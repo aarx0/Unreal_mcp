@@ -131,6 +131,8 @@
 #include "Components/PrimitiveComponent.h"
 #include "EditorViewportClient.h"
 #include "Engine/Blueprint.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerInput.h"
 
 #if __has_include("FileHelpers.h")
 #include "FileHelpers.h"
@@ -3803,17 +3805,50 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateInput(
   Payload->TryGetStringField(TEXT("key"), Key);
 
   bool bSuccess = false;
+  bool bRoutedToPIE = false;
+  bool bHandledByPIE = false;
+  bool bHandledBySlate = false;
   FString Message;
+
+  auto RouteKeyToPIE = [](const FKey &InputKey, const EInputEvent InputEvent,
+                          bool &bOutHandledByPIE) -> bool {
+    bOutHandledByPIE = false;
+    if (!GEditor || !GEditor->PlayWorld) {
+      return false;
+    }
+
+    UWorld *PlayWorld = GEditor->PlayWorld.Get();
+    if (!PlayWorld) {
+      return false;
+    }
+
+    APlayerController *PlayerController = PlayWorld->GetFirstPlayerController();
+    if (!PlayerController) {
+      return false;
+    }
+
+    const double AmountDepressed = InputEvent == IE_Released ? 0.0 : 1.0;
+    PRAGMA_DISABLE_DEPRECATION_WARNINGS
+    FInputKeyParams KeyParams(InputKey, InputEvent, AmountDepressed, false);
+    bOutHandledByPIE = PlayerController->InputKey(KeyParams);
+    PRAGMA_ENABLE_DEPRECATION_WARNINGS
+    return true;
+  };
 
   if (InputType == TEXT("key_down") || InputType == TEXT("keydown")) {
     if (!Key.IsEmpty()) {
       FKey InputKey(*Key);
       if (InputKey.IsValid()) {
-        FSlateApplication& SlateApp = FSlateApplication::Get();
-        FKeyEvent KeyEvent(InputKey, FModifierKeysState(), 0, false, 0, 0);
-        SlateApp.ProcessKeyDownEvent(KeyEvent);
+        bRoutedToPIE = RouteKeyToPIE(InputKey, IE_Pressed, bHandledByPIE);
+        if (!bRoutedToPIE) {
+          FSlateApplication& SlateApp = FSlateApplication::Get();
+          FKeyEvent KeyEvent(InputKey, FModifierKeysState(), 0, false, 0, 0);
+          bHandledBySlate = SlateApp.ProcessKeyDownEvent(KeyEvent);
+        }
         bSuccess = true;
-        Message = FString::Printf(TEXT("Key down: %s"), *Key);
+        Message = bRoutedToPIE
+            ? FString::Printf(TEXT("Key down: %s (delivered to PIE)"), *Key)
+            : FString::Printf(TEXT("Key down: %s"), *Key);
       } else {
         Message = FString::Printf(TEXT("Invalid key: %s"), *Key);
       }
@@ -3824,11 +3859,16 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateInput(
     if (!Key.IsEmpty()) {
       FKey InputKey(*Key);
       if (InputKey.IsValid()) {
-        FSlateApplication& SlateApp = FSlateApplication::Get();
-        FKeyEvent KeyEvent(InputKey, FModifierKeysState(), 0, false, 0, 0);
-        SlateApp.ProcessKeyUpEvent(KeyEvent);
+        bRoutedToPIE = RouteKeyToPIE(InputKey, IE_Released, bHandledByPIE);
+        if (!bRoutedToPIE) {
+          FSlateApplication& SlateApp = FSlateApplication::Get();
+          FKeyEvent KeyEvent(InputKey, FModifierKeysState(), 0, false, 0, 0);
+          bHandledBySlate = SlateApp.ProcessKeyUpEvent(KeyEvent);
+        }
         bSuccess = true;
-        Message = FString::Printf(TEXT("Key up: %s"), *Key);
+        Message = bRoutedToPIE
+            ? FString::Printf(TEXT("Key up: %s (delivered to PIE)"), *Key)
+            : FString::Printf(TEXT("Key up: %s"), *Key);
       } else {
         Message = FString::Printf(TEXT("Invalid key: %s"), *Key);
       }
@@ -3877,6 +3917,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateInput(
         FModifierKeysState()
     );
     SlateApp.ProcessMouseButtonUpEvent(MouseUpEvent);
+    bHandledBySlate = true;
     
     bSuccess = true;
     Message = FString::Printf(TEXT("Mouse click at (%f, %f)"), X, Y);
@@ -3888,6 +3929,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateInput(
     FSlateApplication& SlateApp = FSlateApplication::Get();
     FVector2D Position((float)X, (float)Y);
     SlateApp.SetCursorPos(Position);
+    bHandledBySlate = true;
     
     bSuccess = true;
     Message = FString::Printf(TEXT("Mouse moved to (%f, %f)"), X, Y);
@@ -3899,6 +3941,9 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateInput(
   Resp->SetBoolField(TEXT("success"), bSuccess);
   Resp->SetStringField(TEXT("type"), InputType);
   Resp->SetStringField(TEXT("message"), Message);
+  Resp->SetBoolField(TEXT("routedToPIE"), bRoutedToPIE);
+  Resp->SetBoolField(TEXT("handledByPIE"), bHandledByPIE);
+  Resp->SetBoolField(TEXT("handledBySlate"), bHandledBySlate);
 
   if (bSuccess) {
     SendAutomationResponse(Socket, RequestId, true, Message, Resp, FString());
