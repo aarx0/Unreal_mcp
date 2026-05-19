@@ -53,6 +53,23 @@ const requests = [
 let buffer = '';
 let passed = false;
 
+function failSmokeTest(message: string): never {
+    console.error(`❌ ${message}`);
+    child.kill();
+    process.exit(1);
+}
+
+function parseJsonLine(line: string): unknown | undefined {
+    try {
+        return JSON.parse(line);
+    } catch (error) {
+        if (error instanceof SyntaxError) {
+            return undefined;
+        }
+        throw error;
+    }
+}
+
 child.stdout.on('data', (data) => {
     const chunk = data.toString();
     buffer += chunk;
@@ -64,7 +81,12 @@ child.stdout.on('data', (data) => {
     for (const line of lines) {
         if (!line.trim()) continue;
         try {
-            const msg = JSON.parse(line);
+            const parsed = parseJsonLine(line);
+            if (!parsed || typeof parsed !== 'object') continue;
+
+            const maybeMsg = parsed as Record<string, unknown>;
+            if (typeof maybeMsg.id !== 'number' && typeof maybeMsg.id !== 'undefined') continue;
+            const msg = maybeMsg as { id?: number; result?: { tools?: unknown[]; content?: Array<{ text?: unknown }> } };
             console.log('Received:', JSON.stringify(msg).substring(0, 100) + '...');
 
             if (msg.id === 1 && msg.result) {
@@ -89,8 +111,8 @@ child.stdout.on('data', (data) => {
                 child.kill();
             }
 
-        } catch (_e) {
-            // Ignore non-JSON output (logs)
+        } catch (error) {
+            failSmokeTest(error instanceof Error ? error.message : String(error));
         }
     }
 });
@@ -100,8 +122,7 @@ child.on('exit', (_code) => {
         console.log('🎉 Smoke Test PASSED');
         process.exit(0);
     } else {
-        console.error('❌ Smoke Test FAILED - Server exited without passing checks');
-        process.exit(1);
+        failSmokeTest('Smoke Test FAILED - Server exited without passing checks');
     }
 });
 
@@ -112,9 +133,7 @@ child.stdin.write(JSON.stringify(requests[0]) + '\n');
 // Timeout safety
 setTimeout(() => {
     if (!passed) {
-        console.error('❌ Timeout waiting for smoke test');
         console.error('Buffer contents:', buffer);
-        child.kill();
-        process.exit(1);
+        failSmokeTest('Timeout waiting for smoke test');
     }
 }, 15000);

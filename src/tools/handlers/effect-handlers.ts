@@ -18,6 +18,36 @@ let lastCreatedNiagaraSystemPath: string | undefined;
 let lastCreatedNiagaraEmitterPath: string | undefined;
 let lastAddedNiagaraUserParameterName: string | undefined;
 
+const EFFECT_GRAPH_ACTIONS = new Set<string>([
+  'add_niagara_module',
+  'connect_niagara_pins',
+  'remove_niagara_node'
+]);
+
+const EFFECT_GRAPH_SUB_ACTIONS: Record<string, string> = {
+  'add_niagara_module': 'add_module',
+  'connect_niagara_pins': 'connect_pins',
+  'remove_niagara_node': 'remove_node',
+};
+
+const EFFECT_AUTHORING_ACTIONS = new Set<string>([
+  'add_emitter_to_system', 'set_emitter_properties',
+  'add_spawn_rate_module', 'add_spawn_burst_module', 'add_spawn_per_unit_module',
+  'add_initialize_particle_module', 'add_particle_state_module',
+  'add_force_module', 'add_velocity_module', 'add_acceleration_module',
+  'add_size_module', 'add_color_module',
+  'add_sprite_renderer_module', 'add_mesh_renderer_module',
+  'add_ribbon_renderer_module', 'add_light_renderer_module',
+  'add_collision_module', 'add_kill_particles_module', 'add_camera_offset_module',
+  'add_user_parameter', 'set_parameter_value', 'bind_parameter_to_source',
+  'add_skeletal_mesh_data_interface', 'add_static_mesh_data_interface',
+  'add_spline_data_interface', 'add_audio_spectrum_data_interface',
+  'add_collision_query_data_interface',
+  'add_event_generator', 'add_event_receiver', 'configure_event_payload',
+  'enable_gpu_simulation', 'add_simulation_stage',
+  'get_niagara_info', 'validate_niagara_system'
+]);
+
 function makeGameAssetPath(savePath: string, assetName: string): string {
   return `${savePath.replace(/\/$/, '')}/${assetName}`;
 }
@@ -485,15 +515,9 @@ export async function handleEffectTools(action: string, args: HandlerArgs, tools
   // =========================================================================
   // Niagara graph manipulation → manage_niagara_graph
   // =========================================================================
-  const graphActions = ['add_niagara_module', 'connect_niagara_pins', 'remove_niagara_node'];
-  if (graphActions.includes(action)) {
+  if (EFFECT_GRAPH_ACTIONS.has(action)) {
     const defaultAssets = await ensureDefaultNiagaraAssets(tools);
-    const subActionMap: Record<string, string> = {
-      'add_niagara_module': 'add_module',
-      'connect_niagara_pins': 'connect_pins',
-      'remove_niagara_node': 'remove_node',
-    };
-    mutableArgs.subAction = subActionMap[action] || action;
+    mutableArgs.subAction = EFFECT_GRAPH_SUB_ACTIONS[action] || action;
     if (!mutableArgs.assetPath) {
       mutableArgs.assetPath = defaultAssets.systemPath;
     }
@@ -512,24 +536,7 @@ export async function handleEffectTools(action: string, args: HandlerArgs, tools
   // =========================================================================
   // Niagara authoring → manage_niagara_authoring
   // =========================================================================
-  const authoringActions = [
-    'add_emitter_to_system', 'set_emitter_properties',
-    'add_spawn_rate_module', 'add_spawn_burst_module', 'add_spawn_per_unit_module',
-    'add_initialize_particle_module', 'add_particle_state_module',
-    'add_force_module', 'add_velocity_module', 'add_acceleration_module',
-    'add_size_module', 'add_color_module',
-    'add_sprite_renderer_module', 'add_mesh_renderer_module',
-    'add_ribbon_renderer_module', 'add_light_renderer_module',
-    'add_collision_module', 'add_kill_particles_module', 'add_camera_offset_module',
-    'add_user_parameter', 'set_parameter_value', 'bind_parameter_to_source',
-    'add_skeletal_mesh_data_interface', 'add_static_mesh_data_interface',
-    'add_spline_data_interface', 'add_audio_spectrum_data_interface',
-    'add_collision_query_data_interface',
-    'add_event_generator', 'add_event_receiver', 'configure_event_payload',
-    'enable_gpu_simulation', 'add_simulation_stage',
-    'get_niagara_info', 'validate_niagara_system'
-  ];
-  if (authoringActions.includes(action)) {
+  if (EFFECT_AUTHORING_ACTIONS.has(action)) {
     const usesImplicitSystem = !mutableArgs.systemPath;
     const defaultAssets = await ensureDefaultNiagaraAuthoringAssets(tools);
     if (!mutableArgs.systemPath) {

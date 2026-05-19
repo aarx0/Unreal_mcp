@@ -7,6 +7,8 @@ import {
     ABSOLUTE_MAX_TIMEOUT_MS
 } from '../constants.js';
 
+const READ_ONLY_ACTION_PREFIXES = ['list', 'get_', 'exists', 'search', 'find'];
+
 // Note: The two-phase event pattern was disabled because C++ handlers send a single response,
 // not request+event. All actions now use simple request-response. The PendingRequest interface
 // retains waitForEvent/eventTimeout fields for potential future use.
@@ -242,8 +244,7 @@ export class RequestTracker {
 
     public createCoalesceKey(action: string, payload: Record<string, unknown>): string {
         // Only coalesce read-only operations
-        const readOnlyActions = ['list', 'get_', 'exists', 'search', 'find'];
-        if (!readOnlyActions.some(a => action.startsWith(a))) return '';
+        if (!READ_ONLY_ACTION_PREFIXES.some(a => action.startsWith(a))) return '';
 
         // Create a stable hash of the payload
         const stablePayload = JSON.stringify(stabilizeJsonValue(payload));

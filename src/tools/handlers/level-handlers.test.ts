@@ -38,6 +38,26 @@ describe('handleLevelTools path normalization', () => {
     }, {});
   });
 
+  it('maps DirectionalLight spawn_light requests to the directional light class path', async () => {
+    const { tools, sendAutomationRequest } = createTools();
+
+    await handleLevelTools('spawn_light', {
+      action: 'spawn_light',
+      lightType: 'DirectionalLight',
+      name: 'Sun'
+    }, tools);
+
+    expect(sendAutomationRequest).toHaveBeenCalledWith(
+      'control_actor',
+      expect.objectContaining({
+        action: 'spawn',
+        actorName: 'Sun',
+        classPath: '/Script/Engine.DirectionalLight'
+      }),
+      {}
+    );
+  });
+
   it('keeps World Partition actions out of manage_level dispatch', async () => {
     const { tools, sendAutomationRequest } = createTools();
 

@@ -35,4 +35,9 @@ jobs:
           echo "Running ESLint (fail on warnings)"
           npx eslint . --ext .ts --max-warnings=0
 
+      - name: Type-check TypeScript
+        run: npm run type-check
+
+      - name: Run unit tests
+        run: npm run test:unit
 

@@ -11,6 +11,30 @@ const LEVEL_STRUCTURE_ONLY_ACTIONS = new Set([
   'cleanup_invalid_datalayers',
   'create_datalayer'
 ]);
+const LIGHT_TYPE_CLASS_PATHS = new Map<string, string>([
+  ['point', '/Script/Engine.PointLight'],
+  ['pointlight', '/Script/Engine.PointLight'],
+  ['directional', '/Script/Engine.DirectionalLight'],
+  ['directionallight', '/Script/Engine.DirectionalLight'],
+  ['spot', '/Script/Engine.SpotLight'],
+  ['spotlight', '/Script/Engine.SpotLight'],
+  ['sky', '/Script/Engine.SkyLight'],
+  ['skylight', '/Script/Engine.SkyLight'],
+  ['rect', '/Script/Engine.RectLight'],
+  ['rectlight', '/Script/Engine.RectLight']
+]);
+const CREATE_LIGHT_TYPES = new Set<string>([
+  'point',
+  'directional',
+  'spot',
+  'sky',
+  'rect',
+  'pointlight',
+  'directionallight',
+  'spotlight',
+  'skylight',
+  'rectlight'
+]);
 
 /** Result payload structure for level responses */
 interface ResultPayload {
@@ -20,6 +44,10 @@ interface ResultPayload {
   error?: string;
   message?: string;
   [key: string]: unknown;
+}
+
+function normalizeLightType(lightType: unknown): string | undefined {
+  return typeof lightType === 'string' ? lightType.trim().toLowerCase() : undefined;
 }
 
 /**
@@ -236,17 +264,17 @@ export async function handleLevelTools(action: string, args: HandlerArgs, tools:
         return cleanObject({
           success: false,
           error: 'INVALID_ARGUMENT',
-          message: 'Missing required parameter: type (or lightType). Valid types: Point, Directional, Spot, Sky, Rect',
+          message: 'Missing required parameter: type (or lightType). Valid types: Point, Directional, Spot, Sky, Rect, PointLight, DirectionalLight, SpotLight, SkyLight, RectLight',
           action
         });
       }
       // Validate light type is one of the supported types
-      const validTypes = ['Point', 'Directional', 'Spot', 'Sky', 'Rect', 'PointLight', 'DirectionalLight', 'SpotLight', 'SkyLight', 'RectLight'];
-      if (!validTypes.some(t => t.toLowerCase() === lightType.toLowerCase())) {
+      const normalizedLightType = normalizeLightType(lightType);
+      if (!normalizedLightType || !CREATE_LIGHT_TYPES.has(normalizedLightType)) {
         return cleanObject({
           success: false,
           error: 'INVALID_ARGUMENT',
-          message: `Invalid light type: ${lightType}. Valid types: Point, Directional, Spot, Sky, Rect`,
+          message: `Invalid light type: ${lightType}. Valid types: Point, Directional, Spot, Sky, Rect, PointLight, DirectionalLight, SpotLight, SkyLight, RectLight`,
           action
         });
       }
@@ -278,16 +306,8 @@ export async function handleLevelTools(action: string, args: HandlerArgs, tools:
     }
     case 'spawn_light': {
       // Fallback to control_actor spawn if manage_level spawn_light is not supported
-      const lightClassMap: Record<string, string> = {
-        'Point': '/Script/Engine.PointLight',
-        'Directional': '/Script/Engine.DirectionalLight',
-        'Spot': '/Script/Engine.SpotLight',
-        'Sky': '/Script/Engine.SkyLight',
-        'Rect': '/Script/Engine.RectLight'
-      };
-
-      const lightType = argsTyped.lightType || 'Point';
-      const classPath = lightClassMap[lightType] || '/Script/Engine.PointLight';
+      const lightType = normalizeLightType(argsTyped.lightType) ?? normalizeLightType((argsTyped as Record<string, unknown>).type) ?? 'point';
+      const classPath = LIGHT_TYPE_CLASS_PATHS.get(lightType) || '/Script/Engine.PointLight';
 
       try {
         const res = await executeAutomationRequest(tools, 'control_actor', {

@@ -115,6 +115,33 @@ const sessionActionSet = new Set<string>(SESSION_ACTIONS);
 const gameFrameworkActionSet = new Set<string>(GAME_FRAMEWORK_ACTIONS);
 const inputActionSet = new Set<string>(INPUT_ACTIONS);
 const volumeActionSet = new Set<string>(VOLUME_ACTIONS);
+const blueprintGraphActionSet = new Set<string>([
+  'create_node', 'delete_node', 'connect_pins', 'break_pin_links', 'set_node_property',
+  'create_reroute_node', 'get_node_details', 'get_graph_details', 'get_pin_details',
+  'list_node_types', 'set_pin_default_value'
+]);
+const animationAuthoringActionSet = new Set<string>([
+  'create_animation_sequence', 'set_sequence_length', 'add_bone_track', 'set_bone_key', 'set_curve_key',
+  'add_notify_state', 'add_sync_marker', 'set_root_motion_settings', 'set_additive_settings',
+  'create_montage', 'add_montage_section', 'add_montage_slot', 'set_section_timing',
+  'add_montage_notify', 'set_blend_in', 'set_blend_out', 'link_sections',
+  'create_blend_space_1d', 'create_blend_space_2d', 'add_blend_sample', 'force_rebuild_blend_space', 'set_axis_settings', 'set_interpolation_settings',
+  'create_aim_offset', 'add_aim_offset_sample',
+  'create_anim_blueprint', 'create_animation_bp', 'create_animation_blueprint', 'add_state_machine', 'add_state', 'add_transition', 'set_transition_rules',
+  'add_blend_node', 'add_cached_pose', 'add_slot_node', 'add_layered_blend_per_bone', 'set_anim_graph_node_value',
+  'create_control_rig', 'create_ik_rig', 'create_ik_retargeter', 'set_retarget_chain_mapping', 'get_animation_info'
+]);
+const audioAuthoringActionSet = new Set<string>([
+  'add_cue_node', 'connect_cue_nodes', 'set_cue_attenuation', 'set_cue_concurrency',
+  'create_metasound', 'add_metasound_node', 'connect_metasound_nodes',
+  'add_metasound_input', 'add_metasound_output', 'set_metasound_default',
+  'set_class_properties', 'set_class_parent', 'add_mix_modifier', 'configure_mix_eq',
+  'create_attenuation_settings', 'configure_distance_attenuation',
+  'configure_spatialization', 'configure_occlusion', 'configure_reverb_send',
+  'create_dialogue_voice', 'create_dialogue_wave', 'set_dialogue_context',
+  'create_reverb_effect', 'create_source_effect_chain', 'add_source_effect', 'create_submix_effect',
+  'get_audio_info'
+]);
 
 function normalizeToolCall(
   name: string,
@@ -167,8 +194,7 @@ function registerDefaultHandlers() {
     if (action === 'create_blueprint') return await handleBlueprintTools('create', args, tools);
     if (action === 'get_blueprint') return await handleBlueprintGet(args, tools);
     if (widgetAuthoringActionSet.has(action)) return await handleWidgetAuthoringTools(action, args, tools);
-    const graphActions = ['create_node', 'delete_node', 'connect_pins', 'break_pin_links', 'set_node_property', 'create_reroute_node', 'get_node_details', 'get_graph_details', 'get_pin_details', 'list_node_types', 'set_pin_default_value'];
-    if (graphActions.includes(action)) return await handleGraphTools('manage_blueprint', action, args, tools);
+    if (blueprintGraphActionSet.has(action)) return await handleGraphTools('manage_blueprint', action, args, tools);
     return await handleBlueprintTools(action, args, tools);
   });
 
@@ -176,21 +202,11 @@ function registerDefaultHandlers() {
   toolRegistry.register('control_editor', async (args, tools) => await handleEditorTools(getToolAction(args), args, tools));
   toolRegistry.register('manage_level', async (args, tools) => await handleLevelTools(getToolAction(args), args, tools));
 
-  const animationAuthoringActions = new Set([
-    'create_animation_sequence', 'set_sequence_length', 'add_bone_track', 'set_bone_key', 'set_curve_key',
-    'add_notify_state', 'add_sync_marker', 'set_root_motion_settings', 'set_additive_settings',
-    'create_montage', 'add_montage_section', 'add_montage_slot', 'set_section_timing',
-    'add_montage_notify', 'set_blend_in', 'set_blend_out', 'link_sections',
-    'create_blend_space_1d', 'create_blend_space_2d', 'add_blend_sample', 'force_rebuild_blend_space', 'set_axis_settings', 'set_interpolation_settings',
-    'create_aim_offset', 'add_aim_offset_sample',
-    'create_anim_blueprint', 'create_animation_bp', 'create_animation_blueprint', 'add_state_machine', 'add_state', 'add_transition', 'set_transition_rules',
-    'add_blend_node', 'add_cached_pose', 'add_slot_node', 'add_layered_blend_per_bone', 'set_anim_graph_node_value',
-    'create_control_rig', 'create_ik_rig', 'create_ik_retargeter', 'set_retarget_chain_mapping', 'get_animation_info'
-  ]);
+
   toolRegistry.register('animation_physics', async (args, tools) => {
     const action = getToolAction(args);
     if (skeletonActionSet.has(action)) return await handleSkeletonTools(action, args, tools);
-    if (animationAuthoringActions.has(action)) return await handleAnimationAuthoringTools(action, args, tools);
+    if (animationAuthoringActionSet.has(action)) return await handleAnimationAuthoringTools(action, args, tools);
     if (action === 'add_notify' && (args.frame !== undefined || args.assetPath !== undefined)) {
       return await handleAnimationAuthoringTools(action, args, tools);
     }
@@ -246,20 +262,9 @@ function registerDefaultHandlers() {
   toolRegistry.register('manage_sequence', async (args, tools) => await handleSequenceTools(getToolAction(args), args, tools));
   toolRegistry.register('inspect', async (args, tools) => await handleInspectTools(getToolAction(args), args, tools));
   toolRegistry.register('manage_tools', async (args, tools) => await handleManageToolsTools(getToolAction(args), args, tools));
-  const audioAuthoringActions = new Set([
-    'add_cue_node', 'connect_cue_nodes', 'set_cue_attenuation', 'set_cue_concurrency',
-    'create_metasound', 'add_metasound_node', 'connect_metasound_nodes',
-    'add_metasound_input', 'add_metasound_output', 'set_metasound_default',
-    'set_class_properties', 'set_class_parent', 'add_mix_modifier', 'configure_mix_eq',
-    'create_attenuation_settings', 'configure_distance_attenuation',
-    'configure_spatialization', 'configure_occlusion', 'configure_reverb_send',
-    'create_dialogue_voice', 'create_dialogue_wave', 'set_dialogue_context',
-    'create_reverb_effect', 'create_source_effect_chain', 'add_source_effect', 'create_submix_effect',
-    'get_audio_info'
-  ]);
   toolRegistry.register('manage_audio', async (args, tools) => {
     const action = getToolAction(args);
-    if (audioAuthoringActions.has(action)) return await handleAudioAuthoringTools(action, args, tools);
+    if (audioAuthoringActionSet.has(action)) return await handleAudioAuthoringTools(action, args, tools);
     return await handleAudioTools(action, args, tools);
   });
 

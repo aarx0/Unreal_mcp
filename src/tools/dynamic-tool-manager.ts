@@ -11,6 +11,7 @@ import { consolidatedToolDefinitions, type ToolDefinition } from './consolidated
 const log = new Logger('DynamicToolManager');
 
 export type ToolCategory = 'core' | 'world' | 'gameplay' | 'utility' | 'all';
+const PROTECTED_TOOL_NAMES = new Set(['manage_tools', 'inspect']);
 
 interface ToolState {
   name: string;
@@ -51,16 +52,16 @@ class DynamicToolManager {
       });
 
       // Track category stats
-      if (!this.categoryStates.has(category)) {
-        this.categoryStates.set(category, {
+      let catState = this.categoryStates.get(category);
+      if (!catState) {
+        catState = {
           name: category,
           enabled: true,
           toolCount: 0,
           enabledCount: 0
-        });
+        };
+        this.categoryStates.set(category, catState);
       }
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guaranteed set above
-      const catState = this.categoryStates.get(category)!;
       catState.toolCount++;
       catState.enabledCount++;
     }
@@ -156,11 +157,8 @@ class DynamicToolManager {
     const notFound: string[] = [];
     const protected_: string[] = [];
 
-    // Tools that cannot be disabled (essential for operation)
-    const protectedTools = ['manage_tools', 'inspect'];
-
     for (const name of toolNames) {
-      if (protectedTools.includes(name)) {
+      if (PROTECTED_TOOL_NAMES.has(name)) {
         protected_.push(name);
         continue;
       }
@@ -246,9 +244,6 @@ class DynamicToolManager {
     const disabled: string[] = [];
     const protected_: string[] = [];
 
-    // Tools that cannot be disabled (essential for operation)
-    const protectedTools = ['manage_tools', 'inspect'];
-
     // Handle 'all' category - disable all non-protected tools
     if (category === 'all') {
       for (const catState of this.categoryStates.values()) {
@@ -260,7 +255,7 @@ class DynamicToolManager {
         }
       }
       for (const state of this.toolStates.values()) {
-        if (protectedTools.includes(state.name)) {
+        if (PROTECTED_TOOL_NAMES.has(state.name)) {
           protected_.push(state.name);
         } else if (state.enabled) {
           state.enabled = false;
@@ -297,12 +292,12 @@ class DynamicToolManager {
     catState.enabled = !protectedCategories.includes(category);
 
     for (const state of this.toolStates.values()) {
-      if (state.category === category && !protectedTools.includes(state.name)) {
+      if (state.category === category && !PROTECTED_TOOL_NAMES.has(state.name)) {
         if (state.enabled) {
           state.enabled = false;
           disabled.push(state.name);
         }
-      } else if (state.category === category && protectedTools.includes(state.name)) {
+      } else if (state.category === category && PROTECTED_TOOL_NAMES.has(state.name)) {
         protected_.push(state.name);
       }
     }

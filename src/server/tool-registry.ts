@@ -26,6 +26,8 @@ function parseDefaultCategories(): string[] {
     return cats.length > 0 ? cats : ['all'];
 }
 
+const KNOWN_DYNAMIC_CLIENT_NAMES = ['cursor', 'cline', 'windsurf', 'kilo', 'opencode', 'vscode', 'visual studio code'];
+
 // Check if a client supports tools.listChanged based on known client capabilities
 function clientSupportsListChanged(clientName: string | undefined): boolean {
     if (!clientName) return false;
@@ -44,8 +46,7 @@ function clientSupportsListChanged(clientName: string | undefined): boolean {
     }
     
     // Fallback: check for known clients by partial name match
-    const knownDynamicClients = ['cursor', 'cline', 'windsurf', 'kilo', 'opencode', 'vscode', 'visual studio code'];
-    for (const known of knownDynamicClients) {
+    for (const known of KNOWN_DYNAMIC_CLIENT_NAMES) {
         if (normalizedName.includes(known)) return true;
     }
     
