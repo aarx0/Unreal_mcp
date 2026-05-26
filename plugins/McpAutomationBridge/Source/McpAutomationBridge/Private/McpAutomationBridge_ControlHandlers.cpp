@@ -2101,10 +2101,10 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorGetBoundingBox(
     }
 
     if (BoxExtent.IsNearlyZero()) {
-      const FBox ProxyBounds = Landscape->GetProxyBounds();
-      if (ProxyBounds.IsValid) {
-        Origin = ProxyBounds.GetCenter();
-        BoxExtent = ProxyBounds.GetExtent();
+      const FBox CompleteBounds = Landscape->GetCompleteBounds();
+      if (CompleteBounds.IsValid) {
+        Origin = CompleteBounds.GetCenter();
+        BoxExtent = CompleteBounds.GetExtent();
       }
     }
 
