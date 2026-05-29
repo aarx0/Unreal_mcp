@@ -255,6 +255,12 @@ public class McpAutomationBridge : ModuleRules
             AddOptionalDynamicModule(Target, EngineDir, "ChaosVehicles", "ChaosVehicles");
             AddOptionalDynamicModule(Target, EngineDir, "AnimationData", "AnimationData");
 
+            // CommonUI (optional plugin, EnabledByDefault:false) - for Common UI widget authoring.
+            // CommonUI publicly depends on CommonInput, so linking CommonUI transitively links it.
+            // CommonUIEditor is intentionally NOT linked (editor-only tooling; none of the authoring APIs live there).
+            bool bHasCommonUI = AddOptionalDynamicModule(Target, EngineDir, "CommonUI", "CommonUI");
+            PublicDefinitions.Add(bHasCommonUI ? "MCP_HAS_COMMON_UI=1" : "MCP_HAS_COMMON_UI=0");
+
             // Ensure editor builds expose full Blueprint graph editing APIs.
             PublicDefinitions.Add("MCP_HAS_K2NODE_HEADERS=1");
             PublicDefinitions.Add("MCP_HAS_EDGRAPH_SCHEMA_K2=1");
@@ -323,6 +329,7 @@ public class McpAutomationBridge : ModuleRules
             PublicDefinitions.Add("MCP_HAS_EDGRAPH_SCHEMA_K2=0");
             PublicDefinitions.Add("MCP_HAS_SUBOBJECT_DATA_SUBSYSTEM=0");
             PublicDefinitions.Add("MCP_HAS_WP_FOR_EACH_DATALAYER=0");
+            PublicDefinitions.Add("MCP_HAS_COMMON_UI=0");
         }
 
         // ============================================================================

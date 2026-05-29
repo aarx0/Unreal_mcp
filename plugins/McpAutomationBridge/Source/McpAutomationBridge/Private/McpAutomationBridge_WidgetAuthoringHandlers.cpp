@@ -934,7 +934,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         UClass* ParentUClass = UUserWidget::StaticClass();
         if (!ParentClass.Equals(TEXT("UserWidget"), ESearchCase::IgnoreCase))
         {
-            // Try to find custom parent class
+            // 1) Already-loaded class by short name (fast path).
             // Note: FindFirstObject was introduced in UE 5.1
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
             UClass* FoundClass = FindFirstObject<UClass>(*ParentClass, EFindFirstObjectOptions::None);
@@ -942,9 +942,45 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             // UE 5.0: Use ResolveClassByName instead of deprecated ANY_PACKAGE
             UClass* FoundClass = ResolveClassByName(ParentClass);
 #endif
+
+            // 2) Not yet loaded (e.g. a delay-loaded optional plugin such as CommonUI): force a load.
+            //    FindFirstObject only sees already-loaded classes, so without this a parentClass like
+            //    "CommonActivatableWidget" would silently fall back to UUserWidget. Accept a fully-qualified
+            //    path (/Script/Module.Name or /Game/Path.Name_C), else probe /Script/CommonUI.* then /Script/UMG.*.
+            //    LOAD_NoWarn|LOAD_Quiet keeps probe misses out of the error-capture path.
+            if (!FoundClass)
+            {
+                if (ParentClass.Contains(TEXT(".")) || ParentClass.Contains(TEXT("/")))
+                {
+                    FoundClass = StaticLoadClass(UObject::StaticClass(), nullptr, *ParentClass, nullptr, LOAD_NoWarn | LOAD_Quiet);
+                }
+                else
+                {
+                    static const TCHAR* ScriptModules[] = { TEXT("CommonUI"), TEXT("UMG") };
+                    for (const TCHAR* ModuleName : ScriptModules)
+                    {
+                        const FString ScriptPath = FString::Printf(TEXT("/Script/%s.%s"), ModuleName, *ParentClass);
+                        FoundClass = StaticLoadClass(UObject::StaticClass(), nullptr, *ScriptPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+                        if (FoundClass)
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+
             if (FoundClass && FoundClass->IsChildOf(UUserWidget::StaticClass()))
             {
                 ParentUClass = FoundClass;
+            }
+            else
+            {
+                // A non-default parentClass was explicitly requested but could not be resolved to a
+                // UUserWidget subclass. Fail loudly rather than silently creating a plain UserWidget.
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Could not resolve parentClass '%s' to a UUserWidget subclass. Pass a loaded class name, or a fully-qualified path such as /Script/CommonUI.CommonActivatableWidget or /Game/UI/MyWidget.MyWidget_C."), *ParentClass),
+                    TEXT("INVALID_PARENT_CLASS"));
+                return true;
             }
         }
 
