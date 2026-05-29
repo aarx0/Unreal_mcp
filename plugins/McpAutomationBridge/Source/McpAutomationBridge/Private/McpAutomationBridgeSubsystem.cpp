@@ -1386,6 +1386,12 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                          const TSharedPtr<FJsonObject> &P,
                          TSharedPtr<FMcpBridgeWebSocket> S) {
                     FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
+                    // Common UI actions are checked BEFORE widget-authoring so they
+                    // route to the deletable CommonUI translation unit and never
+                    // enter the large HandleManageWidgetAuthoringAction function.
+                    if (McpConsolidatedActions::IsCommonUiAction(SubAction)) {
+                      return HandleCommonUiAction(R, TEXT("manage_common_ui"), P, S);
+                    }
                     if (McpConsolidatedActions::IsWidgetAuthoringAction(SubAction)) {
                       return HandleManageWidgetAuthoringAction(
                           R, TEXT("manage_widget_authoring"), P, S);

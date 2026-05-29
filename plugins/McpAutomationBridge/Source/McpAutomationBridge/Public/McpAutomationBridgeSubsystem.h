@@ -882,6 +882,11 @@ private:
       const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+  // Common UI (CommonUI plugin) authoring handlers
+  bool HandleCommonUiAction(
+      const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload,
+      TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
   // Phase 20: Networking & Multiplayer handlers
   bool HandleManageNetworkingAction(
       const FString &RequestId, const FString &Action,

@@ -190,10 +190,21 @@ inline const TArray<FString>& WidgetAuthoring()
 	return Actions;
 }
 
+inline const TArray<FString>& CommonUi()
+{
+	static const TArray<FString> Actions = {
+		TEXT("add_common_button"), TEXT("add_common_text"),
+		TEXT("add_common_border"), TEXT("set_common_button_style"),
+		TEXT("set_common_text_style")
+	};
+	return Actions;
+}
+
 inline TArray<FString> ManageBlueprint()
 {
 	TArray<FString> Actions = ManageBlueprintCore();
 	AppendUniqueActions(Actions, WidgetAuthoring());
+	AppendUniqueActions(Actions, CommonUi());
 	return Actions;
 }
 
@@ -605,6 +616,7 @@ inline TArray<FString> ManageAI()
 inline bool IsMaterialAuthoringAction(const FString& Action) { return ContainsAction(MaterialAuthoring(), Action); }
 inline bool IsTextureAction(const FString& Action) { return ContainsAction(Texture(), Action); }
 inline bool IsWidgetAuthoringAction(const FString& Action) { return ContainsAction(WidgetAuthoring(), Action); }
+inline bool IsCommonUiAction(const FString& Action) { return ContainsAction(CommonUi(), Action); }
 inline bool IsAnimationAuthoringAction(const FString& Action) { return ContainsAction(AnimationAuthoring(), Action); }
 inline bool IsAudioAuthoringAction(const FString& Action) { return ContainsAction(AudioAuthoring(), Action); }
 inline bool IsLightingAction(const FString& Action) { return ContainsAction(Lighting(), Action); }
