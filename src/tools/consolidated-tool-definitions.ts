@@ -105,6 +105,13 @@ export const WIDGET_AUTHORING_ACTIONS = [
   'get_widget_info', 'preview_widget'
 ] as const;
 
+// Common UI (CommonUI plugin) authoring actions. Routed to the native
+// HandleCommonUiAction on the C++ side (which is checked before widget-authoring).
+export const COMMON_UI_ACTIONS = [
+  'add_common_button', 'add_common_text', 'add_common_border',
+  'set_common_button_style', 'set_common_text_style'
+] as const;
+
 export const SESSION_ACTIONS = [
   'configure_local_session_settings', 'configure_session_interface', 'configure_split_screen',
   'set_split_screen_type', 'add_local_player', 'remove_local_player', 'configure_lan_play',
@@ -349,7 +356,7 @@ export const consolidatedToolDefinitions: ToolDefinition[] = [
             'create_node', 'add_node', 'delete_node', 'connect_pins', 'break_pin_links', 'set_node_property', 'create_reroute_node', 'get_node_details', 'get_graph_details', 'get_pin_details',
             'list_node_types', 'set_pin_default_value'
           ,
-            ...WIDGET_AUTHORING_ACTIONS],
+            ...WIDGET_AUTHORING_ACTIONS, ...COMMON_UI_ACTIONS],
           description: 'Blueprint action'
         },
         name: commonSchemas.name,

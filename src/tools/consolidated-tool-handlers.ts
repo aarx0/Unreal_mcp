@@ -16,7 +16,8 @@ import {
   SPLINE_ACTIONS,
   TEXTURE_ACTIONS,
   VOLUME_ACTIONS,
-  WIDGET_AUTHORING_ACTIONS
+  WIDGET_AUTHORING_ACTIONS,
+  COMMON_UI_ACTIONS
 } from './consolidated-tool-definitions.js';
 import { executeAutomationRequest, requireAction } from './handlers/common-handlers.js';
 import { handleAssetTools } from './handlers/asset-handlers.js';
@@ -111,6 +112,7 @@ const performanceActionSet = new Set<string>(PERFORMANCE_ACTIONS);
 const behaviorTreeActionSet = new Set<string>(BEHAVIOR_TREE_ACTIONS);
 const navigationActionSet = new Set<string>(NAVIGATION_ACTIONS);
 const widgetAuthoringActionSet = new Set<string>(WIDGET_AUTHORING_ACTIONS);
+const commonUiActionSet = new Set<string>(COMMON_UI_ACTIONS);
 const sessionActionSet = new Set<string>(SESSION_ACTIONS);
 const gameFrameworkActionSet = new Set<string>(GAME_FRAMEWORK_ACTIONS);
 const inputActionSet = new Set<string>(INPUT_ACTIONS);
@@ -193,6 +195,13 @@ function registerDefaultHandlers() {
     const action = getToolAction(args);
     if (action === 'create_blueprint') return await handleBlueprintTools('create', args, tools);
     if (action === 'get_blueprint') return await handleBlueprintGet(args, tools);
+    // Common UI actions forward straight to the bridge with subAction set; the C++
+    // manage_blueprint dispatch routes them to HandleCommonUiAction (checked before
+    // widget-authoring), so they never reach handleWidgetAuthoringTools' UNKNOWN_ACTION default.
+    if (commonUiActionSet.has(action)) {
+      const payload = { ...args, subAction: action };
+      return cleanObject(await executeAutomationRequest(tools, 'manage_blueprint', payload, `Automation bridge not available for ${action}`));
+    }
     if (widgetAuthoringActionSet.has(action)) return await handleWidgetAuthoringTools(action, args, tools);
     if (blueprintGraphActionSet.has(action)) return await handleGraphTools('manage_blueprint', action, args, tools);
     return await handleBlueprintTools(action, args, tools);
