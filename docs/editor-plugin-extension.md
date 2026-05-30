@@ -1,5 +1,13 @@
 # MCP Automation Bridge Plugin
 
+> ⚠️ **Partly historical.** This file's transport sections describe the **legacy**
+> WebSocket automation bridge (`ws://127.0.0.1:8091`) + Node server. The fork now runs the
+> **native** Streamable HTTP/SSE transport (`POST /mcp`). For current architecture see
+> [`Private/MCP/AGENTS.md`](../plugins/McpAutomationBridge/Source/McpAutomationBridge/Private/MCP/AGENTS.md);
+> to add or fix an action see [`extending-the-bridge.md`](./extending-the-bridge.md). The
+> "Tool Coverage Matrix" below also overstates some statuses (a few `✅ Native` entries are
+> stubs) — trust the source and `handler-mapping.md` over this table.
+
 The MCP Automation Bridge is a production-ready Unreal Editor plugin that enables direct communication between the MCP server and Unreal Engine, providing **100% native C++ implementations** for all automation tasks. This document describes the current implementation and future roadmap.
 
 ## Goals

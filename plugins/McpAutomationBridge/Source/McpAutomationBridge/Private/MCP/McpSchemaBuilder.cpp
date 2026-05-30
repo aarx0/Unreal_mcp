@@ -166,8 +166,18 @@ FMcpSchemaBuilder& FMcpSchemaBuilder::ArrayOfObjects(const FString& Name,
 FMcpSchemaBuilder& FMcpSchemaBuilder::FreeformObject(const FString& Name,
 	const FString& Description)
 {
+	// Freeform value: intentionally emits NO "type" constraint so the property
+	// accepts ANY JSON type (string, number, boolean, object, array). Handlers
+	// already parse these defensively (see e.g. manage_blueprint set_style /
+	// set_default, which switch on the runtime JSON type).
+	//
+	// Previously this emitted {"type":"object"}, which caused strict MCP clients
+	// to reject scalar values — e.g. a string passed to manage_blueprint's
+	// "value"/"defaultValue" — and drop the ENTIRE argument object before it
+	// reached the bridge (the handler then saw no "action" and errored with
+	// "Unknown blueprint action"). Omitting "type" is the JSON Schema idiom for
+	// "any value allowed".
 	auto Prop = MakeShared<FJsonObject>();
-	Prop->SetStringField(TEXT("type"), TEXT("object"));
 	if (!Description.IsEmpty())
 	{
 		Prop->SetStringField(TEXT("description"), Description);

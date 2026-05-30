@@ -124,6 +124,12 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 
+// Blueprint graph nodes — for real widget delegate event binding (bind_on_clicked)
+#include "K2Node_ComponentBoundEvent.h"
+#include "K2Node_CallFunction.h"
+#include "EdGraphSchema_K2.h"
+#include "EdGraph/EdGraph.h"
+
 // Editor Utilities
 #include "EditorAssetLibrary.h"
 
@@ -1825,6 +1831,35 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             });
         }
         WidgetInfo->SetArrayField(TEXT("slots"), SlotsArray);
+
+        // Build a hierarchical tree (name + class + children) from the root widget.
+        // Additive: the flat "slots" array above is left untouched for compatibility.
+        if (WidgetBP->WidgetTree && WidgetBP->WidgetTree->RootWidget)
+        {
+            TFunction<TSharedPtr<FJsonObject>(UWidget*)> BuildNode;
+            BuildNode = [&BuildNode](UWidget* W) -> TSharedPtr<FJsonObject>
+            {
+                TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
+                Node->SetStringField(TEXT("name"), W->GetName());
+                Node->SetStringField(TEXT("class"), W->GetClass()->GetName());
+
+                TArray<TSharedPtr<FJsonValue>> ChildrenArray;
+                if (UPanelWidget* Panel = Cast<UPanelWidget>(W))
+                {
+                    for (int32 ChildIndex = 0; ChildIndex < Panel->GetChildrenCount(); ++ChildIndex)
+                    {
+                        if (UWidget* Child = Panel->GetChildAt(ChildIndex))
+                        {
+                            ChildrenArray.Add(MakeShared<FJsonValueObject>(BuildNode(Child)));
+                        }
+                    }
+                }
+                Node->SetArrayField(TEXT("children"), ChildrenArray);
+                return Node;
+            };
+
+            WidgetInfo->SetObjectField(TEXT("tree"), BuildNode(WidgetBP->WidgetTree->RootWidget));
+        }
 
         // Collect animations
         TArray<TSharedPtr<FJsonValue>> AnimsArray;
@@ -3784,48 +3819,179 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
     
     if (SubAction.Equals(TEXT("bind_on_clicked"), ESearchCase::IgnoreCase))
     {
+        // Real widget-delegate event binding.
+        //
+        // Creates a UK2Node_ComponentBoundEvent in the widget BP's event graph for
+        // the named widget's multicast delegate (default "OnClicked"). This is the
+        // same node the UMG Designer's "+ OnClicked" button produces, so it works
+        // for ANY widget exposing a BlueprintAssignable delegate — plain UButton,
+        // UCommonButtonBase, custom user-widget buttons, etc. (The old stub cast to
+        // UButton and only returned instructions; it never wired anything and could
+        // not see Common UI buttons at all.)
+        //
+        // If "targetFunction" is supplied, a self CallFunction node for that function
+        // is created and the event's exec output is linked to it — e.g. binding a
+        // Back button's OnClicked straight to DeactivateWidget with one call.
+        //
+        // Params:
+        //   widgetPath     (required) - the widget Blueprint asset
+        //   slotName       (required) - the child widget whose delegate to bind
+        //   delegateName   (optional, default "OnClicked") - multicast delegate name
+        //   targetFunction (optional) - self UFUNCTION to call from the event
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetSlotName(Payload);
-        FString FunctionName = GetJsonStringField(Payload, TEXT("functionName"), TEXT("OnButtonClicked"));
-        
+        FString DelegateName = GetJsonStringField(Payload, TEXT("delegateName"), TEXT("OnClicked"));
+        FString TargetFunction = GetJsonStringField(Payload, TEXT("targetFunction"));
+
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
-        
+
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
-        
-        UButton* ButtonWidget = nullptr;
-        WidgetBP->WidgetTree->ForEachWidget([&](UWidget* W) {
-            if (W && W->GetFName().ToString().Equals(SlotName, ESearchCase::IgnoreCase))
-            {
-                ButtonWidget = Cast<UButton>(W);
-            }
-        });
-        
-        if (!ButtonWidget)
+
+        UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
+        if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Button '%s' not found"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
+            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
-        
-        // Note: UButton::OnClicked is a multicast delegate that requires binding through Blueprint
-        // We create metadata for the binding - the function needs to exist in the widget BP
+
+        // The widget must be a variable for a bound event to reference it.
+        bool bMadeVariable = false;
+        if (!Widget->bIsVariable)
+        {
+            Widget->bIsVariable = true;
+            bMadeVariable = true;
+            FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+        }
+
+        // The multicast delegate (e.g. OnClicked) lives on the widget's own class.
+        FMulticastDelegateProperty* DelegateProp =
+            FindFProperty<FMulticastDelegateProperty>(Widget->GetClass(), FName(*DelegateName));
+        if (!DelegateProp)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Delegate '%s' not found on widget '%s' (class %s)"),
+                    *DelegateName, *SlotName, *Widget->GetClass()->GetName()),
+                TEXT("DELEGATE_NOT_FOUND"));
+            return true;
+        }
+
+        // The widget variable is an FObjectProperty on the BP's generated class.
+        // Recompile once if it isn't visible yet (e.g. we just set bIsVariable).
+        auto FindWidgetVarProp = [&]() -> FObjectProperty*
+        {
+            UClass* SearchClass = WidgetBP->SkeletonGeneratedClass
+                ? (UClass*)WidgetBP->SkeletonGeneratedClass
+                : (UClass*)WidgetBP->GeneratedClass;
+            return SearchClass ? FindFProperty<FObjectProperty>(SearchClass, FName(*SlotName)) : nullptr;
+        };
+        FObjectProperty* WidgetVarProp = FindWidgetVarProp();
+        if (!WidgetVarProp)
+        {
+            FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::SkipGarbageCollection);
+            WidgetVarProp = FindWidgetVarProp();
+        }
+        if (!WidgetVarProp)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Could not resolve widget variable property for '%s'"), *SlotName),
+                TEXT("WIDGET_VAR_NOT_FOUND"));
+            return true;
+        }
+
+        if (WidgetBP->UbergraphPages.Num() == 0)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no event graph"), TEXT("NO_EVENT_GRAPH"));
+            return true;
+        }
+        UEdGraph* EventGraph = WidgetBP->UbergraphPages[0];
+        EventGraph->Modify();
+
+        // Reuse an existing bound event for this (widget, delegate) if present.
+        UK2Node_ComponentBoundEvent* EventNode = nullptr;
+        {
+            TArray<UK2Node_ComponentBoundEvent*> ExistingBoundEvents;
+            FBlueprintEditorUtils::GetAllNodesOfClass<UK2Node_ComponentBoundEvent>(WidgetBP, ExistingBoundEvents);
+            for (UK2Node_ComponentBoundEvent* BE : ExistingBoundEvents)
+            {
+                if (BE && BE->ComponentPropertyName == WidgetVarProp->GetFName()
+                    && BE->DelegatePropertyName == DelegateProp->GetFName())
+                {
+                    EventNode = BE;
+                    break;
+                }
+            }
+        }
+        const bool bEventExisted = (EventNode != nullptr);
+        if (!EventNode)
+        {
+            FGraphNodeCreator<UK2Node_ComponentBoundEvent> EventCreator(*EventGraph);
+            EventNode = EventCreator.CreateNode(false);
+            EventNode->InitializeComponentBoundEventParams(WidgetVarProp, DelegateProp);
+            EventNode->NodePosX = 0;
+            EventNode->NodePosY = 0;
+            EventCreator.Finalize();
+        }
+
+        // Optionally create + wire a self function call (e.g. DeactivateWidget).
+        bool bWiredTargetFunction = false;
+        if (!TargetFunction.IsEmpty())
+        {
+            UClass* SelfClass = WidgetBP->GeneratedClass ? (UClass*)WidgetBP->GeneratedClass : (UClass*)WidgetBP->ParentClass;
+            UFunction* Func = SelfClass ? SelfClass->FindFunctionByName(FName(*TargetFunction)) : nullptr;
+            if (!Func)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("targetFunction '%s' not found on %s"), *TargetFunction,
+                        SelfClass ? *SelfClass->GetName() : TEXT("<null>")),
+                    TEXT("FUNCTION_NOT_FOUND"));
+                return true;
+            }
+
+            FGraphNodeCreator<UK2Node_CallFunction> CallCreator(*EventGraph);
+            UK2Node_CallFunction* CallNode = CallCreator.CreateNode(false);
+            CallNode->SetFromFunction(Func);
+            CallNode->NodePosX = 400;
+            CallNode->NodePosY = 0;
+            CallCreator.Finalize();
+
+            UEdGraphPin* EventThen = EventNode->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+            UEdGraphPin* CallExec = CallNode->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+            if (EventThen && CallExec)
+            {
+                EventThen->MakeLinkTo(CallExec);
+                bWiredTargetFunction = true;
+            }
+        }
+
+        // Compile so the binding is generated, then persist.
+        FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::SkipGarbageCollection);
+        WidgetBP->MarkPackageDirty();
+        const bool bSaved = McpSafeAssetSave(WidgetBP);
+
         ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-        ResultJson->SetStringField(TEXT("eventType"), TEXT("OnClicked"));
-        ResultJson->SetStringField(TEXT("functionName"), FunctionName);
-        ResultJson->SetStringField(TEXT("instruction"), FString::Printf(TEXT("Create an event handler function named '%s' and bind it to %s's OnClicked event in the Designer."), *FunctionName, *SlotName));
-        
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("OnClicked binding info provided"), ResultJson);
+        ResultJson->SetStringField(TEXT("widgetName"), SlotName);
+        ResultJson->SetStringField(TEXT("widgetClass"), Widget->GetClass()->GetName());
+        ResultJson->SetStringField(TEXT("delegate"), DelegateName);
+        ResultJson->SetStringField(TEXT("eventNode"), EventNode->GetName());
+        ResultJson->SetBoolField(TEXT("eventAlreadyExisted"), bEventExisted);
+        ResultJson->SetBoolField(TEXT("madeWidgetVariable"), bMadeVariable);
+        if (!TargetFunction.IsEmpty())
+        {
+            ResultJson->SetStringField(TEXT("targetFunction"), TargetFunction);
+            ResultJson->SetBoolField(TEXT("wiredTargetFunction"), bWiredTargetFunction);
+        }
+        ResultJson->SetBoolField(TEXT("saveSucceeded"), bSaved);
+
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget delegate bound"), ResultJson);
         return true;
     }
     
