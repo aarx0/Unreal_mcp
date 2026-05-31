@@ -185,7 +185,11 @@ inline const TArray<FString>& WidgetAuthoring()
 		TEXT("add_interaction_prompt"), TEXT("add_objective_tracker"),
 		TEXT("add_damage_indicator"), TEXT("create_inventory_ui"),
 		TEXT("create_dialog_widget"), TEXT("create_radial_menu"),
-		TEXT("get_widget_info"), TEXT("preview_widget")
+		TEXT("get_widget_info"), TEXT("preview_widget"),
+		// Tree-mutation actions: handlers exist in WidgetAuthoringHandlers.cpp
+		// but were never routed here, so they returned "Unknown blueprint action".
+		TEXT("remove_widget"), TEXT("reparent_widget"),
+		TEXT("rename_widget"), TEXT("get_widget_slot_info")
 	};
 	return Actions;
 }

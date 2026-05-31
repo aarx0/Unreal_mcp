@@ -127,6 +127,8 @@
 // Blueprint graph nodes — for real widget delegate event binding (bind_on_clicked)
 #include "K2Node_ComponentBoundEvent.h"
 #include "K2Node_CallFunction.h"
+#include "K2Node_VariableGet.h"          // bind_on_value_changed live-update chain
+#include "Kismet/KismetTextLibrary.h"    // Conv_DoubleToText for value->text
 #include "EdGraphSchema_K2.h"
 #include "EdGraph/EdGraph.h"
 
@@ -3083,21 +3085,45 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         }
 
         UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot);
-        if (CanvasSlot)
+        if (!CanvasSlot)
         {
-            TSharedPtr<FJsonObject> AlignmentObj = GetObjectField(Payload, TEXT("alignment"));
-            if (AlignmentObj.IsValid())
-            {
-                FVector2D Alignment;
-                Alignment.X = GetJsonNumberField(AlignmentObj, TEXT("x"), 0.0);
-                Alignment.Y = GetJsonNumberField(AlignmentObj, TEXT("y"), 0.0);
-                CanvasSlot->SetAlignment(Alignment);
-            }
+            SendAutomationError(RequestingSocket, RequestId, TEXT("set_alignment requires a Canvas Panel slot"), TEXT("INVALID_SLOT"));
+            return true;
         }
 
+        // Accept alignment:{x,y} OR top-level scalars alignmentX/alignmentY.
+        // Strict MCP clients strip object-valued params, so the scalar form is the
+        // reliable path; fail loudly if neither is present instead of silently no-op.
+        FVector2D Alignment(0, 0);
+        bool bHaveAlignment = false;
+        TSharedPtr<FJsonObject> AlignmentObj = GetObjectField(Payload, TEXT("alignment"));
+        if (AlignmentObj.IsValid())
+        {
+            Alignment.X = GetJsonNumberField(AlignmentObj, TEXT("x"), 0.0);
+            Alignment.Y = GetJsonNumberField(AlignmentObj, TEXT("y"), 0.0);
+            bHaveAlignment = true;
+        }
+        else if (Payload->HasField(TEXT("alignmentX")) || Payload->HasField(TEXT("alignmentY")))
+        {
+            Alignment.X = GetJsonNumberField(Payload, TEXT("alignmentX"), 0.0);
+            Alignment.Y = GetJsonNumberField(Payload, TEXT("alignmentY"), 0.0);
+            bHaveAlignment = true;
+        }
+        if (!bHaveAlignment)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing alignment: provide alignment:{x,y} or alignmentX/alignmentY"), TEXT("MISSING_PARAMETER"));
+            return true;
+        }
+
+        CanvasSlot->SetAlignment(Alignment);
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+        WidgetBP->MarkPackageDirty();
+        const bool bAlignSaved = McpSafeAssetSave(WidgetBP);
 
         ResultJson->SetBoolField(TEXT("success"), true);
+        ResultJson->SetNumberField(TEXT("alignmentX"), Alignment.X);
+        ResultJson->SetNumberField(TEXT("alignmentY"), Alignment.Y);
+        ResultJson->SetBoolField(TEXT("saveSucceeded"), bAlignSaved);
         ResultJson->SetStringField(TEXT("message"), TEXT("Alignment set"));
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Alignment set"), ResultJson);
@@ -3129,21 +3155,44 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         }
 
         UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot);
-        if (CanvasSlot)
+        if (!CanvasSlot)
         {
-            TSharedPtr<FJsonObject> PositionObj = GetObjectField(Payload, TEXT("position"));
-            if (PositionObj.IsValid())
-            {
-                FVector2D Position;
-                Position.X = GetJsonNumberField(PositionObj, TEXT("x"), 0.0);
-                Position.Y = GetJsonNumberField(PositionObj, TEXT("y"), 0.0);
-                CanvasSlot->SetPosition(Position);
-            }
+            SendAutomationError(RequestingSocket, RequestId, TEXT("set_position requires a Canvas Panel slot"), TEXT("INVALID_SLOT"));
+            return true;
         }
 
+        // Accept position:{x,y} OR top-level scalars posX/posY (objects get
+        // stripped by strict MCP clients; fail loudly rather than no-op).
+        FVector2D Position(0, 0);
+        bool bHavePosition = false;
+        TSharedPtr<FJsonObject> PositionObj = GetObjectField(Payload, TEXT("position"));
+        if (PositionObj.IsValid())
+        {
+            Position.X = GetJsonNumberField(PositionObj, TEXT("x"), 0.0);
+            Position.Y = GetJsonNumberField(PositionObj, TEXT("y"), 0.0);
+            bHavePosition = true;
+        }
+        else if (Payload->HasField(TEXT("posX")) || Payload->HasField(TEXT("posY")))
+        {
+            Position.X = GetJsonNumberField(Payload, TEXT("posX"), 0.0);
+            Position.Y = GetJsonNumberField(Payload, TEXT("posY"), 0.0);
+            bHavePosition = true;
+        }
+        if (!bHavePosition)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing position: provide position:{x,y} or posX/posY"), TEXT("MISSING_PARAMETER"));
+            return true;
+        }
+
+        CanvasSlot->SetPosition(Position);
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+        WidgetBP->MarkPackageDirty();
+        const bool bPosSaved = McpSafeAssetSave(WidgetBP);
 
         ResultJson->SetBoolField(TEXT("success"), true);
+        ResultJson->SetNumberField(TEXT("positionX"), Position.X);
+        ResultJson->SetNumberField(TEXT("positionY"), Position.Y);
+        ResultJson->SetBoolField(TEXT("saveSucceeded"), bPosSaved);
         ResultJson->SetStringField(TEXT("message"), TEXT("Position set"));
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Position set"), ResultJson);
@@ -3174,22 +3223,57 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             return true;
         }
 
+        FString SizedAs = TEXT("none");
         UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot);
         if (CanvasSlot)
         {
+            // Canvas slots take an explicit pixel size. Accept either a "size":{x,y}
+            // object or top-level x/y for convenience.
             TSharedPtr<FJsonObject> SizeObj = GetObjectField(Payload, TEXT("size"));
+            FVector2D Size;
             if (SizeObj.IsValid())
             {
-                FVector2D Size;
                 Size.X = GetJsonNumberField(SizeObj, TEXT("x"), 100.0);
                 Size.Y = GetJsonNumberField(SizeObj, TEXT("y"), 100.0);
-                CanvasSlot->SetSize(Size);
+            }
+            else
+            {
+                Size.X = GetJsonNumberField(Payload, TEXT("x"), 100.0);
+                Size.Y = GetJsonNumberField(Payload, TEXT("y"), 100.0);
+            }
+            CanvasSlot->SetSize(Size);
+            SizedAs = TEXT("canvas");
+        }
+        else if (Widget->Slot)
+        {
+            // Box slots (HorizontalBox / VerticalBox) have no pixel size — a child is
+            // either Automatic (hug content) or Fill (stretch, weighted). Pass
+            // "fill": true (optional "fillWeight") to stretch a child across its
+            // row/column — e.g. a slider that would otherwise collapse to ~0 width.
+            bool bFill = false;
+            Payload->TryGetBoolField(TEXT("fill"), bFill);
+            FSlateChildSize NewSize;
+            NewSize.SizeRule = bFill ? ESlateSizeRule::Fill : ESlateSizeRule::Automatic;
+            NewSize.Value = (float)GetJsonNumberField(Payload, TEXT("fillWeight"), 1.0);
+            if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(Widget->Slot))
+            {
+                HSlot->SetSize(NewSize);
+                SizedAs = bFill ? TEXT("hbox-fill") : TEXT("hbox-auto");
+            }
+            else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(Widget->Slot))
+            {
+                VSlot->SetSize(NewSize);
+                SizedAs = bFill ? TEXT("vbox-fill") : TEXT("vbox-auto");
             }
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+        WidgetBP->MarkPackageDirty();
+        const bool bSizeSaved = McpSafeAssetSave(WidgetBP);
 
         ResultJson->SetBoolField(TEXT("success"), true);
+        ResultJson->SetStringField(TEXT("sizedAs"), SizedAs);
+        ResultJson->SetBoolField(TEXT("saveSucceeded"), bSizeSaved);
         ResultJson->SetStringField(TEXT("message"), TEXT("Size set"));
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Size set"), ResultJson);
@@ -3220,50 +3304,58 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             return true;
         }
 
-        // Check for different slot types
-        if (UHorizontalBoxSlot* HBoxSlot = Cast<UHorizontalBoxSlot>(Widget->Slot))
+        // Accept padding:{left,top,right,bottom} OR top-level scalars
+        // padLeft/padTop/padRight/padBottom OR a single "pad" for all sides.
+        // Strict MCP clients strip object-valued params, so the scalar forms are
+        // the reliable path; fail loudly if nothing usable was supplied.
+        FMargin Padding(0);
+        bool bHavePadding = false;
+        TSharedPtr<FJsonObject> PaddingObj = GetObjectField(Payload, TEXT("padding"));
+        if (PaddingObj.IsValid())
         {
-            TSharedPtr<FJsonObject> PaddingObj = GetObjectField(Payload, TEXT("padding"));
-            if (PaddingObj.IsValid())
-            {
-                FMargin Padding;
-                Padding.Left = GetJsonNumberField(PaddingObj, TEXT("left"), 0.0);
-                Padding.Top = GetJsonNumberField(PaddingObj, TEXT("top"), 0.0);
-                Padding.Right = GetJsonNumberField(PaddingObj, TEXT("right"), 0.0);
-                Padding.Bottom = GetJsonNumberField(PaddingObj, TEXT("bottom"), 0.0);
-                HBoxSlot->SetPadding(Padding);
-            }
+            Padding.Left = GetJsonNumberField(PaddingObj, TEXT("left"), 0.0);
+            Padding.Top = GetJsonNumberField(PaddingObj, TEXT("top"), 0.0);
+            Padding.Right = GetJsonNumberField(PaddingObj, TEXT("right"), 0.0);
+            Padding.Bottom = GetJsonNumberField(PaddingObj, TEXT("bottom"), 0.0);
+            bHavePadding = true;
         }
-        else if (UVerticalBoxSlot* VBoxSlot = Cast<UVerticalBoxSlot>(Widget->Slot))
+        else if (Payload->HasField(TEXT("pad")))
         {
-            TSharedPtr<FJsonObject> PaddingObj = GetObjectField(Payload, TEXT("padding"));
-            if (PaddingObj.IsValid())
-            {
-                FMargin Padding;
-                Padding.Left = GetJsonNumberField(PaddingObj, TEXT("left"), 0.0);
-                Padding.Top = GetJsonNumberField(PaddingObj, TEXT("top"), 0.0);
-                Padding.Right = GetJsonNumberField(PaddingObj, TEXT("right"), 0.0);
-                Padding.Bottom = GetJsonNumberField(PaddingObj, TEXT("bottom"), 0.0);
-                VBoxSlot->SetPadding(Padding);
-            }
+            Padding = FMargin(GetJsonNumberField(Payload, TEXT("pad"), 0.0));
+            bHavePadding = true;
         }
-        else if (UOverlaySlot* OverlaySlotWidget = Cast<UOverlaySlot>(Widget->Slot))
+        else if (Payload->HasField(TEXT("padLeft")) || Payload->HasField(TEXT("padTop"))
+              || Payload->HasField(TEXT("padRight")) || Payload->HasField(TEXT("padBottom")))
         {
-            TSharedPtr<FJsonObject> PaddingObj = GetObjectField(Payload, TEXT("padding"));
-            if (PaddingObj.IsValid())
-            {
-                FMargin Padding;
-                Padding.Left = GetJsonNumberField(PaddingObj, TEXT("left"), 0.0);
-                Padding.Top = GetJsonNumberField(PaddingObj, TEXT("top"), 0.0);
-                Padding.Right = GetJsonNumberField(PaddingObj, TEXT("right"), 0.0);
-                Padding.Bottom = GetJsonNumberField(PaddingObj, TEXT("bottom"), 0.0);
-                OverlaySlotWidget->SetPadding(Padding);
-            }
+            Padding.Left = GetJsonNumberField(Payload, TEXT("padLeft"), 0.0);
+            Padding.Top = GetJsonNumberField(Payload, TEXT("padTop"), 0.0);
+            Padding.Right = GetJsonNumberField(Payload, TEXT("padRight"), 0.0);
+            Padding.Bottom = GetJsonNumberField(Payload, TEXT("padBottom"), 0.0);
+            bHavePadding = true;
+        }
+        if (!bHavePadding)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing padding: provide padding:{left,top,right,bottom}, pad:<all>, or padLeft/padTop/padRight/padBottom"), TEXT("MISSING_PARAMETER"));
+            return true;
+        }
+
+        FString PaddedSlot = TEXT("none");
+        if (UHorizontalBoxSlot* HBoxSlot = Cast<UHorizontalBoxSlot>(Widget->Slot)) { HBoxSlot->SetPadding(Padding); PaddedSlot = TEXT("hbox"); }
+        else if (UVerticalBoxSlot* VBoxSlot = Cast<UVerticalBoxSlot>(Widget->Slot)) { VBoxSlot->SetPadding(Padding); PaddedSlot = TEXT("vbox"); }
+        else if (UOverlaySlot* OverlaySlotWidget = Cast<UOverlaySlot>(Widget->Slot)) { OverlaySlotWidget->SetPadding(Padding); PaddedSlot = TEXT("overlay"); }
+        else
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Slot type does not support padding (need HBox/VBox/Overlay child)"), TEXT("INVALID_SLOT"));
+            return true;
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+        WidgetBP->MarkPackageDirty();
+        const bool bPadSaved = McpSafeAssetSave(WidgetBP);
 
         ResultJson->SetBoolField(TEXT("success"), true);
+        ResultJson->SetStringField(TEXT("paddedSlot"), PaddedSlot);
+        ResultJson->SetBoolField(TEXT("saveSucceeded"), bPadSaved);
         ResultJson->SetStringField(TEXT("message"), TEXT("Padding set"));
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Padding set"), ResultJson);
@@ -4042,56 +4134,211 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
     
     if (SubAction.Equals(TEXT("bind_on_value_changed"), ESearchCase::IgnoreCase))
     {
+        // Real value-changed binding (was a stub that only returned an instruction
+        // string and wired nothing). Mirrors the real bind_on_clicked: creates a
+        // UK2Node_ComponentBoundEvent for the widget's value-changed multicast
+        // delegate (default "OnValueChanged", as on USlider / USpinBox).
+        //
+        // If "targetText" names a text widget, it also builds the live-update chain
+        //     Event.Value -> Conv_DoubleToText -> TargetText.SetText
+        // so a value label tracks the slider with no hand-wiring in the graph.
+        //
+        // Params:
+        //   widgetPath   (required) - the widget Blueprint asset
+        //   slotName     (required) - the slider (value widget) whose delegate to bind
+        //   delegateName (optional, default "OnValueChanged")
+        //   targetText   (optional) - text widget to SetText with the live value
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetSlotName(Payload);
-        FString FunctionName = GetJsonStringField(Payload, TEXT("functionName"), TEXT("OnValueChanged"));
-        
+        FString DelegateName = GetJsonStringField(Payload, TEXT("delegateName"), TEXT("OnValueChanged"));
+        FString TargetText = GetJsonStringField(Payload, TEXT("targetText"));
+
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
-        
+
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
-        
-        UWidget* TargetWidget = nullptr;
-        WidgetBP->WidgetTree->ForEachWidget([&](UWidget* W) {
-            if (W && W->GetFName().ToString().Equals(SlotName, ESearchCase::IgnoreCase))
-            {
-                TargetWidget = W;
-            }
-        });
-        
-        if (!TargetWidget)
+
+        UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
+        if (!Widget)
         {
             SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
-        
-        // Determine widget type for appropriate binding info
-        FString WidgetType = TargetWidget->GetClass()->GetName();
-        FString EventName = TEXT("OnValueChanged");
-        
-        if (Cast<USlider>(TargetWidget)) EventName = TEXT("OnValueChanged (float)");
-        else if (Cast<UCheckBox>(TargetWidget)) EventName = TEXT("OnCheckStateChanged (bool)");
-        else if (Cast<USpinBox>(TargetWidget)) EventName = TEXT("OnValueChanged (float)");
-        else if (Cast<UComboBoxString>(TargetWidget)) EventName = TEXT("OnSelectionChanged (FString)");
-        
+
+        UWidget* TextWidget = nullptr;
+        if (!TargetText.IsEmpty())
+        {
+            TextWidget = WidgetBP->WidgetTree->FindWidget(FName(*TargetText));
+            if (!TextWidget)
+            {
+                SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("targetText '%s' not found"), *TargetText), TEXT("WIDGET_NOT_FOUND"));
+                return true;
+            }
+        }
+
+        // Any widget referenced by a graph node must be a variable.
+        bool bMadeVariable = false;
+        if (!Widget->bIsVariable) { Widget->bIsVariable = true; bMadeVariable = true; }
+        if (TextWidget && !TextWidget->bIsVariable) { TextWidget->bIsVariable = true; bMadeVariable = true; }
+        if (bMadeVariable) FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+
+        // The value-changed multicast delegate lives on the widget's own class.
+        FMulticastDelegateProperty* DelegateProp =
+            FindFProperty<FMulticastDelegateProperty>(Widget->GetClass(), FName(*DelegateName));
+        if (!DelegateProp)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Delegate '%s' not found on widget '%s' (class %s)"),
+                    *DelegateName, *SlotName, *Widget->GetClass()->GetName()),
+                TEXT("DELEGATE_NOT_FOUND"));
+            return true;
+        }
+
+        // Resolve the widget variable FObjectProperties (compile once if not visible yet).
+        auto FindVarProp = [&](const FString& Name) -> FObjectProperty*
+        {
+            UClass* SearchClass = WidgetBP->SkeletonGeneratedClass
+                ? (UClass*)WidgetBP->SkeletonGeneratedClass
+                : (UClass*)WidgetBP->GeneratedClass;
+            return SearchClass ? FindFProperty<FObjectProperty>(SearchClass, FName(*Name)) : nullptr;
+        };
+        FObjectProperty* SliderVarProp = FindVarProp(SlotName);
+        FObjectProperty* TextVarProp = TextWidget ? FindVarProp(TargetText) : nullptr;
+        if (!SliderVarProp || (TextWidget && !TextVarProp))
+        {
+            FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::SkipGarbageCollection);
+            SliderVarProp = FindVarProp(SlotName);
+            TextVarProp = TextWidget ? FindVarProp(TargetText) : nullptr;
+        }
+        if (!SliderVarProp)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Could not resolve widget variable property for '%s'"), *SlotName),
+                TEXT("WIDGET_VAR_NOT_FOUND"));
+            return true;
+        }
+        if (TextWidget && !TextVarProp)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Could not resolve widget variable property for targetText '%s'"), *TargetText),
+                TEXT("WIDGET_VAR_NOT_FOUND"));
+            return true;
+        }
+
+        if (WidgetBP->UbergraphPages.Num() == 0)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no event graph"), TEXT("NO_EVENT_GRAPH"));
+            return true;
+        }
+        UEdGraph* EventGraph = WidgetBP->UbergraphPages[0];
+        EventGraph->Modify();
+
+        // Reuse an existing bound event for this (widget, delegate) if present.
+        UK2Node_ComponentBoundEvent* EventNode = nullptr;
+        {
+            TArray<UK2Node_ComponentBoundEvent*> ExistingBoundEvents;
+            FBlueprintEditorUtils::GetAllNodesOfClass<UK2Node_ComponentBoundEvent>(WidgetBP, ExistingBoundEvents);
+            for (UK2Node_ComponentBoundEvent* BE : ExistingBoundEvents)
+            {
+                if (BE && BE->ComponentPropertyName == SliderVarProp->GetFName()
+                    && BE->DelegatePropertyName == DelegateProp->GetFName())
+                {
+                    EventNode = BE;
+                    break;
+                }
+            }
+        }
+        const bool bEventExisted = (EventNode != nullptr);
+        if (!EventNode)
+        {
+            FGraphNodeCreator<UK2Node_ComponentBoundEvent> EventCreator(*EventGraph);
+            EventNode = EventCreator.CreateNode(false);
+            EventNode->InitializeComponentBoundEventParams(SliderVarProp, DelegateProp);
+            EventNode->NodePosX = 0;
+            EventNode->NodePosY = 0;
+            EventCreator.Finalize();
+        }
+
+        // Optionally build the live-update chain Event.Value -> Conv -> TargetText.SetText.
+        bool bWiredLiveUpdate = false;
+        if (TextWidget)
+        {
+            // float/double -> FText. UE5 renamed the node to Conv_DoubleToText; fall
+            // back to the old name for safety. Its formatting params keep their CPP
+            // defaults (min 0 / max 3 fractional digits), so 20.0 -> "20", 0.05 -> "0.05".
+            UFunction* ConvFunc = UKismetTextLibrary::StaticClass()->FindFunctionByName(TEXT("Conv_DoubleToText"));
+            if (!ConvFunc) ConvFunc = UKismetTextLibrary::StaticClass()->FindFunctionByName(TEXT("Conv_FloatToText"));
+            UFunction* SetTextFunc = TextWidget->GetClass()->FindFunctionByName(TEXT("SetText"));
+
+            if (ConvFunc && SetTextFunc)
+            {
+                FGraphNodeCreator<UK2Node_CallFunction> ConvCreator(*EventGraph);
+                UK2Node_CallFunction* ConvNode = ConvCreator.CreateNode(false);
+                ConvNode->SetFromFunction(ConvFunc);
+                ConvNode->NodePosX = 280;
+                ConvNode->NodePosY = 16;
+                ConvCreator.Finalize();
+
+                FGraphNodeCreator<UK2Node_VariableGet> GetCreator(*EventGraph);
+                UK2Node_VariableGet* GetNode = GetCreator.CreateNode(false);
+                GetNode->VariableReference.SetSelfMember(TextVarProp->GetFName());
+                GetNode->NodePosX = 280;
+                GetNode->NodePosY = 200;
+                GetCreator.Finalize();
+
+                FGraphNodeCreator<UK2Node_CallFunction> SetCreator(*EventGraph);
+                UK2Node_CallFunction* SetNode = SetCreator.CreateNode(false);
+                SetNode->SetFromFunction(SetTextFunc);
+                SetNode->NodePosX = 560;
+                SetNode->NodePosY = 0;
+                SetCreator.Finalize();
+
+                UEdGraphPin* EvThen   = EventNode->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+                UEdGraphPin* EvValue  = EventNode->FindPin(FName(TEXT("Value")), EGPD_Output);
+                UEdGraphPin* ConvIn   = ConvNode->FindPin(FName(TEXT("Value")), EGPD_Input);
+                UEdGraphPin* ConvOut  = ConvNode->FindPin(UEdGraphSchema_K2::PN_ReturnValue, EGPD_Output);
+                UEdGraphPin* SetExec  = SetNode->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+                UEdGraphPin* SetSelf  = SetNode->FindPin(UEdGraphSchema_K2::PN_Self, EGPD_Input);
+                UEdGraphPin* SetInText= SetNode->FindPin(FName(TEXT("InText")), EGPD_Input);
+                UEdGraphPin* GetOut   = GetNode->FindPin(TextVarProp->GetFName(), EGPD_Output);
+
+                if (EvThen && SetExec)   EvThen->MakeLinkTo(SetExec);
+                if (EvValue && ConvIn)   EvValue->MakeLinkTo(ConvIn);
+                if (ConvOut && SetInText)ConvOut->MakeLinkTo(SetInText);
+                if (GetOut && SetSelf)   GetOut->MakeLinkTo(SetSelf);
+
+                bWiredLiveUpdate = EvThen && SetExec && EvValue && ConvIn && ConvOut && SetInText && GetOut && SetSelf;
+            }
+        }
+
+        // Compile so the binding is generated, then persist.
+        FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::SkipGarbageCollection);
+        WidgetBP->MarkPackageDirty();
+        const bool bSaved = McpSafeAssetSave(WidgetBP);
+
         ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-        ResultJson->SetStringField(TEXT("widgetType"), WidgetType);
-        ResultJson->SetStringField(TEXT("eventType"), EventName);
-        ResultJson->SetStringField(TEXT("functionName"), FunctionName);
-        ResultJson->SetStringField(TEXT("instruction"), FString::Printf(TEXT("Bind '%s' to %s's %s event."), *FunctionName, *SlotName, *EventName));
-        
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("OnValueChanged binding info provided"), ResultJson);
+        ResultJson->SetStringField(TEXT("widgetName"), SlotName);
+        ResultJson->SetStringField(TEXT("widgetClass"), Widget->GetClass()->GetName());
+        ResultJson->SetStringField(TEXT("delegate"), DelegateName);
+        ResultJson->SetStringField(TEXT("eventNode"), EventNode->GetName());
+        ResultJson->SetBoolField(TEXT("eventAlreadyExisted"), bEventExisted);
+        ResultJson->SetBoolField(TEXT("madeWidgetVariable"), bMadeVariable);
+        if (TextWidget)
+        {
+            ResultJson->SetStringField(TEXT("targetText"), TargetText);
+            ResultJson->SetBoolField(TEXT("wiredLiveUpdate"), bWiredLiveUpdate);
+        }
+        ResultJson->SetBoolField(TEXT("saveSucceeded"), bSaved);
+
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("OnValueChanged bound"), ResultJson);
         return true;
     }
     

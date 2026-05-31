@@ -169,6 +169,19 @@ the widget's class). See the real `bind_on_clicked` in `WidgetAuthoringHandlers.
 the pattern (it also optionally creates + wires a self `targetFunction` call). The widget
 must be a variable (`bIsVariable`) for the bound event to reference it.
 
+### 7. Editing an asset that's OPEN in the editor desyncs (partial!)
+The bridge mutates the real `UObject`s, but the editor's open designer/Details views are
+**cached** — they refresh on reselect / recompile / reopen, NOT on external property
+writes. So an MCP property change (font, size, color) won't appear in an already-open tab
+even though a `set_style` read-back confirms it on the object. The desync is *partial* and
+that's the trap: **structural** changes (adding/removing widgets) tend to show up (the
+designer rebuilds the tree on interaction), while **property** edits on already-displayed
+widgets keep showing stale values. Worst of all, **Saving from the stale tab overwrites the
+MCP edits** with the editor's in-memory copy. Rules: keep the asset **closed** during an MCP
+pass (or close-without-save → reopen to resync); never trust the Details panel over a
+`set_style` read; if you must have it open, reselect/recompile to refresh and don't Save the
+stale tab.
+
 ---
 
 ## Build workflow — what compiles how
