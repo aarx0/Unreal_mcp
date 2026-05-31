@@ -61,6 +61,7 @@
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraph/EdGraphSchema.h"
+#include "EdGraphSchema_K2.h"   // PC_Exec — classify exec vs pure/data pins for arrange_graph
 #include "EdGraphNode_Comment.h"
 
 // Blueprint Core
@@ -121,6 +122,195 @@
  * the requester.
  * @return `true` if the request was handled by this function, `false` otherwise.
  */
+#if WITH_EDITOR
+// =============================================================================
+// arrange_graph — Blueprint graph auto-layout (see docs/graph-auto-layout.md)
+// =============================================================================
+// Sugiyama-flavoured layout specialised for Blueprint graphs. Dependency-free,
+// no crossing-minimisation ("fine, not perfect" — a throwaway authoring aid):
+//   X = longest-path columns over exec wires + data wires (so a consumer sits
+//       right of both its exec predecessor and its data feeders); lone pure
+//       getters are then nudged to just-left-of-their-consumer.
+//   Y = a single non-resetting row cursor with parent-centering (Reingold-
+//       Tilford): each leaf takes the next row, each parent centers on its
+//       children (pure feeders + exec successors), so feeders stack on adjacent
+//       rows and independent event trees stack below one another for free.
+namespace
+{
+constexpr int32 ArrangeColStepX = 320; // column spacing (px); > node width, so columns never overlap
+constexpr int32 ArrangeRowStepY = 180; // row spacing (px) for the Y cursor
+
+bool ArrangePinIsExec(const UEdGraphPin* Pin)
+{
+    return Pin && Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec;
+}
+
+bool ArrangeNodeIsPure(const UEdGraphNode* Node)
+{
+    if (!Node) { return true; }
+    for (const UEdGraphPin* P : Node->Pins)
+    {
+        if (ArrangePinIsExec(P)) { return false; }
+    }
+    return true; // no exec pins at all => pure/data node
+}
+
+// Longest-path column: column = 1 + max(predecessor columns). Memoised; the
+// Visiting set turns any back-edge in an exec/data cycle into a no-op so it
+// terminates.
+int32 ArrangeColumn(UEdGraphNode* Node,
+                    const TMap<UEdGraphNode*, TArray<UEdGraphNode*>>& ColPred,
+                    TMap<UEdGraphNode*, int32>& Col,
+                    TSet<UEdGraphNode*>& Visiting)
+{
+    if (const int32* Cached = Col.Find(Node)) { return *Cached; }
+    if (Visiting.Contains(Node)) { return 0; }
+    Visiting.Add(Node);
+    int32 Best = 0;
+    if (const TArray<UEdGraphNode*>* Preds = ColPred.Find(Node))
+    {
+        for (UEdGraphNode* P : *Preds)
+        {
+            Best = FMath::Max(Best, ArrangeColumn(P, ColPred, Col, Visiting) + 1);
+        }
+    }
+    Visiting.Remove(Node);
+    Col.Add(Node, Best);
+    return Best;
+}
+
+// DFS row assignment: leaves consume the monotonic cursor, parents center on
+// their children. Visited guard makes shared feeders / cycles safe (placed once).
+float ArrangeRow(UEdGraphNode* Node,
+                 const TMap<UEdGraphNode*, TArray<UEdGraphNode*>>& Children,
+                 TMap<UEdGraphNode*, float>& Row,
+                 TSet<UEdGraphNode*>& Visited,
+                 float& Cursor)
+{
+    if (const float* Cached = Row.Find(Node)) { return *Cached; }
+    const TArray<UEdGraphNode*>* Kids = Children.Find(Node);
+    if (Visited.Contains(Node) || !Kids || Kids->Num() == 0)
+    {
+        const float Leaf = Cursor; Cursor += 1.0f; Row.Add(Node, Leaf); return Leaf;
+    }
+    Visited.Add(Node);
+    float Sum = 0.0f;
+    for (UEdGraphNode* K : *Kids)
+    {
+        Sum += ArrangeRow(K, Children, Row, Visited, Cursor);
+    }
+    const float Centered = Sum / Kids->Num();
+    Row.Add(Node, Centered);
+    return Centered;
+}
+
+// Lay out every node in Graph; returns the count repositioned.
+int32 ArrangeBlueprintGraph(UEdGraph* Graph)
+{
+    if (!Graph) { return 0; }
+    TArray<UEdGraphNode*> Nodes;
+    for (UEdGraphNode* N : Graph->Nodes) { if (N) { Nodes.Add(N); } }
+    if (Nodes.Num() == 0) { return 0; }
+
+    TMap<UEdGraphNode*, TArray<UEdGraphNode*>> ColPred;       // X: exec preds + data sources
+    TMap<UEdGraphNode*, TArray<UEdGraphNode*>> Children;      // Y: exec successors + pure feeders
+    TMap<UEdGraphNode*, TArray<UEdGraphNode*>> PureConsumers; // pure node -> nodes it feeds
+    TArray<UEdGraphNode*> Roots;                              // event/entry nodes (no exec input)
+
+    for (UEdGraphNode* N : Nodes)
+    {
+        const bool bPure = ArrangeNodeIsPure(N);
+        bool bHasExecInput = false;
+        for (UEdGraphPin* P : N->Pins)
+        {
+            if (!P) { continue; }
+            const bool bExec = ArrangePinIsExec(P);
+            if (bExec && P->Direction == EGPD_Output)
+            {
+                for (UEdGraphPin* L : P->LinkedTo)
+                {
+                    UEdGraphNode* M = L ? L->GetOwningNode() : nullptr;
+                    if (M && M != N)
+                    {
+                        ColPred.FindOrAdd(M).AddUnique(N);   // successor sits right of N
+                        Children.FindOrAdd(N).AddUnique(M);  // ...and is N's Y-child
+                    }
+                }
+            }
+            else if (bExec && P->Direction == EGPD_Input)
+            {
+                for (UEdGraphPin* L : P->LinkedTo)
+                {
+                    if (L && L->GetOwningNode()) { bHasExecInput = true; }
+                }
+            }
+            else if (!bExec && P->Direction == EGPD_Input)
+            {
+                for (UEdGraphPin* L : P->LinkedTo)
+                {
+                    UEdGraphNode* F = L ? L->GetOwningNode() : nullptr;
+                    if (F && F != N)
+                    {
+                        ColPred.FindOrAdd(N).AddUnique(F);   // data source pushes N right
+                        if (ArrangeNodeIsPure(F))
+                        {
+                            Children.FindOrAdd(N).AddUnique(F);   // pure feeder is a Y-child of N
+                            PureConsumers.FindOrAdd(F).AddUnique(N);
+                        }
+                    }
+                }
+            }
+        }
+        if (!bPure && !bHasExecInput) { Roots.Add(N); }
+    }
+
+    // X pass 1 — longest-path columns over the combined exec+data DAG.
+    TMap<UEdGraphNode*, int32> Col;
+    {
+        TSet<UEdGraphNode*> Visiting;
+        for (UEdGraphNode* N : Nodes) { ArrangeColumn(N, ColPred, Col, Visiting); }
+    }
+    // X pass 2 — a pure node with no inputs (a lone getter) would land in column
+    // 0 beside the events; pull it to just-left-of its leftmost consumer instead.
+    TMap<UEdGraphNode*, int32> FinalCol = Col;
+    for (UEdGraphNode* N : Nodes)
+    {
+        if (!ArrangeNodeIsPure(N)) { continue; }
+        const TArray<UEdGraphNode*>* Cons = PureConsumers.Find(N);
+        if (!Cons || Cons->Num() == 0) { continue; }
+        int32 MinConsumerCol = MAX_int32;
+        for (UEdGraphNode* C : *Cons) { MinConsumerCol = FMath::Min(MinConsumerCol, Col.FindRef(C)); }
+        FinalCol.Add(N, FMath::Max(Col.FindRef(N), MinConsumerCol - 1));
+    }
+
+    // Y — non-resetting cursor + parent-centering from each root, then any nodes
+    // not reached from a root (orphans / disconnected) get their own rows.
+    TMap<UEdGraphNode*, float> Row;
+    {
+        // Roots are processed in discovery order; order only decides which rows
+        // each independent tree occupies, never whether any nodes overlap.
+        TSet<UEdGraphNode*> Visited;
+        float Cursor = 0.0f;
+        for (UEdGraphNode* R : Roots) { ArrangeRow(R, Children, Row, Visited, Cursor); }
+        for (UEdGraphNode* N : Nodes)
+        {
+            if (!Row.Contains(N)) { ArrangeRow(N, Children, Row, Visited, Cursor); }
+        }
+    }
+
+    int32 Count = 0;
+    for (UEdGraphNode* N : Nodes)
+    {
+        N->Modify();
+        N->NodePosX = FinalCol.FindRef(N) * ArrangeColStepX;
+        N->NodePosY = FMath::RoundToInt(Row.FindRef(N) * ArrangeRowStepY);
+        ++Count;
+    }
+    return Count;
+}
+} // namespace
+#endif // WITH_EDITOR
+
 bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
@@ -1619,6 +1809,37 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
     SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Graph details retrieved."), Result);
+    return true;
+  } else if (SubAction == TEXT("arrange_graph")) {
+    // Auto-layout every node in TargetGraph: exec-flow columns for X, a
+    // non-resetting row cursor with parent-centering for Y. Works on any graph
+    // (generated or hand-edited), not just the chains the binders emit.
+    const int32 Arranged = ArrangeBlueprintGraph(TargetGraph);
+    TargetGraph->NotifyGraphChanged();
+    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    SaveLoadedAssetThrottled(Blueprint);
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    Result->SetStringField(TEXT("graphName"), TargetGraph->GetName());
+    Result->SetNumberField(TEXT("arrangedNodes"), Arranged);
+    TArray<TSharedPtr<FJsonValue>> NodePositions;
+    for (UEdGraphNode *Node : TargetGraph->Nodes) {
+      if (!Node) {
+        continue;
+      }
+      TSharedPtr<FJsonObject> NodeObj = McpHandlerUtils::CreateResultObject();
+      NodeObj->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
+      NodeObj->SetStringField(
+          TEXT("nodeTitle"),
+          Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+      NodeObj->SetNumberField(TEXT("x"), Node->NodePosX);
+      NodeObj->SetNumberField(TEXT("y"), Node->NodePosY);
+      NodePositions.Add(MakeShared<FJsonValueObject>(NodeObj));
+    }
+    Result->SetArrayField(TEXT("nodes"), NodePositions);
+    McpHandlerUtils::AddVerification(Result, Blueprint);
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           TEXT("Graph arranged."), Result);
     return true;
   } else if (SubAction == TEXT("get_pin_details")) {
     FString NodeId;

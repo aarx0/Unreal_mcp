@@ -151,7 +151,7 @@ inline const TArray<FString>& ManageBlueprintCore()
 		TEXT("set_node_property"), TEXT("create_reroute_node"),
 		TEXT("get_node_details"), TEXT("get_graph_details"),
 		TEXT("get_pin_details"), TEXT("list_node_types"),
-		TEXT("set_pin_default_value")
+		TEXT("set_pin_default_value"), TEXT("arrange_graph")
 	};
 	return Actions;
 }

@@ -112,14 +112,24 @@ minimization, accept "fine."
 - **Generators to fix (Phase 1)**: `bind_on_clicked`, `bind_on_value_changed` in
   `McpAutomationBridge_WidgetAuthoringHandlers.cpp` (they set `NodePosX/NodePosY` directly
   on the `UK2Node*`s right after `FGraphNodeCreator::Finalize`).
-- **Adding `arrange_graph` (Phase 2)**: implement a handler that loads the graph
-  (`UEdGraph` from `WidgetBP->UbergraphPages[...]` or a named graph), classifies each
-  `UEdGraphNode` (exec pins via `UEdGraphSchema_K2::PC_Exec`; pure = no exec pins),
-  computes the layout above, writes `NodePosX/NodePosY`, then
-  `FBlueprintEditorUtils::MarkBlueprintAsModified`. Route it: add the action string to
-  `WidgetAuthoring()` (or a graph group) in `MCP/McpConsolidatedActionRouting.h` **and**
-  the tool's action enum in `MCP/Tools/McpTool_ManageBlueprint.cpp`, then rebuild
-  (header change ⇒ full rebuild; see `docs/extending-the-bridge.md`).
+- **`arrange_graph` (Phase 2) — IMPLEMENTED** in `HandleBlueprintGraphAction`
+  (`McpAutomationBridge_BlueprintGraphHandlers.cpp`): a self-contained anonymous-namespace
+  layout pass (`ArrangeBlueprintGraph`) classifies each `UEdGraphNode` (exec pins via
+  `UEdGraphSchema_K2::PC_Exec`; pure = no exec pins), computes the layout above, writes
+  `NodePosX/NodePosY`, then `MarkBlueprintAsModified` + save. **Routing has two parts, and
+  the dispatch one is the part the original spec missed:**
+  1. **Dispatch gate (required to reach the handler):** add the action to the hard-coded
+     `GraphSubActions` `TSet` in `McpAutomationBridgeSubsystem.cpp` (the `manage_blueprint`
+     `RegisterHandler` lambda). Only subactions in that set are routed to
+     `HandleBlueprintGraphAction`; everything else falls through to `HandleBlueprintAction`
+     and returns `UNKNOWN_ACTION`. (This set — not `McpConsolidatedActionRouting.h` — is
+     the real router; `get_nodes` is unreachable for exactly this reason.)
+  2. **Schema advertisement:** add the action to `ManageBlueprintCore()` in
+     `MCP/McpConsolidatedActionRouting.h`. That list is what `McpTool_ManageBlueprint.cpp`
+     turns into the client `action` enum via `McpConsolidatedActions::ManageBlueprint()` —
+     it's derived, so you do **not** hand-edit an enum in `McpTool_ManageBlueprint.cpp`.
+  Header touch ⇒ full rebuild (editors closed); the handler/dispatch `.cpp` edits could
+  Live-Code. See `docs/extending-the-bridge.md`.
 - Node sizes vary; approximate with a fixed column `GAP` (~320px) and row height from pin
   count, or call the node's estimated size. Pixel-perfect isn't required.
 
