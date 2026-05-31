@@ -126,6 +126,7 @@
 
 // Blueprint graph nodes — for real widget delegate event binding (bind_on_clicked)
 #include "K2Node_ComponentBoundEvent.h"
+#include "K2Node_Event.h"                // base of all event nodes — counted for chain self-layout
 #include "K2Node_CallFunction.h"
 #include "K2Node_VariableGet.h"          // bind_on_value_changed live-update chain
 #include "Kismet/KismetTextLibrary.h"    // Conv_DoubleToText for value->text
@@ -146,6 +147,14 @@
 // Internationalization
 #include "Internationalization/StringTableCore.h"
 #include "Internationalization/StringTableRegistry.h"
+
+// Vertical gap (px) between independently-generated Blueprint event chains. A
+// brand-new event is offset down by (existing event-node count) * this gap so the
+// node-generating binders (bind_on_clicked / bind_on_value_changed) stack their
+// chains instead of piling up at the same coordinates. Within-chain relative
+// offsets are unchanged. ~300 is roomy enough for the tallest chain we emit
+// (value-changed: a feeder 200px below the event); pixel-perfect isn't required.
+static constexpr int32 McpWidgetChainRowGapY = 300;
 
 // =============================================================================
 // Widget Authoring Helper Functions
@@ -4023,14 +4032,32 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             }
         }
         const bool bEventExisted = (EventNode != nullptr);
+        // Self-layout anchor for this chain. A brand-new event is stacked below any
+        // event roots already in the graph (count * row gap) so generated chains
+        // don't smoosh at (0,0); a reused event keeps its place and new nodes anchor
+        // to it. Within-chain offsets below are added to (BaseX, BaseY).
+        int32 BaseX = 0;
+        int32 BaseY = 0;
         if (!EventNode)
         {
+            int32 ExistingEventChains = 0;
+            for (const UEdGraphNode* ExistingNode : EventGraph->Nodes)
+            {
+                if (ExistingNode && ExistingNode->IsA<UK2Node_Event>()) { ++ExistingEventChains; }
+            }
+            BaseY = ExistingEventChains * McpWidgetChainRowGapY;
+
             FGraphNodeCreator<UK2Node_ComponentBoundEvent> EventCreator(*EventGraph);
             EventNode = EventCreator.CreateNode(false);
             EventNode->InitializeComponentBoundEventParams(WidgetVarProp, DelegateProp);
-            EventNode->NodePosX = 0;
-            EventNode->NodePosY = 0;
+            EventNode->NodePosX = BaseX;
+            EventNode->NodePosY = BaseY;
             EventCreator.Finalize();
+        }
+        else
+        {
+            BaseX = EventNode->NodePosX;
+            BaseY = EventNode->NodePosY;
         }
 
         // Optionally create + wire a self function call (e.g. DeactivateWidget).
@@ -4051,8 +4078,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             FGraphNodeCreator<UK2Node_CallFunction> CallCreator(*EventGraph);
             UK2Node_CallFunction* CallNode = CallCreator.CreateNode(false);
             CallNode->SetFromFunction(Func);
-            CallNode->NodePosX = 400;
-            CallNode->NodePosY = 0;
+            CallNode->NodePosX = BaseX + 400;
+            CallNode->NodePosY = BaseY;
             CallCreator.Finalize();
 
             UEdGraphPin* EventThen = EventNode->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
@@ -4257,14 +4284,31 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             }
         }
         const bool bEventExisted = (EventNode != nullptr);
+        // Self-layout anchor for this chain (same scheme as bind_on_clicked): stack a
+        // new event below existing event roots; a reused event keeps its place and the
+        // live-update chain below anchors to it. Chain offsets add to (BaseX, BaseY).
+        int32 BaseX = 0;
+        int32 BaseY = 0;
         if (!EventNode)
         {
+            int32 ExistingEventChains = 0;
+            for (const UEdGraphNode* ExistingNode : EventGraph->Nodes)
+            {
+                if (ExistingNode && ExistingNode->IsA<UK2Node_Event>()) { ++ExistingEventChains; }
+            }
+            BaseY = ExistingEventChains * McpWidgetChainRowGapY;
+
             FGraphNodeCreator<UK2Node_ComponentBoundEvent> EventCreator(*EventGraph);
             EventNode = EventCreator.CreateNode(false);
             EventNode->InitializeComponentBoundEventParams(SliderVarProp, DelegateProp);
-            EventNode->NodePosX = 0;
-            EventNode->NodePosY = 0;
+            EventNode->NodePosX = BaseX;
+            EventNode->NodePosY = BaseY;
             EventCreator.Finalize();
+        }
+        else
+        {
+            BaseX = EventNode->NodePosX;
+            BaseY = EventNode->NodePosY;
         }
 
         // Optionally build the live-update chain Event.Value -> Conv -> TargetText.SetText.
@@ -4283,22 +4327,22 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
                 FGraphNodeCreator<UK2Node_CallFunction> ConvCreator(*EventGraph);
                 UK2Node_CallFunction* ConvNode = ConvCreator.CreateNode(false);
                 ConvNode->SetFromFunction(ConvFunc);
-                ConvNode->NodePosX = 280;
-                ConvNode->NodePosY = 16;
+                ConvNode->NodePosX = BaseX + 280;
+                ConvNode->NodePosY = BaseY + 16;
                 ConvCreator.Finalize();
 
                 FGraphNodeCreator<UK2Node_VariableGet> GetCreator(*EventGraph);
                 UK2Node_VariableGet* GetNode = GetCreator.CreateNode(false);
                 GetNode->VariableReference.SetSelfMember(TextVarProp->GetFName());
-                GetNode->NodePosX = 280;
-                GetNode->NodePosY = 200;
+                GetNode->NodePosX = BaseX + 280;
+                GetNode->NodePosY = BaseY + 200;
                 GetCreator.Finalize();
 
                 FGraphNodeCreator<UK2Node_CallFunction> SetCreator(*EventGraph);
                 UK2Node_CallFunction* SetNode = SetCreator.CreateNode(false);
                 SetNode->SetFromFunction(SetTextFunc);
-                SetNode->NodePosX = 560;
-                SetNode->NodePosY = 0;
+                SetNode->NodePosX = BaseX + 560;
+                SetNode->NodePosY = BaseY;
                 SetCreator.Finalize();
 
                 UEdGraphPin* EvThen   = EventNode->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
