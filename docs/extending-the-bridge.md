@@ -198,6 +198,14 @@ running editor, but a client that already handshook keeps validating against the
 schema. Reconnect the client (e.g. reload the VS Code window) so it re-fetches `tools/list`.
 Handler-only changes (Layer 3) take effect immediately after Live Coding — no reconnect.
 
+**Triggering Live Coding without the editor UI:** the bridge exposes
+`system_control live_coding_compile` (calls `ILiveCodingModule::Compile` with
+`WaitForCompletion`). It compiles changed `.cpp` and patches the running editor in place —
+the headless / MCP-driven equivalent of `Ctrl+Alt+F11`, so an agent can apply `.cpp`-body
+bridge changes without a close/rebuild/relaunch cycle. Same limits as the shortcut:
+`.h` / `*.Build.cs` / `*.uplugin` changes still need a full rebuild, and Live Coding must be
+enabled for the session.
+
 > "Live Coding active" blocking a full rebuild is an **engine-install-wide** lock: close
 > every editor using that engine, not just this project.
 

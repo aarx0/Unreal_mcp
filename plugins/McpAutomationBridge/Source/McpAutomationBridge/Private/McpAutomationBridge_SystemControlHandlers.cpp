@@ -20,6 +20,10 @@
 #include "Materials/MaterialInstanceConstant.h"
 #include "Exporters/Exporter.h"
 #include "Misc/FileHelper.h"
+#if WITH_LIVE_CODING
+#include "ILiveCodingModule.h"           // live_coding_compile: trigger a Live Coding patch
+#include "Modules/ModuleManager.h"       // FModuleManager::GetModulePtr<ILiveCodingModule>
+#endif
 #endif
 
 bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
@@ -41,7 +45,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
       !Lower.StartsWith(TEXT("test_stale")) &&
       Lower != TEXT("export_asset") &&
       Lower != TEXT("start_session") &&
-      Lower != TEXT("execute_python")) {
+      Lower != TEXT("execute_python") &&
+      Lower != TEXT("live_coding_compile")) {
     return false; // Not handled by this function
   }
 
@@ -55,6 +60,67 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
 
   if (Lower == TEXT("start_session")) {
     return HandleInsightsAction(RequestId, TEXT("manage_insights"), Payload, RequestingSocket);
+  }
+
+  if (Lower == TEXT("live_coding_compile")) {
+    // Trigger a Live Coding compile + patch of the running editor so .cpp-body
+    // changes to the bridge (or any module) apply without a close/rebuild/relaunch.
+    // Header / Build.cs / .uplugin changes still require a full rebuild.
+#if WITH_LIVE_CODING
+    ILiveCodingModule *LiveCoding =
+        FModuleManager::GetModulePtr<ILiveCodingModule>(LIVE_CODING_MODULE_NAME);
+    if (!LiveCoding) {
+      SendAutomationError(RequestingSocket, RequestId,
+                          TEXT("Live Coding module is not loaded"),
+                          TEXT("LIVE_CODING_UNAVAILABLE"));
+      return true;
+    }
+    if (!LiveCoding->IsEnabledForSession()) {
+      if (!LiveCoding->CanEnableForSession()) {
+        SendAutomationError(
+            RequestingSocket, RequestId,
+            FString::Printf(
+                TEXT("Live Coding cannot be enabled for this session: %s"),
+                *LiveCoding->GetEnableErrorText().ToString()),
+            TEXT("LIVE_CODING_DISABLED"));
+        return true;
+      }
+      LiveCoding->EnableForSession(true);
+    }
+
+    // Blocking compile so the response reflects the real outcome; the patch is
+    // applied to the running process before this returns.
+    ELiveCodingCompileResult CompileResult = ELiveCodingCompileResult::NotStarted;
+    LiveCoding->Compile(ELiveCodingCompileFlags::WaitForCompletion, &CompileResult);
+
+    FString ResultStr;
+    switch (CompileResult) {
+    case ELiveCodingCompileResult::Success:            ResultStr = TEXT("Success"); break;
+    case ELiveCodingCompileResult::NoChanges:          ResultStr = TEXT("NoChanges"); break;
+    case ELiveCodingCompileResult::InProgress:         ResultStr = TEXT("InProgress"); break;
+    case ELiveCodingCompileResult::CompileStillActive: ResultStr = TEXT("CompileStillActive"); break;
+    case ELiveCodingCompileResult::NotStarted:         ResultStr = TEXT("NotStarted"); break;
+    case ELiveCodingCompileResult::Failure:            ResultStr = TEXT("Failure"); break;
+    case ELiveCodingCompileResult::Cancelled:          ResultStr = TEXT("Cancelled"); break;
+    default:                                           ResultStr = TEXT("Unknown"); break;
+    }
+    const bool bOk = (CompileResult == ELiveCodingCompileResult::Success ||
+                      CompileResult == ELiveCodingCompileResult::NoChanges);
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), bOk);
+    Result->SetStringField(TEXT("compileResult"), ResultStr);
+    SendAutomationResponse(
+        RequestingSocket, RequestId, bOk,
+        FString::Printf(TEXT("Live Coding compile: %s"), *ResultStr), Result);
+    return true;
+#else
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        TEXT("Live Coding is not compiled into this build (WITH_LIVE_CODING=0)"),
+        TEXT("LIVE_CODING_UNAVAILABLE"));
+    return true;
+#endif
   }
 
   if (Lower == TEXT("run_ubt")) {

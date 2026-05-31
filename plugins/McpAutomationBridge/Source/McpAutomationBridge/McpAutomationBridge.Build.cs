@@ -181,6 +181,15 @@ public class McpAutomationBridge : ModuleRules
                 // Optional plugins are handled by AddOptionalDynamicModule() below with delay-load
             });
 
+            // Live Coding (Win64 editor) — lets the bridge trigger a Live Coding
+            // compile/patch of the running editor via ILiveCodingModule, so .cpp-body
+            // bridge changes apply without a close/rebuild/relaunch cycle. Source use
+            // is guarded by WITH_LIVE_CODING. (system_control live_coding_compile)
+            if (Target.Platform == UnrealTargetPlatform.Win64)
+            {
+                PrivateDependencyModuleNames.Add("LiveCoding");
+            }
+
             // --- Feature Detection Logic ---
 
             string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
