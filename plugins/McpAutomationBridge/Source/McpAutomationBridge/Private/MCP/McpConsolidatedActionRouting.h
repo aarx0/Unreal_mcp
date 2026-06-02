@@ -189,7 +189,10 @@ inline const TArray<FString>& WidgetAuthoring()
 		// Tree-mutation actions: handlers exist in WidgetAuthoringHandlers.cpp
 		// but were never routed here, so they returned "Unknown blueprint action".
 		TEXT("remove_widget"), TEXT("reparent_widget"),
-		TEXT("rename_widget"), TEXT("get_widget_slot_info")
+		TEXT("rename_widget"), TEXT("get_widget_slot_info"),
+		// In-place class swap (the designer's "Replace With"); preserves
+		// name + slot + bindings + DesiredFocusWidget via FWidgetBlueprintEditorUtils.
+		TEXT("replace_widget_class")
 	};
 	return Actions;
 }

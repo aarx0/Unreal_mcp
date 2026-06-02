@@ -123,6 +123,7 @@
 // Blueprint Editor
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "WidgetBlueprintEditorUtils.h" // FWidgetBlueprintEditorUtils::ReplaceWidgets (the designer's "Replace With")
 
 // Blueprint graph nodes — for real widget delegate event binding (bind_on_clicked)
 #include "K2Node_ComponentBoundEvent.h"
@@ -6621,6 +6622,73 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         ResultJson->SetStringField(TEXT("newName"), NewName);
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Renamed widget"), ResultJson);
+        return true;
+    }
+
+    if (SubAction.Equals(TEXT("replace_widget_class"), ESearchCase::IgnoreCase))
+    {
+        // In-place widget class swap — the programmatic equivalent of the UMG
+        // designer's right-click "Replace With". FWidgetBlueprintEditorUtils::
+        // ReplaceWidgets reuses the parent slot, copies properties (incl. delegate
+        // bindings), keeps the widget's name for compatible classes (subclass
+        // pairs, e.g. USlider -> UAnalogSlider), fixes variable references and any
+        // CommonActivatableWidget DesiredFocusWidget, and marks the BP modified.
+        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
+        FString SlotName = GetJsonStringField(Payload, TEXT("slotName"));
+        FString NewWidgetClass = GetJsonStringField(Payload, TEXT("newWidgetClass"));
+
+        if (WidgetPath.IsEmpty() || SlotName.IsEmpty() || NewWidgetClass.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName, newWidgetClass"), TEXT("MISSING_PARAMETER"));
+            return true;
+        }
+
+        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
+        if (!WidgetBP || !WidgetBP->WidgetTree)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            return true;
+        }
+
+        UWidget* TargetWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
+        if (!TargetWidget)
+        {
+            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
+            return true;
+        }
+
+        UClass* NewClass = ResolveClassByName(NewWidgetClass);
+        if (!NewClass || !NewClass->IsChildOf(UWidget::StaticClass()))
+        {
+            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("'%s' did not resolve to a UWidget subclass"), *NewWidgetClass), TEXT("INVALID_CLASS"));
+            return true;
+        }
+
+        const FString FromClass = TargetWidget->GetClass()->GetName();
+
+        FWidgetBlueprintEditorUtils::ReplaceWidgets(
+            WidgetBP, TSet<UWidget*>{ TargetWidget }, NewClass,
+            FWidgetBlueprintEditorUtils::EReplaceWidgetNamingMethod::MaintainNameAndReferences);
+
+        // The replacement keeps the old name for compatible classes; confirm.
+        UWidget* NewWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
+        if (!NewWidget || !NewWidget->IsA(NewClass))
+        {
+            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Replace did not yield a '%s' named '%s' (incompatible classes keep a generated name)"), *NewWidgetClass, *SlotName), TEXT("REPLACE_FAILED"));
+            return true;
+        }
+
+        WidgetBP->MarkPackageDirty();
+        const bool bSaved = McpSafeAssetSave(WidgetBP);
+
+        ResultJson->SetBoolField(TEXT("success"), true);
+        ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
+        ResultJson->SetStringField(TEXT("slotName"), SlotName);
+        ResultJson->SetStringField(TEXT("fromClass"), FromClass);
+        ResultJson->SetStringField(TEXT("toClass"), NewWidget->GetClass()->GetName());
+        ResultJson->SetBoolField(TEXT("saved"), bSaved);
+
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Replaced widget class"), ResultJson);
         return true;
     }
 
