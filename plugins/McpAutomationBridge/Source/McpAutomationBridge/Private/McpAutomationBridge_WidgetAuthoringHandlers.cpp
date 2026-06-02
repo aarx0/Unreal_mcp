@@ -124,6 +124,7 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "WidgetBlueprintEditorUtils.h" // FWidgetBlueprintEditorUtils::ReplaceWidgets (the designer's "Replace With")
+#include "Misc/ConfigCacheIni.h"        // GConfig — suppress the "in use in the graph" replace dialog for headless runs
 
 // Blueprint graph nodes — for real widget delegate event binding (bind_on_clicked)
 #include "K2Node_ComponentBoundEvent.h"
@@ -6666,9 +6667,26 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
 
         const FString FromClass = TargetWidget->GetClass()->GetName();
 
+        // ReplaceWidgets pops a blocking FSuppressableWarningDialog ("...in use in
+        // the graph! Do you really want to replace them?") whenever the target is
+        // referenced in the graph — which is the common case (a bound slider, a
+        // named button) and would hang any headless/automation run on the modal.
+        // The dialog's only escape hatch is its config suppression flag (it does
+        // NOT honor GIsRunningUnattendedScript), so flip that flag for the duration
+        // of the replace, then restore the user's prior preference. Safe to auto-
+        // confirm here: MaintainNameAndReferences preserves the bindings the dialog
+        // is warning about. Key string matches the engine's spelling verbatim (sic).
+        const TCHAR* DlgSection = TEXT("SuppressableDialogs");
+        const TCHAR* DlgKey = TEXT("ReaplaceWidgetsInUse_Warning");
+        bool bPrevSuppress = false;
+        GConfig->GetBool(DlgSection, DlgKey, bPrevSuppress, GEditorPerProjectIni);
+        GConfig->SetBool(DlgSection, DlgKey, true, GEditorPerProjectIni);
+
         FWidgetBlueprintEditorUtils::ReplaceWidgets(
             WidgetBP, TSet<UWidget*>{ TargetWidget }, NewClass,
             FWidgetBlueprintEditorUtils::EReplaceWidgetNamingMethod::MaintainNameAndReferences);
+
+        GConfig->SetBool(DlgSection, DlgKey, bPrevSuppress, GEditorPerProjectIni);
 
         // The replacement keeps the old name for compatible classes; confirm.
         UWidget* NewWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
