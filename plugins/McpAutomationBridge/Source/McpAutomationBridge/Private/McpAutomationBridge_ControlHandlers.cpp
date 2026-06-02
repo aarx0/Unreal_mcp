@@ -153,6 +153,7 @@
 #include "Exporters/Exporter.h"
 #include "Misc/OutputDevice.h"
 #include "UnrealClient.h" // For FScreenshotRequest
+#include "Editor/EditorPerformanceSettings.h" // For background-throttle override (headless screenshots)
 
 #endif // WITH_EDITOR
 
@@ -3320,9 +3321,20 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorScreenshot(
     return true;
   }
 
+  // Keep the editor rendering even when it is NOT the foreground window. The
+  // editor throttles background-window rendering ("Use Less CPU in Background"),
+  // and with that on an MCP-driven screenshot request never gets a rendered
+  // frame (so the file is never written) while the editor sits behind the
+  // client. Clearing it for the session lets headless captures complete. We set
+  // the live value only (no PostEditChange/save) so we don't rewrite the user's
+  // saved editor preferences.
+  if (UEditorPerformanceSettings* PerfSettings = GetMutableDefault<UEditorPerformanceSettings>()) {
+    PerfSettings->bThrottleCPUWhenNotForeground = false;
+  }
+
   // Request a screenshot — async, captured on the next rendered viewport frame.
-  // The file will NOT exist immediately; the editor window must be visible and
-  // actively rendering for the capture to complete.
+  // The file will NOT exist immediately; it is written once the viewport draws
+  // (now guaranteed even when backgrounded, per the throttle override above).
   FScreenshotRequest::RequestScreenshot(FullPath, false, false);
 
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
