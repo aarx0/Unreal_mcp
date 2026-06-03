@@ -534,6 +534,20 @@ TArray<FString> UMcpAutomationBridgeSubsystem::EndErrorCapture()
     return AllMessages;
 }
 
+void UMcpAutomationBridgeSubsystem::ClearCapturedErrors()
+{
+    FScopeLock Lock(&ErrorCaptureMutex);
+    CurrentErrorCapture.ErrorMessages.Empty();
+    CurrentErrorCapture.WarningMessages.Empty();
+    CurrentErrorCapture.ErrorCount = 0;
+    CurrentErrorCapture.WarningCount = 0;
+    CurrentErrorCapture.bErrorMessagesTruncated = false;
+    CurrentErrorCapture.bWarningMessagesTruncated = false;
+    CurrentErrorCapture.bHasErrors = false;
+    CurrentErrorCapture.bHasWarnings = false;
+    // Leaves bActive / CapturingThreadId intact so capture continues afterwards.
+}
+
 bool UMcpAutomationBridgeSubsystem::HasCapturedErrors() const
 {
     FScopeLock Lock(&ErrorCaptureMutex);

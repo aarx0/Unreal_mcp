@@ -6699,6 +6699,23 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         WidgetBP->MarkPackageDirty();
         const bool bSaved = McpSafeAssetSave(WidgetBP);
 
+        // Re-verify the end state. ReplaceWidgets logs a transient "There can only
+        // be one event node bound to this component" error during its internal
+        // recompiles even on success; the global error scrape would otherwise turn
+        // this into a false ENGINE_ERROR. Compile once more, confirm it's clean,
+        // then discard the captured transients so success reports as success.
+        FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+        const bool bCompiledClean = (WidgetBP->Status == EBlueprintStatus::BS_UpToDate ||
+                                     WidgetBP->Status == EBlueprintStatus::BS_UpToDateWithWarnings);
+        ClearCapturedErrors();
+        if (!bCompiledClean)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Widget replaced but the blueprint did not compile clean (status %d)"), (int32)WidgetBP->Status),
+                TEXT("REPLACE_COMPILE_FAILED"));
+            return true;
+        }
+
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
         ResultJson->SetStringField(TEXT("slotName"), SlotName);

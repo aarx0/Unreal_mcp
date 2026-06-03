@@ -210,6 +210,14 @@ public:
   /** Return a thread-safe snapshot of captured engine error messages. */
   TArray<FString> GetCapturedErrorMessages() const;
 
+  /**
+   * Discard errors/warnings captured so far during the current request while
+   * leaving capture active. A handler that triggers transient engine logs (e.g.
+   * a Blueprint recompile inside an edit) but then re-verifies the end state is
+   * correct can call this to avoid a false ENGINE_ERROR response.
+   */
+  void ClearCapturedErrors();
+
   // Friend class for error capture device to access private members
   friend class FMcpRequestErrorDevice;
 
