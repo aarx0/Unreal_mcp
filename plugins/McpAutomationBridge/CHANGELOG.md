@@ -31,6 +31,8 @@ All notable changes to the MCP Automation Bridge plugin will be documented in th
 - **`execute_python` action** in `system_control` — execute Python code with stdout/stderr capture, supports inline `code` and `file` path, execution time tracking
 - **Shared `ListenHost` setting** — native MCP respects `AllowNonLoopback` for network access control
 - **Plugin-packaging scripts** for Win/Mac/Linux — build and package the plugin via RunUAT BuildPlugin, with smart arg parsing
+- **`manage_asset` actions** `get_referencers`, `get_asset_properties`, `set_asset_property` — read referencers / bulk-read / write a single reflected property on any asset
+- **`McpDirectPackageSave`** in `McpSafeOperations.h` — raw `UPackage::Save` that bypasses the editor's validate-on-save and source-control checkout pipelines (both have crashed the editor on unattended saves). Detects read-only targets (e.g. Perforce-locked files) and reports an actionable error instead of failing silently. See `docs/safe-asset-saving.md`
 
 ### Changed
 - Tool categories now use four groups: `core`, `world`, `gameplay`, and `utility`. The singleton `authoring` category was removed, and `manage_blueprint` moved into `core`.
@@ -42,6 +44,10 @@ All notable changes to the MCP Automation Bridge plugin will be documented in th
 - Temp file cleanup in `execute_python` uses RAII scope guard for guaranteed cleanup on all exit paths
 
 ### Fixed
+- **`set_asset_property` wrote to the wrong memory address (corruption / crash)** — the handler passed `ContainerPtrToValuePtr(Asset)` (an already-offset value pointer) to `ApplyJsonValueToProperty`/`ExportPropertyToJsonValue`, which themselves use the `*_InContainer` accessors and add the offset again. Every write landed at `Asset + 2×offset`: silent no-op corruption for POD properties (the matching export read the same wrong address and falsely echoed success) and an `FString::operator=` access-violation crash for string/name properties. Now passes the object base. Was masking the write as "working" in earlier testing
+- **`set_asset_property` editor crash on save** — the save routed through editor pipelines that faulted in two different subsystems (`DataValidation` via validate-on-save, `GitSourceControl` via checkout-on-save). Now uses `McpDirectPackageSave` (raw package write), avoiding both. Read-only/locked targets now return `ASSET_SAVE_FAILED` with a checkout hint instead of crashing or silently no-op'ing
+- **`ResolveObjectFromPath`** returned the `UPackage` instead of the asset for asset paths — broke `get_property`/`export`/`set_asset_property` on assets; now normalizes to `Package.Object` and `StaticLoadObject`s the asset
+- **`execute_python` failures** now fold the captured Python traceback into the error message instead of a generic failure string
 - `reset` action now restores initial state from `Initialize()` instead of enabling all tools unconditionally
 - UE 5.6 compatibility: `TSharedPtr` for incomplete types, `Headers.Add` instead of `SetHeader`, `TryGetField` return value
 - Package script arg parsing — flags no longer eaten as output directory, extra args correctly forwarded to RunUAT

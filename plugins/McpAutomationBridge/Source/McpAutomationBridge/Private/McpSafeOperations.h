@@ -46,6 +46,7 @@
 
 #include "FileHelpers.h"
 #include "Misc/PackageName.h"
+#include "UObject/SavePackage.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
 #include "AssetViewUtils.h"
@@ -250,6 +251,114 @@ inline bool McpSafeAssetSave(UObject* Asset)
 #else
     return false;
 #endif
+}
+
+/**
+ * Direct, low-level package save that bypasses BOTH the editor's validate-on-save
+ * pipeline AND source-control checkout. Writes the package file straight to disk
+ * via UPackage::Save.
+ *
+ * Use this instead of McpSafeAssetSave when the editor-owned save path is unsafe.
+ * In this project the editor save flow has been observed to crash in two distinct
+ * subsystems: the content-validation pass (UnrealEditor-DataValidation, via
+ * UEditorAssetLibrary::SaveLoadedAsset) and the Git source-control provider
+ * (UnrealEditor-GitSourceControl, via UPackageTools::SavePackagesForObjects /
+ * FEditorFileUtils::PromptForCheckoutAndSave). A raw SavePackage touches neither
+ * subsystem, so it is the safe path for unattended/automation saves.
+ *
+ * Trade-off vs McpSafeAssetSave: no SC auto-checkout and no asset-registry rescan.
+ * The caller is expected to have already MarkPackageDirty()'d the asset.
+ *
+ * Source control: skipping checkout is fine for Git (it does not lock files), but
+ * systems that mark unchecked-out files read-only (Perforce, Plastic) would make a
+ * raw save fail silently. This helper detects a read-only target up front and
+ * reports it via OutError instead, so callers can surface a "check out the file"
+ * message rather than a mystery no-op.
+ *
+ * @param Asset    The UObject asset (or its package) to save
+ * @param OutError Optional; on failure, receives a human-readable reason
+ * @returns true if the package file was written successfully
+ */
+inline bool McpDirectPackageSave(UObject* Asset, FString* OutError = nullptr)
+{
+    auto Fail = [OutError](const FString& Reason) -> bool
+    {
+        if (OutError)
+        {
+            *OutError = Reason;
+        }
+        return false;
+    };
+
+    if (!Asset)
+    {
+        return Fail(TEXT("No asset provided"));
+    }
+
+    UPackage* Package = Cast<UPackage>(Asset);
+    if (!Package)
+    {
+        Package = Asset->GetOutermost();
+    }
+    if (!Package)
+    {
+        return Fail(TEXT("Asset has no owning package"));
+    }
+
+    const FString PackageName = Package->GetName();
+    if (PackageName.StartsWith(TEXT("/Temp/")) ||
+        PackageName.StartsWith(TEXT("/Transient/")) ||
+        PackageName.StartsWith(TEXT("/Engine/Transient")) ||
+        Package->HasAnyFlags(RF_Transient))
+    {
+        return Fail(FString::Printf(TEXT("Refusing to save transient package '%s'"), *PackageName));
+    }
+
+    const FString PackageExtension = Package->ContainsMap()
+        ? FPackageName::GetMapPackageExtension()
+        : FPackageName::GetAssetPackageExtension();
+
+    FString PackageFileName;
+    if (!FPackageName::TryConvertLongPackageNameToFilename(
+            PackageName, PackageFileName, PackageExtension))
+    {
+        return Fail(FString::Printf(TEXT("Could not resolve a file path for package '%s'"), *PackageName));
+    }
+
+    // A raw UPackage::Save to a read-only file fails (silently). This is the
+    // Perforce/Plastic "not checked out" case. Detect it and report something
+    // actionable instead of an opaque save failure.
+    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+    if (PlatformFile.FileExists(*PackageFileName) && PlatformFile.IsReadOnly(*PackageFileName))
+    {
+        return Fail(FString::Printf(
+            TEXT("Package file is read-only on disk: '%s'. It is likely locked by source ")
+            TEXT("control (e.g. Perforce) — check it out before saving."),
+            *PackageFileName));
+    }
+
+    // Ensure all exports are in memory before writing — a no-op if the package
+    // is already fully loaded, but prevents data loss if it was only partially
+    // loaded (a known SavePackage gotcha).
+    if (!Package->IsFullyLoaded())
+    {
+        Package->FullyLoad();
+    }
+
+    FlushRenderingCommands();
+
+    FSavePackageArgs SaveArgs;
+    SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+    SaveArgs.SaveFlags = SAVE_NoError;
+    SaveArgs.Error = GError;
+
+    const FSavePackageResultStruct Result =
+        UPackage::Save(Package, nullptr, *PackageFileName, SaveArgs);
+    if (!Result.IsSuccessful())
+    {
+        return Fail(FString::Printf(TEXT("UPackage::Save failed for '%s'"), *PackageFileName));
+    }
+    return true;
 }
 
 /**

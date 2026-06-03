@@ -44,6 +44,7 @@ McpAutomationBridge/
 
 ## UE SAFETY
 - Use `McpSafeAssetSave`, `McpSafeLevelSave`, and `McpSafeLoadMap` from `McpSafeOperations.h` instead of raw package save/load calls.
+- For **unattended edits to existing assets** (e.g. `set_asset_property`), prefer `McpDirectPackageSave` over `McpSafeAssetSave`: the latter routes through the editor save helpers (validate-on-save, source-control checkout), both of which have crashed the editor here. See `docs/safe-asset-saving.md`.
 - For Blueprint SCS work, create nodes/templates through SCS ownership patterns (`CreateNode`, `AddNode`) instead of assigning arbitrary outers.
 - Avoid `ANY_PACKAGE`; use modern lookup helpers or `nullptr`-based lookups.
 - Avoid modal asset saves on newly created assets; they can crash editor/D3D12 paths.

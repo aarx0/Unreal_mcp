@@ -54,6 +54,7 @@
 // MCP Handler Utilities (centralized JSON/Asset helpers)
 // -----------------------------------------------------------------------------
 #include "McpHandlerUtils.h"
+#include "McpPropertyReflection.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "Misc/EngineVersionComparison.h"
 #include "Misc/ScopeExit.h"
@@ -263,6 +264,12 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetAction(
     return HandleManageTextureAction(RequestId, TEXT("manage_texture"), Payload, RequestingSocket);
   if (Lower == TEXT("get_dependencies"))
     return HandleGetDependencies(RequestId, Payload, RequestingSocket);
+  if (Lower == TEXT("get_referencers"))
+    return HandleGetReferencers(RequestId, Payload, RequestingSocket);
+  if (Lower == TEXT("get_asset_properties"))
+    return HandleGetAssetProperties(RequestId, Payload, RequestingSocket);
+  if (Lower == TEXT("set_asset_property"))
+    return HandleSetAssetProperty(RequestId, Payload, RequestingSocket);
   if (Lower == TEXT("get_asset_graph"))
     return HandleGetAssetGraph(RequestId, Payload, RequestingSocket);
   if (Lower == TEXT("set_tags"))
@@ -2202,6 +2209,209 @@ bool UMcpAutomationBridgeSubsystem::HandleGetDependencies(
   return true;
 #else
   SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  return true;
+#endif
+}
+
+/**
+ * Returns the assets that reference a given asset (inverse of get_dependencies).
+ * Payload: 'assetPath'.
+ */
+bool UMcpAutomationBridgeSubsystem::HandleGetReferencers(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+#if WITH_EDITOR
+  FString AssetPath;
+  Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
+  if (AssetPath.IsEmpty()) {
+    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+                           nullptr, TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  const FString SafeAssetPath = SanitizeProjectRelativePath(AssetPath);
+  if (SafeAssetPath.IsEmpty()) {
+    SendAutomationResponse(Socket, RequestId, false, TEXT("Invalid asset path"),
+                           nullptr, TEXT("INVALID_PATH"));
+    return true;
+  }
+
+  if (!UEditorAssetLibrary::DoesAssetExist(SafeAssetPath)) {
+    SendAutomationError(Socket, RequestId,
+                        FString::Printf(TEXT("Asset not found: %s"), *SafeAssetPath),
+                        TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
+
+  FAssetRegistryModule &AssetRegistryModule =
+      FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+  TArray<FName> Referencers;
+  AssetRegistryModule.Get().GetReferencers(FName(*SafeAssetPath), Referencers);
+
+  TArray<TSharedPtr<FJsonValue>> RefArray;
+  for (const FName &Ref : Referencers) {
+    RefArray.Add(MakeShared<FJsonValueString>(Ref.ToString()));
+  }
+
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetNumberField(TEXT("count"), RefArray.Num());
+  Resp->SetArrayField(TEXT("referencers"), RefArray);
+  SendAutomationResponse(Socket, RequestId, true,
+                         TEXT("Referencers retrieved"), Resp, FString());
+  return true;
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  return true;
+#endif
+}
+
+/**
+ * Dumps every UPROPERTY of a content asset to JSON (the reflection-based read
+ * that previously required an execute_python probe). Payload: 'assetPath',
+ * optional 'includeTransient'.
+ */
+bool UMcpAutomationBridgeSubsystem::HandleGetAssetProperties(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+#if WITH_EDITOR
+  FString AssetPath;
+  Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
+  if (AssetPath.IsEmpty()) {
+    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+                           nullptr, TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  FString ResolvedPath;
+  UObject *Asset = McpHandlerUtils::ResolveObjectFromPath(AssetPath, &ResolvedPath);
+  if (!Asset) {
+    SendAutomationError(Socket, RequestId,
+                        FString::Printf(TEXT("Asset not found: %s"), *AssetPath),
+                        TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
+
+  bool bIncludeTransient = false;
+  Payload->TryGetBoolField(TEXT("includeTransient"), bIncludeTransient);
+
+  TSharedPtr<FJsonObject> Props =
+      McpPropertyReflection::ExportObjectToJson(Asset, bIncludeTransient);
+
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetStringField(TEXT("assetPath"), ResolvedPath);
+  Resp->SetStringField(TEXT("class"), Asset->GetClass()->GetName());
+  Resp->SetObjectField(TEXT("properties"),
+                       Props.IsValid() ? Props : MakeShared<FJsonObject>());
+  SendAutomationResponse(Socket, RequestId, true,
+                         TEXT("Asset properties retrieved"), Resp, FString());
+  return true;
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  return true;
+#endif
+}
+
+/**
+ * Sets a single UPROPERTY on a content asset (reflection + ImportText), fires
+ * PostEditChangeProperty, and saves. Payload: 'assetPath', 'propertyName',
+ * 'value'.
+ */
+bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+#if WITH_EDITOR
+  FString AssetPath, PropertyName;
+  Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
+  Payload->TryGetStringField(TEXT("propertyName"), PropertyName);
+  if (AssetPath.IsEmpty() || PropertyName.IsEmpty()) {
+    SendAutomationResponse(Socket, RequestId, false,
+                           TEXT("assetPath and propertyName required"), nullptr,
+                           TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+  if (!Payload->HasField(TEXT("value"))) {
+    SendAutomationResponse(Socket, RequestId, false, TEXT("value required"),
+                           nullptr, TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  FString ResolvedPath;
+  UObject *Asset = McpHandlerUtils::ResolveObjectFromPath(AssetPath, &ResolvedPath);
+  if (!Asset) {
+    SendAutomationError(Socket, RequestId,
+                        FString::Printf(TEXT("Asset not found: %s"), *AssetPath),
+                        TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
+
+  FProperty *Prop =
+      McpPropertyReflection::FindPropertyByName(Asset, FName(*PropertyName));
+  if (!Prop) {
+    SendAutomationError(
+        Socket, RequestId,
+        FString::Printf(TEXT("Property '%s' not found on %s"), *PropertyName,
+                        *Asset->GetClass()->GetName()),
+        TEXT("PROPERTY_NOT_FOUND"));
+    return true;
+  }
+
+  const TSharedPtr<FJsonValue> ValueField = Payload->TryGetField(TEXT("value"));
+  Asset->Modify();
+  // ApplyJsonValueToProperty / ExportPropertyToJsonValue use the *_InContainer
+  // reflection accessors, which add the property's offset to the pointer given.
+  // So they expect the CONTAINER BASE (the object), not an already-offset value
+  // pointer. Passing ContainerPtrToValuePtr here applied the offset twice, so
+  // every write landed at Asset+2*offset — silent corruption for PODs (the
+  // matching export read the same wrong address, so it falsely echoed success)
+  // and an FString::operator= access-violation crash for string properties.
+  void *Container = Asset;
+  FString ApplyError;
+  if (!McpPropertyReflection::ApplyJsonValueToProperty(Container, Prop, ValueField,
+                                                       ApplyError)) {
+    SendAutomationError(
+        Socket, RequestId,
+        FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *ApplyError),
+        TEXT("SET_PROPERTY_FAILED"));
+    return true;
+  }
+
+  FPropertyChangedEvent ChangeEvent(Prop);
+  Asset->PostEditChangeProperty(ChangeEvent);
+  Asset->MarkPackageDirty();
+  // Save via a raw UPackage::Save that bypasses the editor save-UI pipeline.
+  // That pipeline has crashed here in TWO different subsystems on this project:
+  //  - validate-on-save (UEditorAssetLibrary::SaveLoadedAsset -> DataValidation)
+  //  - source-control checkout-on-save (McpSafeAssetSave -> SavePackagesForObjects
+  //    / PromptForCheckoutAndSave -> GitSourceControl).
+  // McpDirectPackageSave touches neither, writing the package straight to disk.
+  FString SaveError;
+  const bool bSaved = McpSafeOperations::McpDirectPackageSave(Asset, &SaveError);
+  if (!bSaved) {
+    // The property was applied in memory but not persisted (e.g. a read-only /
+    // un-checked-out file under Perforce). Report it rather than claiming success.
+    SendAutomationError(
+        Socket, RequestId,
+        FString::Printf(
+            TEXT("Property '%s' was set in memory but the asset could not be saved: %s"),
+            *PropertyName, *SaveError),
+        TEXT("ASSET_SAVE_FAILED"));
+    return true;
+  }
+
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetStringField(TEXT("assetPath"), ResolvedPath);
+  Resp->SetStringField(TEXT("propertyName"), PropertyName);
+  Resp->SetBoolField(TEXT("saved"), bSaved);
+  Resp->SetField(TEXT("value"),
+                 McpPropertyReflection::ExportPropertyToJsonValue(Container, Prop));
+  SendAutomationResponse(Socket, RequestId, true, TEXT("Asset property set"), Resp,
+                         FString());
+  return true;
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }

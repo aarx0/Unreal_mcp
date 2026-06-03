@@ -440,31 +440,28 @@ UObject* ResolveObjectFromPath(const FString& ObjectPath, FString* OutResolvedPa
     if (Path.StartsWith(TEXT("/Game/")) || Path.StartsWith(TEXT("/Engine/")) || Path.StartsWith(TEXT("/Script/")) ||
         FPackageName::IsValidLongPackageName(Path, true))
     {
-        FString PackagePath = Path;
-        if (PackagePath.Contains(TEXT(".")))
+        // Normalize to a fully-qualified object path (Package.Object). A bare
+        // package path (no ".") refers to the package's primary asset, whose
+        // object name matches the package's short name. The previous code loaded
+        // the package then called FindObject(package, fullPath) — which never
+        // matches, so it returned the UPackage itself and every subsequent
+        // property lookup failed. StaticLoadObject with the object path returns
+        // the actual asset (SoundControlBus, Submix, DataAsset, etc.).
+        FString ObjectPathStr = Path;
+        if (!ObjectPathStr.Contains(TEXT(".")))
         {
-            PackagePath = PackagePath.Left(PackagePath.Find(TEXT(".")));
+            ObjectPathStr = ObjectPathStr + TEXT(".") + FPackageName::GetShortName(ObjectPathStr);
         }
-        UPackage* LoadedPackage = LoadPackage(nullptr, *PackagePath, LOAD_None);
-        if (LoadedPackage)
+        if (UObject* Found = StaticLoadObject(UObject::StaticClass(), nullptr, *ObjectPathStr))
         {
-            if (UObject* Found = FindObject<UObject>(LoadedPackage, *Path))
-            {
-                if (OutResolvedPath)
-                {
-                    *OutResolvedPath = Found->GetPathName();
-                }
-                return Found;
-            }
             if (OutResolvedPath)
             {
-                *OutResolvedPath = LoadedPackage->GetPathName();
+                *OutResolvedPath = Found->GetPathName();
             }
-            return LoadedPackage;
+            return Found;
         }
-        
-        // Try StaticFindObject for engine assets that may not need package loading
-        if (UObject* Found = FindObject<UObject>(nullptr, *Path))
+        // Fallback: an already-in-memory object matching the exact path.
+        if (UObject* Found = FindObject<UObject>(nullptr, *ObjectPathStr))
         {
             if (OutResolvedPath)
             {

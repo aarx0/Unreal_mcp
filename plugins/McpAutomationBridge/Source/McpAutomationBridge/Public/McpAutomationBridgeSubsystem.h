@@ -1290,6 +1290,15 @@ private:
   bool HandleGetDependencies(const FString &RequestId,
                              const TSharedPtr<FJsonObject> &Payload,
                              TSharedPtr<FMcpBridgeWebSocket> Socket);
+  bool HandleGetReferencers(const FString &RequestId,
+                            const TSharedPtr<FJsonObject> &Payload,
+                            TSharedPtr<FMcpBridgeWebSocket> Socket);
+  bool HandleGetAssetProperties(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                TSharedPtr<FMcpBridgeWebSocket> Socket);
+  bool HandleSetAssetProperty(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              TSharedPtr<FMcpBridgeWebSocket> Socket);
   bool HandleGetAssetGraph(const FString &RequestId,
                            const TSharedPtr<FJsonObject> &Payload,
                            TSharedPtr<FMcpBridgeWebSocket> Socket);

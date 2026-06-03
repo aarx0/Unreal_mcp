@@ -855,8 +855,20 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
     Result->SetStringField(TEXT("output"), Output.TrimEnd());
     Result->SetStringField(TEXT("error"), Error.TrimEnd());
 
-    SendAutomationResponse(RequestingSocket, RequestId, bSuccess,
-                           bSuccess ? TEXT("Python executed successfully") : TEXT("Python execution failed"),
+    // On failure, surface the captured Python traceback in the message itself.
+    // It is also in Result.error, but clients typically drop the result payload
+    // for error responses, so without this the caller only sees the generic
+    // "Python execution failed" with no detail.
+    FString PyMessage = TEXT("Python executed successfully");
+    if (!bSuccess)
+    {
+      const FString Trace = Error.TrimEnd();
+      PyMessage = Trace.IsEmpty()
+          ? TEXT("Python execution failed (no traceback captured)")
+          : FString::Printf(TEXT("Python execution failed: %s"), *Trace.Left(1500));
+    }
+
+    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, PyMessage,
                            Result, bSuccess ? FString() : TEXT("PYTHON_ERROR"));
     return true;
   }
