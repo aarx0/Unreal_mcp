@@ -53,13 +53,20 @@ namespace McpPropertyReflection
      * - Maps (with basic value types)
      * - Sets (of supported element types)
      *
+     * Struct properties (other than Vector/Rotator) are exported as a nested JSON
+     * object of their child properties; object references as their path string;
+     * arrays of structs/objects recurse element-by-element. Recursion is bounded
+     * by Depth (see ExportStructToJson) and falls back to ExportText at the cap.
+     *
      * @param TargetContainer Pointer to the container holding the property value
      * @param Property The property definition to export
+     * @param Depth Current recursion depth (callers pass 0; used internally)
      * @return JSON value representing the property, or null for unsupported types
      */
     MCPAUTOMATIONBRIDGE_API TSharedPtr<FJsonValue> ExportPropertyToJsonValue(
-        void* TargetContainer, 
-        FProperty* Property);
+        void* TargetContainer,
+        FProperty* Property,
+        int32 Depth = 0);
 
     /**
      * Export all properties of a UObject to a JSON object.
@@ -102,13 +109,15 @@ namespace McpPropertyReflection
      * @param Property The property to set
      * @param ValueField The JSON value to apply
      * @param OutError Receives error message on failure
+     * @param Depth Current recursion depth (callers pass 0; used internally)
      * @return true if successful
      */
     MCPAUTOMATIONBRIDGE_API bool ApplyJsonValueToProperty(
         void* TargetContainer,
         FProperty* Property,
         const TSharedPtr<FJsonValue>& ValueField,
-        FString& OutError);
+        FString& OutError,
+        int32 Depth = 0);
 
     /**
      * Apply multiple JSON values to properties of an object.
@@ -482,19 +491,43 @@ namespace McpPropertyReflection
     MCPAUTOMATIONBRIDGE_API int32 GetArrayPropertyCount(void* Container, FArrayProperty* ArrayProp);
 
     /**
-     * Export an array property to a JSON array.
+     * Export an array property to a JSON array. Struct, object-reference and
+     * other non-primitive inner types recurse via ExportPropertyToJsonValue
+     * (the array Inner has offset 0, so each element pointer is a valid
+     * container base), falling back to ExportText only when that can't structure
+     * the element.
      */
     MCPAUTOMATIONBRIDGE_API TArray<TSharedPtr<FJsonValue>> ExportArrayToJson(
         void* Container,
-        FArrayProperty* ArrayProp);
+        FArrayProperty* ArrayProp,
+        int32 Depth = 0);
 
     /**
      * Import a JSON array into an array property (replaces existing elements).
+     * Struct and object-reference inners are supported via ApplyJsonValueToProperty.
      */
     MCPAUTOMATIONBRIDGE_API bool ImportJsonToArray(
         void* Container,
         FArrayProperty* ArrayProp,
         const TArray<TSharedPtr<FJsonValue>>& JsonArray,
-        FString& OutError);
+        FString& OutError,
+        int32 Depth = 0);
+
+    /**
+     * Export a struct instance as a JSON object of its child properties (reusing
+     * the per-property export path, so nested structs, object references and
+     * arrays-of-structs are handled recursively). Object references become path
+     * strings. Returns null at the recursion-depth cap or for a null struct, so
+     * callers can fall back to a textual export.
+     *
+     * @param StructPtr Pointer to the struct instance (the container base for its
+     *                  child property offsets — do NOT pass an already-offset ptr)
+     * @param Struct    The struct layout
+     * @param Depth     Current recursion depth (the struct's own level)
+     */
+    MCPAUTOMATIONBRIDGE_API TSharedPtr<FJsonObject> ExportStructToJson(
+        void* StructPtr,
+        const UScriptStruct* Struct,
+        int32 Depth = 0);
 
 } // namespace McpPropertyReflection

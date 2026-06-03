@@ -35,6 +35,9 @@
 // Include centralized UE version compatibility macros.
 #include "McpVersionCompatibility.h"
 
+// Shared property reflection helpers (deep struct/object array export+import).
+#include "McpPropertyReflection.h"
+
 // Globals used by registry helpers and fast-mode simulations
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeSubsystem.h"
@@ -1248,6 +1251,18 @@ ExportPropertyToJsonValue(void *TargetContainer, FProperty *Property) {
       return MakeShared<FJsonValueArray>(Arr);
     }
 
+    // Generic struct: deep-export the child properties as a nested JSON object
+    // (object references inside become path strings) via the shared reflection
+    // helper. Falls through to ExportText for empty / opaque structs.
+    if (SP->Struct) {
+      TSharedPtr<FJsonObject> StructObj =
+          McpPropertyReflection::ExportStructToJson(
+              SP->ContainerPtrToValuePtr<void>(TargetContainer), SP->Struct);
+      if (StructObj.IsValid() && StructObj->Values.Num() > 0) {
+        return MakeShared<FJsonValueObject>(StructObj);
+      }
+    }
+
     // Fallback: export textual representation
     FString Exported;
     SP->Struct->ExportText(Exported,
@@ -1298,10 +1313,17 @@ ExportPropertyToJsonValue(void *TargetContainer, FProperty *Property) {
           continue;
         }
 
-        // Fallback: use version-compatible export for unsupported inner types.
-        FString ElemStr;
-        MCP_PROPERTY_EXPORT_TEXT(Inner, ElemStr, ElemPtr, nullptr, nullptr, PPF_None);
-        Out.Add(MakeShared<FJsonValueString>(ElemStr));
+        // Struct / object-reference / soft-ref inners: deep-export via the shared
+        // reflection helper (the array Inner has offset 0, so ElemPtr is a valid
+        // container base). Falls back to ExportText only when that can't structure it.
+        if (TSharedPtr<FJsonValue> Deep =
+                McpPropertyReflection::ExportPropertyToJsonValue(ElemPtr, Inner)) {
+          Out.Add(Deep);
+        } else {
+          FString ElemStr;
+          MCP_PROPERTY_EXPORT_TEXT(Inner, ElemStr, ElemPtr, nullptr, nullptr, PPF_None);
+          Out.Add(MakeShared<FJsonValueString>(ElemStr));
+        }
       }
     }
     return MakeShared<FJsonValueArray>(Out);
@@ -1917,10 +1939,17 @@ ApplyJsonValueToProperty(void *TargetContainer, FProperty *Property,
         continue;
       }
 
-      // Unsupported inner type -> fail explicitly
-      OutError =
-          TEXT("Unsupported array inner property type for JSON assignment");
-      return false;
+      // Struct / object-reference / soft-ref inners: recurse through this same
+      // importer (the array Inner has offset 0, so ElemPtr is a valid container
+      // base). Handles arrays of structs (e.g. input mappings) and object arrays.
+      {
+        FString InnerErr;
+        if (!ApplyJsonValueToProperty(ElemPtr, Inner, V, InnerErr)) {
+          OutError = FString::Printf(
+              TEXT("Failed to set array element %d: %s"), i, *InnerErr);
+          return false;
+        }
+      }
     }
     return true;
   }

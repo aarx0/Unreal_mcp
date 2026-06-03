@@ -6,6 +6,7 @@
 
 #include "McpPropertyReflection.h"
 #include "McpVersionCompatibility.h"
+#include "JsonObjectConverter.h"
 #include "Runtime/Launch/Resources/Version.h"
 #include "UObject/TextProperty.h"
 
@@ -20,7 +21,15 @@
 namespace McpPropertyReflection
 {
 
-TSharedPtr<FJsonValue> ExportPropertyToJsonValue(void* TargetContainer, FProperty* Property)
+// Bounds recursion when deep-exporting/importing nested structs (and arrays of
+// structs). Object references are emitted as path strings rather than recursing
+// into the referenced object, and structs are value types that cannot contain
+// themselves, so true cycles are impossible — this cap only guards against
+// pathologically deep nesting and runaway output. At the cap, struct export
+// falls back to a single ExportText string.
+static constexpr int32 GMcpMaxReflectionDepth = 6;
+
+TSharedPtr<FJsonValue> ExportPropertyToJsonValue(void* TargetContainer, FProperty* Property, int32 Depth)
 {
     if (!TargetContainer || !Property)
     {
@@ -148,7 +157,21 @@ TSharedPtr<FJsonValue> ExportPropertyToJsonValue(void* TargetContainer, FPropert
             return RotatorToJsonValue(*R);
         }
 
-        // Fallback: export textual representation
+        // Generic struct: recurse into the struct's child properties and emit a
+        // nested JSON object (object references inside become path strings). Pass
+        // the struct's own address as the container base for its children.
+        if (Depth < GMcpMaxReflectionDepth)
+        {
+            TSharedPtr<FJsonObject> StructObj = ExportStructToJson(
+                SP->ContainerPtrToValuePtr<void>(TargetContainer), SP->Struct, Depth);
+            if (StructObj.IsValid() && StructObj->Values.Num() > 0)
+            {
+                return MakeShared<FJsonValueObject>(StructObj);
+            }
+        }
+
+        // Fallback: export textual representation (depth cap reached, or a struct
+        // with no reflected/exportable child properties).
         FString Exported;
         SP->Struct->ExportText(
             Exported,
@@ -161,7 +184,7 @@ TSharedPtr<FJsonValue> ExportPropertyToJsonValue(void* TargetContainer, FPropert
     // Arrays
     if (FArrayProperty* AP = CastField<FArrayProperty>(Property))
     {
-        return MakeShared<FJsonValueArray>(ExportArrayToJson(TargetContainer, AP));
+        return MakeShared<FJsonValueArray>(ExportArrayToJson(TargetContainer, AP, Depth));
     }
 
     // Maps
@@ -548,7 +571,7 @@ int32 GetArrayPropertyCount(void* Container, FArrayProperty* ArrayProp)
     return Helper.Num();
 }
 
-TArray<TSharedPtr<FJsonValue>> ExportArrayToJson(void* Container, FArrayProperty* ArrayProp)
+TArray<TSharedPtr<FJsonValue>> ExportArrayToJson(void* Container, FArrayProperty* ArrayProp, int32 Depth)
 {
     TArray<TSharedPtr<FJsonValue>> Out;
     if (!Container || !ArrayProp) return Out;
@@ -604,16 +627,61 @@ TArray<TSharedPtr<FJsonValue>> ExportArrayToJson(void* Container, FArrayProperty
         }
         else
         {
-            FString ElemStr;
-            MCP_PROPERTY_EXPORT_TEXT(Inner, ElemStr, ElemPtr, nullptr, nullptr, PPF_None);
-            Out.Add(MakeShared<FJsonValueString>(ElemStr));
+            // Struct / object-reference / soft-ref / nested-container inners: recurse
+            // through the per-property exporter. The array Inner has offset 0, so the
+            // raw element pointer is itself a valid container base for it. Fall back
+            // to ExportText only when that can't produce a structured value.
+            TSharedPtr<FJsonValue> Value = ExportPropertyToJsonValue(ElemPtr, Inner, Depth + 1);
+            if (Value.IsValid())
+            {
+                Out.Add(Value);
+            }
+            else
+            {
+                FString ElemStr;
+                MCP_PROPERTY_EXPORT_TEXT(Inner, ElemStr, ElemPtr, nullptr, nullptr, PPF_None);
+                Out.Add(MakeShared<FJsonValueString>(ElemStr));
+            }
         }
     }
 
     return Out;
 }
 
-bool ImportJsonToArray(void* Container, FArrayProperty* ArrayProp, const TArray<TSharedPtr<FJsonValue>>& JsonArray, FString& OutError)
+TSharedPtr<FJsonObject> ExportStructToJson(void* StructPtr, const UScriptStruct* Struct, int32 Depth)
+{
+    if (!StructPtr || !Struct || Depth >= GMcpMaxReflectionDepth)
+    {
+        return nullptr;
+    }
+
+    TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+    for (TFieldIterator<FProperty> It(Struct); It; ++It)
+    {
+        FProperty* Child = *It;
+        // Mirror ExportObjectToJson: omit deprecated and transient (non-serialized,
+        // runtime-rebuilt) child fields so nested struct output stays consistent
+        // with the object-level filtering and doesn't leak volatile state.
+        if (!Child || Child->HasAnyPropertyFlags(CPF_Deprecated | CPF_Transient))
+        {
+            continue;
+        }
+
+        // The child's offset is relative to the struct base, so StructPtr is the
+        // correct container base to hand the per-property exporter (its
+        // *_InContainer accessors re-add the offset). Increment Depth: this struct
+        // is one level deeper than its parent.
+        TSharedPtr<FJsonValue> Value = ExportPropertyToJsonValue(StructPtr, Child, Depth + 1);
+        if (Value.IsValid())
+        {
+            Obj->SetField(Child->GetName(), Value);
+        }
+    }
+
+    return Obj;
+}
+
+bool ImportJsonToArray(void* Container, FArrayProperty* ArrayProp, const TArray<TSharedPtr<FJsonValue>>& JsonArray, FString& OutError, int32 Depth)
 {
     if (!Container || !ArrayProp)
     {
@@ -630,11 +698,16 @@ bool ImportJsonToArray(void* Container, FArrayProperty* ArrayProp, const TArray<
     for (int32 i = 0; i < JsonArray.Num(); ++i)
     {
         const TSharedPtr<FJsonValue>& JsonVal = JsonArray[i];
+        // Resize() above already default-constructs every element, so no extra
+        // InitializeValue is needed (a second init would re-construct over live
+        // memory — harmless for the empty defaults here, but redundant).
         uint8* ElemPtr = Helper.GetRawPtr(i);
-        Inner->InitializeValue(ElemPtr);
 
+        // The array Inner has offset 0, so ElemPtr is a valid container base for it.
+        // ApplyJsonValueToProperty now handles struct / object-reference inners, so
+        // arrays of structs (e.g. input mappings) round-trip through here.
         FString PropError;
-        if (!McpPropertyReflection::ApplyJsonValueToProperty(ElemPtr, Inner, JsonVal, PropError))
+        if (!McpPropertyReflection::ApplyJsonValueToProperty(ElemPtr, Inner, JsonVal, PropError, Depth + 1))
         {
             OutError = FString::Printf(TEXT("Failed to set array element %d: %s"), i, *PropError);
             return false;
@@ -647,10 +720,10 @@ bool ImportJsonToArray(void* Container, FArrayProperty* ArrayProp, const TArray<
 // Full ApplyJsonValueToProperty implementation - this is a critical function
 // The implementation continues with all the type handling from McpAutomationBridgeHelpers.h
 
-bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const TSharedPtr<FJsonValue>& ValueField, FString& OutError)
+bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const TSharedPtr<FJsonValue>& ValueField, FString& OutError, int32 Depth)
 {
     // Standalone property importer used by reflection callers during the helper refactor.
-    
+
     OutError.Empty();
     if (!TargetContainer || !Property || !ValueField.IsValid())
     {
@@ -748,9 +821,275 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
         return true;
     }
 
-    // Additional type handling would continue here...
-    // For brevity, the full implementation is available in McpAutomationBridgeHelpers.h
-    
+    // Byte (may be an enum)
+    if (FByteProperty* BP = CastField<FByteProperty>(Property))
+    {
+        if (UEnum* Enum = BP->Enum)
+        {
+            if (ValueField->Type == EJson::String)
+            {
+                const FString InStr = ValueField->AsString();
+                int64 EnumVal = Enum->GetValueByNameString(InStr);
+                if (EnumVal == INDEX_NONE)
+                {
+                    EnumVal = Enum->GetValueByName(FName(*Enum->GenerateFullEnumName(*InStr)));
+                }
+                if (EnumVal == INDEX_NONE)
+                {
+                    OutError = FString::Printf(TEXT("Invalid enum value '%s' for enum '%s'"), *InStr, *Enum->GetName());
+                    return false;
+                }
+                BP->SetPropertyValue_InContainer(TargetContainer, static_cast<uint8>(EnumVal));
+                return true;
+            }
+            if (ValueField->Type == EJson::Number)
+            {
+                const int64 Val = static_cast<int64>(ValueField->AsNumber());
+                if (!Enum->IsValidEnumValue(Val))
+                {
+                    OutError = FString::Printf(TEXT("Numeric value %lld is not valid for enum '%s'"), Val, *Enum->GetName());
+                    return false;
+                }
+                BP->SetPropertyValue_InContainer(TargetContainer, static_cast<uint8>(Val));
+                return true;
+            }
+            OutError = TEXT("Enum property requires string or number");
+            return false;
+        }
+        int64 Val = 0;
+        if (ValueField->Type == EJson::Number) Val = static_cast<int64>(ValueField->AsNumber());
+        else if (ValueField->Type == EJson::String) Val = FCString::Atoi64(*ValueField->AsString());
+        else { OutError = TEXT("Unsupported JSON type for byte property"); return false; }
+        BP->SetPropertyValue_InContainer(TargetContainer, static_cast<uint8>(Val));
+        return true;
+    }
+
+    // Enum property (newer engine versions)
+    if (FEnumProperty* EP = CastField<FEnumProperty>(Property))
+    {
+        UEnum* Enum = EP->GetEnum();
+        FNumericProperty* UnderlyingProp = EP->GetUnderlyingProperty();
+        if (Enum && UnderlyingProp)
+        {
+            void* ValuePtr = EP->ContainerPtrToValuePtr<void>(TargetContainer);
+            if (ValueField->Type == EJson::String)
+            {
+                const FString InStr = ValueField->AsString();
+                int64 EnumVal = Enum->GetValueByNameString(InStr);
+                if (EnumVal == INDEX_NONE)
+                {
+                    EnumVal = Enum->GetValueByName(FName(*Enum->GenerateFullEnumName(*InStr)));
+                }
+                if (EnumVal == INDEX_NONE)
+                {
+                    OutError = FString::Printf(TEXT("Invalid enum value '%s' for enum '%s'"), *InStr, *Enum->GetName());
+                    return false;
+                }
+                UnderlyingProp->SetIntPropertyValue(ValuePtr, EnumVal);
+                return true;
+            }
+            if (ValueField->Type == EJson::Number)
+            {
+                const int64 Val = static_cast<int64>(ValueField->AsNumber());
+                if (!Enum->IsValidEnumValue(Val))
+                {
+                    OutError = FString::Printf(TEXT("Numeric value %lld is not valid for enum '%s'"), Val, *Enum->GetName());
+                    return false;
+                }
+                UnderlyingProp->SetIntPropertyValue(ValuePtr, Val);
+                return true;
+            }
+            OutError = TEXT("Enum property requires string or number");
+            return false;
+        }
+        OutError = TEXT("Enum property has no valid enum definition");
+        return false;
+    }
+
+    // Object reference (by path string; null or empty/"None" clears it)
+    if (FObjectProperty* OP = CastField<FObjectProperty>(Property))
+    {
+        if (ValueField->Type == EJson::Null)
+        {
+            OP->SetObjectPropertyValue_InContainer(TargetContainer, nullptr);
+            return true;
+        }
+        if (ValueField->Type == EJson::String)
+        {
+            const FString Path = ValueField->AsString();
+            UObject* Res = nullptr;
+            if (!Path.IsEmpty() && !Path.Equals(TEXT("None"), ESearchCase::IgnoreCase))
+            {
+                Res = LoadObject<UObject>(nullptr, *Path);
+                if (!Res && !Path.Contains(TEXT(".")))
+                {
+                    Res = StaticLoadObject(UObject::StaticClass(), nullptr, *Path);
+                }
+                if (!Res)
+                {
+                    OutError = FString::Printf(TEXT("Failed to load object at path: %s"), *Path);
+                    return false;
+                }
+            }
+            OP->SetObjectPropertyValue_InContainer(TargetContainer, Res);
+            return true;
+        }
+        OutError = TEXT("Unsupported JSON type for object property");
+        return false;
+    }
+
+    // Soft object reference (FSoftObjectPtr)
+    if (FSoftObjectProperty* SOP = CastField<FSoftObjectProperty>(Property))
+    {
+        void* ValuePtr = SOP->ContainerPtrToValuePtr<void>(TargetContainer);
+        FSoftObjectPtr* SoftObjPtr = static_cast<FSoftObjectPtr*>(ValuePtr);
+        if (!SoftObjPtr)
+        {
+            OutError = TEXT("Failed to access soft object property");
+            return false;
+        }
+        if (ValueField->Type == EJson::Null || (ValueField->Type == EJson::String && ValueField->AsString().IsEmpty()))
+        {
+            *SoftObjPtr = FSoftObjectPtr();
+            return true;
+        }
+        if (ValueField->Type == EJson::String)
+        {
+            *SoftObjPtr = FSoftObjectPath(ValueField->AsString());
+            return true;
+        }
+        OutError = TEXT("Soft object property requires string path or null");
+        return false;
+    }
+
+    // Soft class reference (FSoftClassPtr)
+    if (FSoftClassProperty* SCP = CastField<FSoftClassProperty>(Property))
+    {
+        void* ValuePtr = SCP->ContainerPtrToValuePtr<void>(TargetContainer);
+        FSoftObjectPtr* SoftClassPtr = static_cast<FSoftObjectPtr*>(ValuePtr);
+        if (!SoftClassPtr)
+        {
+            OutError = TEXT("Failed to access soft class property");
+            return false;
+        }
+        if (ValueField->Type == EJson::Null || (ValueField->Type == EJson::String && ValueField->AsString().IsEmpty()))
+        {
+            *SoftClassPtr = FSoftObjectPtr();
+            return true;
+        }
+        if (ValueField->Type == EJson::String)
+        {
+            *SoftClassPtr = FSoftObjectPath(ValueField->AsString());
+            return true;
+        }
+        OutError = TEXT("Soft class property requires string path or null");
+        return false;
+    }
+
+    // Structs: Vector/Rotator from a numeric array, otherwise via the engine's
+    // JSON<->struct converter (handles nested structs, FKey, object refs-by-path).
+    if (FStructProperty* SP = CastField<FStructProperty>(Property))
+    {
+        const FString TypeName = SP->Struct ? SP->Struct->GetName() : FString();
+        void* StructPtr = SP->ContainerPtrToValuePtr<void>(TargetContainer);
+
+        if (ValueField->Type == EJson::Array)
+        {
+            const TArray<TSharedPtr<FJsonValue>>& Arr = ValueField->AsArray();
+            if (TypeName.Equals(TEXT("Vector"), ESearchCase::IgnoreCase) && Arr.Num() >= 3 && SP->Struct)
+            {
+                FVector V(Arr[0]->AsNumber(), Arr[1]->AsNumber(), Arr[2]->AsNumber());
+                SP->Struct->CopyScriptStruct(StructPtr, &V);
+                return true;
+            }
+            if (TypeName.Equals(TEXT("Rotator"), ESearchCase::IgnoreCase) && Arr.Num() >= 3 && SP->Struct)
+            {
+                FRotator R(Arr[0]->AsNumber(), Arr[1]->AsNumber(), Arr[2]->AsNumber());
+                SP->Struct->CopyScriptStruct(StructPtr, &R);
+                return true;
+            }
+            OutError = FString::Printf(TEXT("Array form is only supported for Vector/Rotator (got struct '%s')"), *TypeName);
+            return false;
+        }
+
+        if (SP->Struct && ValueField->Type == EJson::Object && ValueField->AsObject().IsValid())
+        {
+            if (FJsonObjectConverter::JsonObjectToUStruct(ValueField->AsObject().ToSharedRef(), SP->Struct, StructPtr, 0, 0))
+            {
+                return true;
+            }
+            OutError = FString::Printf(TEXT("Failed to convert JSON object into struct '%s'"), *TypeName);
+            return false;
+        }
+
+        if (SP->Struct && ValueField->Type == EJson::String)
+        {
+            // Accept a JSON string that itself contains a JSON object describing the struct.
+            const FString Txt = ValueField->AsString();
+            TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Txt);
+            TSharedPtr<FJsonObject> ParsedObj;
+            if (FJsonSerializer::Deserialize(Reader, ParsedObj) && ParsedObj.IsValid())
+            {
+                if (FJsonObjectConverter::JsonObjectToUStruct(ParsedObj.ToSharedRef(), SP->Struct, StructPtr, 0, 0))
+                {
+                    return true;
+                }
+            }
+            OutError = FString::Printf(TEXT("Failed to parse string value into struct '%s'"), *TypeName);
+            return false;
+        }
+
+        OutError = TEXT("Unsupported JSON type for struct property");
+        return false;
+    }
+
+    // Arrays: replace contents element-by-element. The Inner has offset 0, so each
+    // element pointer is a valid container base — this recursion therefore handles
+    // primitive, struct and object-reference inner types uniformly.
+    if (FArrayProperty* AP = CastField<FArrayProperty>(Property))
+    {
+        if (ValueField->Type != EJson::Array)
+        {
+            OutError = TEXT("Expected array for array property");
+            return false;
+        }
+        const TArray<TSharedPtr<FJsonValue>>& Src = ValueField->AsArray();
+        FScriptArrayHelper Helper(AP, AP->ContainerPtrToValuePtr<void>(TargetContainer));
+        Helper.EmptyValues();
+        Helper.Resize(Src.Num());
+        for (int32 i = 0; i < Src.Num(); ++i)
+        {
+            uint8* ElemPtr = Helper.GetRawPtr(i);
+            FString InnerErr;
+            if (!ApplyJsonValueToProperty(ElemPtr, AP->Inner, Src[i], InnerErr, Depth + 1))
+            {
+                OutError = FString::Printf(TEXT("Failed to set array element %d: %s"), i, *InnerErr);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Generic fallback: accept a JSON string for any other property type via the
+    // engine's textual import (covers e.g. FText and other text-importable types).
+    if (ValueField->Type == EJson::String)
+    {
+        void* ValuePtr = Property->ContainerPtrToValuePtr<void>(TargetContainer);
+        if (ValuePtr)
+        {
+            const TCHAR* Result = nullptr;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+            Result = Property->ImportText_Direct(*ValueField->AsString(), ValuePtr, nullptr, PPF_None, nullptr);
+#else
+            Result = Property->ImportText(*ValueField->AsString(), ValuePtr, PPF_None, nullptr);
+#endif
+            if (Result)
+            {
+                return true;
+            }
+        }
+    }
+
     OutError = FString::Printf(TEXT("Unsupported property type: %s"), *Property->GetClass()->GetName());
     return false;
 }
