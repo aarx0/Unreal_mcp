@@ -182,7 +182,7 @@ export const consolidatedToolDefinitions: ToolDefinition[] = [
   {
     name: 'manage_asset',
     category: 'core',
-    description: 'Create/import/manage assets, material graphs, material instances, procedural textures, render targets, and dependency analysis.',
+    description: 'Create/import/manage assets, material graphs, material instances, procedural textures, render targets, dependency/referencer analysis, and reflected property read/write.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -190,7 +190,8 @@ export const consolidatedToolDefinitions: ToolDefinition[] = [
           type: 'string',
           enum: [
             'list', 'import', 'duplicate', 'duplicate_asset', 'rename', 'rename_asset', 'move', 'move_asset', 'delete', 'delete_asset', 'delete_assets', 'create_folder', 'search_assets',
-            'get_dependencies', 'get_source_control_state', 'analyze_graph', 'get_asset_graph', 'create_thumbnail', 'set_tags', 'get_metadata', 'set_metadata', 'validate', 'fixup_redirectors', 'find_by_tag', 'generate_report',
+            'get_dependencies', 'get_referencers', 'get_asset_properties', 'set_asset_property',
+            'get_source_control_state', 'analyze_graph', 'get_asset_graph', 'create_thumbnail', 'set_tags', 'get_metadata', 'set_metadata', 'validate', 'fixup_redirectors', 'find_by_tag', 'generate_report',
             'create_render_target', 'generate_lods', 'add_material_parameter', 'list_instances', 'reset_instance_parameters', 'exists', 'get_material_stats',
             'nanite_rebuild_mesh', 'bulk_rename', 'bulk_delete', 'source_control_checkout', 'source_control_submit',
             ...MATERIAL_AUTHORING_ACTIONS, ...TEXTURE_ACTIONS],
@@ -232,6 +233,9 @@ export const consolidatedToolDefinitions: ToolDefinition[] = [
         inputName: commonSchemas.pinName,
         parameterName: commonSchemas.parameterName,
         value: commonSchemas.value,
+        // Reflected property read/write (get_asset_properties / set_asset_property)
+        propertyName: { ...commonSchemas.stringProp, description: 'set_asset_property: name of the reflected UPROPERTY to write on the asset' },
+        includeTransient: { ...commonSchemas.booleanProp, description: 'get_asset_properties: also dump transient (non-serialized) properties (default false)' },
         x: commonSchemas.numberProp,
         y: commonSchemas.numberProp,
         maxDepth: commonSchemas.numberProp,

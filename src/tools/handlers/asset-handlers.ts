@@ -18,6 +18,8 @@ const VALID_ASSET_ACTIONS = new Set([
   'duplicate_asset', 'rename_asset', 'move_asset', 'delete_asset', 'delete_assets',
   // Asset metadata
   'create_thumbnail', 'set_tags', 'get_metadata', 'set_metadata', 'generate_report',
+  // Asset reflection (referencers + reflected property read/write) — forwarded to C++ via the default passthrough
+  'get_referencers', 'get_asset_properties', 'set_asset_property',
   // Material operations
   'create_material', 'create_material_instance', 'create_render_target',
   'generate_lods', 'add_material_parameter', 'list_instances',
