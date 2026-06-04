@@ -1237,6 +1237,89 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
         return true;
     }
 
+    // Maps: a JSON object { "<key>": <value>, ... } (or a JSON string encoding one).
+    // Keys come from the object's field names (always strings, converted to the key
+    // property's type); values go through this importer, so struct/object/instanced
+    // values work. Mirrors the map export in ExportPropertyToJsonValue.
+    if (FMapProperty* MP = CastField<FMapProperty>(Property))
+    {
+        TSharedPtr<FJsonObject> MapObj;
+        if (ValueField->Type == EJson::Object)
+        {
+            MapObj = ValueField->AsObject();
+        }
+        else if (ValueField->Type == EJson::String)
+        {
+            TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ValueField->AsString());
+            FJsonSerializer::Deserialize(Reader, MapObj);
+        }
+        if (!MapObj.IsValid())
+        {
+            OutError = TEXT("Expected object (or a JSON string encoding an object) for map property");
+            return false;
+        }
+        FScriptMapHelper Helper(MP, MP->ContainerPtrToValuePtr<void>(TargetContainer));
+        Helper.EmptyValues();
+        for (const auto& Pair : MapObj->Values)
+        {
+            const int32 Index = Helper.AddDefaultValue_Invalid_NeedsRehash();
+            // KeyProp / ValueProp have offset 0 relative to the pointers the helper
+            // returns, so each is a valid container base for the per-property importer.
+            const TSharedPtr<FJsonValue> KeyJson = MakeShared<FJsonValueString>(Pair.Key);
+            FString KeyErr;
+            if (!ApplyJsonValueToProperty(Helper.GetKeyPtr(Index), MP->KeyProp, KeyJson, KeyErr, Depth + 1, OwnerForInstancing))
+            {
+                OutError = FString::Printf(TEXT("Map key '%s': %s"), *Pair.Key, *KeyErr);
+                return false;
+            }
+            FString ValErr;
+            if (!ApplyJsonValueToProperty(Helper.GetValuePtr(Index), MP->ValueProp, Pair.Value, ValErr, Depth + 1, OwnerForInstancing))
+            {
+                OutError = FString::Printf(TEXT("Map value for '%s': %s"), *Pair.Key, *ValErr);
+                return false;
+            }
+        }
+        Helper.Rehash();
+        return true;
+    }
+
+    // Sets: a JSON array [ <elem>, ... ] (or a JSON string encoding one). Elements go
+    // through this importer. Mirrors the set export in ExportPropertyToJsonValue.
+    if (FSetProperty* SetP = CastField<FSetProperty>(Property))
+    {
+        TArray<TSharedPtr<FJsonValue>> Elems;
+        bool bHaveElems = false;
+        if (ValueField->Type == EJson::Array)
+        {
+            Elems = ValueField->AsArray();
+            bHaveElems = true;
+        }
+        else if (ValueField->Type == EJson::String)
+        {
+            TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ValueField->AsString());
+            bHaveElems = FJsonSerializer::Deserialize(Reader, Elems);
+        }
+        if (!bHaveElems)
+        {
+            OutError = TEXT("Expected array (or a JSON string encoding an array) for set property");
+            return false;
+        }
+        FScriptSetHelper Helper(SetP, SetP->ContainerPtrToValuePtr<void>(TargetContainer));
+        Helper.EmptyElements();
+        for (const TSharedPtr<FJsonValue>& Elem : Elems)
+        {
+            const int32 Index = Helper.AddDefaultValue_Invalid_NeedsRehash();
+            FString ElemErr;
+            if (!ApplyJsonValueToProperty(Helper.GetElementPtr(Index), SetP->ElementProp, Elem, ElemErr, Depth + 1, OwnerForInstancing))
+            {
+                OutError = FString::Printf(TEXT("Set element: %s"), *ElemErr);
+                return false;
+            }
+        }
+        Helper.Rehash();
+        return true;
+    }
+
     // Generic fallback: accept a JSON string for any other property type via the
     // engine's textual import (covers e.g. FText and other text-importable types).
     if (ValueField->Type == EJson::String)
