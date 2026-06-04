@@ -12,55 +12,34 @@ as they land.
 
 ## Open
 
-### [ ] Import (re-instancing) of Instanced subobject arrays
+### [ ] Round-trip struct-nested Instanced subobjects (`JsonObjectToUStruct` bypass)
 
-The **export** half of the original "round-trip Instanced subobject arrays" item landed
-2026-06-03 (commit `d72f8c3`, see Done). The **import** (re-instancing) half is still open
-and is the hard part. Three findings from the export work pin down why it needs more than
-a mirror of the export logic:
+Top-level instanced arrays now round-trip (see Done — `7589789`). The remaining gap is
+**instanced subobjects nested inside a struct** — the canonical case is a montage
+`AnimNotify` (`FAnimNotifyEvent.Notify`). Those import through the engine's
+`FJsonObjectConverter::JsonObjectToUStruct` (used by the struct import branch), which
+applies its own instanced rules and never calls our `ApplyJsonValueToProperty`, so the
+`__class` re-instancing path is bypassed.
 
-1. **No owner in `ApplyJsonValueToProperty`.** It gets a raw `void*` container, but
-   re-instancing a subobject needs `NewObject<...>(Owner, Class)` — the owning `UObject`
-   (the asset/package) as Outer so the subobject serializes with the asset. The owner must
-   be *threaded* down `ApplyJsonValuesToObject -> ApplyJsonValueToProperty ->
-   ImportJsonToArray` (signature change -> header -> full rebuild).
-2. **Arrays destroy then null.** `ImportJsonToArray` does `EmptyValues()` + `Resize()`,
-   which default-constructs object inners to **null** — so every element is a
-   construct-from-scratch, not a reuse. (Confirmed against `IA_Mute.Triggers`, a top-level
-   instanced array reachable by our import branch.)
-3. **Struct-nested instanced objects bypass our importer.** The montage case
-   (`FAnimNotifyEvent.Notify`) imports via the engine's
-   `FJsonObjectConverter::JsonObjectToUStruct`, which applies its *own* instanced rules and
-   never calls `ApplyJsonValueToProperty`. A coherent round-trip there must coordinate with
-   (or pre-empt) `JsonObjectToUStruct`, honoring the exported `__class`.
+**Fix.** In the struct import branch, before handing off to `JsonObjectToUStruct`, walk
+the struct's `CPF_InstancedReference` object properties whose JSON value is an object with
+`__class`, pre-create those subobjects (`NewObject(Owner, Class)` — the owner is already
+threaded as of `7589789`) and apply them via our path; or replace the `JsonObjectToUStruct`
+call for such structs with a field-by-field apply that routes object fields through
+`ApplyJsonValueToProperty`. **Test attended** (mutates an asset — duplicate + delete):
+flip a notify's `Notify` subobject on a montage copy and read it back.
 
-**Fix.** Add a defaulted `UObject* OwnerForInstancing` threaded through the import path; in
-the array/object branches, when the JSON value is an object with `__class`,
-`LoadClass`/`FindObject` the class -> `NewObject(Owner, Class, RF_Transactional)` -> recurse
-to apply nested props -> assign. For struct-nested cases, pre-create the subobjects from
-`__class` before `JsonObjectToUStruct`, or replace that call with a field-by-field apply
-that routes object fields through the new path. Reuse the depth cap. **Test attended** (a
-round-trip mutates the asset — duplicate + `git checkout`): e.g. flip
-`IA_Mute.Triggers[0]` Pressed->Hold and read back the `HoldTimeThreshold`.
-
-**Effort.** Medium-High (was "Medium"; the `JsonObjectToUStruct` coupling raises it).
-
-### [ ] Mirror instanced deep-export into the `McpAutomationBridgeHelpers.h` twin
-
-`d72f8c3` landed instanced deep-export in the asset-handler reflection twin
-(`McpPropertyReflection.cpp`) only. The header twin `McpAutomationBridgeHelpers.h` (used by
-the ~13 other reflection callers, e.g. `inspect get_property`) still emits a path string
-for instanced subobjects. Mirror the verified logic (it's a header -> full rebuild; pair it
-with the import work above so the rebuild does double duty).
+**Effort.** Medium. The owner plumbing already exists; this is about intercepting the
+struct path.
 
 ### [ ] `set_common_button_input_action` (Common UI) — ready to build, no consumer yet
 
 The last deferred Common UI handler: set a button's `FDataTableRowHandle`
 (DataTable + RowName) and call `SetTriggeringInputAction`, validating
 `RowStruct->IsChildOf(CommonInputActionDataBase)`. Needs an entry in
-`McpConsolidatedActions::CommonUi()` (header -> rebuild) + a handler in
+`McpConsolidatedActions::CommonUi()` (header → rebuild) + a handler in
 `McpAutomationBridge_CommonUIHandlers.cpp`. **Blocked on a fixture:** this project has no
-`CommonInputActionDataBase` DataTable (and no DataTables at all as of 2026-06-03), so it
+`CommonInputActionDataBase` DataTable (and no DataTables at all as of 2026-06-04), so it
 can't be live-tested and has no current consumer — build when the menu work actually adds
 a CommonInput action table.
 
@@ -70,18 +49,28 @@ a CommonInput action table.
 
 _(completed items, newest first)_
 
-### [x] Deep-export of Instanced subobjects (reflection read)
-`ExportPropertyToJsonValue` (`McpPropertyReflection.cpp`) now detects
-`CPF_InstancedReference` object values and deep-exports the subobject as a nested
-`{ "__class": "<class path>", ...props... }` object — depth-capped, transient/deprecated
-children skipped — instead of a bare subobject path that dropped all of its config. Plain
-asset references still export as a path. Commit `d72f8c3` (2026-06-03), via Live Coding.
+### [x] Round-trip (import) of top-level Instanced subobject arrays
+`7589789` (2026-06-04). `set_asset_property` now writes an instanced
+`TArray<TObjectPtr<...>>` from the `{ "__class", ... }` export form. An owning `UObject`
+is threaded through `ApplyJsonValueToProperty`/`ImportJsonToArray` (defaulted — other
+callers unaffected) and used as the `NewObject` Outer, so re-instanced subobjects
+serialize into the asset; the new subobject is validated `IsChildOf` the property class and
+its fields applied best-effort. Array import also tolerates a JSON string encoding the
+array (the typeless `value` param leads some clients to stringify it). *Verified live*
+(full rebuild + relaunch): on a duplicate of `IA_Mute`, writing
+`Triggers = [{__class: InputTriggerHold, HoldTimeThreshold: 0.75, ...}]` re-instanced
+Pressed→Hold and a fresh `get_asset_properties` read back the persisted `InputTriggerHold`.
+Struct-nested instanced objects remain open (see Open).
 
-*Verified live* on two distinct shapes: `AM_AttackMontage1.Notifies` (struct-nested
-`AnimNotify_PlaySound` now reads back `{__class, Sound: MS_SwordSlash, VolumeMultiplier,
-...}`) and `IA_Mute.Triggers` (top-level instanced array — the literal Enhanced Input case
-— now reads back `InputTriggerPressed` with `ActuationThreshold`). Import re-instancing and
-the helpers-twin mirror remain open (see Open).
+### [x] Deep-export of Instanced subobjects (reflection read) + helpers-twin mirror
+`d72f8c3` (export, `McpPropertyReflection.cpp`) and `7589789` (helpers-twin mirror via a
+now-public `ExportInstancedObjectToJson`). `CPF_InstancedReference` object values export as
+a nested `{ "__class", ...props... }` object — depth-capped, transient/deprecated children
+skipped — instead of a bare subobject path. Verified live on `AM_AttackMontage1.Notifies`
+(struct-nested `AnimNotify_PlaySound` → `{__class, Sound: MS_SwordSlash, ...}`) and
+`IA_Mute.Triggers` (top-level instanced array → `InputTriggerPressed` with
+`ActuationThreshold`). The helpers twin already deep-exported array/struct-nested cases via
+the `McpPropertyReflection` delegation; the mirror closes the direct-top-level case.
 
 ### [x] Deep export/import of struct & object-ref array properties
 `ExportArrayToJson` / `ExportPropertyToJsonValue` now recurse into `FStructProperty`
