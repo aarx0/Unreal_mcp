@@ -6682,17 +6682,22 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         GConfig->GetBool(DlgSection, DlgKey, bPrevSuppress, GEditorPerProjectIni);
         GConfig->SetBool(DlgSection, DlgKey, true, GEditorPerProjectIni);
 
+        // Use the *ForUnmatchingClass naming method so the engine keeps SlotName even
+        // for incompatible class pairs (e.g. a native AnalogSlider -> a user-widget
+        // Blueprint) AND runs its own variable/reference fixup (OnVariableRenamed +
+        // ReplaceVariableReferences). Plain MaintainNameAndReferences assigns a
+        // generated name for unmatching classes; a manual post-rename then can't
+        // re-point the references the engine already moved, which breaks bound widgets.
         FWidgetBlueprintEditorUtils::ReplaceWidgets(
             WidgetBP, TSet<UWidget*>{ TargetWidget }, NewClass,
-            FWidgetBlueprintEditorUtils::EReplaceWidgetNamingMethod::MaintainNameAndReferences);
+            FWidgetBlueprintEditorUtils::EReplaceWidgetNamingMethod::MaintainNameAndReferencesForUnmatchingClass);
 
         GConfig->SetBool(DlgSection, DlgKey, bPrevSuppress, GEditorPerProjectIni);
 
-        // The replacement keeps the old name for compatible classes; confirm.
         UWidget* NewWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!NewWidget || !NewWidget->IsA(NewClass))
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Replace did not yield a '%s' named '%s' (incompatible classes keep a generated name)"), *NewWidgetClass, *SlotName), TEXT("REPLACE_FAILED"));
+            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Replace did not yield a '%s' named '%s'"), *NewWidgetClass, *SlotName), TEXT("REPLACE_FAILED"));
             return true;
         }
 
