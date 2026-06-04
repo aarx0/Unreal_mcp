@@ -29,6 +29,40 @@ namespace McpPropertyReflection
 // falls back to a single ExportText string.
 static constexpr int32 GMcpMaxReflectionDepth = 6;
 
+// Deep-export an instanced subobject (e.g. an Enhanced Input UInputTrigger/UInputModifier,
+// or a montage's UAnimNotify) as a nested JSON object carrying its concrete class under
+// "__class", so the subobject's OWN configuration survives a get_asset_properties read
+// (and an importer can re-instance it). Only CPF_InstancedReference object values are
+// routed here; plain asset references keep exporting as a path string. Depth-bounded via
+// the shared cap, and transient/deprecated child fields are skipped to match
+// ExportObjectToJson / ExportStructToJson.
+static TSharedPtr<FJsonObject> ExportInstancedObjectToJson(UObject* Subobject, int32 Depth)
+{
+    if (!Subobject)
+    {
+        return nullptr;
+    }
+
+    TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+    Obj->SetStringField(TEXT("__class"), Subobject->GetClass()->GetPathName());
+
+    for (TFieldIterator<FProperty> It(Subobject->GetClass()); It; ++It)
+    {
+        FProperty* Child = *It;
+        if (!Child || Child->HasAnyPropertyFlags(CPF_Deprecated | CPF_Transient))
+        {
+            continue;
+        }
+        TSharedPtr<FJsonValue> Value = ExportPropertyToJsonValue(Subobject, Child, Depth + 1);
+        if (Value.IsValid())
+        {
+            Obj->SetField(Child->GetName(), Value);
+        }
+    }
+
+    return Obj;
+}
+
 TSharedPtr<FJsonValue> ExportPropertyToJsonValue(void* TargetContainer, FProperty* Property, int32 Depth)
 {
     if (!TargetContainer || !Property)
@@ -107,15 +141,25 @@ TSharedPtr<FJsonValue> ExportPropertyToJsonValue(void* TargetContainer, FPropert
         return MakeShared<FJsonValueNumber>(0.0);
     }
 
-    // Object references
+    // Object references. An instanced subobject (CPF_InstancedReference — e.g. an
+    // input trigger/modifier, or a montage AnimNotify) is deep-exported so its own
+    // config survives the read; a plain asset reference stays a path string.
     if (FObjectProperty* OP = CastField<FObjectProperty>(Property))
     {
         UObject* O = OP->GetObjectPropertyValue_InContainer(TargetContainer);
-        if (O)
+        if (!O)
         {
-            return MakeShared<FJsonValueString>(O->GetPathName());
+            return MakeShared<FJsonValueNull>();
         }
-        return MakeShared<FJsonValueNull>();
+        if (OP->HasAnyPropertyFlags(CPF_InstancedReference) && Depth < GMcpMaxReflectionDepth)
+        {
+            TSharedPtr<FJsonObject> Inst = ExportInstancedObjectToJson(O, Depth);
+            if (Inst.IsValid())
+            {
+                return MakeShared<FJsonValueObject>(Inst);
+            }
+        }
+        return MakeShared<FJsonValueString>(O->GetPathName());
     }
 
     // Soft object references
