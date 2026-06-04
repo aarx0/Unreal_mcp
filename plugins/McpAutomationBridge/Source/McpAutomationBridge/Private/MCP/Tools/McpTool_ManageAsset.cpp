@@ -25,6 +25,8 @@ public:
 				.StringEnum(TEXT("action"), McpConsolidatedActions::ManageAsset(),
 					TEXT("Action to perform"))
 			.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+			.String(TEXT("propertyName"), TEXT("set_asset_property: name of the reflected UPROPERTY to write."))
+			.Bool(TEXT("includeTransient"), TEXT("get_asset_properties: also dump transient (non-serialized) properties (default false)."))
 			.String(TEXT("directory"), TEXT("Path to a directory."))
 			.Array(TEXT("classNames"), TEXT(""))
 			.Array(TEXT("packagePaths"), TEXT(""))

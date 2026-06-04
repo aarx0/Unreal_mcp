@@ -61,10 +61,13 @@ into the `McpAutomationBridgeHelpers.h` twin (the ~13 other reflection callers).
 `{Action: "<path>", Key: {KeyName: "M"}, SettingBehavior: "<enum>", …}` objects — instead
 of an opaque `ExportText` blob.
 
-### [x] Advertise the new `manage_asset` actions in the TS schema
-Added `get_referencers`, `get_asset_properties`, `set_asset_property` to the
-`manage_asset` action enum + `propertyName`/`includeTransient` param docs in
-`consolidated-tool-definitions.ts`, **and** to the `VALID_ASSET_ACTIONS` whitelist in
-`src/tools/handlers/asset-handlers.ts` — without the whitelist entry the handler
-hard-rejected them with `UNKNOWN_ACTION` before ever reaching C++ (advertised but not
-actually dispatchable). They forward to C++ via the existing default passthrough.
+### [x] Advertise the new `manage_asset` actions (native schema)
+`get_referencers`, `get_asset_properties`, `set_asset_property` were already in the native
+tool schema's `action` enum (auto-sourced from `McpConsolidatedActions::ManageAsset()` in
+`McpConsolidatedActionRouting.h`), so over the native `/mcp` transport they were discoverable
+**and** dispatchable from the start. Added `propertyName`/`includeTransient` param docs to
+`McpTool_ManageAsset.cpp`'s `BuildInputSchema` for client-facing discoverability.
+
+> The originally-planned TypeScript-schema edits (`consolidated-tool-definitions.ts` +
+> `VALID_ASSET_ACTIONS`) were a no-op for this native-only fork and were removed with the
+> TypeScript bridge — the C++ `McpTool_*.cpp` schemas are now the single source of truth.
