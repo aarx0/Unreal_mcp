@@ -36,7 +36,7 @@ static constexpr int32 GMcpMaxReflectionDepth = 6;
 // routed here; plain asset references keep exporting as a path string. Depth-bounded via
 // the shared cap, and transient/deprecated child fields are skipped to match
 // ExportObjectToJson / ExportStructToJson.
-static TSharedPtr<FJsonObject> ExportInstancedObjectToJson(UObject* Subobject, int32 Depth)
+TSharedPtr<FJsonObject> ExportInstancedObjectToJson(UObject* Subobject, int32 Depth)
 {
     if (!Subobject)
     {
@@ -437,7 +437,8 @@ int32 ApplyJsonValuesToObject(UObject* Object, const TMap<FName, TSharedPtr<FJso
         }
 
         FString Error;
-        if (McpPropertyReflection::ApplyJsonValueToProperty(Object, Property, Pair.Value, Error))
+        // The object IS the owner for any Instanced subobjects re-created underneath it.
+        if (McpPropertyReflection::ApplyJsonValueToProperty(Object, Property, Pair.Value, Error, 0, Object))
         {
             SuccessCount++;
         }
@@ -725,7 +726,7 @@ TSharedPtr<FJsonObject> ExportStructToJson(void* StructPtr, const UScriptStruct*
     return Obj;
 }
 
-bool ImportJsonToArray(void* Container, FArrayProperty* ArrayProp, const TArray<TSharedPtr<FJsonValue>>& JsonArray, FString& OutError, int32 Depth)
+bool ImportJsonToArray(void* Container, FArrayProperty* ArrayProp, const TArray<TSharedPtr<FJsonValue>>& JsonArray, FString& OutError, int32 Depth, UObject* OwnerForInstancing)
 {
     if (!Container || !ArrayProp)
     {
@@ -751,7 +752,7 @@ bool ImportJsonToArray(void* Container, FArrayProperty* ArrayProp, const TArray<
         // ApplyJsonValueToProperty now handles struct / object-reference inners, so
         // arrays of structs (e.g. input mappings) round-trip through here.
         FString PropError;
-        if (!McpPropertyReflection::ApplyJsonValueToProperty(ElemPtr, Inner, JsonVal, PropError, Depth + 1))
+        if (!McpPropertyReflection::ApplyJsonValueToProperty(ElemPtr, Inner, JsonVal, PropError, Depth + 1, OwnerForInstancing))
         {
             OutError = FString::Printf(TEXT("Failed to set array element %d: %s"), i, *PropError);
             return false;
@@ -764,7 +765,7 @@ bool ImportJsonToArray(void* Container, FArrayProperty* ArrayProp, const TArray<
 // Full ApplyJsonValueToProperty implementation - this is a critical function
 // The implementation continues with all the type handling from McpAutomationBridgeHelpers.h
 
-bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const TSharedPtr<FJsonValue>& ValueField, FString& OutError, int32 Depth)
+bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const TSharedPtr<FJsonValue>& ValueField, FString& OutError, int32 Depth, UObject* OwnerForInstancing)
 {
     // Standalone property importer used by reflection callers during the helper refactor.
 
@@ -958,6 +959,63 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
             OP->SetObjectPropertyValue_InContainer(TargetContainer, nullptr);
             return true;
         }
+        // Instanced subobject re-instancing: a JSON object carrying "__class" (as emitted
+        // by the deep-export path) rebuilds the subobject fresh, Outered to
+        // OwnerForInstancing so it serializes into the owning asset's package. Restricted
+        // to CPF_InstancedReference properties — a plain asset reference expects a path
+        // string — and requires a threaded owner.
+        if (ValueField->Type == EJson::Object && OP->HasAnyPropertyFlags(CPF_InstancedReference))
+        {
+            const TSharedPtr<FJsonObject>& Obj = ValueField->AsObject();
+            FString ClassPath;
+            if (!Obj.IsValid() || !Obj->TryGetStringField(TEXT("__class"), ClassPath) || ClassPath.IsEmpty())
+            {
+                OutError = TEXT("Instanced object value requires a \"__class\" field");
+                return false;
+            }
+            if (!OwnerForInstancing)
+            {
+                OutError = TEXT("Cannot re-instance subobject: no owner threaded for the NewObject Outer");
+                return false;
+            }
+            UClass* SubClass = LoadObject<UClass>(nullptr, *ClassPath);
+            if (!SubClass)
+            {
+                OutError = FString::Printf(TEXT("Failed to resolve instanced subobject class '%s'"), *ClassPath);
+                return false;
+            }
+            if (OP->PropertyClass && !SubClass->IsChildOf(OP->PropertyClass))
+            {
+                OutError = FString::Printf(TEXT("Class '%s' is not a '%s'"), *SubClass->GetName(), *OP->PropertyClass->GetName());
+                return false;
+            }
+            UObject* NewInst = NewObject<UObject>(OwnerForInstancing, SubClass, NAME_None, RF_Transactional);
+            if (!NewInst)
+            {
+                OutError = FString::Printf(TEXT("NewObject failed for class '%s'"), *ClassPath);
+                return false;
+            }
+            // Apply the subobject's own fields best-effort: a single quirky field (e.g. a
+            // value exported only as ExportText) must not abort re-instancing the object
+            // with the fields that do apply. The new instance is itself the owner for any
+            // nested instanced grandchildren.
+            for (const auto& Field : Obj->Values)
+            {
+                if (Field.Key.Equals(TEXT("__class"), ESearchCase::IgnoreCase))
+                {
+                    continue;
+                }
+                FProperty* ChildProp = SubClass->FindPropertyByName(FName(*Field.Key));
+                if (!ChildProp)
+                {
+                    continue;
+                }
+                FString ChildErr;
+                ApplyJsonValueToProperty(NewInst, ChildProp, Field.Value, ChildErr, Depth + 1, NewInst);
+            }
+            OP->SetObjectPropertyValue_InContainer(TargetContainer, NewInst);
+            return true;
+        }
         if (ValueField->Type == EJson::String)
         {
             const FString Path = ValueField->AsString();
@@ -1092,12 +1150,29 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
     // primitive, struct and object-reference inner types uniformly.
     if (FArrayProperty* AP = CastField<FArrayProperty>(Property))
     {
-        if (ValueField->Type != EJson::Array)
+        // Accept either a JSON array, or a JSON string that itself encodes an array.
+        // The FreeformObject "value" param carries no schema type, so some clients
+        // stringify arrays/objects (the struct branch above tolerates the same).
+        TArray<TSharedPtr<FJsonValue>> ParsedArr;
+        const TArray<TSharedPtr<FJsonValue>>* SrcPtr = nullptr;
+        if (ValueField->Type == EJson::Array)
         {
-            OutError = TEXT("Expected array for array property");
+            SrcPtr = &ValueField->AsArray();
+        }
+        else if (ValueField->Type == EJson::String)
+        {
+            TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ValueField->AsString());
+            if (FJsonSerializer::Deserialize(Reader, ParsedArr))
+            {
+                SrcPtr = &ParsedArr;
+            }
+        }
+        if (!SrcPtr)
+        {
+            OutError = TEXT("Expected array (or a JSON string encoding an array) for array property");
             return false;
         }
-        const TArray<TSharedPtr<FJsonValue>>& Src = ValueField->AsArray();
+        const TArray<TSharedPtr<FJsonValue>>& Src = *SrcPtr;
         FScriptArrayHelper Helper(AP, AP->ContainerPtrToValuePtr<void>(TargetContainer));
         Helper.EmptyValues();
         Helper.Resize(Src.Num());
@@ -1105,7 +1180,7 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
         {
             uint8* ElemPtr = Helper.GetRawPtr(i);
             FString InnerErr;
-            if (!ApplyJsonValueToProperty(ElemPtr, AP->Inner, Src[i], InnerErr, Depth + 1))
+            if (!ApplyJsonValueToProperty(ElemPtr, AP->Inner, Src[i], InnerErr, Depth + 1, OwnerForInstancing))
             {
                 OutError = FString::Printf(TEXT("Failed to set array element %d: %s"), i, *InnerErr);
                 return false;

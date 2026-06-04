@@ -2368,8 +2368,10 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
   // and an FString::operator= access-violation crash for string properties.
   void *Container = Asset;
   FString ApplyError;
+  // Pass the asset as the owner so Instanced subobject values ({"__class", ...})
+  // re-instance Outered to the asset (round-trips input Triggers/Modifiers, etc.).
   if (!McpPropertyReflection::ApplyJsonValueToProperty(Container, Prop, ValueField,
-                                                       ApplyError)) {
+                                                       ApplyError, 0, Asset)) {
     SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *ApplyError),

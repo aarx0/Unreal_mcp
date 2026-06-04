@@ -110,6 +110,11 @@ namespace McpPropertyReflection
      * @param ValueField The JSON value to apply
      * @param OutError Receives error message on failure
      * @param Depth Current recursion depth (callers pass 0; used internally)
+     * @param OwnerForInstancing UObject to use as the Outer when re-instancing an
+     *        Instanced subobject (CPF_InstancedReference) from a JSON object carrying
+     *        "__class". Must be threaded from the owning asset so the new subobject
+     *        serializes into the asset's package. nullptr disables re-instancing (the
+     *        object form then errors, preserving prior behavior).
      * @return true if successful
      */
     MCPAUTOMATIONBRIDGE_API bool ApplyJsonValueToProperty(
@@ -117,7 +122,8 @@ namespace McpPropertyReflection
         FProperty* Property,
         const TSharedPtr<FJsonValue>& ValueField,
         FString& OutError,
-        int32 Depth = 0);
+        int32 Depth = 0,
+        UObject* OwnerForInstancing = nullptr);
 
     /**
      * Apply multiple JSON values to properties of an object.
@@ -511,7 +517,8 @@ namespace McpPropertyReflection
         FArrayProperty* ArrayProp,
         const TArray<TSharedPtr<FJsonValue>>& JsonArray,
         FString& OutError,
-        int32 Depth = 0);
+        int32 Depth = 0,
+        UObject* OwnerForInstancing = nullptr);
 
     /**
      * Export a struct instance as a JSON object of its child properties (reusing
@@ -528,6 +535,19 @@ namespace McpPropertyReflection
     MCPAUTOMATIONBRIDGE_API TSharedPtr<FJsonObject> ExportStructToJson(
         void* StructPtr,
         const UScriptStruct* Struct,
+        int32 Depth = 0);
+
+    /**
+     * Deep-export an Instanced subobject (CPF_InstancedReference — e.g. an input
+     * trigger/modifier, a montage AnimNotify) as a nested JSON object carrying its
+     * concrete class under "__class" plus its own properties. Used by the export path
+     * for instanced object values, and shared with the helpers twin so a direct
+     * top-level instanced property reads back its config rather than a bare path.
+     * @param Subobject The instanced subobject instance
+     * @param Depth     Current recursion depth (bounded by the shared cap)
+     */
+    MCPAUTOMATIONBRIDGE_API TSharedPtr<FJsonObject> ExportInstancedObjectToJson(
+        UObject* Subobject,
         int32 Depth = 0);
 
 } // namespace McpPropertyReflection

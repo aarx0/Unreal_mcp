@@ -1200,12 +1200,20 @@ ExportPropertyToJsonValue(void *TargetContainer, FProperty *Property) {
     return MakeShared<FJsonValueNumber>(0.0);
   }
 
-  // Object references -> return path if available
+  // Object references -> path string, except Instanced subobjects which deep-export
+  // (mirrors McpPropertyReflection) so a direct instanced property reads back its config
+  // rather than a bare subobject path. Array/struct-nested instanced cases already
+  // deep-export via the McpPropertyReflection delegation below.
   if (FObjectProperty *OP = CastField<FObjectProperty>(Property)) {
     UObject *O = OP->GetObjectPropertyValue_InContainer(TargetContainer);
-    if (O)
-      return MakeShared<FJsonValueString>(O->GetPathName());
-    return MakeShared<FJsonValueNull>();
+    if (!O)
+      return MakeShared<FJsonValueNull>();
+    if (OP->HasAnyPropertyFlags(CPF_InstancedReference)) {
+      if (TSharedPtr<FJsonObject> Inst =
+              McpPropertyReflection::ExportInstancedObjectToJson(O, 0))
+        return MakeShared<FJsonValueObject>(Inst);
+    }
+    return MakeShared<FJsonValueString>(O->GetPathName());
   }
 
   // Soft object references (FSoftObjectPtr, FSoftObjectPath)
