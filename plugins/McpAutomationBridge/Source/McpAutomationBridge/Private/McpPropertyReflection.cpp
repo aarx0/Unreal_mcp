@@ -1116,8 +1116,56 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
 
         if (SP->Struct && ValueField->Type == EJson::Object && ValueField->AsObject().IsValid())
         {
-            if (FJsonObjectConverter::JsonObjectToUStruct(ValueField->AsObject().ToSharedRef(), SP->Struct, StructPtr, 0, 0))
+            const TSharedPtr<FJsonObject> StructObj = ValueField->AsObject();
+
+            // CPF_InstancedReference fields in the struct (e.g. a montage
+            // FAnimNotifyEvent.Notify) arrive as our {"__class", ...} form, which
+            // JsonObjectToUStruct cannot convert — it fails the WHOLE struct. So strip
+            // those fields before the engine converter, then re-instance them ourselves
+            // through the owner-aware importer afterward.
+            TArray<FProperty*> InstancedFields;
+            for (TFieldIterator<FProperty> It(SP->Struct); It; ++It)
             {
+                FProperty* Child = *It;
+                bool bInstanced = false;
+                if (FObjectProperty* CObj = CastField<FObjectProperty>(Child))
+                {
+                    bInstanced = CObj->HasAnyPropertyFlags(CPF_InstancedReference);
+                }
+                else if (FArrayProperty* CArr = CastField<FArrayProperty>(Child))
+                {
+                    bInstanced = CArr->Inner && CArr->Inner->HasAnyPropertyFlags(CPF_InstancedReference);
+                }
+                if (bInstanced && StructObj->Values.Contains(Child->GetName()))
+                {
+                    InstancedFields.Add(Child);
+                }
+            }
+
+            TSharedRef<FJsonObject> ConvertObj = StructObj.ToSharedRef();
+            if (InstancedFields.Num() > 0)
+            {
+                TSharedRef<FJsonObject> Stripped = MakeShared<FJsonObject>();
+                Stripped->Values = StructObj->Values;
+                for (FProperty* F : InstancedFields)
+                {
+                    Stripped->Values.Remove(F->GetName());
+                }
+                ConvertObj = Stripped;
+            }
+
+            if (FJsonObjectConverter::JsonObjectToUStruct(ConvertObj, SP->Struct, StructPtr, 0, 0))
+            {
+                for (FProperty* Child : InstancedFields)
+                {
+                    const TSharedPtr<FJsonValue>* FieldVal = StructObj->Values.Find(Child->GetName());
+                    if (!FieldVal || !FieldVal->IsValid() || (*FieldVal)->Type == EJson::Null)
+                    {
+                        continue;
+                    }
+                    FString ChildErr;
+                    ApplyJsonValueToProperty(StructPtr, Child, *FieldVal, ChildErr, Depth + 1, OwnerForInstancing);
+                }
                 return true;
             }
             OutError = FString::Printf(TEXT("Failed to convert JSON object into struct '%s'"), *TypeName);
