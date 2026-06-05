@@ -275,6 +275,8 @@
 #define MCP_PC_Wildcard UEdGraphSchema_K2::PC_Wildcard
 #define MCP_PC_Text UEdGraphSchema_K2::PC_Text
 #define MCP_PC_Struct UEdGraphSchema_K2::PC_Struct
+#define MCP_PC_Real UEdGraphSchema_K2::PC_Real
+#define MCP_PC_Double UEdGraphSchema_K2::PC_Double
 #else
 static const FName MCP_PC_Float(TEXT("float"));
 static const FName MCP_PC_Int(TEXT("int"));
@@ -288,6 +290,8 @@ static const FName MCP_PC_Class(TEXT("class"));
 static const FName MCP_PC_Wildcard(TEXT("wildcard"));
 static const FName MCP_PC_Text(TEXT("text"));
 static const FName MCP_PC_Struct(TEXT("struct"));
+static const FName MCP_PC_Real(TEXT("real"));
+static const FName MCP_PC_Double(TEXT("double"));
 #endif
 
 #if WITH_EDITOR
@@ -2636,11 +2640,16 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     // Resolve a single (non-container) type token to a pin category + optional
     // sub-object. Returns false if unresolvable. Shared by the scalar case and by
     // the inner type(s) of container variables.
-    auto ResolveTerminal = [&](const FString &InRaw, FName &OutCat,
+    auto ResolveTerminal = [&](const FString &InRaw, FName &OutCat, FName &OutSubCat,
                                TWeakObjectPtr<UObject> &OutSub) -> bool {
       const FString T = InRaw.TrimStartAndEnd().ToLower();
+      OutSubCat = NAME_None;
       OutSub = nullptr;
-      if (T == TEXT("float") || T == TEXT("double")) { OutCat = MCP_PC_Float; return true; }
+      // Floating point uses PC_Real + a float/double sub-category in UE5; the legacy
+      // PC_Float *category* is not honored and silently produced an int property
+      // (truncating fractional values) in scalar AND container positions.
+      if (T == TEXT("float")) { OutCat = MCP_PC_Real; OutSubCat = MCP_PC_Float; return true; }
+      if (T == TEXT("double") || T == TEXT("real")) { OutCat = MCP_PC_Real; OutSubCat = MCP_PC_Double; return true; }
       if (T == TEXT("int") || T == TEXT("integer")) { OutCat = MCP_PC_Int; return true; }
       if (T == TEXT("int64")) { OutCat = MCP_PC_Int64; return true; }
       if (T == TEXT("byte")) { OutCat = MCP_PC_Byte; return true; }
@@ -2681,41 +2690,45 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
             TEXT("Map variable type needs 'Map<Key,Value>'"), TEXT("INVALID_ARGUMENT"));
         return true;
       }
-      FName KeyCat, ValCat;
+      FName KeyCat, KeySubCat, ValCat, ValSubCat;
       TWeakObjectPtr<UObject> KeySub, ValSub;
-      if (!ResolveTerminal(KeyStr, KeyCat, KeySub) || !ResolveTerminal(ValStr, ValCat, ValSub)) {
+      if (!ResolveTerminal(KeyStr, KeyCat, KeySubCat, KeySub) || !ResolveTerminal(ValStr, ValCat, ValSubCat, ValSub)) {
         SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Could not resolve map inner type(s) in '%s'"), *VarType),
             TEXT("CLASS_NOT_FOUND"));
         return true;
       }
       PinType.PinCategory = KeyCat;
+      PinType.PinSubCategory = KeySubCat;
       PinType.PinSubCategoryObject = KeySub;
       PinType.ContainerType = EPinContainerType::Map;
       PinType.PinValueType.TerminalCategory = ValCat;
+      PinType.PinValueType.TerminalSubCategory = ValSubCat;
       PinType.PinValueType.TerminalSubCategoryObject = ValSub;
     } else if (Container != EPinContainerType::None) {
-      FName InnerCat;
+      FName InnerCat, InnerSubCat;
       TWeakObjectPtr<UObject> InnerSub;
-      if (!ResolveTerminal(InnerSpec, InnerCat, InnerSub)) {
+      if (!ResolveTerminal(InnerSpec, InnerCat, InnerSubCat, InnerSub)) {
         SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Could not resolve container inner type '%s'"), *InnerSpec),
             TEXT("CLASS_NOT_FOUND"));
         return true;
       }
       PinType.PinCategory = InnerCat;
+      PinType.PinSubCategory = InnerSubCat;
       PinType.PinSubCategoryObject = InnerSub;
       PinType.ContainerType = Container;
     } else {
-      FName Cat;
+      FName Cat, SubCat;
       TWeakObjectPtr<UObject> Sub;
-      if (!ResolveTerminal(VarType, Cat, Sub)) {
+      if (!ResolveTerminal(VarType, Cat, SubCat, Sub)) {
         SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Could not resolve class '%s'"), *VarType),
             TEXT("CLASS_NOT_FOUND"));
         return true;
       }
       PinType.PinCategory = Cat;
+      PinType.PinSubCategory = SubCat;
       PinType.PinSubCategoryObject = Sub;
     }
 
