@@ -41,6 +41,8 @@
 #include "CommonButtonBase.h" // UCommonButtonBase, UCommonButtonStyle
 #include "CommonTextBlock.h"  // UCommonTextBlock (concrete), UCommonTextStyle
 #include "CommonBorder.h"     // UCommonBorder (concrete), UCommonBorderStyle
+#include "CommonUITypes.h"    // FCommonInputActionDataBase (input-action row struct)
+#include "Engine/DataTable.h" // UDataTable, FDataTableRowHandle
 #endif
 
 using namespace WidgetAuthoringHelpers;
@@ -416,6 +418,99 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 		ResultJson->SetStringField(TEXT("styleClass"), StyleClass->GetPathName());
 		McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
 		SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set Common UI style"), ResultJson);
+		return true;
+	}
+
+	// -------------------------------------------------------------------------
+	// set_common_button_input_action — bind a UCommonButtonBase's TriggeringInput-
+	// Action (an FDataTableRowHandle into a CommonInputActionDataBase table).
+	// -------------------------------------------------------------------------
+	if (SubAction.Equals(TEXT("set_common_button_input_action"), ESearchCase::IgnoreCase))
+	{
+		const FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
+		const FString WidgetName = GetJsonStringField(Payload, TEXT("widgetName"));
+		const FString DataTablePath = GetJsonStringField(Payload, TEXT("dataTable"));
+		const FString RowName = GetJsonStringField(Payload, TEXT("rowName"));
+		if (WidgetPath.IsEmpty() || WidgetName.IsEmpty() || DataTablePath.IsEmpty() || RowName.IsEmpty())
+		{
+			SendAutomationError(RequestingSocket, RequestId,
+				TEXT("This action requires 'widgetPath', 'widgetName', 'dataTable', and 'rowName'."),
+				TEXT("MISSING_PARAMETER"));
+			return true;
+		}
+
+		UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
+		if (!WidgetBP || !WidgetBP->WidgetTree)
+		{
+			SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+			return true;
+		}
+
+		UWidget* Target = WidgetBP->WidgetTree->FindWidget(FName(*WidgetName));
+		if (!Target)
+		{
+			SendAutomationError(RequestingSocket, RequestId,
+				FString::Printf(TEXT("Widget '%s' not found in %s"), *WidgetName, *WidgetPath), TEXT("WIDGET_NOT_FOUND"));
+			return true;
+		}
+
+		UCommonButtonBase* Button = Cast<UCommonButtonBase>(Target);
+		if (!Button)
+		{
+			SendAutomationError(RequestingSocket, RequestId,
+				FString::Printf(TEXT("Widget '%s' is not a UCommonButtonBase"), *WidgetName), TEXT("WRONG_TYPE"));
+			return true;
+		}
+
+		UDataTable* DataTable = LoadObject<UDataTable>(nullptr, *DataTablePath);
+		if (!DataTable)
+		{
+			SendAutomationError(RequestingSocket, RequestId,
+				FString::Printf(TEXT("DataTable not found at '%s'"), *DataTablePath), TEXT("NOT_FOUND"));
+			return true;
+		}
+		if (!DataTable->RowStruct || !DataTable->RowStruct->IsChildOf(FCommonInputActionDataBase::StaticStruct()))
+		{
+			SendAutomationError(RequestingSocket, RequestId,
+				FString::Printf(TEXT("DataTable '%s' row struct must derive from CommonInputActionDataBase"), *DataTablePath),
+				TEXT("INVALID_ROW_STRUCT"));
+			return true;
+		}
+
+		// TriggeringInputAction is protected on UCommonButtonBase. Write the handle
+		// directly via reflection — this mirrors what the details panel persists and
+		// deliberately avoids UCommonButtonBase::SetTriggeringInputAction(), whose
+		// runtime input binding (BindTriggeringInputActionToClick) fires when
+		// !IsDesignTime() — true for a programmatically-loaded WidgetTree template.
+		FStructProperty* TrigProp = FindFProperty<FStructProperty>(
+			UCommonButtonBase::StaticClass(), TEXT("TriggeringInputAction"));
+		if (!TrigProp || TrigProp->Struct != FDataTableRowHandle::StaticStruct())
+		{
+			SendAutomationError(RequestingSocket, RequestId,
+				TEXT("Could not resolve UCommonButtonBase.TriggeringInputAction property"), TEXT("INTERNAL_ERROR"));
+			return true;
+		}
+
+		const FName RowFName(*RowName);
+		// Non-blocking: a handle may be bound before its row is imported. Report it.
+		const bool bRowFound = DataTable->GetRowMap().Contains(RowFName);
+
+		FDataTableRowHandle* HandlePtr = TrigProp->ContainerPtrToValuePtr<FDataTableRowHandle>(Button);
+		HandlePtr->DataTable = DataTable;
+		HandlePtr->RowName = RowFName;
+
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+
+		TSharedPtr<FJsonObject> ResultJson = MakeShared<FJsonObject>();
+		ResultJson->SetBoolField(TEXT("success"), true);
+		ResultJson->SetStringField(TEXT("widgetName"), WidgetName);
+		ResultJson->SetStringField(TEXT("widgetObjectPath"), Target->GetPathName());
+		ResultJson->SetStringField(TEXT("dataTable"), DataTable->GetPathName());
+		ResultJson->SetStringField(TEXT("rowName"), RowName);
+		ResultJson->SetBoolField(TEXT("rowFound"), bRowFound);
+		McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
+		SendAutomationResponse(RequestingSocket, RequestId, true,
+			TEXT("Set Common UI button input action"), ResultJson);
 		return true;
 	}
 

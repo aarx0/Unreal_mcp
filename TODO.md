@@ -17,27 +17,50 @@ as they land.
 
 ## Open
 
-### [ ] `set_common_button_input_action` (Common UI)
-Set a button's `TriggeringInputAction` `FDataTableRowHandle` (DataTable + RowName) on a
-Common UI button widget inside a Widget Blueprint. Now unblocked: `create_data_table`
-exists (below), so a `CommonInputActionDataBase` table can be fabricated. Plan, refined by
-reading the engine: the row struct is `FCommonInputActionDataBase`
-(`/Script/CommonUI.CommonInputActionDataBase`, derives from `FTableRowBase`); validate the
-DataTable's `RowStruct->IsChildOf` it. Write the property **directly via reflection** rather
-than calling `UCommonButtonBase::SetTriggeringInputAction()` — that runtime setter calls
-`BindTriggeringInputActionToClick()` when `!IsDesignTime()` (which is the case for a
-programmatically-loaded WidgetTree template widget), i.e. runtime input binding on an
-archetype with no owning player. The details-panel-equivalent direct write persists the
-authoring default with no runtime side effects. Add an entry in
-`McpConsolidatedActions::CommonUi()` (header → rebuild) + a block in `HandleCommonUiAction`
-(`McpAutomationBridge_CommonUIHandlers.cpp`). Report `rowFound` (non-blocking) so a handle
-can be bound before its row is imported.
+_(no planned feature items right now — see Bugs below for tracked defects)_
+
+---
+
+## Bugs (found while using the bridge — track, fix when convenient)
+
+### [ ] `create_widget_blueprint` ignores `savePath`
+`manage_blueprint create_widget_blueprint` always creates the asset under `/Game/UI`,
+ignoring the `savePath` param. Observed 2026-06-04 fabricating a fixture: asked for
+`/Game/McpTmp`, got `/Game/UI/WBP_BtnTest`. The handler should honor `savePath` (falling back
+to `/Game/UI` only when empty), matching `manage_blueprint create` / `create_data_table`.
+
+### [ ] Common UI `add_common_button` / `add_common_text` fire a handled ensure on a dirty WBP
+The FIRST `add_common_*` on a freshly created (clean) Widget Blueprint succeeds silently, but
+a SECOND add — or an add after another structural edit — logs a `Handled ensure` (the native
+handler returns success but the bridge's "Unreal logged errors" guard surfaces it as
+`ENGINE_ERROR`). Repro 2026-06-04: create WBP → `add_common_button` (ok) → `add_common_text`
+(ensure) → `add_common_button` (ensure). Likely the construct / `SafeAddWidgetToTree` path on
+an already-modified, unsaved CommonUI WidgetTree. Related: runtime-added (unsaved) widgets can
+vanish from the tree across later ops — a `set_common_button_input_action` couldn't find a
+button an earlier call had set, because nothing saved the WBP in between. Worth deciding
+whether `add_common_*` should compile+save (or at least be ensure-clean) so multi-widget
+authoring in one session is reliable.
 
 ---
 
 ## Done
 
 _(completed items, newest first)_
+
+### [x] `set_common_button_input_action` (Common UI)
+Binds a `UCommonButtonBase`'s `TriggeringInputAction` (`FDataTableRowHandle`) on a button
+widget inside a Widget Blueprint. Params: `widgetPath`, `widgetName`, `dataTable`, `rowName`.
+Validates the widget is a `UCommonButtonBase` and the DataTable's `RowStruct->IsChildOf(
+FCommonInputActionDataBase)` (`/Script/CommonUI.CommonInputActionDataBase`). Writes the handle
+**directly via reflection** (`FindFProperty` → `ContainerPtrToValuePtr`) rather than calling
+`UCommonButtonBase::SetTriggeringInputAction()`, whose runtime input binding
+(`BindTriggeringInputActionToClick`) fires when `!IsDesignTime()` — true for a
+programmatically-loaded WidgetTree template, i.e. it would do runtime binding on an archetype
+with no owning player. The direct write is what the details panel persists. Reports `rowFound`
+(non-blocking). Routed via `CommonUi()` (also feeds the `manage_blueprint` schema enum).
+Verified live on a fabricated `WBP_MenuButton` instance + a `CommonInputActionDataBase` table:
+set → independent read-back of `TriggeringInputAction` returned the exact `{DataTable, RowName}`
+(twice), and the `WRONG`/`INVALID_ROW_STRUCT`/`NOT_FOUND`/`WIDGET_NOT_FOUND` guards all reject.
 
 ### [x] `manage_asset` action `create_data_table`
 Create a `UDataTable` with a given row struct. Params: `name`, `path`, `rowStruct` (full
