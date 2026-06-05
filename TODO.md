@@ -9,28 +9,19 @@ as they land.
 > read/write actions on `manage_asset`).
 
 > **Fixture tip (2026-06-04):** a created Blueprint's variables are fully reachable by
-> `get`/`set_asset_property` via the **CDO path** `<bp-path>.Default__<Class>_C` (e.g.
-> `/Game/X/BP_Foo.Default__BP_Foo_C`). Create a BP, `add_variable` the type you need
-> (now incl. `Set<>`/`Array<>`/`Map<>`), read/write it on the CDO path. This is how the
-> reflection round-trips were verified.
+> `get`/`set_asset_property` via the **CDO path** `<bp-path>.Default__<Class>_C`. Create a
+> BP, `add_variable` the type you need (incl. `Set<>`/`Array<>`/`Map<>`), read/write it on
+> the CDO path. This is how the reflection round-trips were verified.
 
 ---
 
 ## Open
 
-### [ ] Float/double **container** terminals collapse to int
-`add_variable` container support (below, Done) creates `Set`/`Map`/`Array` vars, but a
-float/double element/value terminal (`Map<Name,Float>`, `Set<Float>`, …) comes out
-**int-typed** — the legacy `PC_Float` terminal isn't honored as a container terminal.
-Fix: resolve `float`/`double` terminals to `PC_Real` + `PinSubCategory` (`PC_Float`/
-`PC_Double`) and set `PinValueType.TerminalSubCategory` for maps. Scalar/int/name/object/
-struct terminals are fine.
-
 ### [ ] Generic reflection widening (R3) + helpers-twin `FText`
 `FText` export landed in the asset twin (`6b98c69`). The `McpAutomationBridgeHelpers.h`
 twin (used by `inspect` / `set_object_property`) still lacks the `FText` branch, and its
 generic importer lacks `FText`/`FClassProperty` handling (R3). Header → 64-TU rebuild.
-**Now testable** via a fabricated BP CDO fixture (`inspect_cdo` / `inspect set_property`).
+Testable via a fabricated BP CDO fixture (`inspect_cdo` / `inspect set_property`).
 
 ### [ ] `set_common_button_input_action` (Common UI) — needs a DataTable + a way to make one
 Set a button's `FDataTableRowHandle` + call `SetTriggeringInputAction`, validating
@@ -45,39 +36,47 @@ Set a button's `FDataTableRowHandle` + call `SetTriggeringInputAction`, validati
 
 _(completed items, newest first)_
 
+### [x] Numeric reflection correctness: float/double variables + map/set export
+Two distinct bugs found by thoroughly probing every numeric type in every position
+(scalar / Array / Set / Map key / Map value) on a fabricated BP CDO fixture:
+- `c0bff6a` — `add_variable` mapped `float`/`double` to the legacy `PC_Float` *category*,
+  which UE5 doesn't honor → the BP compiler produced an **int** property → fractional values
+  truncated (`1.5 -> 1`) for scalar AND container float/double vars (pre-existing for
+  scalars). Fixed: `PC_Real` + float/double `PinSubCategory` at every position.
+- `40c3bf9` — the map-value and set-element **export** (in BOTH reflection twins) only
+  handled str/int/float/bool, dropping double/int64/byte/enum/object/struct to an
+  `ExportText` string; non-str/name/int map keys became `"key_%d"`. Fixed: delegate to
+  `ExportPropertyToJsonValue` (full coverage), keys preserved via `ExportText`.
+Verified (rebuild + relaunch): scalar float/double + `Array<Float>`/`Set<Float>`/`Set<Double>`/
+`Map<Name,Float>`/`Map<Name,Double>`/`Map<Name,Int64>` all round-trip correct JSON numbers.
+
 ### [x] `add_variable` container variables (Set / Array / Map)
-`3728d75` (2026-06-04). `add_variable` accepts `Set<Inner>`/`Array<Inner>`/`Map<Key,Value>`
-(T-prefixes ok) → `PinType.ContainerType` (+ `PinValueType`). Verified by creating + value
-round-tripping `Set<Name>`, `Map<Name,Int>`, `Array<Int>`. (Float container terminals →
-int, see Open.)
+`3728d75`. Accepts `Set<Inner>`/`Array<Inner>`/`Map<Key,Value>` (T-prefixes ok) →
+`PinType.ContainerType` (+ `PinValueType`). Verified by creating + value round-tripping.
 
 ### [x] Fix `TMap` value import + runtime-verify `TSet`
-`6bea6a0` (2026-06-04). `TMap` import (`da29c05`) double-offset the value (passed
-`GetValuePtr` to the `*_InContainer` accessors) → all primitive values dropped to default;
-the empty-struct IMC fixture had masked it. Now passes `GetPairPtr` for both key and value.
-Verified `Map<Name,Int>` round-trips `{"apple":5,"banana":7}`. `TSet` import also
-runtime-verified (`Set<Name>` → `["Alpha","Beta","Gamma"]`) once container vars existed.
+`6bea6a0`. `TMap` import (`da29c05`) double-offset the value (`GetValuePtr` vs the
+`*_InContainer` accessors) → all primitive values dropped to default (empty-struct IMC
+fixture masked it). Now `GetPairPtr`. Verified `Map<Name,Int>` round-trips; `TSet` import
+runtime-verified via a fabricated `Set<Name>`.
 
 ### [x] `FText` property export
-`6b98c69`. `ExportPropertyToJsonValue` emits an `FText`'s display string; text properties
-are no longer dropped on read. Verified by round-tripping an `FText` BP variable via its
-CDO path. Import already worked via the generic `ImportText` string fallback.
+`6b98c69`. `ExportPropertyToJsonValue` emits an `FText`'s display string. Verified via a BP
+CDO fixture. Import already worked via the generic `ImportText` fallback.
 
 ### [x] `TMap` / `TSet` property import (initial)
-`da29c05`. Maps import from a JSON object, sets from a JSON array; keys/values route
-through the importer; both tolerate a stringified form. (Value-offset bug fixed later in
-`6bea6a0`.)
+`da29c05`. Maps from a JSON object, sets from a JSON array; keys/values route through the
+importer; both tolerate a stringified form. (Value-offset bug fixed in `6bea6a0`.)
 
 ### [x] Instanced subobject round-trip — export + import (all shapes)
 EXPORT `d72f8c3`. IMPORT `7589789` (top-level arrays — owner threaded → `NewObject` Outered
-to the asset; string-tolerant array values; helpers-twin export mirror) and `685282f`
-(struct-nested — strip instanced fields before `JsonObjectToUStruct`, re-instance after).
-Verified on `IA_Mute.Triggers` and `AM_AttackMontage1.Notifies`.
+to the asset) and `685282f` (struct-nested — strip instanced fields before
+`JsonObjectToUStruct`, re-instance after). Verified on `IA_Mute.Triggers` and
+`AM_AttackMontage1.Notifies`.
 
 ### [x] Deep export/import of struct & object-ref array properties
-Recurses struct/object/other inners (depth-capped, `ExportText` fallback); import covers
-object-by-path, byte/enums, soft refs, structs. Mirrored into the helpers twin. Verified on
-`IMC_GameCommands.DefaultKeyMappings.Mappings`.
+Recurses struct/object/other inners (depth-capped, `ExportText` fallback). Mirrored into the
+helpers twin. Verified on `IMC_GameCommands.DefaultKeyMappings.Mappings`.
 
 ### [x] Advertise the new `manage_asset` actions (native schema)
 `get_referencers`/`get_asset_properties`/`set_asset_property` were already routed; added
