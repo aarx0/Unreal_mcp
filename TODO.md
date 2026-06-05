@@ -69,6 +69,9 @@ re-queryable by request id (short-lived result cache + a `get_result` probe) so 
 is recoverable instead of forcing a blind retry or an independent state re-read; (d) optionally
 return a fast "warming up" status until the editor finishes its initial load.
 
+**Full planning brief: `docs/transport-mid-call-drop-problem.md`** (architecture, confirmed
+mechanism, code map, constraints, acceptance criteria — written to hand to a fresh instance).
+
 ### [ ] `manage_asset delete` / `delete_asset` ignores `assetPath`, requires `paths`
 `delete_asset { assetPath: "/Game/Foo" }` returns `INVALID_ARGUMENT: No paths provided`; only
 `paths: ["/Game/Foo"]` works (observed 2026-06-04). Other `manage_asset` actions accept the
