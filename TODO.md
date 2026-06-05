@@ -15,13 +15,100 @@ as they land.
 
 ---
 
-## Open
+## Roadmap — missing / incomplete capabilities
 
-_(no planned feature items right now — see Bugs below for tracked defects)_
+> Grouped by theme; reliability items cross-reference the **Bugs** section below. Rough
+> priority: 🔴 near-term / unblocks current work · 🟡 valuable soon · 🟢 nice-to-have / deferred.
+> The bridge is broad and mostly real (~36 tools, 600+ actions, most gameplay domains genuinely
+> implemented) — this lists the genuine holes, not the large covered surface.
+
+### A. Reliability & correctness — harden what already ships
+Flakiness in shipped surface erodes trust during real authoring.
+- 🔴 **Transport mid-call drop** — see Bugs §"Native MCP transport drops mid-call" +
+  `docs/transport-mid-call-drop-problem.md`. Per-request SSE keepalive (from the socket
+  thread) + a result cache re-queryable by request id.
+- 🔴 **Widget-authoring ensures + save persistence** — see Bugs §"remove_widget … stale
+  variable→GUID" and §"add_common_* … handled ensure on a dirty WBP". Strip the stale
+  variable→GUID on `remove_widget`; treat the self-healing `SeenVariableNames` ensure as
+  benign in the post-op error guard; make `compile {save:true}` actually persist structural
+  deletes. Directly affects the in-progress Common UI menu migration.
+- 🟡 **`ReadHttpRequest` busy-poll** — see Bugs §"ReadHttpRequest recv loop busy-polls".
+  Replace the 1 ms sleep-spin with `Socket->Wait(WaitForRead)` + chunked header reads.
+- 🟡 **Synchronous results / streaming** — `system_control run_tests` is fire-and-forget (no
+  result capture); `docs/Roadmap.md` Phase 5 ("real-time streaming for logs/test results",
+  remote Insights profiling) is unstarted. Add wait/poll-by-request-id (pairs with the
+  transport result cache) so automation/test outcomes are retrievable, not just logged.
+
+### B. Authoring capability gaps — new features that unblock real workflows
+- 🔴 **DataTable row CRUD** — `create_data_table` makes an *empty* table; there is **no**
+  `add_row`/`edit_row`/`remove_row`/`get_rows` and no CSV/JSON import. This **blocks the
+  `set_common_button_input_action` workflow** (Done, below) — it needs a populated
+  `CommonInputActionDataBase` table, which today must be filled by hand. Highest-value new
+  capability. Implement by reflection-populating a `RowStruct` instance via the existing
+  `McpPropertyReflection::ApplyJsonValueToProperty` path, then `UDataTable::AddRow`; add bulk
+  CSV/JSON import.
+- 🟡 **Enhanced Input authoring depth** — IMC/IA creation + key mapping exist (Input group);
+  verify round-trips and fill the sparse trigger/modifier authoring (modifier/trigger
+  factories are thin).
+- 🟡 **Common UI completeness** — have: add button/text/border, assign style, bind input
+  action. Missing / runtime-only: activatable-widget stack push/pop + focus/nav, style-**asset
+  creation** (only assignment today), input-action→click wiring. Some is inherently runtime
+  (see `COMMONUI_INTEGRATION_PLAN.md`).
+- 🟡 **Asset import pipeline** — `import` works (Interchange) but there's no post-import
+  configuration: texture compression/sRGB/streaming, audio codec/sample-rate, mesh
+  LOD/Nanite/collision. Add a post-import `configure_import` pass (or params on `import`).
+- 🟢 **GAS ability-graph depth** — GAS scaffolding is broad (create ability/effect/attribute/
+  cue BPs), but multi-step ability *logic* (wait-for-input → montage → apply-effect) is manual
+  graph wiring. Templated ability-task chains would speed the boss/combat work.
+
+### C. Runtime / verify loop — mostly HAVE; close the narrow gaps
+The bridge already enters/exits PIE (`control_editor play`/`stop`/`eject` via
+`RequestPlaySession`/`RequestEndPlayMap`), frame-steps (`single_frame_step`,
+`set_fixed_delta_time`), injects `simulate_input`, and reads live state (`inspect
+runtime_report`/`pie_report`/`find_by_class`). Remaining gaps:
+- 🟡 **Input-injection fidelity** — `simulate_input` routes through `FSlateApplication` key/
+  mouse events: right for **menu/UI** testing (works today), but may not exercise **Enhanced
+  Input gameplay** mappings (movement/abilities). Verify; if needed, add player-input /
+  Enhanced-Input injection for gameplay tests.
+- 🟡 **Synchronous test/assert** — see A "synchronous results." Closing it makes the
+  author→play→assert loop scriptable end-to-end.
+- 🟢 **Gameplay-aware assertion helpers** — optional sugar over `runtime_report`/`inspect`
+  (read an attribute, confirm an ability tag) for combat verification.
+
+### D. Long tail — official `docs/Roadmap.md` phases 27+ (note & defer)
+`Roadmap.md` lists phases 27+ as unstarted: PCG, sky/weather/water, advanced rendering
+(ray tracing/post-process), cinematics & Movie Render Queue, **data/persistence & SaveGame**,
+build/deploy, editor utilities, and plugin integrations (MetaHuman, Quixel/Megascans,
+Wwise/FMOD, EOS/Steam, Chaos, accessibility, modding). Mostly not relevant to
+RhyaTowerOfWishes' near-term needs — tracked there, not re-listed here. The one to watch for
+a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if the game needs it.
 
 ---
 
 ## Bugs (found while using the bridge — track, fix when convenient)
+
+### [ ] `remove_widget` leaves a stale variable→GUID entry → handled ensure on next compile (+ gated save)
+Removing a *named* widget (e.g. a `BindWidget`-style member like a `TextBlock` label) deletes it
+from the `WidgetTree` but does NOT remove its entry from the WidgetBlueprint's variable→GUID map.
+The next compile then fires a handled ensure — `WidgetBlueprintCompiler.cpp:828`
+`Ensure condition failed: SeenVariableNames.Contains(It.Key())` /
+`Variable [<Name>] was deleted but still has a GUID referenced by WidgetBlueprint [<WBP>]` — which
+the bridge's "Unreal logged errors" guard surfaces as `ENGINE_ERROR` even though the delete and
+compile actually succeeded. Two follow-on problems: (a) the ensure-gated `compile {save:true}`
+returns `saved:false` and skips the package write, so the deletions sit **unpersisted on disk**
+until something re-dirties + saves (e.g. a later `set_position`, whose `saveSucceeded:true` path
+is NOT gated and does write); (b) the ensure clears itself after one more compile pass (the
+compiler prunes the stale GUID), so a second compile is clean — meaning the asset is fine, the
+noise is just the bridge mis-reporting a handled ensure as failure.
+Repro 2026-06-05 (Pause-menu cleanup): `remove_widget TextBlock` → next `compile` logs the ensure
++ returns `saved:false`; `remove_widget` ×3 then `compile` (ensure, no save) → `compile` again
+(clean, but `saved:false` because no longer dirty) → disk stale until a `set_position` saved it.
+Fix directions: (a) on `remove_widget`, also strip the deleted widget's name from the WBP's
+variable/GUID map (mirror `FWidgetBlueprintEditorUtils::DeleteWidgets`, which does this cleanup) so
+no stale GUID survives; (b) treat the `SeenVariableNames` ensure as benign in the post-op
+"engine errors" guard (don't fail the call on a self-healing handled ensure); (c) make the
+compile-path save not gate on the dirty flag when `save:true` was explicitly requested (or fall
+back to a direct package save) so structural deletes always persist.
 
 ### [ ] Common UI `add_common_button` / `add_common_text` fire a handled ensure on a dirty WBP
 The FIRST `add_common_*` on a freshly created (clean) Widget Blueprint succeeds silently, but
@@ -65,6 +152,21 @@ return a fast "warming up" status until the editor finishes its initial load.
 
 **Full planning brief: `docs/transport-mid-call-drop-problem.md`** (architecture, confirmed
 mechanism, code map, constraints, acceptance criteria — written to hand to a fresh instance).
+
+### [ ] `ReadHttpRequest` recv loop busy-polls (1ms sleep-spin, byte-at-a-time headers) instead of a readiness wait
+The HTTP receive path in `McpNativeTransport.cpp` (`ReadHttpRequest`, ~L681) reads request
+**headers one byte at a time** — `HasPendingData()` → on empty `Sleep(0.001)` and spin →
+`Recv(&Byte, 1, …)` (~L699-711) — and the **body** loop does the same 1ms-sleep-on-empty spin
+(~L819-843), each bounded by a 5s deadline. It's a mini busy-wait, not a real readiness wait:
+puts a ~1ms latency floor on every read and burns a little idle CPU per in-flight connection.
+It's also inconsistent with the **send** side (`SendAllBytes`, ~L283), which correctly uses
+`Socket->Wait(ESocketWaitConditions::WaitForWrite, timeout)` to block until the socket is ready.
+Found by code-read 2026-06-05; harmless at one agent on localhost, would only bite if connection
+volume grew. Pure cleanup, not a correctness bug.
+Fix: replace the `HasPendingData()` + `Sleep(0.001)` spins with
+`Socket->Wait(ESocketWaitConditions::WaitForRead, FTimespan)` (mirroring `SendAllBytes`), and read
+headers in chunks into a buffer (scan for `\r\n\r\n`) instead of one byte per `Recv`. Keep the 5s
+deadline; removes the latency floor + idle-CPU spin and makes recv/send symmetric.
 
 ---
 
