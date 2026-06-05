@@ -615,6 +615,15 @@ UE_LOG(LogTemp, Verbose, TEXT("RegisterAnimationGuid: Animation '%s' registered 
             return nullptr;
         }
 
+        // Idempotency (see docs/pull-architecture.md): if a widget with this name
+        // already exists, return it instead of letting ConstructWidget auto-suffix a
+        // duplicate (which a dropped-response retry would otherwise create). Same type
+        // converges; a name collision with a different type returns null (real conflict).
+        if (UWidget* Existing = WidgetTree->FindWidget(WidgetName))
+        {
+            return Cast<T>(Existing);
+        }
+
         T* Widget = WidgetTree->ConstructWidget<T>(T::StaticClass(), WidgetName);
         if (Widget)
         {

@@ -1520,16 +1520,6 @@ bool FMcpNativeTransport::HasPendingRequest(const FString& RequestId) const
 	return SSEConnections.Contains(RequestId);
 }
 
-void FMcpNativeTransport::TouchPendingRequest(const FString& RequestId)
-{
-	FScopeLock Lock(&SSEConnectionsMutex);
-	TSharedPtr<FSSEConnection>* Found = SSEConnections.Find(RequestId);
-	if (Found && Found->IsValid())
-	{
-		(*Found)->StartTime = FPlatformTime::Seconds();
-	}
-}
-
 void FMcpNativeTransport::SendSSEProgressUpdate(
 	const FString& RequestId, float Percent, const FString& Message)
 {

@@ -53,9 +53,6 @@ public:
 	/** Check if a request ID belongs to an active SSE connection. */
 	bool HasPendingRequest(const FString& RequestId) const;
 
-	/** Extend timeout for a pending request (called on progress updates). */
-	void TouchPendingRequest(const FString& RequestId);
-
 	/** Stream progress notification via SSE to the client. */
 	void SendSSEProgressUpdate(const FString& RequestId, float Percent,
 		const FString& Message);

@@ -300,6 +300,25 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSpawn(
   Payload->TryGetStringField(TEXT("classPath"), ClassPath);
   FString ActorName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
+
+  // Idempotency (see docs/pull-architecture.md): a spawn keyed by `actorName` must
+  // not create a duplicate when a dropped response causes the caller to retry. If an
+  // actor with this label/name already exists, fail fast with a recognizable code
+  // instead of spawning a second one — on a retry ACTOR_ALREADY_EXISTS is the
+  // caller's signal that the prior spawn landed (re-query state to confirm). Unkeyed
+  // spawns (no actorName) keep their create-each-call behavior.
+  if (!ActorName.IsEmpty()) {
+    if (AActor *Existing = FindActorByName(ActorName, /*bExactMatchOnly*/ true)) {
+      SendStandardErrorResponse(
+          this, Socket, RequestId, TEXT("ACTOR_ALREADY_EXISTS"),
+          FString::Printf(
+              TEXT("An actor named '%s' already exists (%s); not spawning a "
+                   "duplicate. Re-query state to confirm the prior spawn landed."),
+              *ActorName, *Existing->GetPathName()));
+      return true;
+    }
+  }
+
   FVector Location =
       ExtractVectorField(Payload, TEXT("location"), FVector::ZeroVector);
   FRotator Rotation =
@@ -541,6 +560,21 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSpawnBlueprint(
 
   FString ActorName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
+
+  // Idempotency (see docs/pull-architecture.md): keyed by `actorName`, fail fast on a
+  // name conflict instead of spawning a duplicate when a dropped response causes a
+  // retry. On a retry ACTOR_ALREADY_EXISTS confirms the prior spawn landed.
+  if (!ActorName.IsEmpty()) {
+    if (AActor *Existing = FindActorByName(ActorName, /*bExactMatchOnly*/ true)) {
+      SendStandardErrorResponse(
+          this, Socket, RequestId, TEXT("ACTOR_ALREADY_EXISTS"),
+          FString::Printf(
+              TEXT("An actor named '%s' already exists (%s); not spawning a "
+                   "duplicate. Re-query state to confirm the prior spawn landed."),
+              *ActorName, *Existing->GetPathName()));
+      return true;
+    }
+  }
   FVector Location =
       ExtractVectorField(Payload, TEXT("location"), FVector::ZeroVector);
   FRotator Rotation =

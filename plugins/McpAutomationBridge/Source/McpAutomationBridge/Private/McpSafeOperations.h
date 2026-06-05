@@ -977,6 +977,45 @@ inline void McpSafePostDeleteGC(bool bFullPurge = true)
 }
 
 /**
+ * Lightweight scoped timer for the GameThread-blocking barriers below (compilation drains,
+ * render flushes, full-purge GC). Logs how long the barrier actually blocked the GameThread and
+ * how many assets it had to drain at entry, so a "why was that delete/save slow?" complaint can be
+ * traced to a specific barrier stall. Quiet (Verbose) under WarnSeconds; emits a Warning past it.
+ * Pass AssetsAtEntry = -1 when the barrier does not touch the asset-compile queue (e.g. GC-only).
+ */
+struct FMcpQuiesceTimer
+{
+    FString Label;
+    int32 AssetsAtEntry;
+    double StartSeconds;
+    static constexpr double WarnSeconds = 5.0;
+
+    explicit FMcpQuiesceTimer(FString InLabel, int32 InAssetsAtEntry = -1)
+        : Label(MoveTemp(InLabel))
+        , AssetsAtEntry(InAssetsAtEntry)
+        , StartSeconds(FPlatformTime::Seconds())
+    {
+    }
+
+    ~FMcpQuiesceTimer()
+    {
+        const double Elapsed = FPlatformTime::Seconds() - StartSeconds;
+        if (Elapsed >= WarnSeconds)
+        {
+            UE_LOG(LogMcpSafeOperations, Warning,
+                TEXT("%s blocked the GameThread for %.2fs (%d assets compiling at entry) — barrier stall"),
+                *Label, Elapsed, AssetsAtEntry);
+        }
+        else
+        {
+            UE_LOG(LogMcpSafeOperations, Verbose,
+                TEXT("%s took %.3fs (%d assets compiling at entry)"),
+                *Label, Elapsed, AssetsAtEntry);
+        }
+    }
+};
+
+/**
  * Fully quiesce all editor state before asset deletion.
  *
  * CRITICAL FOR UE 5.7+:
@@ -991,6 +1030,12 @@ inline void McpSafePostDeleteGC(bool bFullPurge = true)
  */
 inline void McpQuiesceAllState()
 {
+    int32 AssetsAtEntry = -1;
+#if MCP_HAS_ASSET_COMPILING_MANAGER
+    AssetsAtEntry = FAssetCompilingManager::Get().GetNumRemainingAssets();
+#endif
+    FMcpQuiesceTimer QuiesceTimer(TEXT("McpQuiesceAllState"), AssetsAtEntry);
+
     UE_LOG(LogMcpSafeOperations, Log, TEXT("McpQuiesceAllState: Starting full editor quiesce"));
 
     // STEP 1: Finish all pending asset compilation
@@ -1045,6 +1090,7 @@ inline void McpFinishCompilationForBatch(TArray<UObject*>& BatchObjects, const T
 
     // Log current state
     int32 GlobalRemaining = CompilingManager.GetNumRemainingAssets();
+    FMcpQuiesceTimer BarrierTimer(FString::Printf(TEXT("McpFinishCompilationForBatch[%s]"), Context), GlobalRemaining);
     UE_LOG(LogMcpSafeOperations, Log,
         TEXT("McpFinishCompilationForBatch: [%s] %d global compiling assets, %d objects in batch"),
         Context, GlobalRemaining, BatchObjects.Num());
@@ -1210,6 +1256,12 @@ inline bool UnloadLoadedPackagesForAssets(const TArray<FAssetData>& Assets, cons
  */
 inline void McpQuiesceBeforeBatchDelete(TArray<UObject*>& BatchObjects)
 {
+    int32 AssetsAtEntry = -1;
+#if MCP_HAS_ASSET_COMPILING_MANAGER
+    AssetsAtEntry = FAssetCompilingManager::Get().GetNumRemainingAssets();
+#endif
+    FMcpQuiesceTimer QuiesceTimer(TEXT("McpQuiesceBeforeBatchDelete"), AssetsAtEntry);
+
     UE_LOG(LogMcpSafeOperations, Log,
         TEXT("McpQuiesceBeforeBatchDelete: Starting pre-delete quiesce for %d objects"),
         BatchObjects.Num());
@@ -1267,6 +1319,8 @@ inline void McpQuiesceBeforeBatchDelete(TArray<UObject*>& BatchObjects)
  */
 inline void McpQuiesceAfterBatchDelete(const TArray<UObject*>& BatchObjects)
 {
+    FMcpQuiesceTimer QuiesceTimer(TEXT("McpQuiesceAfterBatchDelete"), -1);
+
     UE_LOG(LogMcpSafeOperations, Log,
         TEXT("McpQuiesceAfterBatchDelete: Starting post-delete quiesce for %d objects"),
         BatchObjects.Num());
