@@ -2633,48 +2633,90 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     // Validate variableType BEFORE checking existence to ensure parameter
     // validation occurs even if variable already exists
     FEdGraphPinType PinType;
-    const FString LowerType = VarType.ToLower();
-    if (LowerType == TEXT("float") || LowerType == TEXT("double")) {
-      PinType.PinCategory = MCP_PC_Float;
-    } else if (LowerType == TEXT("int") || LowerType == TEXT("integer")) {
-      PinType.PinCategory = MCP_PC_Int;
-    } else if (LowerType == TEXT("bool") || LowerType == TEXT("boolean")) {
-      PinType.PinCategory = MCP_PC_Boolean;
-    } else if (LowerType == TEXT("string")) {
-      PinType.PinCategory = MCP_PC_String;
-    } else if (LowerType == TEXT("name")) {
-      PinType.PinCategory = MCP_PC_Name;
-    } else if (LowerType == TEXT("text")) {
-      PinType.PinCategory = MCP_PC_Text;
-    } else if (LowerType == TEXT("vector")) {
-      PinType.PinCategory = MCP_PC_Struct;
-      PinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
-    } else if (LowerType == TEXT("rotator")) {
-      PinType.PinCategory = MCP_PC_Struct;
-      PinType.PinSubCategoryObject = TBaseStructure<FRotator>::Get();
-    } else if (LowerType == TEXT("transform")) {
-      PinType.PinCategory = MCP_PC_Struct;
-      PinType.PinSubCategoryObject = TBaseStructure<FTransform>::Get();
-    } else if (LowerType == TEXT("object")) {
-      PinType.PinCategory = MCP_PC_Object;
-      PinType.PinSubCategoryObject = UObject::StaticClass();
-    } else if (LowerType == TEXT("class")) {
-      PinType.PinCategory = MCP_PC_Class;
-      PinType.PinSubCategoryObject = UObject::StaticClass();
-    } else if (!VarType.TrimStartAndEnd().IsEmpty()) {
-      PinType.PinCategory = MCP_PC_Object;
-      UClass *FoundClass = ResolveUClass(VarType);
-      if (FoundClass) {
-        PinType.PinSubCategoryObject = FoundClass;
-      } else {
-        SendAutomationError(
-            RequestingSocket, RequestId,
+    // Resolve a single (non-container) type token to a pin category + optional
+    // sub-object. Returns false if unresolvable. Shared by the scalar case and by
+    // the inner type(s) of container variables.
+    auto ResolveTerminal = [&](const FString &InRaw, FName &OutCat,
+                               TWeakObjectPtr<UObject> &OutSub) -> bool {
+      const FString T = InRaw.TrimStartAndEnd().ToLower();
+      OutSub = nullptr;
+      if (T == TEXT("float") || T == TEXT("double")) { OutCat = MCP_PC_Float; return true; }
+      if (T == TEXT("int") || T == TEXT("integer")) { OutCat = MCP_PC_Int; return true; }
+      if (T == TEXT("int64")) { OutCat = MCP_PC_Int64; return true; }
+      if (T == TEXT("byte")) { OutCat = MCP_PC_Byte; return true; }
+      if (T == TEXT("bool") || T == TEXT("boolean")) { OutCat = MCP_PC_Boolean; return true; }
+      if (T == TEXT("string")) { OutCat = MCP_PC_String; return true; }
+      if (T == TEXT("name")) { OutCat = MCP_PC_Name; return true; }
+      if (T == TEXT("text")) { OutCat = MCP_PC_Text; return true; }
+      if (T == TEXT("vector")) { OutCat = MCP_PC_Struct; OutSub = TBaseStructure<FVector>::Get(); return true; }
+      if (T == TEXT("rotator")) { OutCat = MCP_PC_Struct; OutSub = TBaseStructure<FRotator>::Get(); return true; }
+      if (T == TEXT("transform")) { OutCat = MCP_PC_Struct; OutSub = TBaseStructure<FTransform>::Get(); return true; }
+      if (T == TEXT("object")) { OutCat = MCP_PC_Object; OutSub = UObject::StaticClass(); return true; }
+      if (T == TEXT("class")) { OutCat = MCP_PC_Class; OutSub = UObject::StaticClass(); return true; }
+      if (T.IsEmpty()) { OutCat = MCP_PC_Wildcard; return true; }
+      if (UClass *C = ResolveUClass(InRaw.TrimStartAndEnd())) { OutCat = MCP_PC_Object; OutSub = C; return true; }
+      return false;
+    };
+
+    // Container syntax: Set<Inner> / Array<Inner> / Map<Key,Value> (T-prefixes ok).
+    const FString TrimmedType = VarType.TrimStartAndEnd();
+    const FString LowerTrimmed = TrimmedType.ToLower();
+    EPinContainerType Container = EPinContainerType::None;
+    FString InnerSpec;
+    if (TrimmedType.EndsWith(TEXT(">"))) {
+      const int32 Lt = TrimmedType.Find(TEXT("<"));
+      const FString Head = (Lt > 0) ? LowerTrimmed.Left(Lt) : FString();
+      if (Lt > 0) {
+        InnerSpec = TrimmedType.Mid(Lt + 1, TrimmedType.Len() - Lt - 2);
+        if (Head == TEXT("set") || Head == TEXT("tset")) { Container = EPinContainerType::Set; }
+        else if (Head == TEXT("array") || Head == TEXT("tarray")) { Container = EPinContainerType::Array; }
+        else if (Head == TEXT("map") || Head == TEXT("tmap")) { Container = EPinContainerType::Map; }
+      }
+    }
+
+    if (Container == EPinContainerType::Map) {
+      FString KeyStr, ValStr;
+      if (!InnerSpec.Split(TEXT(","), &KeyStr, &ValStr)) {
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("Map variable type needs 'Map<Key,Value>'"), TEXT("INVALID_ARGUMENT"));
+        return true;
+      }
+      FName KeyCat, ValCat;
+      TWeakObjectPtr<UObject> KeySub, ValSub;
+      if (!ResolveTerminal(KeyStr, KeyCat, KeySub) || !ResolveTerminal(ValStr, ValCat, ValSub)) {
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("Could not resolve map inner type(s) in '%s'"), *VarType),
+            TEXT("CLASS_NOT_FOUND"));
+        return true;
+      }
+      PinType.PinCategory = KeyCat;
+      PinType.PinSubCategoryObject = KeySub;
+      PinType.ContainerType = EPinContainerType::Map;
+      PinType.PinValueType.TerminalCategory = ValCat;
+      PinType.PinValueType.TerminalSubCategoryObject = ValSub;
+    } else if (Container != EPinContainerType::None) {
+      FName InnerCat;
+      TWeakObjectPtr<UObject> InnerSub;
+      if (!ResolveTerminal(InnerSpec, InnerCat, InnerSub)) {
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("Could not resolve container inner type '%s'"), *InnerSpec),
+            TEXT("CLASS_NOT_FOUND"));
+        return true;
+      }
+      PinType.PinCategory = InnerCat;
+      PinType.PinSubCategoryObject = InnerSub;
+      PinType.ContainerType = Container;
+    } else {
+      FName Cat;
+      TWeakObjectPtr<UObject> Sub;
+      if (!ResolveTerminal(VarType, Cat, Sub)) {
+        SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Could not resolve class '%s'"), *VarType),
             TEXT("CLASS_NOT_FOUND"));
         return true;
       }
-    } else {
-      PinType.PinCategory = MCP_PC_Wildcard;
+      PinType.PinCategory = Cat;
+      PinType.PinSubCategoryObject = Sub;
     }
 
     const FString RequestedPath = Path;
