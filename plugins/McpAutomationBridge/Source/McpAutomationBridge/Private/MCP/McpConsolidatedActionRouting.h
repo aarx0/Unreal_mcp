@@ -63,6 +63,7 @@ inline const TArray<FString>& ManageAssetCore()
 		TEXT("get_metadata"), TEXT("set_metadata"), TEXT("validate"),
 		TEXT("fixup_redirectors"), TEXT("find_by_tag"), TEXT("generate_report"),
 		TEXT("create_material"), TEXT("create_material_instance"),
+		TEXT("create_data_table"),
 		TEXT("create_render_target"), TEXT("generate_lods"),
 		TEXT("add_material_parameter"), TEXT("list_instances"),
 		TEXT("reset_instance_parameters"), TEXT("exists"),

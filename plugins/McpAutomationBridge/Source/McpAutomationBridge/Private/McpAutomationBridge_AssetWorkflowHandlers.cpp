@@ -105,6 +105,7 @@
 #include "AssetToolsModule.h"
 #include "AssetViewUtils.h"
 #include "EditorAssetLibrary.h"
+#include "Engine/DataTable.h"  // UDataTable, FTableRowBase (create_data_table)
 #include "Engine/StaticMesh.h"
 #include "EngineUtils.h"  // TActorIterator
 #include "Factories/MaterialFactoryNew.h"
@@ -260,6 +261,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetAction(
     return HandleCreateMaterial(RequestId, Payload, RequestingSocket);
   if (Lower == TEXT("create_material_instance"))
     return HandleCreateMaterialInstance(RequestId, Payload, RequestingSocket);
+  if (Lower == TEXT("create_data_table"))
+    return HandleCreateDataTable(RequestId, Payload, RequestingSocket);
   if (Lower == TEXT("create_render_target"))
     return HandleManageTextureAction(RequestId, TEXT("manage_texture"), Payload, RequestingSocket);
   if (Lower == TEXT("get_dependencies"))
@@ -3238,6 +3241,118 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMaterial(
   return true;
 #else
   SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleCreateDataTable(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+#if WITH_EDITOR
+  FString Name;
+  Payload->TryGetStringField(TEXT("name"), Name);
+  FString Path;
+  Payload->TryGetStringField(TEXT("path"), Path);
+  // Row struct: a UScriptStruct deriving from FTableRowBase. Accept either a full
+  // object path (/Script/Module.StructName or /Game/.../UserStruct) or a bare name.
+  FString RowStructStr;
+  if (!Payload->TryGetStringField(TEXT("rowStruct"), RowStructStr))
+    Payload->TryGetStringField(TEXT("rowStructPath"), RowStructStr);
+  // Newly created assets persist by default; pass save:false for in-memory only.
+  bool bSave = true;
+  Payload->TryGetBoolField(TEXT("save"), bSave);
+
+  if (Name.IsEmpty() || Path.IsEmpty() || RowStructStr.IsEmpty()) {
+    SendAutomationResponse(Socket, RequestId, false,
+                           TEXT("name, path and rowStruct are required"), nullptr,
+                           TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  Name = SanitizeAssetName(Name);
+  Path = SanitizeProjectRelativePath(Path);
+  if (Path.IsEmpty()) {
+    SendAutomationResponse(Socket, RequestId, false, TEXT("Invalid path"),
+                           nullptr, TEXT("SECURITY_VIOLATION"));
+    return true;
+  }
+
+  // Resolve the row struct. LoadObject handles full paths (native /Script structs
+  // and /Game user structs); fall back to a by-name lookup for a bare struct name.
+  UScriptStruct *RowStruct = LoadObject<UScriptStruct>(nullptr, *RowStructStr);
+  if (!RowStruct) {
+    RowStruct = UClass::TryFindTypeSlow<UScriptStruct>(RowStructStr);
+  }
+  if (!RowStruct) {
+    SendAutomationResponse(
+        Socket, RequestId, false,
+        FString::Printf(TEXT("Could not resolve row struct '%s'"), *RowStructStr),
+        nullptr, TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+  if (!RowStruct->IsChildOf(FTableRowBase::StaticStruct())) {
+    SendAutomationResponse(
+        Socket, RequestId, false,
+        FString::Printf(
+            TEXT("Row struct '%s' must derive from FTableRowBase"),
+            *RowStruct->GetName()),
+        nullptr, TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  const FString FullPath = Path + TEXT("/") + Name;
+  if (UEditorAssetLibrary::DoesAssetExist(FullPath)) {
+    UEditorAssetLibrary::DeleteAsset(FullPath);
+  }
+
+  UPackage *Package = CreatePackage(*FullPath);
+  if (!Package) {
+    SendAutomationResponse(Socket, RequestId, false,
+                           TEXT("Failed to create package"), nullptr,
+                           TEXT("CREATE_FAILED"));
+    return true;
+  }
+
+  UDataTable *DataTable =
+      NewObject<UDataTable>(Package, UDataTable::StaticClass(), FName(*Name),
+                            RF_Public | RF_Standalone);
+  if (!DataTable) {
+    SendAutomationResponse(Socket, RequestId, false,
+                           TEXT("Failed to create DataTable object"), nullptr,
+                           TEXT("CREATE_FAILED"));
+    return true;
+  }
+  DataTable->RowStruct = RowStruct;
+
+  // McpDirectPackageSave skips the asset-registry rescan, so register explicitly.
+  FAssetRegistryModule::AssetCreated(DataTable);
+  DataTable->MarkPackageDirty();
+
+  bool bSaved = false;
+  if (bSave) {
+    FString SaveErr;
+    bSaved = McpSafeOperations::McpDirectPackageSave(DataTable, &SaveErr);
+    if (!bSaved) {
+      SendAutomationResponse(
+          Socket, RequestId, false,
+          FString::Printf(TEXT("DataTable created but save failed: %s"),
+                          *SaveErr),
+          nullptr, TEXT("SAVE_FAILED"));
+      return true;
+    }
+  }
+
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetStringField(TEXT("assetPath"), DataTable->GetPathName());
+  Resp->SetStringField(TEXT("rowStruct"), RowStruct->GetPathName());
+  Resp->SetBoolField(TEXT("saved"), bSaved);
+  SendAutomationResponse(Socket, RequestId, true, TEXT("DataTable created"), Resp,
+                         FString());
+  return true;
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor build required"),
+                      TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }

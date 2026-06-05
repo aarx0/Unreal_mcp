@@ -17,18 +17,37 @@ as they land.
 
 ## Open
 
-### [ ] `set_common_button_input_action` (Common UI) — needs a DataTable + a way to make one
-Set a button's `FDataTableRowHandle` + call `SetTriggeringInputAction`, validating
-`RowStruct->IsChildOf(CommonInputActionDataBase)`. Needs an entry in
-`McpConsolidatedActions::CommonUi()` (header → rebuild) + a handler. Blocked on a
-`CommonInputActionDataBase` DataTable: none in the project, and the bridge has no
-`create_data_table` action — add one (also generally useful), then fabricate the fixture.
+### [ ] `set_common_button_input_action` (Common UI)
+Set a button's `TriggeringInputAction` `FDataTableRowHandle` (DataTable + RowName) on a
+Common UI button widget inside a Widget Blueprint. Now unblocked: `create_data_table`
+exists (below), so a `CommonInputActionDataBase` table can be fabricated. Plan, refined by
+reading the engine: the row struct is `FCommonInputActionDataBase`
+(`/Script/CommonUI.CommonInputActionDataBase`, derives from `FTableRowBase`); validate the
+DataTable's `RowStruct->IsChildOf` it. Write the property **directly via reflection** rather
+than calling `UCommonButtonBase::SetTriggeringInputAction()` — that runtime setter calls
+`BindTriggeringInputActionToClick()` when `!IsDesignTime()` (which is the case for a
+programmatically-loaded WidgetTree template widget), i.e. runtime input binding on an
+archetype with no owning player. The details-panel-equivalent direct write persists the
+authoring default with no runtime side effects. Add an entry in
+`McpConsolidatedActions::CommonUi()` (header → rebuild) + a block in `HandleCommonUiAction`
+(`McpAutomationBridge_CommonUIHandlers.cpp`). Report `rowFound` (non-blocking) so a handle
+can be bound before its row is imported.
 
 ---
 
 ## Done
 
 _(completed items, newest first)_
+
+### [x] `manage_asset` action `create_data_table`
+Create a `UDataTable` with a given row struct. Params: `name`, `path`, `rowStruct` (full
+object path or bare struct name → `LoadObject` then `TryFindTypeSlow` fallback), optional
+`save` (default true). Validates the struct derives from `FTableRowBase`; saves via
+`McpDirectPackageSave` + registers with the asset registry. Routed in `HandleAssetAction`
++ declared in the subsystem header + listed in `ManageAssetCore()` (which also feeds the
+tool schema enum, so it is advertised automatically). Verified live: full-path + bare-name
+creation, `RowStruct` read-back, and rejection of a non-row struct (`Vector`) and an unknown
+name. Generally useful, and unblocks `set_common_button_input_action`.
 
 ### [x] Generic reflection widening (R3): helpers-twin `FText` parity
 The `McpAutomationBridgeHelpers.h` twin (`inspect get/set_property`, `set_object_property`)
