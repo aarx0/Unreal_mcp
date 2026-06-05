@@ -1347,42 +1347,34 @@ ExportPropertyToJsonValue(void *TargetContainer, FProperty *Property) {
       if (!Helper.IsValidIndex(i))
         continue;
 
-      // Get key and value pointers
       const uint8 *KeyPtr = Helper.GetKeyPtr(i);
-      const uint8 *ValuePtr = Helper.GetValuePtr(i);
-
-      // Convert key to string (maps typically use string or name keys)
-      FString KeyStr;
+      uint8 *PairPtr = Helper.GetPairPtr(i);
       FProperty *KeyProp = MP->KeyProp;
+      FProperty *ValueProp = MP->ValueProp;
+
+      // Key -> string field name. Strings/names directly; any other key type via
+      // ExportText so its value is preserved (previously a positional "key_%d",
+      // which silently lost the actual key).
+      FString KeyStr;
       if (FStrProperty *StrKey = CastField<FStrProperty>(KeyProp)) {
         KeyStr = *reinterpret_cast<const FString *>(KeyPtr);
       } else if (FNameProperty *NameKey = CastField<FNameProperty>(KeyProp)) {
         KeyStr = reinterpret_cast<const FName *>(KeyPtr)->ToString();
-      } else if (FIntProperty *IntKey = CastField<FIntProperty>(KeyProp)) {
-        KeyStr = FString::FromInt(*reinterpret_cast<const int32 *>(KeyPtr));
       } else {
-        KeyStr = FString::Printf(TEXT("key_%d"), i);
+        MCP_PROPERTY_EXPORT_TEXT(KeyProp, KeyStr, KeyPtr, nullptr, nullptr, PPF_None);
       }
 
-      // Convert value to JSON
-      FProperty *ValueProp = MP->ValueProp;
-      if (FStrProperty *StrVal = CastField<FStrProperty>(ValueProp)) {
-        MapObj->SetStringField(KeyStr,
-                               *reinterpret_cast<const FString *>(ValuePtr));
-      } else if (FIntProperty *IntVal = CastField<FIntProperty>(ValueProp)) {
-        MapObj->SetNumberField(
-            KeyStr, (double)*reinterpret_cast<const int32 *>(ValuePtr));
-      } else if (FFloatProperty *FloatVal =
-                     CastField<FFloatProperty>(ValueProp)) {
-        MapObj->SetNumberField(
-            KeyStr, (double)*reinterpret_cast<const float *>(ValuePtr));
-      } else if (FBoolProperty *BoolVal = CastField<FBoolProperty>(ValueProp)) {
-        MapObj->SetBoolField(KeyStr,
-                             (*reinterpret_cast<const uint8 *>(ValuePtr)) != 0);
+      // Value -> delegate to McpPropertyReflection (full type coverage, like the
+      // array export above) instead of a partial if-else that dropped
+      // double/int64/byte/etc. to a string. Pair-base offset (GetPairPtr) so the
+      // *_InContainer accessors reach the value.
+      TSharedPtr<FJsonValue> ValueJson =
+          McpPropertyReflection::ExportPropertyToJsonValue(PairPtr, ValueProp);
+      if (ValueJson.IsValid()) {
+        MapObj->SetField(KeyStr, ValueJson);
       } else {
-        // Use version-compatible export for unsupported value types.
         FString ValueStr;
-        MCP_PROPERTY_EXPORT_TEXT(ValueProp, ValueStr, ValuePtr, nullptr, nullptr, PPF_None);
+        MCP_PROPERTY_EXPORT_TEXT(ValueProp, ValueStr, Helper.GetValuePtr(i), nullptr, nullptr, PPF_None);
         MapObj->SetStringField(KeyStr, ValueStr);
       }
     }
@@ -1400,26 +1392,16 @@ ExportPropertyToJsonValue(void *TargetContainer, FProperty *Property) {
       if (!Helper.IsValidIndex(i))
         continue;
 
-      const uint8 *ElemPtr = Helper.GetElementPtr(i);
-      FProperty *ElemProp = SP->ElementProp;
-
-      if (FStrProperty *StrElem = CastField<FStrProperty>(ElemProp)) {
-        Out.Add(MakeShared<FJsonValueString>(
-            *reinterpret_cast<const FString *>(ElemPtr)));
-      } else if (FNameProperty *NameElem = CastField<FNameProperty>(ElemProp)) {
-        Out.Add(MakeShared<FJsonValueString>(
-            reinterpret_cast<const FName *>(ElemPtr)->ToString()));
-      } else if (FIntProperty *IntElem = CastField<FIntProperty>(ElemProp)) {
-        Out.Add(MakeShared<FJsonValueNumber>(
-            (double)*reinterpret_cast<const int32 *>(ElemPtr)));
-      } else if (FFloatProperty *FloatElem =
-                     CastField<FFloatProperty>(ElemProp)) {
-        Out.Add(MakeShared<FJsonValueNumber>(
-            (double)*reinterpret_cast<const float *>(ElemPtr)));
+      // Delegate to McpPropertyReflection (full element-type coverage, like the
+      // array export above); element offset is 0 so GetElementPtr is a valid base.
+      uint8 *ElemPtr = Helper.GetElementPtr(i);
+      TSharedPtr<FJsonValue> ElemJson =
+          McpPropertyReflection::ExportPropertyToJsonValue(ElemPtr, SP->ElementProp);
+      if (ElemJson.IsValid()) {
+        Out.Add(ElemJson);
       } else {
-        // Use version-compatible export for unsupported set element types.
         FString ElemStr;
-        MCP_PROPERTY_EXPORT_TEXT(ElemProp, ElemStr, ElemPtr, nullptr, nullptr, PPF_None);
+        MCP_PROPERTY_EXPORT_TEXT(SP->ElementProp, ElemStr, ElemPtr, nullptr, nullptr, PPF_None);
         Out.Add(MakeShared<FJsonValueString>(ElemStr));
       }
     }

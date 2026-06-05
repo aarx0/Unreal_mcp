@@ -254,11 +254,14 @@ TSharedPtr<FJsonValue> ExportPropertyToJsonValue(void* TargetContainer, FPropert
             }
 
             const uint8* KeyPtr = Helper.GetKeyPtr(i);
-            const uint8* ValuePtr = Helper.GetValuePtr(i);
-
-            // Convert key to string
-            FString KeyStr;
+            uint8* PairPtr = Helper.GetPairPtr(i);
             FProperty* KeyProp = MP->KeyProp;
+            FProperty* ValueProp = MP->ValueProp;
+
+            // Key -> a string field name. Strings/names directly; any other key type via
+            // ExportText so its value is preserved (previously non-str/name/int keys were
+            // replaced by a positional "key_%d", silently losing the actual key).
+            FString KeyStr;
             if (FStrProperty* StrKey = CastField<FStrProperty>(KeyProp))
             {
                 KeyStr = *reinterpret_cast<const FString*>(KeyPtr);
@@ -267,37 +270,26 @@ TSharedPtr<FJsonValue> ExportPropertyToJsonValue(void* TargetContainer, FPropert
             {
                 KeyStr = reinterpret_cast<const FName*>(KeyPtr)->ToString();
             }
-            else if (FIntProperty* IntKey = CastField<FIntProperty>(KeyProp))
-            {
-                KeyStr = FString::FromInt(*reinterpret_cast<const int32*>(KeyPtr));
-            }
             else
             {
-                KeyStr = FString::Printf(TEXT("key_%d"), i);
+                MCP_PROPERTY_EXPORT_TEXT(KeyProp, KeyStr, KeyPtr, nullptr, nullptr, PPF_None);
             }
 
-            // Convert value
-            FProperty* ValueProp = MP->ValueProp;
-            if (FStrProperty* StrVal = CastField<FStrProperty>(ValueProp))
+            // Value -> delegate to the per-property exporter so EVERY value type
+            // (float/double/int64/byte/name/enum/struct/object/instanced/nested) gets the
+            // right JSON type, instead of a partial if-else that dropped double/int64/etc.
+            // to an ExportText string. KeyProp/ValueProp offsets are relative to the pair
+            // base, so pass GetPairPtr (the *_InContainer accessors re-add ValueProp's
+            // offset to reach the value; GetValuePtr would mis-offset).
+            TSharedPtr<FJsonValue> ValueJson = ExportPropertyToJsonValue(PairPtr, ValueProp, Depth + 1);
+            if (ValueJson.IsValid())
             {
-                MapObj->SetStringField(KeyStr, *reinterpret_cast<const FString*>(ValuePtr));
-            }
-            else if (FIntProperty* IntVal = CastField<FIntProperty>(ValueProp))
-            {
-                MapObj->SetNumberField(KeyStr, static_cast<double>(*reinterpret_cast<const int32*>(ValuePtr)));
-            }
-            else if (FFloatProperty* FloatVal = CastField<FFloatProperty>(ValueProp))
-            {
-                MapObj->SetNumberField(KeyStr, static_cast<double>(*reinterpret_cast<const float*>(ValuePtr)));
-            }
-            else if (FBoolProperty* BoolVal = CastField<FBoolProperty>(ValueProp))
-            {
-                MapObj->SetBoolField(KeyStr, (*reinterpret_cast<const uint8*>(ValuePtr)) != 0);
+                MapObj->SetField(KeyStr, ValueJson);
             }
             else
             {
                 FString ValueStr;
-                MCP_PROPERTY_EXPORT_TEXT(ValueProp, ValueStr, ValuePtr, nullptr, nullptr, PPF_None);
+                MCP_PROPERTY_EXPORT_TEXT(ValueProp, ValueStr, Helper.GetValuePtr(i), nullptr, nullptr, PPF_None);
                 MapObj->SetStringField(KeyStr, ValueStr);
             }
         }
@@ -318,29 +310,20 @@ TSharedPtr<FJsonValue> ExportPropertyToJsonValue(void* TargetContainer, FPropert
                 continue;
             }
 
-            const uint8* ElemPtr = Helper.GetElementPtr(i);
-            FProperty* ElemProp = SP->ElementProp;
-
-            if (FStrProperty* StrElem = CastField<FStrProperty>(ElemProp))
+            // Element offset is 0 relative to GetElementPtr, so it's a valid container
+            // base. Delegate to the per-property exporter so EVERY element type
+            // (float/double/int64/byte/name/enum/struct/object/instanced/nested) gets the
+            // right JSON type, instead of a partial if-else that dropped double/int64/etc.
+            uint8* ElemPtr = Helper.GetElementPtr(i);
+            TSharedPtr<FJsonValue> ElemJson = ExportPropertyToJsonValue(ElemPtr, SP->ElementProp, Depth + 1);
+            if (ElemJson.IsValid())
             {
-                Out.Add(MakeShared<FJsonValueString>(*reinterpret_cast<const FString*>(ElemPtr)));
-            }
-            else if (FNameProperty* NameElem = CastField<FNameProperty>(ElemProp))
-            {
-                Out.Add(MakeShared<FJsonValueString>(reinterpret_cast<const FName*>(ElemPtr)->ToString()));
-            }
-            else if (FIntProperty* IntElem = CastField<FIntProperty>(ElemProp))
-            {
-                Out.Add(MakeShared<FJsonValueNumber>(static_cast<double>(*reinterpret_cast<const int32*>(ElemPtr))));
-            }
-            else if (FFloatProperty* FloatElem = CastField<FFloatProperty>(ElemProp))
-            {
-                Out.Add(MakeShared<FJsonValueNumber>(static_cast<double>(*reinterpret_cast<const float*>(ElemPtr))));
+                Out.Add(ElemJson);
             }
             else
             {
                 FString ElemStr;
-                MCP_PROPERTY_EXPORT_TEXT(ElemProp, ElemStr, ElemPtr, nullptr, nullptr, PPF_None);
+                MCP_PROPERTY_EXPORT_TEXT(SP->ElementProp, ElemStr, ElemPtr, nullptr, nullptr, PPF_None);
                 Out.Add(MakeShared<FJsonValueString>(ElemStr));
             }
         }
