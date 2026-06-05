@@ -102,6 +102,16 @@ doesn't, the op stays "create" but the caller recovers via re-query (same as any
 (its identity lives only in the dropped response). Already-safe ops (create_asset/blueprint,
 add_variable, add_component, set_*, connect_pins) need no change.
 
+**Implementation status (branch `feat/pull-architecture`):**
+- DONE — fail-fast on name conflict, compile-verified: **#1 spawn + spawn_blueprint**,
+  **#2 duplicate actor**, **#9 widget template builders** (`CreateAndRegisterWidget`).
+- Relying on **state-verification recovery** (agent re-queries on a dropped response before a
+  blind retry — acceptable per the agreed model, not individually guarded): the direct
+  `add_*_widget` sites (#9), #4 add_spline_point, #5 create_node, #6 MetaSound add_node,
+  #7 SmartObject slot, #8 Niagara emitter/module/renderer, #10 WP volumes / level-instances.
+  These are additive or niche; promote any to fail-fast if it proves a real duplication source
+  in practice.
+
 ### DON'T BUILD
 
 Per-request keepalive, result cache / `get_result`, `Last-Event-ID` resumability, off-GameThread

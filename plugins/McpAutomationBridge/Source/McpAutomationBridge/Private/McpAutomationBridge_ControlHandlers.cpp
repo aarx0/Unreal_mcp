@@ -1489,6 +1489,23 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorDuplicate(
     return true;
   }
 
+  // Idempotency (see docs/pull-architecture.md): if the target newName already exists,
+  // fail fast instead of creating a second duplicate when a dropped response causes a
+  // retry. On a retry ACTOR_ALREADY_EXISTS confirms the prior duplicate landed.
+  FString NewName;
+  Payload->TryGetStringField(TEXT("newName"), NewName);
+  if (!NewName.TrimStartAndEnd().IsEmpty()) {
+    if (AActor *ExistingDup = FindActorByName(NewName, /*bExactMatchOnly*/ true)) {
+      SendStandardErrorResponse(
+          this, Socket, RequestId, TEXT("ACTOR_ALREADY_EXISTS"),
+          FString::Printf(
+              TEXT("An actor named '%s' already exists (%s); not creating a "
+                   "duplicate. Re-query state to confirm the prior duplicate landed."),
+              *NewName, *ExistingDup->GetPathName()));
+      return true;
+    }
+  }
+
   FVector Offset =
       ExtractVectorField(Payload, TEXT("offset"), FVector::ZeroVector);
   UEditorActorSubsystem *ActorSS =
@@ -1501,8 +1518,6 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorDuplicate(
     return true;
   }
 
-  FString NewName;
-  Payload->TryGetStringField(TEXT("newName"), NewName);
   if (!NewName.TrimStartAndEnd().IsEmpty())
     Duplicated->SetActorLabel(NewName);
 
