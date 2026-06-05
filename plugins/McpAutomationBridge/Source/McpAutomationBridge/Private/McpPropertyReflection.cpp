@@ -1272,17 +1272,21 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
         for (const auto& Pair : MapObj->Values)
         {
             const int32 Index = Helper.AddDefaultValue_Invalid_NeedsRehash();
-            // KeyProp / ValueProp have offset 0 relative to the pointers the helper
-            // returns, so each is a valid container base for the per-property importer.
+            // KeyProp and ValueProp offsets are relative to the PAIR base (key at
+            // offset 0, value at the map layout's value-offset), so the pair pointer is
+            // the correct container base for both. Passing GetValuePtr (already
+            // pair+valueOffset) would double-offset the value via the *_InContainer
+            // accessors and silently drop it.
+            uint8* PairPtr = Helper.GetPairPtr(Index);
             const TSharedPtr<FJsonValue> KeyJson = MakeShared<FJsonValueString>(Pair.Key);
             FString KeyErr;
-            if (!ApplyJsonValueToProperty(Helper.GetKeyPtr(Index), MP->KeyProp, KeyJson, KeyErr, Depth + 1, OwnerForInstancing))
+            if (!ApplyJsonValueToProperty(PairPtr, MP->KeyProp, KeyJson, KeyErr, Depth + 1, OwnerForInstancing))
             {
                 OutError = FString::Printf(TEXT("Map key '%s': %s"), *Pair.Key, *KeyErr);
                 return false;
             }
             FString ValErr;
-            if (!ApplyJsonValueToProperty(Helper.GetValuePtr(Index), MP->ValueProp, Pair.Value, ValErr, Depth + 1, OwnerForInstancing))
+            if (!ApplyJsonValueToProperty(PairPtr, MP->ValueProp, Pair.Value, ValErr, Depth + 1, OwnerForInstancing))
             {
                 OutError = FString::Printf(TEXT("Map value for '%s': %s"), *Pair.Key, *ValErr);
                 return false;
