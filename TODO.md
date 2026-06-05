@@ -17,12 +17,6 @@ as they land.
 
 ## Open
 
-### [ ] Generic reflection widening (R3) + helpers-twin `FText`
-`FText` export landed in the asset twin (`6b98c69`). The `McpAutomationBridgeHelpers.h`
-twin (used by `inspect` / `set_object_property`) still lacks the `FText` branch, and its
-generic importer lacks `FText`/`FClassProperty` handling (R3). Header → 64-TU rebuild.
-Testable via a fabricated BP CDO fixture (`inspect_cdo` / `inspect set_property`).
-
 ### [ ] `set_common_button_input_action` (Common UI) — needs a DataTable + a way to make one
 Set a button's `FDataTableRowHandle` + call `SetTriggeringInputAction`, validating
 `RowStruct->IsChildOf(CommonInputActionDataBase)`. Needs an entry in
@@ -35,6 +29,17 @@ Set a button's `FDataTableRowHandle` + call `SetTriggeringInputAction`, validati
 ## Done
 
 _(completed items, newest first)_
+
+### [x] Generic reflection widening (R3): helpers-twin `FText` parity
+The `McpAutomationBridgeHelpers.h` twin (`inspect get/set_property`, `set_object_property`)
+lagged the asset twin on `FText`: export had no `FTextProperty` branch (text dropped to
+`nullptr` on reads) and import ended in a hard "unsupported" error (no string fallback, so
+`FText`/text-importable types couldn't be written). Added the `FTextProperty` export branch
+(display string) + the same generic `ImportText_Direct` string fallback the asset twin had,
+bringing the two twins to parity. Verified on a fabricated BP CDO fixture: an `FText` var
+round-trips through **both** twins to the identical value incl. embedded quotes/commas
+(`Say "hi" to all, friend — don't stop`). `FClassProperty` was already covered (derives from
+`FObjectProperty`) and re-verified round-tripping `/Script/Engine.PointLight`.
 
 ### [x] Numeric reflection correctness: float/double variables + map/set export
 Two distinct bugs found by thoroughly probing every numeric type in every position

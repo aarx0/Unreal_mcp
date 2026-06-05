@@ -1145,6 +1145,15 @@ ExportPropertyToJsonValue(void *TargetContainer, FProperty *Property) {
         NP->GetPropertyValue_InContainer(TargetContainer).ToString());
   }
 
+  // Text (FText) -> display string. Mirrors McpPropertyReflection's asset twin so
+  // the helpers twin (inspect / get_object_property) reads FText the same way the
+  // asset twin (get_asset_properties) does. Without this branch FText fell through
+  // to the nullptr return below and was silently dropped from reads.
+  if (FTextProperty *TP = CastField<FTextProperty>(Property)) {
+    return MakeShared<FJsonValueString>(
+        TP->GetPropertyValue_InContainer(TargetContainer).ToString());
+  }
+
   // Booleans
   if (FBoolProperty *BP = CastField<FBoolProperty>(Property)) {
     return MakeShared<FJsonValueBoolean>(
@@ -1942,6 +1951,28 @@ ApplyJsonValueToProperty(void *TargetContainer, FProperty *Property,
       }
     }
     return true;
+  }
+
+  // Generic fallback: accept a JSON string for any other property type via the
+  // engine's textual import (covers e.g. FText and other text-importable types).
+  // Mirrors McpPropertyReflection::ApplyJsonValueToProperty so the two reflection
+  // twins import the same set of types; without it FText and similar string-
+  // importable properties failed here with a hard "unsupported" error.
+  if (ValueField->Type == EJson::String) {
+    void *ValuePtr = Property->ContainerPtrToValuePtr<void>(TargetContainer);
+    if (ValuePtr) {
+      const TCHAR *Result = nullptr;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+      Result = Property->ImportText_Direct(*ValueField->AsString(), ValuePtr,
+                                           nullptr, PPF_None, nullptr);
+#else
+      Result = Property->ImportText(*ValueField->AsString(), ValuePtr, PPF_None,
+                                    nullptr);
+#endif
+      if (Result) {
+        return true;
+      }
+    }
   }
 
   OutError = TEXT("Unsupported property type for JSON assignment");
