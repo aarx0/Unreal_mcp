@@ -42,15 +42,32 @@ whether `add_common_*` should compile+save (or at least be ensure-clean) so mult
 authoring in one session is reliable.
 
 ### [ ] Native MCP transport drops mid-call while the editor GameThread is busy
-When the editor is busy (asset-registry scan / GC right after launch, heavy ops), a
-`tools/call` can fail with "MCP server transport dropped mid-call; response was lost" even
-though the operation **completed**. Repro 2026-06-04: two back-to-back `manage_asset` calls
-(`delete_asset`, then `exists`) dropped right after a relaunch; the editor stayed alive and the
-delete had in fact succeeded (a later `exists` showed the asset already gone) — only the
-responses were lost. So the client can't tell success from failure for a mutating op. Fix
-direction: keep the connection alive during GameThread dispatch (heartbeat/keepalive on the SSE
-stream), and/or make mutating ops report a re-queryable status so a dropped response is
-recoverable.
+When the editor is busy (asset-registry scan / GC / still initializing right after launch, or a
+long synchronous op), a `tools/call` can fail with "MCP server transport dropped mid-call;
+response was lost" even though the operation **completed**. Repro 2026-06-04: two back-to-back
+`manage_asset` calls (`delete_asset`, then `exists`) dropped right after a relaunch; the editor
+stayed alive and the delete had in fact succeeded (a later `exists` showed the asset gone) — only
+the responses were lost. So the client can't tell success from failure for a mutating op.
+
+Root cause (read `McpNativeTransport.cpp`): `HandleToolsCall` (~L1271) sends the SSE response
+headers on the socket thread, parks the connection in `SSEConnections`, then
+`QueueAutomationRequest`s the work onto the subsystem queue — which is *"drained by the core ticker
+after world ticking"* (~L1419), i.e. on the **GameThread, once per tick**. So nothing runs and **no
+bytes flow on the per-request SSE stream** until the GameThread ticks. Crucially the per-request
+stream (`FSSEConnection`) has **no keepalive** — the `:keepalive` frames
+(`WriteNotificationKeepalive`) only cover the long-lived `GET /mcp` notification streams
+(`FNotificationStream`). So while the GameThread is saturated the response stream is silent and the
+connection is torn down (client read timeout, well under the server's 300s `RequestTimeoutSeconds`,
+or a reset during init). The GameThread later drains the queue and runs the op — mutation lands —
+but `CompletePendingRequest` then writes the result to a dead socket (write fails under the 5s
+`WriteTimeoutSeconds`), so it's logged as lost and is unrecoverable.
+
+Fix directions: (a) send periodic `:keepalive`/heartbeat frames on the **per-request** SSE stream
+too, driven from the socket thread (which is NOT blocked by the GameThread), so a slow op doesn't
+look dead; (b) emit an immediate "accepted" SSE event when the request is queued; (c) make results
+re-queryable by request id (short-lived result cache + a `get_result` probe) so a dropped response
+is recoverable instead of forcing a blind retry or an independent state re-read; (d) optionally
+return a fast "warming up" status until the editor finishes its initial load.
 
 ### [ ] `manage_asset delete` / `delete_asset` ignores `assetPath`, requires `paths`
 `delete_asset { assetPath: "/Game/Foo" }` returns `INVALID_ARGUMENT: No paths provided`; only
