@@ -1,3 +1,9 @@
+> ⚠️ **SUPERSEDED (2026-06-05)** — the fix direction sketched here (per-request SSE keepalive +
+> a re-queryable result cache) was **abandoned**. The chosen approach is the pull-only
+> architecture in [`pull-architecture.md`](pull-architecture.md): one request → one response,
+> no server push, no keepalive; a dropped response is recovered by idempotent retry / re-querying
+> editor state. This file is kept for its root-cause analysis only.
+
 # Problem statement: native MCP transport drops mid-call when the editor GameThread is busy
 
 > Status: **unfixed**, root-caused. This is a planning brief for a fresh instance — it
