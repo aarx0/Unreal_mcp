@@ -82,6 +82,15 @@ TSharedPtr<FJsonValue> ExportPropertyToJsonValue(void* TargetContainer, FPropert
         return MakeShared<FJsonValueString>(NP->GetPropertyValue_InContainer(TargetContainer).ToString());
     }
 
+    // Text (FText) — emit the display string. Lossy of namespace/key (fine for
+    // inspection and round-tripping the visible text); the import side restores via
+    // ImportText (the generic string fallback). Previously FText was unhandled here, so
+    // text properties were silently dropped from reads.
+    if (FTextProperty* TP = CastField<FTextProperty>(Property))
+    {
+        return MakeShared<FJsonValueString>(TP->GetPropertyValue_InContainer(TargetContainer).ToString());
+    }
+
     // Booleans
     if (FBoolProperty* BP = CastField<FBoolProperty>(Property))
     {
