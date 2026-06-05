@@ -1978,10 +1978,15 @@ bool UMcpAutomationBridgeSubsystem::HandleDeleteAssets(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     TSharedPtr<FMcpBridgeWebSocket> Socket) {
 #if WITH_EDITOR
-  // Support both single 'path' and array 'paths'
+  // Accept array forms 'paths' / 'assetPaths' and singular forms 'path' /
+  // 'assetPath'. The manage_asset schema advertises assetPath/assetPaths, so a
+  // caller using those (the natural choice for an asset action) previously hit
+  // "No paths provided" because only path/paths were read here.
   TArray<FString> PathsToDelete;
   const TArray<TSharedPtr<FJsonValue>> *PathsArray = nullptr;
-  if (Payload->TryGetArrayField(TEXT("paths"), PathsArray) && PathsArray) {
+  if ((Payload->TryGetArrayField(TEXT("paths"), PathsArray) ||
+       Payload->TryGetArrayField(TEXT("assetPaths"), PathsArray)) &&
+      PathsArray) {
     for (const auto &Val : *PathsArray) {
       if (Val.IsValid() && Val->Type == EJson::String)
         PathsToDelete.Add(Val->AsString());
@@ -1989,7 +1994,8 @@ bool UMcpAutomationBridgeSubsystem::HandleDeleteAssets(
   }
 
   FString SinglePath;
-  if (Payload->TryGetStringField(TEXT("path"), SinglePath) &&
+  if ((Payload->TryGetStringField(TEXT("path"), SinglePath) ||
+       Payload->TryGetStringField(TEXT("assetPath"), SinglePath)) &&
       !SinglePath.IsEmpty()) {
     PathsToDelete.Add(SinglePath);
   }

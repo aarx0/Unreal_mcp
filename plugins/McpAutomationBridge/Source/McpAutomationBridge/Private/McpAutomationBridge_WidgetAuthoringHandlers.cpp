@@ -890,8 +890,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             return true;
         }
 
-        // Accept both 'path' (preferred) and 'folder' for the destination directory
+        // Destination directory. Accept 'path' (preferred), 'savePath' (the
+        // manage_blueprint schema's param name — was previously ignored, so callers
+        // passing savePath silently got the /Game/UI default), and 'folder'.
         FString Folder = GetJsonStringField(Payload, TEXT("path"));
+        if (Folder.IsEmpty())
+        {
+            Folder = GetJsonStringField(Payload, TEXT("savePath"));
+        }
         if (Folder.IsEmpty())
         {
             Folder = GetJsonStringField(Payload, TEXT("folder"), TEXT("/Game/UI"));

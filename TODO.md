@@ -23,12 +23,6 @@ _(no planned feature items right now — see Bugs below for tracked defects)_
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
-### [ ] `create_widget_blueprint` ignores `savePath`
-`manage_blueprint create_widget_blueprint` always creates the asset under `/Game/UI`,
-ignoring the `savePath` param. Observed 2026-06-04 fabricating a fixture: asked for
-`/Game/McpTmp`, got `/Game/UI/WBP_BtnTest`. The handler should honor `savePath` (falling back
-to `/Game/UI` only when empty), matching `manage_blueprint create` / `create_data_table`.
-
 ### [ ] Common UI `add_common_button` / `add_common_text` fire a handled ensure on a dirty WBP
 The FIRST `add_common_*` on a freshly created (clean) Widget Blueprint succeeds silently, but
 a SECOND add — or an add after another structural edit — logs a `Handled ensure` (the native
@@ -72,18 +66,25 @@ return a fast "warming up" status until the editor finishes its initial load.
 **Full planning brief: `docs/transport-mid-call-drop-problem.md`** (architecture, confirmed
 mechanism, code map, constraints, acceptance criteria — written to hand to a fresh instance).
 
-### [ ] `manage_asset delete` / `delete_asset` ignores `assetPath`, requires `paths`
-`delete_asset { assetPath: "/Game/Foo" }` returns `INVALID_ARGUMENT: No paths provided`; only
-`paths: ["/Game/Foo"]` works (observed 2026-06-04). Other `manage_asset` actions accept the
-singular `assetPath`, so this is an inconsistency that surprises callers. The delete handler
-should also accept `assetPath` (and `path`/`name`) for parity, or the schema should stop
-advertising `assetPath` for the delete actions.
-
 ---
 
 ## Done
 
 _(completed items, newest first)_
+
+### [x] Bug fix: `create_widget_blueprint` ignored `savePath`
+`manage_blueprint create_widget_blueprint` read `path`/`folder` but not `savePath` (the
+`manage_blueprint` schema's param), so callers passing `savePath` silently got the `/Game/UI`
+default. Now accepts `savePath` as an alias (precedence: `path` → `savePath` → `folder` →
+`/Game/UI`). `.cpp`-only change in `McpAutomationBridge_WidgetAuthoringHandlers.cpp`. Verified
+live: `savePath:/Game/McpTmp` created the WBP at `/Game/McpTmp/WBP_SaveTest`.
+
+### [x] Bug fix: `delete` / `delete_asset` ignored `assetPath`
+`HandleDeleteAssets` read `path`/`paths` but not `assetPath`/`assetPaths` (which the
+`manage_asset` schema advertises), so `delete_asset { assetPath: … }` failed with "No paths
+provided". Now accepts `assetPath` (singular) and `assetPaths` (array) alongside `path`/`paths`.
+`.cpp`-only change in `McpAutomationBridge_AssetWorkflowHandlers.cpp`. Verified live:
+`delete_asset { assetPath: "/Game/McpTmp/WBP_SaveTest" }` deleted it (`deletedCount:1`).
 
 ### [x] `set_common_button_input_action` (Common UI)
 Binds a `UCommonButtonBase`'s `TriggeringInputAction` (`FDataTableRowHandle`) on a button
