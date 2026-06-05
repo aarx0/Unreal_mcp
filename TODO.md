@@ -41,6 +41,24 @@ button an earlier call had set, because nothing saved the WBP in between. Worth 
 whether `add_common_*` should compile+save (or at least be ensure-clean) so multi-widget
 authoring in one session is reliable.
 
+### [ ] Native MCP transport drops mid-call while the editor GameThread is busy
+When the editor is busy (asset-registry scan / GC right after launch, heavy ops), a
+`tools/call` can fail with "MCP server transport dropped mid-call; response was lost" even
+though the operation **completed**. Repro 2026-06-04: two back-to-back `manage_asset` calls
+(`delete_asset`, then `exists`) dropped right after a relaunch; the editor stayed alive and the
+delete had in fact succeeded (a later `exists` showed the asset already gone) — only the
+responses were lost. So the client can't tell success from failure for a mutating op. Fix
+direction: keep the connection alive during GameThread dispatch (heartbeat/keepalive on the SSE
+stream), and/or make mutating ops report a re-queryable status so a dropped response is
+recoverable.
+
+### [ ] `manage_asset delete` / `delete_asset` ignores `assetPath`, requires `paths`
+`delete_asset { assetPath: "/Game/Foo" }` returns `INVALID_ARGUMENT: No paths provided`; only
+`paths: ["/Game/Foo"]` works (observed 2026-06-04). Other `manage_asset` actions accept the
+singular `assetPath`, so this is an inconsistency that surprises callers. The delete handler
+should also accept `assetPath` (and `path`/`name`) for parity, or the schema should stop
+advertising `assetPath` for the delete actions.
+
 ---
 
 ## Done
