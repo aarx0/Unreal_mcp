@@ -24,9 +24,11 @@ as they land.
 
 ### A. Reliability & correctness — harden what already ships
 Flakiness in shipped surface erodes trust during real authoring.
-- 🔴 **Transport mid-call drop** — see Bugs §"Native MCP transport drops mid-call" +
-  `docs/transport-mid-call-drop-problem.md`. Per-request SSE keepalive (from the socket
-  thread) + a result cache re-queryable by request id.
+- ✅ **Transport mid-call drop — RESOLVED** (2026-06-06; see `docs/pull-architecture.md`).
+  Solved **pull-only** rather than via the keepalive/result-cache idea: de-streamed `tools/call`
+  to plain HTTP request/response, removed all server push + keepalive, deleted the WebSocket
+  transport, and made mutating ops idempotent (fail-fast on name conflict) so a dropped response
+  recovers by retry / state re-query. Verified live.
 - 🔴 **Widget-authoring ensures + save persistence** — see Bugs §"remove_widget … stale
   variable→GUID" and §"add_common_* … handled ensure on a dirty WBP". Strip the stale
   variable→GUID on `remove_widget`; treat the self-healing `SeenVariableNames` ensure as
@@ -122,7 +124,7 @@ button an earlier call had set, because nothing saved the WBP in between. Worth 
 whether `add_common_*` should compile+save (or at least be ensure-clean) so multi-widget
 authoring in one session is reliable.
 
-### [ ] Native MCP transport drops mid-call while the editor GameThread is busy
+### [x] Native MCP transport drops mid-call while the editor GameThread is busy — RESOLVED (pull architecture, 2026-06-06)
 When the editor is busy (asset-registry scan / GC / still initializing right after launch, or a
 long synchronous op), a `tools/call` can fail with "MCP server transport dropped mid-call;
 response was lost" even though the operation **completed**. Repro 2026-06-04: two back-to-back
@@ -143,15 +145,13 @@ or a reset during init). The GameThread later drains the queue and runs the op �
 but `CompletePendingRequest` then writes the result to a dead socket (write fails under the 5s
 `WriteTimeoutSeconds`), so it's logged as lost and is unrecoverable.
 
-Fix directions: (a) send periodic `:keepalive`/heartbeat frames on the **per-request** SSE stream
-too, driven from the socket thread (which is NOT blocked by the GameThread), so a slow op doesn't
-look dead; (b) emit an immediate "accepted" SSE event when the request is queued; (c) make results
-re-queryable by request id (short-lived result cache + a `get_result` probe) so a dropped response
-is recoverable instead of forcing a blind retry or an independent state re-read; (d) optionally
-return a fast "warming up" status until the editor finishes its initial load.
-
-**Full planning brief: `docs/transport-mid-call-drop-problem.md`** (architecture, confirmed
-mechanism, code map, constraints, acceptance criteria — written to hand to a fresh instance).
+**RESOLVED 2026-06-06** (commits 9d96cc6 / 5361a5f / bce9344) — took a simpler path than the
+keepalive/result-cache directions originally sketched here: went **pull-only**. De-streamed
+`tools/call` to a plain HTTP request/response (no SSE → the parked-silent-stream failure mode is
+gone), removed all server→client push + keepalive, disabled and deleted the WebSocket transport,
+and made mutating ops idempotent (fail-fast on name conflict) so a dropped response is recovered by
+retry / re-querying editor state — no result cache needed. Full design: `docs/pull-architecture.md`
+(the old brief `docs/transport-mid-call-drop-problem.md` is marked superseded).
 
 ### [ ] `ReadHttpRequest` recv loop busy-polls (1ms sleep-spin, byte-at-a-time headers) instead of a readiness wait
 The HTTP receive path in `McpNativeTransport.cpp` (`ReadHttpRequest`, ~L681) reads request
