@@ -429,36 +429,6 @@ UE_LOG(LogTemp, Verbose, TEXT("UnregisterWidgetGuid: Widget '%s' unregistered (U
 }
 
     /**
-     * Recursively unregister a widget and all its children from the GUID map.
-     * Use this when removing a widget that has children.
-     * 
-     * @param WidgetBP The widget blueprint that owns the widgets
-     * @param Widget The widget to unregister (including all children)
-     */
-    void UnregisterWidgetAndChildren(UWidgetBlueprint* WidgetBP, UWidget* Widget)
-    {
-        if (!WidgetBP || !Widget)
-        {
-            return;
-        }
-
-        // Unregister this widget
-        UnregisterWidgetGuid(WidgetBP, Widget);
-
-        // If this is a panel widget, recursively unregister children
-        if (UPanelWidget* PanelWidget = Cast<UPanelWidget>(Widget))
-        {
-            for (UWidget* Child : PanelWidget->GetAllChildren())
-            {
-                if (Child)
-                {
-                    UnregisterWidgetAndChildren(WidgetBP, Child);
-                }
-            }
-        }
-    }
-
-    /**
      * Safely add a widget to the widget tree with proper root/parent handling.
      * 
      * This handles the critical case where parentSlot is not specified:
@@ -506,18 +476,28 @@ UE_LOG(LogTemp, Verbose, TEXT("UnregisterWidgetGuid: Widget '%s' unregistered (U
                 }
                 else
                 {
-                    // Root is NOT a panel (e.g., a single widget like TextBlock)
-                    // CRITICAL: Must unregister old root before replacing
-                    UE_LOG(LogTemp, Warning, TEXT("SafeAddWidgetToTree: Replacing non-panel root '%s' with '%s'"), 
-                        *WidgetTree->RootWidget->GetName(), *NewWidget->GetName());
-                    
-                    // Unregister the old root and all its children
-                    UnregisterWidgetAndChildren(WidgetBP, WidgetTree->RootWidget);
-                    
-                    // Remove old root from tree
-                    WidgetTree->RemoveWidget(WidgetTree->RootWidget);
-                    
-                    // Set new widget as root
+                    // Root is NOT a panel (e.g., a single widget like a TextBlock).
+                    // Remove the old root cleanly. The original defect here was NOT changing
+                    // the old widget's outer: a bare WidgetTree->RemoveWidget() only nulls the
+                    // root pointer, leaving the widget outered to the WidgetTree, so the
+                    // compiler's ForEachSourceWidget (ForEachObjectWithOuter) still finds that
+                    // GUID-less orphan and ensures. The fix is to rename it out to the transient
+                    // package (changing its outer), exactly as the engine's DeleteWidgets does.
+                    // We deliberately do NOT call DeleteWidgets here: it ends with
+                    // MarkBlueprintAsStructurallyModified, which reinstances mid-operation while
+                    // the just-constructed NewWidget is still an orphan (not yet root) -- that
+                    // intermediate compile trashes/renames NewWidget (e.g. TRASH_Text2_0),
+                    // desyncing it from its variable->GUID entry. This lightweight path triggers
+                    // no intermediate compile, so NewWidget stays intact for the caller's compile.
+                    UWidget* OldRoot = WidgetTree->RootWidget;
+                    UE_LOG(LogTemp, Warning, TEXT("SafeAddWidgetToTree: Replacing non-panel root '%s' with '%s'"),
+                        *OldRoot->GetName(), *NewWidget->GetName());
+
+                    UnregisterWidgetGuid(WidgetBP, OldRoot);
+                    WidgetTree->RemoveWidget(OldRoot);
+                    OldRoot->Rename(nullptr, GetTransientPackage(),
+                        REN_DontCreateRedirectors | REN_NonTransactional);
+
                     WidgetTree->RootWidget = NewWidget;
                 }
             }

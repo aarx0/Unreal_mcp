@@ -50,9 +50,6 @@ namespace WidgetAuthoringHelpers
 	/** Remove a widget's GUID-map entry (required when removing a widget from the tree). */
 	void UnregisterWidgetGuid(UWidgetBlueprint* WidgetBP, UWidget* Widget);
 
-	/** Recursively unregister a widget and all of its children. */
-	void UnregisterWidgetAndChildren(UWidgetBlueprint* WidgetBP, UWidget* Widget);
-
 	/** Add a widget to the tree with safe root/parent handling and GUID cleanup. */
 	bool SafeAddWidgetToTree(UWidgetBlueprint* WidgetBP, UWidget* NewWidget, const FString& ParentSlot);
 

@@ -161,7 +161,22 @@ no stale GUID survives; (b) treat the `SeenVariableNames` ensure as benign in th
 compile-path save not gate on the dirty flag when `save:true` was explicitly requested (or fall
 back to a direct package save) so structural deletes always persist.
 
-### [ ] Common UI `add_common_button` / `add_common_text` fire a handled ensure on a dirty WBP
+### [x] Common UI `add_common_button` / `add_common_text` fire a handled ensure on a dirty WBP
+**RESOLVED 2026-06-06.** Root cause: `SafeAddWidgetToTree`'s non-panel-root *replacement* path
+removed the old root with a bare `WidgetTree->RemoveWidget()`, which only nulls the root pointer and
+leaves the old widget outered to the WidgetTree. The compiler's `ForEachSourceWidget`
+(`ForEachObjectWithOuter`) then still saw that GUID-stripped orphan → `Widget [X] was added but did
+not get a GUID`. Fix: after removing the old root, rename it out to the transient package
+(`Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors|REN_NonTransactional)`) so it
+leaves the tree's outer — matching what the engine's `DeleteWidgets` does, but WITHOUT calling
+`DeleteWidgets` here (its trailing `MarkBlueprintAsStructurallyModified` reinstances mid-operation
+while the just-constructed new widget is still an orphan, trashing/renaming it to e.g.
+`TRASH_Text2_0` and desyncing it from its GUID entry — observed and ruled out during the fix). Also
+removed the now-dead `UnregisterWidgetAndChildren` helper. Verified live: create WBP →
+`add_common_text` ×2 → no ensure, root correctly named `Text2`, `compile {saveAfterCompile}` clean.
+See the new open item below re: the *replace* semantics, which is unchanged.
+
+Original report:
 The FIRST `add_common_*` on a freshly created (clean) Widget Blueprint succeeds silently, but
 a SECOND add — or an add after another structural edit — logs a `Handled ensure` (the native
 handler returns success but the bridge's "Unreal logged errors" guard surfaces it as
@@ -172,6 +187,19 @@ vanish from the tree across later ops — a `set_common_button_input_action` cou
 button an earlier call had set, because nothing saved the WBP in between. Worth deciding
 whether `add_common_*` should compile+save (or at least be ensure-clean) so multi-widget
 authoring in one session is reliable.
+
+### [ ] DECISION NEEDED: `SafeAddWidgetToTree` silently *replaces* a non-panel root (data loss)
+Surfaced while fixing the ensure above. When you add a widget with no `parentSlot` and the current
+root is a **non-panel** widget (e.g. a `TextBlock`/`CommonTextBlock`), `SafeAddWidgetToTree` discards
+the existing root and installs the new widget as root. This is now *clean* (no ensure/orphan/trash),
+but it still silently throws away the previous widget — which is almost certainly never intended and
+is the "widgets vanish" symptom from the entry above. It only bites the parent-less + non-panel-root
+edge; the normal menu flow (panel root + `parentSlot`) hits the add-as-child path and is unaffected.
+Three options — **Aaron's call** (left as-is for now):
+(a) **error** with guidance ("root '%s' is not a panel; pass parentSlot or add a panel root first") —
+safest, no silent loss; (b) **auto-wrap** — create a VerticalBox/CanvasPanel, reparent the old root
+under it, then add the new widget (most convenient, keeps both, more opinionated); (c) keep the
+replace but make it loud. Leaning (a). Not changing semantics without a decision.
 
 ### [x] Native MCP transport drops mid-call while the editor GameThread is busy — RESOLVED (pull architecture, 2026-06-06)
 When the editor is busy (asset-registry scan / GC / still initializing right after launch, or a
