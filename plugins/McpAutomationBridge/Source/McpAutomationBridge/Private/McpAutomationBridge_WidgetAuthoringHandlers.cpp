@@ -429,6 +429,29 @@ UE_LOG(LogTemp, Verbose, TEXT("UnregisterWidgetGuid: Widget '%s' unregistered (U
 }
 
     /**
+     * Discard a just-constructed widget that failed to be added to the tree. Strips its
+     * variable->GUID entry and renames it OUT of the WidgetTree's outer (to the transient
+     * package). Without the rename it would linger as a GUID-less object still outered to
+     * the WidgetTree, which the compiler's ForEachSourceWidget (ForEachObjectWithOuter)
+     * would later flag as "Widget [X] was added but did not get a GUID". Call this on any
+     * add-failure path for a widget created via WidgetTree->ConstructWidget.
+     */
+    void DiscardUnaddedWidget(UWidgetBlueprint* WidgetBP, UWidget* Widget)
+    {
+        if (!WidgetBP || !Widget)
+        {
+            return;
+        }
+        UnregisterWidgetGuid(WidgetBP, Widget);
+        if (WidgetBP->WidgetTree)
+        {
+            WidgetBP->WidgetTree->RemoveWidget(Widget);
+        }
+        Widget->Rename(nullptr, GetTransientPackage(),
+            REN_DontCreateRedirectors | REN_NonTransactional);
+    }
+
+    /**
      * Safely add a widget to the widget tree with proper root/parent handling.
      * 
      * This handles the critical case where parentSlot is not specified:
@@ -517,15 +540,17 @@ UE_LOG(LogTemp, Verbose, TEXT("UnregisterWidgetGuid: Widget '%s' unregistered (U
                 }
                 else
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("SafeAddWidgetToTree: Parent '%s' is not a panel widget"), 
+                    UE_LOG(LogTemp, Warning, TEXT("SafeAddWidgetToTree: Parent '%s' is not a panel widget"),
                         *ParentSlot);
+                    DiscardUnaddedWidget(WidgetBP, NewWidget);
                     return false;
                 }
             }
             else
             {
-                UE_LOG(LogTemp, Warning, TEXT("SafeAddWidgetToTree: Parent widget '%s' not found"), 
+                UE_LOG(LogTemp, Warning, TEXT("SafeAddWidgetToTree: Parent widget '%s' not found"),
                     *ParentSlot);
+                DiscardUnaddedWidget(WidgetBP, NewWidget);
                 return false;
             }
         }

@@ -96,6 +96,10 @@ runtime_report`/`pie_report`/`find_by_class`).
   (caps only). Caveat: needs a laid-out viewport — a **minimized** editor window has a zero-size
   viewport and returns `VIEWPORT_NOT_AVAILABLE`. Future: an offscreen render-target path would
   make capture fully window-independent (truly headless).
+  Verified 2026-06-06 it also captures **PIE/gameplay**: `GetActiveViewport()` returns the PIE
+  viewport during `control_editor play`, so the same call grabs the live third-person gameplay view
+  (player + combat) with no extra code. author->play->screenshot->evaluate is now a complete
+  self-verify loop for gameplay, not just the editor.
 
 Remaining gaps:
 - 🟡 **Input-injection fidelity** — `simulate_input` routes through `FSlateApplication` key/
