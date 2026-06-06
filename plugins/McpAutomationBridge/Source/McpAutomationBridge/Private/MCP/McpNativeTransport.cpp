@@ -207,27 +207,26 @@ void FMcpNativeTransport::Shutdown()
 		StopEvent = nullptr;
 	}
 
-	// Close all active SSE connections with error.
+	// Answer any still-parked tools/call connections with an error, then close them.
 	// WriteMutex is taken per-connection to synchronize with in-flight async writes.
 	{
 		ISocketSubsystem* SocketSub = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
-		FScopeLock Lock(&SSEConnectionsMutex);
-		for (auto& [RequestId, Conn] : SSEConnections)
+		FScopeLock Lock(&PendingConnectionsMutex);
+		for (auto& [RequestId, Conn] : PendingConnections)
 		{
 			if (Conn.IsValid())
 			{
 				FScopeLock WriteLock(&Conn->WriteMutex);
 				if (Conn->Socket)
 				{
-					// Inline SSE write — we already hold WriteMutex
+					// Pull-only: the socket is still awaiting its single HTTP response, so
+					// send a plain JSON-RPC error response (not an SSE frame — that would be
+					// a malformed reply with no status line/headers).
 					FString ErrorJson = FMcpJsonRpc::BuildError(
 						Conn->JsonRpcId, FMcpJsonRpc::ErrorInternalError,
 						TEXT("Server shutting down"));
-					FString Frame = FString::Printf(
-						TEXT("event: message\ndata: %s\n\n"), *ErrorJson);
-					FTCHARToUTF8 Utf8(*Frame);
-					SendAllBytes(Conn->Socket,
-						reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
+					SendHttpResponse(Conn->Socket, 503, TEXT("application/json"),
+						ErrorJson, {}, Conn->CorsOrigin);
 
 					Conn->Socket->Close();
 					if (SocketSub)
@@ -238,7 +237,7 @@ void FMcpNativeTransport::Shutdown()
 				}
 			}
 		}
-		SSEConnections.Empty();
+		PendingConnections.Empty();
 	}
 
 	{
@@ -456,7 +455,7 @@ void FMcpNativeTransport::HandleConnection(FSocket* ClientSocket)
 		return;
 	}
 
-	// Capability token validation (mirrors McpConnectionManager logic)
+	// Capability token validation
 	{
 		const UMcpAutomationBridgeSettings* Settings = GetDefault<UMcpAutomationBridgeSettings>();
 		if (Settings && Settings->bRequireCapabilityToken)
@@ -611,9 +610,11 @@ void FMcpNativeTransport::HandleConnection(FSocket* ClientSocket)
 
 	if (Rpc.Method == TEXT("tools/call"))
 	{
-		// HandleToolsCall takes ownership of the socket (SSE streaming)
+		// HandleToolsCall takes ownership of the socket: it's parked until the
+		// game-thread request completes, then a single application/json response
+		// is written (pull-only — no SSE streaming).
 		HandleToolsCall(Rpc.Params, Rpc.Id, ClientSocket, HttpReq.SessionId, HttpReq.Origin);
-		return;  // Socket NOT closed here — parked for SSE
+		return;  // Socket NOT closed here — parked until the response is sent
 	}
 
 	// Unknown method
@@ -629,58 +630,80 @@ void FMcpNativeTransport::HandleConnection(FSocket* ClientSocket)
 
 bool FMcpNativeTransport::ReadHttpRequest(FSocket* Socket, FParsedHttpRequest& OutRequest)
 {
-	// Read headers (up to 8KB)
+	// Read headers: drain the socket in chunks (not one byte per syscall) and scan for
+	// the CRLFCRLF terminator. When nothing is buffered, block on Socket->Wait(WaitForRead)
+	// instead of sleep-spinning. Bytes read past the terminator are the start of the body
+	// and are carried into the body phase below via LeftoverBodyBytes.
 	static constexpr int32 MaxHeaderSize = 8192;
-	TArray<uint8> HeaderBuf;
-	HeaderBuf.Reserve(MaxHeaderSize);
+	const double Deadline = FPlatformTime::Seconds() + 5.0;  // 5s overall read timeout
 
-	const double Deadline = FPlatformTime::Seconds() + 5.0;  // 5s read timeout
+	TArray<uint8> Buffer;
+	Buffer.Reserve(2048);
+	uint8 Chunk[2048];
+	int32 HeaderEnd = INDEX_NONE;  // index one past the terminating \r\n\r\n
 
-	while (HeaderBuf.Num() < MaxHeaderSize)
+	while (HeaderEnd == INDEX_NONE)
 	{
-		if (FPlatformTime::Seconds() > Deadline)
+		uint32 PendingSize = 0;
+		if (Socket->HasPendingData(PendingSize) && PendingSize > 0)
+		{
+			int32 BytesRead = 0;
+			if (!Socket->Recv(Chunk, sizeof(Chunk), BytesRead))
+			{
+				UE_LOG(LogMcpNativeTransport, Warning, TEXT("HTTP header read: recv error"));
+				return false;
+			}
+			if (BytesRead > 0)
+			{
+				// Scan from the previous length (clamped to >=3) so a terminator split
+				// across two chunks is still found via the 4-byte window.
+				const int32 ScanFrom = FMath::Max(3, Buffer.Num());
+				Buffer.Append(Chunk, BytesRead);
+				for (int32 i = ScanFrom; i < Buffer.Num(); ++i)
+				{
+					if (Buffer[i - 3] == '\r' && Buffer[i - 2] == '\n'
+						&& Buffer[i - 1] == '\r' && Buffer[i] == '\n')
+					{
+						HeaderEnd = i + 1;
+						break;
+					}
+				}
+				if (HeaderEnd != INDEX_NONE)
+				{
+					break;
+				}
+				if (Buffer.Num() > MaxHeaderSize)
+				{
+					UE_LOG(LogMcpNativeTransport, Warning, TEXT("HTTP headers too large"));
+					return false;
+				}
+				continue;  // keep draining whatever else is buffered before we block
+			}
+		}
+
+		const double Now = FPlatformTime::Seconds();
+		if (Now >= Deadline)
 		{
 			UE_LOG(LogMcpNativeTransport, Warning, TEXT("HTTP header read timeout"));
 			return false;
 		}
-
-		uint32 PendingSize = 0;
-		if (!Socket->HasPendingData(PendingSize))
+		// Block until readable (or a 1s slice) instead of busy-polling. A socket that
+		// reports readable but has no pending data means the peer closed the connection.
+		if (Socket->Wait(ESocketWaitConditions::WaitForRead,
+				FTimespan::FromSeconds(FMath::Min(Deadline - Now, 1.0))))
 		{
-			FPlatformProcess::Sleep(0.001f);
-			continue;
-		}
-
-		uint8 Byte;
-		int32 BytesRead = 0;
-		if (!Socket->Recv(&Byte, 1, BytesRead) || BytesRead <= 0)
-		{
-			FPlatformProcess::Sleep(0.001f);
-			continue;
-		}
-
-		HeaderBuf.Add(Byte);
-
-		// Check for \r\n\r\n
-		const int32 Len = HeaderBuf.Num();
-		if (Len >= 4
-			&& HeaderBuf[Len - 4] == '\r'
-			&& HeaderBuf[Len - 3] == '\n'
-			&& HeaderBuf[Len - 2] == '\r'
-			&& HeaderBuf[Len - 1] == '\n')
-		{
-			break;
+			uint32 P = 0;
+			if (!Socket->HasPendingData(P) || P == 0)
+			{
+				UE_LOG(LogMcpNativeTransport, Warning,
+					TEXT("HTTP header read: peer closed connection"));
+				return false;
+			}
 		}
 	}
 
-	if (HeaderBuf.Num() >= MaxHeaderSize)
-	{
-		UE_LOG(LogMcpNativeTransport, Warning, TEXT("HTTP headers too large"));
-		return false;
-	}
-
-	// Parse headers
-	FUTF8ToTCHAR HeaderConverter(reinterpret_cast<const ANSICHAR*>(HeaderBuf.GetData()), HeaderBuf.Num());
+	// Parse headers (the [0, HeaderEnd) span; anything after is the start of the body).
+	FUTF8ToTCHAR HeaderConverter(reinterpret_cast<const ANSICHAR*>(Buffer.GetData()), HeaderEnd);
 	FString HeaderStr(HeaderConverter.Length(), HeaderConverter.Get());
 
 	TArray<FString> Lines;
@@ -763,37 +786,52 @@ bool FMcpNativeTransport::ReadHttpRequest(FSocket* Socket, FParsedHttpRequest& O
 		TArray<uint8> BodyBuf;
 		BodyBuf.SetNumUninitialized(OutRequest.ContentLength);
 		int32 TotalRead = 0;
-		uint32 PendingData = 0;
+
+		// Seed the body with any bytes we already read past the header terminator.
+		const int32 LeftoverBodyBytes = Buffer.Num() - HeaderEnd;
+		if (LeftoverBodyBytes > 0)
+		{
+			const int32 CopyN = FMath::Min(LeftoverBodyBytes, OutRequest.ContentLength);
+			FMemory::Memcpy(BodyBuf.GetData(), Buffer.GetData() + HeaderEnd, CopyN);
+			TotalRead = CopyN;
+		}
 
 		while (TotalRead < OutRequest.ContentLength)
 		{
-			if (FPlatformTime::Seconds() > Deadline)
+			uint32 PendingData = 0;
+			if (Socket->HasPendingData(PendingData) && PendingData > 0)
 			{
-				UE_LOG(LogMcpNativeTransport, Warning, TEXT("HTTP body read timeout"));
-				return false;
-			}
-
-			int32 BytesRead = 0;
-			if (Socket->Recv(BodyBuf.GetData() + TotalRead,
-				OutRequest.ContentLength - TotalRead, BytesRead))
-			{
+				int32 BytesRead = 0;
+				if (!Socket->Recv(BodyBuf.GetData() + TotalRead,
+					OutRequest.ContentLength - TotalRead, BytesRead))
+				{
+					UE_LOG(LogMcpNativeTransport, Warning, TEXT("HTTP body read: recv error (read %d/%d)"), TotalRead, OutRequest.ContentLength);
+					return false;
+				}
 				if (BytesRead > 0)
 				{
 					TotalRead += BytesRead;
+					continue;
 				}
-				else if (!Socket->HasPendingData(PendingData))
+			}
+
+			const double Now = FPlatformTime::Seconds();
+			if (Now >= Deadline)
+			{
+				UE_LOG(LogMcpNativeTransport, Warning, TEXT("HTTP body read timeout (read %d/%d)"), TotalRead, OutRequest.ContentLength);
+				return false;
+			}
+			// Block until more data arrives instead of sleep-spinning; readable-with-no-data
+			// means the peer closed before sending the full body.
+			if (Socket->Wait(ESocketWaitConditions::WaitForRead,
+					FTimespan::FromSeconds(FMath::Min(Deadline - Now, 1.0))))
+			{
+				uint32 P = 0;
+				if (!Socket->HasPendingData(P) || P == 0)
 				{
 					UE_LOG(LogMcpNativeTransport, Warning, TEXT("HTTP body read: peer closed connection (read %d/%d)"), TotalRead, OutRequest.ContentLength);
 					return false;
 				}
-				else
-				{
-					FPlatformProcess::Sleep(0.001f);
-				}
-			}
-			else
-			{
-				FPlatformProcess::Sleep(0.001f);
 			}
 		}
 
@@ -861,24 +899,6 @@ bool FMcpNativeTransport::SendHttpResponse(FSocket* Socket, int32 StatusCode,
 	}
 
 	return true;
-}
-
-bool FMcpNativeTransport::SendSSEHeaders(FSocket* Socket, const FString& SessionId,
-	const FString& CorsOrigin)
-{
-	FString Headers = FString::Printf(
-		TEXT("HTTP/1.1 200 OK\r\n")
-		TEXT("Content-Type: text/event-stream\r\n")
-		TEXT("Cache-Control: no-cache\r\n")
-		TEXT("Connection: keep-alive\r\n")
-		TEXT("Mcp-Session-Id: %s\r\n"),
-		*SessionId);
-	AppendCorsHeaders(Headers, CorsOrigin);
-	Headers += TEXT("\r\n");
-
-	FTCHARToUTF8 Utf8(*Headers);
-	return SendAllBytes(Socket, reinterpret_cast<const uint8*>(Utf8.Get()),
-		Utf8.Length());
 }
 
 bool FMcpNativeTransport::IsCorsEnabled() const
@@ -1008,22 +1028,6 @@ void FMcpNativeTransport::AppendCorsHeaders(FString& Response, const FString& Or
 	Response += TEXT("Access-Control-Expose-Headers: Mcp-Session-Id, MCP-Protocol-Version\r\n");
 }
 
-bool FMcpNativeTransport::WriteSSEEvent(FSSEConnection& Conn, const FString& EventData)
-{
-	FString Frame = FString::Printf(
-		TEXT("event: message\ndata: %s\n\n"), *EventData);
-
-	FTCHARToUTF8 Utf8(*Frame);
-
-	FScopeLock Lock(&Conn.WriteMutex);
-	if (!Conn.Socket)
-	{
-		return false;
-	}
-	return SendAllBytes(Conn.Socket, reinterpret_cast<const uint8*>(Utf8.Get()),
-		Utf8.Length());
-}
-
 // ─── Persistent Notification Streams (GET /mcp) ────────────────────────────
 
 // HandleGetMcp / WriteNotificationEvent / WriteNotificationKeepalive / CloseNotificationStream
@@ -1115,7 +1119,7 @@ int32 FMcpNativeTransport::GetTotalToolCount() const
 	return FMcpToolRegistry::Get().GetToolCount();
 }
 
-// ─── Tools Call (SSE streaming) ─────────────────────────────────────────────
+// ─── Tools Call (park connection until GameThread handler completes) ────────
 
 void FMcpNativeTransport::HandleToolsCall(
 	const TSharedPtr<FJsonObject>& Params, const TSharedPtr<FJsonValue>& Id,
@@ -1209,15 +1213,15 @@ void FMcpNativeTransport::HandleToolsCall(
 	const FString RequestId = FGuid::NewGuid().ToString();
 
 	{
-		FScopeLock Lock(&SSEConnectionsMutex);
-		TSharedPtr<FSSEConnection> Conn = MakeShared<FSSEConnection>();
+		FScopeLock Lock(&PendingConnectionsMutex);
+		TSharedPtr<FPendingConnection> Conn = MakeShared<FPendingConnection>();
 		Conn->Socket = ClientSocket;
 		Conn->JsonRpcId = Id;
 		Conn->StartTime = FPlatformTime::Seconds();
 		Conn->ToolName = ToolName;
 		Conn->SessionId = SessionId;
 		Conn->CorsOrigin = CorsOrigin;
-		SSEConnections.Add(RequestId, Conn);
+		PendingConnections.Add(RequestId, Conn);
 	}
 
 	UE_LOG(LogMcpNativeTransport, Log,
@@ -1273,22 +1277,22 @@ void FMcpNativeTransport::HandleToolsCall(
 	}
 }
 
-// ─── SSE Connection Management ──────────────────────────────────────────────
+// ─── Pending Connection Management ──────────────────────────────────────────
 
 bool FMcpNativeTransport::CompletePendingRequest(
 	const FString& RequestId, bool bSuccess, const FString& Message,
 	const TSharedPtr<FJsonObject>& Result, const FString& ErrorCode)
 {
-	TSharedPtr<FSSEConnection> Conn;
+	TSharedPtr<FPendingConnection> Conn;
 	{
-		FScopeLock Lock(&SSEConnectionsMutex);
-		TSharedPtr<FSSEConnection>* Found = SSEConnections.Find(RequestId);
+		FScopeLock Lock(&PendingConnectionsMutex);
+		TSharedPtr<FPendingConnection>* Found = PendingConnections.Find(RequestId);
 		if (!Found)
 		{
 			return false;
 		}
 		Conn = *Found;
-		SSEConnections.Remove(RequestId);
+		PendingConnections.Remove(RequestId);
 	}
 
 	if (!Conn.IsValid())
@@ -1355,27 +1359,19 @@ bool FMcpNativeTransport::CompletePendingRequest(
 
 bool FMcpNativeTransport::HasPendingRequest(const FString& RequestId) const
 {
-	FScopeLock Lock(&SSEConnectionsMutex);
-	return SSEConnections.Contains(RequestId);
-}
-
-void FMcpNativeTransport::SendSSEProgressUpdate(
-	const FString& /*RequestId*/, float /*Percent*/, const FString& /*Message*/)
-{
-	// Pull-only: no progress frames. The parked tools/call connection is answered with a
-	// single plain HTTP/JSON response at completion; writing an intermediate SSE frame
-	// here would corrupt that response. Kept as a no-op so callers need not change.
+	FScopeLock Lock(&PendingConnectionsMutex);
+	return PendingConnections.Contains(RequestId);
 }
 
 void FMcpNativeTransport::CleanupStaleRequests()
 {
 	const double Now = FPlatformTime::Seconds();
 
-	// Clean up timed-out SSE connections
+	// Clean up timed-out parked connections
 	TArray<FString> Expired;
 	{
-		FScopeLock Lock(&SSEConnectionsMutex);
-		for (const auto& [RequestId, Conn] : SSEConnections)
+		FScopeLock Lock(&PendingConnectionsMutex);
+		for (const auto& [RequestId, Conn] : PendingConnections)
 		{
 			if (Conn.IsValid() && (Now - Conn->StartTime > RequestTimeoutSeconds
 				|| Conn->bMarkedForRemoval.load()))
@@ -1388,7 +1384,7 @@ void FMcpNativeTransport::CleanupStaleRequests()
 	for (const FString& RequestId : Expired)
 	{
 		UE_LOG(LogMcpNativeTransport, Warning,
-			TEXT("SSE request %s timed out after %.0f seconds"),
+			TEXT("Parked request %s timed out after %.0f seconds"),
 			*RequestId, RequestTimeoutSeconds);
 		CompletePendingRequest(RequestId, false, TEXT("Request timed out"),
 			nullptr, TEXT("TIMEOUT"));

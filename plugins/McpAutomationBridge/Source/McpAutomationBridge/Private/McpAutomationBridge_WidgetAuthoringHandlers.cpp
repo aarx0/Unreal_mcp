@@ -6591,8 +6591,19 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             return true;
         }
 
-        WidgetBP->WidgetTree->RemoveWidget(TargetWidget);
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+        // Delete via the engine's canonical path -- the exact code the UMG designer runs
+        // for right-click > Delete. It removes the widget AND its children from the tree,
+        // strips their WidgetVariableNameToGuidMap entries (via OnVariableRemoved), cleans
+        // up delegate bindings / variable nodes / desired-focus, renames them out to the
+        // transient package, and marks the blueprint structurally modified. Hand-rolling
+        // this left the GUID map inconsistent with the tree, which tripped the self-healing
+        // "SeenVariableNames" ensure on the next compile and gated the save. DeleteSilently
+        // skips the "this widget is referenced in the graph -- continue?" user prompt.
+        TSet<UWidget*> WidgetsToDelete;
+        WidgetsToDelete.Add(TargetWidget);
+        FWidgetBlueprintEditorUtils::DeleteWidgets(
+            WidgetBP, WidgetsToDelete,
+            FWidgetBlueprintEditorUtils::EDeleteWidgetWarningType::DeleteSilently);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);

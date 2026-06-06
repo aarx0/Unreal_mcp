@@ -177,8 +177,16 @@ public:
     std::atomic<bool> bHasErrors{false};
     std::atomic<bool> bHasWarnings{false};
     uint32 CapturingThreadId = 0;
-    bool bActive = false;
-    
+    // Atomic so the log-capture device can take a lock-free fast path: the editor logs
+    // a high volume of non-Error lines, and we only need the mutex when a capture is
+    // actually active (or for the rare Error/Warning line). Set under ErrorCaptureMutex.
+    std::atomic<bool> bActive{false};
+    // True while we're inside a "Handled ensure" multi-line dump. The engine logs
+    // the whole dump (header + condition + message + Stack: + callstack frames) at
+    // Error verbosity even though it recovered, so we downgrade those lines to
+    // warnings. Opens on the dump's marker line, closes when normal logging resumes.
+    bool bInHandledEnsureBlock = false;
+
     // Reset is for internal use only - must be called with ErrorCaptureMutex held
     void Reset()
     {
@@ -192,6 +200,7 @@ public:
       bHasWarnings = false;
       CapturingThreadId = 0;
       bActive = false;
+      bInHandledEnsureBlock = false;
     }
   };
   
@@ -232,8 +241,6 @@ private:
   TSharedPtr<class FMcpRequestErrorDevice> RequestErrorDevice;
 
 public:
-  // Telemetry structs moved to McpConnectionManager
-
   bool Tick(float DeltaTime);
 
   void QueueAutomationRequest(const FString &RequestId, const FString &Action,
@@ -1273,6 +1280,11 @@ private:
   bool HandleCreateDataTable(const FString &RequestId,
                              const TSharedPtr<FJsonObject> &Payload,
                              TSharedPtr<FMcpBridgeWebSocket> Socket);
+  // DataTable row CRUD + CSV/JSON import. SubAction is the (lowercased) routed action
+  // string (add_row / edit_row / remove_row / get_rows / import_data_table, plus aliases).
+  bool HandleDataTableRowOp(const FString &RequestId, const FString &SubAction,
+                            const TSharedPtr<FJsonObject> &Payload,
+                            TSharedPtr<FMcpBridgeWebSocket> Socket);
   bool HandleCreateNiagaraSystemAsset(const FString &RequestId,
                                       const TSharedPtr<FJsonObject> &Payload,
                                       TSharedPtr<FMcpBridgeWebSocket> Socket);

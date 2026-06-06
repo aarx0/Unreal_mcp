@@ -13,10 +13,11 @@ class FEvent;
 class ISocketSubsystem;
 
 /**
- * Native MCP Streamable HTTP transport with SSE streaming.
+ * Native MCP Streamable HTTP transport (pull-only: one request -> one response).
  * Raw socket HTTP server speaking JSON-RPC 2.0 (MCP protocol 2025-03-26).
- * SSE streaming for tools/call — progress notifications + final result.
- * Runs alongside existing WebSocket transport — opt-in via bEnableNativeMCP setting.
+ * tools/call parks the connection while the GameThread handler runs, then answers
+ * with a single plain application/json response — no SSE streaming, no server push.
+ * (GET /mcp returns 405; see docs/pull-architecture.md.)
  */
 class FMcpNativeTransport : public FRunnable
 {
@@ -30,7 +31,7 @@ public:
 		const FString& InListenHost = TEXT("127.0.0.1"),
 		bool bInAllowNonLoopback = false);
 
-	/** Shut down HTTP server, stop accept thread, close all SSE connections. */
+	/** Shut down HTTP server, stop accept thread, close all parked connections. */
 	void Shutdown();
 
 	/** Status accessors for UI. */
@@ -41,8 +42,8 @@ public:
 	int32 GetTotalToolCount() const;
 
 	/**
-	 * Complete a pending SSE request with the handler's result.
-	 * Writes final JSON-RPC result as SSE event, then closes the connection.
+	 * Complete a parked tools/call request with the handler's result: writes a single
+	 * plain HTTP/JSON-RPC response, then closes the connection.
 	 * Called from Subsystem::SendAutomationResponse when Socket==nullptr.
 	 * Returns true if a pending request was found and completed.
 	 */
@@ -50,12 +51,8 @@ public:
 		const FString& Message, const TSharedPtr<FJsonObject>& Result,
 		const FString& ErrorCode);
 
-	/** Check if a request ID belongs to an active SSE connection. */
+	/** Check if a request ID belongs to a parked (awaiting-response) connection. */
 	bool HasPendingRequest(const FString& RequestId) const;
-
-	/** Stream progress notification via SSE to the client. */
-	void SendSSEProgressUpdate(const FString& RequestId, float Percent,
-		const FString& Message);
 
 	/** Clean up requests that have exceeded the timeout. Called from Tick. */
 	void CleanupStaleRequests();
@@ -82,7 +79,7 @@ private:
 	/** Parked tools/call request: the socket is held until the GameThread handler
 	 *  completes, then answered with a single plain HTTP/JSON response (pull-only,
 	 *  no SSE). */
-	struct FSSEConnection
+	struct FPendingConnection
 	{
 		FSocket* Socket = nullptr;
 		TSharedPtr<FJsonValue> JsonRpcId;
@@ -116,9 +113,6 @@ private:
 		const FString& ContentType, const FString& Body,
 		const TMap<FString, FString>& ExtraHeaders = {},
 		const FString& CorsOrigin = FString());
-	bool SendSSEHeaders(FSocket* Socket, const FString& SessionId,
-		const FString& CorsOrigin = FString());
-	static bool WriteSSEEvent(FSSEConnection& Conn, const FString& EventData);
 
 	// JSON-RPC method handlers (return response body string)
 	FString HandleInitialize(const TSharedPtr<FJsonObject>& Params,
@@ -155,7 +149,7 @@ private:
 	std::atomic<bool> bStopping{false};
 	std::atomic<bool> bBindSuccess{false};
 	std::atomic<int32> ActiveConnectionCount{0};
-	std::atomic<int32> PendingAsyncWrites{0};  // tracks in-flight SSE progress/complete writes
+	std::atomic<int32> PendingAsyncWrites{0};  // tracks in-flight async completion writes
 	static constexpr int32 MaxConcurrentConnections = 16;
 
 	// Session state (multi-session, with activity tracking)
@@ -164,9 +158,9 @@ private:
 
 	static constexpr double SessionTimeoutSeconds = 3600.0;  // 1 hour
 
-	// Active SSE streaming connections (RequestId → connection)
-	TMap<FString, TSharedPtr<FSSEConnection>> SSEConnections;
-	mutable FCriticalSection SSEConnectionsMutex;
+	// Parked tools/call connections awaiting their single response (RequestId → connection)
+	TMap<FString, TSharedPtr<FPendingConnection>> PendingConnections;
+	mutable FCriticalSection PendingConnectionsMutex;
 
 	static constexpr double RequestTimeoutSeconds = 300.0;  // 5 minutes
 

@@ -106,6 +106,7 @@
 #include "AssetViewUtils.h"
 #include "EditorAssetLibrary.h"
 #include "Engine/DataTable.h"  // UDataTable, FTableRowBase (create_data_table)
+#include "DataTableEditorUtils.h"  // FDataTableEditorUtils (data table row CRUD)
 #include "Engine/StaticMesh.h"
 #include "EngineUtils.h"  // TActorIterator
 #include "Factories/MaterialFactoryNew.h"
@@ -263,6 +264,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetAction(
     return HandleCreateMaterialInstance(RequestId, Payload, RequestingSocket);
   if (Lower == TEXT("create_data_table"))
     return HandleCreateDataTable(RequestId, Payload, RequestingSocket);
+  if (Lower == TEXT("add_data_table_row") || Lower == TEXT("add_row") ||
+      Lower == TEXT("edit_data_table_row") || Lower == TEXT("edit_row") ||
+      Lower == TEXT("update_data_table_row") || Lower == TEXT("update_row") ||
+      Lower == TEXT("remove_data_table_row") || Lower == TEXT("remove_row") ||
+      Lower == TEXT("delete_row") || Lower == TEXT("get_data_table_rows") ||
+      Lower == TEXT("get_rows") || Lower == TEXT("import_data_table") ||
+      Lower == TEXT("import_rows"))
+    return HandleDataTableRowOp(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("create_render_target"))
     return HandleManageTextureAction(RequestId, TEXT("manage_texture"), Payload, RequestingSocket);
   if (Lower == TEXT("get_dependencies"))
@@ -3354,6 +3363,309 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateDataTable(
   Resp->SetStringField(TEXT("rowStruct"), RowStruct->GetPathName());
   Resp->SetBoolField(TEXT("saved"), bSaved);
   SendAutomationResponse(Socket, RequestId, true, TEXT("DataTable created"), Resp,
+                         FString());
+  return true;
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor build required"),
+                      TEXT("NOT_SUPPORTED"));
+  return true;
+#endif
+}
+
+#if WITH_EDITOR
+namespace {
+// Resolve the DataTable named by the payload (assetPath / dataTablePath / path /
+// tablePath). Returns the table, or nullptr with OutError set (caller sends the
+// response). Validates that a RowStruct is assigned (row ops are meaningless without).
+UDataTable *McpLoadDataTableArg(const TSharedPtr<FJsonObject> &Payload,
+                                FString &OutError) {
+  FString Path;
+  if (!Payload->TryGetStringField(TEXT("assetPath"), Path) &&
+      !Payload->TryGetStringField(TEXT("dataTablePath"), Path) &&
+      !Payload->TryGetStringField(TEXT("tablePath"), Path) &&
+      !Payload->TryGetStringField(TEXT("path"), Path)) {
+    OutError = TEXT("assetPath (the DataTable) is required");
+    return nullptr;
+  }
+  if (Path.IsEmpty()) {
+    OutError = TEXT("assetPath (the DataTable) is required");
+    return nullptr;
+  }
+  UObject *Obj = UEditorAssetLibrary::LoadAsset(Path);
+  UDataTable *DT = Cast<UDataTable>(Obj);
+  if (!DT) {
+    OutError = FString::Printf(TEXT("DataTable not found: %s"), *Path);
+    return nullptr;
+  }
+  if (!DT->RowStruct) {
+    OutError =
+        FString::Printf(TEXT("DataTable '%s' has no RowStruct"), *Path);
+    return nullptr;
+  }
+  return DT;
+}
+} // namespace
+#endif
+
+bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
+    const FString &RequestId, const FString &SubAction,
+    const TSharedPtr<FJsonObject> &Payload,
+    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+#if WITH_EDITOR
+  const bool bAdd =
+      SubAction == TEXT("add_data_table_row") || SubAction == TEXT("add_row");
+  const bool bEdit = SubAction == TEXT("edit_data_table_row") ||
+                     SubAction == TEXT("edit_row") ||
+                     SubAction == TEXT("update_data_table_row") ||
+                     SubAction == TEXT("update_row");
+  const bool bRemove = SubAction == TEXT("remove_data_table_row") ||
+                       SubAction == TEXT("remove_row") ||
+                       SubAction == TEXT("delete_row");
+  const bool bGet = SubAction == TEXT("get_data_table_rows") ||
+                    SubAction == TEXT("get_rows");
+  const bool bImport = SubAction == TEXT("import_data_table") ||
+                       SubAction == TEXT("import_rows");
+
+  FString Err;
+  UDataTable *DT = McpLoadDataTableArg(Payload, Err);
+  if (!DT) {
+    SendAutomationResponse(Socket, RequestId, false, Err, nullptr,
+                           TEXT("NOT_FOUND"));
+    return true;
+  }
+
+  bool bSave = true;
+  Payload->TryGetBoolField(TEXT("save"), bSave);
+  auto SaveIfRequested = [&](bool &bOutSaved) {
+    bOutSaved = false;
+    if (bSave) {
+      FString SaveErr;
+      bOutSaved = McpSafeOperations::McpDirectPackageSave(DT, &SaveErr);
+    }
+  };
+
+  // ---- get_rows: read-only dump of all rows as JSON ----
+  if (bGet) {
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetBoolField(TEXT("success"), true);
+    Resp->SetStringField(TEXT("assetPath"), DT->GetPathName());
+    Resp->SetStringField(TEXT("rowStruct"), DT->RowStruct->GetPathName());
+    Resp->SetNumberField(TEXT("rowCount"), DT->GetRowMap().Num());
+
+    TArray<TSharedPtr<FJsonValue>> NameVals;
+    for (const FName &RowName : DT->GetRowNames())
+      NameVals.Add(MakeShared<FJsonValueString>(RowName.ToString()));
+    Resp->SetArrayField(TEXT("rowNames"), NameVals);
+
+    const FString RowsJson = DT->GetTableAsJSON();
+    TArray<TSharedPtr<FJsonValue>> RowsArr;
+    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(RowsJson);
+    if (FJsonSerializer::Deserialize(Reader, RowsArr))
+      Resp->SetArrayField(TEXT("rows"), RowsArr);
+    else
+      Resp->SetStringField(TEXT("rowsJson"), RowsJson);
+
+    SendAutomationResponse(Socket, RequestId, true, TEXT("DataTable rows"), Resp,
+                           FString());
+    return true;
+  }
+
+  // ---- import: replace all rows from a CSV or JSON string ----
+  if (bImport) {
+    FString Source;
+    if (!Payload->TryGetStringField(TEXT("sourceText"), Source) &&
+        !Payload->TryGetStringField(TEXT("csv"), Source) &&
+        !Payload->TryGetStringField(TEXT("json"), Source) &&
+        !Payload->TryGetStringField(TEXT("content"), Source)) {
+      SendAutomationResponse(Socket, RequestId, false,
+                             TEXT("sourceText (CSV or JSON) is required"),
+                             nullptr, TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+    FString Format;
+    Payload->TryGetStringField(TEXT("format"), Format);
+    const FString Trimmed = Source.TrimStart();
+    const bool bJson = Format.Equals(TEXT("json"), ESearchCase::IgnoreCase) ||
+                       (Format.IsEmpty() &&
+                        (Trimmed.StartsWith(TEXT("[")) ||
+                         Trimmed.StartsWith(TEXT("{"))));
+
+    TArray<FString> Problems = bJson ? DT->CreateTableFromJSONString(Source)
+                                     : DT->CreateTableFromCSVString(Source);
+    FDataTableEditorUtils::BroadcastPostChange(
+        DT, FDataTableEditorUtils::EDataTableChangeInfo::RowList);
+    DT->MarkPackageDirty();
+    bool bSaved = false;
+    SaveIfRequested(bSaved);
+
+    // CreateTableFrom* returns a list of "problems" that mixes hard parse errors
+    // with benign notes (e.g. "column 'Name' is also the row key"), and it still
+    // imports every well-formed row. So the import is best-effort: report it as a
+    // success that ran, surface the problems as warnings, and let the caller judge
+    // from rowCount + problems. (Don't fail the whole call on a benign note -- same
+    // principle as not failing on a self-healing ensure.)
+    const int32 RowsAfter = DT->GetRowMap().Num();
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetBoolField(TEXT("success"), true);
+    Resp->SetStringField(TEXT("assetPath"), DT->GetPathName());
+    Resp->SetStringField(TEXT("format"), bJson ? TEXT("json") : TEXT("csv"));
+    Resp->SetNumberField(TEXT("rowCount"), RowsAfter);
+    Resp->SetBoolField(TEXT("saved"), bSaved);
+    TArray<TSharedPtr<FJsonValue>> ProblemVals;
+    for (const FString &P : Problems)
+      ProblemVals.Add(MakeShared<FJsonValueString>(P));
+    Resp->SetArrayField(TEXT("problems"), ProblemVals);
+    SendAutomationResponse(
+        Socket, RequestId, true,
+        FString::Printf(TEXT("DataTable imported: %d row(s), %d problem(s)"),
+                        RowsAfter, Problems.Num()),
+        Resp, FString());
+    return true;
+  }
+
+  // add / edit / remove all key on a row name.
+  FString RowName;
+  Payload->TryGetStringField(TEXT("rowName"), RowName);
+  if (RowName.IsEmpty()) {
+    SendAutomationResponse(Socket, RequestId, false, TEXT("rowName is required"),
+                           nullptr, TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+  const FName RowFName(*RowName);
+  const bool bExists = DT->GetRowMap().Contains(RowFName);
+
+  // ---- remove: idempotent delete (already-absent reported as success) ----
+  if (bRemove) {
+    bool bRemoved = false;
+    if (bExists)
+      bRemoved = FDataTableEditorUtils::RemoveRow(DT, RowFName);
+    if (bRemoved) {
+      DT->MarkPackageDirty();
+    }
+    bool bSaved = false;
+    if (bRemoved)
+      SaveIfRequested(bSaved);
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetBoolField(TEXT("success"), true);
+    Resp->SetStringField(TEXT("assetPath"), DT->GetPathName());
+    Resp->SetStringField(TEXT("rowName"), RowName);
+    Resp->SetBoolField(TEXT("removed"), bRemoved);
+    Resp->SetBoolField(TEXT("alreadyAbsent"), !bExists);
+    Resp->SetNumberField(TEXT("rowCount"), DT->GetRowMap().Num());
+    Resp->SetBoolField(TEXT("saved"), bSaved);
+    SendAutomationResponse(Socket, RequestId, true,
+                           bRemoved ? TEXT("Row removed")
+                                    : TEXT("Row already absent"),
+                           Resp, FString());
+    return true;
+  }
+
+  // ---- add / edit: locate (or create) the row, then apply rowData ----
+  // add_row fail-fasts when the row already exists (idempotent retry safety:
+  // a dropped response then a re-send surfaces ROW_ALREADY_EXISTS rather than
+  // silently double-applying). edit_row requires the row to exist.
+  if (bAdd && bExists) {
+    TSharedPtr<FJsonObject> E = McpHandlerUtils::CreateResultObject();
+    E->SetStringField(TEXT("rowName"), RowName);
+    SendAutomationResponse(
+        Socket, RequestId, false,
+        FString::Printf(TEXT("Row '%s' already exists; use edit_row to modify"),
+                        *RowName),
+        E, TEXT("ROW_ALREADY_EXISTS"));
+    return true;
+  }
+  if (bEdit && !bExists) {
+    SendAutomationResponse(
+        Socket, RequestId, false,
+        FString::Printf(TEXT("Row '%s' not found; use add_row to create"),
+                        *RowName),
+        nullptr, TEXT("NOT_FOUND"));
+    return true;
+  }
+
+  uint8 *RowMem = nullptr;
+  if (bAdd) {
+    RowMem = FDataTableEditorUtils::AddRow(DT, RowFName);
+    if (!RowMem) {
+      SendAutomationResponse(Socket, RequestId, false,
+                             TEXT("Failed to add row"), nullptr,
+                             TEXT("OPERATION_FAILED"));
+      return true;
+    }
+  } else {
+    DT->Modify();
+    RowMem = DT->FindRowUnchecked(RowFName);
+    if (!RowMem) {
+      SendAutomationResponse(Socket, RequestId, false,
+                             TEXT("Row exists but its data is missing"),
+                             nullptr, TEXT("OPERATION_FAILED"));
+      return true;
+    }
+  }
+
+  // Resolve rowData, accepting EITHER a nested JSON object OR a JSON-encoded
+  // string (MCP clients commonly stringify freeform-object params).
+  TSharedPtr<FJsonObject> RowDataJson;
+  {
+    const TSharedPtr<FJsonObject> *RowDataObj = nullptr;
+    if (Payload->TryGetObjectField(TEXT("rowData"), RowDataObj) && RowDataObj &&
+        RowDataObj->IsValid()) {
+      RowDataJson = *RowDataObj;
+    } else {
+      FString RowDataStr;
+      if (Payload->TryGetStringField(TEXT("rowData"), RowDataStr) &&
+          !RowDataStr.TrimStartAndEnd().IsEmpty()) {
+        TSharedRef<TJsonReader<>> Reader =
+            TJsonReaderFactory<>::Create(RowDataStr);
+        TSharedPtr<FJsonObject> Parsed;
+        if (FJsonSerializer::Deserialize(Reader, Parsed) && Parsed.IsValid()) {
+          RowDataJson = Parsed;
+        } else {
+          if (bAdd)
+            FDataTableEditorUtils::RemoveRow(DT, RowFName);
+          SendAutomationResponse(
+              Socket, RequestId, false,
+              TEXT("rowData must be a JSON object (or a JSON-object string)"),
+              nullptr, TEXT("INVALID_ARGUMENT"));
+          return true;
+        }
+      }
+    }
+  }
+
+  // Apply the supplied fields. JsonObjectToUStruct writes the fields present in
+  // rowData and leaves the rest at their current value (default for a fresh add,
+  // existing for an edit) -- so edit is a partial merge.
+  if (RowDataJson.IsValid()) {
+    if (!FJsonObjectConverter::JsonObjectToUStruct(RowDataJson.ToSharedRef(),
+                                                   DT->RowStruct, RowMem, 0,
+                                                   0)) {
+      // Keep add atomic: roll back the row we just created so a bad rowData
+      // doesn't leave an orphan empty row behind.
+      if (bAdd)
+        FDataTableEditorUtils::RemoveRow(DT, RowFName);
+      SendAutomationResponse(
+          Socket, RequestId, false,
+          TEXT("rowData could not be applied to the row struct"), nullptr,
+          TEXT("DESERIALIZE_FAILED"));
+      return true;
+    }
+  }
+
+  FDataTableEditorUtils::BroadcastPostChange(
+      DT, FDataTableEditorUtils::EDataTableChangeInfo::RowData);
+  DT->MarkPackageDirty();
+  bool bSaved = false;
+  SaveIfRequested(bSaved);
+
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetStringField(TEXT("assetPath"), DT->GetPathName());
+  Resp->SetStringField(TEXT("rowName"), RowName);
+  Resp->SetNumberField(TEXT("rowCount"), DT->GetRowMap().Num());
+  Resp->SetBoolField(TEXT("saved"), bSaved);
+  SendAutomationResponse(Socket, RequestId, true,
+                         bAdd ? TEXT("Row added") : TEXT("Row updated"), Resp,
                          FString());
   return true;
 #else

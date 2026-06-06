@@ -4236,7 +4236,13 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     McpSafeCompileBlueprint(BP);
     bool bSaved = false;
     if (bSaveAfterCompile) {
-      bSaved = SaveLoadedAssetThrottled(BP);
+      // saveAfterCompile is an explicit caller request, so bypass the time-based
+      // save throttle (bForce=true). Otherwise a recent save of the same asset
+      // would make this return saved:true WITHOUT writing -- leaving structural
+      // edits (e.g. a remove_widget) unpersisted on disk. McpSafeAssetSave forces
+      // the dirty flag itself, so the write always lands.
+      bSaved = SaveLoadedAssetThrottled(BP, /*ThrottleSecondsOverride=*/-1.0,
+                                        /*bForce=*/true);
     }
     TSharedPtr<FJsonObject> Out = McpHandlerUtils::CreateResultObject();
     Out->SetBoolField(TEXT("compiled"), true);

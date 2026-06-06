@@ -29,26 +29,45 @@ Flakiness in shipped surface erodes trust during real authoring.
   to plain HTTP request/response, removed all server push + keepalive, deleted the WebSocket
   transport, and made mutating ops idempotent (fail-fast on name conflict) so a dropped response
   recovers by retry / state re-query. Verified live.
-- 🔴 **Widget-authoring ensures + save persistence** — see Bugs §"remove_widget … stale
-  variable→GUID" and §"add_common_* … handled ensure on a dirty WBP". Strip the stale
-  variable→GUID on `remove_widget`; treat the self-healing `SeenVariableNames` ensure as
-  benign in the post-op error guard; make `compile {save:true}` actually persist structural
-  deletes. Directly affects the in-progress Common UI menu migration.
-- 🟡 **`ReadHttpRequest` busy-poll** — see Bugs §"ReadHttpRequest recv loop busy-polls".
-  Replace the 1 ms sleep-spin with `Socket->Wait(WaitForRead)` + chunked header reads.
+- ✅ **Widget-authoring ensures + save persistence** — RESOLVED 2026-06-06. (a) `remove_widget`
+  now deletes via the engine's canonical `FWidgetBlueprintEditorUtils::DeleteWidgets`
+  (`DeleteSilently`), which strips the widget+children variable→GUID entries (`OnVariableRemoved`)
+  exactly as the UMG designer does — so the `SeenVariableNames` ensure no longer fires at all,
+  rather than firing-and-self-healing. (b) The post-op error guard now recognises a *handled
+  ensure* dump as a block (opens on the `=== Handled ensure ===` marker, closes when normal
+  logging resumes) and downgrades the whole block to a warning — defense-in-depth for any other
+  path (incl. the Common UI ensure below). (c) explicit `saveAfterCompile:true` bypasses the
+  save *time-throttle* so structural deletes always persist. Verified live: create WBP → add
+  button → `remove_widget` → `compile {saveAfterCompile:true}` → `compiled:true, saved:true`,
+  **no** ensure in the log, fresh `.uasset` written. The §"add_common_* … handled ensure on a
+  dirty WBP" bug (below) is now covered by (b) but its own root cause is still open.
+- ✅ **`ReadHttpRequest` busy-poll** — DONE 2026-06-06. Both the header and body read loops now
+  drain the socket in chunks (2KB) and block on `Socket->Wait(ESocketWaitConditions::WaitForRead,
+  slice)` when idle instead of `FPlatformProcess::Sleep(0.001f)` spinning + byte-at-a-time `Recv`.
+  Headers are scanned for the CRLFCRLF terminator with a 3-byte cross-chunk overlap; bytes read
+  past the terminator carry over as the start of the body. Readable-with-no-pending-data is treated
+  as a peer close. Mirrors the existing send-path `Wait(WaitForWrite)` idiom. Verified live: normal
+  calls + a 9 KB multi-chunk-body CSV import (500 rows) round-tripped intact.
 - 🟡 **Synchronous results / streaming** — `system_control run_tests` is fire-and-forget (no
   result capture); `docs/Roadmap.md` Phase 5 ("real-time streaming for logs/test results",
   remote Insights profiling) is unstarted. Add wait/poll-by-request-id (pairs with the
   transport result cache) so automation/test outcomes are retrievable, not just logged.
 
 ### B. Authoring capability gaps — new features that unblock real workflows
-- 🔴 **DataTable row CRUD** — `create_data_table` makes an *empty* table; there is **no**
-  `add_row`/`edit_row`/`remove_row`/`get_rows` and no CSV/JSON import. This **blocks the
-  `set_common_button_input_action` workflow** (Done, below) — it needs a populated
-  `CommonInputActionDataBase` table, which today must be filled by hand. Highest-value new
-  capability. Implement by reflection-populating a `RowStruct` instance via the existing
-  `McpPropertyReflection::ApplyJsonValueToProperty` path, then `UDataTable::AddRow`; add bulk
-  CSV/JSON import.
+- ✅ **DataTable row CRUD** — DONE 2026-06-06. Added 5 `manage_asset` actions:
+  `add_data_table_row`, `edit_data_table_row`, `remove_data_table_row`, `get_data_table_rows`,
+  `import_data_table` (+ short aliases `add_row`/`edit_row`/`remove_row`/`get_rows`/`import_rows`),
+  routed in `HandleAssetAction` → `HandleDataTableRowOp`. Rows are populated by
+  `FJsonObjectConverter::JsonObjectToUStruct` onto the `RowStruct` memory; CRUD goes through the
+  engine's `FDataTableEditorUtils::{AddRow,RemoveRow}` + `BroadcastPostChange`; import uses
+  `UDataTable::CreateTableFrom{CSV,JSON}String` (format auto-detected from the text if `format`
+  omitted). `rowData` accepts a JSON **object OR a JSON-encoded string** (MCP clients stringify
+  freeform objects — verified the string path is what the Claude client actually sends). add
+  fail-fasts `ROW_ALREADY_EXISTS` (idempotent retry); add rolls back its row if `rowData` is
+  bad (atomic); edit is a partial merge; remove is idempotent (`alreadyAbsent`); import is
+  best-effort (success + surfaced `problems`, never fails on a benign note). Verified live end
+  to end against `/Script/Engine.MirrorTableRow`. This unblocks the
+  `set_common_button_input_action` workflow (populating a `CommonInputActionDataBase` table).
 - 🟡 **Enhanced Input authoring depth** — IMC/IA creation + key mapping exist (Input group);
   verify round-trips and fill the sparse trigger/modifier authoring (modifier/trigger
   factories are thin).
@@ -89,7 +108,26 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
-### [ ] `remove_widget` leaves a stale variable→GUID entry → handled ensure on next compile (+ gated save)
+### [x] Shutdown wrote a raw SSE frame to parked tools/call connections (de-stream leftover)
+**RESOLVED 2026-06-06** (found during the `FSSEConnection`→`FPendingConnection` rename). `Shutdown()`'s
+close-all loop still wrote an `event: message\ndata: …` SSE frame to each parked connection — but under
+the pull-only transport those sockets are awaiting a single plain HTTP response, so a shutdown with a
+request in flight sent a malformed reply (no status line/headers). Now sends a proper `503` +
+JSON-RPC-error body via `SendHttpResponse` (mirrors `CompletePendingRequest`). Same pass removed the
+now-dead `SendSSEHeaders` / `WriteSSEEvent` / transport `SendSSEProgressUpdate`, renamed the struct/map
+to pending-connection naming, and corrected the stale SSE/WebSocket comments + `AGENTS.md`.
+
+### [x] `remove_widget` leaves a stale variable→GUID entry → handled ensure on next compile (+ gated save)
+**RESOLVED 2026-06-06.** (a) `remove_widget` now calls `FWidgetBlueprintEditorUtils::DeleteWidgets(WBP, {Widget}, DeleteSilently)`
+— the engine's own designer-delete path — instead of a hand-rolled `WidgetTree->RemoveWidget`. It strips the
+widget+children variable→GUID entries (`OnVariableRemoved`), so the ensure no longer fires at all (verified: clean
+log). (b) `FMcpRequestErrorDevice::Serialize` now tracks a *handled-ensure block* (opens on `=== Handled ensure ===`,
+closes when non-Error logging resumes) and downgrades the whole block to a warning; `bActive` made `std::atomic`
+to keep a lock-free fast path. (c) the compile handler passes `bForce=true` to `SaveLoadedAssetThrottled` for
+explicit `saveAfterCompile:true`, so the write isn't silently swallowed by the time-throttle. Verified live
+(WBP_RemoveTest2): `compiled:true, saved:true`, no ensure, fresh `.uasset` on disk.
+
+Original report:
 Removing a *named* widget (e.g. a `BindWidget`-style member like a `TextBlock` label) deletes it
 from the `WidgetTree` but does NOT remove its entry from the WidgetBlueprint's variable→GUID map.
 The next compile then fires a handled ensure — `WidgetBlueprintCompiler.cpp:828`
@@ -153,7 +191,13 @@ and made mutating ops idempotent (fail-fast on name conflict) so a dropped respo
 retry / re-querying editor state — no result cache needed. Full design: `docs/pull-architecture.md`
 (the old brief `docs/transport-mid-call-drop-problem.md` is marked superseded).
 
-### [ ] `ReadHttpRequest` recv loop busy-polls (1ms sleep-spin, byte-at-a-time headers) instead of a readiness wait
+### [x] `ReadHttpRequest` recv loop busy-polls (1ms sleep-spin, byte-at-a-time headers) instead of a readiness wait
+**RESOLVED 2026-06-06.** Both loops now drain the socket in 2KB chunks and block on
+`Socket->Wait(ESocketWaitConditions::WaitForRead, slice)` when idle (mirroring the send-side
+`Wait(WaitForWrite)`), instead of `Sleep(0.001)` spinning + 1-byte `Recv`. Header scan uses a
+3-byte cross-chunk overlap for the `\r\n\r\n` terminator; over-read bytes carry over as the body
+start; readable-with-no-data ⇒ peer close. 5s deadline kept. Verified live with normal calls and a
+9 KB multi-chunk-body import (500 rows intact). Original report:
 The HTTP receive path in `McpNativeTransport.cpp` (`ReadHttpRequest`, ~L681) reads request
 **headers one byte at a time** — `HasPendingData()` → on empty `Sleep(0.001)` and spin →
 `Recv(&Byte, 1, …)` (~L699-711) — and the **body** loop does the same 1ms-sleep-on-empty spin

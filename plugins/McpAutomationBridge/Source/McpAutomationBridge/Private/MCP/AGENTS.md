@@ -1,11 +1,11 @@
 # Private/MCP
 
-Native plugin MCP implementation. This subtree is separate from the TypeScript stdio server and WebSocket automation bridge; it exposes the plugin directly over Streamable HTTP/SSE at `/mcp`.
+Native plugin MCP implementation. It exposes the plugin directly over a **pull-only** MCP Streamable HTTP transport at `/mcp` — one request → one response, no SSE streaming and no server→client push (the legacy WebSocket automation bridge has been removed). See `docs/pull-architecture.md`.
 
 ## STRUCTURE
 ```
 MCP/
-|-- McpNativeTransport.cpp/.h     # raw socket HTTP/SSE transport and JSON-RPC handling
+|-- McpNativeTransport.cpp/.h     # raw socket HTTP transport (pull-only) and JSON-RPC handling
 |-- McpJsonRpc.cpp/.h             # JSON-RPC response/error helpers
 |-- McpToolRegistry.cpp/.h        # canonical self-describing tool registry
 |-- McpDynamicToolManager.cpp/.h  # runtime enable/disable and protected tools
@@ -17,7 +17,7 @@ MCP/
 ## WHERE TO LOOK
 | Task | File | Notes |
 |------|------|-------|
-| Change HTTP/SSE behavior | `McpNativeTransport.cpp` | `GET /mcp`, `POST /mcp`, `DELETE /mcp`, sessions, SSE writes |
+| Change HTTP behavior | `McpNativeTransport.cpp` | `POST /mcp`, `DELETE /mcp` (GET → 405), sessions, parked-connection completion |
 | Change JSON-RPC shape | `McpJsonRpc.*` | Centralize result/error envelope formatting |
 | Add native tool metadata | `Tools/McpTool_*.cpp` | Subclass `FMcpToolDefinition` and use `MCP_REGISTER_TOOL` |
 | Change schema construction | `McpSchemaBuilder.*` | Keep schema JSON generated through builder helpers |
@@ -25,12 +25,12 @@ MCP/
 | Change canonical list | `McpToolRegistry.cpp` | Only 22 parent tool names are accepted |
 
 ## TRANSPORT CONVENTIONS
-- `GET /mcp` opens a persistent SSE notification stream.
-- `POST /mcp` handles JSON-RPC methods including `initialize`, `tools/list`, and `tools/call`.
+- `GET /mcp` returns 405 Method Not Allowed (pull-only — no notification stream).
+- `POST /mcp` handles JSON-RPC methods including `initialize`, `tools/list`, and `tools/call`. A `tools/call` parks its connection until the GameThread handler finishes, then writes one `application/json` response.
 - `DELETE /mcp` tears down an initialized session.
-- `initialize` creates the session and returns protocol version, `capabilities.tools.listChanged`, server info, and optional instructions.
+- `initialize` creates the session and returns protocol version, `capabilities.tools.listChanged` (false), server info, and optional instructions.
 - Requests after initialization require `Mcp-Session-Id`.
-- Progress uses `notifications/progress`; tool results are MCP `content[]` plus `isError`.
+- No progress streaming (pull-only): `SendProgressUpdate` is a no-op. Tool results are MCP `content[]` plus `isError`.
 
 ## TOOL CONVENTIONS
 - Tools self-register statically with `MCP_REGISTER_TOOL`.

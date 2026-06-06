@@ -19,11 +19,25 @@ static constexpr int32 MaxCapturedRequestMessageChars = 1024;
 
 static bool IsKnownBenignMcpCompilerWarning(const FString& Message)
 {
-    return Message.Contains(TEXT("CooldownGameplayEffectClass"), ESearchCase::IgnoreCase) &&
+    // GAS cooldown effect that grants no tags — cosmetic compiler warning.
+    if (Message.Contains(TEXT("CooldownGameplayEffectClass"), ESearchCase::IgnoreCase) &&
         (Message.Contains(TEXT("no tags"), ESearchCase::IgnoreCase) ||
          Message.Contains(TEXT("grant any tags"), ESearchCase::IgnoreCase) ||
          Message.Contains(TEXT("grants no tag"), ESearchCase::IgnoreCase) ||
-         Message.Contains(TEXT("granting no tag"), ESearchCase::IgnoreCase));
+         Message.Contains(TEXT("granting no tag"), ESearchCase::IgnoreCase)))
+    {
+        return true;
+    }
+    // Self-healing WidgetBlueprint variable->GUID ensure: a stale variable-GUID entry for
+    // a removed widget can trip a handled ensure on the next compile, which the compiler
+    // then prunes itself. The asset is fine — don't surface it as ENGINE_ERROR. (The
+    // remove_widget root fix prevents it; this is defense-in-depth for other paths.)
+    if (Message.Contains(TEXT("SeenVariableNames"), ESearchCase::IgnoreCase) ||
+        Message.Contains(TEXT("was deleted but still has a GUID"), ESearchCase::IgnoreCase))
+    {
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -44,23 +58,59 @@ public:
 
     virtual void Serialize(const TCHAR* V, ELogVerbosity::Type Verbosity, const FName& Category) override
     {
-        // Only capture Error and Warning verbosity
-        if (Verbosity == ELogVerbosity::Error || Verbosity == ELogVerbosity::Warning)
+        if (!Subsystem)
         {
-            if (!Subsystem)
-            {
-                return;
-            }
+            return;
+        }
 
-            // Thread-safe access to shared capture
-            FScopeLock Lock(&Subsystem->ErrorCaptureMutex);
-            auto& Capture = Subsystem->CurrentErrorCapture;
-            if (!Capture.bActive ||
-                Capture.CapturingThreadId != FPlatformTLS::GetCurrentThreadId())
-            {
-                return;
-            }
+        const bool bIsErrorOrWarning =
+            (Verbosity == ELogVerbosity::Error || Verbosity == ELogVerbosity::Warning);
 
+        auto& Capture = Subsystem->CurrentErrorCapture;
+
+        // Lock-free fast path: the editor logs a high volume of non-Error/Warning lines,
+        // almost always with no request capture active -- skip those without touching the
+        // mutex. Error/Warning lines are rare enough to always take the slow path, and a
+        // non-Error line while a capture IS active still needs the lock (to close an open
+        // handled-ensure block). A stale relaxed read only risks skipping a block-close at
+        // the very edges of capture start/stop, which is harmless.
+        if (!bIsErrorOrWarning &&
+            !Capture.bActive.load(std::memory_order_relaxed))
+        {
+            return;
+        }
+
+        // Thread-safe access to shared capture
+        FScopeLock Lock(&Subsystem->ErrorCaptureMutex);
+        if (!Capture.bActive ||
+            Capture.CapturingThreadId != FPlatformTLS::GetCurrentThreadId())
+        {
+            return;
+        }
+
+        // A "Handled ensure" prints a multi-line dump -- a header, the condition, the
+        // message, "Stack:", then ~25 "[Callstack]" frames -- and the engine logs EVERY
+        // line at Error verbosity even though it caught and recovered from the ensure.
+        // None of those lines should fail the tool call: a handled ensure is a soft
+        // assertion, not an operation failure (a real failure surfaces as a handler
+        // returning false or a non-ensure Error). So we track the dump as a block: it
+        // opens on the marker line and closes as soon as a normal (non-Error/Warning)
+        // line is logged, i.e. logging has moved on. Bounding it this way means a genuine
+        // Error logged after the dump is still caught.
+        if (!bIsErrorOrWarning)
+        {
+            // Normal logging resumed -> any handled-ensure dump has ended.
+            Capture.bInHandledEnsureBlock = false;
+            return; // we only record Error/Warning
+        }
+
+        if (Verbosity == ELogVerbosity::Error &&
+            FCString::Strstr(V, TEXT("=== Handled ensure")) != nullptr)
+        {
+            Capture.bInHandledEnsureBlock = true;
+        }
+
+        {
             FString Message = FString::Printf(TEXT("[%s] %s"), *Category.ToString(), V);
             if (Message.Len() > MaxCapturedRequestMessageChars)
             {
@@ -68,7 +118,9 @@ public:
             }
 
             const bool bTreatAsWarning =
-                Verbosity == ELogVerbosity::Warning || IsKnownBenignMcpCompilerWarning(Message);
+                Verbosity == ELogVerbosity::Warning ||
+                Capture.bInHandledEnsureBlock ||
+                IsKnownBenignMcpCompilerWarning(Message);
 
             if (!bTreatAsWarning)
             {
@@ -755,27 +807,22 @@ void UMcpAutomationBridgeSubsystem::SendAutomationError(
 }
 
 /**
- * @brief Send a progress update during long-running operations.
+ * @brief Progress hook for long-running handlers.
  *
- * Sends a progress_update message to the MCP server to extend the request
- * timeout and provide status feedback. This prevents timeout errors when
- * UE is actively working on a task.
- *
- * @param RequestId The request ID being tracked
- * @param Percent Optional progress percent (0-100), use negative to omit
- * @param Message Optional status message describing current operation
- * @param bStillWorking True if operation is still in progress
+ * No-op under the pull-only transport: there is no server->client channel to stream
+ * progress on, and (per the MCP spec) progress notifications would not extend the
+ * client's wall-clock timeout anyway. Kept as a stable entry point so long-running
+ * handlers can report progress without guarding every call site -- if a streaming
+ * channel is ever reintroduced, this is the single place to wire it up.
  */
 void UMcpAutomationBridgeSubsystem::SendProgressUpdate(
     const FString &RequestId, float Percent, const FString &Message, bool bStillWorking,
     ERequestOrigin Origin) {
-  if (Origin == ERequestOrigin::NativeHTTP && NativeTransport)
-  {
-    NativeTransport->SendSSEProgressUpdate(RequestId, Percent, Message);
-    return;
-  }
-  // WebSocket transport removed; native progress handled above (no-op under pull).
+  (void)RequestId;
+  (void)Percent;
+  (void)Message;
   (void)bStillWorking;
+  (void)Origin;
 }
 
 /**
