@@ -329,24 +329,15 @@ void UMcpAutomationBridgeSubsystem::Initialize(
   UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
          TEXT("McpAutomationBridgeSubsystem initializing."));
 
-  // Create and initialize the connection manager
-  ConnectionManager = MakeShared<FMcpConnectionManager>();
-  ConnectionManager->Initialize(GetDefault<UMcpAutomationBridgeSettings>());
-
-  // Bind message received delegate
-  ConnectionManager->SetOnMessageReceived(
-      FMcpMessageReceivedCallback::CreateWeakLambda(
-          this, [this](const FString &RequestId, const FString &Action,
-                       const TSharedPtr<FJsonObject> &Payload,
-                       TSharedPtr<FMcpBridgeWebSocket> Socket) {
-            QueueAutomationRequest(RequestId, Action, Payload, Socket);
-          }));
+  // WebSocket transport disabled — pull-only / native HTTP (see docs/pull-architecture.md).
+  // ConnectionManager is intentionally never created, so its listener, 0.25s heartbeat
+  // ticker, reconnect loop, telemetry, and automation_event push never run. Every
+  // ConnectionManager use is .IsValid()-guarded, so they all cleanly no-op.
+  // (The FMcpConnectionManager class files are now dead and can be deleted in a
+  //  follow-up; FMcpBridgeWebSocket stays as the inert response-handle type.)
 
   // Initialize the handler registry
   InitializeHandlers();
-
-  // Start the connection manager
-  ConnectionManager->Start();
 
   // Native MCP Streamable HTTP transport (opt-in)
   {
