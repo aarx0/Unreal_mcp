@@ -241,10 +241,9 @@ public:
                               TSharedPtr<FMcpBridgeWebSocket> RequestingSocket,
                               ERequestOrigin Origin = ERequestOrigin::WebSocket);
 
-  // Connection Manager
-  TSharedPtr<class FMcpConnectionManager> ConnectionManager;
+  // WebSocket ConnectionManager removed (pull-only / native HTTP).
 
-  /** Native MCP Streamable HTTP transport (opt-in via bEnableNativeMCP setting) */
+  /** Native MCP Streamable HTTP transport */
   TSharedPtr<FMcpNativeTransport> NativeTransport;
 
   // Track a blueprint currently being modified by this subsystem request

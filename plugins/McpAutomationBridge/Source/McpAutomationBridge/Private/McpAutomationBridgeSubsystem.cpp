@@ -124,7 +124,6 @@ private:
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeSettings.h"
 #include "McpBridgeWebSocket.h"
-#include "McpConnectionManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
@@ -329,12 +328,10 @@ void UMcpAutomationBridgeSubsystem::Initialize(
   UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
          TEXT("McpAutomationBridgeSubsystem initializing."));
 
-  // WebSocket transport disabled — pull-only / native HTTP (see docs/pull-architecture.md).
-  // ConnectionManager is intentionally never created, so its listener, 0.25s heartbeat
-  // ticker, reconnect loop, telemetry, and automation_event push never run. Every
-  // ConnectionManager use is .IsValid()-guarded, so they all cleanly no-op.
-  // (The FMcpConnectionManager class files are now dead and can be deleted in a
-  //  follow-up; FMcpBridgeWebSocket stays as the inert response-handle type.)
+  // WebSocket transport removed — pull-only / native HTTP (see docs/pull-architecture.md).
+  // FMcpConnectionManager (listener, heartbeat ticker, reconnect, telemetry, push) is
+  // deleted; FMcpBridgeWebSocket remains only as the inert response-handle type used in
+  // handler signatures (always nullptr on HTTP).
 
   // Initialize the handler registry
   InitializeHandlers();
@@ -409,10 +406,7 @@ void UMcpAutomationBridgeSubsystem::Deinitialize() {
     NativeTransport.Reset();
   }
 
-  if (ConnectionManager.IsValid()) {
-    ConnectionManager->Stop();
-    ConnectionManager.Reset();
-  }
+  // (WebSocket ConnectionManager removed — nothing to stop)
 
   if (LogCaptureDevice.IsValid()) {
     if (GLog)
@@ -439,8 +433,8 @@ void UMcpAutomationBridgeSubsystem::Deinitialize() {
  * sockets, `false` otherwise.
  */
 bool UMcpAutomationBridgeSubsystem::IsBridgeActive() const {
-  return ConnectionManager.IsValid() &&
-         ConnectionManager->GetActiveSocketCount() > 0;
+  // WebSocket transport removed; the native HTTP transport is the live bridge.
+  return NativeTransport.IsValid() && NativeTransport->IsRunning();
 }
 
 /**
@@ -454,13 +448,9 @@ bool UMcpAutomationBridgeSubsystem::IsBridgeActive() const {
  */
 EMcpAutomationBridgeState
 UMcpAutomationBridgeSubsystem::GetBridgeState() const {
-  if (ConnectionManager.IsValid()) {
-    if (ConnectionManager->GetActiveSocketCount() > 0) {
-      return EMcpAutomationBridgeState::Connected;
-    }
-    if (ConnectionManager->IsReconnectPending()) {
-      return EMcpAutomationBridgeState::Connecting;
-    }
+  // WebSocket transport removed; reflect the native HTTP transport instead.
+  if (NativeTransport.IsValid() && NativeTransport->IsRunning()) {
+    return EMcpAutomationBridgeState::Connected;
   }
   return EMcpAutomationBridgeState::Disconnected;
 }
@@ -565,9 +555,8 @@ TArray<FString> UMcpAutomationBridgeSubsystem::GetCapturedErrorMessages() const
  * `false` otherwise.
  */
 bool UMcpAutomationBridgeSubsystem::SendRawMessage(const FString &Message) {
-  if (ConnectionManager.IsValid()) {
-    return ConnectionManager->SendRawMessage(Message);
-  }
+  // WebSocket transport removed.
+  (void)Message;
   return false;
 }
 
@@ -735,10 +724,8 @@ void UMcpAutomationBridgeSubsystem::SendAutomationResponse(
     }
     return;
   }
-  if (ConnectionManager.IsValid()) {
-    ConnectionManager->SendAutomationResponse(TargetSocket, RequestId, bEffectiveSuccess,
-                                              EffectiveMessage, EffectiveResult, EffectiveErrorCode);
-  }
+  // WebSocket transport removed; native HTTP responses were sent above via
+  // CompletePendingRequest.
 }
 
 /**
@@ -787,9 +774,8 @@ void UMcpAutomationBridgeSubsystem::SendProgressUpdate(
     NativeTransport->SendSSEProgressUpdate(RequestId, Percent, Message);
     return;
   }
-  if (ConnectionManager.IsValid()) {
-    ConnectionManager->SendProgressUpdate(RequestId, Percent, Message, bStillWorking);
-  }
+  // WebSocket transport removed; native progress handled above (no-op under pull).
+  (void)bStillWorking;
 }
 
 /**
@@ -807,10 +793,8 @@ void UMcpAutomationBridgeSubsystem::SendProgressUpdate(
 void UMcpAutomationBridgeSubsystem::RecordAutomationTelemetry(
     const FString &RequestId, const bool bSuccess, const FString &Message,
     const FString &ErrorCode) {
-  if (ConnectionManager.IsValid()) {
-    ConnectionManager->RecordAutomationTelemetry(RequestId, bSuccess, Message,
-                                                 ErrorCode);
-  }
+  // WebSocket transport removed; telemetry was WS-only.
+  (void)RequestId; (void)bSuccess; (void)Message; (void)ErrorCode;
 }
 
 /**

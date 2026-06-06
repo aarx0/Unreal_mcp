@@ -4,7 +4,6 @@
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
-#include "McpConnectionManager.h"
 #include "Misc/ScopeExit.h"
 #include "Misc/ScopeLock.h"
 
@@ -32,9 +31,7 @@ void UMcpAutomationBridgeSubsystem::ProcessAutomationRequest(
          TEXT("ProcessAutomationRequest invoked (thread=%s) RequestId=%s "
               "action=%s activeSockets=%d"),
          IsInGameThread() ? TEXT("GameThread") : TEXT("SocketThread"),
-         *RequestId, *Action,
-         ConnectionManager.IsValid() ? ConnectionManager->GetActiveSocketCount()
-                                     : 0);
+         *RequestId, *Action, 0);
   if (!IsInGameThread()) {
     QueueAutomationRequest(RequestId, Action, Payload, RequestingSocket, Origin);
     return;
@@ -61,9 +58,7 @@ void UMcpAutomationBridgeSubsystem::ProcessAutomationRequest(
 
   const FString LowerAction = Action.ToLower();
 
-  if (ConnectionManager.IsValid()) {
-    ConnectionManager->StartRequestTelemetry(RequestId, Action);
-  }
+  // (WebSocket request telemetry removed — pull-only / HTTP)
 
   // Reentrancy guard / enqueue
   if (bProcessingAutomationRequest) {
@@ -161,10 +156,7 @@ void UMcpAutomationBridgeSubsystem::ProcessAutomationRequest(
 
       // Map this requestId to the requesting socket so responses can be
       // delivered reliably
-      if (!RequestId.IsEmpty() && RequestingSocket.IsValid() &&
-          ConnectionManager.IsValid()) {
-        ConnectionManager->RegisterRequestSocket(RequestId, RequestingSocket);
-      }
+      // (WebSocket socket-registration removed — pull-only / HTTP)
 
       // ---------------------------------------------------------
       // Check Handler Registry (O(1) dispatch)

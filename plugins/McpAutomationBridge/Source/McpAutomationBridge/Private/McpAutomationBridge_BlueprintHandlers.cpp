@@ -94,7 +94,6 @@
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridge_BlueprintCreationHandlers.h"
 #include "McpAutomationBridge_SCSHandlers.h"
-#include "McpConnectionManager.h"
 #include "Misc/DateTime.h"
 #include "Misc/ScopeExit.h"
 
@@ -2117,9 +2116,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     Notify->SetStringField(TEXT("event"), TEXT("modify_scs_completed"));
     Notify->SetStringField(TEXT("requestId"), RequestId);
     Notify->SetObjectField(TEXT("result"), CompletionResult);
-    if (ConnectionManager.IsValid()) {
-      ConnectionManager->SendControlMessage(Notify);
-    }
+    // (WebSocket automation_event push removed — pull-only / HTTP)
 
     // Final automation_response uses actual success state
     TSharedPtr<FJsonObject> ResultPayload = McpHandlerUtils::CreateResultObject();
@@ -2488,9 +2485,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
                            TEXT("set_variable_metadata_completed"));
     Notify->SetStringField(TEXT("requestId"), RequestId);
     Notify->SetObjectField(TEXT("result"), Resp);
-    if (ConnectionManager.IsValid()) {
-      ConnectionManager->SendControlMessage(Notify);
-    }
+    // (WebSocket automation_event push removed — pull-only / HTTP)
     return true;
 #else
     SendAutomationResponse(
@@ -3530,9 +3525,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     Notify->SetStringField(TEXT("event"), TEXT("add_event_completed"));
     Notify->SetStringField(TEXT("requestId"), RequestId);
     Notify->SetObjectField(TEXT("result"), Resp);
-    if (ConnectionManager.IsValid()) {
-      ConnectionManager->SendControlMessage(Notify);
-    }
+    // (WebSocket automation_event push removed — pull-only / HTTP)
     return true;
 #else
     SendAutomationResponse(
@@ -3633,9 +3626,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
       Notify->SetStringField(TEXT("event"), TEXT("remove_event_completed"));
       Notify->SetStringField(TEXT("requestId"), RequestId);
       Notify->SetObjectField(TEXT("result"), Resp);
-      if (ConnectionManager.IsValid()) {
-        ConnectionManager->SendControlMessage(Notify);
-      }
+      // (WebSocket automation_event push removed — pull-only / HTTP)
       return true;
     }
 
@@ -3685,9 +3676,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     Notify->SetStringField(TEXT("event"), TEXT("remove_event_completed"));
     Notify->SetStringField(TEXT("requestId"), RequestId);
     Notify->SetObjectField(TEXT("result"), Resp);
-    if (ConnectionManager.IsValid()) {
-      ConnectionManager->SendControlMessage(Notify);
-    }
+    // (WebSocket automation_event push removed — pull-only / HTTP)
     UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
            TEXT("HandleBlueprintAction: event '%s' removed from '%s'"),
            *EventName, *RegistryPath);
@@ -3981,9 +3970,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     Notify->SetStringField(TEXT("event"), TEXT("add_function_completed"));
     Notify->SetStringField(TEXT("requestId"), RequestId);
     Notify->SetObjectField(TEXT("result"), Resp);
-    if (ConnectionManager.IsValid()) {
-      ConnectionManager->SendControlMessage(Notify);
-    }
+    // (WebSocket automation_event push removed — pull-only / HTTP)
     return true;
 #else
     SendAutomationResponse(
@@ -4871,9 +4858,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     Notify->SetStringField(TEXT("event"), TEXT("add_node_completed"));
     Notify->SetStringField(TEXT("requestId"), RequestId);
     Notify->SetObjectField(TEXT("result"), Result);
-    if (ConnectionManager.IsValid()) {
-      ConnectionManager->SendControlMessage(Notify);
-    }
+    // (WebSocket automation_event push removed — pull-only / HTTP)
     UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
            TEXT("HandleBlueprintAction: blueprint_add_node completed Path=%s "
                 "nodeGuid=%s"),
