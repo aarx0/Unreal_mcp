@@ -152,7 +152,9 @@
 // -----------------------------------------------------------------------------
 #include "Exporters/Exporter.h"
 #include "Misc/OutputDevice.h"
-#include "UnrealClient.h" // For FScreenshotRequest
+#include "UnrealClient.h" // For FViewport::ReadPixels
+#include "ImageUtils.h" // For FImageUtils::PNGCompressImageArray / ImageResize (sync screenshot)
+#include "Misc/FileHelper.h" // For FFileHelper::SaveArrayToFile
 #include "Editor/EditorPerformanceSettings.h" // For background-throttle override (headless screenshots)
 
 #endif // WITH_EDITOR
@@ -3370,35 +3372,85 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorScreenshot(
     return true;
   }
 
-  // Keep the editor rendering even when it is NOT the foreground window. The
-  // editor throttles background-window rendering ("Use Less CPU in Background"),
-  // and with that on an MCP-driven screenshot request never gets a rendered
-  // frame (so the file is never written) while the editor sits behind the
-  // client. Clearing it for the session lets headless captures complete. We set
-  // the live value only (no PostEditChange/save) so we don't rewrite the user's
-  // saved editor preferences.
+  // Keep the editor rendering even when it is NOT the foreground window. The editor
+  // throttles background-window rendering ("Use Less CPU in Background"); with that on,
+  // the forced Draw() below would not produce a frame while the editor sits behind the
+  // client. We set the live value only (no PostEditChange/save) so we don't rewrite the
+  // user's saved editor preferences.
   if (UEditorPerformanceSettings* PerfSettings = GetMutableDefault<UEditorPerformanceSettings>()) {
     PerfSettings->bThrottleCPUWhenNotForeground = false;
   }
 
-  // Request a screenshot — async, captured on the next rendered viewport frame.
-  // The file will NOT exist immediately; it is written once the viewport draws
-  // (now guaranteed even when backgrounded, per the throttle override above).
-  FScreenshotRequest::RequestScreenshot(FullPath, false, false);
+  // Optional downscale cap so the PNG stays legible but not huge (0/absent = native).
+  int32 MaxWidth = 0;
+  Payload->TryGetNumberField(TEXT("maxWidth"), MaxWidth);
+
+  // Synchronous capture: force a fresh draw, then read the pixels back. ReadPixels
+  // flushes the render commands, so the bitmap is valid the moment it returns -- unlike
+  // FScreenshotRequest, which only writes its file at end-of-frame (useless here, since
+  // this handler is blocking the GameThread and that frame can't complete until we
+  // return). This guarantees the file exists when we answer, so a caller can read it
+  // immediately to evaluate the result.
+  Viewport->Draw();
+  const FIntPoint ViewportSize = Viewport->GetSizeXY();
+  if (ViewportSize.X <= 0 || ViewportSize.Y <= 0) {
+    SendStandardErrorResponse(this, Socket, RequestId, TEXT("VIEWPORT_NOT_AVAILABLE"),
+                              TEXT("Viewport has zero size"), nullptr);
+    return true;
+  }
+
+  TArray<FColor> Bitmap;
+  FReadSurfaceDataFlags ReadFlags(RCM_UNorm, CubeFace_MAX);
+  if (!Viewport->ReadPixels(Bitmap, ReadFlags,
+          FIntRect(0, 0, ViewportSize.X, ViewportSize.Y)) ||
+      Bitmap.Num() < ViewportSize.X * ViewportSize.Y) {
+    SendStandardErrorResponse(this, Socket, RequestId, TEXT("CAPTURE_FAILED"),
+                              TEXT("Failed to read viewport pixels"), nullptr);
+    return true;
+  }
+
+  // Force opaque so a 0 alpha channel doesn't render the PNG transparent.
+  for (FColor& Pixel : Bitmap) {
+    Pixel.A = 255;
+  }
+
+  int32 OutWidth = ViewportSize.X;
+  int32 OutHeight = ViewportSize.Y;
+  const TArray<FColor>* Pixels = &Bitmap;
+  TArray<FColor> Resized;
+  if (MaxWidth > 0 && ViewportSize.X > MaxWidth) {
+    OutWidth = MaxWidth;
+    OutHeight = FMath::Max(1, FMath::RoundToInt(
+        ViewportSize.Y * static_cast<float>(MaxWidth) / ViewportSize.X));
+    FImageUtils::ImageResize(ViewportSize.X, ViewportSize.Y, Bitmap, OutWidth, OutHeight,
+                             Resized, /*bResizeSRGBinLinearSpace=*/false,
+                             /*bForceOpaqueOutput=*/true);
+    Pixels = &Resized;
+  }
+
+  TArray64<uint8> PngData;
+  FImageUtils::PNGCompressImageArray(
+      OutWidth, OutHeight,
+      TArrayView64<const FColor>(Pixels->GetData(), Pixels->Num()), PngData);
+
+  if (PngData.Num() == 0 || !FFileHelper::SaveArrayToFile(PngData, *FullPath)) {
+    SendStandardErrorResponse(this, Socket, RequestId, TEXT("CAPTURE_FAILED"),
+                              TEXT("Failed to encode/write screenshot PNG"), nullptr);
+    return true;
+  }
 
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetBoolField(TEXT("success"), true);
   Resp->SetStringField(TEXT("filename"), Filename);
-  Resp->SetStringField(TEXT("path"), FullPath);
-  Resp->SetBoolField(TEXT("async"), true);
+  Resp->SetStringField(TEXT("path"), FPaths::ConvertRelativePathToFull(FullPath));
+  Resp->SetNumberField(TEXT("width"), OutWidth);
+  Resp->SetNumberField(TEXT("height"), OutHeight);
+  Resp->SetNumberField(TEXT("bytes"), static_cast<double>(PngData.Num()));
   Resp->SetStringField(TEXT("message"),
-      TEXT("Screenshot queued. File will be written on the next rendered frame "
-           "(typically within 100-200ms). Poll the file path to confirm availability. "
-           "The editor window must be visible for capture to complete."));
-  Resp->SetStringField(TEXT("expectedDelay"), TEXT("200ms"));
+      TEXT("Screenshot captured synchronously; the PNG is written and ready to read."));
 
   SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Screenshot queued"), Resp, FString());
+                         TEXT("Screenshot captured"), Resp, FString());
   return true;
 #else
   SendStandardErrorResponse(this, Socket, RequestId, TEXT("NOT_IMPLEMENTED"),

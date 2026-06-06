@@ -86,7 +86,18 @@ Flakiness in shipped surface erodes trust during real authoring.
 The bridge already enters/exits PIE (`control_editor play`/`stop`/`eject` via
 `RequestPlaySession`/`RequestEndPlayMap`), frame-steps (`single_frame_step`,
 `set_fixed_delta_time`), injects `simulate_input`, and reads live state (`inspect
-runtime_report`/`pie_report`/`find_by_class`). Remaining gaps:
+runtime_report`/`pie_report`/`find_by_class`).
+- ✅ **Visual verify (synchronous screenshot)** — DONE 2026-06-06. `control_editor screenshot`
+  now captures the active viewport synchronously (`FViewport::Draw` + `ReadPixels` →
+  `FImageUtils::PNGCompressImageArray` → file) so the PNG is fully written to the returned
+  absolute `path` *before* the call returns — an agent can read it back immediately to evaluate
+  the result (replaces the old fire-and-forget `FScreenshotRequest`, which only wrote at
+  end-of-frame and couldn't be awaited from a GameThread handler). Optional `maxWidth` downscales
+  (caps only). Caveat: needs a laid-out viewport — a **minimized** editor window has a zero-size
+  viewport and returns `VIEWPORT_NOT_AVAILABLE`. Future: an offscreen render-target path would
+  make capture fully window-independent (truly headless).
+
+Remaining gaps:
 - 🟡 **Input-injection fidelity** — `simulate_input` routes through `FSlateApplication` key/
   mouse events: right for **menu/UI** testing (works today), but may not exercise **Enhanced
   Input gameplay** mappings (movement/abilities). Verify; if needed, add player-input /

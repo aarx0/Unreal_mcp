@@ -62,10 +62,10 @@ public:
 				TEXT("undo"),
 				TEXT("redo"),
 				TEXT("save_all")
-			}, TEXT("Editor action. Note: screenshot/take_screenshot is async "
-				"\u2014 the file is written on the next rendered viewport frame, "
-				"not immediately. The editor window must be visible and actively "
-				"rendering for capture to complete."))
+			}, TEXT("Editor action. screenshot/take_screenshot captures the active "
+				"viewport synchronously; the PNG is written to the returned "
+				"absolute 'path' before the call returns, so it can be read back "
+				"immediately to evaluate the result."))
 			.Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 				[](FMcpSchemaBuilder& S) {
 				S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
@@ -77,7 +77,8 @@ public:
 			.String(TEXT("viewMode"), TEXT(""))
 			.Bool(TEXT("enabled"), TEXT("Whether the item/feature is enabled."))
 			.Number(TEXT("speed"), TEXT(""))
-			.String(TEXT("filename"), TEXT(""))
+			.String(TEXT("filename"), TEXT("screenshot: output PNG name (saved under Saved/Screenshots; defaults to a timestamp)."))
+				.Integer(TEXT("maxWidth"), TEXT("screenshot: downscale the capture to at most this width in px (0/omit = native viewport size)."))
 			.Number(TEXT("fov"), TEXT(""))
 			.Number(TEXT("width"), TEXT(""))
 			.Number(TEXT("height"), TEXT(""))
