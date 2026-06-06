@@ -106,7 +106,6 @@ bool FMcpNativeTransport::Start(int32 Port, const FString& PluginDir, bool bLoad
 			TEXT("Tool registry: %d self-describing tools registered"), Registry.GetToolCount());
 		ToolManager.Initialize(Registry, bLoadAllTools);
 	}
-	ToolManager.OnToolsChanged.BindRaw(this, &FMcpNativeTransport::OnToolsListChanged);
 
 	// Create stop event and launch accept thread
 	StopEvent = FPlatformProcess::GetSynchEventFromPool(true);
@@ -240,19 +239,6 @@ void FMcpNativeTransport::Shutdown()
 			}
 		}
 		SSEConnections.Empty();
-	}
-
-	// Close all persistent notification streams
-	{
-		FScopeLock Lock(&NotificationStreamsMutex);
-		for (auto& [StreamId, Stream] : NotificationStreams)
-		{
-			if (Stream.IsValid())
-			{
-				CloseNotificationStream(Stream);
-			}
-		}
-		NotificationStreams.Empty();
 	}
 
 	{
@@ -515,29 +501,6 @@ void FMcpNativeTransport::HandleConnection(FSocket* ClientSocket)
 				}
 			}
 
-			// Close notification streams belonging to this session
-			TArray<FString> StreamsToClose;
-			{
-				FScopeLock Lock(&NotificationStreamsMutex);
-				for (const auto& [StreamId, Stream] : NotificationStreams)
-				{
-					if (Stream.IsValid() && Stream->SessionId == HttpReq.SessionId)
-					{
-						StreamsToClose.Add(StreamId);
-					}
-				}
-			}
-			for (const FString& StreamId : StreamsToClose)
-			{
-				TSharedPtr<FNotificationStream> Stream;
-				{
-					FScopeLock Lock(&NotificationStreamsMutex);
-					NotificationStreams.RemoveAndCopyValue(StreamId, Stream);
-				}
-				CloseNotificationStream(Stream);
-				UE_LOG(LogMcpNativeTransport, Log,
-					TEXT("Closed notification stream %s (session terminated)"), *StreamId);
-			}
 		}
 		SendHttpResponse(ClientSocket, 200, TEXT("text/plain"), FString(), {}, HttpReq.Origin);
 		ClientSocket->Close();
@@ -545,29 +508,15 @@ void FMcpNativeTransport::HandleConnection(FSocket* ClientSocket)
 		return;
 	}
 
-	// ── GET /mcp — persistent SSE notification stream ──
+	// ── GET /mcp — pull-only: no server→client notification stream (405, spec-allowed) ──
 	if (HttpReq.Method == TEXT("GET"))
 	{
-		if (!HttpReq.Accept.Contains(TEXT("text/event-stream")))
-		{
-			SendHttpResponse(ClientSocket, 406, TEXT("text/plain"),
-				TEXT("Not Acceptable: requires Accept: text/event-stream"), {}, HttpReq.Origin);
-			ClientSocket->Close();
-			SocketSub->DestroySocket(ClientSocket);
-			return;
-		}
-		FString SessionError;
-		ESessionValidationResult SessionStatus = ValidateSession(HttpReq.SessionId, SessionError);
-		if (SessionStatus != ESessionValidationResult::Valid)
-		{
-			SendHttpResponse(ClientSocket, GetSessionValidationStatusCode(SessionStatus),
-				TEXT("text/plain"), SessionError, {}, HttpReq.Origin);
-			ClientSocket->Close();
-			SocketSub->DestroySocket(ClientSocket);
-			return;
-		}
-		HandleGetMcp(ClientSocket, HttpReq.SessionId, HttpReq.Origin);
-		return;  // Socket parked — no close here
+		SendHttpResponse(ClientSocket, 405, TEXT("text/plain"),
+			TEXT("Method Not Allowed: this server does not offer an SSE notification stream"),
+			{}, HttpReq.Origin);
+		ClientSocket->Close();
+		SocketSub->DestroySocket(ClientSocket);
+		return;
 	}
 
 	// ── POST /mcp — JSON-RPC ──
@@ -1077,108 +1026,8 @@ bool FMcpNativeTransport::WriteSSEEvent(FSSEConnection& Conn, const FString& Eve
 
 // ─── Persistent Notification Streams (GET /mcp) ────────────────────────────
 
-void FMcpNativeTransport::HandleGetMcp(FSocket* ClientSocket, const FString& SessionId,
-	const FString& CorsOrigin)
-{
-	ISocketSubsystem* SocketSub = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
-
-	// Check per-session stream limit
-	{
-		FScopeLock Lock(&NotificationStreamsMutex);
-		int32 Count = 0;
-		for (const auto& [Id, Stream] : NotificationStreams)
-		{
-			if (Stream.IsValid() && Stream->SessionId == SessionId
-				&& !Stream->bMarkedForRemoval.load())
-			{
-				++Count;
-			}
-		}
-		if (Count >= MaxNotificationStreamsPerSession)
-		{
-			Lock.Unlock();
-			SendHttpResponse(ClientSocket, 429, TEXT("text/plain"),
-				FString::Printf(TEXT("Too Many Requests: max %d notification streams per session"),
-					MaxNotificationStreamsPerSession), {}, CorsOrigin);
-			ClientSocket->Close();
-			SocketSub->DestroySocket(ClientSocket);
-			return;
-		}
-	}
-
-	// Send SSE headers
-	if (!SendSSEHeaders(ClientSocket, SessionId, CorsOrigin))
-	{
-		ClientSocket->Close();
-		SocketSub->DestroySocket(ClientSocket);
-		return;
-	}
-
-	// Park socket as notification stream
-	const double Now = FPlatformTime::Seconds();
-	TSharedPtr<FNotificationStream> Stream = MakeShared<FNotificationStream>();
-	Stream->Socket = ClientSocket;
-	Stream->SessionId = SessionId;
-	Stream->StreamId = FGuid::NewGuid().ToString();
-	Stream->StartTime = Now;
-	Stream->LastKeepaliveTime = Now;
-
-	{
-		FScopeLock Lock(&NotificationStreamsMutex);
-		NotificationStreams.Add(Stream->StreamId, Stream);
-	}
-	TouchSession(SessionId);
-
-	UE_LOG(LogMcpNativeTransport, Log,
-		TEXT("GET /mcp: notification stream %s opened for session %s"),
-		*Stream->StreamId, *SessionId);
-	// Socket is parked — do NOT close it. Thread pool slot is released.
-}
-
-bool FMcpNativeTransport::WriteNotificationEvent(FNotificationStream& Stream, const FString& EventData)
-{
-	FString Frame = FString::Printf(TEXT("event: message\ndata: %s\n\n"), *EventData);
-	FTCHARToUTF8 Utf8(*Frame);
-
-	FScopeLock Lock(&Stream.WriteMutex);
-	if (!Stream.Socket)
-	{
-		return false;
-	}
-	return SendAllBytes(Stream.Socket, reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
-}
-
-bool FMcpNativeTransport::WriteNotificationKeepalive(FNotificationStream& Stream)
-{
-	static const char* KeepaliveFrame = ":keepalive\n\n";
-	static const int32 KeepaliveLen = FCStringAnsi::Strlen(KeepaliveFrame);
-
-	FScopeLock Lock(&Stream.WriteMutex);
-	if (!Stream.Socket)
-	{
-		return false;
-	}
-	return SendAllBytes(Stream.Socket, reinterpret_cast<const uint8*>(KeepaliveFrame), KeepaliveLen);
-}
-
-void FMcpNativeTransport::CloseNotificationStream(TSharedPtr<FNotificationStream> Stream)
-{
-	if (!Stream.IsValid())
-	{
-		return;
-	}
-	ISocketSubsystem* SocketSub = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
-	FScopeLock Lock(&Stream->WriteMutex);
-	if (Stream->Socket)
-	{
-		Stream->Socket->Close();
-		if (SocketSub)
-		{
-			SocketSub->DestroySocket(Stream->Socket);
-		}
-		Stream->Socket = nullptr;
-	}
-}
+// HandleGetMcp / WriteNotificationEvent / WriteNotificationKeepalive / CloseNotificationStream
+// removed — pull-only transport offers no GET /mcp notification stream (see docs/pull-architecture.md).
 
 // ─── Initialize ─────────────────────────────────────────────────────────────
 
@@ -1212,7 +1061,7 @@ FString FMcpNativeTransport::HandleInitialize(
 
 	auto Capabilities = MakeShared<FJsonObject>();
 	auto ToolsCap = MakeShared<FJsonObject>();
-	ToolsCap->SetBoolField(TEXT("listChanged"), true);
+	ToolsCap->SetBoolField(TEXT("listChanged"), false);  // pull-only: no server->client push
 	Capabilities->SetObjectField(TEXT("tools"), ToolsCap);
 	Result->SetObjectField(TEXT("capabilities"), Capabilities);
 
@@ -1354,17 +1203,9 @@ void FMcpNativeTransport::HandleToolsCall(
 		return;
 	}
 
-	// Send SSE headers — begins the streaming response
-	if (!SendSSEHeaders(ClientSocket, SessionId, CorsOrigin))
-	{
-		UE_LOG(LogMcpNativeTransport, Warning,
-			TEXT("Failed to send SSE headers for tool %s"), *ToolName);
-		ClientSocket->Close();
-		if (SocketSub) SocketSub->DestroySocket(ClientSocket);
-		return;
-	}
-
-	// Generate request ID and park the connection
+	// Pull-only: send nothing upfront. Park the connection and answer with a single
+	// plain HTTP/JSON response once the GameThread handler completes (see
+	// docs/pull-architecture.md). The socket is held until then.
 	const FString RequestId = FGuid::NewGuid().ToString();
 
 	{
@@ -1375,6 +1216,7 @@ void FMcpNativeTransport::HandleToolsCall(
 		Conn->StartTime = FPlatformTime::Seconds();
 		Conn->ToolName = ToolName;
 		Conn->SessionId = SessionId;
+		Conn->CorsOrigin = CorsOrigin;
 		SSEConnections.Add(RequestId, Conn);
 	}
 
@@ -1483,12 +1325,9 @@ bool FMcpNativeTransport::CompletePendingRequest(
 				return;  // Already cleaned up by Shutdown
 			}
 
-			// Inline SSE write — we already hold WriteMutex
-			FString Frame = FString::Printf(
-				TEXT("event: message\ndata: %s\n\n"), *ResponseBody);
-			FTCHARToUTF8 Utf8(*Frame);
-			bWroteResponse = SendAllBytes(Conn->Socket,
-				reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
+			// Pull-only: write a single plain HTTP/JSON response (no SSE framing).
+			bWroteResponse = SendHttpResponse(Conn->Socket, 200,
+				TEXT("application/json"), ResponseBody, {}, Conn->CorsOrigin);
 
 			Conn->Socket->Close();
 			ISocketSubsystem* SocketSub = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
@@ -1521,68 +1360,11 @@ bool FMcpNativeTransport::HasPendingRequest(const FString& RequestId) const
 }
 
 void FMcpNativeTransport::SendSSEProgressUpdate(
-	const FString& RequestId, float Percent, const FString& Message)
+	const FString& /*RequestId*/, float /*Percent*/, const FString& /*Message*/)
 {
-	TSharedPtr<FSSEConnection> Conn;
-	FString CapturedSessionId;
-	{
-		FScopeLock Lock(&SSEConnectionsMutex);
-		TSharedPtr<FSSEConnection>* Found = SSEConnections.Find(RequestId);
-		if (!Found || !Found->IsValid() || !(*Found)->Socket
-			|| (*Found)->bMarkedForRemoval.load())
-		{
-			return;
-		}
-		Conn = *Found;
-		CapturedSessionId = Conn->SessionId;
-	}
-
-	// Build progress JSON before offloading (cheap, no I/O)
-	FString ProgressJson = FMcpJsonRpc::BuildProgressNotification(
-		RequestId, Percent, 100.0f, Message);
-
-	FString CapturedRequestId = RequestId;
-	PendingAsyncWrites.fetch_add(1);
-
-	Async(EAsyncExecution::ThreadPool,
-		[this, Conn, ProgressJson = MoveTemp(ProgressJson), CapturedRequestId,
-		 CapturedSessionId]()
-	{
-		// Guard: if transport is shutting down, bail out
-		if (bStopping.load())
-		{
-			PendingAsyncWrites.fetch_sub(1);
-			return;
-		}
-
-		if (WriteSSEEvent(*Conn, ProgressJson))
-		{
-			// Reset SSE request timeout
-			{
-				FScopeLock Lock(&SSEConnectionsMutex);
-				Conn->StartTime = FPlatformTime::Seconds();
-			}
-			// Touch session so long-running tool calls don't expire the session
-			if (!CapturedSessionId.IsEmpty())
-			{
-				FScopeLock Lock(&SessionMutex);
-				double* LastActivity = ActiveSessions.Find(CapturedSessionId);
-				if (LastActivity)
-				{
-					*LastActivity = FPlatformTime::Seconds();
-				}
-			}
-		}
-		else
-		{
-			UE_LOG(LogMcpNativeTransport, Warning,
-				TEXT("SSE write failed for request %s — marking for removal"),
-				*CapturedRequestId);
-			Conn->bMarkedForRemoval.store(true);
-		}
-
-		PendingAsyncWrites.fetch_sub(1);
-	});
+	// Pull-only: no progress frames. The parked tools/call connection is answered with a
+	// single plain HTTP/JSON response at completion; writing an intermediate SSE frame
+	// here would corrupt that response. Kept as a no-op so callers need not change.
 }
 
 void FMcpNativeTransport::CleanupStaleRequests()
@@ -1632,86 +1414,7 @@ void FMcpNativeTransport::CleanupStaleRequests()
 		}
 	}
 
-	// Clean up notification streams: expired, orphaned sessions, keepalive
-	{
-		// 1. Snapshot stream IDs + session IDs under lock
-		TArray<TPair<FString, FString>> StreamSessions;  // StreamId, SessionId
-		TArray<FString> MarkedForRemoval;
-		{
-			FScopeLock Lock(&NotificationStreamsMutex);
-			for (const auto& [StreamId, Stream] : NotificationStreams)
-			{
-				if (!Stream.IsValid())
-				{
-					continue;
-				}
-				if (Stream->bMarkedForRemoval.load()
-					|| Now - Stream->StartTime > NotificationStreamTimeoutSeconds)
-				{
-					MarkedForRemoval.Add(StreamId);
-				}
-				else
-				{
-					StreamSessions.Emplace(StreamId, Stream->SessionId);
-				}
-			}
-		}
-
-		// 2. Check session validity (separate lock — no nesting)
-		{
-			FScopeLock Lock(&SessionMutex);
-			for (const auto& [StreamId, SessionId] : StreamSessions)
-			{
-				if (!ActiveSessions.Contains(SessionId))
-				{
-					MarkedForRemoval.Add(StreamId);
-				}
-			}
-		}
-
-		// 3. Remove dead streams
-		for (const FString& StreamId : MarkedForRemoval)
-		{
-			TSharedPtr<FNotificationStream> Stream;
-			{
-				FScopeLock Lock(&NotificationStreamsMutex);
-				NotificationStreams.RemoveAndCopyValue(StreamId, Stream);
-			}
-			if (Stream.IsValid())
-			{
-				CloseNotificationStream(Stream);
-				UE_LOG(LogMcpNativeTransport, Log,
-					TEXT("Notification stream %s closed (session=%s)"),
-					*StreamId, *Stream->SessionId);
-			}
-		}
-
-		// 4. Keepalive for living streams
-		TArray<TSharedPtr<FNotificationStream>> AliveSnapshot;
-		{
-			FScopeLock Lock(&NotificationStreamsMutex);
-			for (auto& [StreamId, Stream] : NotificationStreams)
-			{
-				if (Stream.IsValid() && !Stream->bMarkedForRemoval.load()
-					&& Now - Stream->LastKeepaliveTime >= KeepaliveIntervalSeconds)
-				{
-					AliveSnapshot.Add(Stream);
-				}
-			}
-		}
-		for (const auto& Stream : AliveSnapshot)
-		{
-			if (!WriteNotificationKeepalive(*Stream))
-			{
-				Stream->bMarkedForRemoval.store(true);
-			}
-			else
-			{
-				Stream->LastKeepaliveTime = Now;
-				TouchSession(Stream->SessionId);
-			}
-		}
-	}
+	// (notification-stream cleanup + keepalive removed — pull-only transport)
 }
 
 // ─── Session Validation ─────────────────────────────────────────────────────
@@ -1776,52 +1479,8 @@ void FMcpNativeTransport::TouchSession(const FString& SessionId)
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-void FMcpNativeTransport::OnToolsListChanged()
-{
-	UE_LOG(LogMcpNativeTransport, Log,
-		TEXT("Tool list changed — broadcasting notifications/tools/list_changed"));
-	BroadcastToolsListChanged();
-}
-
-void FMcpNativeTransport::BroadcastToolsListChanged()
-{
-	FString NotificationJson = FMcpJsonRpc::BuildNotification(
-		TEXT("notifications/tools/list_changed"));
-
-	// Broadcast only to persistent notification streams (GET /mcp). Per-request
-	// tools/call streams must contain only progress and the final response.
-	TArray<TSharedPtr<FNotificationStream>> NotifSnapshot;
-	{
-		FScopeLock Lock(&NotificationStreamsMutex);
-		NotifSnapshot.Reserve(NotificationStreams.Num());
-		for (auto& [StreamId, Stream] : NotificationStreams)
-		{
-			if (Stream.IsValid() && !Stream->bMarkedForRemoval.load())
-			{
-				NotifSnapshot.Add(Stream);
-			}
-		}
-	}
-
-	for (const auto& Stream : NotifSnapshot)
-	{
-		if (!WriteNotificationEvent(*Stream, NotificationJson))
-		{
-			Stream->bMarkedForRemoval.store(true);
-			UE_LOG(LogMcpNativeTransport, Warning,
-				TEXT("Failed to send list_changed to notification stream %s — marking for removal"),
-				*Stream->StreamId);
-		}
-		else
-		{
-			TouchSession(Stream->SessionId);
-		}
-	}
-
-	UE_LOG(LogMcpNativeTransport, Log,
-		TEXT("Broadcast list_changed to %d notification stream(s)"),
-		NotifSnapshot.Num());
-}
+// OnToolsListChanged / BroadcastToolsListChanged removed — pull-only transport has no
+// server->client push stream (see docs/pull-architecture.md).
 
 int32 FMcpNativeTransport::GetActiveSessionCount() const
 {

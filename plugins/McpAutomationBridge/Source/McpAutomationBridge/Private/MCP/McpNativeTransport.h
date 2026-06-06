@@ -79,28 +79,19 @@ private:
 		int32 ContentLength = 0;
 	};
 
-	/** Active SSE streaming connection for a tools/call request. */
+	/** Parked tools/call request: the socket is held until the GameThread handler
+	 *  completes, then answered with a single plain HTTP/JSON response (pull-only,
+	 *  no SSE). */
 	struct FSSEConnection
 	{
 		FSocket* Socket = nullptr;
 		TSharedPtr<FJsonValue> JsonRpcId;
 		double StartTime = 0.0;
 		FString ToolName;
-		FString SessionId;  // for touching ActiveSessions during long-running calls
-		FCriticalSection WriteMutex;  // protects socket writes from GameThread
-		std::atomic<bool> bMarkedForRemoval{false};  // set by failed writes, checked by CleanupStaleRequests
-	};
-
-	/** Persistent SSE notification stream (GET /mcp). */
-	struct FNotificationStream
-	{
-		FSocket* Socket = nullptr;
-		FString SessionId;
-		FString StreamId;
-		double StartTime = 0.0;
-		double LastKeepaliveTime = 0.0;
-		FCriticalSection WriteMutex;
-		std::atomic<bool> bMarkedForRemoval{false};
+		FString SessionId;   // for touching ActiveSessions
+		FString CorsOrigin;  // preserved from the request for the response headers
+		FCriticalSection WriteMutex;  // protects the socket write
+		std::atomic<bool> bMarkedForRemoval{false};  // set by failed writes / shutdown
 	};
 
 	enum class ESessionValidationResult
@@ -142,16 +133,6 @@ private:
 	static int32 GetSessionValidationStatusCode(ESessionValidationResult Result);
 	void TouchSession(const FString& SessionId);
 
-	void OnToolsListChanged();
-	void BroadcastToolsListChanged();
-
-	// Persistent notification stream helpers (GET /mcp)
-	void HandleGetMcp(FSocket* ClientSocket, const FString& SessionId,
-		const FString& CorsOrigin);
-	static bool WriteNotificationEvent(FNotificationStream& Stream, const FString& EventData);
-	static bool WriteNotificationKeepalive(FNotificationStream& Stream);
-	void CloseNotificationStream(TSharedPtr<FNotificationStream> Stream);
-
 	UMcpAutomationBridgeSubsystem* Subsystem;
 	FMcpDynamicToolManager ToolManager;
 	int32 ListenPort = 0;
@@ -189,11 +170,4 @@ private:
 
 	static constexpr double RequestTimeoutSeconds = 300.0;  // 5 minutes
 
-	// Persistent notification streams (GET /mcp — StreamId → stream)
-	TMap<FString, TSharedPtr<FNotificationStream>> NotificationStreams;
-	mutable FCriticalSection NotificationStreamsMutex;
-
-	static constexpr int32 MaxNotificationStreamsPerSession = 4;
-	static constexpr double NotificationStreamTimeoutSeconds = 3600.0;  // 1 hour
-	static constexpr double KeepaliveIntervalSeconds = 30.0;
 };
