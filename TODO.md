@@ -68,6 +68,10 @@ Flakiness in shipped surface erodes trust during real authoring.
   best-effort (success + surfaced `problems`, never fails on a benign note). Verified live end
   to end against `/Script/Engine.MirrorTableRow`. This unblocks the
   `set_common_button_input_action` workflow (populating a `CommonInputActionDataBase` table).
+  **Verified end-to-end 2026-06-06**: create DT (`rowStruct=CommonInputActionDataBase`) →
+  `add_data_table_row` → `add_common_button` (project's `WBP_MenuButton`) →
+  `set_common_button_input_action` → the button's `TriggeringInputAction` handle persists to the
+  saved asset pointing at the right DataTable + row, with a clean compile.
 - 🟡 **Enhanced Input authoring depth** — IMC/IA creation + key mapping exist (Input group);
   verify round-trips and fill the sparse trigger/modifier authoring (modifier/trigger
   factories are thin).
