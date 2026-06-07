@@ -3208,6 +3208,8 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorAction(
     return HandleControlEditorSetViewportRealtime(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("simulate_input"))
     return HandleControlEditorSimulateInput(RequestId, Payload, RequestingSocket);
+  if (LowerSub == TEXT("simulate_nav"))
+    return HandleControlEditorSimulateNav(RequestId, Payload, RequestingSocket);
   // Additional actions for test compatibility
   if (LowerSub == TEXT("close_asset"))
     return HandleControlEditorCloseAsset(RequestId, Payload, RequestingSocket);

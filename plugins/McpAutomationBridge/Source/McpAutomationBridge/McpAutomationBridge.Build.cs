@@ -265,9 +265,17 @@ public class McpAutomationBridge : ModuleRules
             AddOptionalDynamicModule(Target, EngineDir, "AnimationData", "AnimationData");
 
             // CommonUI (optional plugin, EnabledByDefault:false) - for Common UI widget authoring.
-            // CommonUI publicly depends on CommonInput, so linking CommonUI transitively links it.
             // CommonUIEditor is intentionally NOT linked (editor-only tooling; none of the authoring APIs live there).
             bool bHasCommonUI = AddOptionalDynamicModule(Target, EngineDir, "CommonUI", "CommonUI");
+            if (bHasCommonUI)
+            {
+                // CommonInput is CommonUI's sibling module. Even though CommonUI publicly
+                // depends on it, that does NOT re-export its symbols — and the focus/input
+                // handlers reference CommonInput directly (UCommonInputSubsystem::Get /
+                // GetCurrentInputType), so we must link CommonInput's own import lib or the
+                // link fails with unresolved COMMONINPUT_API externals.
+                AddOptionalDynamicModule(Target, EngineDir, "CommonInput", "CommonInput");
+            }
             PublicDefinitions.Add(bHasCommonUI ? "MCP_HAS_COMMON_UI=1" : "MCP_HAS_COMMON_UI=0");
 
             // Ensure editor builds expose full Blueprint graph editing APIs.

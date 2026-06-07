@@ -52,6 +52,7 @@ public:
 				TEXT("open_asset"),
 				TEXT("close_asset"),
 				TEXT("simulate_input"),
+				TEXT("simulate_nav"),
 				TEXT("open_level"),
 				TEXT("focus_actor"),
 				TEXT("show_stats"),
@@ -105,6 +106,8 @@ public:
 			.Number(TEXT("x"), TEXT("Mouse X coordinate for simulate_input."))
 			.Number(TEXT("y"), TEXT("Mouse Y coordinate for simulate_input."))
 			.String(TEXT("button"), TEXT("Mouse button for simulate_input."))
+			.String(TEXT("direction"), TEXT("simulate_nav direction: Up/Down/Left/Right/Accept/Back/Next/Previous (PIE-only; faithfully routes a nav key through CommonUI, then returns the post-nav focus snapshot)."))
+			.String(TEXT("device"), TEXT("simulate_nav input device: 'gamepad' (default, sends DPad/face-button keys) or 'keyboard' (arrows/Enter/Esc/Tab)."))
 			.Required({TEXT("action")})
 			.Build();
 	}

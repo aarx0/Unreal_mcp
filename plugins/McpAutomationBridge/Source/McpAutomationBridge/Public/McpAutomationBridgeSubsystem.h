@@ -741,6 +741,12 @@ private:
   bool HandleInspectCdoAction(const FString &RequestId,
                               const TSharedPtr<FJsonObject> &Payload,
                               TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+  // CommonUI runtime focus/input introspection (PIE-only): focused widget +
+  // path, the activatable owning focus + its desired-focus target, the active
+  // activatable stack, current input type, and the active root's bound actions.
+  bool HandleInspectUiFocus(const FString &RequestId,
+                            const TSharedPtr<FJsonObject> &Payload,
+                            TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
 
   // 1. Editor Authoring & Graph Editing
   bool
@@ -1270,6 +1276,12 @@ private:
   bool HandleControlEditorSimulateInput(const FString &RequestId,
                                         const TSharedPtr<FJsonObject> &Payload,
                                         TSharedPtr<FMcpBridgeWebSocket> Socket);
+  // CommonUI gamepad/keyboard navigation drive (PIE-only). Faithfully routes a
+  // nav key through Slate + the CommonUI input preprocessor/action router, then
+  // returns the post-nav focus snapshot so callers can diff where focus landed.
+  bool HandleControlEditorSimulateNav(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      TSharedPtr<FMcpBridgeWebSocket> Socket);
   // Additional editor handlers for test compatibility
   bool HandleControlEditorCloseAsset(const FString &RequestId,
                                      const TSharedPtr<FJsonObject> &Payload,

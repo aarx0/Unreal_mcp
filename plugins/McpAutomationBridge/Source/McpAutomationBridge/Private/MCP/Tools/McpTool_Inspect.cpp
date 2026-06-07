@@ -16,7 +16,10 @@ public:
 			"and query class info. Actions: inspect_cdo (Blueprint CDO properties + all components "
 			"without spawning an actor; use blueprintPath, optional detailed/componentName/propertyNames), "
 			"inspect_class (class metadata), inspect_object (world actor), get_property/set_property, "
-			"get_components, list_objects, find_by_class, find_by_tag, runtime_report.");
+			"get_components, list_objects, find_by_class, find_by_tag, runtime_report, "
+			"ui_focus (CommonUI PIE runtime snapshot: focused widget + path, the activatable "
+			"owning focus + its desired-focus target, active activatable stack, current input "
+			"type, and the active root's bound actions).");
 	}
 
 	FString GetCategory() const override { return TEXT("core"); }
@@ -45,6 +48,7 @@ public:
 				TEXT("inspect_cdo"),
 				TEXT("runtime_report"),
 				TEXT("pie_report"),
+				TEXT("ui_focus"),
 				TEXT("list_objects"),
 				TEXT("get_metadata"),
 				TEXT("add_tag"),

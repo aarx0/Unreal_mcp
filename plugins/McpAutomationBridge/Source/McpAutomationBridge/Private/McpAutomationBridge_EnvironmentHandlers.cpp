@@ -1665,6 +1665,15 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectAction(
     const FString LowerSubAction = SubAction.ToLower();
 
     // -------------------------------------------------------------------------
+    // ui_focus — CommonUI runtime focus/input snapshot (own handler/TU).
+    // Delegated early: it's global (no objectPath) and self-contained.
+    // -------------------------------------------------------------------------
+    if (LowerSubAction.Equals(TEXT("ui_focus")))
+    {
+        return HandleInspectUiFocus(RequestId, Payload, RequestingSocket);
+    }
+
+    // -------------------------------------------------------------------------
     // Classify action types
     // -------------------------------------------------------------------------
     // Global actions that don't require objectPath

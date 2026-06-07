@@ -208,11 +208,28 @@ Flakiness in shipped surface erodes trust during real authoring.
   and (NEW 2026-06-07) **style-asset creation**. Missing / runtime-only: activatable-widget stack
   push/pop + focus/nav, input-action→click wiring. Some is inherently runtime
   (see `COMMONUI_INTEGRATION_PLAN.md`).
-  - 📝 **Gamepad focus/nav** — design stub parked in `COMMONUI_FOCUS_NAV.md` for a future deep
-    dive. Key finding: activation flags (`bAutoActivate`/`bIsModal`/`bSupportsActivationFocus`/
-    `bAutoRestoreFocus`) are plain UPROPERTYs already settable via `inspect set_property`, but the
-    desired-focus *target* is a BP override (`BP_GetDesiredFocusTarget`), not a property — so the
-    real work is either generating that override or adding a project base-class property. Deferred.
+  - 📝 **Gamepad focus/nav (authoring)** — design stub parked in `COMMONUI_FOCUS_NAV.md`. Key
+    finding: activation flags (`bAutoActivate`/`bIsModal`/`bSupportsActivationFocus`/
+    `bAutoRestoreFocus`) are plain UPROPERTYs settable via `inspect set_property`, and the
+    desired-focus *target* is the **engine-native `DesiredFocusWidget`** UPROPERTY (settable via
+    `manage_blueprint set_default {propertyName:"DesiredFocusWidget.WidgetName"}`) — no BP override or
+    C++ base class needed. Applied to the Pause/Options menus (Aaron's uncommitted asset changes).
+  - ✅ **Focus/input introspection + drive (runtime)** BUILT 2026-06-07 — the observe/verify loop
+    CommonUI was missing over MCP (design + as-built + corrections in `COMMONUI_FOCUS_INPUT.md`):
+    `inspect ui_focus` (focused widget + path, active activatable + its desired-focus target, active
+    activatable stack, current input type/gamepad, active-root bound actions) and
+    `control_editor simulate_nav` (faithful gamepad/keyboard nav via `ProcessKeyDownEvent` + post-nav
+    focus read-back). New TU `McpAutomationBridge_FocusInputHandlers.cpp`; uses only public CommonUI
+    APIs (`FindActivatable`/`GatherActiveBindings`/`GetDesiredFocusTarget`) — NOT the private
+    `DebugDumpRootList` the design assumed. **Build fix:** had to add the `CommonInput` module to
+    `Build.cs` (sibling of CommonUI, not transitively linked) for `UCommonInputSubsystem`. Verified
+    live: actions reachable, no crashes, `inputType`/`activatableStack` populated in PIE. **OPEN:**
+    focus *movement* in a real menu unconfirmed (M&K mode uses hover not keyboard-focus; this project's
+    PIE starts in gameplay so synthesized gamepad DPad is consumed by gameplay) — Aaron's gamepad
+    feel-test (pause/options, gamepad UI mode) is the check; refine if synthesized events don't register
+    as a real pad (inject via `FInputDeviceId` / read game-viewport local-player focus). **Ops lesson:**
+    never force-kill the editor (next launch hangs on the unclean-shutdown modal) — quit via
+    `control_editor console_command QUIT_EDITOR`.
   - ✅ **Style-asset creation** DONE 2026-06-07: `create_common_button_style` /
     `create_common_text_style` (via `manage_blueprint`). CommonUI styles ARE classes (assigned with
     `SetStyle(TSubclassOf<...>)`), so each creates a Blueprint subclass of `UCommonButtonStyle` /

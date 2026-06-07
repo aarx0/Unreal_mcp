@@ -1,7 +1,52 @@
-# CommonUI Focus / Input Introspection + Drive (design)
+# CommonUI Focus / Input Introspection + Drive
 
-**Status:** design draft for discussion (2026-06-07). Not built. The keystone CommonUI
-tool the bridge is missing — pairs with `COMMONUI_FOCUS_NAV.md` (authoring side, done).
+**Status:** ✅ BUILT 2026-06-07 (faithful drive, per Aaron's call). Pairs with
+`COMMONUI_FOCUS_NAV.md` (authoring side). Implementation:
+`McpAutomationBridge_FocusInputHandlers.cpp`. The design discussion below is kept for
+context; the **As-built** section records what actually shipped + the API corrections.
+
+## As-built (2026-06-07)
+Two actions, both in one self-contained TU (`McpAutomationBridge_FocusInputHandlers.cpp`):
+- **`inspect ui_focus`** (observe) — `HandleInspectUiFocus`. Returns a snapshot:
+  `inPie`, `focusedWidget` {slateType, name?, class?}, `focusPath` (root→leaf), and
+  (in PIE w/ CommonUI) `inputType`, `currentGamepad`, `activeActivatable`,
+  `desiredFocusTarget`, `activatableStack`, `boundActions`. Wired as an early delegate in
+  `HandleInspectAction` (global, no objectPath).
+- **`control_editor simulate_nav`** (drive, faithful) — `HandleControlEditorSimulateNav`.
+  `direction` (Up/Down/Left/Right/Accept/Back/Next/Previous) + `device` (gamepad default /
+  keyboard) or explicit `key`; delivers the nav key via `FSlateApplication::ProcessKeyDownEvent`
+  (faithful — runs CommonUI's input preprocessor + nav config like a real pad), then returns
+  the post-nav snapshot + `focusChanged`. Wired next to `simulate_input` in `HandleControlEditorAction`.
+
+### API corrections vs the design below (verified against UE 5.7 headers)
+- ❌ `UCommonUIActionRouterBase::DebugDumpRootList` is **NOT public** — it lives on a private
+  nested struct (`FActionDomainSortedRootList`). Replaced with public APIs:
+  **`FindActivatable(SWidget, LocalPlayer)`** (activatable owning focus) + **`GatherActiveBindings()`**
+  (bound actions) + a `TObjectIterator<UCommonActivatableWidget>` scan filtered to the PIE world
+  (active stack). Zero private coupling.
+- ⚠️ **Build fix:** `UCommonInputSubsystem` is in the **CommonInput** module, a *sibling* of
+  CommonUI. CommonUI's public dependency on it does NOT re-export its symbols, so the link failed
+  with unresolved `COMMONINPUT_API` externals until `CommonInput` was added to `Build.cs`
+  (delay-load, gated on `bHasCommonUI`).
+
+### Verified live (2026-06-07, rebuild + PIE)
+- Compiles + links clean. Both actions reachable over MCP, return clean JSON, **no crashes**.
+- `ui_focus` outside PIE: `inPie:false` + correct Slate focus path (SWindow→…→SLevelViewport).
+- `ui_focus` in PIE: `inPie:true`, **`inputType`/`currentGamepad` populated** (proves the
+  CommonInput runtime linkage), **`activatableStack` shows the live `WBP_MainMenu_CUI_C`**
+  (active-screen detection works).
+- `simulate_nav` outside PIE → clean `NOT_IN_PIE`; in PIE → resolves direction→key, delivers it
+  (`handled:true`), returns the post-nav snapshot.
+- **OPEN (the design's Decision-C spike, for Aaron's gamepad test):** focus *movement* in a real
+  **menu** is not yet demonstrated. In M&K input mode CommonUI drives selection by mouse hover (no
+  Slate keyboard focus → `focusedWidget` is the viewport, not a button). And this project's PIE
+  starts in **gameplay** (main menu blends to gameplay on Play), so a synthesized gamepad DPad is
+  consumed by gameplay, not menu nav — `inputType` did not flip to Gamepad from a synthesized event.
+  → To confirm the drive in a real menu (pause/options, gamepad UI-input mode), Aaron's gamepad
+  feel-test is the check. Possible refinement if synthesized events don't register as a real pad:
+  inject via a valid `FInputDeviceId`, or read the game viewport's local-player focus rather than
+  Slate user 0. **Bridge-ops lesson learned:** never force-kill the editor (next launch hangs on the
+  unclean-shutdown modal); quit via `control_editor console_command QUIT_EDITOR` for a clean restart.
 
 ## The problem
 CommonUI's hardest-to-eyeball state is **not** the widget tree (a screenshot or
