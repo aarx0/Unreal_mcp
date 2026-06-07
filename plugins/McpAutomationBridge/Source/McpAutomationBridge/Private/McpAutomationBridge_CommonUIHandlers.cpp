@@ -36,6 +36,12 @@
 #include "WidgetBlueprint.h"
 #include "Blueprint/WidgetTree.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/KismetEditorUtilities.h" // FKismetEditorUtilities::CreateBlueprint (style-asset creation)
+#include "Engine/Blueprint.h"              // UBlueprint, BPTYPE_Normal
+#include "Engine/BlueprintGeneratedClass.h"// UBlueprintGeneratedClass
+#include "EditorAssetLibrary.h"            // UEditorAssetLibrary::DoesAssetExist
+#include "UObject/Package.h"               // CreatePackage
+#include "Misc/Paths.h"                    // FPaths
 
 #if MCP_HAS_COMMON_UI
 #include "CommonButtonBase.h" // UCommonButtonBase, UCommonButtonStyle
@@ -415,6 +421,90 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 		ResultJson->SetStringField(TEXT("styleClass"), StyleClass->GetPathName());
 		McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
 		SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set Common UI style"), ResultJson);
+		return true;
+	}
+
+	// -------------------------------------------------------------------------
+	// create_common_button_style / create_common_text_style — create a Blueprint
+	// subclass of UCommonButtonStyle / UCommonTextStyle. CommonUI styles ARE
+	// classes (assigned via SetStyle(TSubclassOf<...>)), so authoring a style means
+	// making a Blueprint with that parent. Closes the gap where you could *assign*
+	// a style but not *create* one. Returns the generated-class path (Name_C),
+	// which set_common_button_style / set_common_text_style accept directly.
+	// -------------------------------------------------------------------------
+	if (SubAction.Equals(TEXT("create_common_button_style"), ESearchCase::IgnoreCase) ||
+		SubAction.Equals(TEXT("create_common_text_style"), ESearchCase::IgnoreCase))
+	{
+		const bool bButtonStyle = SubAction.Equals(TEXT("create_common_button_style"), ESearchCase::IgnoreCase);
+		UClass* ParentClass = bButtonStyle
+			? UCommonButtonStyle::StaticClass()
+			: UCommonTextStyle::StaticClass();
+
+		FString Name = GetJsonStringField(Payload, TEXT("name"));
+		if (Name.IsEmpty())
+		{
+			SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'name'."), TEXT("MISSING_PARAMETER"));
+			return true;
+		}
+		if (Name.Contains(TEXT("/")) || Name.Contains(TEXT(".")))
+		{
+			SendAutomationError(RequestingSocket, RequestId,
+				TEXT("'name' must be a bare asset name (no '/' or '.'); use 'path' for the folder."),
+				TEXT("INVALID_NAME"));
+			return true;
+		}
+
+		FString Path = GetJsonStringField(Payload, TEXT("path"));
+		if (Path.IsEmpty())
+		{
+			Path = TEXT("/Game/UI/Styles");
+		}
+		Path.RemoveFromEnd(TEXT("/"));
+		const FString PackagePath = Path / Name;                       // /Game/UI/Styles/Name
+		const FString ClassPath = FString::Printf(TEXT("%s.%s_C"), *PackagePath, *Name);
+
+		if (UEditorAssetLibrary::DoesAssetExist(PackagePath))
+		{
+			TSharedPtr<FJsonObject> ExistJson = MakeShared<FJsonObject>();
+			ExistJson->SetBoolField(TEXT("success"), true);
+			ExistJson->SetBoolField(TEXT("alreadyExisted"), true);
+			ExistJson->SetStringField(TEXT("blueprintPath"), PackagePath);
+			ExistJson->SetStringField(TEXT("styleClass"), ClassPath);
+			ExistJson->SetStringField(TEXT("styleType"), bButtonStyle ? TEXT("button") : TEXT("text"));
+			SendAutomationResponse(RequestingSocket, RequestId, true,
+				FString::Printf(TEXT("Style asset already exists: %s"), *PackagePath), ExistJson);
+			return true;
+		}
+
+		UPackage* Package = CreatePackage(*PackagePath);
+		if (!Package)
+		{
+			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package for style asset."), TEXT("PACKAGE_ERROR"));
+			return true;
+		}
+
+		UBlueprint* StyleBP = FKismetEditorUtilities::CreateBlueprint(
+			ParentClass, Package, FName(*Name),
+			BPTYPE_Normal, UBlueprint::StaticClass(), UBlueprintGeneratedClass::StaticClass());
+		if (!StyleBP)
+		{
+			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create style blueprint."), TEXT("CREATION_FAILED"));
+			return true;
+		}
+
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(StyleBP);
+		McpSafeAssetSave(StyleBP);
+
+		TSharedPtr<FJsonObject> ResultJson = MakeShared<FJsonObject>();
+		ResultJson->SetBoolField(TEXT("success"), true);
+		ResultJson->SetBoolField(TEXT("alreadyExisted"), false);
+		ResultJson->SetStringField(TEXT("blueprintPath"), PackagePath);
+		ResultJson->SetStringField(TEXT("styleClass"), ClassPath);
+		ResultJson->SetStringField(TEXT("styleType"), bButtonStyle ? TEXT("button") : TEXT("text"));
+		McpHandlerUtils::AddVerification(ResultJson, StyleBP);
+		SendAutomationResponse(RequestingSocket, RequestId, true,
+			FString::Printf(TEXT("Created %s style: %s"), bButtonStyle ? TEXT("button") : TEXT("text"), *PackagePath),
+			ResultJson);
 		return true;
 	}
 

@@ -144,10 +144,20 @@ Flakiness in shipped surface erodes trust during real authoring.
 - 🟡 **Enhanced Input authoring depth** — IMC/IA creation + key mapping exist (Input group);
   verify round-trips and fill the sparse trigger/modifier authoring (modifier/trigger
   factories are thin).
-- 🟡 **Common UI completeness** — have: add button/text/border, assign style, bind input
-  action. Missing / runtime-only: activatable-widget stack push/pop + focus/nav, style-**asset
-  creation** (only assignment today), input-action→click wiring. Some is inherently runtime
+- 🟡 **Common UI completeness** — have: add button/text/border, assign style, bind input action,
+  and (NEW 2026-06-07) **style-asset creation**. Missing / runtime-only: activatable-widget stack
+  push/pop + focus/nav, input-action→click wiring. Some is inherently runtime
   (see `COMMONUI_INTEGRATION_PLAN.md`).
+  - ✅ **Style-asset creation** DONE 2026-06-07: `create_common_button_style` /
+    `create_common_text_style` (via `manage_blueprint`). CommonUI styles ARE classes (assigned with
+    `SetStyle(TSubclassOf<...>)`), so each creates a Blueprint subclass of `UCommonButtonStyle` /
+    `UCommonTextStyle` via `FKismetEditorUtilities::CreateBlueprint` + `McpSafeAssetSave`, returning
+    the generated-class path (`/Game/.../Name.Name_C`) that `set_common_button_style` /
+    `set_common_text_style` accept directly. Params: `name` (required, bare), `path` (default
+    `/Game/UI/Styles`). Idempotent (`alreadyExisted`). Closes the "could assign but not create" gap.
+    Verified live: created both styles, then `add_common_text` + `set_common_text_style` accepted the
+    created text style (passes the `IsChildOf(UCommonTextStyle)` check) — full create→assign pipeline.
+    Follow-up if wanted: optional CDO property params (text size/color; button brushes are heavier).
 - 🟡 **Asset import pipeline** — `import` works (Interchange) but there's no post-import
   configuration: texture compression/sRGB/streaming, audio codec/sample-rate, mesh
   LOD/Nanite/collision. Add a post-import `configure_import` pass (or params on `import`).

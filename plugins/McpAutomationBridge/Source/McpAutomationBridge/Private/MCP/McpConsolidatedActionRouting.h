@@ -206,7 +206,8 @@ inline const TArray<FString>& CommonUi()
 	static const TArray<FString> Actions = {
 		TEXT("add_common_button"), TEXT("add_common_text"),
 		TEXT("add_common_border"), TEXT("set_common_button_style"),
-		TEXT("set_common_text_style"), TEXT("set_common_button_input_action")
+		TEXT("set_common_text_style"), TEXT("set_common_button_input_action"),
+		TEXT("create_common_button_style"), TEXT("create_common_text_style")
 	};
 	return Actions;
 }
