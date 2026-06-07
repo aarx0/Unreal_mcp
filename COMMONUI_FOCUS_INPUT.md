@@ -37,16 +37,39 @@ Two actions, both in one self-contained TU (`McpAutomationBridge_FocusInputHandl
   (active-screen detection works).
 - `simulate_nav` outside PIE → clean `NOT_IN_PIE`; in PIE → resolves direction→key, delivers it
   (`handled:true`), returns the post-nav snapshot.
-- **OPEN (the design's Decision-C spike, for Aaron's gamepad test):** focus *movement* in a real
-  **menu** is not yet demonstrated. In M&K input mode CommonUI drives selection by mouse hover (no
-  Slate keyboard focus → `focusedWidget` is the viewport, not a button). And this project's PIE
-  starts in **gameplay** (main menu blends to gameplay on Play), so a synthesized gamepad DPad is
-  consumed by gameplay, not menu nav — `inputType` did not flip to Gamepad from a synthesized event.
-  → To confirm the drive in a real menu (pause/options, gamepad UI-input mode), Aaron's gamepad
-  feel-test is the check. Possible refinement if synthesized events don't register as a real pad:
-  inject via a valid `FInputDeviceId`, or read the game viewport's local-player focus rather than
-  Slate user 0. **Bridge-ops lesson learned:** never force-kill the editor (next launch hangs on the
-  unclean-shutdown modal); quit via `control_editor console_command QUIT_EDITOR` for a clean restart.
+- **RESOLVED — drive verified + observe confirmed correct (2026-06-07).** Opened the real pause menu
+  in PIE (`control_actor call_actor_function BP_PlayerController_C_0 TogglePause` — `TogglePause` is
+  BlueprintCallable on `GOSPlayerController`) and drove it:
+  - **Drive reaches CommonUI:** a *synthesized* `simulate_nav Down (gamepad)` flipped `inputType`
+    MouseAndKeyboard→**Gamepad** (CommonInput's preprocessor accepts synthesized pad events — **no
+    `FInputDeviceId` hack needed**) and moved Slate user-0 focus into the game `SViewport`. `handled:true`.
+  - **Observe reads the right Slate user — no refinement needed.** CommonUI focuses the desired target
+    on the **local player's slate user** (`OwnerSlateId`) via `UWidget::SetFocus()` /
+    `SetUserFocus(OwnerSlateId, …)` (engine: `UIActionRouterTypes.cpp` ~L1657-1684). In single-player
+    PIE that's **user 0** — exactly what `ui_focus` reads (proven: the fallback below landed on
+    `GetUserFocusedWidget(0)`). A properly-wired menu's focused button WILL appear in `focusedWidget`.
+  - **`focusedWidget == SViewport` is a diagnostic, not a blind spot.** It's CommonUI's documented
+    fallback (`SetUserFocus(OwnerSlateId, ViewportClient->GetGameViewportWidget())`,
+    `UIActionRouterTypes.cpp:1684`) when the active leaf's desired-focus-target doesn't resolve / isn't
+    focusable. So "focus fell back to the viewport" == "this menu didn't grab focus" — exactly the
+    nav-rot the regression layer (next) should assert against.
+  - **Surfaced re: `WBP_PauseScreen`:** it registered active-in-stack but hit the viewport fallback (and
+    didn't render visibly) — consistent with its in-progress CommonUI conversion; its DesiredFocusWidget
+    isn't resolving to a focusable widget in PIE yet. A perfect first golden-path test once fixed.
+  → **Net: the nav-assertion regression layer can be built on the current observe** — no FInputDeviceId
+  / game-focus-drilldown refinement required.
+  **Bridge-ops lesson:** never force-kill the editor (next launch hangs on the unclean-shutdown modal);
+  quit via `control_editor console_command QUIT_EDITOR` for a clean restart.
+
+## Next: nav-assertion regression layer (Aaron's #1)
+Persist the observe/drive loop into replayable golden-path tests — the "automate what I don't want to
+babysit" payoff. Shape (per Aaron): a declarative step+expectation list run in PIE, returning pass/fail:
+`{ open menu (call TogglePause / push screen) → expect activatableStack contains X → expect
+desiredFocusTarget == Y → simulate_nav Down ×N → expect focusedWidget == Z (NOT SViewport) → expect
+stack depth == N }`, run across variants (KBM vs gamepad; a couple of resolutions). Recorded as data so
+it replays forever; wire into `system_control run_tests` / CI later. Fast-follow (#2): authoring
+scaffolding — style-asset variants, activatable boilerplate with the focus target wired, BindWidget
+reconcile (lower-stakes grind reduction).
 
 ## The problem
 CommonUI's hardest-to-eyeball state is **not** the widget tree (a screenshot or
