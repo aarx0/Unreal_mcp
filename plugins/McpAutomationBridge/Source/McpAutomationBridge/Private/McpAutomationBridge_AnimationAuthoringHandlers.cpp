@@ -1761,6 +1761,13 @@ if (SubAction == TEXT("add_montage_notify"))
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeleton: %s"), *SkeletonPath), TEXT("SKELETON_NOT_FOUND"));
         }
     }
+    // A Blend Space must target a skeleton; without one UBlendSpaceFactoryNew fails
+    // and we previously surfaced a generic "Failed to create blend space" — give a
+    // clear required-param error instead.
+    if (!Skeleton)
+    {
+        ANIM_ERROR_RESPONSE(TEXT("skeletonPath is required: a Blend Space targets a USkeleton. Pass skeletonPath to an existing skeleton asset."), TEXT("SKELETON_REQUIRED"));
+    }
 
     // Check if an asset already exists at the target path to prevent modal dialog
         FString ObjectPath = FString::Printf(TEXT("%s/%s"), *Path, *Name);
@@ -1870,6 +1877,13 @@ if (SubAction == TEXT("add_montage_notify"))
         {
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeleton: %s"), *SkeletonPath), TEXT("SKELETON_NOT_FOUND"));
         }
+    }
+    // A Blend Space must target a skeleton; without one UBlendSpaceFactoryNew fails
+    // and we previously surfaced a generic "Failed to create blend space 2D" — give
+    // a clear required-param error instead.
+    if (!Skeleton)
+    {
+        ANIM_ERROR_RESPONSE(TEXT("skeletonPath is required: a Blend Space targets a USkeleton. Pass skeletonPath to an existing skeleton asset."), TEXT("SKELETON_REQUIRED"));
     }
 
     // Check if an asset already exists at the target path to prevent modal dialog
@@ -2312,7 +2326,13 @@ if (SubAction == TEXT("add_montage_notify"))
     
     // ===== 10.4 Animation Blueprints =====
     
-    if (SubAction == TEXT("create_anim_blueprint"))
+    // Accept the documented/advertised aliases too — the routing list and this
+    // file's header both name this `create_animation_blueprint`, but only
+    // `create_anim_blueprint` was handled, so the advertised names returned
+    // UNKNOWN_ACTION.
+    if (SubAction == TEXT("create_anim_blueprint") ||
+        SubAction == TEXT("create_animation_blueprint") ||
+        SubAction == TEXT("create_animation_bp"))
     {
     FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
     FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Blueprints")));

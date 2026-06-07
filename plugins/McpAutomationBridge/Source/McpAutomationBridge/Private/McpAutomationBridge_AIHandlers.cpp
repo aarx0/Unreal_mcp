@@ -2821,6 +2821,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         Result->SetStringField(TEXT("definitionPath"), FullPath);
         Result->SetNumberField(TEXT("slotCount"), 0);
         Result->SetStringField(TEXT("message"), TEXT("Smart Object Definition created"));
+        Result->SetBoolField(TEXT("success"), true);
+        McpHandlerUtils::AddVerification(Result, Definition); // existsAfter/assetPath, matching other creates
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Definition created"), Result);
 #elif MCP_HAS_SMART_OBJECTS
         FString Name = GetStringFieldAI(Payload, TEXT("name"));
@@ -3124,6 +3126,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         Result->SetStringField(TEXT("configPath"), FullPath);
         Result->SetNumberField(TEXT("traitCount"), 0);
         Result->SetStringField(TEXT("message"), TEXT("Mass Entity Config created"));
+        Result->SetBoolField(TEXT("success"), true);
+        McpHandlerUtils::AddVerification(Result, ConfigAsset); // existsAfter/assetPath, matching other creates
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Config created"), Result);
 #elif MCP_HAS_MASS_AI
         FString Name = GetStringFieldAI(Payload, TEXT("name"));

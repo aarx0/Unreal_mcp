@@ -2827,10 +2827,18 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAction(
 #endif
   }
 
+  FString AttemptedAction = Action;
+  if (Payload.IsValid())
+  {
+    Payload->TryGetStringField(TEXT("action"), AttemptedAction);
+  }
   SendAutomationResponse(
       RequestingSocket, RequestId, false,
-      FString::Printf(TEXT("Sequence action not implemented by plugin: %s"),
-                      *Action),
-      nullptr, TEXT("NOT_IMPLEMENTED"));
+      FString::Printf(TEXT("Unknown manage_sequence action '%s'. To create a Level "
+                           "Sequence use action 'create' (or 'sequence_create'); "
+                           "other actions are sequence_add_actor / sequence_add_camera / "
+                           "sequence_open / sequence_play / sequence_list / etc."),
+                      *AttemptedAction),
+      nullptr, TEXT("UNKNOWN_ACTION"));
   return true;
 }

@@ -121,6 +121,27 @@ Flakiness in shipped surface erodes trust during real authoring.
   `IsWidgetAuthoringAction`/`IsCommonUiAction`; `manage_ai` covers BT/nav). The action lists live in
   `McpConsolidatedActionRouting.h`, not the deleted tool-def files. The handlers (`Handle*Action`)
   are untouched.
+- ✅ **Tool-family sweep #2 + batch fixes** 2026-06-07. Swept asset-creating actions across families
+  (render_target, blueprint, state_tree, eqs_query, blackboard, smart_object, mass, inventory_ui,
+  niagara, sequence, anim) for crashes / false-success / read-back gaps. **No crashes, no
+  false-success** (the three suspects — smart_object/mass/inventory_ui — create real assets, just
+  omitted a verification field). Findings were papercuts; fixed (verified live):
+  - `create_animation_blueprint` / `create_animation_bp` advertised + documented but only
+    `create_anim_blueprint` was handled → added the aliases.
+  - `create_blend_space_1d`/`2d` returned a generic `CREATE_FAILED` when no skeleton was passed (a
+    blend space requires a target skeleton) → now `SKELETON_REQUIRED` with guidance.
+  - `manage_sequence` unknown-action error said "not implemented by plugin" → now `UNKNOWN_ACTION`
+    echoing the attempted sub-action and pointing at `create`/`sequence_create`. (Sequence creation
+    itself works via `create` — `create_level_sequence` was never a real action.)
+  - `create_smart_object_definition` / `create_mass_entity_config` now return `success`/`existsAfter`
+    (AddVerification) like other creates.
+  - 🟡 **DEFERRED (real gap):** `create_niagara_system` is advertised in the `manage_effect` schema
+    but unreachable via the tool — `HandleEffectAction` keys its branches off the **tool-level
+    `Action`** (`Lower = Action.ToLower()` == `"manage_effect"`), so the create_* branches only fire
+    when the action arrives top-level (and those aren't registered MCP tools). Fix needs reworking
+    HandleEffectAction to resolve an effective sub-action (tool-action vs payload `action`) through
+    its gate + branches — non-trivial, left for a focused pass. Same shape likely affects
+    `create_effect` via `manage_effect`.
 - ✅ **BT authoring fixed — graph path roots trees, simplistic actions deprecated** 2026-06-07.
   Two-part fix (both verified live):
   - **Part A (the real gap):** `connect_nodes` now accepts `parentNodeId:'root'` — it finds the
