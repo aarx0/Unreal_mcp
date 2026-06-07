@@ -296,10 +296,19 @@ authoring in one session is reliable.
 non-panel-root + no-`parentSlot` case instead of replacing: it cleans up the new widget
 (`DiscardUnaddedWidget`) and returns false with a specific message ("the root '%s' is not a panel …
 pass a parentSlot naming a panel, or add a panel root first"). Threaded an optional `FString* OutError`
-through the helper and surfaced it in the Common UI callers (add_common_button/text/border). The 24
-regular `add_*` callers still error safely but with their generic "Failed to add X to widget tree"
-message — minor follow-up to thread `OutError` there too for identical guidance. Also gave clear
-guidance for the `parentSlot`-not-found / not-a-panel cases. (Original analysis below.)
+through the helper and surfaced it in the Common UI callers (add_common_button/text/border). Also
+gave clear guidance for the `parentSlot`-not-found / not-a-panel cases. (Original analysis below.)
+
+**Follow-up DONE 2026-06-07:** threaded `OutError` through all 23 regular `add_*` widget callers in
+`McpAutomationBridge_WidgetAuthoringHandlers.cpp` (add_canvas_panel/horizontal_box/vertical_box/
+overlay/text_block/image/button/progress_bar/slider/grid_panel/uniform_grid/wrap_box/scroll_box/
+size_box/scale_box/border/rich_text_block/check_box/text_input/combo_box/spin_box/list_view/
+tree_view). Each now passes `&AddErr` and surfaces the specific guidance (falling back to its
+generic message only if empty); the now-redundant manual `UnregisterWidgetGuid`+`RemoveWidget`
+cleanup was dropped since `SafeAddWidgetToTree` already discards on every failure path. Verified
+live (live-coding patch): `add_text_block` with a bogus `parentSlot` returns
+`parentSlot 'NoSuchSlot' was not found in the widget tree.`, the happy path still adds, and the
+failed add leaves the WBP intact (a subsequent add into a real panel succeeds).
 
 Surfaced while fixing the ensure above. When you add a widget with no `parentSlot` and the current
 root is a **non-panel** widget (e.g. a `TextBlock`/`CommonTextBlock`), `SafeAddWidgetToTree` discards

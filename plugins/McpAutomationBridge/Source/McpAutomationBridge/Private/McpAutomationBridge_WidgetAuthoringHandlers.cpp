@@ -1228,11 +1228,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
 
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, CanvasPanel, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, CanvasPanel, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, CanvasPanel);
-            WidgetBP->WidgetTree->RemoveWidget(CanvasPanel);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add canvas panel to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add canvas panel to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -1285,11 +1286,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
 
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, HBox, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, HBox, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, HBox);
-            WidgetBP->WidgetTree->RemoveWidget(HBox);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add horizontal box to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add horizontal box to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -1342,11 +1344,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
 
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, VBox, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, VBox, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, VBox);
-            WidgetBP->WidgetTree->RemoveWidget(VBox);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add vertical box to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add vertical box to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -1399,11 +1402,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
 
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, OverlayWidget, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, OverlayWidget, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, OverlayWidget);
-            WidgetBP->WidgetTree->RemoveWidget(OverlayWidget);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add overlay to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add overlay to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -1490,11 +1494,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         // This prevents "Variable was deleted but still has a GUID" ensure failures
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, TextBlock, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, TextBlock, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, TextBlock);
-            WidgetBP->WidgetTree->RemoveWidget(TextBlock);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add text block to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add text block to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -1567,11 +1572,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         // This prevents "Variable was deleted but still has a GUID" ensure failures
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, ImageWidget, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, ImageWidget, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, ImageWidget);
-            WidgetBP->WidgetTree->RemoveWidget(ImageWidget);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add image to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add image to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -1639,11 +1645,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         // This prevents "Variable was deleted but still has a GUID" ensure failures
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, ButtonWidget, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, ButtonWidget, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, ButtonWidget);
-            WidgetBP->WidgetTree->RemoveWidget(ButtonWidget);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add button to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add button to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -1717,11 +1724,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         // This prevents "Variable was deleted but still has a GUID" ensure failures
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, ProgressBarWidget, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, ProgressBarWidget, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, ProgressBarWidget);
-            WidgetBP->WidgetTree->RemoveWidget(ProgressBarWidget);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add progress bar to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add progress bar to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -1797,11 +1805,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         // This prevents "Variable was deleted but still has a GUID" ensure failures
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, SliderWidget, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, SliderWidget, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, SliderWidget);
-            WidgetBP->WidgetTree->RemoveWidget(SliderWidget);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add slider to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add slider to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -1949,11 +1958,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
 
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, GridPanel, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, GridPanel, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, GridPanel);
-            WidgetBP->WidgetTree->RemoveWidget(GridPanel);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add grid panel to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add grid panel to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -2030,11 +2040,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         }
 
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, UniformGrid, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, UniformGrid, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, UniformGrid);
-            WidgetBP->WidgetTree->RemoveWidget(UniformGrid);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add uniform grid to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add uniform grid to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -2107,11 +2118,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
 #endif
 
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, WrapBox, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, WrapBox, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, WrapBox);
-            WidgetBP->WidgetTree->RemoveWidget(WrapBox);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add wrap box to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add wrap box to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -2197,11 +2209,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         }
 
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, ScrollBox, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, ScrollBox, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, ScrollBox);
-            WidgetBP->WidgetTree->RemoveWidget(ScrollBox);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add scroll box to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add scroll box to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -2278,11 +2291,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         }
 
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, SizeBox, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, SizeBox, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, SizeBox);
-            WidgetBP->WidgetTree->RemoveWidget(SizeBox);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add size box to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add size box to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -2389,11 +2403,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         }
 
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, ScaleBox, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, ScaleBox, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, ScaleBox);
-            WidgetBP->WidgetTree->RemoveWidget(ScaleBox);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add scale box to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add scale box to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -2472,11 +2487,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         }
 
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, BorderWidget, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, BorderWidget, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, BorderWidget);
-            WidgetBP->WidgetTree->RemoveWidget(BorderWidget);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add border to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add border to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -2536,11 +2552,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         // This prevents "Variable was deleted but still has a GUID" ensure failures
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, RichTextBlock, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, RichTextBlock, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, RichTextBlock);
-            WidgetBP->WidgetTree->RemoveWidget(RichTextBlock);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add rich text block to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add rich text block to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -2596,11 +2613,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         // This prevents "Variable was deleted but still has a GUID" ensure failures
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, CheckBox, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, CheckBox, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, CheckBox);
-            WidgetBP->WidgetTree->RemoveWidget(CheckBox);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add check box to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add check box to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -2675,11 +2693,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         // This prevents "Variable was deleted but still has a GUID" ensure failures
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, TextInput, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, TextInput, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, TextInput);
-            WidgetBP->WidgetTree->RemoveWidget(TextInput);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add text input to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add text input to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -2749,11 +2768,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         // This prevents "Variable was deleted but still has a GUID" ensure failures
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, ComboBox, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, ComboBox, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, ComboBox);
-            WidgetBP->WidgetTree->RemoveWidget(ComboBox);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add combo box to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add combo box to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -2826,11 +2846,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         // This prevents "Variable was deleted but still has a GUID" ensure failures
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, SpinBox, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, SpinBox, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, SpinBox);
-            WidgetBP->WidgetTree->RemoveWidget(SpinBox);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add spin box to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add spin box to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -2883,11 +2904,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         // This prevents "Variable was deleted but still has a GUID" ensure failures
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, ListView, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, ListView, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, ListView);
-            WidgetBP->WidgetTree->RemoveWidget(ListView);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add list view to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add list view to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
@@ -2940,11 +2962,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
         // This prevents "Variable was deleted but still has a GUID" ensure failures
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        if (!SafeAddWidgetToTree(WidgetBP, TreeView, ParentSlot))
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, TreeView, ParentSlot, &AddErr))
         {
-            UnregisterWidgetGuid(WidgetBP, TreeView);
-            WidgetBP->WidgetTree->RemoveWidget(TreeView);
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add tree view to widget tree"), TEXT("TREE_ERROR"));
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? FString(TEXT("Failed to add tree view to widget tree")) : AddErr,
+                TEXT("TREE_ERROR"));
             return true;
         }
 
