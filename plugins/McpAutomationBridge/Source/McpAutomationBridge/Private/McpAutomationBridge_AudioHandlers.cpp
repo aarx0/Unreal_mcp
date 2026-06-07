@@ -663,15 +663,24 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
       Wave = LoadObject<USoundWave>(nullptr, *WavePath);
     }
 
-    USoundCueFactoryNew *Factory = NewObject<USoundCueFactoryNew>();
-    if (Wave) {
-      Factory->InitialSoundWaves.Add(Wave);
+    // Safe creation (CreatePackage + NewObject) -- NOT IAssetTools::CreateAsset (modal hazard;
+    // see the create_sound_class note). Seed the wave-player node ourselves to match what
+    // USoundCueFactoryNew::InitialSoundWaves would have produced.
+    const FString FullPackagePath = PackagePath / Name;
+    UPackage *Package = CreatePackage(*FullPackagePath);
+    USoundCue *SoundCue = Package
+        ? NewObject<USoundCue>(Package, FName(*Name), RF_Public | RF_Standalone)
+        : nullptr;
+    if (SoundCue) {
+      FAssetRegistryModule::AssetCreated(SoundCue);
+      SoundCue->MarkPackageDirty();
+      if (Wave) {
+        USoundNodeWavePlayer *WavePlayer = SoundCue->ConstructSoundNode<USoundNodeWavePlayer>();
+        WavePlayer->SetSoundWave(Wave);
+        SoundCue->FirstNode = WavePlayer;
+        SoundCue->LinkGraphNodesFromSoundNodes();
+      }
     }
-    FAssetToolsModule &AssetToolsModule =
-        FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools");
-    UObject *NewAsset = AssetToolsModule.Get().CreateAsset(
-        Name, PackagePath, USoundCue::StaticClass(), Factory);
-    USoundCue *SoundCue = Cast<USoundCue>(NewAsset);
 
     if (!SoundCue) {
       SendAutomationError(RequestingSocket, RequestId,
@@ -763,12 +772,20 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
       PackagePath = GetJsonStringField(Payload, TEXT("path"));
     }
 
-    USoundClassFactory *Factory = NewObject<USoundClassFactory>();
-    FAssetToolsModule &AssetToolsModule =
-        FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools");
-    UObject *NewAsset = AssetToolsModule.Get().CreateAsset(
-        Name, PackagePath, USoundClass::StaticClass(), Factory);
-    USoundClass *SoundClass = Cast<USoundClass>(NewAsset);
+    // Create directly via CreatePackage + NewObject -- NOT IAssetTools::CreateAsset, which
+    // can pop an interactive "overwrite existing object?" dialog. In a headless/-unattended
+    // editor that dialog never gets dismissed and HANGS the GameThread (observed >90s, asset
+    // never created). Mirrors the safe create_data_table / attenuation paths in this codebase.
+    const FString FullPackagePath = PackagePath / Name;
+    UPackage *Package = CreatePackage(*FullPackagePath);
+    USoundClass *SoundClass = Package
+        ? NewObject<USoundClass>(Package, FName(*Name), RF_Public | RF_Standalone)
+        : nullptr;
+    if (SoundClass)
+    {
+        FAssetRegistryModule::AssetCreated(SoundClass);
+        SoundClass->MarkPackageDirty();
+    }
 
     if (SoundClass) {
       const TSharedPtr<FJsonObject> *Props;
@@ -837,12 +854,18 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
       PackagePath = GetJsonStringField(Payload, TEXT("path"));
     }
 
-    USoundMixFactory *Factory = NewObject<USoundMixFactory>();
-    FAssetToolsModule &AssetToolsModule =
-        FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools");
-    UObject *NewAsset = AssetToolsModule.Get().CreateAsset(
-        Name, PackagePath, USoundMix::StaticClass(), Factory);
-    USoundMix *SoundMix = Cast<USoundMix>(NewAsset);
+    // Safe creation (CreatePackage + NewObject) -- NOT IAssetTools::CreateAsset, which can pop
+    // a modal that hangs a headless editor (see the create_sound_class note above).
+    const FString FullPackagePath = PackagePath / Name;
+    UPackage *Package = CreatePackage(*FullPackagePath);
+    USoundMix *SoundMix = Package
+        ? NewObject<USoundMix>(Package, FName(*Name), RF_Public | RF_Standalone)
+        : nullptr;
+    if (SoundMix)
+    {
+        FAssetRegistryModule::AssetCreated(SoundMix);
+        SoundMix->MarkPackageDirty();
+    }
 
     if (SoundMix) {
       const TArray<TSharedPtr<FJsonValue>> *Adjusters;

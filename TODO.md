@@ -127,6 +127,27 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] `manage_audio` create_sound_class / create_sound_mix HANG the bridge (300s) — audio-mixing-asset creation modal
+Found 2026-06-07 during the audio sweep. `create_sound_class` (and `create_sound_mix`) never return —
+the parked tools/call times out at 300s. The GameThread keeps ticking (other tools respond, CleanupStaleRequests
+fires), i.e. a **Slate modal** is up and the handler is blocked in its nested pump waiting for a dismissal
+that never comes headlessly. Two distinct causes:
+1. **`IAssetTools::CreateAsset` modal (FIXED).** The old `HandleAudioAction` create_sound_cue/class/mix used
+   `AssetToolsModule.CreateAsset(...)`, which can pop an "overwrite existing object?" dialog (the AudioAuthoring
+   handlers already avoid it for exactly this reason — "recursive FlushRenderingCommands / D3D12 crashes").
+   Replaced all three with the safe `CreatePackage`+`NewObject`(+`AssetCreated`+`MarkPackageDirty`) pattern
+   (cue re-seeds its wave-player node to match `USoundCueFactoryNew::InitialSoundWaves`).
+2. **RESIDUAL (OPEN): audio-mixing-asset creation still hangs even via `NewObject`.** With the safe pattern,
+   `create_attenuation_settings` works (33ms) but `create_sound_class`/`create_sound_mix` STILL hang. So the
+   residual modal is **asset-type-specific to audio-mixing assets** (USoundClass / USoundMix register with the
+   audio device; USoundAttenuation doesn't) — NOT the bridge's creation call. **Not diagnosable remotely**
+   (the Slate modal is invisible over MCP). Needs in-editor debugging: attach a debugger, create a SoundClass
+   via the bridge, and read the hung GameThread callstack / identify the modal window. Likely an audio-device
+   registration interaction in a headless/-unattended editor.
+Also note: **duplicate handlers** — the old `HandleAudioAction` (dispatched first) claims all `create_sound_*`
+via a prefix gate and shadows the safe `HandleManageAudioAuthoringAction` versions. Worth deduplicating once
+the residual hang is understood.
+
 ### [x] Shutdown wrote a raw SSE frame to parked tools/call connections (de-stream leftover)
 **RESOLVED 2026-06-06** (found during the `FSSEConnection`→`FPendingConnection` rename). `Shutdown()`'s
 close-all loop still wrote an `event: message\ndata: …` SSE frame to each parked connection — but under
