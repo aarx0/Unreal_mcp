@@ -135,13 +135,37 @@ Flakiness in shipped surface erodes trust during real authoring.
     itself works via `create` — `create_level_sequence` was never a real action.)
   - `create_smart_object_definition` / `create_mass_entity_config` now return `success`/`existsAfter`
     (AddVerification) like other creates.
-  - 🟡 **DEFERRED (real gap):** `create_niagara_system` is advertised in the `manage_effect` schema
-    but unreachable via the tool — `HandleEffectAction` keys its branches off the **tool-level
-    `Action`** (`Lower = Action.ToLower()` == `"manage_effect"`), so the create_* branches only fire
-    when the action arrives top-level (and those aren't registered MCP tools). Fix needs reworking
-    HandleEffectAction to resolve an effective sub-action (tool-action vs payload `action`) through
-    its gate + branches — non-trivial, left for a focused pass. Same shape likely affects
-    `create_effect` via `manage_effect`.
+  - 🟡 **DEFERRED (real gap, root cause nailed 2026-06-07):** `create_niagara_system` is advertised
+    in the `manage_effect` schema but returns `UNKNOWN_ACTION` via the tool. Actual mechanism (traced
+    in `McpAutomationBridge_EffectHandlers.cpp`): `manage_effect` dispatches with `Action ==
+    "manage_effect"` (Pattern A — default `GetDispatchAction()==GetName()`). `HandleEffectAction`
+    has a re-dispatch (~L250): when `Lower=="manage_effect"`, it routes the payload sub-action to
+    one of 4 specials (`list_debug_shapes`/`clear_debug_shapes`/`spawn_niagara`/
+    `set_niagara_parameter`) **or else to `create_effect`**, then re-enters `HandleEffectAction`.
+    `create_niagara_system` isn't special → routed to `create_effect` → its create branch reads
+    `SubAction="create_niagara_system"` but doesn't handle that sub-action → catch-all. Meanwhile a
+    dedicated `HandleCreateNiagaraSystem` (registered for the top-level `create_niagara_system`
+    action) AND `HandleManageNiagaraAuthoringAction` (NiagaraAuthoringHandlers ~L311) both handle it
+    — the re-dispatch just never routes there. **Fix:** in the `manage_effect` re-dispatch (or the
+    create branch), route `create_niagara_system` (and likely `create_niagara_emitter`/
+    `create_niagara_ribbon`) to `HandleCreateNiagaraSystem`/niagara-authoring instead of
+    `create_effect`. **TRAP (verified, reverted):** do NOT "fix" this by making `Lower` resolve to the
+    payload sub-action globally — that makes `Lower!="manage_effect"`, which disables the L250
+    re-dispatch and breaks `debug_shape`/`create_effect`/etc. via the tool. Route the specific
+    sub-action, don't rewrite the gate.
+- 🟡 **Introspection gaps (DX, found 2026-06-07 during focus/nav work):** the bridge can't cleanly
+  read back two things via typed actions: (1) a Blueprint **CDO's property values** —
+  `inspect get_blueprint_details`/`inspect_class`/`inspect_cdo` return only metadata (parent,
+  components), not default values, so there's no read-counterpart to `blueprint_set_default`
+  (had to rely on the set's echoed value); (2) a Blueprint's **overridden functions / implemented
+  events** — had to read EventGraph nodes via `get_graph_details` to tell whether
+  `BP_GetDesiredFocusTarget` was overridden. Candidate adds: `blueprint_get_default`
+  (CDO property read) and a `list_functions`/`list_overrides` on inspect. Low priority; nice for
+  verify loops.
+- 🟢 **Dead legacy BT branches (trivial cleanup):** the simplistic `add_composite_node`/
+  `add_task_node`/`add_decorator`/`add_service` branch bodies in `McpAutomationBridge_AIHandlers.cpp`
+  are unreachable behind the `USE_GRAPH_AUTHORING` guard (added with the BT fix) — safe to delete
+  whenever. Left in place (harmless) to avoid a fragile ~190-line excision while unattended.
 - ✅ **BT authoring fixed — graph path roots trees, simplistic actions deprecated** 2026-06-07.
   Two-part fix (both verified live):
   - **Part A (the real gap):** `connect_nodes` now accepts `parentNodeId:'root'` — it finds the
