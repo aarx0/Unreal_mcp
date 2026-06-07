@@ -121,7 +121,22 @@ Flakiness in shipped surface erodes trust during real authoring.
   `IsWidgetAuthoringAction`/`IsCommonUiAction`; `manage_ai` covers BT/nav). The action lists live in
   `McpConsolidatedActionRouting.h`, not the deleted tool-def files. The handlers (`Handle*Action`)
   are untouched.
-- 🔴 **BUG: `manage_ai` simple BT node actions report false success (orphaned nodes)** — found
+- ✅ **BT authoring fixed — graph path roots trees, simplistic actions deprecated** 2026-06-07.
+  Two-part fix (both verified live):
+  - **Part A (the real gap):** `connect_nodes` now accepts `parentNodeId:'root'` — it finds the
+    `UBehaviorTreeGraphNode_Root` and connects it to the child, so the child becomes the tree entry.
+    Previously there was no way to attach the top node to the root (`'root'` → `NODE_NOT_FOUND`),
+    leaving `hasRootNode:false` (non-runnable). Now a full graph flow works:
+    `create` → `add_node{nodeType:Selector}` → `connect_nodes{parentNodeId:'root', childNodeId}` →
+    `add_node` + `connect_nodes` for children → `get_ai_info` shows `hasRootNode:true, btNodeCount:2`.
+    (`McpAutomationBridge_BehaviorTreeHandlers.cpp` connect_nodes, mirrors add_subnode's root lookup.)
+  - **Part B (chose option a):** the broken simplistic `add_composite_node`/`add_task_node`/
+    `add_decorator`/`add_service` (which `NewObject`'d an orphaned node and falsely reported success)
+    now return `Error [USE_GRAPH_AUTHORING]` with a message pointing at `add_node`/`connect_nodes`/
+    `add_subnode`. One guard in `HandleManageAIAction`; the legacy branches are now unreachable
+    (trivial TODO: delete the dead branches).
+  Original report below for context.
+- 🔴 **(RESOLVED above) BUG: `manage_ai` simple BT node actions report false success (orphaned nodes)** — found
   2026-06-07. Repro: `create_behavior_tree {name:BT_MCPSweepTest, path:/Game}` →
   `add_composite_node {compositeType:Selector}` → `add_task_node {taskType:Wait}` →
   `add_decorator {decoratorType:Loop}` → `get_ai_info`. All three "add" calls return success

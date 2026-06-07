@@ -538,7 +538,27 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAction(
     Payload->TryGetStringField(TEXT("parentNodeId"), ParentNodeId);
     Payload->TryGetStringField(TEXT("childNodeId"), ChildNodeId);
 
-    UEdGraphNode *Parent = FindGraphNodeByIdOrName(ParentNodeId);
+    // parentNodeId "root" (case-insensitive) targets the graph's root node so the
+    // child becomes the tree's entry composite — without this there was no way to
+    // attach the top node to the root, leaving hasRootNode:false (non-runnable).
+    // Mirrors the root-sentinel lookup used by add_subnode.
+    UEdGraphNode *Parent = nullptr;
+    if (ParentNodeId.Equals(TEXT("root"), ESearchCase::IgnoreCase)) {
+      for (UEdGraphNode *GraphNode : BTGraph->Nodes) {
+        if (UBehaviorTreeGraphNode_Root *RootNode = Cast<UBehaviorTreeGraphNode_Root>(GraphNode)) {
+          Parent = RootNode;
+          break;
+        }
+      }
+      if (!Parent) {
+        SendAutomationError(RequestingSocket, RequestId,
+                            TEXT("Root graph node not found for parentNodeId 'root'."),
+                            TEXT("NODE_NOT_FOUND"));
+        return true;
+      }
+    } else {
+      Parent = FindGraphNodeByIdOrName(ParentNodeId);
+    }
     UEdGraphNode *Child = FindGraphNodeByIdOrName(ChildNodeId);
 
     if (!Parent || !Child) {

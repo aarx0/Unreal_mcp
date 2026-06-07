@@ -1071,6 +1071,30 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         return true;
     }
 
+    // -----------------------------------------------------------------------
+    // DEPRECATED simplistic BT node actions. add_composite_node / add_task_node /
+    // add_decorator / add_service NewObject a node but never wire it into the
+    // Behavior Tree graph, so the node is orphaned (get_ai_info shows btNodeCount
+    // unchanged) and is discarded when the asset is opened in the BT editor — a
+    // false success. Superseded by the graph-based authoring (add_node /
+    // connect_nodes / add_subnode), which builds real UBehaviorTreeGraphNodes that
+    // compile to RootNode. This guard returns guidance for all four; the legacy
+    // branches below no longer execute (TODO: delete the dead branches).
+    // -----------------------------------------------------------------------
+    if (SubAction == TEXT("add_composite_node") || SubAction == TEXT("add_task_node") ||
+        SubAction == TEXT("add_decorator") || SubAction == TEXT("add_service"))
+    {
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("This action does not wire the node into the Behavior Tree graph (the node would be "
+                 "orphaned and lost when the asset is opened in the BT editor). Use graph-based authoring "
+                 "instead: add_node {nodeType:'Selector'|'Sequence'|'Wait'|...}, then connect_nodes "
+                 "{parentNodeId:'root' or a node id, childNodeId:<new node id>} to attach it ('root' makes "
+                 "it the tree entry). For decorators/services use add_subnode {parentNodeId, "
+                 "subnodeType:'Decorator'|'Service', nodeClass}."),
+            TEXT("USE_GRAPH_AUTHORING"));
+        return true;
+    }
+
     if (SubAction == TEXT("add_composite_node"))
     {
         FString BTPath = GetStringFieldAI(Payload, TEXT("behaviorTreePath"));
