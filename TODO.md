@@ -93,6 +93,35 @@ Flakiness in shipped surface erodes trust during real authoring.
   `add_data_table_row` → `add_common_button` (project's `WBP_MenuButton`) →
   `set_common_button_input_action` → the button's `TriggeringInputAction` handle persists to the
   saved asset pointing at the right DataTable + row, with a clean compile.
+- ✅ **Material authoring — swept & verified working** 2026-06-07. Full graph-authoring path is
+  solid end-to-end via the canonical **`manage_asset`** tool (which re-dispatches material
+  sub-actions to `HandleManageMaterialAuthoringAction` — see the surface note below):
+  `create_material` → `add_scalar_parameter` / `add_vector_parameter` / `add_texture_sample`
+  (each returns a `nodeId`) → `connect_nodes` (targetNodeId `"Main"` + `inputName=BaseColor/
+  Roughness/...`) → `get_material_info` (reads back nodeCount, parameters, expressions w/ pos,
+  **and the connections array**) → `compile_material` (`compiled:true, saved:true`). No bugs in
+  the core path. (Minor non-blocking robustness note: `add_vector_parameter` reads `defaultValue`
+  only via `TryGetObjectField`, so an MCP client that *stringifies* the rgba object would get the
+  default white — same stringify gotcha the DataTable fix handles both ways; only matters for the
+  vector default, not connectivity.)
+- ✅ **`create_folder` false `existsAfter:false`** — FIXED 2026-06-07. `manage_asset create_folder`
+  created the folder (`MakeDirectory` → `success:true`) but reported `existsAfter:false` because it
+  verified via `VerifyAssetExists` (→ `DoesAssetExist`), and a folder is never an asset. Now
+  verifies the directory on disk via `DoesAssetDirectoryExistOnDisk`. Verified live (live-coding
+  patch): fresh folder + `/Game` root both report `existsAfter:true`. `.cpp`-only change in
+  `McpAutomationBridge_AssetWorkflowHandlers.cpp::HandleCreateFolder`.
+- 🟡 **Canonical tool surface excludes 14 tool defs** — `FMcpToolRegistry::Register` drops any tool
+  whose name fails `IsCanonicalMcpToolName` (a hard-coded 22-name allowlist in
+  `McpToolRegistry.cpp`). So `McpTool_ManageMaterialAuthoring/Skeleton/Texture/Navigation/Lighting/
+  Volumes/Splines/Input/GameFramework/BehaviorTree/Performance/Pipeline/Sessions/WidgetAuthoring`
+  are compiled but **never registered** — `tools/list` shows 22, and a direct
+  `manage_material_authoring` (etc.) call returns `TOOL_DISABLED` / `enable_tools`→`notFound`.
+  Their functionality is reached by folding the sub-actions into a canonical tool: `manage_asset`
+  re-dispatches material (`IsMaterialAuthoringAction`) and texture (`IsTextureAction`) actions;
+  similar fold-ins exist for others. Decision for Aaron: this is intentional consolidation, but the
+  14 dead `McpTool_*.cpp` definition files are confusing (they look registerable but aren't) — worth
+  either deleting them or adding a header comment that the canonical surface is `manage_*`. Not
+  changed autonomously (surface/product decision).
 - 🟡 **Enhanced Input authoring depth** — IMC/IA creation + key mapping exist (Input group);
   verify round-trips and fill the sparse trigger/modifier authoring (modifier/trigger
   factories are thin).

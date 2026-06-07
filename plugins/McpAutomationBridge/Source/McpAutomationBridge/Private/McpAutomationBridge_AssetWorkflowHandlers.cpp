@@ -2153,8 +2153,12 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateFolder(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetStringField(TEXT("path"), SafePath);
-    // Add verification data
-    VerifyAssetExists(Resp, SafePath);
+    // Verify as a DIRECTORY, not an asset. A folder is never an asset, so the
+    // generic VerifyAssetExists (DoesAssetExist) always reported
+    // existsAfter:false for a folder that was in fact created successfully.
+    const bool bDirExists = DoesAssetDirectoryExistOnDisk(SafePath);
+    Resp->SetStringField(TEXT("verifiedPath"), SafePath);
+    Resp->SetBoolField(TEXT("existsAfter"), bDirExists);
     SendAutomationResponse(Socket, RequestId, true, TEXT("Folder created"),
                            Resp, FString());
   } else {
