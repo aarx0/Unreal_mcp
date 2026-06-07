@@ -169,6 +169,15 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectAction(
 
   auto IsNiagaraAuthoringSubAction = [](const FString &SubAction) {
     static const TSet<FString> NiagaraAuthoringActions = {
+        // Asset creation — handled by HandleManageNiagaraAuthoringAction via the
+        // `subAction` field. Routed here (before the manage_effect re-dispatch at
+        // ~L235) so `manage_effect create_niagara_system`/`create_niagara_emitter`
+        // reach the real handler instead of falling through to `create_effect`
+        // (which has no branch for them -> UNKNOWN_ACTION). create_niagara_ribbon
+        // is intentionally NOT here: it keeps its existing create_effect-path
+        // handling (bCreateRibbon).
+        TEXT("create_niagara_system"),
+        TEXT("create_niagara_emitter"),
         TEXT("add_emitter_to_system"),
         TEXT("set_emitter_properties"),
         TEXT("add_spawn_rate_module"),

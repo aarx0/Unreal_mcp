@@ -135,24 +135,24 @@ Flakiness in shipped surface erodes trust during real authoring.
     itself works via `create` — `create_level_sequence` was never a real action.)
   - `create_smart_object_definition` / `create_mass_entity_config` now return `success`/`existsAfter`
     (AddVerification) like other creates.
-  - 🟡 **DEFERRED (real gap, root cause nailed 2026-06-07):** `create_niagara_system` is advertised
-    in the `manage_effect` schema but returns `UNKNOWN_ACTION` via the tool. Actual mechanism (traced
-    in `McpAutomationBridge_EffectHandlers.cpp`): `manage_effect` dispatches with `Action ==
-    "manage_effect"` (Pattern A — default `GetDispatchAction()==GetName()`). `HandleEffectAction`
-    has a re-dispatch (~L250): when `Lower=="manage_effect"`, it routes the payload sub-action to
-    one of 4 specials (`list_debug_shapes`/`clear_debug_shapes`/`spawn_niagara`/
-    `set_niagara_parameter`) **or else to `create_effect`**, then re-enters `HandleEffectAction`.
-    `create_niagara_system` isn't special → routed to `create_effect` → its create branch reads
-    `SubAction="create_niagara_system"` but doesn't handle that sub-action → catch-all. Meanwhile a
-    dedicated `HandleCreateNiagaraSystem` (registered for the top-level `create_niagara_system`
-    action) AND `HandleManageNiagaraAuthoringAction` (NiagaraAuthoringHandlers ~L311) both handle it
-    — the re-dispatch just never routes there. **Fix:** in the `manage_effect` re-dispatch (or the
-    create branch), route `create_niagara_system` (and likely `create_niagara_emitter`/
-    `create_niagara_ribbon`) to `HandleCreateNiagaraSystem`/niagara-authoring instead of
-    `create_effect`. **TRAP (verified, reverted):** do NOT "fix" this by making `Lower` resolve to the
-    payload sub-action globally — that makes `Lower!="manage_effect"`, which disables the L250
-    re-dispatch and breaks `debug_shape`/`create_effect`/etc. via the tool. Route the specific
-    sub-action, don't rewrite the gate.
+  - ✅ **`manage_effect create_niagara_system`/`create_niagara_emitter` UNKNOWN_ACTION — FIXED
+    2026-06-07.** Both were advertised in the `manage_effect` schema but returned `UNKNOWN_ACTION`
+    via the tool. Mechanism (traced in `McpAutomationBridge_EffectHandlers.cpp`): `manage_effect`
+    dispatches with `Action == "manage_effect"` (Pattern A). The re-dispatch (~L235): when
+    `Lower=="manage_effect"`, it routes the payload sub-action to one of 4 specials
+    (`list_debug_shapes`/`clear_debug_shapes`/`spawn_niagara`/`set_niagara_parameter`) **or else to
+    `create_effect`**; the `create_effect` branch has no case for system/emitter → catch-all.
+    **Fix applied:** added `create_niagara_system` + `create_niagara_emitter` to the
+    `NiagaraAuthoringActions` set (checked at L219, *before* the manage_effect re-dispatch), so they
+    route to `HandleManageNiagaraAuthoringAction` (which already handles both via `subAction`, stamped
+    into the payload by `NormalizeNativeManageEffectSubAction`). One-point change, no `Lower` rewrite.
+    `create_niagara_ribbon` intentionally left on its existing `create_effect`-path handling
+    (`bCreateRibbon`, L1684/1880) — works there, no need to move it. **TRAP avoided (the harmful
+    revert from earlier):** did NOT make `Lower` resolve to the payload sub-action globally — that
+    makes `Lower!="manage_effect"`, disabling the re-dispatch and breaking `debug_shape`/
+    `create_effect`. Verified live (live-coding patch): `manage_effect create_niagara_system` and
+    `create_niagara_emitter` both create real assets; `list_debug_shapes` still works (re-dispatch
+    gate intact). `.cpp`-only.
 - 🟡 **Introspection gaps (DX, found 2026-06-07 during focus/nav work):** the bridge can't cleanly
   read back two things via typed actions: (1) a Blueprint **CDO's property values** —
   `inspect get_blueprint_details`/`inspect_class`/`inspect_cdo` return only metadata (parent,
