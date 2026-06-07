@@ -148,6 +148,11 @@ Flakiness in shipped surface erodes trust during real authoring.
   and (NEW 2026-06-07) **style-asset creation**. Missing / runtime-only: activatable-widget stack
   push/pop + focus/nav, input-action→click wiring. Some is inherently runtime
   (see `COMMONUI_INTEGRATION_PLAN.md`).
+  - 📝 **Gamepad focus/nav** — design stub parked in `COMMONUI_FOCUS_NAV.md` for a future deep
+    dive. Key finding: activation flags (`bAutoActivate`/`bIsModal`/`bSupportsActivationFocus`/
+    `bAutoRestoreFocus`) are plain UPROPERTYs already settable via `inspect set_property`, but the
+    desired-focus *target* is a BP override (`BP_GetDesiredFocusTarget`), not a property — so the
+    real work is either generating that override or adding a project base-class property. Deferred.
   - ✅ **Style-asset creation** DONE 2026-06-07: `create_common_button_style` /
     `create_common_text_style` (via `manage_blueprint`). CommonUI styles ARE classes (assigned with
     `SetStyle(TSubclassOf<...>)`), so each creates a Blueprint subclass of `UCommonButtonStyle` /
