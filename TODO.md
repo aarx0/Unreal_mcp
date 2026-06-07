@@ -110,18 +110,17 @@ Flakiness in shipped surface erodes trust during real authoring.
   verifies the directory on disk via `DoesAssetDirectoryExistOnDisk`. Verified live (live-coding
   patch): fresh folder + `/Game` root both report `existsAfter:true`. `.cpp`-only change in
   `McpAutomationBridge_AssetWorkflowHandlers.cpp::HandleCreateFolder`.
-- 🟡 **Canonical tool surface excludes 14 tool defs** — `FMcpToolRegistry::Register` drops any tool
-  whose name fails `IsCanonicalMcpToolName` (a hard-coded 22-name allowlist in
-  `McpToolRegistry.cpp`). So `McpTool_ManageMaterialAuthoring/Skeleton/Texture/Navigation/Lighting/
-  Volumes/Splines/Input/GameFramework/BehaviorTree/Performance/Pipeline/Sessions/WidgetAuthoring`
-  are compiled but **never registered** — `tools/list` shows 22, and a direct
-  `manage_material_authoring` (etc.) call returns `TOOL_DISABLED` / `enable_tools`→`notFound`.
-  Their functionality is reached by folding the sub-actions into a canonical tool: `manage_asset`
-  re-dispatches material (`IsMaterialAuthoringAction`) and texture (`IsTextureAction`) actions;
-  similar fold-ins exist for others. Decision for Aaron: this is intentional consolidation, but the
-  14 dead `McpTool_*.cpp` definition files are confusing (they look registerable but aren't) — worth
-  either deleting them or adding a header comment that the canonical surface is `manage_*`. Not
-  changed autonomously (surface/product decision).
+- ✅ **Canonical tool surface — dead tool defs removed** 2026-06-07. `FMcpToolRegistry::Register`
+  drops any tool whose name fails `IsCanonicalMcpToolName` (a hard-coded 22-name allowlist in
+  `McpToolRegistry.cpp`), so 14 `McpTool_*.cpp` files were compiled but **never registered** —
+  confusing because they look registerable but aren't. Deleted them (Material­Authoring/Skeleton/
+  Texture/Navigation/Lighting/Volumes/Splines/Input/GameFramework/BehaviorTree/Performance/Pipeline/
+  Sessions/WidgetAuthoring). No functional change: `tools/list` is still 22, and those families'
+  actions remain reachable because they're folded into canonical tools via re-dispatch (e.g.
+  `manage_asset` → `IsMaterialAuthoringAction`/`IsTextureAction`; `manage_blueprint` →
+  `IsWidgetAuthoringAction`/`IsCommonUiAction`; `manage_ai` covers BT/nav). The action lists live in
+  `McpConsolidatedActionRouting.h`, not the deleted tool-def files. The handlers (`Handle*Action`)
+  are untouched.
 - 🔴 **BUG: `manage_ai` simple BT node actions report false success (orphaned nodes)** — found
   2026-06-07. Repro: `create_behavior_tree {name:BT_MCPSweepTest, path:/Game}` →
   `add_composite_node {compositeType:Selector}` → `add_task_node {taskType:Wait}` →
