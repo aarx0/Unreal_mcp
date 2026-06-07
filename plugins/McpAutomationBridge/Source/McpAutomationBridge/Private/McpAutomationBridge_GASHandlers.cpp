@@ -100,6 +100,11 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpGASHandlers, Log, All);
 #if __has_include("AbilitySystemComponent.h")
 #define MCP_HAS_GAS 1
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"   // IAbilitySystemInterface (resolve ASC on a live actor)
+#include "EngineUtils.h"               // TActorIterator (find a live PIE actor)
+#include "GameFramework/Pawn.h"        // APawn (ASC fallback: pawn -> playerstate/controller)
+#include "GameFramework/Controller.h"  // AController
+#include "GameFramework/PlayerState.h" // APlayerState
 #include "AttributeSet.h"
 #include "GameplayEffect.h"
 #include "GameplayAbilitySpec.h"
@@ -2621,6 +2626,139 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     // ============================================================
 
     // get_gas_info
+    // get_attribute - read a LIVE actor's GAS attribute value during PIE. This is the
+    // verify-loop keystone for combat: enter PIE, act, then assert (e.g. Health dropped).
+    // Reads the runtime ASC, NOT an asset CDO (that's get_gas_info).
+    if (SubAction == TEXT("get_attribute") || SubAction == TEXT("get_attribute_value"))
+    {
+        UWorld* PieWorld = (GEditor && GEditor->PlayWorld) ? GEditor->PlayWorld.Get() : nullptr;
+        if (!PieWorld)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("get_attribute reads a live actor; start PIE first (control_editor play)."),
+                TEXT("NOT_IN_PIE"));
+            return true;
+        }
+
+        const FString ActorName = GetStringFieldGAS(Payload, TEXT("actorName"));
+        const FString AttributeName = GetStringFieldGAS(Payload, TEXT("attribute"));
+        if (AttributeName.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("get_attribute requires 'attribute' (e.g. 'Health'). Optional 'actorName' (defaults to the player pawn)."),
+                TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+
+        // Resolve the actor: by name (object name or label), else the first player pawn.
+        AActor* TargetActor = nullptr;
+        if (!ActorName.IsEmpty())
+        {
+            for (TActorIterator<AActor> It(PieWorld); It; ++It)
+            {
+                AActor* A = *It;
+                if (A && (A->GetName() == ActorName || A->GetActorNameOrLabel() == ActorName))
+                {
+                    TargetActor = A;
+                    break;
+                }
+            }
+            if (!TargetActor)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Actor '%s' not found in the PIE world."), *ActorName),
+                    TEXT("ACTOR_NOT_FOUND"));
+                return true;
+            }
+        }
+        else
+        {
+            APlayerController* PC = PieWorld->GetFirstPlayerController();
+            TargetActor = PC ? PC->GetPawn() : nullptr;
+            if (!TargetActor)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("No 'actorName' given and no player pawn found in PIE."),
+                    TEXT("ACTOR_NOT_FOUND"));
+                return true;
+            }
+        }
+
+        // Resolve the ASC. GAS commonly hangs the ASC off the PlayerState (player) or
+        // directly on the actor (enemies), so check the actor first, then walk
+        // pawn <-> controller <-> playerstate.
+        auto TryGetASC = [](AActor* A) -> UAbilitySystemComponent*
+        {
+            if (!A) return nullptr;
+            if (IAbilitySystemInterface* Iface = Cast<IAbilitySystemInterface>(A))
+            {
+                if (UAbilitySystemComponent* C = Iface->GetAbilitySystemComponent()) return C;
+            }
+            return A->FindComponentByClass<UAbilitySystemComponent>();
+        };
+        UAbilitySystemComponent* ASC = TryGetASC(TargetActor);
+        AActor* AscOwner = ASC ? TargetActor : nullptr;
+        if (!ASC)
+        {
+            if (APawn* Pawn = Cast<APawn>(TargetActor))
+            {
+                if ((ASC = TryGetASC(Pawn->GetPlayerState()))) AscOwner = Pawn->GetPlayerState();
+                else if ((ASC = TryGetASC(Pawn->GetController()))) AscOwner = Pawn->GetController();
+            }
+            else if (AController* Ctrl = Cast<AController>(TargetActor))
+            {
+                if ((ASC = TryGetASC(Ctrl->PlayerState))) AscOwner = Ctrl->PlayerState;
+                else if ((ASC = TryGetASC(Ctrl->GetPawn()))) AscOwner = Ctrl->GetPawn();
+            }
+        }
+        if (!ASC)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Actor '%s' (and its pawn/controller/playerstate) has no AbilitySystemComponent."), *TargetActor->GetName()),
+                TEXT("NO_ASC"));
+            return true;
+        }
+
+        // Match the attribute by name; collect the rest to guide the caller on a miss.
+        TArray<FGameplayAttribute> AllAttrs;
+        ASC->GetAllAttributes(AllAttrs);
+        FGameplayAttribute Matched;
+        TArray<TSharedPtr<FJsonValue>> AvailableJson;
+        for (const FGameplayAttribute& Attr : AllAttrs)
+        {
+            const FString AttrName = Attr.GetName();
+            AvailableJson.Add(MakeShared<FJsonValueString>(AttrName));
+            if (!Matched.IsValid() && AttrName.Equals(AttributeName, ESearchCase::IgnoreCase))
+            {
+                Matched = Attr;
+            }
+        }
+        if (!Matched.IsValid())
+        {
+            TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
+            Err->SetStringField(TEXT("actor"), TargetActor->GetName());
+            Err->SetArrayField(TEXT("availableAttributes"), AvailableJson);
+            SendAutomationResponse(RequestingSocket, RequestId, false,
+                FString::Printf(TEXT("Attribute '%s' not found on '%s'."), *AttributeName, *TargetActor->GetName()),
+                Err, TEXT("ATTRIBUTE_NOT_FOUND"));
+            return true;
+        }
+
+        bool bFound = false;
+        const float CurrentValue = ASC->GetGameplayAttributeValue(Matched, bFound);
+        const float BaseValue = ASC->GetNumericAttributeBase(Matched);
+
+        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+        Result->SetBoolField(TEXT("success"), true);
+        Result->SetStringField(TEXT("actor"), TargetActor->GetName());
+        Result->SetStringField(TEXT("ascOwner"), AscOwner ? AscOwner->GetName() : TargetActor->GetName());
+        Result->SetStringField(TEXT("attribute"), Matched.GetName());
+        Result->SetNumberField(TEXT("value"), CurrentValue);
+        Result->SetNumberField(TEXT("baseValue"), BaseValue);
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Attribute value"), Result, FString());
+        return true;
+    }
+
     if (SubAction == TEXT("get_gas_info"))
     {
         if (AssetPath.IsEmpty())

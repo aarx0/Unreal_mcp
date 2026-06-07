@@ -48,9 +48,12 @@ public:
 				TEXT("configure_cue_trigger"),
 				TEXT("set_cue_effects"),
 				TEXT("add_tag_to_asset"),
-				TEXT("get_gas_info")
+				TEXT("get_gas_info"),
+				TEXT("get_attribute")
 			}, TEXT("GAS action to perform."))
 			.String(TEXT("name"), TEXT("Name of the asset to create."))
+			.String(TEXT("actorName"), TEXT("get_attribute: live PIE actor to read (object name or label; defaults to the player pawn)."))
+			.String(TEXT("attribute"), TEXT("get_attribute: attribute to read at runtime (e.g. 'Health')."))
 			.String(TEXT("path"), TEXT("Directory path for asset creation."))
 			.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 			.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
