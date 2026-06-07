@@ -65,3 +65,65 @@ child widget. That's real graph authoring, not a property poke — the heavy par
 ## References
 - `Engine/Plugins/Runtime/CommonUI/Source/CommonUI/Public/CommonActivatableWidget.h`
 - `COMMONUI_INTEGRATION_PLAN.md` (broader Common UI integration notes)
+
+---
+
+# Deep dive (2026-06-07) — grounded design + recommendation
+
+This section supersedes the "Open design questions" above with concrete answers,
+grounded in the project's actual menus (inspected live via the bridge).
+
+## Grounding — the real menus
+Both target menus derive **directly from the engine `UCommonActivatableWidget`** (no
+project subclass), with CommonUI-aware interactive children:
+- **`WBP_PauseScreen`** (parent `CommonActivatableWidget`): root `CanvasPanel` → BG image,
+  title text, 3× `WBP_VolumeSlider`.
+- **`WBP_OptionsScreen`** (parent `CommonActivatableWidget`): root `CanvasPanel` → `VerticalBox`
+  of rows; interactive children are `WBP_VolumeSlider`, `AnalogSlider`, and `WBP_MenuButton`
+  (a CommonButton) for Back.
+
+Two implications:
+1. Children are already CommonUI buttons/sliders, so CommonUI's action router handles most
+   D-pad movement **once the screen activates and focus lands on a starting widget**. The
+   missing authoring piece is almost entirely the **desired-focus target**.
+2. There is **no project `UCommonActivatableWidget` subclass** to hang a `DesiredFocus`
+   property on — the pivotal fact for the approach choice below.
+
+## The decision (desired-focus target)
+- **B1 — project base class (recommended; needs the team).** Add a tiny
+  `UGOSActivatableWidget : UCommonActivatableWidget` with
+  `UPROPERTY(EditAnywhere) FName DesiredFocusWidget;` and override
+  `NativeGetDesiredFocusTarget()` → `GetWidgetFromName(DesiredFocusWidget)`. Then (a) reparent
+  each menu to it — the bridge already has `set_widget_parent_class`; (b) the bridge sets the
+  property. Turns the hard case into "reparent + set a property," reused across all screens.
+  Cost: the base class lives in the **game module** (RhyaTowerOfWishes) — the team adds it; the
+  bridge/fork can't (and shouldn't) touch game source.
+- **B2 — bridge generates the `BP_GetDesiredFocusTarget` override (bridge-only).** A new action
+  authors the BP function override inside the WidgetBlueprint (function graph: `GetWidgetFromName`
+  → return node). No game code; works on the existing engine-based widgets as-is. Cost: BP
+  function-graph generation is the fiddliest bridge work here, and it's one override per widget.
+
+**Recommendation:** B1 if the team will add the one base class (cleanest, shared by all screens);
+otherwise B2 as the bridge-owned fallback. The bridge's own work is small either way:
+B1 = `set_widget_parent_class` + set-property (both exist/trivial); B2 = one graph-authoring action.
+
+## Activation flags (the easy half) — already doable today
+`bAutoActivate` / `bIsModal` / `bSupportsActivationFocus` / `bAutoRestoreFocus` are UPROPERTYs →
+settable now via `inspect set_property` on the widget CDO. Action: verify the exact set_property
+call sticks on a WidgetBlueprint CDO and document it; a `set_activatable_flags` convenience is
+optional sugar, not required.
+
+## Nav rules (D-pad order) — follow-up only if needed
+Per-widget `Navigation` (`FWidgetNavigation`: Up/Down/Left/Right = Escape/Wrap/Explicit) sets
+movement order. CommonUI auto-nav covers simple layouts, so this is only for custom order. Open:
+can `inspect set_property` write the nested `Navigation` struct, or is a dedicated
+`set_widget_navigation` action needed? Test before building.
+
+## First implementation slice (when we build)
+1. **Check first:** do the menus already override `BP_GetDesiredFocusTarget`? If so, focus may
+   already work and the gap is elsewhere — don't build anything until this is confirmed.
+2. Decide B1 vs B2 (the team-base-class question).
+3. Add `set_desired_focus {widgetPath, focusWidgetName}` — sets the base-class property (B1) or
+   authors the BP override (B2).
+4. Verify in PIE with a gamepad: activate Pause → focus lands on the first slider/button → D-pad
+   moves between them.
