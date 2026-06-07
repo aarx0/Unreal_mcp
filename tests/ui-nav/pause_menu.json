@@ -1,0 +1,19 @@
+{
+  "name": "Pause menu - gamepad golden path",
+  "description": "Open the pause menu via TogglePause, confirm it is the active screen, drive one gamepad nav, and confirm CommonUI grabbed widget focus (not its viewport fallback). The focusedWidgetNot assertion is EXPECTED TO FAIL today: WBP_PauseScreen's CommonUI conversion is in progress and its DesiredFocusWidget is not resolving to a focusable widget, so CommonUI falls back to focusing the game viewport (UIActionRouterTypes.cpp:1684). That failing assertion is exactly the nav-rot this layer is meant to catch; flip it to a focusedName assertion once the menu grabs focus.",
+  "steps": [
+    { "do": "play" },
+    { "do": "wait", "ms": 4000 },
+    { "do": "resolvePC" },
+    { "do": "call", "function": "TogglePause" },
+    { "do": "wait", "ms": 1500 },
+    { "assert": "inPie", "equals": true },
+    { "assert": "stackContains", "value": "WBP_PauseScreen_C" },
+    { "do": "nav", "direction": "Down", "device": "gamepad" },
+    { "do": "wait", "ms": 500 },
+    { "assert": "inputType", "equals": "Gamepad", "note": "synthesized gamepad nav should flip CommonUI input mode" },
+    { "assert": "focusedWidgetNot", "value": "SViewport", "note": "expected-fail today: pause menu hits CommonUI viewport-focus fallback (desired focus not grabbed)" },
+    { "do": "call", "function": "TogglePause" },
+    { "do": "stop" }
+  ]
+}
