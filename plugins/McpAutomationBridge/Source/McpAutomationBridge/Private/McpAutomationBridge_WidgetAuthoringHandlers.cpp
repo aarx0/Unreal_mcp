@@ -467,10 +467,13 @@ UE_LOG(LogTemp, Verbose, TEXT("UnregisterWidgetGuid: Widget '%s' unregistered (U
      * @param ParentSlot The name of the parent slot (empty = auto-determine)
      * @return true if widget was successfully added to the tree
      */
-    bool SafeAddWidgetToTree(UWidgetBlueprint* WidgetBP, UWidget* NewWidget, const FString& ParentSlot)
+    // NOTE: this .cpp does not include the helpers header, so the default lives here too (the
+    // header carries the same default for other TUs; no TU sees both, so it's legal).
+    bool SafeAddWidgetToTree(UWidgetBlueprint* WidgetBP, UWidget* NewWidget, const FString& ParentSlot, FString* OutError = nullptr)
     {
         if (!WidgetBP || !WidgetBP->WidgetTree || !NewWidget)
         {
+            if (OutError) { *OutError = TEXT("Invalid widget blueprint or widget"); }
             return false;
         }
 
@@ -499,29 +502,20 @@ UE_LOG(LogTemp, Verbose, TEXT("UnregisterWidgetGuid: Widget '%s' unregistered (U
                 }
                 else
                 {
-                    // Root is NOT a panel (e.g., a single widget like a TextBlock).
-                    // Remove the old root cleanly. The original defect here was NOT changing
-                    // the old widget's outer: a bare WidgetTree->RemoveWidget() only nulls the
-                    // root pointer, leaving the widget outered to the WidgetTree, so the
-                    // compiler's ForEachSourceWidget (ForEachObjectWithOuter) still finds that
-                    // GUID-less orphan and ensures. The fix is to rename it out to the transient
-                    // package (changing its outer), exactly as the engine's DeleteWidgets does.
-                    // We deliberately do NOT call DeleteWidgets here: it ends with
-                    // MarkBlueprintAsStructurallyModified, which reinstances mid-operation while
-                    // the just-constructed NewWidget is still an orphan (not yet root) -- that
-                    // intermediate compile trashes/renames NewWidget (e.g. TRASH_Text2_0),
-                    // desyncing it from its variable->GUID entry. This lightweight path triggers
-                    // no intermediate compile, so NewWidget stays intact for the caller's compile.
-                    UWidget* OldRoot = WidgetTree->RootWidget;
-                    UE_LOG(LogTemp, Warning, TEXT("SafeAddWidgetToTree: Replacing non-panel root '%s' with '%s'"),
-                        *OldRoot->GetName(), *NewWidget->GetName());
-
-                    UnregisterWidgetGuid(WidgetBP, OldRoot);
-                    WidgetTree->RemoveWidget(OldRoot);
-                    OldRoot->Rename(nullptr, GetTransientPackage(),
-                        REN_DontCreateRedirectors | REN_NonTransactional);
-
-                    WidgetTree->RootWidget = NewWidget;
+                    // Root exists and is NOT a panel (e.g. a TextBlock/CommonTextBlock). Refuse
+                    // rather than silently replace it -- replacing would discard the existing root
+                    // (data loss). Surface guidance instead. (Decision 2026-06-06: error with
+                    // guidance, not auto-wrap or silent replace.)
+                    const FString Msg = FString::Printf(
+                        TEXT("Cannot add '%s' without a parentSlot: the root widget '%s' is not a ")
+                        TEXT("panel, so it can't take children and adding here would discard it. Pass ")
+                        TEXT("a 'parentSlot' naming a panel, or give the blueprint a panel root first ")
+                        TEXT("(e.g. add_canvas_panel / add_vertical_box)."),
+                        *NewWidget->GetName(), *WidgetTree->RootWidget->GetName());
+                    UE_LOG(LogTemp, Warning, TEXT("SafeAddWidgetToTree: %s"), *Msg);
+                    if (OutError) { *OutError = Msg; }
+                    DiscardUnaddedWidget(WidgetBP, NewWidget);
+                    return false;
                 }
             }
         }
@@ -540,16 +534,21 @@ UE_LOG(LogTemp, Verbose, TEXT("UnregisterWidgetGuid: Widget '%s' unregistered (U
                 }
                 else
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("SafeAddWidgetToTree: Parent '%s' is not a panel widget"),
-                        *ParentSlot);
+                    const FString Msg = FString::Printf(
+                        TEXT("parentSlot '%s' is not a panel widget, so it can't take children. ")
+                        TEXT("Choose a panel parent (e.g. a CanvasPanel / VerticalBox)."), *ParentSlot);
+                    UE_LOG(LogTemp, Warning, TEXT("SafeAddWidgetToTree: %s"), *Msg);
+                    if (OutError) { *OutError = Msg; }
                     DiscardUnaddedWidget(WidgetBP, NewWidget);
                     return false;
                 }
             }
             else
             {
-                UE_LOG(LogTemp, Warning, TEXT("SafeAddWidgetToTree: Parent widget '%s' not found"),
-                    *ParentSlot);
+                const FString Msg = FString::Printf(
+                    TEXT("parentSlot '%s' was not found in the widget tree."), *ParentSlot);
+                UE_LOG(LogTemp, Warning, TEXT("SafeAddWidgetToTree: %s"), *Msg);
+                if (OutError) { *OutError = Msg; }
                 DiscardUnaddedWidget(WidgetBP, NewWidget);
                 return false;
             }

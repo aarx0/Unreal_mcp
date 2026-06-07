@@ -179,11 +179,10 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 			}
 		}
 
-		if (!SafeAddWidgetToTree(WidgetBP, Button, ParentSlot))
+		FString AddErr;
+		if (!SafeAddWidgetToTree(WidgetBP, Button, ParentSlot, &AddErr))
 		{
-			UnregisterWidgetGuid(WidgetBP, Button);
-			WidgetBP->WidgetTree->RemoveWidget(Button);
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Common UI button to widget tree"), TEXT("TREE_ERROR"));
+			SendAutomationError(RequestingSocket, RequestId, AddErr, TEXT("TREE_ERROR"));
 			return true;
 		}
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
@@ -252,11 +251,10 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 			}
 		}
 
-		if (!SafeAddWidgetToTree(WidgetBP, TextWidget, ParentSlot))
+		FString AddErr;
+		if (!SafeAddWidgetToTree(WidgetBP, TextWidget, ParentSlot, &AddErr))
 		{
-			UnregisterWidgetGuid(WidgetBP, TextWidget);
-			WidgetBP->WidgetTree->RemoveWidget(TextWidget);
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Common UI text to widget tree"), TEXT("TREE_ERROR"));
+			SendAutomationError(RequestingSocket, RequestId, AddErr, TEXT("TREE_ERROR"));
 			return true;
 		}
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
@@ -318,11 +316,10 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 			}
 		}
 
-		if (!SafeAddWidgetToTree(WidgetBP, BorderWidget, ParentSlot))
+		FString AddErr;
+		if (!SafeAddWidgetToTree(WidgetBP, BorderWidget, ParentSlot, &AddErr))
 		{
-			UnregisterWidgetGuid(WidgetBP, BorderWidget);
-			WidgetBP->WidgetTree->RemoveWidget(BorderWidget);
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Common UI border to widget tree"), TEXT("TREE_ERROR"));
+			SendAutomationError(RequestingSocket, RequestId, AddErr, TEXT("TREE_ERROR"));
 			return true;
 		}
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);

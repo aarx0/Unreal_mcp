@@ -50,8 +50,14 @@ namespace WidgetAuthoringHelpers
 	/** Remove a widget's GUID-map entry (required when removing a widget from the tree). */
 	void UnregisterWidgetGuid(UWidgetBlueprint* WidgetBP, UWidget* Widget);
 
-	/** Add a widget to the tree with safe root/parent handling and GUID cleanup. */
-	bool SafeAddWidgetToTree(UWidgetBlueprint* WidgetBP, UWidget* NewWidget, const FString& ParentSlot);
+	/**
+	 * Add a widget to the tree with safe root/parent handling and GUID cleanup.
+	 * On failure returns false, cleans up NewWidget (so no orphan is left), and — if
+	 * OutError is provided — fills it with a caller-facing reason/guidance. Refuses to
+	 * silently replace a non-panel root (would be data loss); pass a panel parentSlot
+	 * or give the blueprint a panel root instead.
+	 */
+	bool SafeAddWidgetToTree(UWidgetBlueprint* WidgetBP, UWidget* NewWidget, const FString& ParentSlot, FString* OutError = nullptr);
 
 	/** Register an animation in the GUID map and the Animations array. */
 	void RegisterAnimationGuid(UWidgetBlueprint* WidgetBP, UWidgetAnimation* Animation);

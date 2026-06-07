@@ -196,7 +196,16 @@ button an earlier call had set, because nothing saved the WBP in between. Worth 
 whether `add_common_*` should compile+save (or at least be ensure-clean) so multi-widget
 authoring in one session is reliable.
 
-### [ ] DECISION NEEDED: `SafeAddWidgetToTree` silently *replaces* a non-panel root (data loss)
+### [x] DECISION: `SafeAddWidgetToTree` silently *replaces* a non-panel root (data loss)
+**RESOLVED 2026-06-06 — chose (a) error with guidance.** `SafeAddWidgetToTree` now refuses the
+non-panel-root + no-`parentSlot` case instead of replacing: it cleans up the new widget
+(`DiscardUnaddedWidget`) and returns false with a specific message ("the root '%s' is not a panel …
+pass a parentSlot naming a panel, or add a panel root first"). Threaded an optional `FString* OutError`
+through the helper and surfaced it in the Common UI callers (add_common_button/text/border). The 24
+regular `add_*` callers still error safely but with their generic "Failed to add X to widget tree"
+message — minor follow-up to thread `OutError` there too for identical guidance. Also gave clear
+guidance for the `parentSlot`-not-found / not-a-panel cases. (Original analysis below.)
+
 Surfaced while fixing the ensure above. When you add a widget with no `parentSlot` and the current
 root is a **non-panel** widget (e.g. a `TextBlock`/`CommonTextBlock`), `SafeAddWidgetToTree` discards
 the existing root and installs the new widget as root. This is now *clean* (no ensure/orphan/trash),
