@@ -162,10 +162,10 @@ Flakiness in shipped surface erodes trust during real authoring.
   `BP_GetDesiredFocusTarget` was overridden. Candidate adds: `blueprint_get_default`
   (CDO property read) and a `list_functions`/`list_overrides` on inspect. Low priority; nice for
   verify loops.
-- 🟢 **Dead legacy BT branches (trivial cleanup):** the simplistic `add_composite_node`/
+- ✅ **Dead legacy BT branches removed** 2026-06-07. The simplistic `add_composite_node`/
   `add_task_node`/`add_decorator`/`add_service` branch bodies in `McpAutomationBridge_AIHandlers.cpp`
-  are unreachable behind the `USE_GRAPH_AUTHORING` guard (added with the BT fix) — safe to delete
-  whenever. Left in place (harmless) to avoid a fragile ~190-line excision while unattended.
+  were unreachable behind the `USE_GRAPH_AUTHORING` guard (added with the BT fix); deleted the 194
+  dead lines, build verified clean. Guard now flows straight into `configure_bt_node`.
 - ✅ **BT authoring fixed — graph path roots trees, simplistic actions deprecated** 2026-06-07.
   Two-part fix (both verified live):
   - **Part A (the real gap):** `connect_nodes` now accepts `parentNodeId:'root'` — it finds the
