@@ -127,3 +127,43 @@ can `inspect set_property` write the nested `Navigation` struct, or is a dedicat
    authors the BP override (B2).
 4. Verify in PIE with a gamepad: activate Pause → focus lands on the first slider/button → D-pad
    moves between them.
+
+---
+
+# RESOLVED (2026-06-07) — no base class, no new bridge action needed
+
+The B1/B2 analysis above is **obsolete**: the engine already provides exactly this, and the
+bridge can already author it. (Discovered while compiling a draft `UGOSActivatableWidget` C++ base
+— UHT errored that `DesiredFocusWidget` "is already defined in scope `UUserWidget`". It is.)
+
+- Every `UUserWidget` has `UPROPERTY(EditDefaultsOnly) FWidgetChild DesiredFocusWidget;` plus
+  `SetDesiredFocusWidget(FName)` / `GetDesiredFocusWidget()`.
+- `UCommonActivatableWidget::NativeGetDesiredFocusTarget()` already **falls back to
+  `GetDesiredFocusWidget()`** when no BP override is present (see
+  `CommonActivatableWidget.cpp` ~L95-103). The project's menus derive from `CommonActivatableWidget`
+  and do **not** override `BP_GetDesiredFocusTarget` (confirmed via `get_graph_details` on
+  `WBP_PauseScreen`'s EventGraph), so the fallback path applies.
+
+**So the whole feature is one existing bridge call per menu — no game C++, no reparent, no new action:**
+
+```
+manage_blueprint set_default {
+  blueprintPath: "/Game/UI/WBP_PauseScreen",
+  propertyName:  "DesiredFocusWidget.WidgetName",   // nested path into the FWidgetChild
+  value:         "Master_Volume_Slider"             // the child to focus on activate
+}
+```
+
+`blueprint_set_default` resolves the nested struct path, sets it on the generated-class CDO,
+recompiles, and saves. **Verified live 2026-06-07** on a throwaway `CommonActivatableWidget`-based
+WBP: `set_default DesiredFocusWidget.WidgetName=TestBtn` → response echoes `value:"TestBtn"`,
+persisted to the asset.
+
+Remaining to actually ship on the real menus:
+1. Run the `set_default` call on each real menu (`WBP_PauseScreen`, `WBP_OptionsScreen`) with the
+   desired starting widget. (Touches Aaron's uncommitted menu assets — do on his go.)
+2. PIE gamepad check: open the menu, confirm focus lands on the chosen widget and the D-pad moves
+   between the CommonButtons/sliders (CommonUI's action router handles the movement).
+
+Nav-rules (custom D-pad order) remains the only possible follow-up, and only if auto-nav order
+isn't good enough.
