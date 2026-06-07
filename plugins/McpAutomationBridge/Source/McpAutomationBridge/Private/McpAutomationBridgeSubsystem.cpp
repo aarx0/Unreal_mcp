@@ -9,6 +9,7 @@
 #include "MCP/McpConsolidatedActionRouting.h"
 #include "HAL/PlatformTLS.h"
 #include "Interfaces/IPluginManager.h"
+#include "Misc/AutomationTest.h" // OnTestEndEvent unbind in Deinitialize (TDD runner)
 
 // =============================================================================
 // FMcpRequestErrorDevice - Custom log device for per-request error capture
@@ -445,6 +446,12 @@ void UMcpAutomationBridgeSubsystem::Deinitialize() {
     TickHandle.Reset();
   }
 
+  // Unbind the automation test-end capture delegate (lazy-bound on first run_tests).
+  if (AutomationTestEndHandle.IsValid()) {
+    FAutomationTestFramework::Get().OnTestEndEvent.Remove(AutomationTestEndHandle);
+    AutomationTestEndHandle.Reset();
+  }
+
   // Skip verbose logging during commandlet mode since we didn't fully
   // initialize
   if (!IsRunningCommandlet()) {
@@ -627,6 +634,9 @@ bool UMcpAutomationBridgeSubsystem::Tick(float DeltaTime) {
   // Drain pending requests only outside unsafe engine states.
   if (!GIsSavingPackage && !IsGarbageCollecting() && !IsAsyncLoading()) {
     ProcessPendingAutomationRequests();
+    // Advance any in-progress automation test run one step per frame
+    // (system_control run_tests / get_test_results). No-op when idle.
+    TickAutomationTestRun();
   }
   // Cleanup stale HTTP pending requests (5 minute timeout)
   if (NativeTransport)

@@ -260,6 +260,44 @@ public:
   bool bCurrentBlueprintBusyMarked = false;
   bool bCurrentBlueprintBusyScheduled = false;
 
+  // --- Automation test runs (TDD: run_tests / get_test_results) ---------------
+  // run_tests builds a queue and returns immediately; the subsystem Tick advances
+  // ONE ExecuteLatentCommands per frame so latent/functional tests run over real
+  // frames and never block the request handler (a synchronous in-handler run could
+  // open a map / enter PIE and hang headlessly). get_test_results polls this state.
+  struct FMcpAutomationRun
+  {
+    FString RunId;
+    TArray<FString> TestCommandNames;  // FAutomationTestInfo::GetTestName() (passed to StartTestByName)
+    TArray<FString> TestDisplayNames;  // FAutomationTestInfo::GetDisplayName() (reporting)
+    TArray<FString> TestFullPaths;     // FAutomationTestInfo::GetFullTestPath() (StartTestByName path arg)
+    int32 CurrentIndex = 0;
+    bool bCurrentStarted = false;
+    double CurrentTestStartTime = 0.0; // wall-clock when the current test started (per-test timeout)
+    bool bComplete = false;
+    int32 Passed = 0;
+    int32 Failed = 0;
+    double StartTime = 0.0;
+    TArray<TSharedPtr<FJsonObject>> Results;  // per-test: { test, success, errors[] }
+    // Transient capture for the in-flight test, written by OnAutomationTestEnded
+    // (bound to FAutomationTestFramework::OnTestEndEvent). The editor's in-process
+    // automation worker concludes any active test itself, so we read the result
+    // from that delegate rather than always owning StopTest.
+    bool bCaptured = false;
+    bool bCapturedSuccess = false;
+    int32 CapturedErrorCount = 0;
+    int32 CapturedWarningCount = 0;
+    TArray<FString> CapturedErrors;
+  };
+  /** Active automation run (one at a time). Null when idle. */
+  TSharedPtr<FMcpAutomationRun> ActiveAutomationRun;
+  /** Advance the active automation test run by one step. Called from Tick(). */
+  void TickAutomationTestRun();
+  /** Bound to FAutomationTestFramework::OnTestEndEvent; captures the in-flight result. */
+  void OnAutomationTestEnded(class FAutomationTestBase *Test);
+  /** Handle for the OnTestEndEvent binding (lazy-bound on first run_tests). */
+  FDelegateHandle AutomationTestEndHandle;
+
   // Pending automation request queue (thread-safe). Inbound socket threads
   // will enqueue requests here; the queue is drained sequentially on the
   // game thread to ensure deterministic processing order and avoid

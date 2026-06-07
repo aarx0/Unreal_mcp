@@ -1,5 +1,8 @@
 #include "McpAutomationBridgeGlobals.h"
 #include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
+#include "Misc/Guid.h"
+#include "Misc/AutomationTest.h"     // FAutomationTestFramework — real TDD run/poll (run_tests/get_test_results)
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
 
@@ -41,6 +44,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
   // Check if this handler should process this sub-action
   if (!Lower.StartsWith(TEXT("run_ubt")) &&
       !Lower.StartsWith(TEXT("run_tests")) &&
+      Lower != TEXT("list_tests") &&
+      Lower != TEXT("get_test_results") &&
       !Lower.StartsWith(TEXT("test_progress")) &&
       !Lower.StartsWith(TEXT("test_stale")) &&
       Lower != TEXT("export_asset") &&
@@ -347,54 +352,201 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
                              Result, TEXT("UBT_FAILED"));
     }
     return true;
-  } else if (Lower == TEXT("run_tests")) {
-    // Extract test filter
+  } else if (Lower == TEXT("list_tests")) {
+    // Enumerate registered automation tests (optionally substring-filtered).
+    // Read-only: no test is started. Useful to discover exact test names/paths
+    // before run_tests, and to confirm seeded project tests are visible.
     FString Filter;
     Payload->TryGetStringField(TEXT("filter"), Filter);
-    
-    FString TestName;
-    Payload->TryGetStringField(TEXT("test"), TestName);
-    
-    // If specific test name provided, use it as filter
-    if (!TestName.IsEmpty() && Filter.IsEmpty()) {
-      Filter = TestName;
-    }
     Filter.TrimStartAndEndInline();
-    if (!McpIsSafeAutomationTestFilter(Filter)) {
-      SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("Test filter contains unsafe characters"),
-                          TEXT("INVALID_ARGUMENT"));
-      return true;
-    }
-    
-    // Build automation test command
-    FString TestCommand;
-    if (Filter.IsEmpty()) {
-      // Run all tests
-      TestCommand = TEXT("automation RunAll");
-    } else {
-      // Run filtered tests
-      TestCommand = FString::Printf(TEXT("automation RunTests %s"), *Filter);
+
+    FAutomationTestFramework &Framework = FAutomationTestFramework::Get();
+    Framework.SetRequestedTestFilter(EAutomationTestFlags_FilterMask);
+    TArray<FAutomationTestInfo> AllTests;
+    Framework.GetValidTestNames(AllTests);
+
+    TArray<TSharedPtr<FJsonValue>> TestArray;
+    int32 Matched = 0;
+    for (const FAutomationTestInfo &Info : AllTests) {
+      if (!Filter.IsEmpty() &&
+          !Info.GetDisplayName().Contains(Filter) &&
+          !Info.GetFullTestPath().Contains(Filter) &&
+          !Info.GetTestName().Contains(Filter)) {
+        continue;
+      }
+      ++Matched;
+      TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
+      T->SetStringField(TEXT("displayName"), Info.GetDisplayName());
+      T->SetStringField(TEXT("fullPath"), Info.GetFullTestPath());
+      T->SetStringField(TEXT("testName"), Info.GetTestName());
+      TestArray.Add(MakeShared<FJsonValueObject>(T));
     }
 
-    // Execute the automation command
-    if (GEngine && GEditor && GEditor->GetEditorWorldContext().World()) {
-      GEngine->Exec(GEditor->GetEditorWorldContext().World(), *TestCommand);
-      
-      TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-      Result->SetStringField(TEXT("command"), TestCommand);
-      Result->SetStringField(TEXT("filter"), Filter);
-      
-      // Note: Automation tests run asynchronously in UE.
-      // The command starts the tests, but results come later via automation framework.
-      SendAutomationResponse(RequestingSocket, RequestId, true,
-                             TEXT("Automation tests started. Check Output Log for results."),
-                             Result);
-    } else {
-      SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("Editor world not available for running tests"),
-                          TEXT("EDITOR_NOT_AVAILABLE"));
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetNumberField(TEXT("total"), AllTests.Num());
+    Result->SetNumberField(TEXT("matched"), Matched);
+    Result->SetStringField(TEXT("filter"), Filter);
+    Result->SetArrayField(TEXT("tests"), TestArray);
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           FString::Printf(TEXT("%d of %d automation tests match."),
+                                           Matched, AllTests.Num()),
+                           Result);
+    return true;
+  } else if (Lower == TEXT("run_tests")) {
+    // Real TDD runner. Builds a queue of matching tests and returns immediately;
+    // the subsystem Tick() drives one ExecuteLatentCommands step per frame via
+    // TickAutomationTestRun() so latent/functional tests run over real frames and
+    // never block this request handler. Poll results with get_test_results.
+    if (ActiveAutomationRun.IsValid() && !ActiveAutomationRun->bComplete) {
+      TSharedPtr<FJsonObject> Busy = MakeShared<FJsonObject>();
+      Busy->SetStringField(TEXT("runId"), ActiveAutomationRun->RunId);
+      Busy->SetNumberField(TEXT("total"), ActiveAutomationRun->TestCommandNames.Num());
+      Busy->SetNumberField(TEXT("completed"), ActiveAutomationRun->CurrentIndex);
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          FString::Printf(TEXT("A test run is already in progress (runId=%s). "
+                               "Poll get_test_results until it completes."),
+                          *ActiveAutomationRun->RunId),
+          Busy, TEXT("RUN_IN_PROGRESS"));
+      return true;
     }
+
+    // Capture per-test results via the framework's end-of-test delegate. The
+    // editor's in-process automation worker concludes any active test on its own
+    // tick, so this is how we read pass/fail even when we didn't call StopTest.
+    if (!AutomationTestEndHandle.IsValid()) {
+      AutomationTestEndHandle =
+          FAutomationTestFramework::Get().OnTestEndEvent.AddUObject(
+              this, &UMcpAutomationBridgeSubsystem::OnAutomationTestEnded);
+    }
+
+    FString Filter;
+    Payload->TryGetStringField(TEXT("filter"), Filter);
+    {
+      FString TestName;
+      Payload->TryGetStringField(TEXT("test"), TestName);
+      if (!TestName.IsEmpty() && Filter.IsEmpty()) {
+        Filter = TestName;
+      }
+    }
+    Filter.TrimStartAndEndInline();
+
+    int32 MaxTests = 50;
+    {
+      double MaxTestsD = 0.0;
+      if (Payload->TryGetNumberField(TEXT("maxTests"), MaxTestsD) && MaxTestsD > 0.0) {
+        MaxTests = FMath::Clamp(static_cast<int32>(MaxTestsD), 1, 500);
+      }
+    }
+
+    FAutomationTestFramework &Framework = FAutomationTestFramework::Get();
+    Framework.SetRequestedTestFilter(EAutomationTestFlags_FilterMask);
+    TArray<FAutomationTestInfo> AllTests;
+    Framework.GetValidTestNames(AllTests);
+
+    TSharedPtr<FMcpAutomationRun> Run = MakeShared<FMcpAutomationRun>();
+    Run->RunId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    Run->StartTime = FPlatformTime::Seconds();
+    TArray<TSharedPtr<FJsonValue>> QueuedNames;
+    for (const FAutomationTestInfo &Info : AllTests) {
+      if (!Filter.IsEmpty() &&
+          !Info.GetDisplayName().Contains(Filter) &&
+          !Info.GetFullTestPath().Contains(Filter) &&
+          !Info.GetTestName().Contains(Filter)) {
+        continue;
+      }
+      Run->TestCommandNames.Add(Info.GetTestName());
+      Run->TestDisplayNames.Add(Info.GetDisplayName());
+      Run->TestFullPaths.Add(Info.GetFullTestPath());
+      QueuedNames.Add(MakeShared<FJsonValueString>(Info.GetDisplayName()));
+      if (Run->TestCommandNames.Num() >= MaxTests) {
+        break;
+      }
+    }
+
+    if (Run->TestCommandNames.Num() == 0) {
+      TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+      Result->SetStringField(TEXT("status"), TEXT("complete"));
+      Result->SetStringField(TEXT("filter"), Filter);
+      Result->SetNumberField(TEXT("total"), 0);
+      Result->SetNumberField(TEXT("available"), AllTests.Num());
+      SendAutomationResponse(
+          RequestingSocket, RequestId, true,
+          FString::Printf(TEXT("No automation tests match filter '%s' (%d available). "
+                               "Use list_tests to discover names."),
+                          *Filter, AllTests.Num()),
+          Result);
+      return true;
+    }
+
+    // Don't start while the engine is busy / in PIE; the queue still starts and
+    // TickAutomationTestRun waits for a clean frame.
+    ActiveAutomationRun = Run;
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetStringField(TEXT("runId"), Run->RunId);
+    Result->SetStringField(TEXT("status"), TEXT("running"));
+    Result->SetStringField(TEXT("filter"), Filter);
+    Result->SetNumberField(TEXT("total"), Run->TestCommandNames.Num());
+    Result->SetArrayField(TEXT("tests"), QueuedNames);
+    SendAutomationResponse(
+        RequestingSocket, RequestId, true,
+        FString::Printf(TEXT("Started %d test(s). Poll get_test_results with runId=%s."),
+                        Run->TestCommandNames.Num(), *Run->RunId),
+        Result);
+    return true;
+  } else if (Lower == TEXT("get_test_results")) {
+    // Poll the active/last automation run. Returns status running|complete plus
+    // per-test results once finished.
+    if (!ActiveAutomationRun.IsValid()) {
+      SendAutomationError(RequestingSocket, RequestId,
+                          TEXT("No test run has been started. Call run_tests first."),
+                          TEXT("NO_ACTIVE_RUN"));
+      return true;
+    }
+
+    FString WantRunId;
+    Payload->TryGetStringField(TEXT("runId"), WantRunId);
+    WantRunId.TrimStartAndEndInline();
+    if (!WantRunId.IsEmpty() && WantRunId != ActiveAutomationRun->RunId) {
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(TEXT("runId '%s' not found; current run is '%s'."),
+                          *WantRunId, *ActiveAutomationRun->RunId),
+          TEXT("RUN_NOT_FOUND"));
+      return true;
+    }
+
+    TSharedPtr<FMcpAutomationRun> Run = ActiveAutomationRun;
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetStringField(TEXT("runId"), Run->RunId);
+    Result->SetStringField(TEXT("status"),
+                           Run->bComplete ? TEXT("complete") : TEXT("running"));
+    Result->SetNumberField(TEXT("total"), Run->TestCommandNames.Num());
+    Result->SetNumberField(TEXT("completed"), Run->CurrentIndex);
+    Result->SetNumberField(TEXT("passed"), Run->Passed);
+    Result->SetNumberField(TEXT("failed"), Run->Failed);
+    Result->SetNumberField(TEXT("elapsedSeconds"),
+                           FPlatformTime::Seconds() - Run->StartTime);
+    if (!Run->bComplete &&
+        Run->TestDisplayNames.IsValidIndex(Run->CurrentIndex)) {
+      Result->SetStringField(TEXT("currentTest"),
+                             Run->TestDisplayNames[Run->CurrentIndex]);
+    }
+
+    TArray<TSharedPtr<FJsonValue>> ResultsArray;
+    for (const TSharedPtr<FJsonObject> &R : Run->Results) {
+      ResultsArray.Add(MakeShared<FJsonValueObject>(R));
+    }
+    Result->SetArrayField(TEXT("results"), ResultsArray);
+
+    const FString Msg =
+        Run->bComplete
+            ? FString::Printf(TEXT("Run complete: %d passed, %d failed of %d."),
+                              Run->Passed, Run->Failed, Run->TestCommandNames.Num())
+            : FString::Printf(TEXT("Run in progress: %d/%d complete."),
+                              Run->CurrentIndex, Run->TestCommandNames.Num());
+    SendAutomationResponse(RequestingSocket, RequestId, true, Msg, Result);
     return true;
   } else   if (Lower == TEXT("test_progress_protocol")) {
     // Test action for heartbeat/progress protocol
@@ -880,4 +1032,245 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
+}
+
+// ---------------------------------------------------------------------------
+// OnAutomationTestEnded
+// ---------------------------------------------------------------------------
+// Bound to FAutomationTestFramework::OnTestEndEvent (lazy-bound in run_tests).
+// Fires from InternalStopTest just after the test's success state is set and
+// before the test object is torn down — whether StopTest was called by the
+// editor's in-process automation worker or by us. Captures the result for the
+// test currently in flight so TickAutomationTestRun can report pass/fail.
+void UMcpAutomationBridgeSubsystem::OnAutomationTestEnded(FAutomationTestBase *Test)
+{
+  if (!Test || !ActiveAutomationRun.IsValid() || !ActiveAutomationRun->bCurrentStarted)
+  {
+    return;
+  }
+
+  TSharedPtr<FMcpAutomationRun> Run = ActiveAutomationRun;
+  if (!Run->TestCommandNames.IsValidIndex(Run->CurrentIndex))
+  {
+    return;
+  }
+
+  // Only capture the test we believe is in flight. Command names are
+  // "ClassName" or "ClassName Param"; the ended test's name is the class name.
+  const FString &CmdName = Run->TestCommandNames[Run->CurrentIndex];
+  FString BaseName;
+  FString Param;
+  if (!CmdName.Split(TEXT(" "), &BaseName, &Param, ESearchCase::CaseSensitive))
+  {
+    BaseName = CmdName;
+  }
+  if (Test->GetTestName() != BaseName)
+  {
+    return; // a different test (e.g. one the editor ran on its own)
+  }
+
+  FAutomationTestExecutionInfo Info;
+  Test->GetExecutionInfo(Info);
+
+  Run->bCaptured = true;
+  Run->bCapturedSuccess = Test->GetLastExecutionSuccessState();
+  Run->CapturedErrorCount = Info.GetErrorTotal();
+  Run->CapturedWarningCount = Info.GetWarningTotal();
+  Run->CapturedErrors.Reset();
+  for (const FAutomationExecutionEntry &Entry : Info.GetEntries())
+  {
+    if (Entry.Event.Type == EAutomationEventType::Error)
+    {
+      Run->CapturedErrors.Add(Entry.Event.Message);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TickAutomationTestRun
+// ---------------------------------------------------------------------------
+// Advances the active automation run (started by system_control run_tests) one
+// step per editor frame. Called from UMcpAutomationBridgeSubsystem::Tick()
+// inside the safe-state guard that gates request draining.
+//
+// Why this is not a simple "StartTestByName then ExecuteLatentCommands loop":
+// the editor loads FAutomationWorkerModule, whose own per-frame Tick() drives
+// ExecuteLatentCommands() AND concludes (StopTest) ANY active test the moment
+// GIsAutomationTesting is set — even one we started directly. So a second,
+// unguarded ExecuteLatentCommands() from us in a later frame hits its
+// check(GIsAutomationTesting) and crashes the editor.
+//
+// Design that is correct whether the worker is present or not:
+//   * Every FAutomationTestFramework call is immediately preceded by a
+//     GIsAutomationTesting check. Both this and the worker Tick run on the game
+//     thread sequentially, so the flag cannot change mid-function.
+//   * Results come from OnAutomationTestEnded (OnTestEndEvent), which fires for
+//     whichever side calls StopTest. We never depend on owning the conclusion.
+//   * We still drive ExecuteLatentCommands/StopTest as a fallback for when the
+//     worker isn't ticking; guarded, so it is a harmless duplicate when it is.
+void UMcpAutomationBridgeSubsystem::TickAutomationTestRun()
+{
+  if (!ActiveAutomationRun.IsValid() || ActiveAutomationRun->bComplete)
+  {
+    return;
+  }
+
+  // Hard ceiling per test so a hung latent command (e.g. a map that never
+  // finishes loading) can't wedge the queue forever.
+  static const double McpTestPerTestTimeoutSeconds = 120.0;
+
+  TSharedPtr<FMcpAutomationRun> Run = ActiveAutomationRun;
+
+  // Slow task / PIE active: StartTestByName() would refuse and log an error
+  // that our "did it start?" probe would misread. Wait for a clean frame.
+  if (GIsSlowTask || GIsPlayInEditorWorld)
+  {
+    return;
+  }
+
+  if (Run->CurrentIndex >= Run->TestCommandNames.Num())
+  {
+    Run->bComplete = true;
+    return;
+  }
+
+  FAutomationTestFramework &Framework = FAutomationTestFramework::Get();
+
+  const FString &CmdName = Run->TestCommandNames[Run->CurrentIndex];
+  const FString DisplayName = Run->TestDisplayNames.IsValidIndex(Run->CurrentIndex)
+                                  ? Run->TestDisplayNames[Run->CurrentIndex]
+                                  : CmdName;
+  const FString FullPath = Run->TestFullPaths.IsValidIndex(Run->CurrentIndex)
+                               ? Run->TestFullPaths[Run->CurrentIndex]
+                               : CmdName;
+
+  // Record a result and move to the next test.
+  auto RecordAndAdvance = [&](bool bSuccess, double DurationSeconds, int32 ErrC,
+                              int32 WarnC, const TArray<FString> &Errors,
+                              bool bTimedOut) {
+    TSharedPtr<FJsonObject> R = MakeShared<FJsonObject>();
+    R->SetStringField(TEXT("test"), DisplayName);
+    R->SetStringField(TEXT("command"), CmdName);
+    R->SetBoolField(TEXT("success"), bSuccess);
+    R->SetNumberField(TEXT("durationSeconds"), DurationSeconds);
+    R->SetNumberField(TEXT("errorCount"), ErrC);
+    R->SetNumberField(TEXT("warningCount"), WarnC);
+    if (bTimedOut)
+    {
+      R->SetBoolField(TEXT("timedOut"), true);
+    }
+    TArray<TSharedPtr<FJsonValue>> Errs;
+    for (const FString &E : Errors)
+    {
+      Errs.Add(MakeShared<FJsonValueString>(E));
+    }
+    R->SetArrayField(TEXT("errors"), Errs);
+    Run->Results.Add(R);
+
+    if (bSuccess)
+    {
+      ++Run->Passed;
+    }
+    else
+    {
+      ++Run->Failed;
+    }
+    ++Run->CurrentIndex;
+    Run->bCurrentStarted = false;
+    Run->bCaptured = false;
+    if (Run->CurrentIndex >= Run->TestCommandNames.Num())
+    {
+      Run->bComplete = true;
+    }
+  };
+
+  if (!Run->bCurrentStarted)
+  {
+    // Wait while any automation test (ours from a prior frame, or one the editor
+    // started) is still running; the worker will conclude it.
+    if (GIsAutomationTesting)
+    {
+      return;
+    }
+
+    Run->bCaptured = false;
+    Framework.SetRequestedTestFilter(EAutomationTestFlags_FilterMask);
+    Framework.StartTestByName(CmdName, 0, FullPath);
+
+    if (!GIsAutomationTesting)
+    {
+      // StartTestByName logged an error and did not begin a session.
+      RecordAndAdvance(false, 0.0, 0, 0,
+                       {TEXT("Test could not be started (not found, disabled, "
+                             "or too slow).")},
+                       false);
+      return;
+    }
+
+    Run->bCurrentStarted = true;
+    Run->CurrentTestStartTime = FPlatformTime::Seconds();
+    return; // let the test run; conclusion is detected on a later frame
+  }
+
+  // Test is in flight. If the conclusion already happened (worker called StopTest,
+  // or we did on a prior frame), GIsAutomationTesting is now false.
+  const double Elapsed = FPlatformTime::Seconds() - Run->CurrentTestStartTime;
+
+  if (!GIsAutomationTesting)
+  {
+    if (Run->bCaptured)
+    {
+      RecordAndAdvance(Run->bCapturedSuccess, Elapsed, Run->CapturedErrorCount,
+                       Run->CapturedWarningCount, Run->CapturedErrors, false);
+    }
+    else
+    {
+      RecordAndAdvance(false, Elapsed, 0, 0,
+                       {TEXT("Test concluded but no result was captured.")},
+                       false);
+    }
+    return;
+  }
+
+  // Still running. Enforce the per-test timeout.
+  if (Elapsed > McpTestPerTestTimeoutSeconds)
+  {
+    Framework.DequeueAllCommands();
+    if (GIsAutomationTesting)
+    {
+      FAutomationTestExecutionInfo Tmp;
+      Framework.StopTest(Tmp); // also fires OnTestEndEvent
+    }
+    TArray<FString> Errors = Run->bCaptured ? Run->CapturedErrors : TArray<FString>();
+    Errors.Add(FString::Printf(TEXT("Test timed out after %.0f seconds."), Elapsed));
+    RecordAndAdvance(false, Elapsed,
+                     Run->bCaptured ? Run->CapturedErrorCount : 0,
+                     Run->bCaptured ? Run->CapturedWarningCount : 0, Errors, true);
+    return;
+  }
+
+  // Drive latent commands one step as a fallback for when the worker isn't
+  // ticking. Guarded: GIsAutomationTesting is true right now (same thread).
+  const bool bLatentDone = Framework.ExecuteLatentCommands();
+  if (bLatentDone)
+  {
+    // Latent queue drained; conclude ourselves so we don't depend on the worker.
+    if (GIsAutomationTesting)
+    {
+      FAutomationTestExecutionInfo ExecInfo;
+      Framework.StopTest(ExecInfo); // fires OnTestEndEvent -> capture
+    }
+    if (Run->bCaptured)
+    {
+      RecordAndAdvance(Run->bCapturedSuccess, Elapsed, Run->CapturedErrorCount,
+                       Run->CapturedWarningCount, Run->CapturedErrors, false);
+    }
+    else
+    {
+      RecordAndAdvance(false, Elapsed, 0, 0,
+                       {TEXT("Test concluded but no result was captured.")},
+                       false);
+    }
+  }
+  // else: still running; wait for the next frame.
 }

@@ -48,10 +48,31 @@ Flakiness in shipped surface erodes trust during real authoring.
   past the terminator carry over as the start of the body. Readable-with-no-pending-data is treated
   as a peer close. Mirrors the existing send-path `Wait(WaitForWrite)` idiom. Verified live: normal
   calls + a 9 KB multi-chunk-body CSV import (500 rows) round-tripped intact.
-- 🟡 **Synchronous results / streaming** — `system_control run_tests` is fire-and-forget (no
-  result capture); `docs/Roadmap.md` Phase 5 ("real-time streaming for logs/test results",
-  remote Insights profiling) is unstarted. Add wait/poll-by-request-id (pairs with the
-  transport result cache) so automation/test outcomes are retrievable, not just logged.
+- ✅ **Automation test results (poll-by-runId)** — DONE 2026-06-07. `system_control run_tests`
+  is no longer fire-and-forget: it now enumerates matching tests via
+  `FAutomationTestFramework::GetValidTestNames` (substring `filter` over displayName / fullPath /
+  testName, `maxTests` cap, default 50), builds an `ActiveAutomationRun` queue, and returns
+  `{runId, status:"running", total, tests[]}` immediately. The subsystem `Tick()` drives the run
+  one test per frame via `TickAutomationTestRun()`; poll `system_control get_test_results`
+  (`runId` optional — defaults to the current/last run) for
+  `{status, total, completed, passed, failed, results:[{test, command, success, errorCount,
+  warningCount, errors[]}]}`. Added `system_control list_tests` (read-only enumeration).
+  Seeded `McpBridge.SelfTest.{Pass,Latent,Math}` in `McpAutomationBridge_SelfTests.cpp` (simple,
+  latent multi-frame, and parameterized/complex) so the loop has deterministic project-local
+  tests. **Crash-and-fix worth remembering:** the editor loads `FAutomationWorkerModule`, whose
+  own per-frame `Tick()` calls `ExecuteLatentCommands()` and *concludes* (`StopTest`) **any**
+  active test the instant `GIsAutomationTesting` is set — even one we started directly. A v1 that
+  unguarded-`ExecuteLatentCommands()`'d on the next frame hit `check(GIsAutomationTesting)` and
+  hard-crashed the editor (`AutomationTest.cpp:676`). Fix: bind `OnTestEndEvent` to capture each
+  result from whichever side calls `StopTest`, and guard *every* framework call with an
+  immediately-preceding `GIsAutomationTesting` check (both ticks are game-thread-sequential, so
+  the flag can't flip mid-function). Verified live 2026-06-07: 4/4 self-tests pass; a
+  live-coding-patched failing assertion reports `failed:1` + the exact message; editor survives.
+  Minor known interaction: starting tests directly leaves the worker's `bExecuteNextNetworkCommand`
+  false, so for tests 2+ in a run *we* (not the worker) call the concluding `StopTest` (handled by
+  the guarded fallback). Helper: `scripts/mcp-call.ps1` (one-shot MCP initialize + tools/call).
+- 🟡 **Log/profiling streaming** — `docs/Roadmap.md` Phase 5 real-time streaming for logs +
+  remote Insights profiling is still unstarted (test results above are now covered).
 
 ### B. Authoring capability gaps — new features that unblock real workflows
 - ✅ **DataTable row CRUD** — DONE 2026-06-06. Added 5 `manage_asset` actions:
@@ -110,8 +131,12 @@ Remaining gaps:
   mouse events: right for **menu/UI** testing (works today), but may not exercise **Enhanced
   Input gameplay** mappings (movement/abilities). Verify; if needed, add player-input /
   Enhanced-Input injection for gameplay tests.
-- 🟡 **Synchronous test/assert** — see A "synchronous results." Closing it makes the
-  author→play→assert loop scriptable end-to-end.
+- ✅ **C++ automation test runner** — DONE 2026-06-07 (see §A "Automation test results").
+  `run_tests`/`get_test_results` execute real `FAutomationTestFramework` tests and return
+  pass/fail/errors, so the author→(play)→assert loop is scriptable for any C++ automation test
+  (incl. functional/latent tests, which the worker drives over real frames). Gap that remains:
+  authoring NEW tests still needs a `.cpp` + rebuild (or live-coding patch) — there's no
+  bridge action to generate a test stub.
 - 🟢 **Gameplay-aware assertion helpers** — optional sugar over `runtime_report`/`inspect`
   (read an attribute, confirm an ability tag) for combat verification.
 
