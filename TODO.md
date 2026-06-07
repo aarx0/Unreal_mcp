@@ -122,6 +122,26 @@ Flakiness in shipped surface erodes trust during real authoring.
   14 dead `McpTool_*.cpp` definition files are confusing (they look registerable but aren't) — worth
   either deleting them or adding a header comment that the canonical surface is `manage_*`. Not
   changed autonomously (surface/product decision).
+- 🔴 **BUG: `manage_ai` simple BT node actions report false success (orphaned nodes)** — found
+  2026-06-07. Repro: `create_behavior_tree {name:BT_MCPSweepTest, path:/Game}` →
+  `add_composite_node {compositeType:Selector}` → `add_task_node {taskType:Wait}` →
+  `add_decorator {decoratorType:Loop}` → `get_ai_info`. All three "add" calls return success
+  (`"Added Wait task"` etc.), but `get_ai_info` reports `btNodeCount:1, childDecorators:[],
+  services:[]` — i.e. only the root composite exists; the task and decorator were `NewObject`'d,
+  `MarkPackageDirty`'d, and **never attached** to any composite or graph (see
+  `McpAutomationBridge_AIHandlers.cpp` `add_task_node`/`add_decorator`/`add_service` — they create
+  the node then immediately respond OK without wiring it in). `add_composite_node` only sets
+  `BT->RootNode = NewNode` (no children, no editor graph). Architectural root cause: a UE
+  BehaviorTree is authored via its **editor graph** (`UBehaviorTreeGraph` + `UBehaviorTreeGraphNode_*`),
+  which compiles down to `RootNode`; setting `RootNode`/orphaned nodes directly is fragile — opening
+  the asset in the BT editor recompiles from the (empty) graph and **wipes** the hand-set `RootNode`.
+  The correct path is the graph-based `manage_ai` actions `create`/`add_node`/`connect_nodes` →
+  `HandleBehaviorTreeAction` (verified `create` works; `add_node`/`connect_nodes` need the
+  **BehaviorTreeEditor** editor plugin enabled). **Fix is a decision for Aaron** (not done
+  autonomously — it's a contract change): either (a) make `add_composite_node`/`add_task_node`/
+  `add_decorator`/`add_service` error-with-guidance redirecting to the graph path, or (b) delete
+  them, or (c) reimplement them on top of the graph builder. What DOES work today: BT/blackboard
+  **asset** creation (`create_behavior_tree`, graph `create`, blackboard assets) and `get_ai_info`.
 - 🟡 **Enhanced Input authoring depth** — IMC/IA creation + key mapping exist (Input group);
   verify round-trips and fill the sparse trigger/modifier authoring (modifier/trigger
   factories are thin).
