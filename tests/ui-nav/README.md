@@ -63,13 +63,16 @@ was considered and not needed once focus-stabilize made the faithful path repeat
   focus (`Button_Play`) applies → same Down navigates to `Button_Options`; Up returns.
   Buttons assert via `focusPathContains` (a CommonButton's focused leaf is an unnamed
   internal `SCommonButton`). `5 pass, 0 fail` ×3.
-- `options_roundtrip.json` — the full pad journey: Down → A pushes `WBP_OptionsScreen`
-  (desired-focus row relays to its inner AnalogSlider) → Down/Down → A on `Button_Back`
-  pops → main menu reactivates and `bAutoRestoreFocus` returns focus to `Button_Options`.
-  `8 pass, 0 fail` ×3. **Requires** `CommonUI.ShouldVirtualAcceptSimulateMouseButton=0`
-  (DefaultEngine.ini `[SystemSettings]`): with the engine default (true), CommonUI's analog
-  cursor converts gamepad A into a simulated mouse click at the cursor position and the
-  focused button never receives it — found by this spec, affects real pads identically.
-  Known log noise on options activation: `Cannot create action binding ... no action
-  provided` (`bIsBackHandler=true` with no CommonInput `InputData`/`DefaultBackAction`
-  configured); fix that config to silence it and gain gamepad B = back.
+- `options_roundtrip.json` — the full pad journey, both pop paths: Down → A pushes
+  `WBP_OptionsScreen` (desired-focus row relays to its inner AnalogSlider) → Down/Down →
+  A on `Button_Back` pops (focus auto-restores to `Button_Options`) → A pushes again →
+  **gamepad B pops** via the back-handler action binding. `11 pass, 0 fail` ×3.
+  **Requires** two project config pieces (both in place since 2026-06-09):
+  (1) `CommonUI.ShouldVirtualAcceptSimulateMouseButton=0` (DefaultEngine.ini
+  `[SystemSettings]`) — with the engine default (true), CommonUI's analog cursor converts
+  gamepad A into a simulated mouse click at the cursor position and the focused button
+  never receives it; found by this spec, affects real pads identically.
+  (2) `CommonInputSettings.InputData = /Game/UI/Input/BP_UIInputData` (DefaultGame.ini) —
+  `DefaultBackAction` row (`DT_UIInputActions:Back`, Escape / FaceButton_Right) is what
+  lets `bIsBackHandler` activatables bind B/Escape; without it CommonUI logged
+  `Cannot create action binding ... no action provided` on every options activation.

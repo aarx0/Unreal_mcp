@@ -1,6 +1,6 @@
 {
   "name": "Options screen - gamepad push/pop roundtrip",
-  "description": "Full pad journey: from the main menu, Down lands on Button_Options (flip + nav), A pushes WBP_OptionsScreen whose DesiredFocusWidget (Master_Volume_Slider row) relays focus to its inner AnalogSlider; Down/Down reaches Button_Back, A pops back to the main menu and CommonUI auto-restores focus to Button_Options. Requires CommonUI.ShouldVirtualAcceptSimulateMouseButton=0 (DefaultEngine.ini) - with the engine default, gamepad A becomes a simulated mouse click at the cursor and never reaches the focused button. KNOWN noise: options activation logs 'Cannot create action binding ... no action provided' (bIsBackHandler=true but no CommonInput InputData/DefaultBackAction configured yet) - the nav step tolerates the error response; fix that config to also get gamepad B = back.",
+  "description": "Full pad journey, both pop paths: from the main menu, Down lands on Button_Options (flip + nav), A pushes WBP_OptionsScreen whose DesiredFocusWidget (Master_Volume_Slider row) relays focus to its inner AnalogSlider; Down/Down reaches Button_Back, A pops, focus auto-restores to Button_Options. Then A pushes again and gamepad B pops via the back-handler action binding (bIsBackHandler + the DefaultBackAction row from DT_UIInputActions via BP_UIInputData, configured in DefaultGame.ini CommonInputSettings.InputData). Requires CommonUI.ShouldVirtualAcceptSimulateMouseButton=0 (DefaultEngine.ini) - with the engine default, gamepad A becomes a simulated mouse click at the cursor and never reaches the focused button.",
   "steps": [
     { "do": "play" },
     { "do": "wait", "ms": 4000 },
@@ -20,8 +20,15 @@
     { "assert": "focusPathContains", "value": "Button_Back" },
     { "do": "nav", "direction": "Accept", "device": "gamepad" },
     { "do": "wait", "ms": 800 },
-    { "assert": "stackContains", "value": "WBP_MainMenu_CUI_C", "note": "options popped, main menu reactivated" },
+    { "assert": "stackContains", "value": "WBP_MainMenu_CUI_C", "note": "options popped via Button_Back click" },
     { "assert": "focusPathContains", "value": "Button_Options", "note": "bAutoRestoreFocus returns focus to the pre-push widget" },
+    { "do": "nav", "direction": "Accept", "device": "gamepad" },
+    { "do": "wait", "ms": 800 },
+    { "assert": "stackContains", "value": "WBP_OptionsScreen_C", "note": "pushed again for the B-button pop leg" },
+    { "do": "nav", "direction": "Back", "device": "gamepad" },
+    { "do": "wait", "ms": 800 },
+    { "assert": "stackContains", "value": "WBP_MainMenu_CUI_C", "note": "gamepad B pops via the bound DefaultBackAction (DT_UIInputActions: Back)" },
+    { "assert": "focusPathContains", "value": "Button_Options", "note": "focus restored again" },
     { "do": "stop" }
   ]
 }

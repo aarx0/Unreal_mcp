@@ -287,7 +287,24 @@ Flakiness in shipped surface erodes trust during real authoring.
     Fix: `CommonUI.ShouldVirtualAcceptSimulateMouseButton=0` under `[SystemSettings]` in
     `Config/DefaultEngine.ini` (+ set live via console for the running session). Verified on the
     pad end-to-end: A pushes options, A on Button_Back pops, focus auto-restores.
-  - 📝 **OPEN (Aaron): CommonInput `InputData` not configured → back-handler binding fails.**
+  - ✅ **(FIXED 2026-06-09, Aaron-authorized) CommonInput `InputData` authored over the bridge.**
+    Built the full chain headlessly: `create_data_table` →
+    `/Game/UI/Input/DT_UIInputActions` (rowStruct `CommonInputActionDataBase`) +
+    `add_data_table_row` ×2 (`DefaultClick`: LMB / Gamepad_FaceButton_Bottom; `Back`: Escape /
+    Gamepad_FaceButton_Right — note the row field is `DefaultGamepadInputTypeInfo`, NOT
+    "GamepadInputTypeInfo") → `create_blueprint` `/Game/UI/Input/BP_UIInputData` (parent
+    `CommonUIInputData`) → `set_default` the two `FDataTableRowHandle`s (JSON object form works) →
+    `[/Script/CommonInput.CommonInputSettings] InputData=...BP_UIInputData_C` in DefaultGame.ini.
+    **Gotcha:** the live settings CDO write does NOT take effect (`bInputDataLoaded` caches null;
+    bridge `set_property` doesn't fire `PostEditChangeProperty`) — needs the editor restart to load
+    from config. **Second gotcha (ops):** live-coding patches are session-scoped — after the editor
+    restart the on-disk bridge DLL was stale (no focus-stabilize/inactive-input/rename fixes) until
+    one `live_coding_compile` re-patched everything from source. Verified on the pad: options
+    activation binds `Legacy_DT_UIInputActions_Back` (first non-empty `boundActions` ever),
+    **gamepad B pops the screen**, focus restores, zero `no action provided` in the fresh session
+    log. `options_roundtrip.json` extended with the B-pop leg (`11 pass, 0 fail` ×3; full suite
+    12/12 runs green on the fresh editor). Original report below for context.
+  - 📝 **(resolved above — original report) OPEN (Aaron): CommonInput `InputData` not configured → back-handler binding fails.**
     `WBP_OptionsScreen` has `bIsBackHandler=true`, but the project has no
     `[/Script/CommonInput.CommonInputSettings] InputData` (a `UCommonUIInputData` BP naming
     `DefaultClickAction`/`DefaultBackAction` rows in a `CommonInputActionDataBase` table). On every
