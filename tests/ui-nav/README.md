@@ -44,7 +44,7 @@ Exits non-zero if any assertion fails. Spec format is documented in the runner's
 `COMMONUI_FOCUS_INPUT.md`. A deterministic `mode:"slate"` (`NavigateFromWidget`) alternative
 was considered and not needed once focus-stabilize made the faithful path repeatable.)
 
-## Specs
+## Specs (all green ×3, 2026-06-09)
 - `pause_menu.json` — opens the pause menu via `TogglePause`, confirms it's the active
   screen, drives one gamepad nav, and asserts focus sits on a volume row's inner
   AnalogSlider (`focusedName VolumeSlider`). **All-green since 2026-06-09** (3 byte-identical
@@ -55,3 +55,21 @@ was considered and not needed once focus-stabilize made the faithful path repeat
   forwards the router's desired-target focus to the real slider. Verified beyond the spec:
   DPad Down moves focus row→row through the wrappers, and DPad Left/Right adjusts only the
   focused row's value. Full RCA + fix history: `COMMONUI_FOCUS_INPUT.md` (2026-06-09 section).
+- `pause_menu_kbm.json` — keyboard variant. No input-method flip exists for keyboard, so it
+  relies on **activation-time** desired focus, made deterministic by a pre-pause keyboard nav
+  whose focus-stabilize side effect puts the game viewport in the slate focus path before
+  `TogglePause` (satisfies the PIE-only `FocusLeafmostNode` gate). `5 pass, 0 fail` ×3.
+- `main_menu.json` — HubWorld main menu: first gamepad input flips CommonInput → desired
+  focus (`Button_Play`) applies → same Down navigates to `Button_Options`; Up returns.
+  Buttons assert via `focusPathContains` (a CommonButton's focused leaf is an unnamed
+  internal `SCommonButton`). `5 pass, 0 fail` ×3.
+- `options_roundtrip.json` — the full pad journey: Down → A pushes `WBP_OptionsScreen`
+  (desired-focus row relays to its inner AnalogSlider) → Down/Down → A on `Button_Back`
+  pops → main menu reactivates and `bAutoRestoreFocus` returns focus to `Button_Options`.
+  `8 pass, 0 fail` ×3. **Requires** `CommonUI.ShouldVirtualAcceptSimulateMouseButton=0`
+  (DefaultEngine.ini `[SystemSettings]`): with the engine default (true), CommonUI's analog
+  cursor converts gamepad A into a simulated mouse click at the cursor position and the
+  focused button never receives it — found by this spec, affects real pads identically.
+  Known log noise on options activation: `Cannot create action binding ... no action
+  provided` (`bIsBackHandler=true` with no CommonInput `InputData`/`DefaultBackAction`
+  configured); fix that config to silence it and gain gamepad B = back.

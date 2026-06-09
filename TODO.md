@@ -270,6 +270,32 @@ Flakiness in shipped surface erodes trust during real authoring.
     + inPie/inputType/stackContains/stackDepth/focusedWidget/focusedName asserts, exits non-zero on
     fail) + `tests/ui-nav/pause_menu.json` golden path + `tests/ui-nav/README.md`. Usable as a CI
     gate now.
+  - ✅ **Spec suite expanded (2026-06-09, Aaron's #1 follow-through):** 4 specs, 12/12 runs green
+    deterministic — `main_menu.json` (flip→desired-focus→nav), `options_roundtrip.json` (full pad
+    push/pop/focus-restore journey), `pause_menu_kbm.json` (keyboard variant via the
+    stabilize-before-activate trick — no flip exists for keyboard, so activation-time desired focus
+    carries the assert). Runner gained `focusPathContains` (CommonButton leaves are unnamed internal
+    `SCommonButton`s, so button asserts match any UMG name on the focus path).
+  - ✅ **PRODUCT BUG FIXED (2026-06-09, main repo): gamepad A never clicked focused menu buttons.**
+    Found by `options_roundtrip.json`: keyboard Enter clicked `Button_Options`, gamepad
+    FaceButton_Bottom did nothing. Root cause (engine source): CommonUI's analog cursor
+    preprocessor intercepts the virtual-accept key and, with the default
+    `CommonUI.ShouldVirtualAcceptSimulateMouseButton=true` (`CommonAnalogCursor.cpp:25-28`,
+    handling at `:339-372`), converts it into a **simulated mouse click at the cursor position** —
+    the focused button never receives the key, defeating the project's
+    `CommonButtonAcceptKeyHandling=TriggerClick` (DefaultGame.ini). Affects real pads identically.
+    Fix: `CommonUI.ShouldVirtualAcceptSimulateMouseButton=0` under `[SystemSettings]` in
+    `Config/DefaultEngine.ini` (+ set live via console for the running session). Verified on the
+    pad end-to-end: A pushes options, A on Button_Back pops, focus auto-restores.
+  - 📝 **OPEN (Aaron): CommonInput `InputData` not configured → back-handler binding fails.**
+    `WBP_OptionsScreen` has `bIsBackHandler=true`, but the project has no
+    `[/Script/CommonInput.CommonInputSettings] InputData` (a `UCommonUIInputData` BP naming
+    `DefaultClickAction`/`DefaultBackAction` rows in a `CommonInputActionDataBase` table). On every
+    options activation CommonUI logs `Cannot create action binding for widget
+    [WBP_OptionsScreen_C_0] - no action provided`, and **gamepad B cannot pop the screen** (the
+    back handler never binds). Proper fix = author the input-data asset + table (the
+    `create_data_table`/`add_data_table_row`/`set_common_button_input_action` actions cover the
+    table side) and set it in Project Settings → Common Input. Doable over the bridge on request.
   - ✅ **Style-asset creation** DONE 2026-06-07: `create_common_button_style` /
     `create_common_text_style` (via `manage_blueprint`). CommonUI styles ARE classes (assigned with
     `SetStyle(TSubclassOf<...>)`), so each creates a Blueprint subclass of `UCommonButtonStyle` /

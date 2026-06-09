@@ -28,7 +28,10 @@
     { "assert": "stackDepth", "equals": 2 }
     { "assert": "focusedWidget", "value": "SButton" }      slateType equals
     { "assert": "focusedWidgetNot", "value": "SViewport" } slateType not-equals (focus grabbed?)
-    { "assert": "focusedName", "value": "Button_Resume" }  UMG name equals
+    { "assert": "focusedName", "value": "Button_Resume" }  UMG name equals (the focused LEAF)
+    { "assert": "focusPathContains", "value": "Button_Options" }  UMG name anywhere on the
+        root->leaf focus path. Use for composite widgets (CommonButton / UserWidget rows)
+        whose focused leaf is an unnamed internal slate widget.
   Any assert may carry a "note" (printed on failure, e.g. "expected-fail today").
 
 .EXAMPLE
@@ -112,6 +115,11 @@ foreach ($step in $specObj.steps) {
             'focusedWidget' { $actual = $f.focusedWidget.slateType; $ok = ($actual -eq $step.value) }
             'focusedWidgetNot' { $actual = $f.focusedWidget.slateType; $ok = ($null -ne $actual -and $actual -ne $step.value) }
             'focusedName' { $actual = $f.focusedWidget.name; $ok = ($actual -eq $step.value) }
+            'focusPathContains' {
+                $names = @($f.focusPath | ForEach-Object { $_.name } | Where-Object { $_ })
+                $actual = $names -join '>'
+                $ok = ($names -contains $step.value)
+            }
             default { $actual = 'n/a'; $ok = $false }
         }
         if ($ok) { $pass++; Write-Output "  [PASS] $($step.assert) = '$actual'" }

@@ -1,0 +1,27 @@
+{
+  "name": "Options screen - gamepad push/pop roundtrip",
+  "description": "Full pad journey: from the main menu, Down lands on Button_Options (flip + nav), A pushes WBP_OptionsScreen whose DesiredFocusWidget (Master_Volume_Slider row) relays focus to its inner AnalogSlider; Down/Down reaches Button_Back, A pops back to the main menu and CommonUI auto-restores focus to Button_Options. Requires CommonUI.ShouldVirtualAcceptSimulateMouseButton=0 (DefaultEngine.ini) - with the engine default, gamepad A becomes a simulated mouse click at the cursor and never reaches the focused button. KNOWN noise: options activation logs 'Cannot create action binding ... no action provided' (bIsBackHandler=true but no CommonInput InputData/DefaultBackAction configured yet) - the nav step tolerates the error response; fix that config to also get gamepad B = back.",
+  "steps": [
+    { "do": "play" },
+    { "do": "wait", "ms": 4000 },
+    { "do": "nav", "direction": "Down", "device": "gamepad" },
+    { "do": "wait", "ms": 300 },
+    { "assert": "focusPathContains", "value": "Button_Options" },
+    { "do": "nav", "direction": "Accept", "device": "gamepad" },
+    { "do": "wait", "ms": 800 },
+    { "assert": "stackContains", "value": "WBP_OptionsScreen_C" },
+    { "assert": "focusPathContains", "value": "Master_Volume_Slider", "note": "desired-target row on the focus path" },
+    { "assert": "focusedName", "value": "VolumeSlider", "note": "row relays focus to its inner AnalogSlider" },
+    { "do": "nav", "direction": "Down", "device": "gamepad" },
+    { "do": "wait", "ms": 200 },
+    { "assert": "focusedName", "value": "DeadZoneSlider" },
+    { "do": "nav", "direction": "Down", "device": "gamepad" },
+    { "do": "wait", "ms": 200 },
+    { "assert": "focusPathContains", "value": "Button_Back" },
+    { "do": "nav", "direction": "Accept", "device": "gamepad" },
+    { "do": "wait", "ms": 800 },
+    { "assert": "stackContains", "value": "WBP_MainMenu_CUI_C", "note": "options popped, main menu reactivated" },
+    { "assert": "focusPathContains", "value": "Button_Options", "note": "bAutoRestoreFocus returns focus to the pre-push widget" },
+    { "do": "stop" }
+  ]
+}
