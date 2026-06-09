@@ -123,7 +123,9 @@
 // Blueprint Editor
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/Kismet2NameValidators.h" // FKismetNameValidator — rename_widget unique-name check
 #include "WidgetBlueprintEditorUtils.h" // FWidgetBlueprintEditorUtils::ReplaceWidgets (the designer's "Replace With")
+#include "Blueprint/WidgetNavigation.h" // rename_widget: fix explicit nav rules referencing the old name
 #include "Misc/ConfigCacheIni.h"        // GConfig — suppress the "in use in the graph" replace dialog for headless runs
 
 // Blueprint graph nodes — for real widget delegate event binding (bind_on_clicked)
@@ -6643,12 +6645,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
     if (SubAction.Equals(TEXT("rename_widget"), ESearchCase::IgnoreCase))
     {
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
-        FString OldName = GetJsonStringField(Payload, TEXT("slotName"));
+        // The advertised schema param is oldName; slotName/name accepted as aliases.
+        FString OldName = GetJsonStringField(Payload, TEXT("oldName"));
+        if (OldName.IsEmpty()) { OldName = GetJsonStringField(Payload, TEXT("slotName")); }
+        if (OldName.IsEmpty()) { OldName = GetJsonStringField(Payload, TEXT("name")); }
         FString NewName = GetJsonStringField(Payload, TEXT("newName"));
 
         if (WidgetPath.IsEmpty() || OldName.IsEmpty() || NewName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName, newName"), TEXT("MISSING_PARAMETER"));
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, oldName, newName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
@@ -6666,14 +6671,104 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             return true;
         }
 
-        // Rename requires FBlueprintEditorUtils for proper undo/redo support
+        // Canonical rename — mirrors the headless-safe core of
+        // FWidgetBlueprintEditorUtils::RenameWidget (which requires an open
+        // FWidgetBlueprintEditor we don't have): variable→GUID map
+        // (OnVariableRenamed), graph variable references, delegate + animation
+        // bindings, explicit nav rules, and the blueprint's own
+        // DesiredFocusWidget. A bare UObject::Rename leaves all of those
+        // pointing at the old name — same bug family as the remove_widget
+        // stale-GUID ensure. Skipped vs the engine version (editor-UI only):
+        // preview-widget rename, orphan-pin getter reconstruction,
+        // FUIComponentUtils::OnWidgetRenamed.
+        const FName OldFName(*OldName);
+        const FName NewFName(*NewName);
+
+        // Unique-name check; allow renaming onto a matching BindWidget property
+        // of the parent class (the engine's special case).
+        TSharedPtr<INameValidatorInterface> NameValidator = MakeShareable(new FKismetNameValidator(WidgetBP, OldFName));
+        FObjectPropertyBase* ExistingProperty = WidgetBP->ParentClass
+            ? CastField<FObjectPropertyBase>(WidgetBP->ParentClass->FindPropertyByName(NewFName))
+            : nullptr;
+        const bool bBindWidget = ExistingProperty &&
+            FWidgetBlueprintEditorUtils::IsBindWidgetProperty(ExistingProperty) &&
+            TargetWidget->IsA(ExistingProperty->PropertyClass);
+        if (NameValidator->IsValid(NewFName) != EValidatorResult::Ok && !bBindWidget)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("'%s' is not a valid/unique name in this Blueprint."), *NewName),
+                TEXT("INVALID_NAME"));
+            return true;
+        }
+
+        WidgetBP->Modify();
+        TargetWidget->Modify();
+
+        WidgetBP->OnVariableRenamed(OldFName, NewFName);
+        TargetWidget->SetDisplayLabel(NewName);
         TargetWidget->Rename(*NewName);
+
+        // Blueprint CDO's DesiredFocusWidget, iff it referenced the old name.
+        bool bDesiredFocusUpdated = false;
+        if (WidgetBP->GeneratedClass)
+        {
+            if (UUserWidget* WidgetCDO = WidgetBP->GeneratedClass->GetDefaultObject<UUserWidget>())
+            {
+                bDesiredFocusUpdated = WidgetCDO->GetDesiredFocusWidgetName() == OldFName;
+            }
+        }
+        FWidgetBlueprintEditorUtils::ReplaceDesiredFocus(WidgetBP, OldFName, NewFName);
+
+        // Property/delegate bindings.
+        for (FDelegateEditorBinding& Binding : WidgetBP->Bindings)
+        {
+            if (Binding.ObjectName == OldName)
+            {
+                Binding.ObjectName = NewName;
+            }
+        }
+
+        // Animation track bindings.
+        for (UWidgetAnimation* WidgetAnimation : WidgetBP->Animations)
+        {
+            for (FWidgetAnimationBinding& AnimBinding : WidgetAnimation->AnimationBindings)
+            {
+                if (AnimBinding.WidgetName == OldFName)
+                {
+                    AnimBinding.WidgetName = NewFName;
+                    WidgetAnimation->MovieScene->Modify();
+                    if (AnimBinding.SlotWidgetName == NAME_None)
+                    {
+                        if (FMovieScenePossessable* Possessable = WidgetAnimation->MovieScene->FindPossessable(AnimBinding.AnimationGuid))
+                        {
+                            Possessable->SetName(NewFName.ToString());
+                        }
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Explicit per-widget navigation rules referencing the old name.
+        WidgetBP->WidgetTree->ForEachWidget([&OldFName, &NewFName](UWidget* EachWidget) {
+            if (EachWidget->Navigation)
+            {
+                EachWidget->Navigation->TryToRenameBinding(OldFName, NewFName);
+            }
+        });
+
+        FBlueprintEditorUtils::ValidateBlueprintChildVariables(WidgetBP, NewFName);
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+        FBlueprintEditorUtils::ReplaceVariableReferences(WidgetBP, OldFName, NewFName);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
         ResultJson->SetStringField(TEXT("oldName"), OldName);
         ResultJson->SetStringField(TEXT("newName"), NewName);
+        ResultJson->SetBoolField(TEXT("desiredFocusUpdated"), bDesiredFocusUpdated);
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Renamed widget"), ResultJson);
         return true;

@@ -332,6 +332,24 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [x] `rename_widget` was a bare `UObject::Rename` (stale GUID map, broken references) + schema/param mismatch
+**FIXED 2026-06-09** (found renaming `WBP_OptionsScreen`'s slider row). Two bugs:
+1. The handler did `TargetWidget->Rename()` + `MarkBlueprintAsStructurallyModified` only — skipping
+   everything the designer's rename does: `OnVariableRenamed` (variable→GUID map — the same stale-GUID
+   ensure family as the old `remove_widget` bug), `ReplaceVariableReferences` (graph getters/setters),
+   delegate bindings, animation bindings, explicit nav rules, and the blueprint's own
+   `DesiredFocusWidget`. Rewrote it to mirror the headless-safe core of
+   `FWidgetBlueprintEditorUtils::RenameWidget` (UMGEditor `WidgetBlueprintEditorUtils.cpp:305-465`),
+   incl. the public `ReplaceDesiredFocus(UWidgetBlueprint*, Old, New)` overload (CDO-level, editor-open
+   not required) and the FKismetNameValidator unique-name check with the BindWidget-property exception.
+   Skipped (editor-UI only): preview rename, orphan-pin getter reconstruction,
+   `FUIComponentUtils::OnWidgetRenamed`. Response now reports `desiredFocusUpdated`.
+2. The handler required `slotName` but the `manage_blueprint` schema advertises `oldName` → the action
+   was uncallable via MCP. Now accepts `oldName` (canonical) with `slotName`/`name` aliases.
+Verified live (live-coding): renamed options' `VolumeSlider` row → `Master_Volume_Slider`;
+`desiredFocusUpdated:true`, CDO `DesiredFocusWidget` followed automatically, clean compile+save, no
+ensures, templates kept their instance values, pause spec still 4/4 green.
+
 ### [ ] `manage_audio` create_sound_class / create_sound_mix HANG the bridge (300s) — audio-mixing-asset creation modal
 Found 2026-06-07 during the audio sweep. `create_sound_class` (and `create_sound_mix`) never return —
 the parked tools/call times out at 300s. The GameThread keeps ticking (other tools respond, CleanupStaleRequests
