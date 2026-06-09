@@ -93,11 +93,26 @@ gamepad focus." **Two independent causes**, both confirmed; two earlier beliefs 
    `PIE: Warning: Master_Volume_Slider` (the Widget.cpp "does not support focus" warning).
    Also corrected: `focusedWidget==null` in M&K mode is **not** "expected CommonUI behavior" —
    desired focus applies on activation in *any* input mode; null focus was this bug's symptom.
-   **Recommended fix:** make the *inner* AnalogSlider the resolved target — e.g. expose
-   `UWidget* GetFocusWidget()` on `URhyaVolumeSlider` returning `VolumeSlider`, and override
-   `BP_GetDesiredFocusTarget` on `WBP_PauseScreen` to return it. Do **not** just set the wrapper
-   `bIsFocusable=true`: focus would land on a dead container that doesn't relay Left/Right to the
-   slider, so gamepad volume adjust still wouldn't work.
+   **FIXED 2026-06-09 (asset-only, better than the recommendation below):** UE 5.7's stock
+   `UUserWidget::NativeOnFocusReceived` already implements a focus relay — if the widget's own
+   `DesiredFocusWidget` resolves, it returns
+   `FReply::Handled().SetUserFocus(inner)` (`UserWidget.cpp:2414-2424`). So the fix is two class
+   defaults on `WBP_VolumeSlider`: `bIsFocusable=true` (the wrapper can receive the router's
+   focus) + `DesiredFocusWidget.WidgetName="VolumeSlider"` (receipt relays to the inner
+   AnalogSlider). No C++, no rebuild, no per-screen change — it also fixed `WBP_OptionsScreen`
+   (whose DesiredFocusWidget resolves to its own `WBP_VolumeSlider` row, same bug). The earlier
+   "don't just set bIsFocusable" caveat assumed a dead container; with the relay the container
+   bounces focus to the slider, so Left/Right value-adjust works (verified live: DPad Down moves
+   row→row, DPad Left dropped only Music to 0.99, restored). **Editor-session gotcha:** a CDO
+   `set_default` does NOT propagate to already-loaded sub-widget *template instances* (BP
+   reinstancing preserves old values) — the loaded `WBP_PauseScreen`/`WBP_OptionsScreen`
+   tree templates kept `false` and the PIE warning kept firing until the 8 template objects
+   (editor tree + generated-class tree per screen) were patched via `inspect set_property` on
+   their subobject paths (or the editor restarted; disk state was already correct since the
+   values had no serialized delta). Verified: `pause_menu.json` 3× byte-identical
+   `4 pass, 0 fail`.
+   (Original recommendation, superseded: expose `GetFocusWidget()` on `URhyaVolumeSlider` +
+   override `BP_GetDesiredFocusTarget` on the pause screen.)
 
 ## Next: nav-assertion regression layer (Aaron's #1)
 Persist the observe/drive loop into replayable golden-path tests — the "automate what I don't want to

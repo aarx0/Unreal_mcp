@@ -240,6 +240,19 @@ Flakiness in shipped surface erodes trust during real authoring.
     every time. Full RCA (adversarially verified against engine source):
     `COMMONUI_FOCUS_INPUT.md` 2026-06-09 section. The earlier `FInputDeviceId` suspicion was a red
     herring (`IsRelevantInput` reads only `GetUserIndex()`; the uint32 ctor already sets device 0).
+  - ✅ **(FIXED 2026-06-09, Aaron-authorized)** — asset-only: `WBP_VolumeSlider` got
+    `bIsFocusable=true` + its own `DesiredFocusWidget="VolumeSlider"`, so the engine's
+    `UUserWidget::NativeOnFocusReceived` relay (`UserWidget.cpp:2414-2424`) forwards the router's
+    desired-target focus from the wrapper row to the inner AnalogSlider. Fixes pause AND options
+    screens (options' DesiredFocusWidget resolves to its own slider row — same bug). Verified
+    live: activation focus lands on Master's slider, DPad Down moves row→row, DPad Left/Right
+    adjusts only the focused row's value; `pause_menu.json` now 3× byte-identical
+    `4 pass, 0 fail`. Gotcha worth remembering: CDO `set_default` doesn't reach already-loaded
+    sub-widget template instances (reinstancing preserves old values) — had to
+    `inspect set_property` the 8 loaded tree-template objects (subobject paths under
+    `WBP_PauseScreen{,_C}:WidgetTree.*` / `WBP_OptionsScreen{,_C}:WidgetTree.*`); disk needed
+    nothing (no serialized delta). Main-repo asset changes left uncommitted for Aaron.
+    Original report below for context.
   - 📝 **Product bug surfaced by the layer (Aaron's side, recommendation only, 2026-06-09):**
     `WBP_PauseScreen.DesiredFocusWidget` targets `Master_Volume_Slider` — a non-focusable
     `WBP_VolumeSlider` wrapper (`URhyaVolumeSlider : UUserWidget`, `bIsFocusable=false`, no focus

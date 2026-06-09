@@ -46,12 +46,12 @@ was considered and not needed once focus-stabilize made the faithful path repeat
 
 ## Specs
 - `pause_menu.json` — opens the pause menu via `TogglePause`, confirms it's the active
-  screen, drives one gamepad nav, and asserts focus was grabbed. The
-  `focusedWidgetNot SViewport` assertion is **expected to fail today** on a **confirmed
-  product bug**: `WBP_PauseScreen.DesiredFocusWidget` targets `Master_Volume_Slider`, a
-  non-focusable `WBP_VolumeSlider` wrapper, so the router's `SetFocus` silently no-ops
-  (`UIActionRouterTypes.cpp:1657-1661` — no success check; the viewport fallback at
-  `:1680-1685` is unreachable when the desired target is non-null) and focus stays on the
-  stabilized `SViewport`. Recommended product fix + full RCA in `COMMONUI_FOCUS_INPUT.md`
-  (2026-06-09 section). Flip the assertion to `focusedName` on the inner AnalogSlider once
-  the menu's focus target is fixed.
+  screen, drives one gamepad nav, and asserts focus sits on a volume row's inner
+  AnalogSlider (`focusedName VolumeSlider`). **All-green since 2026-06-09** (3 byte-identical
+  `4 pass, 0 fail` runs): the confirmed product bug (DesiredFocusWidget targeting a
+  non-focusable `WBP_VolumeSlider` wrapper → silent `SetFocus` no-op) was fixed asset-only by
+  making the wrapper focusable with its own `DesiredFocusWidget = VolumeSlider`, so the
+  engine's `UUserWidget` focus relay (`NativeOnFocusReceived`, UserWidget.cpp:2414-2424)
+  forwards the router's desired-target focus to the real slider. Verified beyond the spec:
+  DPad Down moves focus row→row through the wrappers, and DPad Left/Right adjusts only the
+  focused row's value. Full RCA + fix history: `COMMONUI_FOCUS_INPUT.md` (2026-06-09 section).
