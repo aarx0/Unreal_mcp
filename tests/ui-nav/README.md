@@ -12,39 +12,28 @@ pwsh -File scripts/ui-nav-test.ps1 -Spec tests/ui-nav/pause_menu.json
 ```
 Exits non-zero if any assertion fails. Spec format is documented in the runner's header.
 
-## Status: SPIKE — read before trusting results
+## Status: deterministic (focus-stabilized) — usable as a gate
 
-This is a working proof of concept, **not yet a reliable CI gate.** It established two
-things:
+1. **Observe assertions** (`inPie`, `stackContains`/`stackDepth`) are deterministic and
+   catch real state — e.g. `pause_menu.json` reliably confirms `WBP_PauseScreen_C` becomes
+   the active screen.
 
-1. **Observe assertions are stable & useful.** `inPie`, `stackContains`/`stackDepth`
-   (the active activatable stack) are deterministic and already catch real state — e.g.
-   `pause_menu.json` reliably confirms `WBP_PauseScreen_C` becomes the active screen.
+2. **Drive assertions** (`inputType`, `focusedWidget`) were initially **non-deterministic**
+   (back-to-back runs flipped `Gamepad`/`SViewport` ↔ `MouseAndKeyboard`/`SWindow`), because
+   the faithful `ProcessKeyDownEvent` nav only routes through CommonUI when the PIE game
+   viewport owns Slate focus — which an unattended run doesn't guarantee.
 
-2. **Drive-dependent assertions are currently NON-DETERMINISTIC.** Across back-to-back
-   runs of the *same* spec, `inputType` (M&K↔Gamepad) and `focusedWidget` flip:
-   - run A: `inputType=Gamepad`, `focusedWidget=SViewport`
-   - run B: `inputType=MouseAndKeyboard`, `focusedWidget=SWindow`
+   **Fixed (2026-06-08):** `simulate_nav` now **focus-stabilizes** — before delivering the
+   key it focuses the PIE game viewport (`FSlateApplication::SetUserFocusToGameViewport`)
+   *iff* focus isn't already inside it, so the faithful pad path routes through CommonUI on
+   every run, without stealing focus from an already-correctly-focused in-game widget. Opt
+   out with `stabilizeFocus:false`; the nav response reports `focusStabilized`. Verified:
+   3 back-to-back runs of `pause_menu.json` are byte-identical (`3 pass, 1 fail`). Usable as
+   a CI gate now.
 
-   Root cause: a *faithful* synthesized nav (`FSlateApplication::ProcessKeyDownEvent`,
-   the Decision-C choice) only flips CommonUI's input mode + moves focus when the **PIE
-   game viewport actually owns Slate/OS focus** — which an automated run doesn't
-   guarantee (run B's `SWindow` focus = the editor window had focus, not the game
-   viewport). So focus/input assertions flake.
-
-### What this means for the regression layer
-The drive needs to be made **deterministic for tests** before focus/nav assertions can
-gate CI. Options (a decision, not yet made):
-- **Focus-stabilize first:** before each nav, force the game viewport to own focus
-  (engine has `SetUserFocusToGameViewport` / `SlateOperations.SetUserFocus(viewport)` —
-  would need a small bridge step). Keeps the faithful drive.
-- **Deterministic drive mode:** add `simulate_nav { mode: "slate" }` using
-  `FSlateApplication::NavigateFromWidget` (the Decision-C alternative) for tests — stable,
-  but bypasses CommonUI's action-router routing, so it tests Slate nav, not the full pad path.
-- Keep faithful `simulate_nav` for interactive verification (where it works well — see
-  `COMMONUI_FOCUS_INPUT.md`), and use one of the above for recorded regression.
-
-Until that lands, treat the drive assertions here as informational, not a gate.
+(The faithful drive remains the default and is also used for interactive verification — see
+`COMMONUI_FOCUS_INPUT.md`. A deterministic `mode:"slate"` (`NavigateFromWidget`) alternative
+was considered and not needed once focus-stabilize made the faithful path repeatable.)
 
 ## Specs
 - `pause_menu.json` — opens the pause menu via `TogglePause`, confirms it's the active

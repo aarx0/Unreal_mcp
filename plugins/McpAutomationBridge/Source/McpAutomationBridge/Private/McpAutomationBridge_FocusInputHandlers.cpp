@@ -54,6 +54,7 @@
 
 #include "Engine/World.h"
 #include "Engine/GameInstance.h"
+#include "Engine/GameViewportClient.h"           // UGameViewportClient::GetGameViewportWidget
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/PlayerController.h"
 #include "Components/Widget.h"
@@ -62,6 +63,7 @@
 #include "InputCoreTypes.h"                         // FKey, EKeys
 #include "Framework/Application/SlateApplication.h" // FSlateApplication, FKeyEvent
 #include "Widgets/SWidget.h"                        // SWidget, GetParentWidget
+#include "Widgets/SViewport.h"                       // SViewport (complete type for the TSharedPtr upcast)
 #include "Types/ReflectionMetadata.h"              // FReflectionMetaData (SWidget→UMG)
 #include "UObject/UObjectIterator.h"                // TObjectIterator
 
@@ -425,6 +427,43 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateNav(
 
 	FSlateApplication &Slate = FSlateApplication::Get();
 
+	// Focus-stabilize — make the faithful drive deterministic. An automated run
+	// often leaves Slate focus on the editor window / level viewport rather than the
+	// PIE game viewport, so a synthesized nav never reaches CommonUI (the flaky case
+	// that made focus/input assertions non-deterministic). Redirect focus to the game
+	// viewport *only when it isn't already there*, so we never steal focus from a
+	// correctly-focused in-game widget (its focus path walks up to the game viewport,
+	// so we leave it). Opt out with stabilizeFocus:false.
+	bool bStabilizeFocus = true;
+	Payload->TryGetBoolField(TEXT("stabilizeFocus"), bStabilizeFocus);
+	bool bFocusStabilized = false;
+	if (bStabilizeFocus)
+	{
+		TSharedPtr<SWidget> GameViewportWidget;
+		if (UGameViewportClient *GVC = GEditor->PlayWorld->GetGameViewport())
+		{
+			GameViewportWidget = GVC->GetGameViewportWidget();
+		}
+		if (GameViewportWidget.IsValid())
+		{
+			bool bInGame = false;
+			for (TSharedPtr<SWidget> Cur = Slate.GetUserFocusedWidget(0); Cur.IsValid();
+			     Cur = Cur->GetParentWidget())
+			{
+				if (Cur == GameViewportWidget)
+				{
+					bInGame = true;
+					break;
+				}
+			}
+			if (!bInGame)
+			{
+				Slate.SetUserFocusToGameViewport(0); // default EFocusCause::SetDirectly
+				bFocusStabilized = true;
+			}
+		}
+	}
+
 	// Capture focus before, so we can report whether the nav moved it.
 	TSharedPtr<SWidget> Before = Slate.GetUserFocusedWidget(0);
 	TSharedPtr<FJsonObject> FocusBefore;
@@ -461,6 +500,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateNav(
 	Resp->SetStringField(TEXT("device"), Device);
 	Resp->SetStringField(TEXT("key"), NavKey.ToString());
 	Resp->SetBoolField(TEXT("handled"), bHandled);
+	Resp->SetBoolField(TEXT("focusStabilized"), bFocusStabilized);
 	Resp->SetBoolField(TEXT("focusChanged"), Before != After);
 	if (FocusBefore.IsValid())
 	{

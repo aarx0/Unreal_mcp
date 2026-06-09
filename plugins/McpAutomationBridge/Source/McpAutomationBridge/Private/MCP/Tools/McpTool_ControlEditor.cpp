@@ -108,6 +108,7 @@ public:
 			.String(TEXT("button"), TEXT("Mouse button for simulate_input."))
 			.String(TEXT("direction"), TEXT("simulate_nav direction: Up/Down/Left/Right/Accept/Back/Next/Previous (PIE-only; faithfully routes a nav key through CommonUI, then returns the post-nav focus snapshot)."))
 			.String(TEXT("device"), TEXT("simulate_nav input device: 'gamepad' (default, sends DPad/face-button keys) or 'keyboard' (arrows/Enter/Esc/Tab)."))
+			.Bool(TEXT("stabilizeFocus"), TEXT("simulate_nav: default true — before the nav, focus the PIE game viewport if focus isn't already inside it, so the faithful drive routes through CommonUI deterministically (never steals focus from an already-focused in-game widget). Set false to drive from whatever currently has focus."))
 			.Required({TEXT("action")})
 			.Build();
 	}
