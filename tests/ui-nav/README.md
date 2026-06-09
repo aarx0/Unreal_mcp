@@ -27,9 +27,18 @@ Exits non-zero if any assertion fails. Spec format is documented in the runner's
    key it focuses the PIE game viewport (`FSlateApplication::SetUserFocusToGameViewport`)
    *iff* focus isn't already inside it, so the faithful pad path routes through CommonUI on
    every run, without stealing focus from an already-correctly-focused in-game widget. Opt
-   out with `stabilizeFocus:false`; the nav response reports `focusStabilized`. Verified:
-   3 back-to-back runs of `pause_menu.json` are byte-identical (`3 pass, 1 fail`). Usable as
-   a CI gate now.
+   out with `stabilizeFocus:false`; the nav response reports `focusStabilized`.
+
+   **Fixed (2026-06-09):** root-caused the *other* half of the flakiness — CommonInput
+   refuses to reclassify the input method while the editor isn't the OS-foreground app
+   (`FCommonInputPreprocessor::IsRelevantInput` gates on `FSlateApplication::IsActive()`),
+   so the `inputType: Gamepad` flip silently depended on window foreground state.
+   `simulate_nav` now brackets the key delivery with
+   `SetHandleDeviceInputWhenApplicationNotActive(true)` (+ restore) and reports
+   `slateAppActive` for diagnostics. Both determinism gates (focus path + app-active) are
+   now satisfied unconditionally. Verified: 3 back-to-back runs of `pause_menu.json` are
+   byte-identical (`3 pass, 1 fail` — the fail is a confirmed product bug, see below).
+   Usable as a CI gate now. Full RCA: `COMMONUI_FOCUS_INPUT.md` (2026-06-09 section).
 
 (The faithful drive remains the default and is also used for interactive verification — see
 `COMMONUI_FOCUS_INPUT.md`. A deterministic `mode:"slate"` (`NavigateFromWidget`) alternative
@@ -38,7 +47,11 @@ was considered and not needed once focus-stabilize made the faithful path repeat
 ## Specs
 - `pause_menu.json` — opens the pause menu via `TogglePause`, confirms it's the active
   screen, drives one gamepad nav, and asserts focus was grabbed. The
-  `focusedWidgetNot SViewport` assertion is **expected to fail today**: `WBP_PauseScreen`'s
-  CommonUI conversion is in progress and its `DesiredFocusWidget` doesn't resolve, so
-  CommonUI falls back to focusing the viewport (`UIActionRouterTypes.cpp:1684`). Flip it to
-  a `focusedName` assertion once the menu grabs focus.
+  `focusedWidgetNot SViewport` assertion is **expected to fail today** on a **confirmed
+  product bug**: `WBP_PauseScreen.DesiredFocusWidget` targets `Master_Volume_Slider`, a
+  non-focusable `WBP_VolumeSlider` wrapper, so the router's `SetFocus` silently no-ops
+  (`UIActionRouterTypes.cpp:1657-1661` — no success check; the viewport fallback at
+  `:1680-1685` is unreachable when the desired target is non-null) and focus stays on the
+  stabilized `SViewport`. Recommended product fix + full RCA in `COMMONUI_FOCUS_INPUT.md`
+  (2026-06-09 section). Flip the assertion to `focusedName` on the inner AnalogSlider once
+  the menu's focus target is fixed.

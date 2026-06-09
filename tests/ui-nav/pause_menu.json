@@ -1,6 +1,6 @@
 {
   "name": "Pause menu - gamepad golden path",
-  "description": "Open the pause menu via TogglePause, confirm it is the active screen, drive one gamepad nav, and confirm CommonUI grabbed widget focus (not its viewport fallback). The focusedWidgetNot assertion is EXPECTED TO FAIL today: WBP_PauseScreen's CommonUI conversion is in progress and its DesiredFocusWidget is not resolving to a focusable widget, so CommonUI falls back to focusing the game viewport (UIActionRouterTypes.cpp:1684). That failing assertion is exactly the nav-rot this layer is meant to catch; flip it to a focusedName assertion once the menu grabs focus.",
+  "description": "Open the pause menu via TogglePause, confirm it is the active screen, drive one gamepad nav, and confirm CommonUI grabbed widget focus. The focusedWidgetNot assertion is EXPECTED TO FAIL today on a CONFIRMED product bug (see COMMONUI_FOCUS_INPUT.md RCA 2026-06-09): WBP_PauseScreen.DesiredFocusWidget targets Master_Volume_Slider, a non-focusable WBP_VolumeSlider wrapper, so the router's SetFocus silently no-ops (UIActionRouterTypes.cpp:1657-1661 has no success check; the viewport fallback at :1680-1685 is unreachable when the desired target is non-null) and focus stays on the stabilized SViewport. That stable red is exactly the nav-rot this layer exists to catch; flip it to a focusedName assertion on the inner AnalogSlider once the menu's focus target is fixed.",
   "steps": [
     { "do": "play" },
     { "do": "wait", "ms": 4000 },
@@ -11,8 +11,8 @@
     { "assert": "stackContains", "value": "WBP_PauseScreen_C" },
     { "do": "nav", "direction": "Down", "device": "gamepad" },
     { "do": "wait", "ms": 500 },
-    { "assert": "inputType", "equals": "Gamepad", "note": "synthesized gamepad nav should flip CommonUI input mode" },
-    { "assert": "focusedWidgetNot", "value": "SViewport", "note": "expected-fail today: pause menu hits CommonUI viewport-focus fallback (desired focus not grabbed)" },
+    { "assert": "inputType", "equals": "Gamepad", "note": "deterministic since the simulate_nav inactive-input fix (2026-06-09): the synthesized pad key flips CommonInput regardless of OS foreground state" },
+    { "assert": "focusedWidgetNot", "value": "SViewport", "note": "expected-fail today: confirmed product bug - DesiredFocusWidget targets the non-focusable WBP_VolumeSlider wrapper, SetFocus silently no-ops" },
     { "do": "call", "function": "TogglePause" },
     { "do": "stop" }
   ]

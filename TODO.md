@@ -223,13 +223,40 @@ Flakiness in shipped surface erodes trust during real authoring.
     APIs (`FindActivatable`/`GatherActiveBindings`/`GetDesiredFocusTarget`) — NOT the private
     `DebugDumpRootList` the design assumed. **Build fix:** had to add the `CommonInput` module to
     `Build.cs` (sibling of CommonUI, not transitively linked) for `UCommonInputSubsystem`. Verified
-    live: actions reachable, no crashes, `inputType`/`activatableStack` populated in PIE. **OPEN:**
-    focus *movement* in a real menu unconfirmed (M&K mode uses hover not keyboard-focus; this project's
-    PIE starts in gameplay so synthesized gamepad DPad is consumed by gameplay) — Aaron's gamepad
-    feel-test (pause/options, gamepad UI mode) is the check; refine if synthesized events don't register
-    as a real pad (inject via `FInputDeviceId` / read game-viewport local-player focus). **Ops lesson:**
-    never force-kill the editor (next launch hangs on the unclean-shutdown modal) — quit via
-    `control_editor console_command QUIT_EDITOR`.
+    live: actions reachable, no crashes, `inputType`/`activatableStack` populated in PIE. **Ops
+    lesson:** never force-kill the editor (next launch hangs on the unclean-shutdown modal) — quit
+    via `control_editor console_command QUIT_EDITOR`.
+  - ✅ **`simulate_nav` determinism — BOTH gates fixed (2026-06-08 + 2026-06-09).** The faithful
+    drive was flaky for two stacked reasons, each an engine gate on synthesized input:
+    (1) *focus path* — CommonUI's PIE check (`RefreshCurrentInputMethod`,
+    `CommonInputPreprocessor.cpp:214-221`) requires the game viewport in the slate user's focus
+    path → fixed 06-08 with focus-stabilize (`SetUserFocusToGameViewport(0)` iff outside, opt-out
+    `stabilizeFocus:false`). (2) *OS foreground* — `FCommonInputPreprocessor::IsRelevantInput`
+    refuses to reclassify the input method while `FSlateApplication::IsActive()` is false
+    (`:176-178/192`), the normal state for a bridge-driven editor → fixed 06-09 by bracketing the
+    key delivery with `SetHandleDeviceInputWhenApplicationNotActive(true)` (+ restore); response
+    reports `slateAppActive`. Repro pre-fix: same spec flipped `Gamepad` ↔ `MouseAndKeyboard`
+    depending on window foreground state. Post-fix: 3 byte-identical runs, `inputType=Gamepad`
+    every time. Full RCA (adversarially verified against engine source):
+    `COMMONUI_FOCUS_INPUT.md` 2026-06-09 section. The earlier `FInputDeviceId` suspicion was a red
+    herring (`IsRelevantInput` reads only `GetUserIndex()`; the uint32 ctor already sets device 0).
+  - 📝 **Product bug surfaced by the layer (Aaron's side, recommendation only, 2026-06-09):**
+    `WBP_PauseScreen.DesiredFocusWidget` targets `Master_Volume_Slider` — a non-focusable
+    `WBP_VolumeSlider` wrapper (`URhyaVolumeSlider : UUserWidget`, `bIsFocusable=false`, no focus
+    forwarding) — so the router's `SetFocus` silently no-ops (no success check,
+    `UIActionRouterTypes.cpp:1657-1661`; the viewport fallback is unreachable when the target is
+    non-null) and the pause menu never grabs focus in ANY input mode. Caught live:
+    `Focused desired target Master_Volume_Slider` + `PIE: Warning:` (does-not-support-focus) in
+    adjacent log lines. Recommended fix: expose the inner `VolumeSlider` (e.g.
+    `URhyaVolumeSlider::GetFocusWidget()`) and override `BP_GetDesiredFocusTarget` on
+    `WBP_PauseScreen` to return it — NOT just `bIsFocusable=true` on the wrapper (focus would land
+    on a dead container that doesn't relay Left/Right to the slider). The
+    `tests/ui-nav/pause_menu.json` `focusedWidgetNot` assertion stays red until fixed.
+  - ✅ **Nav-regression layer (Aaron's #1) — BUILT 2026-06-08, deterministic 2026-06-09.**
+    `scripts/ui-nav-test.ps1` (declarative spec runner over MCP HTTP: play/resolvePC/call/nav steps
+    + inPie/inputType/stackContains/stackDepth/focusedWidget/focusedName asserts, exits non-zero on
+    fail) + `tests/ui-nav/pause_menu.json` golden path + `tests/ui-nav/README.md`. Usable as a CI
+    gate now.
   - ✅ **Style-asset creation** DONE 2026-06-07: `create_common_button_style` /
     `create_common_text_style` (via `manage_blueprint`). CommonUI styles ARE classes (assigned with
     `SetStyle(TSubclassOf<...>)`), so each creates a Blueprint subclass of `UCommonButtonStyle` /

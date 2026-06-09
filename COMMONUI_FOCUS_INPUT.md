@@ -61,6 +61,44 @@ Two actions, both in one self-contained TU (`McpAutomationBridge_FocusInputHandl
   **Bridge-ops lesson:** never force-kill the editor (next launch hangs on the unclean-shutdown modal);
   quit via `control_editor console_command QUIT_EDITOR` for a clean restart.
 
+## Root-cause analysis (2026-06-09) — corrects two claims above
+Deep source-grounded RCA (engine 5.7 source + live PIE probes) of "pause menu never grabs
+gamepad focus." **Two independent causes**, both confirmed; two earlier beliefs corrected:
+
+1. **Harness gap (FIXED in `simulate_nav`):** the earlier "synthesized pad events are accepted —
+   no FInputDeviceId hack needed" was only half-true. The key *is* classified Gamepad by FKey
+   identity (`CommonInputPreprocessor.cpp:265-273`), but `FCommonInputPreprocessor::IsRelevantInput`
+   **refuses to reclassify the input method while the app is not OS-foreground**
+   (`SlateApp.IsActive()` gate, `CommonInputPreprocessor.cpp:176-178/192`) — the normal state for a
+   bridge-driven editor. So `inputType` never flipped to Gamepad and CommonUI's input-method-change
+   focus path never ran (that's why pre-fix runs were foreground-dependent/flaky). **Fix:** bracket
+   the key delivery with `FSlateApplication::SetHandleDeviceInputWhenApplicationNotActive(true)`
+   (+ restore; `SlateApplication.h:759-760`). The `FInputDeviceId` theory *was* a red herring:
+   `IsRelevantInput` reads only `GetUserIndex()` (line 189), and the uint32-ctor already sets
+   device id 0. Note the flip needs **two** gates: this one *and* the WITH_EDITOR PIE check in
+   `RefreshCurrentInputMethod` (`:214-221`, game viewport must be in the slate user's focus path) —
+   which is exactly what `simulate_nav`'s focus-stabilize satisfies. Both are now handled; response
+   reports `slateAppActive` for diagnostics. Verified: 3 byte-identical runs, `inputType=Gamepad`
+   every time.
+2. **Product bug in `WBP_PauseScreen` (Aaron's side, recommendation only):** the earlier
+   "`SViewport` = CommonUI's documented fallback" was the **wrong mechanism**. The viewport
+   fallback (`UIActionRouterTypes.cpp:1680-1685`) lives in the `GetDesiredFocusTarget()==null`
+   branch and is **unreachable** here: the pause screen's `DesiredFocusWidget` *is* set — to
+   `Master_Volume_Slider`, a `WBP_VolumeSlider` wrapper (`URhyaVolumeSlider : UUserWidget`,
+   `bIsFocusable=false`, no focus forwarding). The router calls `DesiredTarget->SetFocus()` with
+   **no success check** (`:1657-1661`); Slate's focus walk ascends ancestors only, never descends
+   to the focusable inner slider (`SlateApplication.cpp:2981-2998`) → **focus is silently lost**
+   (it stays wherever it was — on `SViewport` only because focus-stabilize put it there).
+   Caught live in the log: `Focused desired target Master_Volume_Slider` immediately followed by
+   `PIE: Warning: Master_Volume_Slider` (the Widget.cpp "does not support focus" warning).
+   Also corrected: `focusedWidget==null` in M&K mode is **not** "expected CommonUI behavior" —
+   desired focus applies on activation in *any* input mode; null focus was this bug's symptom.
+   **Recommended fix:** make the *inner* AnalogSlider the resolved target — e.g. expose
+   `UWidget* GetFocusWidget()` on `URhyaVolumeSlider` returning `VolumeSlider`, and override
+   `BP_GetDesiredFocusTarget` on `WBP_PauseScreen` to return it. Do **not** just set the wrapper
+   `bIsFocusable=true`: focus would land on a dead container that doesn't relay Left/Right to the
+   slider, so gamepad volume adjust still wouldn't work.
+
 ## Next: nav-assertion regression layer (Aaron's #1)
 Persist the observe/drive loop into replayable golden-path tests — the "automate what I don't want to
 babysit" payoff. Shape (per Aaron): a declarative step+expectation list run in PIE, returning pass/fail:

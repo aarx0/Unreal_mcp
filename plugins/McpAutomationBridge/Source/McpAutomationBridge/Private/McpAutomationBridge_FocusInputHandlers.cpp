@@ -484,12 +484,24 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateNav(
 	    /*bInIsLeftCommandDown*/ false, /*bInIsRightCommandDown*/ false,
 	    /*bInAreCapsLocked*/ false);
 
+	// CommonInput refuses to reclassify the input method while the application is
+	// not OS-foreground: FCommonInputPreprocessor::IsRelevantInput gates on
+	// FSlateApplication::IsActive() (CommonInputPreprocessor.cpp:176-178), which is
+	// false for a bridge-driven editor in the background — the synthesized gamepad
+	// key would never flip ECommonInputType to Gamepad, so CommonUI's input-method
+	// focus path would never run. Temporarily allow device input while inactive so
+	// the key is treated exactly like foreground hardware input, then restore.
+	const bool bPrevHandleInactive = Slate.GetHandleDeviceInputWhenApplicationNotActive();
+	Slate.SetHandleDeviceInputWhenApplicationNotActive(true);
+
 	FKeyEvent DownEvent(NavKey, Mods, UserIndex, /*bIsRepeat*/ false,
 	                    /*CharacterCode*/ 0, /*KeyCode*/ 0);
 	const bool bHandled = Slate.ProcessKeyDownEvent(DownEvent);
 	FKeyEvent UpEvent(NavKey, Mods, UserIndex, /*bIsRepeat*/ false,
 	                  /*CharacterCode*/ 0, /*KeyCode*/ 0);
 	Slate.ProcessKeyUpEvent(UpEvent);
+
+	Slate.SetHandleDeviceInputWhenApplicationNotActive(bPrevHandleInactive);
 
 	// Read focus back (synchronous: Slate navigation resolves within
 	// ProcessKeyDownEvent) and return the full post-nav snapshot for diffing.
@@ -501,6 +513,9 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateNav(
 	Resp->SetStringField(TEXT("key"), NavKey.ToString());
 	Resp->SetBoolField(TEXT("handled"), bHandled);
 	Resp->SetBoolField(TEXT("focusStabilized"), bFocusStabilized);
+	// False whenever the editor isn't OS-foreground (the normal automated-run
+	// state) — the inactive-input bypass above is what kept the nav faithful.
+	Resp->SetBoolField(TEXT("slateAppActive"), Slate.IsActive());
 	Resp->SetBoolField(TEXT("focusChanged"), Before != After);
 	if (FocusBefore.IsValid())
 	{
