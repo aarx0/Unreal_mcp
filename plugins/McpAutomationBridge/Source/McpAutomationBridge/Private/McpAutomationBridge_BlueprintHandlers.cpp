@@ -4118,6 +4118,225 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
+  if (ActionMatchesPattern(TEXT("blueprint_get_default")) ||
+      ActionMatchesPattern(TEXT("get_default")) ||
+      AlphaNumLower.Contains(TEXT("blueprintgetdefault"))) {
+    // Read-counterpart to blueprint_set_default: export a CDO property's
+    // current value (verify loops previously had to trust the set's echo or
+    // detour through find_objects/the Default__ asset path).
+    FString Path = ResolveBlueprintRequestedPath();
+    if (Path.IsEmpty()) {
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("blueprint_get_default requires a blueprint path."), nullptr,
+          TEXT("INVALID_BLUEPRINT_PATH"));
+      return true;
+    }
+    FString PropertyName;
+    LocalPayload->TryGetStringField(TEXT("propertyName"), PropertyName);
+    if (PropertyName.IsEmpty()) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("propertyName required"), nullptr,
+                             TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+#if WITH_EDITOR
+    FString Normalized;
+    FString LoadErr;
+    UBlueprint *BP = LoadBlueprintAsset(Path, Normalized, LoadErr);
+    if (!BP) {
+      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+      Result->SetStringField(TEXT("error"), LoadErr);
+      SendAutomationResponse(RequestingSocket, RequestId, false, LoadErr,
+                             Result, TEXT("BLUEPRINT_NOT_FOUND"));
+      return true;
+    }
+    UClass *GeneratedClass = BP->GeneratedClass;
+    UObject *CDO = GeneratedClass ? GeneratedClass->GetDefaultObject() : nullptr;
+    if (!CDO) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Blueprint has no generated class / CDO"),
+                             nullptr, TEXT("NO_GENERATED_CLASS"));
+      return true;
+    }
+
+    // Same resolution rules as blueprint_set_default: flat name first, then a
+    // single "Component.Property" hop through an object property on the CDO.
+    FProperty *TargetProperty =
+        FindFProperty<FProperty>(GeneratedClass, FName(*PropertyName));
+    if (!TargetProperty) {
+      const int32 DotIdx = PropertyName.Find(TEXT("."));
+      if (DotIdx != INDEX_NONE) {
+        const FString ComponentName = PropertyName.Left(DotIdx);
+        const FString NestedProp = PropertyName.Mid(DotIdx + 1);
+        UClass *SearchClass = GeneratedClass;
+        FProperty *CompProp = nullptr;
+        while (SearchClass && !CompProp) {
+          CompProp =
+              FindFProperty<FProperty>(SearchClass, FName(*ComponentName));
+          if (!CompProp) {
+            SearchClass = SearchClass->GetSuperClass();
+          }
+        }
+        if (CompProp && CompProp->IsA<FObjectProperty>()) {
+          FObjectProperty *ObjProp = CastField<FObjectProperty>(CompProp);
+          if (UObject *CompObj =
+                  ObjProp->GetObjectPropertyValue_InContainer(CDO)) {
+            TargetProperty = FindFProperty<FProperty>(CompObj->GetClass(),
+                                                      FName(*NestedProp));
+            if (TargetProperty) {
+              CDO = CompObj;
+            }
+          }
+        }
+      }
+    }
+    if (!TargetProperty) {
+      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+      Result->SetStringField(TEXT("propertyName"), PropertyName);
+      Result->SetStringField(TEXT("blueprintPath"), Path);
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Property not found on blueprint"), Result,
+                             TEXT("PROPERTY_NOT_FOUND"));
+      return true;
+    }
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    Result->SetStringField(TEXT("blueprintPath"),
+                           Normalized.IsEmpty() ? Path : Normalized);
+    Result->SetStringField(TEXT("propertyName"), PropertyName);
+    Result->SetStringField(
+        TEXT("propertyType"),
+        McpPropertyReflection::GetPropertyTypeName(TargetProperty));
+    Result->SetField(TEXT("value"), McpPropertyReflection::ExportPropertyToJsonValue(
+                                        CDO, TargetProperty));
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           TEXT("Default value retrieved"), Result, FString());
+    return true;
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+  }
+
+  if (ActionMatchesPattern(TEXT("blueprint_list_functions")) ||
+      ActionMatchesPattern(TEXT("list_functions")) ||
+      AlphaNumLower.Contains(TEXT("blueprintlistfunctions"))) {
+    // One-call answer to "what does this BP implement/override?" — previously
+    // required reading EventGraph nodes via get_graph_details to tell whether
+    // e.g. BP_GetDesiredFocusTarget was overridden.
+    FString Path = ResolveBlueprintRequestedPath();
+    if (Path.IsEmpty()) {
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("blueprint_list_functions requires a blueprint path."), nullptr,
+          TEXT("INVALID_BLUEPRINT_PATH"));
+      return true;
+    }
+
+#if WITH_EDITOR && MCP_HAS_K2NODE_HEADERS
+    FString Normalized;
+    FString LoadErr;
+    UBlueprint *BP = LoadBlueprintAsset(Path, Normalized, LoadErr);
+    if (!BP) {
+      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+      Result->SetStringField(TEXT("error"), LoadErr);
+      SendAutomationResponse(RequestingSocket, RequestId, false, LoadErr,
+                             Result, TEXT("BLUEPRINT_NOT_FOUND"));
+      return true;
+    }
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    Result->SetStringField(TEXT("blueprintPath"),
+                           Normalized.IsEmpty() ? Path : Normalized);
+
+    // Function graphs — flagged as overrides when the parent class declares a
+    // BlueprintEvent of the same name (the designer's "Override" dropdown).
+    TArray<TSharedPtr<FJsonValue>> FunctionsJson;
+    for (UEdGraph *Graph : BP->FunctionGraphs) {
+      if (!Graph) {
+        continue;
+      }
+      TSharedPtr<FJsonObject> FnObj = McpHandlerUtils::CreateResultObject();
+      const FString FnName = Graph->GetName();
+      FnObj->SetStringField(TEXT("name"), FnName);
+      bool bIsOverride = false;
+      if (BP->ParentClass) {
+        if (UFunction *ParentFn =
+                BP->ParentClass->FindFunctionByName(FName(*FnName))) {
+          bIsOverride = ParentFn->HasAnyFunctionFlags(FUNC_BlueprintEvent);
+        }
+      }
+      FnObj->SetBoolField(TEXT("isOverride"), bIsOverride);
+      FunctionsJson.Add(MakeShared<FJsonValueObject>(FnObj));
+    }
+    Result->SetArrayField(TEXT("functionGraphs"), FunctionsJson);
+
+    // Events implemented in ubergraphs (BeginPlay, input events, overrides
+    // that live as event nodes) + custom events. Ghost placeholder nodes are
+    // reported with their disabled state so callers can filter them.
+    TArray<TSharedPtr<FJsonValue>> EventsJson;
+    for (UEdGraph *Graph : BP->UbergraphPages) {
+      if (!Graph) {
+        continue;
+      }
+      for (UEdGraphNode *Node : Graph->Nodes) {
+        UK2Node_Event *EventNode = Cast<UK2Node_Event>(Node);
+        if (!EventNode) {
+          continue;
+        }
+        TSharedPtr<FJsonObject> EvObj = McpHandlerUtils::CreateResultObject();
+        if (UK2Node_CustomEvent *CustomEvent =
+                Cast<UK2Node_CustomEvent>(EventNode)) {
+          EvObj->SetStringField(TEXT("name"),
+                                CustomEvent->CustomFunctionName.ToString());
+          EvObj->SetStringField(TEXT("kind"), TEXT("CustomEvent"));
+        } else {
+          EvObj->SetStringField(
+              TEXT("name"),
+              EventNode->EventReference.GetMemberName().ToString());
+          EvObj->SetStringField(TEXT("kind"), EventNode->bOverrideFunction
+                                                  ? TEXT("Override")
+                                                  : TEXT("Event"));
+        }
+        EvObj->SetStringField(TEXT("graphName"), Graph->GetName());
+        EvObj->SetBoolField(TEXT("isEnabled"),
+                            EventNode->GetDesiredEnabledState() ==
+                                ENodeEnabledState::Enabled);
+        EventsJson.Add(MakeShared<FJsonValueObject>(EvObj));
+      }
+    }
+    Result->SetArrayField(TEXT("events"), EventsJson);
+
+    TArray<TSharedPtr<FJsonValue>> MacrosJson;
+    for (UEdGraph *Graph : BP->MacroGraphs) {
+      if (Graph) {
+        MacrosJson.Add(MakeShared<FJsonValueString>(Graph->GetName()));
+      }
+    }
+    Result->SetArrayField(TEXT("macroGraphs"), MacrosJson);
+
+    TArray<TSharedPtr<FJsonValue>> InterfacesJson;
+    for (const FBPInterfaceDescription &Iface : BP->ImplementedInterfaces) {
+      if (Iface.Interface) {
+        InterfacesJson.Add(
+            MakeShared<FJsonValueString>(Iface.Interface->GetName()));
+      }
+    }
+    Result->SetArrayField(TEXT("interfaces"), InterfacesJson);
+
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           TEXT("Functions listed"), Result, FString());
+    return true;
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+  }
+
   if (ActionMatchesPattern(TEXT("blueprint_set_default")) ||
       ActionMatchesPattern(TEXT("set_default")) ||
       ActionMatchesPattern(TEXT("setdefault")) ||

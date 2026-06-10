@@ -163,15 +163,21 @@ Flakiness in shipped surface erodes trust during real authoring.
     `create_effect`. Verified live (live-coding patch): `manage_effect create_niagara_system` and
     `create_niagara_emitter` both create real assets; `list_debug_shapes` still works (re-dispatch
     gate intact). `.cpp`-only.
-- 🟡 **Introspection gaps (DX, found 2026-06-07 during focus/nav work):** the bridge can't cleanly
-  read back two things via typed actions: (1) a Blueprint **CDO's property values** —
-  `inspect get_blueprint_details`/`inspect_class`/`inspect_cdo` return only metadata (parent,
-  components), not default values, so there's no read-counterpart to `blueprint_set_default`
-  (had to rely on the set's echoed value); (2) a Blueprint's **overridden functions / implemented
-  events** — had to read EventGraph nodes via `get_graph_details` to tell whether
-  `BP_GetDesiredFocusTarget` was overridden. Candidate adds: `blueprint_get_default`
-  (CDO property read) and a `list_functions`/`list_overrides` on inspect. Low priority; nice for
-  verify loops.
+- ✅ **Introspection gaps CLOSED 2026-06-10** (found 2026-06-07 during focus/nav work):
+  (1) **`manage_blueprint get_default`** `{blueprintPath, propertyName}` — read-counterpart to
+  `set_default`; same resolution rules (flat name, or one `Component.Property` hop through an
+  object property on the CDO); returns `value` + `propertyType`. Verified:
+  `attributeComponent.maxHealth` on BP_CPP_Character → `Int 100`; `DesiredFocusWidget` on
+  WBP_PauseScreen → `{WidgetName: Master_Volume_Slider}`.
+  (2) **`manage_blueprint list_functions`** `{blueprintPath}` — one call returns
+  `functionGraphs` (+`isOverride` when the parent declares a same-named BlueprintEvent),
+  ubergraph `events` (`kind`: Event/Override/CustomEvent, `graphName`, `isEnabled` so ghost
+  placeholders are filterable), `macroGraphs`, `interfaces`. Verified on WBP_PauseScreen:
+  `BP_OnHandleBackAction` flagged `isOverride:true`; ghost PreConstruct/Tick report
+  `isEnabled:false`. Routing added to `ManageBlueprintCore()` (header → full rebuild done).
+  NOTE for a future cleanup pass: `HandleBlueprintAction` contains a DUPLICATE dead
+  `blueprint_set_default` block (~L4300 after this change; the live one is ~L2925 — first
+  match wins in the if-chain). Didn't touch it mid-feature.
 - ✅ **Dead legacy BT branches removed** 2026-06-07. The simplistic `add_composite_node`/
   `add_task_node`/`add_decorator`/`add_service` branch bodies in `McpAutomationBridge_AIHandlers.cpp`
   were unreachable behind the `USE_GRAPH_AUTHORING` guard (added with the BT fix); deleted the 194

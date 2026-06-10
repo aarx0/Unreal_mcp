@@ -142,7 +142,9 @@ inline const TArray<FString>& ManageBlueprintCore()
 	static const TArray<FString> Actions = {
 		TEXT("create"), TEXT("create_blueprint"), TEXT("get_blueprint"),
 		TEXT("get"), TEXT("compile"), TEXT("add_component"),
-		TEXT("set_default"), TEXT("modify_scs"), TEXT("get_scs"),
+		TEXT("set_default"), TEXT("get_default"), TEXT("blueprint_get_default"),
+		TEXT("list_functions"), TEXT("blueprint_list_functions"),
+		TEXT("modify_scs"), TEXT("get_scs"),
 		TEXT("add_scs_component"),
 		TEXT("remove_scs_component"), TEXT("reparent_scs_component"),
 		TEXT("set_scs_transform"), TEXT("set_scs_property"),
