@@ -437,6 +437,8 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateNav(
 	bool bStabilizeFocus = true;
 	Payload->TryGetBoolField(TEXT("stabilizeFocus"), bStabilizeFocus);
 	bool bFocusStabilized = false;
+	bool Resp_Diag_GameViewportRegistered = false;
+	bool Resp_Diag_FocusInViewportAfterStabilize = false;
 	if (bStabilizeFocus)
 	{
 		TSharedPtr<SWidget> GameViewportWidget;
@@ -460,6 +462,23 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateNav(
 			{
 				Slate.SetUserFocusToGameViewport(0); // default EFocusCause::SetDirectly
 				bFocusStabilized = true;
+			}
+		}
+		// Diagnostics: stabilization can silently no-op (FSlateApplication's
+		// registered game viewport unset, or SetUserFocus refused) — surface
+		// the preconditions so a failing run says WHY instead of just failing.
+		{
+			TSharedPtr<SViewport> RegisteredViewport = Slate.GetGameViewport();
+			Resp_Diag_GameViewportRegistered = RegisteredViewport.IsValid();
+			TSharedPtr<SWidget> FocusNow = Slate.GetUserFocusedWidget(0);
+			Resp_Diag_FocusInViewportAfterStabilize = false;
+			for (TSharedPtr<SWidget> Cur = FocusNow; Cur.IsValid(); Cur = Cur->GetParentWidget())
+			{
+				if (Cur == GameViewportWidget)
+				{
+					Resp_Diag_FocusInViewportAfterStabilize = true;
+					break;
+				}
 			}
 		}
 	}
@@ -516,6 +535,8 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateNav(
 	// False whenever the editor isn't OS-foreground (the normal automated-run
 	// state) — the inactive-input bypass above is what kept the nav faithful.
 	Resp->SetBoolField(TEXT("slateAppActive"), Slate.IsActive());
+	Resp->SetBoolField(TEXT("gameViewportRegistered"), Resp_Diag_GameViewportRegistered);
+	Resp->SetBoolField(TEXT("focusInViewportAfterStabilize"), Resp_Diag_FocusInViewportAfterStabilize);
 	Resp->SetBoolField(TEXT("focusChanged"), Before != After);
 	if (FocusBefore.IsValid())
 	{

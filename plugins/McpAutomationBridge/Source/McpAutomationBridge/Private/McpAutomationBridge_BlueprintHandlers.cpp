@@ -3684,6 +3684,64 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // Add a function to the blueprint (synchronous editor implementation)
+  if (ActionMatchesPattern(TEXT("blueprint_remove_function")) ||
+      ActionMatchesPattern(TEXT("remove_function")) ||
+      AlphaNumLower.Contains(TEXT("removefunction"))) {
+    // Delete a function graph by name (incl. override graphs) — the inverse of
+    // add_function. Idempotent: absent graph reports alreadyAbsent.
+    FString Path = ResolveBlueprintRequestedPath();
+    FString FuncName;
+    if (!LocalPayload->TryGetStringField(TEXT("functionName"), FuncName) ||
+        FuncName.IsEmpty()) {
+      LocalPayload->TryGetStringField(TEXT("name"), FuncName);
+    }
+    if (Path.IsEmpty() || FuncName.TrimStartAndEnd().IsEmpty()) {
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("remove_function requires blueprintPath and functionName."),
+          nullptr, TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+#if WITH_EDITOR
+    FString Normalized;
+    FString LoadErr;
+    UBlueprint *Blueprint = LoadBlueprintAsset(Path, Normalized, LoadErr);
+    if (!Blueprint) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Failed to load blueprint"), nullptr,
+                             TEXT("BLUEPRINT_NOT_FOUND"));
+      return true;
+    }
+    UEdGraph *TargetGraph = nullptr;
+    for (UEdGraph *Graph : Blueprint->FunctionGraphs) {
+      if (Graph && Graph->GetName().Equals(FuncName, ESearchCase::IgnoreCase)) {
+        TargetGraph = Graph;
+        break;
+      }
+    }
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetStringField(TEXT("functionName"), FuncName);
+    if (TargetGraph) {
+      FBlueprintEditorUtils::RemoveGraph(Blueprint, TargetGraph,
+                                         EGraphRemoveFlags::Default);
+      FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+      Resp->SetBoolField(TEXT("removed"), true);
+    } else {
+      Resp->SetBoolField(TEXT("removed"), false);
+      Resp->SetBoolField(TEXT("alreadyAbsent"), true);
+    }
+    Resp->SetBoolField(TEXT("success"), true);
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           TEXT("remove_function"), Resp, FString());
+    return true;
+#else
+    SendAutomationResponse(RequestingSocket, RequestId, false,
+                           TEXT("Editor build required"), nullptr,
+                           TEXT("NOT_IMPLEMENTED"));
+    return true;
+#endif
+  }
+
   if (ActionMatchesPattern(TEXT("blueprint_add_function")) ||
       ActionMatchesPattern(TEXT("add_function")) ||
       AlphaNumLower.Contains(TEXT("blueprintaddfunction")) ||
@@ -3792,6 +3850,81 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
       Resp->SetStringField(TEXT("note"), TEXT("Function already exists"));
       SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Function already exists"), Resp, FString());
+      return true;
+    }
+
+    // override:true — implement an inherited BlueprintImplementableEvent /
+    // BlueprintNativeEvent (the designer's "Override" dropdown) instead of
+    // creating a new user function. The graph takes the PARENT signature
+    // (inputs/outputs params are ignored); entry/result node ids are returned
+    // so the caller can wire the body with create_node/connect_pins.
+    const bool bOverride = LocalPayload->HasField(TEXT("override")) &&
+                           GetJsonBoolField(LocalPayload, TEXT("override"));
+    if (bOverride) {
+      UClass *ParentClass = Blueprint->ParentClass;
+      UFunction *ParentFn =
+          ParentClass ? ParentClass->FindFunctionByName(FName(*FuncName))
+                      : nullptr;
+      if (!ParentFn) {
+        SendAutomationResponse(
+            RequestingSocket, RequestId, false,
+            FString::Printf(
+                TEXT("Parent class has no function named '%s' to override."),
+                *FuncName),
+            nullptr, TEXT("PARENT_FUNCTION_NOT_FOUND"));
+        return true;
+      }
+      if (!ParentFn->HasAnyFunctionFlags(FUNC_BlueprintEvent)) {
+        SendAutomationResponse(
+            RequestingSocket, RequestId, false,
+            FString::Printf(TEXT("'%s' is not a BlueprintImplementableEvent / "
+                                 "BlueprintNativeEvent and cannot be "
+                                 "overridden in a Blueprint."),
+                            *FuncName),
+            nullptr, TEXT("NOT_OVERRIDABLE"));
+        return true;
+      }
+
+      UEdGraph *OverrideGraph = FBlueprintEditorUtils::CreateNewGraph(
+          Blueprint, FName(*FuncName), UEdGraph::StaticClass(),
+          UEdGraphSchema_K2::StaticClass());
+      if (!OverrideGraph) {
+        SendAutomationResponse(RequestingSocket, RequestId, false,
+                               TEXT("Failed to create override graph"), nullptr,
+                               TEXT("GRAPH_UNAVAILABLE"));
+        return true;
+      }
+      // bIsUserCreated=false + the OWNING CLASS as the signature source — the
+      // same call the editor's Override dropdown makes (SMyBlueprint.cpp).
+      // Passing the UFunction instead creates a same-named LOCAL function and
+      // the compiler rejects the duplicate ("function name is already used").
+      UClass *OverrideFuncClass =
+          CastChecked<UClass>(ParentFn->GetOuter())->GetAuthoritativeClass();
+      FBlueprintEditorUtils::AddFunctionGraph<UClass>(
+          Blueprint, OverrideGraph, /*bIsUserCreated=*/false,
+          OverrideFuncClass);
+
+      FString EntryNodeId, ResultNodeId;
+      for (UEdGraphNode *Node : OverrideGraph->Nodes) {
+        if (Cast<UK2Node_FunctionEntry>(Node)) {
+          EntryNodeId = Node->NodeGuid.ToString();
+        } else if (Cast<UK2Node_FunctionResult>(Node)) {
+          ResultNodeId = Node->NodeGuid.ToString();
+        }
+      }
+
+      FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+      TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+      Resp->SetBoolField(TEXT("success"), true);
+      Resp->SetStringField(TEXT("blueprintPath"), RegistryKey);
+      Resp->SetStringField(TEXT("functionName"), FuncName);
+      Resp->SetBoolField(TEXT("override"), true);
+      Resp->SetStringField(TEXT("entryNodeId"), EntryNodeId);
+      Resp->SetStringField(TEXT("resultNodeId"), ResultNodeId);
+      SendAutomationResponse(RequestingSocket, RequestId, true,
+                             TEXT("Override function graph created"), Resp,
+                             FString());
       return true;
     }
 

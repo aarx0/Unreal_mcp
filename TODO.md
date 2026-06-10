@@ -333,6 +333,42 @@ Flakiness in shipped surface erodes trust during real authoring.
     captures the scene render only (`FViewport::ReadPixels`) — **UMG/Slate UI is not in the
     capture**; live-tree probes (`get_num_entries`, entry text) are the verification path until an
     offscreen-composite capture exists.
+  - ✅ **`add_function override:true` + `remove_function` (2026-06-09)** — BP function-OVERRIDE
+    authoring (the designer's "Override" dropdown): `add_function {blueprintPath, functionName,
+    override:true}` finds the parent `UFunction`, validates `FUNC_BlueprintEvent`, and builds the
+    override graph with the parent signature, returning `entryNodeId`/`resultNodeId` for wiring.
+    **Engine gotcha that cost a broken graph:** the signature source must be the OWNING CLASS —
+    `AddFunctionGraph<UClass>(BP, Graph, false, OwnerClass)` exactly as `SMyBlueprint.cpp:2878`
+    does; passing the `UFunction` (`<UFunction>`) creates a same-named LOCAL function and the
+    compiler rejects the duplicate ("function name is already used"). `remove_function` (RemoveGraph
+    by name, idempotent) added as the inverse + repair tool. First real use: overrode
+    `BP_OnHandleBackAction` on `WBP_PauseScreen` (GetOwningPlayer → cast → `TogglePause`, return
+    true so the default deactivate is skipped) — gamepad B now unpauses, with the pause screen's
+    own `CommonBoundActionBar` showing "Back" while paused. Node-wiring notes: pure functions
+    (e.g. `GetOwningPlayer`) have no exec pins; an override's auto-created entry comes pre-wired to
+    the result node (break it first); the result pin is `ReturnValue`; the cast output pin name has
+    a space (`AsGOSPlayer Controller`). This is the primitive the #2 "activatable boilerplate with
+    GetDesiredFocusTarget wired" scaffolding needs.
+  - 🟡 **Introspection gaps flagged by Aaron (2026-06-09): every `execute_python` probe is an MCP
+    smell — expose them as typed actions.** Probes used this session that deserve actions:
+    (a) **object/template discovery** — find loaded UObjects by class + outer-path filter with
+    property readback (used for: stale `bIsFocusable` template hunt, overlay/canvas slot-object
+    paths, `Category` checks). Candidate: `inspect find_objects {class, pathContains,
+    propertyNames[]}` over `TObjectIterator` with Transient/asset filters.
+    (b) **live widget runtime state** — entry counts + entry text of a `DynamicEntryBox`
+    (action-bar verification), live slider values, widget visibility. Candidate: extend `ui_focus`
+    or add `inspect widget_runtime {nameContains/class, propertyNames[]}` over live PIE widgets.
+    (c) **slot-object resolution** — given a widget, return its slot's object path + properties
+    (avoids guessing `OverlaySlot_N`/`CanvasPanelSlot_N` names; `get_widget_slot_info` covers some
+    of this — verify and extend to return the subobject path usable with `set_property`).
+  - 📝 **ui-nav suite operational constraints (2026-06-09):** the drive layer requires an
+    **idle editor** — concurrent human use of the same editor session breaks Slate focus
+    determinism (observed: a manual floating-window PIE session left state that made
+    `SetUserFocusToGameViewport` silently fail until an editor restart; all specs red, restart →
+    all green). `simulate_nav` now reports `gameViewportRegistered` + `focusInViewportAfterStabilize`
+    diagnostics so a failing run says WHY. Also remember: live-coding patches are session-scoped —
+    first bridge call after an editor restart should be `live_coding_compile` (or do a full
+    Build.bat rebuild to refresh the on-disk DLL).
   - ✅ **Style-asset creation** DONE 2026-06-07: `create_common_button_style` /
     `create_common_text_style` (via `manage_blueprint`). CommonUI styles ARE classes (assigned with
     `SetStyle(TSubclassOf<...>)`), so each creates a Blueprint subclass of `UCommonButtonStyle` /
