@@ -48,6 +48,7 @@ public:
 			.String(TEXT("configName"), TEXT(""))
 			.String(TEXT("code"), TEXT("Python code to execute inline"))
 			.String(TEXT("file"), TEXT("Path to .py file to execute"))
+			.Bool(TEXT("allowModalApis"), TEXT("execute_python: opt out of the modal-API guard (reload_packages / *_with_dialog / EditorDialog are blocked by default — a modal dialog permanently freezes a headless editor). Only pass true when the exact call cannot prompt."))
 			.Required({TEXT("action")})
 			.Build();
 	}

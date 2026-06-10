@@ -870,6 +870,27 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
     FString PyErrorPath  = NormalizePyPath(ErrorPath);
     FString PyStatusPath = NormalizePyPath(StatusPath);
 
+    // Modal guard: a Python call that opens a modal dialog permanently freezes
+    // the GameThread in a headless bridge session — nobody can click it, every
+    // later bridge call times out, and the editor needs a force-kill (the
+    // 2026-06-10 reload_packages-on-IMC incident). Scan the user code for
+    // known modal-popping APIs and fail fast BEFORE exec. Explicit opt-out:
+    // payload {allowModalApis:true} for callers who know their form can't
+    // prompt (e.g. a *_with_dialog API where a flag suppresses the dialog).
+    bool bAllowModalApis = false;
+    Payload->TryGetBoolField(TEXT("allowModalApis"), bAllowModalApis);
+    FString ModalGuard;
+    if (!bAllowModalApis) {
+      ModalGuard += TEXT("    import re as _re\n");
+      ModalGuard += TEXT("    _modal_match = _re.search(r'reload_packages|with_dialog|EditorDialog', _user_code)\n");
+      ModalGuard += TEXT("    if _modal_match:\n");
+      ModalGuard += TEXT("        raise RuntimeError(\"MCP modal guard: '\" + _modal_match.group(0) + \"' can open a modal dialog, \"\n");
+      ModalGuard += TEXT("            \"which permanently freezes the editor GameThread in a headless bridge session \"\n");
+      ModalGuard += TEXT("            \"(2026-06-10 incident: reload_packages on an IMC). Use a typed bridge action instead \"\n");
+      ModalGuard += TEXT("            \"(execute_python is for read-only probes). If this exact call cannot prompt, \"\n");
+      ModalGuard += TEXT("            \"retry with allowModalApis:true.\")\n");
+    }
+
     // Build Python wrapper
     FString Wrapper;
     Wrapper += TEXT("import sys\nimport traceback\n\n");
@@ -890,6 +911,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
       FString PyCodePath = NormalizePyPath(CodePath);
       Wrapper += FString::Printf(TEXT("    with open(r'%s', 'r', encoding='utf-8') as _f:\n"), *PyCodePath);
       Wrapper += TEXT("        _user_code = _f.read()\n");
+      Wrapper += ModalGuard;
       Wrapper += FString::Printf(TEXT("    exec(compile(_user_code, r'%s', 'exec'))\n"), *PyCodePath);
     } else {
       // SECURITY: Sanitize file path to prevent directory traversal
@@ -937,6 +959,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
       FString PyFilePath = NormalizePyPath(AbsoluteFilePath);
       Wrapper += FString::Printf(TEXT("    with open(r'%s', 'r', encoding='utf-8') as _f:\n"), *PyFilePath);
       Wrapper += TEXT("        _user_code = _f.read()\n");
+      Wrapper += ModalGuard;
       Wrapper += FString::Printf(TEXT("    exec(compile(_user_code, r'%s', 'exec'))\n"), *PyFilePath);
     }
 

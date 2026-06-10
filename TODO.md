@@ -488,7 +488,18 @@ function errors with guidance. Ops note: live-coding `McpAutomationBridge_Bluepr
 takes ~60s (huge TU) — just over the MCP client timeout; the compile still completes, confirm
 via `LogLiveCoding` in the editor log instead of retrying.
 
-### [ ] `execute_python` + `EditorLoadingAndSavingUtils.reload_packages` → modal → permanent GameThread freeze (bridge dead)
+### [x] `execute_python` + `EditorLoadingAndSavingUtils.reload_packages` → modal → permanent GameThread freeze (bridge dead)
+**GUARDED 2026-06-10** — the exec wrapper now scans the user code for known modal-popping
+APIs (`reload_packages` / `*_with_dialog` / `EditorDialog`) and raises a RuntimeError with
+guidance BEFORE exec; explicit opt-out via the new `allowModalApis:true` param (added to the
+system_control schema) for calls that provably can't prompt. Source-scan chosen over
+monkey-patching (unreal extension types may refuse setattr) — it's deterministic and the
+goal is protecting cooperative agents from foot-guns, not sandboxing adversaries. Verified
+live: pattern in code → `PYTHON_ERROR` with the full incident message; benign probes
+unaffected; `allowModalApis:true` (via mcp-call.ps1 — note its `-Arguments` takes a
+HASHTABLE, not a JSON string) runs the same code. Possible future hardening: the (c)
+watchdog idea below (log loudly when a queued request hasn't started for N minutes and a
+modal is up). Original report:
 2026-06-10 ~06:46 UTC (the dead-zone session's last call). Repro: `execute_python` running
 `unreal.EditorLoadingAndSavingUtils.reload_packages([pkg])` on `IMC_CharacterContext` → the
 default `INTERACTIVE` mode pops a confirmation dialog that can never be dismissed headlessly →
