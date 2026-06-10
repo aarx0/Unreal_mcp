@@ -75,13 +75,16 @@ Flakiness in shipped surface erodes trust during real authoring.
   remote Insights profiling is still unstarted (test results above are now covered).
 
 ### B. Authoring capability gaps — new features that unblock real workflows
-- 🔴 **`get_graph_details` should enable a 1-call graph-hygiene pass** (2026-06-10). Reviews now
-  include checking BP graphs for orphaned nodes, disabled nodes, and overlapping ("smooshed")
-  layout — Aaron caught an orphaned `float * float` node and an overlapping-node mess that a
-  names-only review missed. Today `get_graph_details` returns only id/name/title per node, so the
-  hygiene scan needs N per-node `get_node_details` calls for pin `linkedTo`, position, and enabled
-  state. Add per-node `x`/`y`, enabled state, and a link-count/`isOrphan` flag to
-  `get_graph_details` so the whole pass is one round-trip.
+- ✅ **`get_graph_details` 1-call graph-hygiene pass** — DONE 2026-06-10. Per-node `x`/`y`
+  (`NodePosX/Y`), `enabledState` (`GetDesiredEnabledState()` → Enabled/Disabled/DevelopmentOnly),
+  `linkCount` (sum of pin `LinkedTo`), `pinCount`, and `isOrphan` (pin-bearing node with zero
+  links; pinless comment nodes are NOT flagged — they're connected by placement, not pins).
+  Orphans, disabled clutter, and smooshed layout are now all visible in one round-trip.
+  Verified live: fresh-BP ghost events report `Disabled`+orphan, an unconnected `K2Node_Self`
+  reports `isOrphan:true` at its authored x/y, and `WBP_MenuLayer` EventGraph (27 nodes) shows
+  correct link counts with the comment node unflagged. Original motivation: Aaron caught an
+  orphaned `float * float` node and an overlapping-node mess that a names-only review missed;
+  the scan previously needed N `get_node_details` calls.
 - ✅ **DataTable row CRUD** — DONE 2026-06-06. Added 5 `manage_asset` actions:
   `add_data_table_row`, `edit_data_table_row`, `remove_data_table_row`, `get_data_table_rows`,
   `import_data_table` (+ short aliases `add_row`/`edit_row`/`remove_row`/`get_rows`/`import_rows`),
@@ -468,6 +471,22 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] `execute_python` + `EditorLoadingAndSavingUtils.reload_packages` → modal → permanent GameThread freeze (bridge dead)
+2026-06-10 ~06:46 UTC (the dead-zone session's last call). Repro: `execute_python` running
+`unreal.EditorLoadingAndSavingUtils.reload_packages([pkg])` on `IMC_CharacterContext` → the
+default `INTERACTIVE` mode pops a confirmation dialog that can never be dismissed headlessly →
+GameThread parks in the modal's nested loop forever (log frame counter frozen at [498] from
+06:46 onward; no py output/status files written). The bridge's socket thread keeps ACCEPTING
+requests (sessions init, tools/call logged) but nothing executes — every call times out, port
+3123 stays occupied by a dead editor. Required a force-kill + fresh editor instance.
+Directions: (a) workflow rule (already policy): `execute_python` is for READ-ONLY probes —
+package reload/save/mutation goes through typed bridge actions; (b) the py exec harness could
+prepend a guard that monkey-patches known-modal Python APIs (`reload_packages`,
+`save_dirty_packages_with_dialog`, …) to their non-interactive overloads or a hard error;
+(c) consider a watchdog: if a queued bridge request hasn't STARTED for N minutes and a modal
+window is up, log loudly (can't auto-dismiss safely, but the log line tells the next session
+why everything is timing out).
+
 ### [ ] `set_asset_property` can't import struct `InputMappingContextMappingData` (+ no indexed subpaths)
 2026-06-10, found writing dead-zone modifiers into an IMC. Three layers, exact repro:
 1. `propertyName:"DefaultKeyMappings.Mappings[19].Modifiers"` → `PROPERTY_NOT_FOUND` (indexed
@@ -485,26 +504,37 @@ Workaround used: `execute_python` building real `unreal.InputModifierDeadZone` o
 and `set_editor_property` refuses with "cannot be edited on templates" — insert the modifier with
 its class defaults (0.2 radial was fine) or find a non-template construction path.
 
-### [ ] `control_actor` world-scoping is inconsistent: by-class/list miss PIE actors, by-name finds them
+### [x] `control_actor` world-scoping is inconsistent: by-class misses PIE actors, by-name finds them
+**FIXED 2026-06-10.** `HandleControlActorFindByClass` hardcoded
+`GEditor->GetEditorWorldContext().World()`; now prefers `GEditor->PlayWorld` when PIE is active
+(matching `HandleControlActorList` — which was *already* PIE-aware — and `FindActorByName`), and
+the response gained `isPieWorld` + `worldName` for diagnosability. Verified live: in PIE,
+`find_by_class {className:Character}` returns `BP_CPP_Character_C_0` in `UEDPIE_0_HubWorld`
+(`isPieWorld:true`); without PIE, `find_by_class PlayerStart` still walks the editor world
+(`isPieWorld:false`). Original report:
 2026-06-10, single-editor session (so NOT the cross-client noise from the entry below). During PIE:
 `control_actor find_by_class {className:Character}` → 0 actors, but the pawn existed —
 `inspect find_objects {className:Character, pathContains:UEDPIE}` returned
 `UEDPIE_0_HubWorld...BP_CPP_Character_C_0`, and `control_actor get_transform
 {actorName:BP_CPP_Character_C_0}` found it fine and tracked it across frames. So the by-name path
-resolves into the PIE world while the by-class enumeration only walks the editor world. Likely the
-same root cause as the night-shift `control_actor list` weirdness (previously blamed entirely on
-the two-editor incident). Fix direction: enumeration actions should prefer `GEditor->PlayWorld`
-when PIE is active (or take an explicit `world` param), matching whatever world the by-name lookup
-uses. Until fixed: use `inspect find_objects` with `pathContains:UEDPIE` for PIE discovery.
+resolves into the PIE world while the by-class enumeration only walks the editor world.
 
-### [ ] Live Coding can't patch UBA-built binaries: `Cannot find image section .voltbl`
+### [x] Live Coding can't patch UBA-built binaries: `Cannot find image section .voltbl`
+**RESOLVED 2026-06-10 — build with `-NoUBA`.** Confirmed the hypothesis: a full rebuild via
+`Build.bat <target> Win64 Development -Project=<uproject> -WaitMutex -NoUBA` uses the Parallel
+executor (log line: `Using Parallel executor to run N action(s)` — verify this, it's the proof
+UBA is off), and Live Coding patches the result fine. Verified live with an end-to-end
+observable probe: changed a handler's response string → `live_coding_compile` → call returned
+the patched string → reverted → second patch cycle → original string back. Two activations,
+zero `.voltbl` errors. **New build protocol: ALWAYS pass `-NoUBA` on Build.bat rebuilds**, or
+live-coding iteration is dead until the next full rebuild. (User-level
+`BuildConfiguration.xml` is currently empty; making `-NoUBA` persistent there is Aaron's call —
+it would slow his big full builds in exchange for never losing Live Coding.) Original report:
 2026-06-10. After a full `Build.bat` rebuild (which ran via Unreal Build Accelerator), the next
 `system_control live_coding_compile` failed: LiveCodingConsole.log shows hundreds of
 `Cannot find image section .voltbl` + `Patch could not be activated.` (.voltbl = MSVC volatile
-metadata; the UBA-compiled objects evidently drop it, and Live Coding refuses to patch a mismatched
-image). Workaround: don't mix — after a Build.bat rebuild, ship .cpp changes with another Build.bat
-cycle (editor quit → build → relaunch) instead of live-coding on top. Worth checking whether
-`-NoUba` (or `bAllowUba=false` for the bridge module) restores live-coding compatibility.
+metadata; the UBA-compiled objects evidently drop it, and Live Coding refuses to patch a
+mismatched image).
 
 ### [ ] Investigate: unexplained `tools/call: control_actor` requests hitting the bridge
 2026-06-10 ~04:55 (RhyaTowerOfWishes.log): two `control_actor` calls reached this bridge
