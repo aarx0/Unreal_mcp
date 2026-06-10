@@ -2344,7 +2344,12 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorFindByClass(
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   TArray<TSharedPtr<FJsonValue>> ActorsArray;
 
-  if (UWorld* World = GEditor->GetEditorWorldContext().World()) {
+  // Prefer the PIE world when active, matching HandleControlActorList and
+  // FindActorByName — otherwise by-class enumeration misses every PIE actor
+  // while the by-name path finds them.
+  UWorld* World = GEditor->PlayWorld ? GEditor->PlayWorld.Get()
+                                     : GEditor->GetEditorWorldContext().World();
+  if (World) {
     UClass* ClassToFind = nullptr;
 
     // CRITICAL FIX: Use ResolveClassByName for proper engine class resolution
@@ -2371,6 +2376,9 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorFindByClass(
 
   Data->SetArrayField(TEXT("actors"), ActorsArray);
   Data->SetNumberField(TEXT("count"), ActorsArray.Num());
+  Data->SetBoolField(TEXT("isPieWorld"), GEditor->PlayWorld != nullptr);
+  if (World)
+    Data->SetStringField(TEXT("worldName"), World->GetName());
   SendStandardSuccessResponse(this, Socket, RequestId,
                               FString::Printf(TEXT("Found %d actors"), ActorsArray.Num()), Data);
   return true;
