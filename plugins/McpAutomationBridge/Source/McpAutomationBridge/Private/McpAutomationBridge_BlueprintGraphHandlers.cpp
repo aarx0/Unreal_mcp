@@ -1796,12 +1796,52 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
     TArray<TSharedPtr<FJsonValue>> Nodes;
     for (UEdGraphNode *Node : TargetGraph->Nodes) {
+      if (!Node) {
+        continue;
+      }
       TSharedPtr<FJsonObject> NodeObj = McpHandlerUtils::CreateResultObject();
       NodeObj->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
       NodeObj->SetStringField(TEXT("nodeName"), Node->GetName());
       NodeObj->SetStringField(
           TEXT("nodeTitle"),
           Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+
+      // Hygiene-pass fields: position (overlap detection), enabled state
+      // (disabled-node clutter), link count (orphan detection) — so a graph
+      // review is one call instead of N get_node_details round-trips.
+      NodeObj->SetNumberField(TEXT("x"), Node->NodePosX);
+      NodeObj->SetNumberField(TEXT("y"), Node->NodePosY);
+
+      const TCHAR *EnabledStateName = nullptr;
+      switch (Node->GetDesiredEnabledState()) {
+      case ENodeEnabledState::Enabled:
+        EnabledStateName = TEXT("Enabled");
+        break;
+      case ENodeEnabledState::Disabled:
+        EnabledStateName = TEXT("Disabled");
+        break;
+      case ENodeEnabledState::DevelopmentOnly:
+        EnabledStateName = TEXT("DevelopmentOnly");
+        break;
+      default:
+        EnabledStateName = TEXT("Unknown");
+        break;
+      }
+      NodeObj->SetStringField(TEXT("enabledState"), EnabledStateName);
+
+      int32 LinkCount = 0;
+      for (const UEdGraphPin *Pin : Node->Pins) {
+        if (Pin) {
+          LinkCount += Pin->LinkedTo.Num();
+        }
+      }
+      NodeObj->SetNumberField(TEXT("linkCount"), LinkCount);
+      NodeObj->SetNumberField(TEXT("pinCount"), Node->Pins.Num());
+      // Pin-bearing node with zero links = orphan. Pinless nodes (comments)
+      // are not flagged — they are connected by placement, not pins.
+      NodeObj->SetBoolField(TEXT("isOrphan"),
+                            Node->Pins.Num() > 0 && LinkCount == 0);
+
       Nodes.Add(MakeShared<FJsonValueObject>(NodeObj));
     }
     Result->SetArrayField(TEXT("nodes"), Nodes);
