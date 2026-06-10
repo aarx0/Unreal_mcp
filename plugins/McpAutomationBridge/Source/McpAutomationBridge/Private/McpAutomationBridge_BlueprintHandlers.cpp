@@ -604,17 +604,21 @@ FMcpAutomationBridge_ResolveFunction(UBlueprint *Blueprint,
     }
   }
 
-  int32 DotIndex = INDEX_NONE;
-  if (CleanFunc.FindChar('.', DotIndex)) {
-    const FString ClassPath = CleanFunc.Left(DotIndex);
-    const FString FuncSegment = CleanFunc.Mid(DotIndex + 1);
-    if (!ClassPath.IsEmpty() && !FuncSegment.IsEmpty()) {
-      if (UClass *ExplicitClass = FindObject<UClass>(nullptr, *ClassPath)) {
-        UFunction *ExplicitFunc =
-            ExplicitClass->FindFunctionByName(FName(*FuncSegment));
-        if (ExplicitFunc) {
-          return ExplicitFunc;
-        }
+  // "Class::Function" (C++ style), "Class.Function", or a full path like
+  // "/Script/Engine.KismetSystemLibrary.PrintString". Split on the LAST
+  // separator — the class part may itself contain dots — and resolve the class
+  // through ResolveClassByName (short names, /Script/ paths, _C classes).
+  // The previous first-dot FindObject split broke every /Script/-prefixed form.
+  const FString Normalized = CleanFunc.Replace(TEXT("::"), TEXT("."));
+  int32 LastDot = INDEX_NONE;
+  if (Normalized.FindLastChar(TEXT('.'), LastDot) && LastDot > 0 &&
+      LastDot < Normalized.Len() - 1) {
+    const FString ClassPart = Normalized.Left(LastDot);
+    const FString FuncPart = Normalized.Mid(LastDot + 1);
+    if (UClass *ExplicitClass = ResolveClassByName(ClassPart)) {
+      if (UFunction *ExplicitFunc =
+              ExplicitClass->FindFunctionByName(FName(*FuncPart))) {
+        return ExplicitFunc;
       }
     }
   }
@@ -4807,17 +4811,43 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     TargetGraph->Modify();
 
     UEdGraphNode *NewNode = nullptr;
-    const FString NodeTypeLower = NodeType.ToLower();
+    FString NodeTypeLower = NodeType.ToLower();
+
+    // Convenience: a nodeType of "Class::Function" (e.g.
+    // "KismetSystemLibrary::PrintString") IS a call-function request — the
+    // form callers naturally try first. Route it to the CallFunction branch
+    // with the whole spec as the function name.
+    if (NodeType.Contains(TEXT("::")) && FunctionName.IsEmpty()) {
+      FunctionName = NodeType;
+      NodeTypeLower = TEXT("callfunction");
+    }
 
     if (NodeTypeLower.Contains(TEXT("callfunction")) ||
         NodeTypeLower.Contains(TEXT("function"))) {
+      UFunction *FoundFunc = nullptr;
+      if (!FunctionName.IsEmpty()) {
+        FoundFunc = FMcpAutomationBridge_ResolveFunction(BP, FunctionName);
+        if (!FoundFunc) {
+          // Fail fast: silently creating a bare CallFunction node (the old
+          // behavior) leaves a misconfigured node that breaks the next compile
+          // while the add reports success.
+          TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+          Result->SetStringField(TEXT("error"), FunctionName);
+          SendAutomationResponse(
+              RequestingSocket, RequestId, false,
+              FString::Printf(
+                  TEXT("Function '%s' not found. Tried the blueprint's class "
+                       "hierarchy and the Class::Function / Class.Function / "
+                       "/Script/Module.Class.Function forms."),
+                  *FunctionName),
+              Result, TEXT("FUNCTION_NOT_FOUND"));
+          return true;
+        }
+      }
       UK2Node_CallFunction *FuncNode =
           NewObject<UK2Node_CallFunction>(TargetGraph);
-      if (FuncNode && !FunctionName.IsEmpty()) {
-        if (UFunction *FoundFunc =
-                FMcpAutomationBridge_ResolveFunction(BP, FunctionName)) {
-          FuncNode->SetFromFunction(FoundFunc);
-        }
+      if (FuncNode && FoundFunc) {
+        FuncNode->SetFromFunction(FoundFunc);
       }
       NewNode = FuncNode;
     } else if (NodeTypeLower.Contains(TEXT("variableget")) ||

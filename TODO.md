@@ -471,6 +471,23 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [x] `add_node` couldn't author function-call nodes by name (`Class::Function`)
+**FIXED 2026-06-10** (found when `nodeType:"KismetSystemLibrary::PrintString"` →
+`UNSUPPORTED_NODE`). Three changes in `McpAutomationBridge_BlueprintHandlers.cpp`:
+(1) a `nodeType` containing `::` now routes to the CallFunction branch with the whole spec
+as the function name — the form callers naturally try; (2) `FMcpAutomationBridge_ResolveFunction`
+now splits `Class.Function` on the LAST dot and resolves the class via `ResolveClassByName`,
+so `KismetSystemLibrary::PrintString`, `KismetSystemLibrary.PrintString`, and
+`/Script/Engine.KismetSystemLibrary.PrintString` all work (the old first-dot
+`FindObject<UClass>` split broke every `/Script/`-prefixed form and all short names);
+(3) **fail-fast**: a non-empty `functionName` that doesn't resolve now returns
+`FUNCTION_NOT_FOUND` instead of silently creating a bare misconfigured `K2Node_CallFunction`
+that breaks the next compile while the add reports success. Verified live: `::` form creates
+a fully-bound Print String node (all pins + defaults), `/Script/` form binds, unknown
+function errors with guidance. Ops note: live-coding `McpAutomationBridge_BlueprintHandlers.cpp`
+takes ~60s (huge TU) — just over the MCP client timeout; the compile still completes, confirm
+via `LogLiveCoding` in the editor log instead of retrying.
+
 ### [ ] `execute_python` + `EditorLoadingAndSavingUtils.reload_packages` → modal → permanent GameThread freeze (bridge dead)
 2026-06-10 ~06:46 UTC (the dead-zone session's last call). Repro: `execute_python` running
 `unreal.EditorLoadingAndSavingUtils.reload_packages([pkg])` on `IMC_CharacterContext` → the
