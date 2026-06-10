@@ -754,6 +754,84 @@ bool ImportJsonToArray(void* Container, FArrayProperty* ArrayProp, const TArray<
     return true;
 }
 
+// Returns true when a property's VALUE TREE can hold an Instanced subobject —
+// the {"__class"} object form FJsonObjectConverter::JsonObjectToUStruct cannot
+// convert (it fails the WHOLE struct on the first one it meets). Descends
+// nested structs and container inners, but NOT plain object references (those
+// import as path strings, which the engine converter handles fine). Checks the
+// linker-maintained CPF_ContainsInstancedReference flag first, then walks
+// explicitly as defense-in-depth against properties the flag misses.
+static bool PropertyTreeContainsInstanced(const FProperty* Property, int32 Depth);
+
+static bool StructTreeContainsInstanced(const UScriptStruct* Struct, int32 Depth = 0)
+{
+    if (!Struct || Depth >= GMcpMaxReflectionDepth)
+    {
+        return false;
+    }
+    for (TFieldIterator<FProperty> It(Struct); It; ++It)
+    {
+        if (PropertyTreeContainsInstanced(*It, Depth))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool PropertyTreeContainsInstanced(const FProperty* Property, int32 Depth)
+{
+    if (!Property || Depth >= GMcpMaxReflectionDepth)
+    {
+        return false;
+    }
+    if (Property->HasAnyPropertyFlags(CPF_InstancedReference | CPF_ContainsInstancedReference))
+    {
+        return true;
+    }
+    if (const FArrayProperty* AP = CastField<const FArrayProperty>(Property))
+    {
+        return PropertyTreeContainsInstanced(AP->Inner, Depth + 1);
+    }
+    if (const FSetProperty* SetP = CastField<const FSetProperty>(Property))
+    {
+        return PropertyTreeContainsInstanced(SetP->ElementProp, Depth + 1);
+    }
+    if (const FMapProperty* MP = CastField<const FMapProperty>(Property))
+    {
+        return PropertyTreeContainsInstanced(MP->KeyProp, Depth + 1) ||
+               PropertyTreeContainsInstanced(MP->ValueProp, Depth + 1);
+    }
+    if (const FStructProperty* SP = CastField<const FStructProperty>(Property))
+    {
+        return StructTreeContainsInstanced(SP->Struct, Depth + 1);
+    }
+    return false;
+}
+
+// Case-tolerant struct-field lookup for the field-by-field struct importer.
+// Exact FName match first (our own export emits exact GetName() keys), then a
+// case-insensitive sweep so hand-written JSON with different casing still maps.
+static FProperty* FindStructChildProperty(const UScriptStruct* Struct, const FString& FieldName)
+{
+    if (!Struct)
+    {
+        return nullptr;
+    }
+    if (FProperty* Exact = Struct->FindPropertyByName(FName(*FieldName)))
+    {
+        return Exact;
+    }
+    for (TFieldIterator<FProperty> It(Struct); It; ++It)
+    {
+        if ((*It)->GetName().Equals(FieldName, ESearchCase::IgnoreCase))
+        {
+            return *It;
+        }
+    }
+    return nullptr;
+}
+
 // Full ApplyJsonValueToProperty implementation - this is a critical function
 // The implementation continues with all the type handling from McpAutomationBridgeHelpers.h
 
@@ -1110,54 +1188,36 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
         {
             const TSharedPtr<FJsonObject> StructObj = ValueField->AsObject();
 
-            // CPF_InstancedReference fields in the struct (e.g. a montage
-            // FAnimNotifyEvent.Notify) arrive as our {"__class", ...} form, which
-            // JsonObjectToUStruct cannot convert — it fails the WHOLE struct. So strip
-            // those fields before the engine converter, then re-instance them ourselves
-            // through the owner-aware importer afterward.
-            TArray<FProperty*> InstancedFields;
-            for (TFieldIterator<FProperty> It(SP->Struct); It; ++It)
+            // Structs whose value tree holds Instanced references ANYWHERE (e.g.
+            // InputMappingContextMappingData -> Mappings[] -> Modifiers[]) cannot go
+            // through JsonObjectToUStruct: it meets the {"__class"} object form and
+            // fails the WHOLE struct. (A previous direct-children strip-and-patch
+            // missed instanced fields nested under arrays-of-structs.) Import
+            // field-by-field through this importer instead — it handles nested
+            // structs, containers and instanced re-instancing (owner threaded) at
+            // every depth, and matches the shape ExportStructToJson emits.
+            if (StructTreeContainsInstanced(SP->Struct, Depth))
             {
-                FProperty* Child = *It;
-                bool bInstanced = false;
-                if (FObjectProperty* CObj = CastField<FObjectProperty>(Child))
+                for (const auto& Field : StructObj->Values)
                 {
-                    bInstanced = CObj->HasAnyPropertyFlags(CPF_InstancedReference);
-                }
-                else if (FArrayProperty* CArr = CastField<FArrayProperty>(Child))
-                {
-                    bInstanced = CArr->Inner && CArr->Inner->HasAnyPropertyFlags(CPF_InstancedReference);
-                }
-                if (bInstanced && StructObj->Values.Contains(Child->GetName()))
-                {
-                    InstancedFields.Add(Child);
-                }
-            }
-
-            TSharedRef<FJsonObject> ConvertObj = StructObj.ToSharedRef();
-            if (InstancedFields.Num() > 0)
-            {
-                TSharedRef<FJsonObject> Stripped = MakeShared<FJsonObject>();
-                Stripped->Values = StructObj->Values;
-                for (FProperty* F : InstancedFields)
-                {
-                    Stripped->Values.Remove(F->GetName());
-                }
-                ConvertObj = Stripped;
-            }
-
-            if (FJsonObjectConverter::JsonObjectToUStruct(ConvertObj, SP->Struct, StructPtr, 0, 0))
-            {
-                for (FProperty* Child : InstancedFields)
-                {
-                    const TSharedPtr<FJsonValue>* FieldVal = StructObj->Values.Find(Child->GetName());
-                    if (!FieldVal || !FieldVal->IsValid() || (*FieldVal)->Type == EJson::Null)
+                    FProperty* Child = FindStructChildProperty(SP->Struct, Field.Key);
+                    if (!Child)
                     {
-                        continue;
+                        OutError = FString::Printf(TEXT("Struct '%s' has no field '%s'"), *TypeName, *Field.Key);
+                        return false;
                     }
                     FString ChildErr;
-                    ApplyJsonValueToProperty(StructPtr, Child, *FieldVal, ChildErr, Depth + 1, OwnerForInstancing);
+                    if (!ApplyJsonValueToProperty(StructPtr, Child, Field.Value, ChildErr, Depth + 1, OwnerForInstancing))
+                    {
+                        OutError = FString::Printf(TEXT("Struct '%s' field '%s': %s"), *TypeName, *Field.Key, *ChildErr);
+                        return false;
+                    }
                 }
+                return true;
+            }
+
+            if (FJsonObjectConverter::JsonObjectToUStruct(StructObj.ToSharedRef(), SP->Struct, StructPtr, 0, 0))
+            {
                 return true;
             }
             OutError = FString::Printf(TEXT("Failed to convert JSON object into struct '%s'"), *TypeName);
@@ -1166,18 +1226,34 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
 
         if (SP->Struct && ValueField->Type == EJson::String)
         {
-            // Accept a JSON string that itself contains a JSON object describing the struct.
             const FString Txt = ValueField->AsString();
-            TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Txt);
-            TSharedPtr<FJsonObject> ParsedObj;
-            if (FJsonSerializer::Deserialize(Reader, ParsedObj) && ParsedObj.IsValid())
+            // Clients that stringify the freeform `value` param (the Claude MCP
+            // client does) deliver the same object/array forms as JSON text. Parse
+            // and RE-ENTER the importer so the parsed form takes the identical
+            // code path (incl. the instanced field-by-field import above, which
+            // this branch previously bypassed straight into JsonObjectToUStruct).
             {
-                if (FJsonObjectConverter::JsonObjectToUStruct(ParsedObj.ToSharedRef(), SP->Struct, StructPtr, 0, 0))
+                TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Txt);
+                TSharedPtr<FJsonValue> ParsedVal;
+                if (FJsonSerializer::Deserialize(Reader, ParsedVal) && ParsedVal.IsValid() &&
+                    (ParsedVal->Type == EJson::Object || ParsedVal->Type == EJson::Array))
                 {
-                    return true;
+                    return ApplyJsonValueToProperty(TargetContainer, Property, ParsedVal, OutError, Depth, OwnerForInstancing);
                 }
             }
-            OutError = FString::Printf(TEXT("Failed to parse string value into struct '%s'"), *TypeName);
+            // Not JSON text: try the engine's textual struct import so UE-syntax
+            // forms ("(X=1,Y=2,Z=3)", FGuid hex, FKey names) keep working.
+            const TCHAR* ImportResult = nullptr;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+            ImportResult = Property->ImportText_Direct(*Txt, StructPtr, nullptr, PPF_None, nullptr);
+#else
+            ImportResult = Property->ImportText(*Txt, StructPtr, PPF_None, nullptr);
+#endif
+            if (ImportResult)
+            {
+                return true;
+            }
+            OutError = FString::Printf(TEXT("String value for struct '%s' is neither JSON nor an importable UE text form"), *TypeName);
             return false;
         }
 

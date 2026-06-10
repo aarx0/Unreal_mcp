@@ -487,22 +487,35 @@ prepend a guard that monkey-patches known-modal Python APIs (`reload_packages`,
 window is up, log loudly (can't auto-dismiss safely, but the log line tells the next session
 why everything is timing out).
 
-### [ ] `set_asset_property` can't import struct `InputMappingContextMappingData` (+ no indexed subpaths)
-2026-06-10, found writing dead-zone modifiers into an IMC. Three layers, exact repro:
-1. `propertyName:"DefaultKeyMappings.Mappings[19].Modifiers"` → `PROPERTY_NOT_FOUND` (indexed
-   array subpaths unsupported; plain struct subpaths like `Padding.Right` do work).
-2. Whole-struct write via the Claude MCP client → `Failed to parse string value into struct` —
-   the client STRINGIFIES freeform `value` objects and the struct import path has no
-   string→JSON fallback (the DataTable rowData fix handles both forms; mirror it here).
-3. Same write via `mcp-call.ps1` (true JSON object) → `Failed to convert JSON object into struct
-   'InputMappingContextMappingData'` even though the value was a byte-faithful round-trip of the
-   `get_asset_properties` export with one modifier added — so export shape ≠ accepted import
-   shape for this struct. Suspects: `FKey` (`{"KeyName":...}`), or instanced re-instancing not
-   descending into struct→array→struct(`FEnhancedActionKeyMapping`)→instanced-array(`Modifiers`).
-Workaround used: `execute_python` building real `unreal.InputModifierDeadZone` objects.
-**Python gotcha for the notes:** `new_object(..., outer=asset)` yields a template-flagged object
-and `set_editor_property` refuses with "cannot be edited on templates" — insert the modifier with
-its class defaults (0.2 radial was fine) or find a non-template construction path.
+### [x] `set_asset_property` can't import struct `InputMappingContextMappingData` (+ no indexed subpaths)
+**FIXED 2026-06-10 — all three layers, verified live on a duplicated IMC + montage:**
+1. **Dotted/indexed property paths** — new `ResolveAssetPropertyPath` (AssetWorkflowHandlers):
+   `"DefaultKeyMappings.Mappings[19].Modifiers"` resolves segment-by-segment (struct fields,
+   `[i]` array indices, and descent through object refs into e.g. an Instanced modifier).
+   Wired into BOTH `set_asset_property` (writes fire `PostEditChangeProperty` with the ROOT
+   class-level property so editor rebuild logic reacts) and `get_asset_properties` (new
+   `propertyName` param → single-value subpath read, so writes verify symmetrically).
+   Fail-fast errors name the exact problem (unknown field on which struct, index out of
+   bounds with the actual size, non-array indexed, descent into None).
+2. **String→JSON fallback for structs** — the struct string branch now parses the text and
+   RE-ENTERS the importer (so a client-stringified object takes the identical code path,
+   instanced handling included), falling back to `ImportText_Direct` for UE-syntax text
+   forms. Previously it went straight to `JsonObjectToUStruct`, bypassing instanced logic.
+3. **Root cause of the struct failure** — `JsonObjectToUStruct` fails an entire struct when it
+   meets the `{"__class"}` instanced form, and the old direct-children strip-and-patch missed
+   instanced fields nested under arrays-of-structs (`InputMappingContextMappingData` →
+   `Mappings[]` → `Modifiers[]`). Now: structs whose value tree holds instanced references
+   ANYWHERE (new `StructTreeContainsInstanced`, flag check + explicit walk) import
+   **field-by-field** through `ApplyJsonValueToProperty`, which handles nested structs,
+   containers, and owner-threaded re-instancing at every depth; everything else keeps the
+   engine converter. Strip-and-patch deleted.
+   Verified: `Mappings[19].Modifiers` indexed write (the original repro) lands 2 instanced
+   modifiers; whole-`DefaultKeyMappings` object write round-trips (DeadZone values, triggers
+   incl. the quirky `LastValue:"()"` text field, FKey, enums, null object refs); montage
+   `Notifies[0]` (instanced `AnimNotify_PlaySound` + FGuid + nested EndLink) round-trips
+   byte-identically — the field-by-field path regression-checked against the old behavior.
+**Python gotcha kept for the notes:** `new_object(..., outer=asset)` yields a template-flagged
+object and `set_editor_property` refuses with "cannot be edited on templates".
 
 ### [x] `control_actor` world-scoping is inconsistent: by-class misses PIE actors, by-name finds them
 **FIXED 2026-06-10.** `HandleControlActorFindByClass` hardcoded

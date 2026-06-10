@@ -2293,6 +2293,142 @@ bool UMcpAutomationBridgeSubsystem::HandleGetReferencers(
  * that previously required an execute_python probe). Payload: 'assetPath',
  * optional 'includeTransient'.
  */
+namespace {
+
+#if WITH_EDITOR
+struct FMcpResolvedPropertyPath {
+  void *Container = nullptr;     // container base for Prop's *_InContainer accessors
+  FProperty *Prop = nullptr;     // resolved leaf (the array Inner when the last segment is indexed)
+  FProperty *RootProp = nullptr; // first segment's class-level property (for PostEditChangeProperty)
+  UObject *OwnerObject = nullptr; // deepest UObject on the walk (instancing Outer / PostEditChange target)
+};
+
+// Resolves a dotted property path with optional array indices —
+// "DefaultKeyMappings.Mappings[19].Modifiers" — against an asset. Dotted
+// segments descend struct fields and object references (e.g. into an Instanced
+// input modifier); "[i]" indexes an array property. Fails fast with a specific
+// error: unknown field, malformed/non-numeric index, indexing a non-array,
+// index out of bounds, or descending into a None object / scalar field.
+bool ResolveAssetPropertyPath(UObject *Asset, const FString &PropertyPath,
+                              FMcpResolvedPropertyPath &Out, FString &OutError) {
+  if (!Asset || PropertyPath.IsEmpty()) {
+    OutError = TEXT("Asset and property path are required");
+    return false;
+  }
+
+  TArray<FString> Segments;
+  PropertyPath.ParseIntoArray(Segments, TEXT("."), /*InCullEmpty=*/false);
+  if (Segments.Num() == 0) {
+    OutError = TEXT("Empty property path");
+    return false;
+  }
+
+  void *Container = Asset;
+  const UStruct *Scope = Asset->GetClass();
+  UObject *OwnerObject = Asset;
+  FProperty *Prop = nullptr;
+
+  for (int32 SegIdx = 0; SegIdx < Segments.Num(); ++SegIdx) {
+    const FString &Seg = Segments[SegIdx];
+
+    FString Name = Seg;
+    TArray<int32> Indices;
+    int32 BracketPos = INDEX_NONE;
+    if (Seg.FindChar(TEXT('['), BracketPos)) {
+      Name = Seg.Left(BracketPos);
+      FString Rest = Seg.Mid(BracketPos);
+      while (Rest.StartsWith(TEXT("["))) {
+        const int32 Close = Rest.Find(TEXT("]"));
+        if (Close == INDEX_NONE) {
+          OutError = FString::Printf(TEXT("Malformed index (missing ']') in segment '%s'"), *Seg);
+          return false;
+        }
+        const FString NumStr = Rest.Mid(1, Close - 1);
+        if (NumStr.IsEmpty() || !NumStr.IsNumeric()) {
+          OutError = FString::Printf(TEXT("Non-numeric index '%s' in segment '%s'"), *NumStr, *Seg);
+          return false;
+        }
+        Indices.Add(FCString::Atoi(*NumStr));
+        Rest = Rest.Mid(Close + 1);
+      }
+      if (!Rest.IsEmpty()) {
+        OutError = FString::Printf(TEXT("Malformed segment '%s' (trailing '%s')"), *Seg, *Rest);
+        return false;
+      }
+    }
+    if (Name.IsEmpty()) {
+      OutError = FString::Printf(TEXT("Empty field name at path segment %d"), SegIdx);
+      return false;
+    }
+
+    Prop = Scope->FindPropertyByName(FName(*Name));
+    if (!Prop) {
+      for (TFieldIterator<FProperty> It(Scope); It; ++It) {
+        if (It->GetName().Equals(Name, ESearchCase::IgnoreCase)) {
+          Prop = *It;
+          break;
+        }
+      }
+    }
+    if (!Prop) {
+      OutError = FString::Printf(TEXT("Field '%s' not found on '%s'"), *Name, *Scope->GetName());
+      return false;
+    }
+    if (SegIdx == 0) {
+      Out.RootProp = Prop;
+    }
+
+    for (const int32 Idx : Indices) {
+      FArrayProperty *AP = CastField<FArrayProperty>(Prop);
+      if (!AP) {
+        OutError = FString::Printf(TEXT("'%s' is not an array property but an index was given"), *Name);
+        return false;
+      }
+      FScriptArrayHelper Helper(AP, AP->ContainerPtrToValuePtr<void>(Container));
+      if (Idx < 0 || Idx >= Helper.Num()) {
+        OutError = FString::Printf(TEXT("Index %d out of bounds for '%s' (size %d)"), Idx, *Name, Helper.Num());
+        return false;
+      }
+      Container = Helper.GetRawPtr(Idx); // element base; the Inner property has offset 0
+      Prop = AP->Inner;
+    }
+
+    if (SegIdx == Segments.Num() - 1) {
+      break;
+    }
+
+    // More segments follow: descend into the resolved field.
+    if (FStructProperty *SPd = CastField<FStructProperty>(Prop)) {
+      Container = SPd->ContainerPtrToValuePtr<void>(Container);
+      Scope = SPd->Struct;
+    } else if (FObjectProperty *OPd = CastField<FObjectProperty>(Prop)) {
+      UObject *Obj = OPd->GetObjectPropertyValue_InContainer(Container);
+      if (!Obj) {
+        OutError = FString::Printf(TEXT("Object field '%s' is None; cannot descend further"), *Name);
+        return false;
+      }
+      Container = Obj;
+      Scope = Obj->GetClass();
+      OwnerObject = Obj;
+    } else {
+      OutError = FString::Printf(TEXT("Field '%s' (%s) cannot be descended into"), *Name,
+                                 *Prop->GetClass()->GetName());
+      return false;
+    }
+  }
+
+  Out.Container = Container;
+  Out.Prop = Prop;
+  Out.OwnerObject = OwnerObject;
+  if (!Out.RootProp) {
+    Out.RootProp = Prop;
+  }
+  return true;
+}
+#endif // WITH_EDITOR
+
+} // namespace
+
 bool UMcpAutomationBridgeSubsystem::HandleGetAssetProperties(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     TSharedPtr<FMcpBridgeWebSocket> Socket) {
@@ -2316,6 +2452,33 @@ bool UMcpAutomationBridgeSubsystem::HandleGetAssetProperties(
 
   bool bIncludeTransient = false;
   Payload->TryGetBoolField(TEXT("includeTransient"), bIncludeTransient);
+
+  // Optional propertyName: read ONE property, supporting the same dotted/indexed
+  // subpaths set_asset_property accepts ("DefaultKeyMappings.Mappings[19].Modifiers")
+  // so a subpath write can be verified with a symmetric subpath read.
+  FString PropertyName;
+  Payload->TryGetStringField(TEXT("propertyName"), PropertyName);
+  if (!PropertyName.IsEmpty()) {
+    FMcpResolvedPropertyPath Resolved;
+    FString ResolveError;
+    if (!ResolveAssetPropertyPath(Asset, PropertyName, Resolved, ResolveError)) {
+      SendAutomationError(
+          Socket, RequestId,
+          FString::Printf(TEXT("Property path '%s': %s"), *PropertyName, *ResolveError),
+          TEXT("PROPERTY_NOT_FOUND"));
+      return true;
+    }
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetBoolField(TEXT("success"), true);
+    Resp->SetStringField(TEXT("assetPath"), ResolvedPath);
+    Resp->SetStringField(TEXT("class"), Asset->GetClass()->GetName());
+    Resp->SetStringField(TEXT("propertyName"), PropertyName);
+    Resp->SetField(TEXT("value"), McpPropertyReflection::ExportPropertyToJsonValue(
+                                      Resolved.Container, Resolved.Prop));
+    SendAutomationResponse(Socket, RequestId, true,
+                           TEXT("Asset property retrieved"), Resp, FString());
+    return true;
+  }
 
   TSharedPtr<FJsonObject> Props =
       McpPropertyReflection::ExportObjectToJson(Asset, bIncludeTransient);
@@ -2368,32 +2531,39 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
     return true;
   }
 
-  FProperty *Prop =
-      McpPropertyReflection::FindPropertyByName(Asset, FName(*PropertyName));
-  if (!Prop) {
+  // Resolve dotted/indexed subpaths ("DefaultKeyMappings.Mappings[19].Modifiers")
+  // to a (container, property) pair. A plain name resolves identically to the old
+  // flat class lookup.
+  FMcpResolvedPropertyPath Resolved;
+  FString ResolveError;
+  if (!ResolveAssetPropertyPath(Asset, PropertyName, Resolved, ResolveError)) {
     SendAutomationError(
         Socket, RequestId,
-        FString::Printf(TEXT("Property '%s' not found on %s"), *PropertyName,
-                        *Asset->GetClass()->GetName()),
+        FString::Printf(TEXT("Property path '%s' on %s: %s"), *PropertyName,
+                        *Asset->GetClass()->GetName(), *ResolveError),
         TEXT("PROPERTY_NOT_FOUND"));
     return true;
   }
+  FProperty *Prop = Resolved.Prop;
 
   const TSharedPtr<FJsonValue> ValueField = Payload->TryGetField(TEXT("value"));
   Asset->Modify();
+  if (Resolved.OwnerObject && Resolved.OwnerObject != Asset) {
+    Resolved.OwnerObject->Modify();
+  }
   // ApplyJsonValueToProperty / ExportPropertyToJsonValue use the *_InContainer
   // reflection accessors, which add the property's offset to the pointer given.
-  // So they expect the CONTAINER BASE (the object), not an already-offset value
-  // pointer. Passing ContainerPtrToValuePtr here applied the offset twice, so
-  // every write landed at Asset+2*offset — silent corruption for PODs (the
-  // matching export read the same wrong address, so it falsely echoed success)
-  // and an FString::operator= access-violation crash for string properties.
-  void *Container = Asset;
+  // So they expect the CONTAINER BASE (the resolved container), not an
+  // already-offset value pointer (passing one applies the offset twice — silent
+  // corruption for PODs, an access violation for strings).
+  void *Container = Resolved.Container;
   FString ApplyError;
-  // Pass the asset as the owner so Instanced subobject values ({"__class", ...})
-  // re-instance Outered to the asset (round-trips input Triggers/Modifiers, etc.).
-  if (!McpPropertyReflection::ApplyJsonValueToProperty(Container, Prop, ValueField,
-                                                       ApplyError, 0, Asset)) {
+  // Pass the deepest object on the path as the owner so Instanced subobject
+  // values ({"__class", ...}) re-instance Outered into the right package
+  // (round-trips input Triggers/Modifiers, etc.).
+  if (!McpPropertyReflection::ApplyJsonValueToProperty(
+          Container, Prop, ValueField, ApplyError, 0,
+          Resolved.OwnerObject ? Resolved.OwnerObject : Asset)) {
     SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *ApplyError),
@@ -2401,7 +2571,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
     return true;
   }
 
-  FPropertyChangedEvent ChangeEvent(Prop);
+  // Notify with the ROOT class-level property: for a subpath write the leaf
+  // FProperty doesn't belong to the asset's class, and editors (e.g. the IMC
+  // editor) key their rebuild logic off the top-level member.
+  if (Resolved.OwnerObject && Resolved.OwnerObject != Asset) {
+    Resolved.OwnerObject->PostEditChange();
+  }
+  FPropertyChangedEvent ChangeEvent(Resolved.RootProp ? Resolved.RootProp : Prop);
   Asset->PostEditChangeProperty(ChangeEvent);
   Asset->MarkPackageDirty();
   // Save via a raw UPackage::Save that bypasses the editor save-UI pipeline.
