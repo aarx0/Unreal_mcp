@@ -477,6 +477,33 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] Benign "Editor is currently in a play mode" log line false-fails PIE-time calls
+2026-06-10 (combat verification session). During PIE, several control_actor/manage_blueprint
+calls return `ENGINE_ERROR: [LogUtils] The Editor is currently in a play mode.` even though
+the operation SUCCEEDED (verified repeatedly: `spawn_blueprint` spawned into the PIE world
+fine; `get_graph_details` read fine after stopping PIE). Source: editor-only utilities
+(`UEditorAssetLibrary::LoadAsset` in the spawn class-resolution path at
+`McpAutomationBridge_ControlHandlers.cpp` ~L345, and whatever asset loader graph-detail
+calls use) log an Error-severity line when called during PIE, and the post-op error guard
+promotes it to a call failure. Two fixes: (a) replace `UEditorAssetLibrary::LoadAsset` with
+plain `LoadObject`/`StaticLoadObject` in the spawn path (no play-mode guard, identical
+result); (b) teach the error guard to downgrade this specific benign line (like the
+handled-ensure downgrade). Note the retry idempotency guard worked as designed here — the
+"failed" spawns had actually landed and the retry caught it.
+
+### [ ] `create_montage` ignores `savePath`; `add_montage_section` can't find its montage
+2026-06-10 (authoring AM_BlockImpact). (a) `animation_physics create_montage
+{savePath:/Game/Blueprints/Characters/MainRobo/Montages}` created the asset at
+`/Game/Animations/` — same bug family as the fixed create_widget_blueprint savePath issue;
+worked around with `move_asset`. (b) `add_montage_section {name:<montage path>,
+sectionName, time}` → `MONTAGE_NOT_FOUND` — the handler evidently reads a different param
+for the montage path than the schema suggests (the `name` param was taken as something
+else). Worked around entirely with `set_asset_property` subpath writes
+(`CompositeSections[0]`, `SlotAnimTracks`, `SequenceLength`) — which round-tripped
+perfectly and produced a working montage (block react plays in PIE), so the reflection
+route is a viable montage-authoring fallback. Also: `create_montage` DOES seed a "Default"
+composite section — only linking (SegmentIndex/SegmentLength/LinkedSequence) was missing.
+
 ### [x] `add_node` couldn't author function-call nodes by name (`Class::Function`)
 **FIXED 2026-06-10** (found when `nodeType:"KismetSystemLibrary::PrintString"` →
 `UNSUPPORTED_NODE`). Three changes in `McpAutomationBridge_BlueprintHandlers.cpp`:
