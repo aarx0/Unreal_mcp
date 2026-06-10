@@ -6931,6 +6931,192 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         return true;
     }
 
+    if (SubAction.Equals(TEXT("wrap_root"), ESearchCase::IgnoreCase))
+    {
+        // Wrap the current root widget in a new panel: the panel becomes the root and
+        // the old root its first child (Fill/Fill so it keeps occupying the full rect).
+        // Unblocks adding overlay chrome (action bars, HUD layers) to a widget BP whose
+        // root is a non-panel widget (e.g. a CommonActivatableWidgetStack), where the
+        // add_* root-replacement path correctly refuses.
+        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
+        FString PanelType = GetJsonStringField(Payload, TEXT("panelType"));
+        FString NewName = GetJsonStringField(Payload, TEXT("name"));
+        if (PanelType.IsEmpty()) { PanelType = TEXT("Overlay"); }
+        if (NewName.IsEmpty()) { NewName = TEXT("RootPanel"); }
+
+        if (WidgetPath.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            return true;
+        }
+
+        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
+        if (!WidgetBP || !WidgetBP->WidgetTree)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            return true;
+        }
+
+        UWidget* OldRoot = WidgetBP->WidgetTree->RootWidget;
+        if (!OldRoot)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no root widget - add a panel normally instead."), TEXT("NO_ROOT"));
+            return true;
+        }
+        if (WidgetBP->WidgetTree->FindWidget(FName(*NewName)))
+        {
+            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("A widget named '%s' already exists."), *NewName), TEXT("ALREADY_EXISTS"));
+            return true;
+        }
+
+        UClass* PanelClass = nullptr;
+        if (PanelType.Equals(TEXT("Overlay"), ESearchCase::IgnoreCase)) { PanelClass = UOverlay::StaticClass(); }
+        else if (PanelType.Equals(TEXT("VerticalBox"), ESearchCase::IgnoreCase)) { PanelClass = UVerticalBox::StaticClass(); }
+        else if (PanelType.Equals(TEXT("HorizontalBox"), ESearchCase::IgnoreCase)) { PanelClass = UHorizontalBox::StaticClass(); }
+        else if (PanelType.Equals(TEXT("CanvasPanel"), ESearchCase::IgnoreCase)) { PanelClass = UCanvasPanel::StaticClass(); }
+        else
+        {
+            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Unsupported panelType '%s'. Use Overlay, VerticalBox, HorizontalBox or CanvasPanel."), *PanelType), TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+
+        UPanelWidget* NewRoot = Cast<UPanelWidget>(WidgetBP->WidgetTree->ConstructWidget<UWidget>(PanelClass, FName(*NewName)));
+        if (!NewRoot)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct the panel widget."), TEXT("CREATION_ERROR"));
+            return true;
+        }
+        NewRoot->SetDisplayLabel(NewName);
+
+        WidgetBP->WidgetTree->RootWidget = NewRoot;
+        UPanelSlot* NewSlot = NewRoot->AddChild(OldRoot);
+        // Keep the wrapped old root filling the same rect it had as the root.
+        if (UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>(NewSlot))
+        {
+            OverlaySlot->SetHorizontalAlignment(HAlign_Fill);
+            OverlaySlot->SetVerticalAlignment(VAlign_Fill);
+        }
+        else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(NewSlot))
+        {
+            VSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+            VSlot->SetHorizontalAlignment(HAlign_Fill);
+        }
+        else if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(NewSlot))
+        {
+            HSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+            HSlot->SetVerticalAlignment(VAlign_Fill);
+        }
+
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+
+        ResultJson->SetBoolField(TEXT("success"), true);
+        ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
+        ResultJson->SetStringField(TEXT("newRoot"), NewName);
+        ResultJson->SetStringField(TEXT("wrapped"), OldRoot->GetName());
+
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Wrapped root widget"), ResultJson);
+        return true;
+    }
+
+    if (SubAction.Equals(TEXT("add_widget"), ESearchCase::IgnoreCase))
+    {
+        // Generic widget add for classes without a dedicated add_* action: resolves any
+        // UWidget subclass (loaded short name, /Script/Module.Class, or /Game/....Name_C)
+        // and places it via the same SafeAddWidgetToTree path as the typed adds.
+        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
+        FString WidgetClassName = GetJsonStringField(Payload, TEXT("widgetClass"));
+        FString Name = GetJsonStringField(Payload, TEXT("name"));
+        FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
+
+        if (WidgetPath.IsEmpty() || WidgetClassName.IsEmpty() || Name.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, widgetClass, name"), TEXT("MISSING_PARAMETER"));
+            return true;
+        }
+
+        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
+        if (!WidgetBP || !WidgetBP->WidgetTree)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            return true;
+        }
+        if (WidgetBP->WidgetTree->FindWidget(FName(*Name)))
+        {
+            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("A widget named '%s' already exists."), *Name), TEXT("ALREADY_EXISTS"));
+            return true;
+        }
+
+        // Resolve the class: loaded short name first, then force-load by path or by
+        // probing the usual widget script modules (same approach as create_widget_blueprint).
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+        UClass* FoundClass = FindFirstObject<UClass>(*WidgetClassName, EFindFirstObjectOptions::None);
+#else
+        UClass* FoundClass = ResolveClassByName(WidgetClassName);
+#endif
+        if (!FoundClass)
+        {
+            if (WidgetClassName.Contains(TEXT(".")) || WidgetClassName.Contains(TEXT("/")))
+            {
+                FoundClass = StaticLoadClass(UObject::StaticClass(), nullptr, *WidgetClassName, nullptr, LOAD_NoWarn | LOAD_Quiet);
+            }
+            else
+            {
+                static const TCHAR* ScriptModules[] = { TEXT("CommonUI"), TEXT("CommonInput"), TEXT("UMG") };
+                for (const TCHAR* ModuleName : ScriptModules)
+                {
+                    const FString ScriptPath = FString::Printf(TEXT("/Script/%s.%s"), ModuleName, *WidgetClassName);
+                    FoundClass = StaticLoadClass(UObject::StaticClass(), nullptr, *ScriptPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+                    if (FoundClass)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+        if (!FoundClass || !FoundClass->IsChildOf(UWidget::StaticClass()))
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Could not resolve widgetClass '%s' to a UWidget subclass. Pass a loaded class name, or a fully-qualified path such as /Script/CommonUI.CommonBoundActionBar or /Game/UI/MyWidget.MyWidget_C."), *WidgetClassName),
+                TEXT("INVALID_CLASS"));
+            return true;
+        }
+        if (FoundClass->HasAnyClassFlags(CLASS_Abstract))
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("widgetClass '%s' is abstract - use a concrete subclass."), *WidgetClassName),
+                TEXT("INVALID_CLASS"));
+            return true;
+        }
+
+        UWidget* NewWidget = WidgetBP->WidgetTree->ConstructWidget<UWidget>(FoundClass, FName(*Name));
+        if (!NewWidget)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct the widget."), TEXT("CREATION_ERROR"));
+            return true;
+        }
+        NewWidget->SetDisplayLabel(Name);
+        NewWidget->bIsVariable = true;
+
+        FString AddErr;
+        if (!SafeAddWidgetToTree(WidgetBP, NewWidget, ParentSlot, &AddErr))
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                AddErr.IsEmpty() ? TEXT("Failed to add the widget to the tree.") : AddErr,
+                TEXT("ADD_FAILED"));
+            return true;
+        }
+
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+
+        ResultJson->SetBoolField(TEXT("success"), true);
+        ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
+        ResultJson->SetStringField(TEXT("name"), Name);
+        ResultJson->SetStringField(TEXT("widgetClass"), FoundClass->GetPathName());
+
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added widget"), ResultJson);
+        return true;
+    }
+
     if (SubAction.Equals(TEXT("get_widget_slot_info"), ESearchCase::IgnoreCase))
     {
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));

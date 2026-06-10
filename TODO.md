@@ -313,6 +313,26 @@ Flakiness in shipped surface erodes trust during real authoring.
     back handler never binds). Proper fix = author the input-data asset + table (the
     `create_data_table`/`add_data_table_row`/`set_common_button_input_action` actions cover the
     table side) and set it in Project Settings → Common Input. Doable over the bridge on request.
+  - ✅ **Generic `add_widget` + `wrap_root` (2026-06-09)** — two widget-authoring gaps hit while
+    building the CommonUI action bar: (1) **`add_widget`** `{widgetPath, widgetClass, name,
+    parentSlot?}` adds ANY `UWidget` subclass (loaded short name, `/Script/Module.Class`, or
+    `/Game/....Name_C`; probes CommonUI/CommonInput/UMG script modules; rejects abstract) via the
+    same `SafeAddWidgetToTree` path as the typed adds — no more "no typed action for this class"
+    dead-ends (used for `CommonActionWidget` + `CommonBoundActionBar`). (2) **`wrap_root`**
+    `{widgetPath, panelType?=Overlay, name?}` constructs a panel, makes it the root, and re-slots
+    the old root as its first child (Fill/Fill) — unblocks adding overlay chrome to a WBP whose
+    root is a non-panel (e.g. `WBP_MenuLayer`'s `CommonActivatableWidgetStack` root), where the
+    add_* root-replacement path correctly refuses. Both verified live (action-bar build below);
+    suite stayed 12/12 green after the MenuLayer root restructure. **Built with them (game side,
+    uncommitted):** `WBP_BoundActionButton` (CommonBoundActionButton subclass; HBox +
+    `InputActionWidget` CommonActionWidget + `Text_ActionName` CommonTextBlock — exact BindWidget
+    names required) + `CommonBoundActionBar` "ActionBar" in `WBP_MenuLayer` under a new
+    `RootOverlay` (bottom-right, `ActionButtonClass` set via subobject-path `set_property`) +
+    `bIsBackActionDisplayedInActionBar=true` on `WBP_OptionsScreen`. Verified in PIE: options open
+    → bar `entries=1`, entry label "Back"; B pop → `entries=0`. NOTE reconfirmed: `screenshot`
+    captures the scene render only (`FViewport::ReadPixels`) — **UMG/Slate UI is not in the
+    capture**; live-tree probes (`get_num_entries`, entry text) are the verification path until an
+    offscreen-composite capture exists.
   - ✅ **Style-asset creation** DONE 2026-06-07: `create_common_button_style` /
     `create_common_text_style` (via `manage_blueprint`). CommonUI styles ARE classes (assigned with
     `SetStyle(TSubclassOf<...>)`), so each creates a Blueprint subclass of `UCommonButtonStyle` /

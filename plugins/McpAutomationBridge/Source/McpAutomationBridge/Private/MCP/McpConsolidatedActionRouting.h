@@ -196,7 +196,10 @@ inline const TArray<FString>& WidgetAuthoring()
 		TEXT("rename_widget"), TEXT("get_widget_slot_info"),
 		// In-place class swap (the designer's "Replace With"); preserves
 		// name + slot + bindings + DesiredFocusWidget via FWidgetBlueprintEditorUtils.
-		TEXT("replace_widget_class")
+		TEXT("replace_widget_class"),
+		// Generic add (any UWidget subclass, incl. ones without a typed add_*
+		// action) + root wrapper (panel becomes root, old root its first child).
+		TEXT("add_widget"), TEXT("wrap_root")
 	};
 	return Actions;
 }
