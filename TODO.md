@@ -433,14 +433,20 @@ Remaining gaps:
     faithful). Slate route passes gameplay input through CommonUI unconsumed and stops clean too.
   - Note: `mouse_move` remains absolute-cursor-only (`SetCursorPos`, handledBySlate, never
     routedToPIE) — camera look injection is `analog MouseX/MouseY`, not mouse_move.
-  - **Movement-latch finding (Aaron's 2026-06-09 report):** the full matrix — keyboard, gamepad
-    analog via pie route, gamepad analog via slate route, mouse deltas — starts AND stops clean
-    in a single-editor session; no latch anywhere. The latch *mechanism* is real and demonstrated:
-    an axis value persists in `UPlayerInput` indefinitely until the next sample, so anything that
-    eats the release/zero sample (e.g. a second editor stealing activation mid-hold — UE only
-    pumps controller events to the active app) latches movement AND camera at last value. Verdict:
-    dual-editor session artifact, not the CommonUI/InputData config changes. Gameplay regression
-    specs (hold → velocity>0; release → velocity→0 within N frames) are now scriptable.
+  - **Movement-latch finding (Aaron's 2026-06-09 report) — SOLVED 2026-06-10, root cause was
+    MISSING DEAD ZONES, not a latch.** First pass (perfect 0.0 injections) wrongly exonerated the
+    project: every route stopped clean. Aaron reported it still repro'd single-editor → the gap
+    was that real sticks never return to exact 0 (settle at ±0.03–0.10). String-scan showed ZERO
+    `InputModifierDeadZone` in all 10 IAs + 3 IMCs (Enhanced Input has no default dead zone;
+    legacy input's 0.25 was lost in migration). Reproduced over the bridge with the new analog
+    injection: LeftY=0.08/RightX=0.05 → continuous 80 u/s walk + 0.46°/s pan, forever. Fix:
+    `InputModifierDeadZone` (default 0.2 radial) on the 3 stick mappings (Gamepad_Left2D→Move,
+    Gamepad_LeftX→Right, Gamepad_Right2D→Look, dead zone ordered before Negate) in BOTH
+    IMC_CharacterContext variants — mapping-level, NOT action-level, so Mouse2D look deltas stay
+    raw. Verified: drift values now produce byte-identical position/rotation over 4s; 0.9
+    deflection still runs full speed and zeroes to a dead stop. Main-repo asset changes left
+    uncommitted for Aaron. Gameplay regression specs (hold → velocity>0; release+drift →
+    velocity→0) are now scriptable — a drift-tolerance spec would pin this permanently.
 - ✅ **C++ automation test runner** — DONE 2026-06-07 (see §A "Automation test results").
   `run_tests`/`get_test_results` execute real `FAutomationTestFramework` tests and return
   pass/fail/errors, so the author→(play)→assert loop is scriptable for any C++ automation test
@@ -461,6 +467,23 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 ---
 
 ## Bugs (found while using the bridge — track, fix when convenient)
+
+### [ ] `set_asset_property` can't import struct `InputMappingContextMappingData` (+ no indexed subpaths)
+2026-06-10, found writing dead-zone modifiers into an IMC. Three layers, exact repro:
+1. `propertyName:"DefaultKeyMappings.Mappings[19].Modifiers"` → `PROPERTY_NOT_FOUND` (indexed
+   array subpaths unsupported; plain struct subpaths like `Padding.Right` do work).
+2. Whole-struct write via the Claude MCP client → `Failed to parse string value into struct` —
+   the client STRINGIFIES freeform `value` objects and the struct import path has no
+   string→JSON fallback (the DataTable rowData fix handles both forms; mirror it here).
+3. Same write via `mcp-call.ps1` (true JSON object) → `Failed to convert JSON object into struct
+   'InputMappingContextMappingData'` even though the value was a byte-faithful round-trip of the
+   `get_asset_properties` export with one modifier added — so export shape ≠ accepted import
+   shape for this struct. Suspects: `FKey` (`{"KeyName":...}`), or instanced re-instancing not
+   descending into struct→array→struct(`FEnhancedActionKeyMapping`)→instanced-array(`Modifiers`).
+Workaround used: `execute_python` building real `unreal.InputModifierDeadZone` objects.
+**Python gotcha for the notes:** `new_object(..., outer=asset)` yields a template-flagged object
+and `set_editor_property` refuses with "cannot be edited on templates" — insert the modifier with
+its class defaults (0.2 radial was fine) or find a non-template construction path.
 
 ### [ ] `control_actor` world-scoping is inconsistent: by-class/list miss PIE actors, by-name finds them
 2026-06-10, single-editor session (so NOT the cross-client noise from the entry below). During PIE:
