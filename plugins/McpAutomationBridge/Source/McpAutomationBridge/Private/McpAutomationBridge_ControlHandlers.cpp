@@ -133,6 +133,7 @@
 #include "Engine/Blueprint.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerInput.h"
+#include "InputKeyEventArgs.h"
 
 #if __has_include("FileHelpers.h")
 #include "FileHelpers.h"
@@ -3890,7 +3891,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateInput(
   }
 
   // Accept multiple field names for flexibility
-  // - 'type': C++ native field (key_down, key_up, mouse_click, mouse_move)
+  // - 'type': C++ native field (key_down, key_up, mouse_click, mouse_move, analog)
   // - 'inputType': Alternative name
   // - 'inputAction': Action-based naming (pressed, released, click, move)
   // CRITICAL: Do NOT read from 'action' field - that's the routing action (e.g., "simulate_input")
@@ -4045,11 +4046,67 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateInput(
     FVector2D Position((float)X, (float)Y);
     SlateApp.SetCursorPos(Position);
     bHandledBySlate = true;
-    
+
     bSuccess = true;
     Message = FString::Printf(TEXT("Mouse moved to (%f, %f)"), X, Y);
+  } else if (InputType == TEXT("analog") || InputType == TEXT("axis")) {
+    // Axis-value injection: gamepad sticks/triggers (Gamepad_LeftY, ...) and
+    // mouse look (MouseX/MouseY). One IE_Axis sample persists in PlayerInput
+    // until the next sample — matching hardware's change-driven delivery — so
+    // hold = inject once, release = inject value 0.
+    double Value = 0.0;
+    const bool bHasValue = Payload->TryGetNumberField(TEXT("value"), Value);
+    FString Route = TEXT("pie");
+    Payload->TryGetStringField(TEXT("route"), Route);
+    Route = Route.ToLower();
+
+    if (Key.IsEmpty()) {
+      Message = TEXT("Key parameter required for analog");
+    } else if (!bHasValue) {
+      Message = TEXT("value parameter required for analog (axis value, typically -1..1)");
+    } else {
+      FKey InputKey(*Key);
+      if (!InputKey.IsValid() || !InputKey.IsAxis1D()) {
+        Message = FString::Printf(
+            TEXT("'%s' is not a 1D axis key (try Gamepad_LeftY, Gamepad_RightX, MouseX, MouseY)"), *Key);
+      } else if (Route == TEXT("slate")) {
+        // Faithful route: through FSlateApplication and its input preprocessors
+        // (CommonUI analog cursor etc.), exactly like foreground hardware input.
+        // Same inactive-app bracket as simulate_nav so background editors behave
+        // like foreground ones.
+        FSlateApplication& SlateApp = FSlateApplication::Get();
+        const bool bPrevHandleInactive = SlateApp.GetHandleDeviceInputWhenApplicationNotActive();
+        SlateApp.SetHandleDeviceInputWhenApplicationNotActive(true);
+        FAnalogInputEvent AnalogEvent(InputKey, FModifierKeysState(), /*UserIndex*/ 0,
+                                      /*bIsRepeat*/ false, /*CharacterCode*/ 0,
+                                      /*KeyCode*/ 0, static_cast<float>(Value));
+        bHandledBySlate = SlateApp.ProcessAnalogInputEvent(AnalogEvent);
+        SlateApp.SetHandleDeviceInputWhenApplicationNotActive(bPrevHandleInactive);
+        bSuccess = true;
+        Message = FString::Printf(TEXT("Analog %s = %.3f (slate route)"), *Key, Value);
+      } else {
+        // Default route: straight to the PIE player controller — gameplay-level,
+        // immune to window focus, bypasses Slate/CommonUI (use route:'slate' to
+        // exercise that layer).
+        if (GEditor->PlayWorld) {
+          if (APlayerController* PC = GEditor->PlayWorld->GetFirstPlayerController()) {
+            FInputKeyEventArgs Args = FInputKeyEventArgs::CreateSimulated(
+                InputKey, IE_Axis, static_cast<float>(Value), /*NumSamples*/ 1);
+            Args.DeltaTime = GEditor->PlayWorld->GetDeltaSeconds();
+            bHandledByPIE = PC->InputKey(Args);
+            bRoutedToPIE = true;
+          }
+        }
+        if (bRoutedToPIE) {
+          bSuccess = true;
+          Message = FString::Printf(TEXT("Analog %s = %.3f (delivered to PIE)"), *Key, Value);
+        } else {
+          Message = TEXT("analog requires an active PIE session with a player controller (or pass route:'slate')");
+        }
+      }
+    }
   } else {
-    Message = FString::Printf(TEXT("Unknown input type: %s. Supported: key_down, key_up, mouse_click, mouse_move"), *InputType);
+    Message = FString::Printf(TEXT("Unknown input type: %s. Supported: key_down, key_up, mouse_click, mouse_move, analog"), *InputType);
   }
 
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();

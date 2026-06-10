@@ -75,6 +75,13 @@ Flakiness in shipped surface erodes trust during real authoring.
   remote Insights profiling is still unstarted (test results above are now covered).
 
 ### B. Authoring capability gaps — new features that unblock real workflows
+- 🔴 **`get_graph_details` should enable a 1-call graph-hygiene pass** (2026-06-10). Reviews now
+  include checking BP graphs for orphaned nodes, disabled nodes, and overlapping ("smooshed")
+  layout — Aaron caught an orphaned `float * float` node and an overlapping-node mess that a
+  names-only review missed. Today `get_graph_details` returns only id/name/title per node, so the
+  hygiene scan needs N per-node `get_node_details` calls for pin `linkedTo`, position, and enabled
+  state. Add per-node `x`/`y`, enabled state, and a link-count/`isOrphan` flag to
+  `get_graph_details` so the whole pass is one round-trip.
 - ✅ **DataTable row CRUD** — DONE 2026-06-06. Added 5 `manage_asset` actions:
   `add_data_table_row`, `edit_data_table_row`, `remove_data_table_row`, `get_data_table_rows`,
   `import_data_table` (+ short aliases `add_row`/`edit_row`/`remove_row`/`get_rows`/`import_rows`),
@@ -409,10 +416,31 @@ runtime_report`/`pie_report`/`find_by_class`).
   self-verify loop for gameplay, not just the editor.
 
 Remaining gaps:
-- 🟡 **Input-injection fidelity** — `simulate_input` routes through `FSlateApplication` key/
-  mouse events: right for **menu/UI** testing (works today), but may not exercise **Enhanced
-  Input gameplay** mappings (movement/abilities). Verify; if needed, add player-input /
-  Enhanced-Input injection for gameplay tests.
+- ✅ **Input-injection fidelity — VERIFIED + analog injection BUILT (2026-06-10).**
+  Verified live in PIE (HubWorld, main menu → Play → gameplay):
+  - `key_down`/`key_up` (existing) DO drive Enhanced Input gameplay — W moved the pawn at
+    MaxWalkSpeed via the `PlayerController->InputKey` PIE-direct path; release stopped it dead
+    (positions byte-identical across 1.5s, velocity 0).
+  - **NEW `simulate_input type:analog`** `{key, value, route?}` — the missing axis injection for
+    gamepad sticks/triggers and mouse look. `route:'pie'` (default) builds
+    `FInputKeyEventArgs::CreateSimulated(Key, IE_Axis, value)` → `PC->InputKey` (focus-immune);
+    `route:'slate'` sends a real `FAnalogInputEvent` through `ProcessAnalogInputEvent` with the
+    simulate_nav inactive-app bracket, exercising input preprocessors (CommonUI analog cursor) —
+    use it to test the layer the pie route bypasses. Verified: LeftY=+1 → pawn runs (value
+    persists from ONE sample, exactly like hardware's change-driven delivery); LeftY=0 → clean
+    stop. RightX drives ControlRotation continuously, zero freezes it. MouseX/MouseY take
+    per-event deltas (300 → 52.5° yaw snap; mouse axes reset each frame, no persistence —
+    faithful). Slate route passes gameplay input through CommonUI unconsumed and stops clean too.
+  - Note: `mouse_move` remains absolute-cursor-only (`SetCursorPos`, handledBySlate, never
+    routedToPIE) — camera look injection is `analog MouseX/MouseY`, not mouse_move.
+  - **Movement-latch finding (Aaron's 2026-06-09 report):** the full matrix — keyboard, gamepad
+    analog via pie route, gamepad analog via slate route, mouse deltas — starts AND stops clean
+    in a single-editor session; no latch anywhere. The latch *mechanism* is real and demonstrated:
+    an axis value persists in `UPlayerInput` indefinitely until the next sample, so anything that
+    eats the release/zero sample (e.g. a second editor stealing activation mid-hold — UE only
+    pumps controller events to the active app) latches movement AND camera at last value. Verdict:
+    dual-editor session artifact, not the CommonUI/InputData config changes. Gameplay regression
+    specs (hold → velocity>0; release → velocity→0 within N frames) are now scriptable.
 - ✅ **C++ automation test runner** — DONE 2026-06-07 (see §A "Automation test results").
   `run_tests`/`get_test_results` execute real `FAutomationTestFramework` tests and return
   pass/fail/errors, so the author→(play)→assert loop is scriptable for any C++ automation test
@@ -433,6 +461,35 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 ---
 
 ## Bugs (found while using the bridge — track, fix when convenient)
+
+### [ ] `control_actor` world-scoping is inconsistent: by-class/list miss PIE actors, by-name finds them
+2026-06-10, single-editor session (so NOT the cross-client noise from the entry below). During PIE:
+`control_actor find_by_class {className:Character}` → 0 actors, but the pawn existed —
+`inspect find_objects {className:Character, pathContains:UEDPIE}` returned
+`UEDPIE_0_HubWorld...BP_CPP_Character_C_0`, and `control_actor get_transform
+{actorName:BP_CPP_Character_C_0}` found it fine and tracked it across frames. So the by-name path
+resolves into the PIE world while the by-class enumeration only walks the editor world. Likely the
+same root cause as the night-shift `control_actor list` weirdness (previously blamed entirely on
+the two-editor incident). Fix direction: enumeration actions should prefer `GEditor->PlayWorld`
+when PIE is active (or take an explicit `world` param), matching whatever world the by-name lookup
+uses. Until fixed: use `inspect find_objects` with `pathContains:UEDPIE` for PIE discovery.
+
+### [ ] Live Coding can't patch UBA-built binaries: `Cannot find image section .voltbl`
+2026-06-10. After a full `Build.bat` rebuild (which ran via Unreal Build Accelerator), the next
+`system_control live_coding_compile` failed: LiveCodingConsole.log shows hundreds of
+`Cannot find image section .voltbl` + `Patch could not be activated.` (.voltbl = MSVC volatile
+metadata; the UBA-compiled objects evidently drop it, and Live Coding refuses to patch a mismatched
+image). Workaround: don't mix — after a Build.bat rebuild, ship .cpp changes with another Build.bat
+cycle (editor quit → build → relaunch) instead of live-coding on top. Worth checking whether
+`-NoUba` (or `bAllowUba=false` for the bridge module) restores live-coding compatibility.
+
+### [ ] Investigate: unexplained `tools/call: control_actor` requests hitting the bridge
+2026-06-10 ~04:55 (RhyaTowerOfWishes.log): two `control_actor` calls reached this bridge
+between this client's `manage_blueprint` calls, but this client never issued them. Suspect
+cross-client traffic on port 3123 (another MCP session — e.g. the handpanic project's config —
+pointed at the wrong port); coincided with a two-editor incident, so attribution is murky.
+Confirm who else can reach 3123, and consider logging a client identifier (peer address /
+session header) per request so this is diagnosable next time.
 
 ### [x] `rename_widget` was a bare `UObject::Rename` (stale GUID map, broken references) + schema/param mismatch
 **FIXED 2026-06-09** (found renaming `WBP_OptionsScreen`'s slider row). Two bugs:

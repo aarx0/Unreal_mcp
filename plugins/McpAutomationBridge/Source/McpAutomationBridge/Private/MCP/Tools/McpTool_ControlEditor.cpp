@@ -100,8 +100,13 @@ public:
 			.String(TEXT("category"), TEXT(""))
 			.FreeformObject(TEXT("preferences"), TEXT(""))
 			.String(TEXT("key"), TEXT(""))
-			.String(TEXT("type"), TEXT("Input event type for simulate_input, e.g. key_down, key_up, mouse_click, mouse_move."))
+			.String(TEXT("type"), TEXT("Input event type for simulate_input: key_down, key_up, mouse_click, mouse_move, analog. "
+				"analog injects a 1D axis value (key=Gamepad_LeftY/Gamepad_RightX/MouseX/... + value); the value persists in "
+				"PlayerInput until the next sample, so hold = inject once, release = inject 0."))
 			.String(TEXT("inputType"), TEXT("Alias for type used by simulate_input."))
+			.Number(TEXT("value"), TEXT("simulate_input analog: axis value (typically -1..1; mouse axes take pixel-ish deltas)."))
+			.String(TEXT("route"), TEXT("simulate_input analog: 'pie' (default — straight to the PIE player controller, focus-immune) or "
+				"'slate' (through FSlateApplication + input preprocessors, exercising the CommonUI layer)."))
 			.String(TEXT("inputAction"), TEXT(""))
 			.Number(TEXT("x"), TEXT("Mouse X coordinate for simulate_input."))
 			.Number(TEXT("y"), TEXT("Mouse Y coordinate for simulate_input."))
