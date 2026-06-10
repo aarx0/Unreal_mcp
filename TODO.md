@@ -349,18 +349,21 @@ Flakiness in shipped surface erodes trust during real authoring.
     the result node (break it first); the result pin is `ReturnValue`; the cast output pin name has
     a space (`AsGOSPlayer Controller`). This is the primitive the #2 "activatable boilerplate with
     GetDesiredFocusTarget wired" scaffolding needs.
-  - 🟡 **Introspection gaps flagged by Aaron (2026-06-09): every `execute_python` probe is an MCP
-    smell — expose them as typed actions.** Probes used this session that deserve actions:
-    (a) **object/template discovery** — find loaded UObjects by class + outer-path filter with
-    property readback (used for: stale `bIsFocusable` template hunt, overlay/canvas slot-object
-    paths, `Category` checks). Candidate: `inspect find_objects {class, pathContains,
-    propertyNames[]}` over `TObjectIterator` with Transient/asset filters.
-    (b) **live widget runtime state** — entry counts + entry text of a `DynamicEntryBox`
-    (action-bar verification), live slider values, widget visibility. Candidate: extend `ui_focus`
-    or add `inspect widget_runtime {nameContains/class, propertyNames[]}` over live PIE widgets.
-    (c) **slot-object resolution** — given a widget, return its slot's object path + properties
-    (avoids guessing `OverlaySlot_N`/`CanvasPanelSlot_N` names; `get_widget_slot_info` covers some
-    of this — verify and extend to return the subobject path usable with `set_property`).
+  - ✅ **Introspection gaps flagged by Aaron (2026-06-09) — CLOSED same night.** Every
+    `execute_python` probe from the gamepad-menu sessions now has a typed action:
+    (a)+(b) **`inspect find_objects`** `{className, pathContains?, propertyNames[]?, exactClass?,
+    includeCdo?, limit?}` — `TObjectIterator` discovery with reflected property readback via
+    `McpPropertyReflection::ExportPropertyToJsonValue`. Covers the template-staleness hunts
+    (`bIsFocusable` on `WBP_*:WidgetTree.*` archetypes — archetype subobjects ARE returned, only
+    `RF_ClassDefaultObject` is filtered by default), live PIE widget state (`AllEntries` of a
+    `CommonBoundActionBar`, slider `Value`, `bIsActive` of audio components), and slot-object
+    discovery. Reports `matched`/`truncated` so capped results are never silent.
+    (c) **`get_widget_slot_info`** now returns `slotObjectPath` (the exact subobject path to feed
+    `inspect set_property` — no more guessing `OverlaySlot_N` names) + a generic `slotProperties`
+    dump for ALL slot types (was canvas-only).
+    Also fixed in the same pass: `add_common_button`/`add_common_text`/`add_common_border` accept
+    `name` as an alias for `slotName` (the param mismatch that silently named a widget "CommonText"
+    when the caller passed `name`, forcing a rename_widget detour).
   - 📝 **ui-nav suite operational constraints (2026-06-09):** the drive layer requires an
     **idle editor** — concurrent human use of the same editor session breaks Slate focus
     determinism (observed: a manual floating-window PIE session left state that made

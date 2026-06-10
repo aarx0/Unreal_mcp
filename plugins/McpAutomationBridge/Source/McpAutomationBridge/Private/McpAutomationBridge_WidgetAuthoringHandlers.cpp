@@ -7151,7 +7151,39 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
         if (UPanelSlot* Slot = TargetWidget->Slot)
         {
             ResultJson->SetStringField(TEXT("slotClass"), Slot->GetClass()->GetName());
-            
+            // The slot's full subobject path — pass directly to inspect
+            // set_property/get_property (no more guessing OverlaySlot_N /
+            // CanvasPanelSlot_N names via object iteration).
+            ResultJson->SetStringField(TEXT("slotObjectPath"), Slot->GetPathName());
+            // Generic property dump of the slot (covers Overlay/VBox/HBox/etc.
+            // slots, which previously returned nothing typed).
+            {
+                TSharedPtr<FJsonObject> SlotProps = MakeShared<FJsonObject>();
+                for (TFieldIterator<FProperty> PropIt(Slot->GetClass()); PropIt; ++PropIt)
+                {
+                    FProperty* Prop = *PropIt;
+                    if (!Prop || Prop->HasAnyPropertyFlags(CPF_Transient | CPF_Deprecated))
+                    {
+                        continue;
+                    }
+                    // Skip the back-pointers (Parent panel / Content widget) —
+                    // noise that bloats the response.
+                    if (Prop->GetFName() == TEXT("Parent") || Prop->GetFName() == TEXT("Content"))
+                    {
+                        continue;
+                    }
+                    // Helper takes the CONTAINER (object) pointer, not a
+                    // pre-resolved value pointer (double-offset reads garbage).
+                    TSharedPtr<FJsonValue> Exported =
+                        McpPropertyReflection::ExportPropertyToJsonValue(Slot, Prop);
+                    if (Exported.IsValid())
+                    {
+                        SlotProps->SetField(Prop->GetName(), Exported);
+                    }
+                }
+                ResultJson->SetObjectField(TEXT("slotProperties"), SlotProps);
+            }
+
             if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
             {
                 TSharedPtr<FJsonObject> SlotInfo = McpHandlerUtils::CreateResultObject();

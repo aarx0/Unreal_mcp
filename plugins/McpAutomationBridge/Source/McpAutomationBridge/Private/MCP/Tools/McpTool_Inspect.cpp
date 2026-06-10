@@ -19,7 +19,9 @@ public:
 			"get_components, list_objects, find_by_class, find_by_tag, runtime_report, "
 			"ui_focus (CommonUI PIE runtime snapshot: focused widget + path, the activatable "
 			"owning focus + its desired-focus target, active activatable stack, current input "
-			"type, and the active root's bound actions).");
+			"type, and the active root's bound actions), find_objects (loaded-object discovery: "
+			"className + optional pathContains substring + propertyNames readback — use for "
+			"widget-tree template subobjects, slot objects, and live PIE widget state).");
 	}
 
 	FString GetCategory() const override { return TEXT("core"); }
@@ -49,6 +51,7 @@ public:
 				TEXT("runtime_report"),
 				TEXT("pie_report"),
 				TEXT("ui_focus"),
+				TEXT("find_objects"),
 				TEXT("list_objects"),
 				TEXT("get_metadata"),
 				TEXT("add_tag"),
@@ -82,6 +85,10 @@ public:
 			.String(TEXT("snapshotName"), TEXT(""))
 			.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 			.Bool(TEXT("detailed"), TEXT(""))
+			.String(TEXT("pathContains"), TEXT("find_objects: case-insensitive substring filter on the object's full path."))
+			.Bool(TEXT("exactClass"), TEXT("find_objects: require the exact class (default false = IsA semantics)."))
+			.Bool(TEXT("includeCdo"), TEXT("find_objects: include class default objects (default false)."))
+			.Integer(TEXT("limit"), TEXT("find_objects: max objects returned (default 50, cap 200)."))
 			.Array(TEXT("propertyNames"), TEXT(""))
 			.Array(TEXT("componentNames"), TEXT("Component names to include detailed property readback for."))
 			.Required({TEXT("action")})

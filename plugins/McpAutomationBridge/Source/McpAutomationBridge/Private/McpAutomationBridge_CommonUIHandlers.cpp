@@ -133,7 +133,9 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 			return true;
 		}
 
-		const FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("CommonButton"));
+		// slotName is canonical; name accepted as an alias (matches add_widget).
+		FString SlotName = GetJsonStringField(Payload, TEXT("slotName"));
+		if (SlotName.IsEmpty()) { SlotName = GetJsonStringField(Payload, TEXT("name"), TEXT("CommonButton")); }
 		const FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
 
 		UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
@@ -218,7 +220,9 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 			return true;
 		}
 
-		const FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("CommonText"));
+		// slotName is canonical; name accepted as an alias (matches add_widget).
+		FString SlotName = GetJsonStringField(Payload, TEXT("slotName"));
+		if (SlotName.IsEmpty()) { SlotName = GetJsonStringField(Payload, TEXT("name"), TEXT("CommonText")); }
 		const FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
 
 		UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
@@ -289,7 +293,9 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 			return true;
 		}
 
-		const FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("CommonBorder"));
+		// slotName is canonical; name accepted as an alias (matches add_widget).
+		FString SlotName = GetJsonStringField(Payload, TEXT("slotName"));
+		if (SlotName.IsEmpty()) { SlotName = GetJsonStringField(Payload, TEXT("name"), TEXT("CommonBorder")); }
 		const FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
 
 		UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);

@@ -66,6 +66,7 @@
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "UObject/UObjectIterator.h" // find_objects: TObjectIterator discovery
 #include "Misc/ConfigCacheIni.h"
 #include "HAL/PlatformMemory.h"
 #include "Misc/App.h"
@@ -1671,6 +1672,140 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectAction(
     if (LowerSubAction.Equals(TEXT("ui_focus")))
     {
         return HandleInspectUiFocus(RequestId, Payload, RequestingSocket);
+    }
+
+    // -------------------------------------------------------------------------
+    // find_objects — loaded-object discovery with property readback. Replaces
+    // the read-only execute_python ObjectIterator probes (template staleness
+    // hunts, slot-object path discovery, live widget state like
+    // DynamicEntryBox AllEntries or slider values). Params:
+    //   className (required) — IsA semantics; exactClass:true for exact match.
+    //   pathContains (optional) — case-insensitive substring of GetPathName().
+    //   propertyNames[] (optional) — reflected readback per object.
+    //   includeCdo (default false) — include class default objects.
+    //   limit (default 50, max 200).
+    // -------------------------------------------------------------------------
+    if (LowerSubAction.Equals(TEXT("find_objects")))
+    {
+        FString ClassName;
+        Payload->TryGetStringField(TEXT("className"), ClassName);
+        if (ClassName.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                                TEXT("find_objects requires 'className'."),
+                                TEXT("MISSING_PARAMETER"));
+            return true;
+        }
+
+        // Resolve the class: loaded short name, /Script/Module.Class, or
+        // /Game/....Name_C (same approach as the widget-authoring resolvers).
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+        UClass *TargetClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::None);
+#else
+        UClass *TargetClass = nullptr;
+#endif
+        if (!TargetClass && (ClassName.Contains(TEXT(".")) || ClassName.Contains(TEXT("/"))))
+        {
+            TargetClass = StaticLoadClass(UObject::StaticClass(), nullptr, *ClassName, nullptr, LOAD_NoWarn | LOAD_Quiet);
+        }
+        if (!TargetClass)
+        {
+            SendAutomationError(
+                RequestingSocket, RequestId,
+                FString::Printf(TEXT("Could not resolve className '%s' to a loaded UClass. Pass a loaded short name or a fully-qualified path."), *ClassName),
+                TEXT("CLASS_NOT_FOUND"));
+            return true;
+        }
+
+        FString PathContains;
+        Payload->TryGetStringField(TEXT("pathContains"), PathContains);
+        bool bExactClass = false;
+        Payload->TryGetBoolField(TEXT("exactClass"), bExactClass);
+        bool bIncludeCdo = false;
+        Payload->TryGetBoolField(TEXT("includeCdo"), bIncludeCdo);
+        int32 Limit = 50;
+        {
+            double LimitNum = 0.0;
+            if (Payload->TryGetNumberField(TEXT("limit"), LimitNum))
+            {
+                Limit = FMath::Clamp(static_cast<int32>(LimitNum), 1, 200);
+            }
+        }
+        const TArray<TSharedPtr<FJsonValue>> *PropertyNames = nullptr;
+        Payload->TryGetArrayField(TEXT("propertyNames"), PropertyNames);
+
+        TArray<TSharedPtr<FJsonValue>> Results;
+        int32 Matched = 0;
+        bool bTruncated = false;
+        for (TObjectIterator<UObject> It; It; ++It)
+        {
+            UObject *Obj = *It;
+            if (!IsValid(Obj))
+            {
+                continue;
+            }
+            if (bExactClass ? (Obj->GetClass() != TargetClass) : !Obj->IsA(TargetClass))
+            {
+                continue;
+            }
+            if (!bIncludeCdo && Obj->HasAnyFlags(RF_ClassDefaultObject))
+            {
+                continue;
+            }
+            const FString Path = Obj->GetPathName();
+            if (!PathContains.IsEmpty() && !Path.Contains(PathContains, ESearchCase::IgnoreCase))
+            {
+                continue;
+            }
+            ++Matched;
+            if (Results.Num() >= Limit)
+            {
+                bTruncated = true;
+                continue; // keep counting matches, stop collecting
+            }
+
+            TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+            Entry->SetStringField(TEXT("path"), Path);
+            Entry->SetStringField(TEXT("class"), Obj->GetClass()->GetName());
+            if (PropertyNames && PropertyNames->Num() > 0)
+            {
+                TSharedPtr<FJsonObject> Props = MakeShared<FJsonObject>();
+                for (const TSharedPtr<FJsonValue> &NameVal : *PropertyNames)
+                {
+                    FString PropName;
+                    if (!NameVal.IsValid() || !NameVal->TryGetString(PropName) || PropName.IsEmpty())
+                    {
+                        continue;
+                    }
+                    FProperty *Prop = Obj->GetClass()->FindPropertyByName(FName(*PropName));
+                    if (!Prop)
+                    {
+                        Props->SetField(PropName, MakeShared<FJsonValueNull>());
+                        continue;
+                    }
+                    // The helper takes the CONTAINER (object) pointer — it
+                    // resolves offsets itself via the _InContainer accessors.
+                    TSharedPtr<FJsonValue> Exported =
+                        McpPropertyReflection::ExportPropertyToJsonValue(Obj, Prop);
+                    Props->SetField(PropName, Exported.IsValid()
+                                                  ? Exported
+                                                  : MakeShared<FJsonValueNull>());
+                }
+                Entry->SetObjectField(TEXT("properties"), Props);
+            }
+            Results.Add(MakeShared<FJsonValueObject>(Entry));
+        }
+
+        TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+        Resp->SetBoolField(TEXT("success"), true);
+        Resp->SetStringField(TEXT("className"), TargetClass->GetPathName());
+        Resp->SetNumberField(TEXT("matched"), Matched);
+        Resp->SetBoolField(TEXT("truncated"), bTruncated);
+        Resp->SetArrayField(TEXT("objects"), Results);
+        SendAutomationResponse(RequestingSocket, RequestId, true,
+                               FString::Printf(TEXT("Found %d object(s)"), Matched),
+                               Resp, FString());
+        return true;
     }
 
     // -------------------------------------------------------------------------
