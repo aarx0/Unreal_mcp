@@ -1224,9 +1224,23 @@ void FMcpNativeTransport::HandleToolsCall(
 		PendingConnections.Add(RequestId, Conn);
 	}
 
+	// Log the peer and session so multi-client traffic on the port is
+	// attributable (the session id joins to the init line's client name/version;
+	// an unfamiliar peer/session means another MCP client is hitting this port).
+	FString PeerDesc = TEXT("unknown");
+	if (SocketSub && ClientSocket)
+	{
+		TSharedRef<FInternetAddr> PeerAddr = SocketSub->CreateInternetAddr();
+		if (ClientSocket->GetPeerAddress(*PeerAddr))
+		{
+			PeerDesc = PeerAddr->ToString(true);
+		}
+	}
 	UE_LOG(LogMcpNativeTransport, Log,
-		TEXT("tools/call: %s (RequestId=%s)"),
-		*ToolName, *RequestId);
+		TEXT("tools/call: %s (RequestId=%s, session=%s, peer=%s)"),
+		*ToolName, *RequestId,
+		SessionId.IsEmpty() ? TEXT("<no-session>") : *SessionId,
+		*PeerDesc);
 
 	// Resolve dispatch action using tool definition metadata.
 	// Pattern A: pass tool name as Action (handler checks Action == "tool_name")

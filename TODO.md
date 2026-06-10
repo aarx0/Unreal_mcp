@@ -566,13 +566,17 @@ it would slow his big full builds in exchange for never losing Live Coding.) Ori
 metadata; the UBA-compiled objects evidently drop it, and Live Coding refuses to patch a
 mismatched image).
 
-### [ ] Investigate: unexplained `tools/call: control_actor` requests hitting the bridge
+### [x] Investigate: unexplained `tools/call: control_actor` requests hitting the bridge
+**Diagnosability landed 2026-06-10** — the `tools/call` log line now carries
+`session=<id>, peer=<ip:port>` (the session id joins to the init line's
+`client: <name> <version>`), so the next occurrence is attributable on sight. Verified live:
+`tools/call: inspect (RequestId=…, session=60D7…, peer=127.0.0.1:50617)`. The original
+incident itself remains unexplained (coincided with a two-editor session, attribution murky)
+but is now a one-grep diagnosis if it recurs. Original report:
 2026-06-10 ~04:55 (RhyaTowerOfWishes.log): two `control_actor` calls reached this bridge
 between this client's `manage_blueprint` calls, but this client never issued them. Suspect
 cross-client traffic on port 3123 (another MCP session — e.g. the handpanic project's config —
-pointed at the wrong port); coincided with a two-editor incident, so attribution is murky.
-Confirm who else can reach 3123, and consider logging a client identifier (peer address /
-session header) per request so this is diagnosable next time.
+pointed at the wrong port).
 
 ### [x] `rename_widget` was a bare `UObject::Rename` (stale GUID map, broken references) + schema/param mismatch
 **FIXED 2026-06-09** (found renaming `WBP_OptionsScreen`'s slider row). Two bugs:
