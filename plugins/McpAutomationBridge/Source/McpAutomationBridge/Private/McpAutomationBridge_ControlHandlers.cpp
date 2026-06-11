@@ -279,7 +279,7 @@ AActor *UMcpAutomationBridgeSubsystem::FindActorByName(const FString &Target, bo
   if (Target.StartsWith(TEXT("/"))) {
     const FString SafeTargetPath = SanitizeProjectRelativePath(Target);
     if (!SafeTargetPath.IsEmpty()) {
-      if (UObject *Obj = UEditorAssetLibrary::LoadAsset(SafeTargetPath)) {
+      if (UObject *Obj = McpLoadAssetPieSafe(SafeTargetPath)) {
         return Cast<AActor>(Obj);
       }
     }
@@ -350,7 +350,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSpawn(
       !ClassPath.StartsWith(TEXT("/Script/"))) {
     const FString SafeClassPath = SanitizeProjectRelativePath(ClassPath);
     if (!SafeClassPath.IsEmpty()) {
-      if (UObject *Loaded = UEditorAssetLibrary::LoadAsset(SafeClassPath)) {
+      if (UObject *Loaded = McpLoadAssetPieSafe(SafeClassPath)) {
         if (UBlueprint *BP = Cast<UBlueprint>(Loaded))
           ResolvedClass = BP->GeneratedClass;
         else if (UClass *C = Cast<UClass>(Loaded))
@@ -369,7 +369,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSpawn(
   if (!ResolvedStaticMesh && !ResolvedSkeletalMesh && !MeshPath.IsEmpty()) {
     const FString SafeMeshPath = SanitizeProjectRelativePath(MeshPath);
     if (!SafeMeshPath.IsEmpty()) {
-      if (UObject *MeshObj = UEditorAssetLibrary::LoadAsset(SafeMeshPath)) {
+      if (UObject *MeshObj = McpLoadAssetPieSafe(SafeMeshPath)) {
         ResolvedStaticMesh = Cast<UStaticMesh>(MeshObj);
         if (!ResolvedStaticMesh)
           ResolvedSkeletalMesh = Cast<USkeletalMesh>(MeshObj);
@@ -621,7 +621,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSpawnBlueprint(
                          BlueprintPath.Contains(TEXT("/")))) {
     const FString SafeBlueprintPath = SanitizeProjectRelativePath(BlueprintPath);
     if (!SafeBlueprintPath.IsEmpty()) {
-      if (UObject *Loaded = UEditorAssetLibrary::LoadAsset(SafeBlueprintPath)) {
+      if (UObject *Loaded = McpLoadAssetPieSafe(SafeBlueprintPath)) {
         if (UBlueprint *BP = Cast<UBlueprint>(Loaded))
           ResolvedClass = BP->GeneratedClass;
         else if (UClass *C = Cast<UClass>(Loaded))
@@ -1176,7 +1176,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorAddComponent(
         !MeshPath.IsEmpty()) {
       const FString SafeMeshPath = SanitizeProjectRelativePath(MeshPath);
       if (!SafeMeshPath.IsEmpty()) {
-        if (UObject *LoadedMesh = UEditorAssetLibrary::LoadAsset(SafeMeshPath)) {
+        if (UObject *LoadedMesh = McpLoadAssetPieSafe(SafeMeshPath)) {
           if (UStaticMesh *Mesh = Cast<UStaticMesh>(LoadedMesh)) {
             SMC->SetStaticMesh(Mesh);
           }
@@ -1421,7 +1421,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorGetComponents(
   if (!Found) {
     const FString SafeTargetPath = SanitizeProjectRelativePath(TargetName);
     if (!SafeTargetPath.IsEmpty()) {
-      if (UObject *Asset = UEditorAssetLibrary::LoadAsset(SafeTargetPath)) {
+      if (UObject *Asset = McpLoadAssetPieSafe(SafeTargetPath)) {
         if (UBlueprint *BP = Cast<UBlueprint>(Asset)) {
           if (BP->GeneratedClass) {
             Found = Cast<AActor>(BP->GeneratedClass->GetDefaultObject());
@@ -3332,7 +3332,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorOpenAsset(
     return true;
   }
 
-  UObject *Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
+  UObject *Asset = McpLoadAssetPieSafe(AssetPath);
   if (!Asset) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("LOAD_FAILED"),
                               TEXT("Failed to load asset"), nullptr);
@@ -4201,7 +4201,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorCloseAsset(
     return true;
   }
 
-  UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
+  UObject* Asset = McpLoadAssetPieSafe(AssetPath);
   if (!Asset) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("LOAD_FAILED"),
                               TEXT("Failed to load asset"), nullptr);

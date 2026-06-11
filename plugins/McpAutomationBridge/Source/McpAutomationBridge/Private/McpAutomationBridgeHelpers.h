@@ -983,6 +983,23 @@ static inline bool McpSafeCompileBlueprint(UBlueprint* Blueprint) { return Bluep
 #endif
 
 #if WITH_EDITOR
+// PIE-safe asset load. UEditorAssetLibrary::LoadAsset refuses to run during
+// PIE (the engine's EditorScriptingHelpers::CheckIfInEditorAndPIE gate logs
+// "[LogUtils] The Editor is currently in a play mode." at Error severity and
+// bails). Plain LoadObject has no play-mode guard and returns the same asset;
+// normalize a bare package path to Package.Asset form first.
+static inline UObject *McpLoadAssetPieSafe(const FString &AssetPath) {
+  if (AssetPath.IsEmpty()) {
+    return nullptr;
+  }
+  FString ObjectPath = AssetPath;
+  if (!ObjectPath.Contains(TEXT("."))) {
+    const FString AssetName = FPaths::GetBaseFilename(ObjectPath);
+    ObjectPath = ObjectPath + TEXT(".") + AssetName;
+  }
+  return LoadObject<UObject>(nullptr, *ObjectPath);
+}
+
 // Resolve a UClass by a variety of heuristics: try full path lookup, attempt
 // to load an asset by path (UBlueprint or UClass), then fall back to scanning
 // loaded classes by name or path suffix. This replaces previous usages of
@@ -996,11 +1013,7 @@ static inline UClass *ResolveClassByName(const FString &ClassNameOrPath) {
   if ((ClassNameOrPath.StartsWith(TEXT("/")) ||
        ClassNameOrPath.Contains(TEXT("/"))) &&
       !ClassNameOrPath.StartsWith(TEXT("/Script/"))) {
-    UObject *Loaded = nullptr;
-// Prefer EditorAssetLibrary when available
-#if WITH_EDITOR
-    Loaded = UEditorAssetLibrary::LoadAsset(ClassNameOrPath);
-#endif
+    UObject *Loaded = McpLoadAssetPieSafe(ClassNameOrPath);
     if (Loaded) {
       if (UBlueprint *BP = Cast<UBlueprint>(Loaded))
         return BP->GeneratedClass;
@@ -2422,8 +2435,12 @@ static inline UBlueprint *LoadBlueprintAsset(const FString &Req,
     }
   }
 
-  // Method 4: UEditorAssetLibrary existence check + LoadObject
-  if (UEditorAssetLibrary::DoesAssetExist(ObjectPath)) {
+  // Method 4: package existence check + LoadObject. PIE-safe:
+  // UEditorAssetLibrary::DoesAssetExist logs "[LogUtils] The Editor is
+  // currently in a play mode." at Error severity during PIE and returns
+  // false for EVERY asset. Disk-existence semantics are preserved because
+  // Methods 1-3 already cover in-memory blueprints.
+  if (FPackageName::DoesPackageExist(PackagePath)) {
     if (UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *ObjectPath)) {
       OutNormalized = PackagePath;
       return BP;
