@@ -521,7 +521,22 @@ result); (b) teach the error guard to downgrade this specific benign line (like 
 handled-ensure downgrade). Note the retry idempotency guard worked as designed here — the
 "failed" spawns had actually landed and the retry caught it.
 
-### [ ] `create_montage` ignores `savePath`; `add_montage_section` can't find its montage
+### [x] `create_montage` ignores `savePath`; `add_montage_section` can't find its montage
+**FIXED 2026-06-11.** Root cause: an alias-routing layer sends these sub-actions to the
+animation AUTHORING handler (`McpAutomationBridge_AnimationAuthoringHandlers.cpp`), not the
+legacy handler — and the authoring handler's params disagreed with the tool schema:
+create_montage read only `path` (schema advertises `savePath`); add_montage_section read
+only `assetPath`/`startTime` (schema advertises neither — only `name`/`time`). Fixes:
+savePath fallback chain (mirrors the fixed create_widget_blueprint); add_montage_section
+accepts assetPath → montagePath → name with a fail-fast INVALID_ARGUMENT when no path-ish
+value arrives, reads time as fallback for startTime, calls `Modify()` before mutating, and
+fail-fasts `SECTION_EXISTS` on AddAnimCompositeSection returning INDEX_NONE (used to
+report success "added at index -1"). BONUS root-cause of the third symptom: the engine
+montage factory seeds a "Default" composite section WITHOUT calling Link() — create_montage
+now links all sections after creation (engine AddAnimCompositeSection pattern), so the
+reflection-write workaround is no longer needed. Schema: added `assetPath` + `startTime`
+fields. All verified live: savePath honored, section added via name+time (LinkValue
+correct), duplicate rejected, sections linked. Original report:
 2026-06-10 (authoring AM_BlockImpact). (a) `animation_physics create_montage
 {savePath:/Game/Blueprints/Characters/MainRobo/Montages}` created the asset at
 `/Game/Animations/` — same bug family as the fixed create_widget_blueprint savePath issue;

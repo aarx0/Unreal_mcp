@@ -27,6 +27,8 @@ public:
 					TEXT("Action"))
 			.String(TEXT("name"), TEXT("Name identifier."))
 			.String(TEXT("savePath"), TEXT("Path to save the asset."))
+			.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+			.Number(TEXT("startTime"), TEXT("Section start time in seconds (alias of 'time')."))
 			.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 			.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
 			.String(TEXT("parentClass"), TEXT(""))

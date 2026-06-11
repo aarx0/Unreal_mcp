@@ -1346,7 +1346,20 @@ if (SubAction == TEXT("add_notify_state"))
     if (SubAction == TEXT("create_montage"))
     {
     FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-    FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")));
+    // Accept 'path' (legacy) and 'savePath' (the animation_physics schema's
+    // param name — previously ignored, so callers passing savePath silently
+    // got the /Game/Animations default). Mirrors the fixed
+    // create_widget_blueprint fallback chain.
+    FString RawPath = GetStringFieldAnimAuth(Params, TEXT("path"), TEXT(""));
+    if (RawPath.IsEmpty())
+    {
+        RawPath = GetStringFieldAnimAuth(Params, TEXT("savePath"), TEXT(""));
+    }
+    if (RawPath.IsEmpty())
+    {
+        RawPath = TEXT("/Game/Animations");
+    }
+    FString Path = NormalizeAnimPath(RawPath);
     FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
     FString SlotName = GetStringFieldAnimAuth(Params, TEXT("slotName"), TEXT("DefaultSlot"));
     bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
@@ -1391,7 +1404,17 @@ if (SubAction == TEXT("add_notify_state"))
             FSlotAnimationTrack& SlotTrack = NewMontage->SlotAnimTracks.AddDefaulted_GetRef();
             SlotTrack.SlotName = FName(*SlotName);
         }
-        
+
+        // The factory seeds a "Default" composite section but never calls
+        // Link() on it (LinkedMontage/LinkedSequence stay null) — the engine's
+        // own AddAnimCompositeSection links every section it adds. Without
+        // this, montage sections authored over the bridge needed manual
+        // reflection writes to become playable.
+        for (FCompositeSection& Section : NewMontage->CompositeSections)
+        {
+            Section.Link(NewMontage, Section.GetTime());
+        }
+
         SaveAnimAsset(NewMontage, bSave);
 
         FString FullPath = Path / Name;
@@ -1403,25 +1426,56 @@ if (SubAction == TEXT("add_notify_state"))
 
     if (SubAction == TEXT("add_montage_section"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
+        // Accept assetPath, montagePath, and 'name' (the schema's only
+        // name-ish field — callers passed the montage path there and got
+        // MONTAGE_NOT_FOUND with an EMPTY path in the message).
+        FString RawAssetPath = GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT(""));
+        if (RawAssetPath.IsEmpty())
+        {
+            RawAssetPath = GetStringFieldAnimAuth(Params, TEXT("montagePath"), TEXT(""));
+        }
+        if (RawAssetPath.IsEmpty())
+        {
+            RawAssetPath = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
+        }
+        const FString AssetPath = NormalizeAnimPath(RawAssetPath);
         FString SectionName = GetStringFieldAnimAuth(Params, TEXT("sectionName"), TEXT(""));
-        float StartTime = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("startTime"), 0.0));
+        // 'time' is the schema-advertised field; 'startTime' kept for
+        // compatibility with the handler's original contract.
+        float StartTime = static_cast<float>(GetNumberFieldAnimAuth(
+            Params, TEXT("startTime"),
+            GetNumberFieldAnimAuth(Params, TEXT("time"), 0.0)));
         bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
+
         if (SectionName.IsEmpty())
         {
             ANIM_ERROR_RESPONSE(TEXT("sectionName is required"), TEXT("MISSING_SECTION_NAME"));
         }
-        
+        if (AssetPath.IsEmpty() || !AssetPath.StartsWith(TEXT("/")))
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Montage asset path required (got '%s') — pass assetPath"), *AssetPath),
+                TEXT("INVALID_ARGUMENT"));
+        }
+
         UAnimMontage* Montage = Cast<UAnimMontage>(StaticLoadObject(UAnimMontage::StaticClass(), nullptr, *AssetPath));
         if (!Montage)
         {
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load montage: %s"), *AssetPath), TEXT("MONTAGE_NOT_FOUND"));
         }
-        
-        // Add new section
+
+        // Add new section (fail fast on duplicates: AddAnimCompositeSection
+        // returns INDEX_NONE for an existing name — this used to report
+        // success "added at index -1").
+        Montage->Modify();
         int32 SectionIndex = Montage->AddAnimCompositeSection(FName(*SectionName), StartTime);
-        
+        if (SectionIndex == INDEX_NONE)
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Section '%s' already exists on %s"), *SectionName, *AssetPath),
+                TEXT("SECTION_EXISTS"));
+        }
+
         SaveAnimAsset(Montage, bSave);
 
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Section '%s' added at index %d"), *SectionName, SectionIndex));
