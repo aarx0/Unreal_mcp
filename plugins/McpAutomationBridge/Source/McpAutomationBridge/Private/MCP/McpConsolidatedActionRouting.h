@@ -399,16 +399,23 @@ inline const TArray<FString>& AudioAuthoring()
 
 inline const TArray<FString>& SystemControlCore()
 {
+	// Truth in advertising (2026-06-11 drift sweep): removed actions that had
+	// NO handler anywhere — profile, set_quality, set_resolution,
+	// set_fullscreen, play_sound, show_widget, validate_assets. They died at
+	// HandleUiAction's NOT_IMPLEMENTED catch-all; re-add only together with a
+	// real implementation. console_command/execute_command/set_cvar/
+	// subscribe/unsubscribe/spawn_category/lumen_update_scene are now routed
+	// in the system_control registry lambda (McpAutomationBridgeSubsystem.cpp).
 	static const TArray<FString> Actions = {
-		TEXT("profile"), TEXT("show_fps"), TEXT("set_quality"),
-		TEXT("screenshot"), TEXT("set_resolution"), TEXT("set_fullscreen"),
+		TEXT("show_fps"),
+		TEXT("screenshot"),
 		TEXT("execute_command"), TEXT("console_command"), TEXT("run_ubt"),
 		TEXT("run_tests"), TEXT("list_tests"), TEXT("get_test_results"),
 		TEXT("subscribe"), TEXT("unsubscribe"),
 		TEXT("spawn_category"), TEXT("start_session"),
-		TEXT("lumen_update_scene"), TEXT("play_sound"), TEXT("create_widget"),
-		TEXT("show_widget"), TEXT("add_widget_child"), TEXT("set_cvar"),
-		TEXT("get_project_settings"), TEXT("validate_assets"),
+		TEXT("lumen_update_scene"), TEXT("create_widget"),
+		TEXT("add_widget_child"), TEXT("set_cvar"),
+		TEXT("get_project_settings"),
 		TEXT("set_project_setting"), TEXT("execute_python"),
 		TEXT("live_coding_compile")
 	};

@@ -3056,7 +3056,9 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   if (ActionMatchesPattern(TEXT("blueprint_remove_variable")) ||
-      AlphaNumLower.Contains(TEXT("blueprintremovevariable"))) {
+      ActionMatchesPattern(TEXT("remove_variable")) || // schema-advertised form
+      AlphaNumLower.Contains(TEXT("blueprintremovevariable")) ||
+      AlphaNumLower.Contains(TEXT("removevariable"))) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_remove_variable handler: RequestId=%s"),
            *RequestId);
@@ -3143,7 +3145,9 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   if (ActionMatchesPattern(TEXT("blueprint_rename_variable")) ||
-      AlphaNumLower.Contains(TEXT("blueprintrenamevariable"))) {
+      ActionMatchesPattern(TEXT("rename_variable")) || // schema-advertised form
+      AlphaNumLower.Contains(TEXT("blueprintrenamevariable")) ||
+      AlphaNumLower.Contains(TEXT("renamevariable"))) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_rename_variable handler: RequestId=%s"),
            *RequestId);
@@ -4697,6 +4701,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   // blueprint_get: return the lightweight registry entry for a blueprint
   if ((ActionMatchesPattern(TEXT("blueprint_get")) ||
        ActionMatchesPattern(TEXT("get")) ||
+       ActionMatchesPattern(TEXT("get_blueprint")) || // schema-advertised form
        AlphaNumLower.Contains(TEXT("blueprintget"))) &&
       !Lower.Contains(TEXT("scs"))) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,

@@ -188,7 +188,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLogAction(
         const bool bWasAlreadySubscribed,
         const FString& Message) -> void
     {
-        TSharedRef<FJsonObject> Result = MakeShared<FJsonObject>();
+        TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
         Result->SetBoolField(TEXT("success"), true);
         Result->SetStringField(TEXT("action"), TEXT("manage_logs"));
         Result->SetStringField(TEXT("subAction"), ResponseAction);
@@ -198,25 +198,12 @@ bool UMcpAutomationBridgeSubsystem::HandleLogAction(
             Result->SetBoolField(TEXT("wasAlreadySubscribed"), bWasAlreadySubscribed);
         }
 
-        TSharedRef<FJsonObject> Response = MakeShared<FJsonObject>();
-        Response->SetStringField(TEXT("type"), TEXT("automation_response"));
-        Response->SetStringField(TEXT("requestId"), RequestId);
-        Response->SetBoolField(TEXT("success"), true);
-        Response->SetStringField(TEXT("message"), Message);
-        Response->SetStringField(TEXT("error"), TEXT(""));
-        Response->SetObjectField(TEXT("result"), Result);
-
-        FString Serialized;
-        const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Serialized);
-        FJsonSerializer::Serialize(Response, Writer);
-
-        if (RequestingSocket.IsValid() && RequestingSocket->IsConnected())
-        {
-            RequestingSocket->Send(Serialized);
-            return;
-        }
-
-        SendRawMessage(Serialized);
+        // Standard response path: the old hand-rolled envelope + raw
+        // RequestingSocket->Send predated the pull-architecture transport;
+        // raw sends are never matched to the pending request, so native MCP
+        // callers timed out waiting for a completion that never came.
+        SendAutomationResponse(RequestingSocket, RequestId, true, Message,
+                               Result, FString());
     };
 
     // -------------------------------------------------------------------------

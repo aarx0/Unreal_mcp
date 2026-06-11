@@ -1307,6 +1307,54 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                     if (McpConsolidatedActions::IsPerformanceAction(SubAction)) {
                       return HandlePerformanceAction(R, TEXT("manage_performance"), P, S);
                     }
+                    // Schema/router drift repairs: these sub-actions are
+                    // advertised by the system_control schema but their real
+                    // implementations live behind other canonical action
+                    // names — re-dispatch like the Performance branch above.
+                    // (Anything not intercepted here falls through to
+                    // HandleSystemControlAction and then the linear chain's
+                    // HandleUiAction, which owns the widget/screenshot set.)
+                    if (SubAction == TEXT("console_command") ||
+                        SubAction == TEXT("execute_command")) {
+                      // Same path control_editor uses; inherits the console
+                      // security blocklist.
+                      return HandleConsoleCommandAction(
+                          R, TEXT("console_command"), P, S);
+                    }
+                    if (SubAction == TEXT("set_cvar")) {
+                      // set_cvar was advertised with key/value params but had
+                      // no handler anywhere. Compose a console command and
+                      // reuse the audited console path.
+                      FString Key, Value;
+                      P->TryGetStringField(TEXT("key"), Key);
+                      P->TryGetStringField(TEXT("value"), Value);
+                      if (Key.IsEmpty()) {
+                        SendAutomationError(
+                            S, R,
+                            TEXT("set_cvar requires 'key' (and usually "
+                                 "'value')."),
+                            TEXT("INVALID_ARGUMENT"));
+                        return true;
+                      }
+                      TSharedPtr<FJsonObject> CmdPayload = MakeShared<FJsonObject>();
+                      CmdPayload->SetStringField(
+                          TEXT("command"),
+                          Value.IsEmpty()
+                              ? Key
+                              : FString::Printf(TEXT("%s %s"), *Key, *Value));
+                      return HandleConsoleCommandAction(
+                          R, TEXT("console_command"), CmdPayload, S);
+                    }
+                    if (SubAction == TEXT("subscribe") ||
+                        SubAction == TEXT("unsubscribe")) {
+                      return HandleLogAction(R, TEXT("manage_logs"), P, S);
+                    }
+                    if (SubAction == TEXT("spawn_category")) {
+                      return HandleDebugAction(R, TEXT("manage_debug"), P, S);
+                    }
+                    if (SubAction == TEXT("lumen_update_scene")) {
+                      return HandleRenderAction(R, TEXT("manage_render"), P, S);
+                    }
                     return HandleSystemControlAction(R, A, P, S);
                   });
   RegisterHandler(TEXT("list_blueprints"),

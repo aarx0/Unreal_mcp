@@ -242,6 +242,20 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectAction(
                                     LocalPayload, RequestingSocket);
   }
   if (Lower.Equals(TEXT("manage_effect")) && !NativeSubAction.IsEmpty()) {
+    // Schema/handler drift repair: the schema advertises activate/deactivate
+    // (and *_effect forms) but the create_effect path only matches the
+    // *_niagara names. NOTE: that path derives its sub-action from the
+    // payload's *action* field (not subAction), so rewrite both.
+    if (NativeSubAction == TEXT("activate") ||
+        NativeSubAction == TEXT("activate_effect")) {
+      LocalPayload->SetStringField(TEXT("action"), TEXT("activate_niagara"));
+      LocalPayload->SetStringField(TEXT("subAction"), TEXT("activate_niagara"));
+    } else if (NativeSubAction == TEXT("deactivate") ||
+               NativeSubAction == TEXT("deactivate_effect")) {
+      LocalPayload->SetStringField(TEXT("action"), TEXT("deactivate_niagara"));
+      LocalPayload->SetStringField(TEXT("subAction"),
+                                   TEXT("deactivate_niagara"));
+    }
     const FString RoutedAction =
         (NativeSubAction == TEXT("list_debug_shapes") ||
          NativeSubAction == TEXT("clear_debug_shapes") ||

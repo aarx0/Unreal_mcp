@@ -2704,7 +2704,9 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorAction(
     return HandleControlActorAttach(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("detach") || LowerSub == TEXT("detach_actor"))
     return HandleControlActorDetach(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("find_by_tag"))
+  if (LowerSub == TEXT("find_by_tag") ||
+      LowerSub == TEXT("find_actors_by_tag")) // schema-advertised alias, like
+                                              // find_actors_by_name/_class
     return HandleControlActorFindByTag(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("add_tag"))
     return HandleControlActorAddTag(RequestId, Payload, RequestingSocket);

@@ -37,8 +37,11 @@ public:
 				TEXT("create_niagara_ribbon"),
 				TEXT("activate"),
 				TEXT("activate_effect"),
+				TEXT("activate_niagara"),
 				TEXT("deactivate"),
-				TEXT("reset"),
+				TEXT("deactivate_niagara"),
+				// "reset" removed (2026-06-11): never had a handler — it is a
+				// bool payload FIELD of activate_niagara, not an action.
 				TEXT("advance_simulation"),
 				TEXT("add_niagara_module"),
 				TEXT("connect_niagara_pins"),

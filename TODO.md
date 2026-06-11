@@ -526,7 +526,31 @@ wrong path form — registry wants package path `FName`, not object path). Check
 `get_dependencies` shares the broken resolution. Workaround: none over the bridge;
 used live-world `find_by_class` + asset search instead.
 
-### [ ] `manage_blueprint get_blueprint`/`get` advertised in schema but router rejects them
+### [x] `manage_blueprint get_blueprint`/`get` advertised in schema but router rejects them
+**FIXED 2026-06-11** (full drift sweep via recon workflow — every tool's schema enum
+cross-referenced against its router). Repairs, all live-verified:
+- `manage_blueprint`: `get_blueprint` alias added to the blueprint_get branch (returns the
+  rich snapshot; plain `get` already worked); `remove_variable`/`rename_variable`
+  unprefixed aliases added (only blueprint_-prefixed forms matched before).
+- `system_control` registry lambda now re-dispatches: `console_command`/`execute_command`
+  → `HandleConsoleCommandAction` (inherits the security blocklist, same as control_editor);
+  NEW `set_cvar` implementation (composes "key value" through the audited console path,
+  INVALID_ARGUMENT without key); `subscribe`/`unsubscribe` → `HandleLogAction(manage_logs)`;
+  `spawn_category` → `HandleDebugAction(manage_debug)`; `lumen_update_scene` →
+  `HandleRenderAction(manage_render)`.
+- LATENT BUG found by wiring subscribe: `HandleLogAction` answered via a hand-rolled
+  envelope + raw `RequestingSocket->Send` (pre-pull-architecture) — native MCP callers
+  timed out. Now uses standard `SendAutomationResponse`.
+- `control_actor`: `find_actors_by_tag` alias (matches its _name/_class siblings).
+- `manage_effect`: `activate`/`activate_effect`/`deactivate` now alias-rewrite to the real
+  `*_niagara` handlers — NOTE the create_effect path derives its sub-action from the
+  payload's `action` field, not `subAction`; both are rewritten.
+- Schema truth-in-advertising (takes effect at next full rebuild — schema registry is
+  built at module startup): SystemControlCore drops the 7 never-implemented actions
+  (profile, set_quality, set_resolution, set_fullscreen, play_sound, show_widget,
+  validate_assets); manage_effect drops dead `reset` (it's a payload FIELD of
+  activate_niagara) and advertises activate_niagara/deactivate_niagara.
+Original report:
 2026-06-10. `manage_blueprint {action:get_blueprint}` → `UNKNOWN_ACTION: Unknown blueprint
 action: get_blueprint` — yet both `get_blueprint` and `get` are in the action enum the
 native schema advertises (`McpTool_ManageBlueprint`?). Schema/router drift: either the
