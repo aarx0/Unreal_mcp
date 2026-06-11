@@ -523,6 +523,35 @@ router lost the alias or the schema advertises an action that was never wired. S
 family as the fixed `rename_widget` schema/param mismatch. Meanwhile
 `get_asset_properties {propertyName:ParentClass}` is a fine substitute for parent-class
 queries (returned `BP_BaseEnemy_C` for BP_MiliBot).
+Same drift found 2026-06-11 (gym build session): `system_control {action:execute_command}`
+→ `NOT_IMPLEMENTED` despite being in the schema enum (`control_editor console_command`
+works). Sweep the schema enums against the routers in one pass.
+
+### [ ] `control_actor spawn` ignores `className` for engine classes (works via `classPath`)
+2026-06-11 (gym build). `spawn {className:PlayerStart}` and `{className:SkyLight}` →
+`CLASS_NOT_FOUND: Class not found: .` — note the EMPTY class name in the message: the
+handler never read the `className` param on this code path. The same spawns succeed with
+`classPath:/Script/Engine.PlayerStart`. Oddly `{className:StaticMeshActor}` + `meshPath`
+worked — so there are (at least) two resolution paths and only one honors `className`.
+Align them + include the requested name in the error.
+
+### [ ] `set_node_property` supports NodePosX/NodePosY but not `EnabledState`
+2026-06-11 (gym build). Wanted to flip a ghost (Disabled) `Event BeginPlay` node to
+Enabled; `set_node_property {propertyName:EnabledState, value:Enabled}` →
+`PROPERTY_NOT_SUPPORTED`. Workaround: delete the ghost node (+ its auto-added
+`Parent: BeginPlay`) and re-run `add_event` — the fresh node comes in Enabled with no
+parent call. Supporting EnabledState would make "override an event WITHOUT calling the BP
+parent" a first-class authoring flow instead of a delete/recreate dance.
+
+### [ ] `get_asset_properties` returns `[]` for `InputMappingContext.Mappings`
+2026-06-11 (gym build). `get_asset_properties {assetPath:IMC_CharacterContext,
+propertyName:Mappings}` → `{"value":[]}` with success=true, but the IMC demonstrably has
+mappings (the game plays; the dead-zone work edited them). Likely the array-of-struct
+export path bails on `FEnhancedActionKeyMapping` (instanced Modifiers/Triggers inside) and
+silently returns empty instead of erroring — which violates fail-fast and cost a detour
+(had to discover the attack key by simulating LeftMouseButton instead of reading the
+binding). Related to the (fixed) instanced-struct IMPORT work — the EXPORT side of the
+same struct family needs the equivalent treatment.
 
 ### [ ] Investigate: consecutive `find_by_class` calls in one PIE session report different worlds
 2026-06-10. Two back-to-back `control_actor find_by_class` calls during a single live PIE
