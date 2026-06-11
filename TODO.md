@@ -477,6 +477,31 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] Graph-node authoring has no overlap-aware placement → unreadable graphs
+**FOUND 2026-06-11** (Aaron's review of the training-dummy graphs). `add_node`/`add_event`/
+`create_node` place nodes at exactly the caller-supplied (or default) coordinates with zero
+awareness of what's already there — including the engine's ghost template events
+(BeginPlay/ActorBeginOverlap/Tick + `Parent:` pairs) that every child BP is seeded with.
+Repro: all three `BP_TrainingDummy_*` EventGraphs had authored nodes overlapping ghost
+nodes and each other; row spacing also didn't account for tall nodes (Set Timer by Function
+Name, 11 pins ≈ 330px). Cleaned up by hand 2026-06-11 (ghosts deleted; positions set via
+`set_node_property NodePosX/NodePosY` — which works fine and is the current workaround).
+Improvement: overlap-avoiding default placement (offset until the estimated node rect is
+clear), and consider a `removeGhostEvents` option since disabled template nodes are pure
+clutter in bridge-authored BPs. The 1-call hygiene readback (`get_graph_details` x/y/
+enabledState) already exists for *detection* — authoring just never consults it.
+
+### [ ] `arrange_graph` ignores node geometry — stacks nodes at IDENTICAL coordinates
+**FOUND 2026-06-11** (first real use, on BP_TrainingDummy_AoE EventGraph). The layout
+algorithm appears to be pure depth-column × row-index: it placed `Get AIPerception` and
+`Execute Console Command` at the **same exact spot** (640,180), and its row pitch (~270)
+is smaller than a tall node (Set Timer, 11 pins ≈ 330px), so rows overlap vertically.
+Pure data nodes (variable getters) seem to share a depth slot with the exec-chain node they
+feed instead of being offset below it. Needs size-aware layout: estimate node extent from
+pin count + title width (or read live Slate geometry when the graph editor is open), give
+data-only nodes their own sub-row, and assert no two nodes share a rect. Until then,
+hand-positioning via `set_node_property` is more reliable than `arrange_graph`.
+
 ### [x] `add_event` Custom DUPLICATED default pins → authored event chains died on editor restart
 **FOUND + FIXED 2026-06-11** (TODO-clearing session; discovered when the combat-gym
 training dummies went dead after the overnight rebuild). The add_event custom-event path
