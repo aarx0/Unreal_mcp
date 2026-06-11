@@ -3366,8 +3366,12 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
         CustomEventNode->CustomFunctionName = EventName;
         CustomEventNode->NodePosX = EventPosX;
         CustomEventNode->NodePosY = EventPosY;
+        // Finalize() already calls AllocateDefaultPins(). Calling it again
+        // DUPLICATED every default pin (delegate+then twice, pinCount 4);
+        // links made to the duplicate pins were silently dropped by
+        // ReconstructNode on the next editor load — authored event chains
+        // died on restart (found via the combat-gym training dummies).
         NodeCreator.Finalize();
-        CustomEventNode->AllocateDefaultPins();
       } else {
         CustomEventNode->NodePosX = EventPosX;
         CustomEventNode->NodePosY = EventPosY;

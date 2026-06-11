@@ -38,6 +38,18 @@ static bool IsKnownBenignMcpCompilerWarning(const FString& Message)
     {
         return true;
     }
+    // Editor-scripting utilities (UEditorAssetLibrary et al.) refuse to run
+    // during PIE via EditorScriptingHelpers::CheckIfInEditorAndPIE(), which
+    // logs this line at Error severity and bails. Bridge call paths have
+    // PIE-safe fallbacks (LoadObject/FindObject/AssetRegistry); when the
+    // fallback also fails the handler surfaces its own specific error, and
+    // this guard only promotes on SUCCESS — so suppressing the line never
+    // hides a real failure. (Captured form: "[LogUtils] The Editor is
+    // currently in a play mode." — match without prefix/period.)
+    if (Message.Contains(TEXT("The Editor is currently in a play mode"), ESearchCase::IgnoreCase))
+    {
+        return true;
+    }
     return false;
 }
 

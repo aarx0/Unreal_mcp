@@ -477,7 +477,37 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
-### [ ] Benign "Editor is currently in a play mode" log line false-fails PIE-time calls
+### [x] `add_event` Custom DUPLICATED default pins → authored event chains died on editor restart
+**FOUND + FIXED 2026-06-11** (TODO-clearing session; discovered when the combat-gym
+training dummies went dead after the overnight rebuild). The add_event custom-event path
+in `McpAutomationBridge_BlueprintHandlers.cpp` called `CustomEventNode->AllocateDefaultPins()`
+AFTER `NodeCreator.Finalize()` — but Finalize already allocates default pins, so every
+bridge-authored custom event carried DUPLICATE delegate/then pins (pinCount 4 instead
+of 2). `connect_pins` then linked the duplicate `then`, everything verified fine
+in-session, and on the NEXT editor load `ReconstructNode` silently dropped the duplicate
+pins AND the links on them: BP_TrainingDummy_Melee/AoE both lost their Swing/Lob exec
+chains overnight (events fired, did nothing). Fix: removed the redundant call (only
+occurrence in the codebase — swept every `Finalize()` site). Verified: fresh custom event
+now reports pinCount 2; dummies re-linked on the post-reconstruction canonical nodes,
+re-verified live in PIE (melee kills again, AoE lobs again); link survival across restart
+gets confirmed at this session's end-of-night rebuild. LESSON for graph authoring:
+in-session verification is not enough for node-creation bugs — pin duplication only
+manifests at the serialize→reload boundary.
+
+### [x] Benign "Editor is currently in a play mode" log line false-fails PIE-time calls
+**FIXED 2026-06-11** in two layers. (1) Guard downgrade (live now): the captured-error
+promoter's benign-line list (`IsKnownBenignMcpCompilerWarning`,
+`McpAutomationBridgeSubsystem.cpp`) now treats "The Editor is currently in a play mode"
+as a warning — engine editor-scripting utilities log it at Error severity whenever called
+during PIE and the handlers all have PIE-safe fallbacks; the guard only promotes on
+SUCCESS, so this can't mask a real failure. Verified live: `spawn_blueprint` into a PIE
+world and `get_graph_details` mid-PIE both return clean success (both used to
+ENGINE_ERROR). (2) Per-site swaps (in the end-of-night rebuild batch, header change):
+`McpLoadAssetPieSafe` helper (plain LoadObject, no play-mode gate) replacing
+`UEditorAssetLibrary::LoadAsset` at the spawn/spawn_blueprint/FindActorByName/
+add_component/get_components sites + `FPackageName::DoesPackageExist` replacing
+`DoesAssetExist` in LoadBlueprintAsset Method 4 — so PIE-time loads actually work
+instead of leaning on fallbacks. Original report:
 2026-06-10 (combat verification session). During PIE, several control_actor/manage_blueprint
 calls return `ENGINE_ERROR: [LogUtils] The Editor is currently in a play mode.` even though
 the operation SUCCEEDED (verified repeatedly: `spawn_blueprint` spawned into the PIE world
