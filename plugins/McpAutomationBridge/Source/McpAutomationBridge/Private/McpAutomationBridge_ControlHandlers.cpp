@@ -2363,9 +2363,19 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorFindByClass(
 
   // Prefer the PIE world when active, matching HandleControlActorList and
   // FindActorByName — otherwise by-class enumeration misses every PIE actor
-  // while the by-name path finds them.
-  UWorld* World = GEditor->PlayWorld ? GEditor->PlayWorld.Get()
-                                     : GEditor->GetEditorWorldContext().World();
+  // while the by-name path finds them. Resolve via GetPIEWorldContext()
+  // (instance 0), NOT GEditor->PlayWorld: PlayWorld is per-frame scratch that
+  // UEditorEngine::Tick reassigns per PIE context (last-context-wins, can be
+  // null mid-teardown) — nondeterministic under multi-instance PIE.
+  UWorld* World = nullptr;
+  bool bIsPieWorld = false;
+  if (const FWorldContext* PieContext = GEditor->GetPIEWorldContext()) {
+    World = PieContext->World();
+    bIsPieWorld = (World != nullptr);
+  }
+  if (!World) {
+    World = GEditor->GetEditorWorldContext().World();
+  }
   if (World) {
     UClass* ClassToFind = nullptr;
 
@@ -2393,9 +2403,17 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorFindByClass(
 
   Data->SetArrayField(TEXT("actors"), ActorsArray);
   Data->SetNumberField(TEXT("count"), ActorsArray.Num());
-  Data->SetBoolField(TEXT("isPieWorld"), GEditor->PlayWorld != nullptr);
-  if (World)
+  // Derived from the SAME resolution as World so the flag and worldName can
+  // never disagree. worldPackage exposes the UEDPIE_<instance>_ prefix and
+  // hasBegunPlay flags the brief post-OpenLevel window — together they make
+  // legitimate mid-PIE level travel (worldName changing between calls)
+  // diagnosable instead of looking like a picker bug.
+  Data->SetBoolField(TEXT("isPieWorld"), bIsPieWorld);
+  if (World) {
     Data->SetStringField(TEXT("worldName"), World->GetName());
+    Data->SetStringField(TEXT("worldPackage"), World->GetOutermost()->GetName());
+    Data->SetBoolField(TEXT("hasBegunPlay"), World->HasBegunPlay());
+  }
   SendStandardSuccessResponse(this, Socket, RequestId,
                               FString::Printf(TEXT("Found %d actors"), ActorsArray.Num()), Data);
   return true;

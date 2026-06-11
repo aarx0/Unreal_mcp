@@ -653,7 +653,21 @@ silently returns empty instead of erroring — which violates fail-fast and cost
 binding). Related to the (fixed) instanced-struct IMPORT work — the EXPORT side of the
 same struct family needs the equivalent treatment.
 
-### [ ] Investigate: consecutive `find_by_class` calls in one PIE session report different worlds
+### [x] Investigate: consecutive `find_by_class` calls in one PIE session report different worlds
+**RESOLVED 2026-06-11.** Investigation verdict (engine-source recon): the observed
+IceMap→HubWorld flip-flop was a REAL mid-PIE level travel (a gameplay/level-BP OpenLevel —
+LoadMap swaps the world on the same FWorldContext; the bridge drains requests on the core
+ticker AFTER GEngine->Tick, so it can never read mid-LoadMap state). The "false empties"
+were true empties of a freshly traveled world. HOWEVER a real LATENT bug was found:
+`GEditor->PlayWorld` is per-frame scratch that UEditorEngine::Tick reassigns per PIE
+context (last-context-wins, unchecked null in the render loop) — nondeterministic under
+multi-instance PIE. Fix: find_by_class now resolves via `GEditor->GetPIEWorldContext()`
+(deterministic, instance 0) with editor-world fallback; `isPieWorld` derives from the same
+resolution; response gains `worldPackage` (UEDPIE_<instance>_ prefix) and `hasBegunPlay`
+so real travels are diagnosable. Verified live in both modes. NOTE: sibling handlers
+(FindActorByName, spawn, set_game_speed, exec at ControlHandlers ~220/409/626/3125/3616/
+3649) still read raw PlayWorld — identical in single-instance PIE; migrate to a shared
+helper if multi-instance PIE ever matters. Original report:
 2026-06-10. Two back-to-back `control_actor find_by_class` calls during a single live PIE
 session returned `worldName:"IceMap"` then `worldName:"HubWorld"` (both `isPieWorld:true`,
 both 0 hits, ~seconds apart). Could be legitimate (level transition mid-play, or World
