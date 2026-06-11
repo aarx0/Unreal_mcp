@@ -504,6 +504,37 @@ perfectly and produced a working montage (block react plays in PIE), so the refl
 route is a viable montage-authoring fallback. Also: `create_montage` DOES seed a "Default"
 composite section — only linking (SegmentIndex/SegmentLength/LinkedSequence) was missing.
 
+### [ ] `manage_asset get_referencers` / `get_dependencies`(?) ASSET_NOT_FOUND on valid paths
+2026-06-10 (BP_MiliBot architecture walkthrough). `get_referencers
+{assetPath:/Game/Blueprints/Characters/Enemies/MiliBot/BP_MiliBot}` → `ASSET_NOT_FOUND`,
+and the same with the full object path (`...BP_MiliBot.BP_MiliBot`). The asset definitely
+exists: `search_assets` returns it and `get_asset_properties`/`get_graph_details` work on
+the exact same path in the same session. So the referencer handler resolves paths
+differently from every other asset handler (probably querying the asset registry with the
+wrong path form — registry wants package path `FName`, not object path). Check whether
+`get_dependencies` shares the broken resolution. Workaround: none over the bridge;
+used live-world `find_by_class` + asset search instead.
+
+### [ ] `manage_blueprint get_blueprint`/`get` advertised in schema but router rejects them
+2026-06-10. `manage_blueprint {action:get_blueprint}` → `UNKNOWN_ACTION: Unknown blueprint
+action: get_blueprint` — yet both `get_blueprint` and `get` are in the action enum the
+native schema advertises (`McpTool_ManageBlueprint`?). Schema/router drift: either the
+router lost the alias or the schema advertises an action that was never wired. Same bug
+family as the fixed `rename_widget` schema/param mismatch. Meanwhile
+`get_asset_properties {propertyName:ParentClass}` is a fine substitute for parent-class
+queries (returned `BP_BaseEnemy_C` for BP_MiliBot).
+
+### [ ] Investigate: consecutive `find_by_class` calls in one PIE session report different worlds
+2026-06-10. Two back-to-back `control_actor find_by_class` calls during a single live PIE
+session returned `worldName:"IceMap"` then `worldName:"HubWorld"` (both `isPieWorld:true`,
+both 0 hits, ~seconds apart). Could be legitimate (level transition mid-play, or World
+Partition/streamed-level multi-world) or could mean the PIE-world picker grabs the first
+PIE-flagged world it finds nondeterministically — if so, by-class searches can silently
+scan the WRONG world and return false empties. The fix from the earlier world-scoping bug
+(see [x] entry below) chose *a* PIE world; verify it chooses *the* game world (use
+`UEditorEngine::GetPIEWorldContext()` / the game instance's world) when multiple worlds
+are live.
+
 ### [x] `add_node` couldn't author function-call nodes by name (`Class::Function`)
 **FIXED 2026-06-10** (found when `nodeType:"KismetSystemLibrary::PrintString"` →
 `UNSUPPORTED_NODE`). Three changes in `McpAutomationBridge_BlueprintHandlers.cpp`:
