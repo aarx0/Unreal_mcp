@@ -2200,23 +2200,33 @@ bool UMcpAutomationBridgeSubsystem::HandleGetDependencies(
     return true;
   }
 
-  // Check if asset exists - return error for non-existent assets
-  if (!UEditorAssetLibrary::DoesAssetExist(SafeAssetPath)) {
-    SendAutomationError(Socket, RequestId, 
-                        FString::Printf(TEXT("Asset not found: %s"), *SafeAssetPath),
-                        TEXT("ASSET_NOT_FOUND"));
-    return true;
-  }
+  // Registry dependency queries key on PACKAGE names; accept the object-path
+  // form (/Game/Pkg/Name.Name) by stripping the object suffix — the FName
+  // overload keyed on an object path used to return a silent empty result.
+  const FString PackagePath = FPackageName::ObjectPathToPackageName(SafeAssetPath);
 
   bool bRecursive = false;
   Payload->TryGetBoolField(TEXT("recursive"), bRecursive);
 
   FAssetRegistryModule &AssetRegistryModule =
       FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+
+  // Existence check via the registry, NOT UEditorAssetLibrary::DoesAssetExist:
+  // that one returns false for EVERY asset while PIE is running (engine-side
+  // CheckIfInEditorAndPIE gate), which this handler misreported as
+  // ASSET_NOT_FOUND. The registry query is PIE-immune and load-free.
+  TArray<FAssetData> PackageAssets;
+  AssetRegistryModule.Get().GetAssetsByPackageName(FName(*PackagePath),
+                                                   PackageAssets);
+  if (PackageAssets.Num() == 0) {
+    SendAutomationError(Socket, RequestId,
+                        FString::Printf(TEXT("Asset not found: %s"), *SafeAssetPath),
+                        TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
+
   TArray<FName> Dependencies;
-  UE::AssetRegistry::EDependencyCategory Category =
-      UE::AssetRegistry::EDependencyCategory::Package;
-  AssetRegistryModule.Get().GetDependencies(FName(*SafeAssetPath), Dependencies);
+  AssetRegistryModule.Get().GetDependencies(FName(*PackagePath), Dependencies);
 
   TArray<TSharedPtr<FJsonValue>> DepArray;
   for (const FName &Dep : Dependencies) {
@@ -2258,17 +2268,25 @@ bool UMcpAutomationBridgeSubsystem::HandleGetReferencers(
     return true;
   }
 
-  if (!UEditorAssetLibrary::DoesAssetExist(SafeAssetPath)) {
+  // See HandleGetDependencies: package-path normalization + PIE-immune
+  // registry existence check (DoesAssetExist false-fails wholesale in PIE).
+  const FString PackagePath = FPackageName::ObjectPathToPackageName(SafeAssetPath);
+
+  FAssetRegistryModule &AssetRegistryModule =
+      FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+
+  TArray<FAssetData> PackageAssets;
+  AssetRegistryModule.Get().GetAssetsByPackageName(FName(*PackagePath),
+                                                   PackageAssets);
+  if (PackageAssets.Num() == 0) {
     SendAutomationError(Socket, RequestId,
                         FString::Printf(TEXT("Asset not found: %s"), *SafeAssetPath),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
   }
 
-  FAssetRegistryModule &AssetRegistryModule =
-      FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
   TArray<FName> Referencers;
-  AssetRegistryModule.Get().GetReferencers(FName(*SafeAssetPath), Referencers);
+  AssetRegistryModule.Get().GetReferencers(FName(*PackagePath), Referencers);
 
   TArray<TSharedPtr<FJsonValue>> RefArray;
   for (const FName &Ref : Referencers) {

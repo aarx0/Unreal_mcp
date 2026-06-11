@@ -299,8 +299,16 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSpawn(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     TSharedPtr<FMcpBridgeWebSocket> Socket) {
 #if WITH_EDITOR
+  // The tool schema advertises three aliases for the class (classPath,
+  // className, actorClass); coalesce them so all three actually work
+  // (mirrors HandleControlActorFindByClass). classPath wins when several
+  // are sent since it is the most explicit form.
   FString ClassPath;
   Payload->TryGetStringField(TEXT("classPath"), ClassPath);
+  if (ClassPath.IsEmpty())
+    Payload->TryGetStringField(TEXT("className"), ClassPath);
+  if (ClassPath.IsEmpty())
+    Payload->TryGetStringField(TEXT("actorClass"), ClassPath);
   FString ActorName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
 
@@ -391,6 +399,15 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSpawn(
   }
 
   if (!ResolvedClass && !bSpawnStaticMeshActor && !bSpawnSkeletalMeshActor) {
+    if (ClassPath.IsEmpty()) {
+      // Distinguish "you sent nothing" from "couldn't resolve what you sent" —
+      // the old message printed "Class not found: ." here.
+      SendStandardErrorResponse(
+          this, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
+          TEXT("No class specified: pass classPath, className, or actorClass "
+               "(or meshPath for a static/skeletal mesh actor)."));
+      return true;
+    }
     const FString ErrorMsg =
         FString::Printf(TEXT("Class not found: %s. Verify plugin is enabled if "
                              "using a plugin class."),

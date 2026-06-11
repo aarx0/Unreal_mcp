@@ -1653,6 +1653,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     if (TargetNode) {
       TargetNode->Modify();
       bool bHandled = false;
+      bool bStructuralChange = false; // structural writes need the stronger mark
 
       if (PropertyName.Equals(TEXT("Comment"), ESearchCase::IgnoreCase) ||
           PropertyName.Equals(TEXT("NodeComment"), ESearchCase::IgnoreCase)) {
@@ -1684,12 +1685,45 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
                                      ESearchCase::IgnoreCase)) {
         TargetNode->bCommentBubblePinned = Value.ToBool();
         bHandled = true;
+      } else if (PropertyName.Equals(TEXT("EnabledState"),
+                                     ESearchCase::IgnoreCase)) {
+        // Flip ghost/disabled nodes (e.g. the stock Disabled `Event BeginPlay`)
+        // without the delete-and-recreate dance. Strict parse, fail fast.
+        ENodeEnabledState NewState;
+        if (Value.Equals(TEXT("Enabled"), ESearchCase::IgnoreCase)) {
+          NewState = ENodeEnabledState::Enabled;
+        } else if (Value.Equals(TEXT("Disabled"), ESearchCase::IgnoreCase)) {
+          NewState = ENodeEnabledState::Disabled;
+        } else if (Value.Equals(TEXT("DevelopmentOnly"),
+                                ESearchCase::IgnoreCase)) {
+          NewState = ENodeEnabledState::DevelopmentOnly;
+        } else {
+          SendAutomationError(
+              RequestingSocket, RequestId,
+              FString::Printf(
+                  TEXT("Invalid EnabledState '%s' (expected "
+                       "Enabled|Disabled|DevelopmentOnly)"),
+                  *Value),
+              TEXT("INVALID_VALUE"));
+          return true;
+        }
+        TargetNode->SetEnabledState(NewState); // bUserAction=true: mirrors a user toggle
+        bStructuralChange = true;
+        bHandled = true;
       }
 
       if (bHandled) {
         TargetGraph->NotifyGraphChanged();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        
+        if (bStructuralChange) {
+          // Enabled state changes what gets COMPILED (disabled nodes are
+          // compiled out) — the editor's own toggle marks structurally
+          // (FBlueprintEditor::OnSetEnabledStateForSelectedNodes); plain
+          // MarkBlueprintAsModified would leave the old state compiled in.
+          FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        } else {
+          FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        }
+
         // CRITICAL: Save the blueprint to persist changes.
         SaveLoadedAssetThrottled(Blueprint);
         

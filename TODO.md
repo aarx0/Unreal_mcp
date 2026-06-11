@@ -504,7 +504,18 @@ perfectly and produced a working montage (block react plays in PIE), so the refl
 route is a viable montage-authoring fallback. Also: `create_montage` DOES seed a "Default"
 composite section — only linking (SegmentIndex/SegmentLength/LinkedSequence) was missing.
 
-### [ ] `manage_asset get_referencers` / `get_dependencies`(?) ASSET_NOT_FOUND on valid paths
+### [x] `manage_asset get_referencers` / `get_dependencies` ASSET_NOT_FOUND on valid paths
+**FIXED 2026-06-11.** Recon found TWO coupled defects in
+`McpAutomationBridge_AssetWorkflowHandlers.cpp`: (1) the existence gate used
+`UEditorAssetLibrary::DoesAssetExist`, which hard-fails for EVERY asset while PIE runs
+(engine `CheckIfInEditorAndPIE` gate — the original session had live PIE, hence blanket
+ASSET_NOT_FOUND); (2) the registry FName overloads take PACKAGE names, so the
+`.Name` object-path form silently returned `success:true` with empty arrays. Fix: both
+handlers now derive `FPackageName::ObjectPathToPackageName(...)`, existence-check via
+`GetAssetsByPackageName` (registry-native, PIE-immune, load-free), and query with the
+package FName; dead `EDependencyCategory` local removed. Verified live: both path forms
+return identical results (BP_MiliBot: 10 referencers), AND the same call succeeds
+mid-PIE. Original report:
 2026-06-10 (BP_MiliBot architecture walkthrough). `get_referencers
 {assetPath:/Game/Blueprints/Characters/Enemies/MiliBot/BP_MiliBot}` → `ASSET_NOT_FOUND`,
 and the same with the full object path (`...BP_MiliBot.BP_MiliBot`). The asset definitely
@@ -527,7 +538,18 @@ Same drift found 2026-06-11 (gym build session): `system_control {action:execute
 → `NOT_IMPLEMENTED` despite being in the schema enum (`control_editor console_command`
 works). Sweep the schema enums against the routers in one pass.
 
-### [ ] `control_actor spawn` ignores `className` for engine classes (works via `classPath`)
+### [x] `control_actor spawn` ignores `className` for engine classes (works via `classPath`)
+**FIXED 2026-06-11.** `HandleControlActorSpawn` only read `classPath`; the schema's other
+two aliases (`className`, `actorClass`) were never read — `ResolveClassByName("")` then
+nullptr'd silently (the StaticMeshActor case "worked" only because the mesh fallback
+forced the class, masking the drop). Fix: coalesce classPath → className → actorClass
+(mirrors `HandleControlActorFindByClass`), plus a fail-fast `INVALID_ARGUMENT` ("No class
+specified: pass classPath, className, or actorClass...") when all are empty, replacing the
+old "Class not found: ." message. Verified live: `{className:PlayerStart}` spawns; empty
+payload errors clearly. NOTE found in passing: `spawn_blueprint` reads only
+`blueprintPath` — same alias-dropping family if a caller sends classPath; harmless today
+(schema steers to blueprintPath) but worth aligning whenever that handler is next touched.
+Original report:
 2026-06-11 (gym build). `spawn {className:PlayerStart}` and `{className:SkyLight}` →
 `CLASS_NOT_FOUND: Class not found: .` — note the EMPTY class name in the message: the
 handler never read the `className` param on this code path. The same spawns succeed with
@@ -535,7 +557,16 @@ handler never read the `className` param on this code path. The same spawns succ
 worked — so there are (at least) two resolution paths and only one honors `className`.
 Align them + include the requested name in the error.
 
-### [ ] `set_node_property` supports NodePosX/NodePosY but not `EnabledState`
+### [x] `set_node_property` supports NodePosX/NodePosY but not `EnabledState`
+**FIXED 2026-06-11.** Added an `EnabledState` branch to the property dispatch in
+`McpAutomationBridge_BlueprintGraphHandlers.cpp` (strict parse
+Enabled|Disabled|DevelopmentOnly, unknown → `INVALID_VALUE` fail-fast) calling
+`UEdGraphNode::SetEnabledState` (bUserAction=true, mirroring a user toggle). Because
+enabled state changes what gets COMPILED, this branch marks the Blueprint
+**structurally** modified (`MarkBlueprintAsStructurallyModified`) like the editor's own
+toggle — the other property writes keep the cheaper `MarkBlueprintAsModified`. Verified
+live: ghost `Event ActorBeginOverlap` flipped Disabled→Enabled→Disabled (round-trip
+confirmed via get_graph_details), `Bogus` → INVALID_VALUE. Original report:
 2026-06-11 (gym build). Wanted to flip a ghost (Disabled) `Event BeginPlay` node to
 Enabled; `set_node_property {propertyName:EnabledState, value:Enabled}` →
 `PROPERTY_NOT_SUPPORTED`. Workaround: delete the ghost node (+ its auto-added
