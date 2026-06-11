@@ -643,7 +643,20 @@ Enabled; `set_node_property {propertyName:EnabledState, value:Enabled}` →
 parent call. Supporting EnabledState would make "override an event WITHOUT calling the BP
 parent" a first-class authoring flow instead of a delete/recreate dance.
 
-### [ ] `get_asset_properties` returns `[]` for `InputMappingContext.Mappings`
+### [x] `get_asset_properties` returns `[]` for `InputMappingContext.Mappings`
+**FIXED 2026-06-11 — and the original hypothesis was WRONG.** The export machinery is
+fine (field-by-field struct export + `{"__class"}` instanced export already work; round
+trips verified previously). Root cause: UE 5.7 DEPRECATED `UInputMappingContext::Mappings`
+— `PostLoad()` MoveTemps the data into `DefaultKeyMappings.Mappings`, so the legacy array
+is GENUINELY EMPTY in memory; the bridge silently resolved the deprecated property and
+returned a truthful-but-misleading `[]`. The correct read (`DefaultKeyMappings.Mappings`)
+worked all along. Fix: fail-fast deprecated-property guard in `ResolveAssetPropertyPath`
+(shared by get/set_asset_property, so it also stops silent writes to dead arrays):
+errors with the engine's own DeprecationMessage — "Field 'Mappings' on
+'InputMappingContext' is deprecated: Use the DefaultKeyMappings struct instead." KEY
+DETAIL: UHT only sets CPF_Deprecated for `_DEPRECATED`-suffixed names; the
+`meta=(DeprecatedProperty)` metadata check is the load-bearing half. Verified live both
+ways. Original report:
 2026-06-11 (gym build). `get_asset_properties {assetPath:IMC_CharacterContext,
 propertyName:Mappings}` → `{"value":[]}` with success=true, but the IMC demonstrably has
 mappings (the game plays; the dead-zone work edited them). Likely the array-of-struct

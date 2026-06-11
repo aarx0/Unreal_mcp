@@ -2392,6 +2392,20 @@ bool ResolveAssetPropertyPath(UObject *Asset, const FString &PropertyPath,
       OutError = FString::Printf(TEXT("Field '%s' not found on '%s'"), *Name, *Scope->GetName());
       return false;
     }
+    // Fail fast on engine-deprecated fields. UHT only sets CPF_Deprecated for
+    // _DEPRECATED-suffixed names, so the meta=(DeprecatedProperty) check is
+    // the load-bearing half. Without this, UE 5.7's legacy
+    // UInputMappingContext::Mappings (emptied into DefaultKeyMappings.Mappings
+    // by PostLoad) read back as a plausible-but-wrong [] — and writes to such
+    // fields mutate dead data that PostLoad ignores.
+    if (Prop->HasAnyPropertyFlags(CPF_Deprecated) ||
+        Prop->HasMetaData(TEXT("DeprecatedProperty"))) {
+      const FString DeprecationMsg = Prop->GetMetaData(TEXT("DeprecationMessage"));
+      OutError = FString::Printf(
+          TEXT("Field '%s' on '%s' is deprecated%s%s"), *Name, *Scope->GetName(),
+          DeprecationMsg.IsEmpty() ? TEXT("") : TEXT(": "), *DeprecationMsg);
+      return false;
+    }
     if (SegIdx == 0) {
       Out.RootProp = Prop;
     }
