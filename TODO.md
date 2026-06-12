@@ -491,6 +491,16 @@ clear), and consider a `removeGhostEvents` option since disabled template nodes 
 clutter in bridge-authored BPs. The 1-call hygiene readback (`get_graph_details` x/y/
 enabledState) already exists for *detection* — authoring just never consults it.
 
+### [ ] WATCH: editor crashed during shutdown after bridge-issued QUIT_EDITOR (1× 2026-06-11)
+EXCEPTION_ACCESS_VIOLATION reading nullptr, callstack entirely UnrealEditor-Slate.dll
+(teardown path), AFTER "Engine exit requested" — i.e. a shutdown-order crash, not a hang.
+Editor had been up ~all day across many PIE cycles + heavy bridge use; assets were saved,
+no data loss; the lingering process was the crash-reporter dialog. NOT attributed to the
+bridge (no bridge frames in the stack) — but QUIT_EDITOR via bridge is our standard
+clean-quit path, so log recurrences here. If it repeats, symbolize the stack and check
+whether a bridge-held Slate reference (e.g. a cached widget from ui_focus/find_objects)
+outlives its window.
+
 ### [ ] `arrange_graph` ignores node geometry — stacks nodes at IDENTICAL coordinates
 **FOUND 2026-06-11** (first real use, on BP_TrainingDummy_AoE EventGraph). The layout
 algorithm appears to be pure depth-column × row-index: it placed `Get AIPerception` and
