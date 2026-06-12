@@ -501,6 +501,25 @@ clean-quit path, so log recurrences here. If it repeats, symbolize the stack and
 whether a bridge-held Slate reference (e.g. a cached widget from ui_focus/find_objects)
 outlives its window.
 
+### [ ] Graph-authoring papercuts batch (found building BP_GymRespawner, 2026-06-11)
+All worked around in-session; each cost a delete-and-retry round trip:
+- `add_node {nodeType:K2Node_DynamicCast, targetClass}` silently creates a **"Bad cast
+  node"** (TargetType never set, wildcard pins). The working path is
+  `create_node {nodeType:Cast, targetClass}` — add_node should either route to the same
+  factory or fail fast with guidance.
+- `add_node {nodeType:K2Node_VariableGet, memberName, memberClass}` creates an empty
+  "Get" node (0 pins). Working path: `create_node {nodeType:VariableGet, variableName,
+  memberClass}` — same fix wanted.
+- `create_node` ignores `posX`/`posY` (lands at 0,0); `add_event` ignores them too
+  (Custom event landed on top of BeginPlay). Both need the position params honored
+  (related: the overlap-aware-placement entry below).
+- Auto-exec-wiring surprise: each new exec node self-connects to the most recent open
+  exec chain. Convenient for BeginPlay→SetTimer, but it silently wired
+  `CheckPlayer.then → ExecuteConsoleCommand.execute` across an 800px gap — a link the
+  caller never asked for and must notice + break. Should be opt-in (`autoConnect`).
+- `set_node_property` rejects `TargetType` (PROPERTY_NOT_SUPPORTED) — fine that it's
+  allowlisted, but the error should point at create_node for cast retyping.
+
 ### [ ] `arrange_graph` ignores node geometry — stacks nodes at IDENTICAL coordinates
 **FOUND 2026-06-11** (first real use, on BP_TrainingDummy_AoE EventGraph). The layout
 algorithm appears to be pure depth-column × row-index: it placed `Get AIPerception` and
