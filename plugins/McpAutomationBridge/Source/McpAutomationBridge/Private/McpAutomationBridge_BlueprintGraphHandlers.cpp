@@ -135,10 +135,28 @@
 //       Tilford): each leaf takes the next row, each parent centers on its
 //       children (pure feeders + exec successors), so feeders stack on adjacent
 //       rows and independent event trees stack below one another for free.
+//   Placement is size-aware: columns advance by the widest node in each column,
+//   and a per-column collision pass pushes nodes down until vertical extents
+//   clear — parent-centering produces unconstrained averages that can land
+//   exactly on another node's row, so a post-pass is required, not optional.
 namespace
 {
-constexpr int32 ArrangeColStepX = 320; // column spacing (px); > node width, so columns never overlap
-constexpr int32 ArrangeRowStepY = 180; // row spacing (px) for the Y cursor
+constexpr int32 ArrangeRowStepY = 180; // target row spacing (px) for the Y cursor
+constexpr float ArrangeGapX = 96.f;    // horizontal gap between columns
+constexpr float ArrangeGapY = 48.f;    // minimum vertical clearance within a column
+
+// Headless node-extent estimate (no Slate geometry exists for unopened graphs).
+// Height: the engine's canonical estimator (exists for exactly this reason —
+// "we don't know the actual size of the node until the next Slate tick").
+// Width: title length at ~7 px/char (Bold 10pt), floored at the engine's own
+// K2 node-width guess of 224 (BlueprintFunctionNodeSpawner's EstimatedVarNodeWidth).
+FVector2D ArrangeEstimateNodeSize(UEdGraphNode* Node)
+{
+    const float Height = UEdGraphSchema_K2::EstimateNodeHeight(Node);
+    const FString Title = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
+    const float Width = FMath::Max(224.f, 32.f + 7.f * Title.Len());
+    return FVector2D(Width, Height);
+}
 
 bool ArrangePinIsExec(const UEdGraphPin* Pin)
 {
@@ -298,13 +316,52 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph)
         }
     }
 
-    int32 Count = 0;
+    // Size-aware placement. X: cumulative column origins from per-column max
+    // widths. Y: within each column, nodes keep their computed row as the
+    // target but get pushed down until they clear the previous node's bottom.
+    TMap<UEdGraphNode*, FVector2D> Size;
+    int32 MaxCol = 0;
     for (UEdGraphNode* N : Nodes)
     {
-        N->Modify();
-        N->NodePosX = FinalCol.FindRef(N) * ArrangeColStepX;
-        N->NodePosY = FMath::RoundToInt(Row.FindRef(N) * ArrangeRowStepY);
-        ++Count;
+        Size.Add(N, ArrangeEstimateNodeSize(N));
+        MaxCol = FMath::Max(MaxCol, FinalCol.FindRef(N));
+    }
+
+    TArray<float> ColWidth;
+    ColWidth.Init(0.f, MaxCol + 1);
+    for (UEdGraphNode* N : Nodes)
+    {
+        const int32 C = FinalCol.FindRef(N);
+        ColWidth[C] = FMath::Max(ColWidth[C], (float)Size.FindRef(N).X);
+    }
+    TArray<float> ColX;
+    ColX.Init(0.f, MaxCol + 1);
+    for (int32 C = 1; C <= MaxCol; ++C)
+    {
+        ColX[C] = ColX[C - 1] + ColWidth[C - 1] + ArrangeGapX;
+    }
+
+    TMap<int32, TArray<UEdGraphNode*>> ByCol;
+    for (UEdGraphNode* N : Nodes) { ByCol.FindOrAdd(FinalCol.FindRef(N)).Add(N); }
+
+    int32 Count = 0;
+    for (TPair<int32, TArray<UEdGraphNode*>>& Pair : ByCol)
+    {
+        Pair.Value.Sort([&Row](const UEdGraphNode& A, const UEdGraphNode& B)
+        {
+            return Row.FindRef(const_cast<UEdGraphNode*>(&A)) < Row.FindRef(const_cast<UEdGraphNode*>(&B));
+        });
+        float PrevBottom = -FLT_MAX;
+        for (UEdGraphNode* N : Pair.Value)
+        {
+            const float TargetY = Row.FindRef(N) * ArrangeRowStepY;
+            const float Y = FMath::Max(TargetY, PrevBottom);
+            N->Modify();
+            N->NodePosX = FMath::RoundToInt(ColX[Pair.Key]);
+            N->NodePosY = FMath::RoundToInt(Y);
+            PrevBottom = Y + (float)Size.FindRef(N).Y + ArrangeGapY;
+            ++Count;
+        }
     }
     return Count;
 }
@@ -556,8 +613,9 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     Payload->TryGetStringField(TEXT("nodeType"), NodeType);
     float X = 0.0f;
     float Y = 0.0f;
-    Payload->TryGetNumberField(TEXT("x"), X);
-    Payload->TryGetNumberField(TEXT("y"), Y);
+    // Schema advertises both x/y and posX/posY — honor either spelling.
+    if (!Payload->TryGetNumberField(TEXT("x"), X)) { Payload->TryGetNumberField(TEXT("posX"), X); }
+    if (!Payload->TryGetNumberField(TEXT("y"), Y)) { Payload->TryGetNumberField(TEXT("posY"), Y); }
 
     // Helper to finalize and report
     auto FinalizeAndReport = [&](auto &NodeCreator, UEdGraphNode *NewNode) {
@@ -1609,8 +1667,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
     float X = 0.0f;
     float Y = 0.0f;
-    Payload->TryGetNumberField(TEXT("x"), X);
-    Payload->TryGetNumberField(TEXT("y"), Y);
+    if (!Payload->TryGetNumberField(TEXT("x"), X)) { Payload->TryGetNumberField(TEXT("posX"), X); }
+    if (!Payload->TryGetNumberField(TEXT("y"), Y)) { Payload->TryGetNumberField(TEXT("posY"), Y); }
 
     FGraphNodeCreator<UK2Node_Knot> NodeCreator(*TargetGraph);
     UK2Node_Knot *RerouteNode = NodeCreator.CreateNode(false);

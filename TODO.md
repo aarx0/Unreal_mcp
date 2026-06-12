@@ -501,7 +501,17 @@ clean-quit path, so log recurrences here. If it repeats, symbolize the stack and
 whether a bridge-held Slate reference (e.g. a cached widget from ui_focus/find_objects)
 outlives its window.
 
-### [ ] Graph-authoring papercuts batch (found building BP_GymRespawner, 2026-06-11)
+### [x] Graph-authoring papercuts batch (found building BP_GymRespawner, 2026-06-11)
+**ALL FIXED 2026-06-11**, verified live on a scratch BP: (1) add_node now DELEGATES
+cast/variable-get/variable-set node types (K2Node_DynamicCast→Cast etc., memberName
+mapped to variableName) to the create_node factories that do proper TargetType/
+VariableReference setup — no more "Bad cast node"/pinless getters; (2) create_node and
+the reroute path read posX/posY as fallback for x/y; (3) add_event reads posX/posY
+first (and from LocalPayload, fixing a latent null-Payload risk); (4) auto-exec-wiring
+(both the VarSet wire and the EnsureExecLinked graph sweep) is now opt-in via
+`autoConnect` (default false) — verified no surprise wire without it, sweep wires the
+first open exec node with it. Schema gained autoConnect + posX/posY descriptions
+(visible after next editor restart; parsing is live). Original report:
 All worked around in-session; each cost a delete-and-retry round trip:
 - `add_node {nodeType:K2Node_DynamicCast, targetClass}` silently creates a **"Bad cast
   node"** (TargetType never set, wildcard pins). The working path is
@@ -520,7 +530,19 @@ All worked around in-session; each cost a delete-and-retry round trip:
 - `set_node_property` rejects `TargetType` (PROPERTY_NOT_SUPPORTED) — fine that it's
   allowlisted, but the error should point at create_node for cast retyping.
 
-### [ ] `arrange_graph` ignores node geometry — stacks nodes at IDENTICAL coordinates
+### [x] `arrange_graph` ignores node geometry — stacks nodes at IDENTICAL coordinates
+**FIXED 2026-06-11.** Recon traced TWO collision sources: parent-centering produces
+unconstrained row averages that can land exactly on a leaf's integer row (single-child
+parent = exactly the child's row), and X pass 2 relocates pure getters into
+(consumerCol−1), which an unrelated exec node can occupy via longest-path. Fix in
+`ArrangeBlueprintGraph`: new `ArrangeEstimateNodeSize` (height via the engine's
+canonical headless `UEdGraphSchema_K2::EstimateNodeHeight` — which exists precisely
+because Slate sizes don't exist until the next tick; width = max(224, 32 + 7·titleLen),
+224 being the engine's own K2 width guess) + size-aware placement: per-column max-width
+X advance (fixed ColStepX removed) and a per-column collision pass (sort by computed
+row, push down past the previous node's bottom + 48px). Verified live on a duplicate of
+BP_TrainingDummy_AoE (the original failure): the colliding pair now lands (640,180) vs
+(640,276), extents clear, columns sized to content. Original report:
 **FOUND 2026-06-11** (first real use, on BP_TrainingDummy_AoE EventGraph). The layout
 algorithm appears to be pure depth-column × row-index: it placed `Get AIPerception` and
 `Execute Console Command` at the **same exact spot** (640,180), and its row pitch (~270)

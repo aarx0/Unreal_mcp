@@ -3323,16 +3323,26 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
       return true;
     }
 
-    // Extract parameters from payload
+    // Extract parameters from payload. Schema advertises posX/posY; older
+    // callers used location{x,y} or bare x/y — honor all three spellings.
+    // (Read from LocalPayload — Payload can be null on this path.)
+    double EventPosXd = 0.0, EventPosYd = 0.0;
     int32 EventPosX = 0;
     int32 EventPosY = 0;
-    if (const TSharedPtr<FJsonObject> *LocObj = nullptr;
-        Payload->TryGetObjectField(TEXT("location"), LocObj)) {
+    const bool bHasPosX = LocalPayload->TryGetNumberField(TEXT("posX"), EventPosXd);
+    const bool bHasPosY = LocalPayload->TryGetNumberField(TEXT("posY"), EventPosYd);
+    if (bHasPosX || bHasPosY) {
+      EventPosX = FMath::RoundToInt(EventPosXd);
+      EventPosY = FMath::RoundToInt(EventPosYd);
+    } else if (const TSharedPtr<FJsonObject> *LocObj = nullptr;
+               LocalPayload->TryGetObjectField(TEXT("location"), LocObj)) {
       EventPosX = (*LocObj)->GetIntegerField(TEXT("x"));
       EventPosY = (*LocObj)->GetIntegerField(TEXT("y"));
     } else {
-      EventPosX = Payload->GetIntegerField(TEXT("x"));
-      EventPosY = Payload->GetIntegerField(TEXT("y"));
+      LocalPayload->TryGetNumberField(TEXT("x"), EventPosXd);
+      LocalPayload->TryGetNumberField(TEXT("y"), EventPosYd);
+      EventPosX = FMath::RoundToInt(EventPosXd);
+      EventPosY = FMath::RoundToInt(EventPosYd);
     }
 
     const FString FinalType = EventType.IsEmpty() ? TEXT("custom") : EventType;
@@ -4943,6 +4953,34 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     LocalPayload->TryGetNumberField(TEXT("posX"), PosX);
     LocalPayload->TryGetNumberField(TEXT("posY"), PosY);
 
+    // Cast and variable-get/set nodes need node-specific setup (TargetType,
+    // VariableReference) that only the create_node factories perform — the
+    // generic spawn below produced "Bad cast node" / pinless getters. Delegate.
+    {
+      const FString Lowered = NodeType.ToLower();
+      FString Mapped;
+      if (Lowered == TEXT("k2node_dynamiccast") || Lowered == TEXT("cast") ||
+          Lowered.StartsWith(TEXT("castto"))) {
+        Mapped = (Lowered == TEXT("k2node_dynamiccast")) ? TEXT("Cast") : NodeType;
+      } else if (Lowered == TEXT("k2node_variableget")) {
+        Mapped = TEXT("VariableGet");
+      } else if (Lowered == TEXT("k2node_variableset")) {
+        Mapped = TEXT("VariableSet");
+      }
+      if (!Mapped.IsEmpty()) {
+        LocalPayload->SetStringField(TEXT("subAction"), TEXT("create_node"));
+        LocalPayload->SetStringField(TEXT("nodeType"), Mapped);
+        FString MemberName;
+        if (VariableName.IsEmpty() &&
+            LocalPayload->TryGetStringField(TEXT("memberName"), MemberName) &&
+            !MemberName.IsEmpty()) {
+          LocalPayload->SetStringField(TEXT("variableName"), MemberName);
+        }
+        return HandleBlueprintGraphAction(RequestId, TEXT("manage_blueprint"),
+                                          LocalPayload, RequestingSocket);
+      }
+    }
+
     // Declare RegistryKey outside the conditional blocks
     const FString RegistryKey = Path;
 
@@ -5144,9 +5182,15 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     bool bValueLinked = false;
     bool bSaved = false;
 
+    // Auto-wiring is opt-in: the unconditional sweep wired new exec nodes to
+    // whatever open event chain existed anywhere in the graph — links the
+    // caller never asked for and had to notice and break.
+    bool bAutoConnect = false;
+    LocalPayload->TryGetBoolField(TEXT("autoConnect"), bAutoConnect);
+
     const UEdGraphSchema_K2 *Schema =
         Cast<UEdGraphSchema_K2>(TargetGraph->GetSchema());
-    if (Schema) {
+    if (Schema && bAutoConnect) {
       if (UK2Node_VariableSet *VarSet = Cast<UK2Node_VariableSet>(NewNode)) {
         if (!VarSet->HasAnyFlags(RF_Transactional)) {
           VarSet->SetFlags(RF_Transactional);
