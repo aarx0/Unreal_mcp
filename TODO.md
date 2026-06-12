@@ -477,7 +477,14 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
-### [ ] Graph-node authoring has no overlap-aware placement → unreadable graphs
+### [ ] (deprioritized 2026-06-11) Graph-node authoring has no overlap-aware placement
+**Priority dropped now that `arrange_graph` is fixed (size-aware, collision-free):**
+the workflow "author blindly → arrange_graph once at the end" covers the readability
+goal without per-insert nudging. If still wanted, the building block exists —
+`ArrangeEstimateNodeSize` in McpAutomationBridge_BlueprintGraphHandlers.cpp; hoist it
+to McpAutomationBridgeHelpers.h (header change = full rebuild) and nudge +Y until the
+estimated rect is clear, reporting `nudged:true`. The `removeGhostEvents` idea stands.
+Original report:
 **FOUND 2026-06-11** (Aaron's review of the training-dummy graphs). `add_node`/`add_event`/
 `create_node` place nodes at exactly the caller-supplied (or default) coordinates with zero
 awareness of what's already there — including the engine's ghost template events
