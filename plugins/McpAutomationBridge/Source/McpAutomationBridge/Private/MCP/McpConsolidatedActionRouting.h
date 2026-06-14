@@ -323,11 +323,11 @@ inline const TArray<FString>& AnimationAuthoring()
 	static const TArray<FString> Actions = {
 		TEXT("create_animation_sequence"), TEXT("set_sequence_length"),
 		TEXT("add_bone_track"), TEXT("set_bone_key"), TEXT("set_curve_key"),
-		TEXT("add_notify_state"), TEXT("add_sync_marker"),
+		TEXT("add_notify"), TEXT("add_notify_state"), TEXT("add_sync_marker"),
 		TEXT("set_root_motion_settings"), TEXT("set_additive_settings"),
 		TEXT("create_montage"), TEXT("add_montage_section"),
 		TEXT("add_montage_slot"), TEXT("set_section_timing"),
-		TEXT("add_montage_notify"), TEXT("set_blend_in"),
+		TEXT("add_montage_notify"), TEXT("bind_anim_notify"), TEXT("set_blend_in"),
 		TEXT("set_blend_out"), TEXT("link_sections"),
 		TEXT("create_blend_space_1d"), TEXT("create_blend_space_2d"),
 		TEXT("add_blend_sample"), TEXT("force_rebuild_blend_space"),

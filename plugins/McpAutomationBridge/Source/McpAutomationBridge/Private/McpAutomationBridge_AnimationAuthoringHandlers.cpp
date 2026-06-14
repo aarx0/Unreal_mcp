@@ -75,6 +75,17 @@
 #include "Misc/PackageName.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/Kismet2NameValidators.h"
+// bind_anim_notify: event-graph authoring (notify -> BlueprintCallable function)
+#include "Kismet2/KismetEditorUtilities.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphPin.h"
+#include "EdGraphSchema_K2.h"
+#include "K2Node_CustomEvent.h"
+#include "K2Node_CallFunction.h"
+#include "K2Node_DynamicCast.h"
+#include "Animation/AnimInstance.h"
+#include "GameFramework/Pawn.h"
+#include "ScopedTransaction.h"
 
 // Blend Space factories
 #if __has_include("Factories/BlendSpaceFactoryNew.h") && __has_include("Factories/BlendSpaceFactory1D.h")
@@ -556,10 +567,22 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     if (SubAction == TEXT("create_animation_sequence"))
     {
     FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-    FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")));
+    // Schema advertises savePath; older callers pass path. Prefer savePath, fall back to path.
+    FString Path = GetStringFieldAnimAuth(Params, TEXT("savePath"), TEXT(""));
+    if (Path.IsEmpty()) { Path = GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")); }
+    Path = NormalizeAnimPath(Path);
     FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-    int32 NumFrames = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("numFrames"), 30));
     int32 FrameRate = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frameRate"), 30));
+    // Schema exposes length (seconds); numFrames is an undocumented override.
+    int32 NumFrames = 30;
+    if (Params->HasField(TEXT("numFrames")))
+    {
+        NumFrames = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("numFrames"), 30));
+    }
+    else if (Params->HasField(TEXT("length")))
+    {
+        NumFrames = FMath::Max(1, FMath::RoundToInt(GetNumberFieldAnimAuth(Params, TEXT("length"), 1.0) * static_cast<double>(FrameRate)));
+    }
     bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
 
     if (FrameRate <= 0)
@@ -657,8 +680,17 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     if (SubAction == TEXT("set_sequence_length"))
     {
         FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        int32 NumFrames = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("numFrames"), 30));
         int32 FrameRate = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frameRate"), 30));
+        // Schema exposes length (seconds); numFrames is an undocumented override.
+        int32 NumFrames = 30;
+        if (Params->HasField(TEXT("numFrames")))
+        {
+            NumFrames = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("numFrames"), 30));
+        }
+        else if (Params->HasField(TEXT("length")))
+        {
+            NumFrames = FMath::Max(1, FMath::RoundToInt(GetNumberFieldAnimAuth(Params, TEXT("length"), 1.0) * static_cast<double>(FrameRate)));
+        }
         bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
         
         UAnimSequence* Sequence = LoadAnimSequenceFromPath(AssetPath);
@@ -2274,7 +2306,10 @@ if (SubAction == TEXT("add_montage_notify"))
     {
 #if MCP_HAS_BLENDSPACE_FACTORY
     FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-    FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")));
+    // Schema advertises savePath; older callers pass path. Prefer savePath, fall back to path.
+    FString Path = GetStringFieldAnimAuth(Params, TEXT("savePath"), TEXT(""));
+    if (Path.IsEmpty()) { Path = GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")); }
+    Path = NormalizeAnimPath(Path);
     FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
     bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
 
@@ -2389,7 +2424,10 @@ if (SubAction == TEXT("add_montage_notify"))
         SubAction == TEXT("create_animation_bp"))
     {
     FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-    FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Blueprints")));
+    // Schema advertises savePath; older callers pass path. Prefer savePath, fall back to path.
+    FString Path = GetStringFieldAnimAuth(Params, TEXT("savePath"), TEXT(""));
+    if (Path.IsEmpty()) { Path = GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Blueprints")); }
+    Path = NormalizeAnimPath(Path);
     FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
     FString ParentClass = GetStringFieldAnimAuth(Params, TEXT("parentClass"), TEXT("AnimInstance"));
     bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
@@ -3857,7 +3895,170 @@ Retargeter->TargetIKRigAsset = TargetRig;
         ANIM_SUCCESS_RESPONSE(TEXT("Animation info retrieved"));
         return Response;
     }
-    
+
+    // Wires a montage AnimNotify to a BlueprintCallable function: authors an
+    // AnimNotify_<NotifyName> custom event in the AnimBP EventGraph, then
+    // TryGetPawnOwner -> Cast<targetClass> -> call functionName on the result.
+    // A name-only montage notify dispatches by FindFunction("AnimNotify_"+name)
+    // on the AnimInstance (UAnimInstance::TriggerSingleAnimNotify), so the
+    // custom event name is load-bearing and must match the notify name.
+    if (SubAction == TEXT("bind_anim_notify"))
+    {
+        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
+        if (BlueprintPath.IsEmpty())
+        {
+            BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
+        }
+        const FString NotifyName      = GetStringFieldAnimAuth(Params, TEXT("notifyName"), TEXT(""));
+        const FString FunctionName    = GetStringFieldAnimAuth(Params, TEXT("functionName"), TEXT(""));
+        const FString TargetClassName = GetStringFieldAnimAuth(Params, TEXT("targetClass"), TEXT(""));
+        const bool bSave              = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        const int32 NodePosX          = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 0));
+        const int32 NodePosY          = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
+
+        if (BlueprintPath.IsEmpty()) { ANIM_ERROR_RESPONSE(TEXT("blueprintPath (or assetPath) is required"), TEXT("MISSING_BLUEPRINT_PATH")); }
+        if (NotifyName.IsEmpty())    { ANIM_ERROR_RESPONSE(TEXT("notifyName is required"), TEXT("MISSING_NOTIFY_NAME")); }
+        if (FunctionName.IsEmpty())  { ANIM_ERROR_RESPONSE(TEXT("functionName is required"), TEXT("MISSING_FUNCTION_NAME")); }
+
+        // StaticLoadObject returns the in-memory (possibly unsaved) AnimBP if already loaded.
+        UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(StaticLoadObject(UAnimBlueprint::StaticClass(), nullptr, *BlueprintPath));
+        if (!AnimBP) { ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load animation blueprint: %s"), *BlueprintPath), TEXT("ANIM_BP_NOT_FOUND")); }
+
+        // ResolveClassByName accepts /Game/... BP asset paths and /Script/... native names; defaults to the owner pawn.
+        UClass* TargetClass = APawn::StaticClass();
+        if (!TargetClassName.IsEmpty())
+        {
+            TargetClass = ResolveClassByName(TargetClassName);
+            if (!TargetClass) { ANIM_ERROR_RESPONSE(FString::Printf(TEXT("targetClass not found: %s"), *TargetClassName), TEXT("CLASS_NOT_FOUND")); }
+        }
+
+        UFunction* TargetFunc = TargetClass->FindFunctionByName(FName(*FunctionName));
+        if (!TargetFunc) { ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Function '%s' not found on class '%s'"), *FunctionName, *TargetClass->GetName()), TEXT("FUNCTION_NOT_FOUND")); }
+
+        UFunction* GetPawnFn = UAnimInstance::StaticClass()->FindFunctionByName(TEXT("TryGetPawnOwner"));
+        if (!GetPawnFn) { ANIM_ERROR_RESPONSE(TEXT("UAnimInstance::TryGetPawnOwner not found"), TEXT("ENGINE_FUNCTION_NOT_FOUND")); }
+
+        // The AnimBP EventGraph is a ubergraph named "EventGraph"; the AnimGraph (also a
+        // ubergraph) is "AnimGraph" and must not be used here.
+        UEdGraph* EventGraph = nullptr;
+        for (UEdGraph* G : AnimBP->UbergraphPages)
+        {
+            if (G && G->GetName() == TEXT("EventGraph")) { EventGraph = G; break; }
+        }
+        if (!EventGraph)
+        {
+            for (UEdGraph* G : AnimBP->UbergraphPages)
+            {
+                if (G && G->GetName() != TEXT("AnimGraph")) { EventGraph = G; break; }
+            }
+        }
+        if (!EventGraph) { ANIM_ERROR_RESPONSE(TEXT("Could not find an EventGraph in the AnimBlueprint"), TEXT("EVENT_GRAPH_NOT_FOUND")); }
+
+        const FString CustomEventName = FString::Printf(TEXT("AnimNotify_%s"), *NotifyName);
+
+        TArray<UK2Node_CustomEvent*> ExistingEvents;
+        FBlueprintEditorUtils::GetAllNodesOfClass<UK2Node_CustomEvent>(AnimBP, ExistingEvents);
+        for (UK2Node_CustomEvent* E : ExistingEvents)
+        {
+            if (E && E->CustomFunctionName == FName(*CustomEventName))
+            {
+                Response->SetBoolField(TEXT("existingAsset"), true);
+                Response->SetStringField(TEXT("customEvent"), CustomEventName);
+                ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("AnimNotify event '%s' already exists"), *CustomEventName));
+                return Response;
+            }
+        }
+
+        const FScopedTransaction Transaction(FText::FromString(TEXT("Bind Anim Notify")));
+        AnimBP->Modify();
+        EventGraph->Modify();
+
+        const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
+
+        UK2Node_CustomEvent* EventNode = nullptr;
+        {
+            FGraphNodeCreator<UK2Node_CustomEvent> Creator(*EventGraph);
+            EventNode = Creator.CreateNode(false);
+            EventNode->CustomFunctionName = FName(*CustomEventName);
+            EventNode->NodePosX = NodePosX;
+            EventNode->NodePosY = NodePosY;
+            Creator.Finalize();
+        }
+
+        // const BlueprintCallable -> pure node (return value only); handled robustly below.
+        UK2Node_CallFunction* GetOwnerNode = nullptr;
+        {
+            FGraphNodeCreator<UK2Node_CallFunction> Creator(*EventGraph);
+            GetOwnerNode = Creator.CreateNode(false);
+            GetOwnerNode->SetFromFunction(GetPawnFn);
+            GetOwnerNode->NodePosX = NodePosX + 260;
+            GetOwnerNode->NodePosY = NodePosY + 24;
+            Creator.Finalize();
+        }
+
+        // Default purity is impure -> has exec + valid/invalid-cast exec pins.
+        UK2Node_DynamicCast* CastNode = nullptr;
+        {
+            FGraphNodeCreator<UK2Node_DynamicCast> Creator(*EventGraph);
+            CastNode = Creator.CreateNode(false);
+            CastNode->TargetType = TargetClass;
+            CastNode->NodePosX = NodePosX + 540;
+            CastNode->NodePosY = NodePosY;
+            Creator.Finalize();
+        }
+
+        UK2Node_CallFunction* CallNode = nullptr;
+        {
+            FGraphNodeCreator<UK2Node_CallFunction> Creator(*EventGraph);
+            CallNode = Creator.CreateNode(false);
+            CallNode->SetFromFunction(TargetFunc);
+            CallNode->NodePosX = NodePosX + 860;
+            CallNode->NodePosY = NodePosY;
+            Creator.Finalize();
+        }
+
+        bool bWired = true;
+        auto Connect = [&](UEdGraphPin* A, UEdGraphPin* B) { bWired &= (A != nullptr && B != nullptr && K2Schema->TryCreateConnection(A, B)); };
+
+        UEdGraphPin* EventThen   = EventNode->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+        UEdGraphPin* OwnerReturn = GetOwnerNode->GetReturnValuePin();
+        UEdGraphPin* CastExecIn  = CastNode->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+        UEdGraphPin* CastSource  = CastNode->GetCastSourcePin();
+        UEdGraphPin* CastValid   = CastNode->GetValidCastPin();
+        UEdGraphPin* CastResult  = CastNode->GetCastResultPin();
+        UEdGraphPin* CallExecIn  = CallNode->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+        UEdGraphPin* CallSelf    = CallNode->FindPin(UEdGraphSchema_K2::PN_Self, EGPD_Input);
+
+        // Thread exec through the owner getter only if it is impure (has exec pins).
+        UEdGraphPin* OwnerExecIn = GetOwnerNode->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+        UEdGraphPin* OwnerThen   = GetOwnerNode->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+        if (OwnerExecIn && OwnerThen)
+        {
+            Connect(EventThen, OwnerExecIn);
+            Connect(OwnerThen, CastExecIn);
+        }
+        else
+        {
+            Connect(EventThen, CastExecIn);
+        }
+        Connect(OwnerReturn, CastSource);
+        Connect(CastValid, CallExecIn);
+        Connect(CastResult, CallSelf);
+
+        if (!bWired) { ANIM_ERROR_RESPONSE(TEXT("Failed to connect one or more pins (schema rejected a link)"), TEXT("CONNECTION_FAILED")); }
+
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
+        FKismetEditorUtilities::CompileBlueprint(AnimBP, EBlueprintCompileOptions::SkipGarbageCollection);
+        SaveAnimAsset(AnimBP, bSave);
+
+        Response->SetStringField(TEXT("customEvent"), CustomEventName);
+        Response->SetStringField(TEXT("targetClass"), TargetClass->GetName());
+        Response->SetStringField(TEXT("function"), FunctionName);
+        ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Bound notify '%s' -> %s::%s"), *NotifyName, *TargetClass->GetName(), *FunctionName));
+        McpHandlerUtils::AddVerification(Response, AnimBP);
+        return Response;
+    }
+
     // Unknown action
     Response->SetBoolField(TEXT("success"), false);
     Response->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown animation authoring action: %s"), *SubAction));
