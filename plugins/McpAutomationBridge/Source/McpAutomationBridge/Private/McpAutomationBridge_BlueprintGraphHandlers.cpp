@@ -173,6 +173,85 @@ bool ArrangeNodeIsPure(const UEdGraphNode* Node)
     return true; // no exec pins at all => pure/data node
 }
 
+// Which nodes actually contribute to executed behavior. Two passes:
+//   1. Exec reachability — BFS from true entry nodes (an exec output and *no*
+//      exec input pin: events, custom/input events, function & macro entries)
+//      along exec wires. The distinction that matters: an exec node whose exec
+//      input merely happens to be *unconnected* is NOT an entry, so a Push/Set
+//      node left off the chain stays unreached. linkCount/isOrphan can't catch
+//      that — they count the node's data + "then" wires and read as connected.
+//   2. Data liveness — a pure node is live iff it feeds (transitively, through
+//      other pure nodes) a live node; a getter wired only into a dead exec node
+//      is itself dead. An unreached exec node is never resurrected this way: a
+//      node that doesn't run can't make its data feeders matter.
+// OutLive is the union. Connectivity only — enable-state is reported separately.
+void ComputeGraphLiveness(const UEdGraph* Graph,
+                          TSet<const UEdGraphNode*>& OutExecReachable,
+                          TSet<const UEdGraphNode*>& OutLive)
+{
+    OutExecReachable.Reset();
+    OutLive.Reset();
+    if (!Graph) { return; }
+
+    TArray<const UEdGraphNode*> Queue; // exec BFS frontier (index-walked)
+    for (const UEdGraphNode* N : Graph->Nodes)
+    {
+        if (!N) { continue; }
+        bool bHasExecOut = false;
+        bool bHasExecInPin = false;
+        for (const UEdGraphPin* P : N->Pins)
+        {
+            if (!ArrangePinIsExec(P)) { continue; }
+            if (P->Direction == EGPD_Output) { bHasExecOut = true; }
+            else if (P->Direction == EGPD_Input) { bHasExecInPin = true; }
+        }
+        if (bHasExecOut && !bHasExecInPin) // entry: emits exec, consumes none
+        {
+            OutExecReachable.Add(N);
+            Queue.Add(N);
+        }
+    }
+    for (int32 Head = 0; Head < Queue.Num(); ++Head)
+    {
+        for (const UEdGraphPin* P : Queue[Head]->Pins)
+        {
+            if (!ArrangePinIsExec(P) || P->Direction != EGPD_Output) { continue; }
+            for (const UEdGraphPin* L : P->LinkedTo)
+            {
+                const UEdGraphNode* M = L ? L->GetOwningNode() : nullptr;
+                if (M && !OutExecReachable.Contains(M))
+                {
+                    OutExecReachable.Add(M);
+                    Queue.Add(M);
+                }
+            }
+        }
+    }
+
+    OutLive = OutExecReachable;
+    bool bChanged = true;
+    while (bChanged) // backward data-liveness fixpoint over pure nodes
+    {
+        bChanged = false;
+        for (const UEdGraphNode* N : Graph->Nodes)
+        {
+            if (!N || OutLive.Contains(N) || !ArrangeNodeIsPure(N)) { continue; }
+            bool bFeedsLive = false;
+            for (const UEdGraphPin* P : N->Pins)
+            {
+                if (!P || P->Direction != EGPD_Output) { continue; }
+                for (const UEdGraphPin* L : P->LinkedTo)
+                {
+                    const UEdGraphNode* M = L ? L->GetOwningNode() : nullptr;
+                    if (M && OutLive.Contains(M)) { bFeedsLive = true; break; }
+                }
+                if (bFeedsLive) { break; }
+            }
+            if (bFeedsLive) { OutLive.Add(N); bChanged = true; }
+        }
+    }
+}
+
 // Longest-path column: column = 1 + max(predecessor columns). Memoised; the
 // Visiting set turns any back-edge in an exec/data cycle into a no-op so it
 // terminates.
@@ -1886,6 +1965,10 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     Result->SetStringField(TEXT("graphName"), TargetGraph->GetName());
     Result->SetNumberField(TEXT("nodeCount"), TargetGraph->Nodes.Num());
 
+    TSet<const UEdGraphNode *> ExecReachable;
+    TSet<const UEdGraphNode *> LiveNodes;
+    ComputeGraphLiveness(TargetGraph, ExecReachable, LiveNodes);
+
     TArray<TSharedPtr<FJsonValue>> Nodes;
     for (UEdGraphNode *Node : TargetGraph->Nodes) {
       if (!Node) {
@@ -1899,8 +1982,9 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
           Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
 
       // Hygiene-pass fields: position (overlap detection), enabled state
-      // (disabled-node clutter), link count (orphan detection) — so a graph
-      // review is one call instead of N get_node_details round-trips.
+      // (disabled-node clutter), link count (orphan detection), exec
+      // reachability (dead-node detection) — so a graph review is one call
+      // instead of N get_node_details round-trips.
       NodeObj->SetNumberField(TEXT("x"), Node->NodePosX);
       NodeObj->SetNumberField(TEXT("y"), Node->NodePosY);
 
@@ -1933,10 +2017,34 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
       // are not flagged — they are connected by placement, not pins.
       NodeObj->SetBoolField(TEXT("isOrphan"),
                             Node->Pins.Num() > 0 && LinkCount == 0);
+      // execReachable: exec node reachable from an entry along exec wires, or a
+      // pure node feeding one. False = the node never runs (see deadNodes).
+      NodeObj->SetBoolField(TEXT("execReachable"), LiveNodes.Contains(Node));
 
       Nodes.Add(MakeShared<FJsonValueObject>(NodeObj));
     }
     Result->SetArrayField(TEXT("nodes"), Nodes);
+
+    // Actionable dead-node summary: pin-bearing nodes that never run. Comments
+    // and other pinless nodes are connected by placement, not exec, so skip.
+    TArray<TSharedPtr<FJsonValue>> DeadNodes;
+    for (UEdGraphNode *Node : TargetGraph->Nodes) {
+      if (!Node || Node->Pins.Num() == 0 || LiveNodes.Contains(Node)) {
+        continue;
+      }
+      TSharedPtr<FJsonObject> DeadObj = McpHandlerUtils::CreateResultObject();
+      DeadObj->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
+      DeadObj->SetStringField(
+          TEXT("nodeTitle"),
+          Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+      DeadObj->SetStringField(TEXT("reason"),
+                              ArrangeNodeIsPure(Node)
+                                  ? TEXT("feeds-nothing-live")
+                                  : TEXT("exec-unreachable"));
+      DeadNodes.Add(MakeShared<FJsonValueObject>(DeadObj));
+    }
+    Result->SetNumberField(TEXT("deadNodeCount"), DeadNodes.Num());
+    Result->SetArrayField(TEXT("deadNodes"), DeadNodes);
     McpHandlerUtils::AddVerification(Result, Blueprint);
 
     SendAutomationResponse(RequestingSocket, RequestId, true,
