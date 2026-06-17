@@ -84,6 +84,12 @@
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphSchema.h"
 #include "K2Node.h"
+#include "EdGraph/EdGraphPin.h"
+#include "DiffUtils.h"
+#include "Misc/PackagePath.h"
+#include "Misc/Paths.h"
+#include "UObject/Package.h"
+#include "UObject/UObjectHash.h"
 #endif
 
 // =============================================================================
@@ -3243,6 +3249,446 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
     SendAutomationError(RequestingSocket, RequestId,
                         TEXT("inspect_cdo requires editor build."),
                         TEXT("NOT_IMPLEMENTED"));
+    return true;
+#endif
+}
+
+// =============================================================================
+// diff_asset — structural diff between two on-disk .uasset versions.
+//
+// Loads each file as an isolated package via DiffUtils::LoadPackageForDiff so
+// neither collides with the live (already-loaded) asset, then compares
+// Blueprint structure: parent class, implemented interfaces, SCS components,
+// variables, function/event graphs, and (optionally) CDO default properties.
+// The client supplies the two versions as files (e.g. `git show <ref>:<path>`
+// to a temp file for the old side, the working-tree file for the new side);
+// the bridge only compares. Non-Blueprint assets fall back to a property diff.
+// =============================================================================
+#if WITH_EDITOR
+namespace McpDiffAssetDetail
+{
+    // Deterministic stringify of a JSON value (object keys sorted) so CDO
+    // property values can be compared for equality across the two versions.
+    FString McpStableJsonValueString(const TSharedPtr<FJsonValue>& Value)
+    {
+        if (!Value.IsValid()) { return TEXT("null"); }
+        switch (Value->Type)
+        {
+            case EJson::String:  return FString::Printf(TEXT("\"%s\""), *Value->AsString());
+            case EJson::Number:  return FString::SanitizeFloat(Value->AsNumber());
+            case EJson::Boolean: return Value->AsBool() ? TEXT("true") : TEXT("false");
+            case EJson::Null:    return TEXT("null");
+            case EJson::Array:
+            {
+                const TArray<TSharedPtr<FJsonValue>>& Arr = Value->AsArray();
+                FString Out = TEXT("[");
+                for (int32 i = 0; i < Arr.Num(); ++i)
+                {
+                    if (i) { Out += TEXT(","); }
+                    Out += McpStableJsonValueString(Arr[i]);
+                }
+                return Out + TEXT("]");
+            }
+            case EJson::Object:
+            {
+                const TSharedPtr<FJsonObject>& Obj = Value->AsObject();
+                TArray<FString> Keys;
+                if (Obj.IsValid()) { Obj->Values.GetKeys(Keys); }
+                Keys.Sort();
+                FString Out = TEXT("{");
+                for (int32 i = 0; i < Keys.Num(); ++i)
+                {
+                    if (i) { Out += TEXT(","); }
+                    Out += Keys[i] + TEXT(":") + McpStableJsonValueString(Obj->Values[Keys[i]]);
+                }
+                return Out + TEXT("}");
+            }
+            default: return TEXT("");
+        }
+    }
+
+    // Load a .uasset file as an isolated diff package and return its primary
+    // asset object (does not collide with the live loaded asset).
+    UObject* McpLoadAssetForDiff(const FString& FilePath, const FString& AssetName)
+    {
+        const FPackagePath TempPath = FPackagePath::FromLocalPath(FilePath);
+        UPackage* Pkg = DiffUtils::LoadPackageForDiff(TempPath, FPackagePath());
+        if (!Pkg) { return nullptr; }
+        UObject* Obj = FindObject<UObject>(Pkg, *AssetName);
+        if (!Obj)
+        {
+            TArray<UObject*> Objs;
+            GetObjectsWithPackage(Pkg, Objs, false);
+            for (UObject* O : Objs)
+            {
+                if (O && O->IsAsset()) { Obj = O; break; }
+            }
+        }
+        return Obj;
+    }
+
+    FString McpVarTypeString(const FEdGraphPinType& T)
+    {
+        FString S = T.PinCategory.ToString();
+        if (const UObject* Sub = T.PinSubCategoryObject.Get())
+        {
+            S += TEXT(":") + Sub->GetName();
+        }
+        if (T.ContainerType == EPinContainerType::Array) { S += TEXT("[]"); }
+        else if (T.ContainerType == EPinContainerType::Set) { S += TEXT("<set>"); }
+        else if (T.ContainerType == EPinContainerType::Map) { S += TEXT("<map>"); }
+        return S;
+    }
+
+    bool McpNameLooksGAS(const FString& In)
+    {
+        static const TCHAR* Keys[] = { TEXT("AbilitySystem"), TEXT("Attribute"),
+            TEXT("GameplayAbility"), TEXT("GameplayEffect"), TEXT("GameplayTag"),
+            TEXT("GameplayCue"), TEXT("AbilitySet") };
+        for (const TCHAR* K : Keys)
+        {
+            if (In.Contains(K)) { return true; }
+        }
+        return false;
+    }
+}
+#endif // WITH_EDITOR
+
+bool UMcpAutomationBridgeSubsystem::HandleDiffAssetAction(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+{
+#if WITH_EDITOR
+    using namespace McpDiffAssetDetail;
+    if (!Payload.IsValid())
+    {
+        SendAutomationError(RequestingSocket, RequestId,
+                            TEXT("diff_asset: payload missing"), TEXT("INVALID_PAYLOAD"));
+        return true;
+    }
+
+    FString OldFilePath, NewFilePath, AssetName;
+    Payload->TryGetStringField(TEXT("oldFilePath"), OldFilePath);
+    Payload->TryGetStringField(TEXT("newFilePath"), NewFilePath);
+    Payload->TryGetStringField(TEXT("assetName"), AssetName);
+    OldFilePath.TrimStartAndEndInline();
+    NewFilePath.TrimStartAndEndInline();
+    AssetName.TrimStartAndEndInline();
+
+    if (OldFilePath.IsEmpty() || NewFilePath.IsEmpty())
+    {
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("diff_asset requires 'oldFilePath' and 'newFilePath' (filesystem paths to .uasset files)"),
+            TEXT("INVALID_ARGUMENT"));
+        return true;
+    }
+    if (!FPaths::FileExists(OldFilePath))
+    {
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("oldFilePath not found: %s"), *OldFilePath), TEXT("FILE_NOT_FOUND"));
+        return true;
+    }
+    if (!FPaths::FileExists(NewFilePath))
+    {
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("newFilePath not found: %s"), *NewFilePath), TEXT("FILE_NOT_FOUND"));
+        return true;
+    }
+    if (AssetName.IsEmpty())
+    {
+        AssetName = FPaths::GetBaseFilename(NewFilePath);
+    }
+
+    bool bIncludeDefaults = true;
+    Payload->TryGetBoolField(TEXT("includeDefaults"), bIncludeDefaults);
+
+    UObject* OldObj = McpLoadAssetForDiff(OldFilePath, AssetName);
+    UObject* NewObj = McpLoadAssetForDiff(NewFilePath, AssetName);
+    if (!OldObj || !NewObj)
+    {
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("Failed to load '%s' for diff (old=%s new=%s)"), *AssetName,
+                            OldObj ? TEXT("ok") : TEXT("null"), NewObj ? TEXT("ok") : TEXT("null")),
+            TEXT("DIFF_LOAD_FAILED"));
+        return true;
+    }
+
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetStringField(TEXT("assetName"), AssetName);
+    Resp->SetStringField(TEXT("oldFilePath"), OldFilePath);
+    Resp->SetStringField(TEXT("newFilePath"), NewFilePath);
+    Resp->SetStringField(TEXT("oldClass"), OldObj->GetClass()->GetName());
+    Resp->SetStringField(TEXT("newClass"), NewObj->GetClass()->GetName());
+
+    bool bAnyChange = false;
+    TArray<TSharedPtr<FJsonValue>> GasSignals;
+
+    UBlueprint* OldBP = Cast<UBlueprint>(OldObj);
+    UBlueprint* NewBP = Cast<UBlueprint>(NewObj);
+
+    if (OldBP && NewBP)
+    {
+        Resp->SetStringField(TEXT("assetType"), TEXT("Blueprint"));
+
+        // --- Parent class ---
+        const FString OldParent = OldBP->ParentClass ? OldBP->ParentClass->GetName() : TEXT("None");
+        const FString NewParent = NewBP->ParentClass ? NewBP->ParentClass->GetName() : TEXT("None");
+        {
+            TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+            P->SetStringField(TEXT("old"), OldParent);
+            P->SetStringField(TEXT("new"), NewParent);
+            const bool bChanged = OldParent != NewParent;
+            P->SetBoolField(TEXT("changed"), bChanged);
+            bAnyChange |= bChanged;
+            Resp->SetObjectField(TEXT("parentClass"), P);
+        }
+
+        // --- Implemented interfaces ---
+        {
+            TSet<FString> OldSet, NewSet;
+            for (const FBPInterfaceDescription& I : OldBP->ImplementedInterfaces) { if (I.Interface) { OldSet.Add(I.Interface->GetName()); } }
+            for (const FBPInterfaceDescription& I : NewBP->ImplementedInterfaces) { if (I.Interface) { NewSet.Add(I.Interface->GetName()); } }
+            TArray<TSharedPtr<FJsonValue>> Added, Removed;
+            for (const FString& S : NewSet) { if (!OldSet.Contains(S)) { Added.Add(MakeShared<FJsonValueString>(S)); if (McpNameLooksGAS(S)) { GasSignals.Add(MakeShared<FJsonValueString>(TEXT("interface +") + S)); } } }
+            for (const FString& S : OldSet) { if (!NewSet.Contains(S)) { Removed.Add(MakeShared<FJsonValueString>(S)); } }
+            TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+            O->SetArrayField(TEXT("added"), Added);
+            O->SetArrayField(TEXT("removed"), Removed);
+            bAnyChange |= (Added.Num() + Removed.Num()) > 0;
+            Resp->SetObjectField(TEXT("interfaces"), O);
+        }
+
+        // --- SCS components ---
+        {
+            auto ScsMap = [](UBlueprint* BP)
+            {
+                TMap<FString, FString> M;
+                if (BP->SimpleConstructionScript)
+                {
+                    for (USCS_Node* N : BP->SimpleConstructionScript->GetAllNodes())
+                    {
+                        if (!N) { continue; }
+                        UClass* CC = N->ComponentTemplate ? N->ComponentTemplate->GetClass() : N->ComponentClass.Get();
+                        M.Add(N->GetVariableName().ToString(), CC ? CC->GetName() : TEXT("?"));
+                    }
+                }
+                return M;
+            };
+            TMap<FString, FString> OldM = ScsMap(OldBP), NewM = ScsMap(NewBP);
+            TArray<TSharedPtr<FJsonValue>> Added, Removed, Changed;
+            for (const TPair<FString, FString>& Kv : NewM)
+            {
+                const FString* Old = OldM.Find(Kv.Key);
+                if (!Old)
+                {
+                    TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+                    E->SetStringField(TEXT("name"), Kv.Key);
+                    E->SetStringField(TEXT("class"), Kv.Value);
+                    Added.Add(MakeShared<FJsonValueObject>(E));
+                    if (McpNameLooksGAS(Kv.Value) || McpNameLooksGAS(Kv.Key)) { GasSignals.Add(MakeShared<FJsonValueString>(TEXT("component +") + Kv.Key + TEXT(" (") + Kv.Value + TEXT(")"))); }
+                }
+                else if (*Old != Kv.Value)
+                {
+                    TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+                    E->SetStringField(TEXT("name"), Kv.Key);
+                    E->SetStringField(TEXT("oldClass"), *Old);
+                    E->SetStringField(TEXT("newClass"), Kv.Value);
+                    Changed.Add(MakeShared<FJsonValueObject>(E));
+                }
+            }
+            for (const TPair<FString, FString>& Kv : OldM)
+            {
+                if (!NewM.Contains(Kv.Key))
+                {
+                    TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+                    E->SetStringField(TEXT("name"), Kv.Key);
+                    E->SetStringField(TEXT("class"), Kv.Value);
+                    Removed.Add(MakeShared<FJsonValueObject>(E));
+                }
+            }
+            TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+            O->SetArrayField(TEXT("added"), Added);
+            O->SetArrayField(TEXT("removed"), Removed);
+            O->SetArrayField(TEXT("changed"), Changed);
+            bAnyChange |= (Added.Num() + Removed.Num() + Changed.Num()) > 0;
+            Resp->SetObjectField(TEXT("components"), O);
+        }
+
+        // --- Variables ---
+        {
+            auto VarMap = [](UBlueprint* BP)
+            {
+                TMap<FString, FString> M;
+                for (const FBPVariableDescription& V : BP->NewVariables) { M.Add(V.VarName.ToString(), McpVarTypeString(V.VarType)); }
+                return M;
+            };
+            TMap<FString, FString> OldM = VarMap(OldBP), NewM = VarMap(NewBP);
+            TArray<TSharedPtr<FJsonValue>> Added, Removed, Changed;
+            for (const TPair<FString, FString>& Kv : NewM)
+            {
+                const FString* Old = OldM.Find(Kv.Key);
+                if (!Old)
+                {
+                    TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+                    E->SetStringField(TEXT("name"), Kv.Key);
+                    E->SetStringField(TEXT("type"), Kv.Value);
+                    Added.Add(MakeShared<FJsonValueObject>(E));
+                    if (McpNameLooksGAS(Kv.Value) || McpNameLooksGAS(Kv.Key)) { GasSignals.Add(MakeShared<FJsonValueString>(TEXT("variable +") + Kv.Key + TEXT(" : ") + Kv.Value)); }
+                }
+                else if (*Old != Kv.Value)
+                {
+                    TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+                    E->SetStringField(TEXT("name"), Kv.Key);
+                    E->SetStringField(TEXT("oldType"), *Old);
+                    E->SetStringField(TEXT("newType"), Kv.Value);
+                    Changed.Add(MakeShared<FJsonValueObject>(E));
+                }
+            }
+            for (const TPair<FString, FString>& Kv : OldM)
+            {
+                if (!NewM.Contains(Kv.Key))
+                {
+                    TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+                    E->SetStringField(TEXT("name"), Kv.Key);
+                    E->SetStringField(TEXT("type"), Kv.Value);
+                    Removed.Add(MakeShared<FJsonValueObject>(E));
+                }
+            }
+            TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+            O->SetArrayField(TEXT("added"), Added);
+            O->SetArrayField(TEXT("removed"), Removed);
+            O->SetArrayField(TEXT("changed"), Changed);
+            bAnyChange |= (Added.Num() + Removed.Num() + Changed.Num()) > 0;
+            Resp->SetObjectField(TEXT("variables"), O);
+        }
+
+        // --- Function / event graphs (by name + node count) ---
+        {
+            auto GraphMap = [](UBlueprint* BP)
+            {
+                TMap<FString, int32> M;
+                for (UEdGraph* G : BP->FunctionGraphs) { if (G) { M.Add(G->GetName(), G->Nodes.Num()); } }
+                for (UEdGraph* G : BP->UbergraphPages) { if (G) { M.Add(G->GetName(), G->Nodes.Num()); } }
+                return M;
+            };
+            TMap<FString, int32> OldM = GraphMap(OldBP), NewM = GraphMap(NewBP);
+            TArray<TSharedPtr<FJsonValue>> Added, Removed, Changed;
+            for (const TPair<FString, int32>& Kv : NewM)
+            {
+                const int32* Old = OldM.Find(Kv.Key);
+                if (!Old) { Added.Add(MakeShared<FJsonValueString>(Kv.Key)); if (McpNameLooksGAS(Kv.Key)) { GasSignals.Add(MakeShared<FJsonValueString>(TEXT("graph +") + Kv.Key)); } }
+                else if (*Old != Kv.Value)
+                {
+                    TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+                    E->SetStringField(TEXT("name"), Kv.Key);
+                    E->SetNumberField(TEXT("oldNodeCount"), *Old);
+                    E->SetNumberField(TEXT("newNodeCount"), Kv.Value);
+                    Changed.Add(MakeShared<FJsonValueObject>(E));
+                }
+            }
+            for (const TPair<FString, int32>& Kv : OldM) { if (!NewM.Contains(Kv.Key)) { Removed.Add(MakeShared<FJsonValueString>(Kv.Key)); } }
+            TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+            O->SetArrayField(TEXT("added"), Added);
+            O->SetArrayField(TEXT("removed"), Removed);
+            O->SetArrayField(TEXT("changed"), Changed);
+            bAnyChange |= (Added.Num() + Removed.Num() + Changed.Num()) > 0;
+            Resp->SetObjectField(TEXT("graphs"), O);
+        }
+
+        // --- CDO default properties ---
+        if (bIncludeDefaults)
+        {
+            UObject* OldCDO = OldBP->GeneratedClass ? OldBP->GeneratedClass->GetDefaultObject() : nullptr;
+            UObject* NewCDO = NewBP->GeneratedClass ? NewBP->GeneratedClass->GetDefaultObject() : nullptr;
+            if (OldCDO && NewCDO)
+            {
+                TSharedPtr<FJsonObject> OldProps = McpPropertyReflection::ExportObjectToJson(OldCDO, false);
+                TSharedPtr<FJsonObject> NewProps = McpPropertyReflection::ExportObjectToJson(NewCDO, false);
+                TArray<TSharedPtr<FJsonValue>> Changed, Added, Removed;
+                const int32 Cap = 200;
+                if (OldProps.IsValid() && NewProps.IsValid())
+                {
+                    for (const TPair<FString, TSharedPtr<FJsonValue>>& Kv : NewProps->Values)
+                    {
+                        const TSharedPtr<FJsonValue>* OldV = OldProps->Values.Find(Kv.Key);
+                        if (!OldV)
+                        {
+                            if (Added.Num() < Cap) { Added.Add(MakeShared<FJsonValueString>(Kv.Key)); }
+                        }
+                        else
+                        {
+                            const FString NewS = McpStableJsonValueString(Kv.Value);
+                            const FString OldS = McpStableJsonValueString(*OldV);
+                            if (NewS != OldS && Changed.Num() < Cap)
+                            {
+                                TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+                                E->SetStringField(TEXT("property"), Kv.Key);
+                                E->SetStringField(TEXT("old"), OldS.Left(400));
+                                E->SetStringField(TEXT("new"), NewS.Left(400));
+                                Changed.Add(MakeShared<FJsonValueObject>(E));
+                                if (McpNameLooksGAS(Kv.Key)) { GasSignals.Add(MakeShared<FJsonValueString>(TEXT("default ~") + Kv.Key)); }
+                            }
+                        }
+                    }
+                    for (const TPair<FString, TSharedPtr<FJsonValue>>& Kv : OldProps->Values) { if (!NewProps->Values.Contains(Kv.Key) && Removed.Num() < Cap) { Removed.Add(MakeShared<FJsonValueString>(Kv.Key)); } }
+                }
+                TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+                O->SetArrayField(TEXT("changed"), Changed);
+                O->SetArrayField(TEXT("added"), Added);
+                O->SetArrayField(TEXT("removed"), Removed);
+                O->SetStringField(TEXT("note"), TEXT("Default-value diff; internal subobject references may appear changed due to diff-package naming."));
+                bAnyChange |= (Changed.Num() + Added.Num() + Removed.Num()) > 0;
+                Resp->SetObjectField(TEXT("defaults"), O);
+            }
+        }
+    }
+    else
+    {
+        // Non-Blueprint asset: generic property diff on the asset objects.
+        Resp->SetStringField(TEXT("assetType"), TEXT("Object"));
+        TSharedPtr<FJsonObject> OldProps = McpPropertyReflection::ExportObjectToJson(OldObj, false);
+        TSharedPtr<FJsonObject> NewProps = McpPropertyReflection::ExportObjectToJson(NewObj, false);
+        TArray<TSharedPtr<FJsonValue>> Changed, Added, Removed;
+        const int32 Cap = 300;
+        if (OldProps.IsValid() && NewProps.IsValid())
+        {
+            for (const TPair<FString, TSharedPtr<FJsonValue>>& Kv : NewProps->Values)
+            {
+                const TSharedPtr<FJsonValue>* OldV = OldProps->Values.Find(Kv.Key);
+                if (!OldV) { if (Added.Num() < Cap) { Added.Add(MakeShared<FJsonValueString>(Kv.Key)); } }
+                else
+                {
+                    const FString NewS = McpStableJsonValueString(Kv.Value);
+                    const FString OldS = McpStableJsonValueString(*OldV);
+                    if (NewS != OldS && Changed.Num() < Cap)
+                    {
+                        TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+                        E->SetStringField(TEXT("property"), Kv.Key);
+                        E->SetStringField(TEXT("old"), OldS.Left(400));
+                        E->SetStringField(TEXT("new"), NewS.Left(400));
+                        Changed.Add(MakeShared<FJsonValueObject>(E));
+                    }
+                }
+            }
+            for (const TPair<FString, TSharedPtr<FJsonValue>>& Kv : OldProps->Values) { if (!NewProps->Values.Contains(Kv.Key) && Removed.Num() < Cap) { Removed.Add(MakeShared<FJsonValueString>(Kv.Key)); } }
+        }
+        TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+        O->SetArrayField(TEXT("changed"), Changed);
+        O->SetArrayField(TEXT("added"), Added);
+        O->SetArrayField(TEXT("removed"), Removed);
+        bAnyChange |= (Changed.Num() + Added.Num() + Removed.Num()) > 0;
+        Resp->SetObjectField(TEXT("properties"), O);
+    }
+
+    Resp->SetArrayField(TEXT("gasSignals"), GasSignals);
+    Resp->SetBoolField(TEXT("anyChange"), bAnyChange);
+    Resp->SetBoolField(TEXT("success"), true);
+    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Asset diff completed"), Resp, FString());
+    return true;
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("diff_asset requires editor build."), TEXT("NOT_IMPLEMENTED"));
     return true;
 #endif
 }

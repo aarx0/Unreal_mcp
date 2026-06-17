@@ -21,7 +21,10 @@ public:
 			"owning focus + its desired-focus target, active activatable stack, current input "
 			"type, and the active root's bound actions), find_objects (loaded-object discovery: "
 			"className + optional pathContains substring + propertyNames readback — use for "
-			"widget-tree template subobjects, slot objects, and live PIE widget state).");
+			"widget-tree template subobjects, slot objects, and live PIE widget state), "
+				"diff_asset (structural diff of two on-disk .uasset versions: oldFilePath vs "
+				"newFilePath — parent/interfaces/components/variables/graphs + CDO defaults + "
+				"gasSignals).");
 	}
 
 	FString GetCategory() const override { return TEXT("core"); }
@@ -48,6 +51,7 @@ public:
 				TEXT("set_component_property"),
 				TEXT("inspect_class"),
 				TEXT("inspect_cdo"),
+				TEXT("diff_asset"),
 				TEXT("runtime_report"),
 				TEXT("pie_report"),
 				TEXT("ui_focus"),
@@ -91,6 +95,10 @@ public:
 			.Integer(TEXT("limit"), TEXT("find_objects: max objects returned (default 50, cap 200)."))
 			.Array(TEXT("propertyNames"), TEXT(""))
 			.Array(TEXT("componentNames"), TEXT("Component names to include detailed property readback for."))
+			.String(TEXT("oldFilePath"), TEXT("diff_asset: filesystem path to the OLD .uasset version (e.g. a git revision extracted to a temp file)."))
+			.String(TEXT("newFilePath"), TEXT("diff_asset: filesystem path to the NEW .uasset version (e.g. the working-tree file)."))
+			.String(TEXT("assetName"), TEXT("diff_asset: object name inside the package (default = newFilePath filename stem)."))
+			.Bool(TEXT("includeDefaults"), TEXT("diff_asset: also diff CDO default properties (default true)."))
 			.Required({TEXT("action")})
 			.Build();
 	}

@@ -741,6 +741,12 @@ private:
   bool HandleInspectCdoAction(const FString &RequestId,
                               const TSharedPtr<FJsonObject> &Payload,
                               TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+  // Structural diff of two on-disk .uasset versions (e.g. a git revision vs the
+  // working tree). Loads each as an isolated diff package and compares Blueprint
+  // structure (parent/interfaces/components/variables/graphs) + CDO defaults.
+  bool HandleDiffAssetAction(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
   // CommonUI runtime focus/input introspection (PIE-only): focused widget +
   // path, the activatable owning focus + its desired-focus target, the active
   // activatable stack, current input type, and the active root's bound actions.

@@ -1675,6 +1675,18 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectAction(
     }
 
     // -------------------------------------------------------------------------
+    // diff_asset — structural diff of two on-disk .uasset versions (own handler).
+    // Global (no objectPath): takes filesystem paths to the two versions
+    // (oldFilePath / newFilePath), loads each as an isolated diff package, and
+    // compares Blueprint structure + CDO defaults. Client extracts the versions
+    // (e.g. `git show <ref>:<path>`); the bridge only compares.
+    // -------------------------------------------------------------------------
+    if (LowerSubAction.Equals(TEXT("diff_asset")))
+    {
+        return HandleDiffAssetAction(RequestId, Payload, RequestingSocket);
+    }
+
+    // -------------------------------------------------------------------------
     // find_objects — loaded-object discovery with property readback. Replaces
     // the read-only execute_python ObjectIterator probes (template staleness
     // hunts, slot-object path discovery, live widget state like
