@@ -90,6 +90,7 @@
 #include "Misc/Paths.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectHash.h"
+#include "Engine/Engine.h"
 #endif
 
 // =============================================================================
@@ -3351,6 +3352,25 @@ namespace McpDiffAssetDetail
         }
         return false;
     }
+
+    // Release a package loaded purely for diffing: detach its linker so the on-disk
+    // file handle is freed (otherwise the temp file stays locked until the next GC /
+    // editor restart), then clear standalone/public flags so GC can reclaim it.
+    // Without this each diff leaks a package, and a later diff of the same path would
+    // return this stale cached copy instead of reloading the file. The interactive
+    // editor diff tool keeps its package loaded while the diff window is open and
+    // relies on GC after close; a one-shot diff has no such reason to hold it.
+    void ReleaseDiffPackage(UObject* AssetObj)
+    {
+        if (!AssetObj) { return; }
+        UPackage* Pkg = AssetObj->GetPackage();
+        if (!Pkg || Pkg == GetTransientPackage()) { return; }
+        ResetLoaders(Pkg);
+        TArray<UObject*> Inner;
+        GetObjectsWithPackage(Pkg, Inner, true);
+        for (UObject* O : Inner) { if (O) { O->ClearFlags(RF_Standalone | RF_Public); } }
+        Pkg->ClearFlags(RF_Standalone | RF_Public);
+    }
 }
 #endif // WITH_EDITOR
 
@@ -3680,6 +3700,13 @@ bool UMcpAutomationBridgeSubsystem::HandleDiffAssetAction(
         bAnyChange |= (Changed.Num() + Added.Num() + Removed.Num()) > 0;
         Resp->SetObjectField(TEXT("properties"), O);
     }
+
+    // Everything is extracted into Resp now — release both diff packages so their
+    // on-disk files unlock immediately and GC can reclaim them (no per-call leak,
+    // and no stale cached copy returned by a later diff of the same path).
+    ReleaseDiffPackage(OldObj);
+    ReleaseDiffPackage(NewObj);
+    if (GEngine) { GEngine->ForceGarbageCollection(false); }
 
     Resp->SetArrayField(TEXT("gasSignals"), GasSignals);
     Resp->SetBoolField(TEXT("anyChange"), bAnyChange);
