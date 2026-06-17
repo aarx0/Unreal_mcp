@@ -3867,6 +3867,46 @@ Retargeter->TargetIKRigAsset = TargetRig;
             AnimInfo->SetNumberField(TEXT("numSections"), Montage->CompositeSections.Num());
             AnimInfo->SetNumberField(TEXT("numSlots"), Montage->SlotAnimTracks.Num());
             AnimInfo->SetNumberField(TEXT("numNotifies"), Montage->Notifies.Num());
+
+            // Blend in/out + auto-blend-out: the "snap on release" tuning lives here and was
+            // previously only reachable via execute_python.
+            AnimInfo->SetNumberField(TEXT("blendInTime"), Montage->BlendIn.GetBlendTime());
+            AnimInfo->SetNumberField(TEXT("blendOutTime"), Montage->BlendOut.GetBlendTime());
+            AnimInfo->SetBoolField(TEXT("autoBlendOut"), Montage->bEnableAutoBlendOut);
+
+            // Sections: name + start time + next-section link (the section graph).
+            TArray<TSharedPtr<FJsonValue>> SectionsArr;
+            for (const FCompositeSection& Sec : Montage->CompositeSections)
+            {
+                TSharedPtr<FJsonObject> SecObj = MakeShared<FJsonObject>();
+                SecObj->SetStringField(TEXT("name"), Sec.SectionName.ToString());
+                SecObj->SetNumberField(TEXT("startTime"), Sec.GetTime());
+                SecObj->SetStringField(TEXT("nextSection"), Sec.NextSectionName.ToString());
+                SectionsArr.Add(MakeShared<FJsonValueObject>(SecObj));
+            }
+            AnimInfo->SetArrayField(TEXT("sections"), SectionsArr);
+
+            // Slots + their anim segments (slot tracks are not Python-reflectable, so this
+            // is the only way over the bridge to see slot names and segment source anims).
+            TArray<TSharedPtr<FJsonValue>> SlotsArr;
+            for (const FSlotAnimationTrack& Slot : Montage->SlotAnimTracks)
+            {
+                TSharedPtr<FJsonObject> SlotObj = MakeShared<FJsonObject>();
+                SlotObj->SetStringField(TEXT("slotName"), Slot.SlotName.ToString());
+                TArray<TSharedPtr<FJsonValue>> SegsArr;
+                for (const FAnimSegment& Seg : Slot.AnimTrack.AnimSegments)
+                {
+                    TSharedPtr<FJsonObject> SegObj = MakeShared<FJsonObject>();
+                    const UAnimSequenceBase* Ref = Seg.GetAnimReference();
+                    SegObj->SetStringField(TEXT("anim"), Ref ? Ref->GetPathName() : TEXT(""));
+                    SegObj->SetNumberField(TEXT("startPos"), Seg.StartPos);
+                    SegObj->SetNumberField(TEXT("length"), Seg.GetLength());
+                    SegsArr.Add(MakeShared<FJsonValueObject>(SegObj));
+                }
+                SlotObj->SetArrayField(TEXT("segments"), SegsArr);
+                SlotsArr.Add(MakeShared<FJsonValueObject>(SlotObj));
+            }
+            AnimInfo->SetArrayField(TEXT("slots"), SlotsArr);
         }
         else if (UBlendSpace* BlendSpace = Cast<UBlendSpace>(Asset))
         {

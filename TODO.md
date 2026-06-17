@@ -404,6 +404,23 @@ Flakiness in shipped surface erodes trust during real authoring.
 - 🟢 **GAS ability-graph depth** — GAS scaffolding is broad (create ability/effect/attribute/
   cue BPs), but multi-step ability *logic* (wait-for-input → montage → apply-effect) is manual
   graph wiring. Templated ability-task chains would speed the boss/combat work.
+- ✅ **Montage introspection (read-back) — DONE 2026-06-16.** `get_animation_info` now returns
+  `sections[]` ({name,startTime,nextSection}), `blendInTime`/`blendOutTime`/`autoBlendOut`, and
+  `slots[]` ({slotName, segments:[{anim,startPos,length}]}); verified live on AM_Block. Also
+  expanded `get_input_info` to list IMC `mappings[]` (action/key/trigger+modifier counts) and to
+  accept `blueprintPath` (the `manage_networking` re-dispatch exposes that, not `assetPath`, so it
+  was previously uncallable). Original report below.
+  - 🟡 found 2026-06-16 (block hold-to-block
+  work). `animation_physics get_animation_info` returns only counts (`numSections/numSlots/
+  numNotifies/duration`); verifying montage *state* required `execute_python` for everything that
+  matters: per-section `{name, startTime, nextSectionName}` (`composite_sections`), `BlendIn/
+  BlendOut.BlendTime`, `enable_auto_blend_out`, and **slot names + segment anim refs** — the last
+  isn't even Python-reflectable (`slot_anim_tracks` is not an exposed UPROPERTY; needs native
+  `FSlotAnimationTrack` access, which is exactly why this belongs in the bridge). The authoring
+  side (`add_montage_section`/`set_blend_in`/`set_blend_out`/`link_sections`) exists, but there's no
+  read-back to confirm it landed — every montage verify this session went through raw python. Add
+  the fields to `get_animation_info` (or a new `get_montage_details`): `sections[]`, blendIn/out,
+  autoBlendOut, `slots[]` with segment animation paths. Aligns with the prefer-a-real-action rule.
 
 ### C. Runtime / verify loop — mostly HAVE; close the narrow gaps
 The bridge already enters/exits PIE (`control_editor play`/`stop`/`eject` via
@@ -477,6 +494,23 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] Raw `execute_python` IMC / BP-default authoring traps (found 2026-06-13, Option C IA_Block)
+Two silent persistence traps hit authoring input via **raw `execute_python`** instead of the
+dedicated Enhanced-Input / `manage_blueprint set_default` actions (lesson — prefer the real bridge
+action; these almost certainly handle both):
+- **IMC key-mapping didn't persist.** This project's IMC mappings live in the nested
+  `DefaultKeyMappings.Mappings` (`InputMappingContextMappingData`) struct, NOT the empty top-level
+  `Mappings`. `set_editor_property` on that nested struct does **not** mark the IMC package dirty, so
+  `EditorAssetLibrary.save_asset` (default `only_if_is_dirty=True`) silently no-ops. In-session
+  readback looked correct, but after the editor relaunch the mappings were gone — caught only because
+  `git status` showed the IMC `.uasset` unchanged. Workaround: `imc.modify(True)` +
+  `save_asset(only_if_is_dirty=False)`, then confirm via `git status`. Verify the bridge's
+  Enhanced-Input mapping action dirties+saves the nested struct correctly.
+- **BP class-default via CDO needs a recompile.** Setting an inherited C++ `UPROPERTY` default on a
+  BP via `set_editor_property` on the CDO + `save_asset` did NOT propagate to spawned instances (the
+  PIE pawn read the new `UInputAction*` as None); had to `BlueprintEditorLibrary.compile_blueprint(bp)`
+  before saving. The dedicated `manage_blueprint set_default` presumably compiles — use it over raw CDO writes.
+
 ### [ ] (deprioritized 2026-06-11) Graph-node authoring has no overlap-aware placement
 **Priority dropped now that `arrange_graph` is fixed (size-aware, collision-free):**
 the workflow "author blindly → arrange_graph once at the end" covers the readability
@@ -507,6 +541,9 @@ bridge (no bridge frames in the stack) — but QUIT_EDITOR via bridge is our sta
 clean-quit path, so log recurrences here. If it repeats, symbolize the stack and check
 whether a bridge-held Slate reference (e.g. a cached widget from ui_focus/find_objects)
 outlives its window.
+- 2026-06-16: clean QUIT_EDITOR via bridge worked (no crash, no hang). Real lesson this time was
+  process disambiguation — `Get-Process UnrealEditor` matched a *different* project's editor
+  (HandPanic), so confirm the target by `.uproject` in the command line before waiting/killing.
 
 ### [x] Graph-authoring papercuts batch (found building BP_GymRespawner, 2026-06-11)
 **ALL FIXED 2026-06-11**, verified live on a scratch BP: (1) add_node now DELEGATES

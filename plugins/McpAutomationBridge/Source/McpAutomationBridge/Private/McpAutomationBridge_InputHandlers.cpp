@@ -862,11 +862,17 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
     {
         FString AssetPath;
         Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
+        if (AssetPath.IsEmpty())
+        {
+            // manage_networking (which re-dispatches input actions) exposes blueprintPath,
+            // not assetPath — accept it as a fallback so get_input_info is reachable that way.
+            Payload->TryGetStringField(TEXT("blueprintPath"), AssetPath);
+        }
 
         if (AssetPath.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId,
-                TEXT("assetPath is required."), TEXT("INVALID_ARGUMENT"));
+                TEXT("assetPath (or blueprintPath) is required."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
 
@@ -903,7 +909,23 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
         else if (UInputMappingContext* Context = Cast<UInputMappingContext>(Asset))
         {
             Result->SetStringField(TEXT("type"), TEXT("InputMappingContext"));
-            Result->SetNumberField(TEXT("mappingCount"), Context->GetMappings().Num());
+            const TArray<FEnhancedActionKeyMapping>& Mappings = Context->GetMappings();
+            Result->SetNumberField(TEXT("mappingCount"), Mappings.Num());
+            // List each action->key binding. GetMappings() is the canonical accessor and reads
+            // the live storage even when the raw 'Mappings' UPROPERTY reflects empty (UE5.7
+            // keeps the data in the nested DefaultKeyMappings struct) — so no poking that struct.
+            TArray<TSharedPtr<FJsonValue>> MappingsArr;
+            for (const FEnhancedActionKeyMapping& M : Mappings)
+            {
+                TSharedPtr<FJsonObject> MObj = MakeShared<FJsonObject>();
+                MObj->SetStringField(TEXT("action"), M.Action ? M.Action->GetPathName() : TEXT(""));
+                MObj->SetStringField(TEXT("actionName"), M.Action ? M.Action->GetName() : TEXT(""));
+                MObj->SetStringField(TEXT("key"), M.Key.GetFName().ToString());
+                MObj->SetNumberField(TEXT("triggerCount"), M.Triggers.Num());
+                MObj->SetNumberField(TEXT("modifierCount"), M.Modifiers.Num());
+                MappingsArr.Add(MakeShared<FJsonValueObject>(MObj));
+            }
+            Result->SetArrayField(TEXT("mappings"), MappingsArr);
         }
 
         McpHandlerUtils::AddVerification(Result, Asset);
