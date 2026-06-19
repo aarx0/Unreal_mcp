@@ -1400,35 +1400,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
 
     if (SubAction.Equals(TEXT("add_text_block"), ESearchCase::IgnoreCase))
     {
-        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
-        if (WidgetPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
-            return true;
-        }
-
-        FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("TextBlock"));
-        FString Text = GetJsonStringField(Payload, TEXT("text"), TEXT("Text"));
-
-        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
-        if (!WidgetBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        UTextBlock* TextBlock = WidgetBP->WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), FName(*SlotName));
-        if (!TextBlock)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create text block"), TEXT("CREATION_ERROR"));
-            return true;
-        }
-        
-        // CRITICAL: Register widget GUID to prevent ensure failures during compilation
-        RegisterWidgetGuid(WidgetBP, TextBlock);
+        UWidgetBlueprint* WidgetBP = nullptr;
+        FString SlotName;
+        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+            UTextBlock::StaticClass(), TEXT("TextBlock"), WidgetBP, SlotName);
+        if (!NewWidget) { return true; }
+        UTextBlock* TextBlock = Cast<UTextBlock>(NewWidget);
 
         // Set text
-        TextBlock->SetText(FText::FromString(Text));
+        TextBlock->SetText(FText::FromString(GetJsonStringField(Payload, TEXT("text"), TEXT("Text"))));
 
         // Set optional properties
         if (Payload->HasField(TEXT("fontSize")))
@@ -1455,64 +1435,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             TextBlock->SetAutoWrapText(GetJsonBoolField(Payload, TEXT("autoWrap")));
         }
 
-        // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
-        // This prevents "Variable was deleted but still has a GUID" ensure failures
-        FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        FString AddErr;
-        if (!SafeAddWidgetToTree(WidgetBP, TextBlock, ParentSlot, &AddErr))
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                AddErr.IsEmpty() ? FString(TEXT("Failed to add text block to widget tree")) : AddErr,
-                TEXT("TREE_ERROR"));
-            return true;
-        }
-
-        FinalizeWidgetEdit(WidgetBP, Payload);
-
-        // CRITICAL: Validate widget creation succeeded and check for engine errors
-        FString ValidationError;
-        if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
-        {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
-            return true;
-        }
-
-        ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), TEXT("Added text block"));
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-
-        McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added text block"), ResultJson);
-        return true;
+        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+            NewWidget, SlotName, TEXT("Added text block"), ResultJson);
     }
 
     if (SubAction.Equals(TEXT("add_image"), ESearchCase::IgnoreCase))
     {
-        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
-        if (WidgetPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
-            return true;
-        }
-
-        FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("Image"));
-
-        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
-        if (!WidgetBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        UImage* ImageWidget = WidgetBP->WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), FName(*SlotName));
-        if (!ImageWidget)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create image"), TEXT("CREATION_ERROR"));
-            return true;
-        }
-        
-        // CRITICAL: Register widget GUID to prevent ensure failures during compilation
-        RegisterWidgetGuid(WidgetBP, ImageWidget);
+        UWidgetBlueprint* WidgetBP = nullptr;
+        FString SlotName;
+        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+            UImage::StaticClass(), TEXT("Image"), WidgetBP, SlotName);
+        if (!NewWidget) { return true; }
+        UImage* ImageWidget = Cast<UImage>(NewWidget);
 
         // Set texture if provided
         FString TexturePath = GetJsonStringField(Payload, TEXT("texturePath"));
@@ -1533,64 +1467,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             ImageWidget->SetColorAndOpacity(Color);
         }
 
-        // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
-        // This prevents "Variable was deleted but still has a GUID" ensure failures
-        FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        FString AddErr;
-        if (!SafeAddWidgetToTree(WidgetBP, ImageWidget, ParentSlot, &AddErr))
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                AddErr.IsEmpty() ? FString(TEXT("Failed to add image to widget tree")) : AddErr,
-                TEXT("TREE_ERROR"));
-            return true;
-        }
-
-        FinalizeWidgetEdit(WidgetBP, Payload);
-
-        // CRITICAL: Validate widget creation succeeded and check for engine errors
-        FString ValidationError;
-        if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
-        {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
-            return true;
-        }
-
-        ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), TEXT("Added image"));
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-
-        McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added image"), ResultJson);
-        return true;
+        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+            NewWidget, SlotName, TEXT("Added image"), ResultJson);
     }
 
     if (SubAction.Equals(TEXT("add_button"), ESearchCase::IgnoreCase))
     {
-        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
-        if (WidgetPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
-            return true;
-        }
-
-        FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("Button"));
-
-        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
-        if (!WidgetBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        UButton* ButtonWidget = WidgetBP->WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), FName(*SlotName));
-        if (!ButtonWidget)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create button"), TEXT("CREATION_ERROR"));
-            return true;
-        }
-        
-        // CRITICAL: Register widget GUID to prevent ensure failures during compilation
-        RegisterWidgetGuid(WidgetBP, ButtonWidget);
+        UWidgetBlueprint* WidgetBP = nullptr;
+        FString SlotName;
+        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+            UButton::StaticClass(), TEXT("Button"), WidgetBP, SlotName);
+        if (!NewWidget) { return true; }
+        UButton* ButtonWidget = Cast<UButton>(NewWidget);
 
         // Set enabled state if provided
         if (Payload->HasField(TEXT("isEnabled")))
@@ -1606,70 +1494,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             ButtonWidget->SetColorAndOpacity(Color);
         }
 
-        // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
-        // This prevents "Variable was deleted but still has a GUID" ensure failures
-        FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        FString AddErr;
-        if (!SafeAddWidgetToTree(WidgetBP, ButtonWidget, ParentSlot, &AddErr))
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                AddErr.IsEmpty() ? FString(TEXT("Failed to add button to widget tree")) : AddErr,
-                TEXT("TREE_ERROR"));
-            return true;
-        }
-
-        FinalizeWidgetEdit(WidgetBP, Payload);
-
-        // CRITICAL: Validate widget creation succeeded and check for engine errors
-        FString ValidationError;
-        if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
-        {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
-            return true;
-        }
-
-        ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), TEXT("Added button"));
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-
-        McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added button"), ResultJson);
-        return true;
+        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+            NewWidget, SlotName, TEXT("Added button"), ResultJson);
     }
 
     if (SubAction.Equals(TEXT("add_progress_bar"), ESearchCase::IgnoreCase))
     {
-        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
-        if (WidgetPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
-            return true;
-        }
-
-        // Honor slotName/name/widgetName (GetSlotName) before falling back to the type default,
-        // so a caller passing name:"PlayerHealthBar" no longer gets an auto-named "ProgressBar".
-        FString SlotName = GetSlotName(Payload);
-        if (SlotName.IsEmpty())
-        {
-            SlotName = TEXT("ProgressBar");
-        }
-
-        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
-        if (!WidgetBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        UProgressBar* ProgressBarWidget = WidgetBP->WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), FName(*SlotName));
-        if (!ProgressBarWidget)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create progress bar"), TEXT("CREATION_ERROR"));
-            return true;
-        }
-        
-        // CRITICAL: Register widget GUID to prevent ensure failures during compilation
-        RegisterWidgetGuid(WidgetBP, ProgressBarWidget);
+        UWidgetBlueprint* WidgetBP = nullptr;
+        FString SlotName;
+        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+            UProgressBar::StaticClass(), TEXT("ProgressBar"), WidgetBP, SlotName);
+        if (!NewWidget) { return true; }
+        UProgressBar* ProgressBarWidget = Cast<UProgressBar>(NewWidget);
 
         // Set percent if provided
         if (Payload->HasField(TEXT("percent")))
@@ -1691,64 +1527,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             ProgressBarWidget->SetIsMarquee(GetJsonBoolField(Payload, TEXT("isMarquee")));
         }
 
-        // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
-        // This prevents "Variable was deleted but still has a GUID" ensure failures
-        FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        FString AddErr;
-        if (!SafeAddWidgetToTree(WidgetBP, ProgressBarWidget, ParentSlot, &AddErr))
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                AddErr.IsEmpty() ? FString(TEXT("Failed to add progress bar to widget tree")) : AddErr,
-                TEXT("TREE_ERROR"));
-            return true;
-        }
-
-        FinalizeWidgetEdit(WidgetBP, Payload);
-
-        // CRITICAL: Validate widget creation succeeded and check for engine errors
-        FString ValidationError;
-        if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
-        {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
-            return true;
-        }
-
-        ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), TEXT("Added progress bar"));
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-
-        McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added progress bar"), ResultJson);
-        return true;
+        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+            NewWidget, SlotName, TEXT("Added progress bar"), ResultJson);
     }
 
     if (SubAction.Equals(TEXT("add_slider"), ESearchCase::IgnoreCase))
     {
-        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
-        if (WidgetPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
-            return true;
-        }
-
-        FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("Slider"));
-
-        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
-        if (!WidgetBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        USlider* SliderWidget = WidgetBP->WidgetTree->ConstructWidget<USlider>(USlider::StaticClass(), FName(*SlotName));
-        if (!SliderWidget)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create slider"), TEXT("CREATION_ERROR"));
-            return true;
-        }
-        
-        // CRITICAL: Register widget GUID to prevent ensure failures during compilation
-        RegisterWidgetGuid(WidgetBP, SliderWidget);
+        UWidgetBlueprint* WidgetBP = nullptr;
+        FString SlotName;
+        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+            USlider::StaticClass(), TEXT("Slider"), WidgetBP, SlotName);
+        if (!NewWidget) { return true; }
+        USlider* SliderWidget = Cast<USlider>(NewWidget);
 
         // Set value if provided
         if (Payload->HasField(TEXT("value")))
@@ -1772,35 +1562,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             SliderWidget->SetStepSize(static_cast<float>(GetJsonNumberField(Payload, TEXT("stepSize"), 0.01)));
         }
 
-        // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
-        // This prevents "Variable was deleted but still has a GUID" ensure failures
-        FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        FString AddErr;
-        if (!SafeAddWidgetToTree(WidgetBP, SliderWidget, ParentSlot, &AddErr))
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                AddErr.IsEmpty() ? FString(TEXT("Failed to add slider to widget tree")) : AddErr,
-                TEXT("TREE_ERROR"));
-            return true;
-        }
-
-        FinalizeWidgetEdit(WidgetBP, Payload);
-
-        // CRITICAL: Validate widget creation succeeded and check for engine errors
-        FString ValidationError;
-        if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
-        {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
-            return true;
-        }
-
-        ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), TEXT("Added slider"));
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-
-        McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added slider"), ResultJson);
-        return true;
+        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+            NewWidget, SlotName, TEXT("Added slider"), ResultJson);
     }
 
     // =========================================================================
@@ -2192,233 +1955,59 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
 
     if (SubAction.Equals(TEXT("add_rich_text_block"), ESearchCase::IgnoreCase))
     {
-        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
-        if (WidgetPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
-            return true;
-        }
+        UWidgetBlueprint* WidgetBP = nullptr;
+        FString SlotName;
+        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+            URichTextBlock::StaticClass(), TEXT("RichTextBlock"), WidgetBP, SlotName);
+        if (!NewWidget) { return true; }
+        Cast<URichTextBlock>(NewWidget)->SetText(FText::FromString(GetJsonStringField(Payload, TEXT("text"), TEXT("Rich Text"))));
 
-        FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("RichTextBlock"));
-        FString Text = GetJsonStringField(Payload, TEXT("text"), TEXT("Rich Text"));
-
-        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
-        if (!WidgetBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        URichTextBlock* RichTextBlock = WidgetBP->WidgetTree->ConstructWidget<URichTextBlock>(URichTextBlock::StaticClass(), FName(*SlotName));
-        if (!RichTextBlock)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create rich text block"), TEXT("CREATION_ERROR"));
-            return true;
-        }
-
-        RichTextBlock->SetText(FText::FromString(Text));
-        
-        // CRITICAL: Register widget GUID to prevent ensure failures during compilation
-        RegisterWidgetGuid(WidgetBP, RichTextBlock);
-
-        // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
-        // This prevents "Variable was deleted but still has a GUID" ensure failures
-        FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        FString AddErr;
-        if (!SafeAddWidgetToTree(WidgetBP, RichTextBlock, ParentSlot, &AddErr))
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                AddErr.IsEmpty() ? FString(TEXT("Failed to add rich text block to widget tree")) : AddErr,
-                TEXT("TREE_ERROR"));
-            return true;
-        }
-
-        FinalizeWidgetEdit(WidgetBP, Payload);
-
-        // CRITICAL: Validate widget creation succeeded and check for engine errors
-        FString ValidationError;
-        if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
-        {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
-            return true;
-        }
-
-        ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), TEXT("Added rich text block"));
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added rich text block"), ResultJson);
-        return true;
+        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+            NewWidget, SlotName, TEXT("Added rich text block"), ResultJson);
     }
 
     if (SubAction.Equals(TEXT("add_check_box"), ESearchCase::IgnoreCase))
     {
-        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
-        if (WidgetPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
-            return true;
-        }
+        UWidgetBlueprint* WidgetBP = nullptr;
+        FString SlotName;
+        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+            UCheckBox::StaticClass(), TEXT("CheckBox"), WidgetBP, SlotName);
+        if (!NewWidget) { return true; }
+        Cast<UCheckBox>(NewWidget)->SetIsChecked(GetJsonBoolField(Payload, TEXT("isChecked"), false));
 
-        FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("CheckBox"));
-        bool bIsChecked = GetJsonBoolField(Payload, TEXT("isChecked"), false);
-
-        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
-        if (!WidgetBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        UCheckBox* CheckBox = WidgetBP->WidgetTree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass(), FName(*SlotName));
-        if (!CheckBox)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create check box"), TEXT("CREATION_ERROR"));
-            return true;
-        }
-
-        CheckBox->SetIsChecked(bIsChecked);
-        
-        // CRITICAL: Register widget GUID to prevent ensure failures during compilation
-        RegisterWidgetGuid(WidgetBP, CheckBox);
-
-        // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
-        // This prevents "Variable was deleted but still has a GUID" ensure failures
-        FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        FString AddErr;
-        if (!SafeAddWidgetToTree(WidgetBP, CheckBox, ParentSlot, &AddErr))
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                AddErr.IsEmpty() ? FString(TEXT("Failed to add check box to widget tree")) : AddErr,
-                TEXT("TREE_ERROR"));
-            return true;
-        }
-
-        FinalizeWidgetEdit(WidgetBP, Payload);
-
-        // CRITICAL: Validate widget creation succeeded and check for engine errors
-        FString ValidationError;
-        if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
-        {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
-            return true;
-        }
-
-        ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), TEXT("Added check box"));
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added check box"), ResultJson);
-        return true;
+        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+            NewWidget, SlotName, TEXT("Added check box"), ResultJson);
     }
 
     if (SubAction.Equals(TEXT("add_text_input"), ESearchCase::IgnoreCase))
     {
-        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
-        if (WidgetPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
-            return true;
-        }
+        const bool bMultiLine = GetJsonBoolField(Payload, TEXT("multiLine"), false);
+        UClass* const InputClass = bMultiLine
+            ? UMultiLineEditableTextBox::StaticClass()
+            : UEditableTextBox::StaticClass();
 
-        FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("TextInput"));
-        FString HintText = GetJsonStringField(Payload, TEXT("hintText"), TEXT(""));
-        bool bMultiLine = GetJsonBoolField(Payload, TEXT("multiLine"), false);
+        UWidgetBlueprint* WidgetBP = nullptr;
+        FString SlotName;
+        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+            InputClass, TEXT("TextInput"), WidgetBP, SlotName);
+        if (!NewWidget) { return true; }
 
-        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
-        if (!WidgetBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
-            return true;
-        }
+        const FText HintText = FText::FromString(GetJsonStringField(Payload, TEXT("hintText"), TEXT("")));
+        if (bMultiLine) { Cast<UMultiLineEditableTextBox>(NewWidget)->SetHintText(HintText); }
+        else            { Cast<UEditableTextBox>(NewWidget)->SetHintText(HintText); }
 
-        UWidget* TextInput = nullptr;
-        if (bMultiLine)
-        {
-            UMultiLineEditableTextBox* MultiLineText = WidgetBP->WidgetTree->ConstructWidget<UMultiLineEditableTextBox>(UMultiLineEditableTextBox::StaticClass(), FName(*SlotName));
-            if (MultiLineText)
-            {
-                MultiLineText->SetHintText(FText::FromString(HintText));
-                TextInput = MultiLineText;
-                // CRITICAL: Register widget GUID to prevent ensure failures during compilation
-                RegisterWidgetGuid(WidgetBP, MultiLineText);
-            }
-        }
-        else
-        {
-            UEditableTextBox* SingleLineText = WidgetBP->WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(), FName(*SlotName));
-            if (SingleLineText)
-            {
-                SingleLineText->SetHintText(FText::FromString(HintText));
-                TextInput = SingleLineText;
-                // CRITICAL: Register widget GUID to prevent ensure failures during compilation
-                RegisterWidgetGuid(WidgetBP, SingleLineText);
-            }
-        }
-
-        if (!TextInput)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create text input"), TEXT("CREATION_ERROR"));
-            return true;
-        }
-
-        // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
-        // This prevents "Variable was deleted but still has a GUID" ensure failures
-        FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        FString AddErr;
-        if (!SafeAddWidgetToTree(WidgetBP, TextInput, ParentSlot, &AddErr))
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                AddErr.IsEmpty() ? FString(TEXT("Failed to add text input to widget tree")) : AddErr,
-                TEXT("TREE_ERROR"));
-            return true;
-        }
-
-        FinalizeWidgetEdit(WidgetBP, Payload);
-
-        // CRITICAL: Validate widget creation succeeded and check for engine errors
-        FString ValidationError;
-        if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
-        {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
-            return true;
-        }
-
-        ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), TEXT("Added text input"));
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added text input"), ResultJson);
-        return true;
+        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+            NewWidget, SlotName, TEXT("Added text input"), ResultJson);
     }
 
     if (SubAction.Equals(TEXT("add_combo_box"), ESearchCase::IgnoreCase))
     {
-        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
-        if (WidgetPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
-            return true;
-        }
-
-        FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("ComboBox"));
-
-        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
-        if (!WidgetBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        UComboBoxString* ComboBox = WidgetBP->WidgetTree->ConstructWidget<UComboBoxString>(UComboBoxString::StaticClass(), FName(*SlotName));
-        if (!ComboBox)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create combo box"), TEXT("CREATION_ERROR"));
-            return true;
-        }
-        
-        // CRITICAL: Register widget GUID to prevent ensure failures during compilation
-        RegisterWidgetGuid(WidgetBP, ComboBox);
+        UWidgetBlueprint* WidgetBP = nullptr;
+        FString SlotName;
+        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+            UComboBoxString::StaticClass(), TEXT("ComboBox"), WidgetBP, SlotName);
+        if (!NewWidget) { return true; }
+        UComboBoxString* ComboBox = Cast<UComboBoxString>(NewWidget);
 
         // Add options if provided
         const TArray<TSharedPtr<FJsonValue>>* Options = GetArrayField(Payload, TEXT("options"));
@@ -2437,63 +2026,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             ComboBox->SetSelectedOption(SelectedOption);
         }
 
-        // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
-        // This prevents "Variable was deleted but still has a GUID" ensure failures
-        FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        FString AddErr;
-        if (!SafeAddWidgetToTree(WidgetBP, ComboBox, ParentSlot, &AddErr))
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                AddErr.IsEmpty() ? FString(TEXT("Failed to add combo box to widget tree")) : AddErr,
-                TEXT("TREE_ERROR"));
-            return true;
-        }
-
-        FinalizeWidgetEdit(WidgetBP, Payload);
-
-        // CRITICAL: Validate widget creation succeeded and check for engine errors
-        FString ValidationError;
-        if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
-        {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
-            return true;
-        }
-
-        ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), TEXT("Added combo box"));
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added combo box"), ResultJson);
-        return true;
+        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+            NewWidget, SlotName, TEXT("Added combo box"), ResultJson);
     }
 
     if (SubAction.Equals(TEXT("add_spin_box"), ESearchCase::IgnoreCase))
     {
-        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
-        if (WidgetPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
-            return true;
-        }
-
-        FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("SpinBox"));
-
-        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
-        if (!WidgetBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        USpinBox* SpinBox = WidgetBP->WidgetTree->ConstructWidget<USpinBox>(USpinBox::StaticClass(), FName(*SlotName));
-        if (!SpinBox)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create spin box"), TEXT("CREATION_ERROR"));
-            return true;
-        }
-        
-        // CRITICAL: Register widget GUID to prevent ensure failures during compilation
-        RegisterWidgetGuid(WidgetBP, SpinBox);
+        UWidgetBlueprint* WidgetBP = nullptr;
+        FString SlotName;
+        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+            USpinBox::StaticClass(), TEXT("SpinBox"), WidgetBP, SlotName);
+        if (!NewWidget) { return true; }
+        USpinBox* SpinBox = Cast<USpinBox>(NewWidget);
 
         // Set value
         if (Payload->HasField(TEXT("value")))
@@ -2515,150 +2059,30 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             SpinBox->SetDelta(static_cast<float>(GetJsonNumberField(Payload, TEXT("delta"), 1.0)));
         }
 
-        // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
-        // This prevents "Variable was deleted but still has a GUID" ensure failures
-        FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        FString AddErr;
-        if (!SafeAddWidgetToTree(WidgetBP, SpinBox, ParentSlot, &AddErr))
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                AddErr.IsEmpty() ? FString(TEXT("Failed to add spin box to widget tree")) : AddErr,
-                TEXT("TREE_ERROR"));
-            return true;
-        }
-
-        FinalizeWidgetEdit(WidgetBP, Payload);
-
-        // CRITICAL: Validate widget creation succeeded and check for engine errors
-        FString ValidationError;
-        if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
-        {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
-            return true;
-        }
-
-        ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), TEXT("Added spin box"));
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added spin box"), ResultJson);
-        return true;
+        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+            NewWidget, SlotName, TEXT("Added spin box"), ResultJson);
     }
 
     if (SubAction.Equals(TEXT("add_list_view"), ESearchCase::IgnoreCase))
     {
-        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
-        if (WidgetPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
-            return true;
-        }
-
-        FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("ListView"));
-
-        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
-        if (!WidgetBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        UListView* ListView = WidgetBP->WidgetTree->ConstructWidget<UListView>(UListView::StaticClass(), FName(*SlotName));
-        if (!ListView)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create list view"), TEXT("CREATION_ERROR"));
-            return true;
-        }
-        
-        // CRITICAL: Register widget GUID to prevent ensure failures during compilation
-        RegisterWidgetGuid(WidgetBP, ListView);
-
-        // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
-        // This prevents "Variable was deleted but still has a GUID" ensure failures
-        FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        FString AddErr;
-        if (!SafeAddWidgetToTree(WidgetBP, ListView, ParentSlot, &AddErr))
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                AddErr.IsEmpty() ? FString(TEXT("Failed to add list view to widget tree")) : AddErr,
-                TEXT("TREE_ERROR"));
-            return true;
-        }
-
-        FinalizeWidgetEdit(WidgetBP, Payload);
-
-        // CRITICAL: Validate widget creation succeeded and check for engine errors
-        FString ValidationError;
-        if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
-        {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
-            return true;
-        }
-
-        ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), TEXT("Added list view"));
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added list view"), ResultJson);
-        return true;
+        UWidgetBlueprint* WidgetBP = nullptr;
+        FString SlotName;
+        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+            UListView::StaticClass(), TEXT("ListView"), WidgetBP, SlotName);
+        if (!NewWidget) { return true; }
+        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+            NewWidget, SlotName, TEXT("Added list view"), ResultJson);
     }
 
     if (SubAction.Equals(TEXT("add_tree_view"), ESearchCase::IgnoreCase))
     {
-        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
-        if (WidgetPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
-            return true;
-        }
-
-        FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("TreeView"));
-
-        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
-        if (!WidgetBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        UTreeView* TreeView = WidgetBP->WidgetTree->ConstructWidget<UTreeView>(UTreeView::StaticClass(), FName(*SlotName));
-        if (!TreeView)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create tree view"), TEXT("CREATION_ERROR"));
-            return true;
-        }
-        
-        // CRITICAL: Register widget GUID to prevent ensure failures during compilation
-        RegisterWidgetGuid(WidgetBP, TreeView);
-
-        // CRITICAL: Use SafeAddWidgetToTree to properly handle root replacement and GUID cleanup
-        // This prevents "Variable was deleted but still has a GUID" ensure failures
-        FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
-        FString AddErr;
-        if (!SafeAddWidgetToTree(WidgetBP, TreeView, ParentSlot, &AddErr))
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                AddErr.IsEmpty() ? FString(TEXT("Failed to add tree view to widget tree")) : AddErr,
-                TEXT("TREE_ERROR"));
-            return true;
-        }
-
-        FinalizeWidgetEdit(WidgetBP, Payload);
-
-        // CRITICAL: Validate widget creation succeeded and check for engine errors
-        FString ValidationError;
-        if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
-        {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
-            return true;
-        }
-
-        ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), TEXT("Added tree view"));
-        ResultJson->SetStringField(TEXT("slotName"), SlotName);
-
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added tree view"), ResultJson);
-        return true;
+        UWidgetBlueprint* WidgetBP = nullptr;
+        FString SlotName;
+        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+            UTreeView::StaticClass(), TEXT("TreeView"), WidgetBP, SlotName);
+        if (!NewWidget) { return true; }
+        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+            NewWidget, SlotName, TEXT("Added tree view"), ResultJson);
     }
 
     // =========================================================================

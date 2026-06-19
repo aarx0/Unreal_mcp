@@ -618,16 +618,17 @@ bake-rebuild done so the on-disk DLL matches source.
   now save (added `McpSafeOperations` include/`using` — they were relying on a unity-build using-leak).
 
 **Still open (deliberately deferred — not bugs / higher risk / gated):**
-- **C monolith dedup** — PARTLY DONE (2026-06-18d). Extracted file-local helpers `ConstructWidgetForAdd`
+- **C `add_*` dedup — DONE (2026-06-18d).** Extracted file-local helpers `ConstructWidgetForAdd`
   (load+construct+register, returns the widget) + `AddFinalizeRespondWidget` (SafeAddToTree + FinalizeWidgetEdit
   + Validate + respond) in the `WidgetAuthoringHelpers` namespace — they call the subsystem's public send helpers
-  via a `Self` pointer, so they stay `.cpp`-only. Collapsed **all 11 §19.2 layout panels** onto them
-  (canvas/hbox/vbox/overlay/grid/uniform_grid/wrap_box/scroll_box/size_box/scale_box/border): pure panels are
-  ~5 lines; property panels do construct → set type-specific props on the cast → addfinalize. ~600 boilerplate
-  lines removed. Build clean + live-verified (canvas via name alias; size_box WidthOverride=250 persisted; correct
-  tree). **Remaining:** the ~12 §19.3+ leaf widgets (text/rich_text/image/button/check_box/slider/progress_bar/
-  text_input/combo_box/spin_box/list_view/tree_view) — now a trivial mechanical conversion onto the same helpers,
-  preserving each one's property block; plus the 🟡 7,350-line-function split + error-literal/response-tail dedup.
+  via a `Self` pointer, so they stay `.cpp`-only. Collapsed **all 23 add_* handlers** onto them: 11 §19.2 layout
+  panels (canvas/hbox/vbox/overlay/grid/uniform_grid/wrap_box/scroll_box/size_box/scale_box/border) + 12 §19.3
+  leaf widgets (text_block/rich_text_block/image/button/check_box/slider/progress_bar/text_input/combo_box/
+  spin_box/list_view/tree_view). Pure adds are ~5 lines; property widgets do `construct → Cast<T> → set props →
+  addfinalize` (property blocks preserved verbatim); text_input picks single/multi-line class first. ~1,100
+  boilerplate lines removed. Build clean (both waves) + live-verified (size_box WidthOverride=250, progress_bar
+  Percent=0.7 persisted; correct trees via name alias). **Remaining C (🟡, optional):** split the still-large
+  `HandleManageWidgetAuthoringAction` function + fold the duplicated error literals / response-tail; not a bug.
 - **D** — extract the shared graph-event-chain helper; add `FScopedTransaction` + `TryCreateConnection` to
   `bind_on_clicked`/`bind_on_value_changed` (🟢 robustness).
 - **B 🟡/🟢** — Inventory/Interaction structural adds save-without-compile (stale CDO); InputHandlers
