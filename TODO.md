@@ -586,6 +586,110 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### 2026-06-19c — Graph-authoring papercuts hit wiring the HUD pull-binding (BP_CPP_Character / WBP_HUD)
+Found while converting the player-HUD binding to a self-contained pull model. None block work (all had
+workarounds) but each cost round-trips:
+- 🟡 **`create_node` cast needs `nodeType:"Cast"` (or `"CastTo<Class>"`), NOT `"DynamicCast"`.** Passing
+  `nodeType:"DynamicCast"` (the actual UClass name, and what `get_graph_details` reports) falls through to
+  the generic registered-node path which creates a `K2Node_DynamicCast` but never sets `TargetType` → a
+  "Bad cast node" (Object pin wildcard, no `As<Class>` pin), even with a full `targetClass` path. Only the
+  `NodeType=="Cast" || StartsWith("CastTo")` branch (BlueprintGraphHandlers ~L1449) sets `TargetType`. Fix:
+  route `"DynamicCast"`/`"K2Node_DynamicCast"` to that branch, or read `targetClass` in the generic path.
+- 🟡 **`add_event` for an engine BlueprintImplementableEvent override (e.g. `Construct`) doesn't
+  materialize the node.** `add_event {eventName:"Construct"}` returned `success/saved:true` but the graph
+  still showed only the disabled ghost placeholder; `set_node_property {EnabledState:"Enabled"}` also
+  reported success but left it disabled ("This node is disabled and will not be called"). **What worked:**
+  `connect_pins` from the ghost event's `then` exec pin — wiring it materializes + enables the real event
+  (standard UMG behavior). Consider making `add_event` do that materialization, or document the wire-to-enable path.
+- 📝 **Usage note (UE behavior, not a bridge bug): a C++ `BlueprintImplementableEvent` can't be *called*
+  from another Blueprint** — `create_node CallFunction` to `UCombatHudWidget::InitializeHud` from
+  `BP_CPP_Character` compiled to "Function 'InitializeHud' ... should not be called from a Blueprint"
+  (FUNC_BlueprintCallable not granted for the cross-BP call). Worked around with a pull model (HUD binds
+  itself on Construct). If a push API is wanted later, the canonical fix is a C++ `BlueprintCallable`
+  wrapper that calls a protected BIE, or expose a BP custom event (custom events ARE cross-BP callable).
+
+### 2026-06-19b — ✅ `control_actor call_actor_function` couldn't reach components or pass args — FIXED
+Found while trying to drive the game's magic bar in PIE (`RemoveMagic(40)` on the player's
+`Attributes` component → `FUNCTION_NOT_FOUND`). Two gaps in `HandleControlActorCallFunction`
+(`McpAutomationBridge_ControlHandlers.cpp` ~L2597):
+1. **Actor-class-only resolution.** It called `Actor->FindFunction(FunctionName)` + `Actor->ProcessEvent`,
+   and never read `componentName` on this path — so any UFUNCTION living on a *component*
+   (`UAttributeComponent::RemoveMagic`, etc.) was invisible.
+2. **Arguments ignored.** Even on a found function it `Malloc`+`Memzero`'d the param frame and called
+   with all-zero params; the schema's `arguments` array was never parsed. So `RemoveMagic(40)` would
+   have run as `RemoveMagic(0)` regardless.
+**Fix (`.cpp`-only, live-coding patched):** resolve `Target` = component (via the existing fuzzy
+`FindComponentByName`) when `componentName` is set, else the actor; `Target->FindFunction` +
+`Target->ProcessEvent`. Build a real param frame (`InitializeValue_InContainer` per `CPF_Parm`, fill
+input params in order from `arguments` via `ImportText_Direct`, skipping `CPF_ReturnParm` and pure
+`CPF_OutParm`, then `DestroyValue_InContainer`) so non-POD args don't leak and values actually pass.
+Response now echoes `componentName` + `argumentsApplied`. Verify: PIE → `call_actor_function`
+`{actorName, componentName:"Attributes", functionName:"RemoveMagic", arguments:["40"]}` → player magic
+60, bound MagicBar Percent 0.6. (Possible follow-up: read back the function's return value into the
+response.)
+
+### 2026-06-19 — ✅ FIXED: Failed save pops a blocking modal that starves the bridge
+**RESOLVED 2026-06-19** (bridge `dev`, full rebuild `-NoUBA` + verified live). `McpSafeAssetSave` +
+`McpSafeLevelSave` now bracket the save in `GIsRunningUnattendedScript = true` — **note the global is
+`GIsRunningUnattendedScript`, NOT `GIsRunningUnattended`** (that symbol does not exist; first build
+failed C2065 on it). `FMessageDialog::Open` then returns its default (Cancel) for the "failed to save"
+dialog without showing UI, so a failed save returns `success=false` and the bridge stays responsive.
+Verified with a read-only-`.uasset` test: modal auto-dismissed (~72ms/attempt, `Message dialog closed,
+result: Ok` in the log), follow-up calls returned immediately. Commits 790e77a / 27705c0 / 4c76569 /
+20a9f9e. The guard fixes the starvation for ANY save-failure cause, so the open sub-question below
+(transient lock vs read-only) no longer gates it. Original report kept below.
+Repro (live, hit while wiring the game's magic bar — item B(b) above): `manage_blueprint add_progress_bar`
+on `/Game/UI/WBP_HUD` (a widget already loaded + live in the open HubWorld). The widget add itself
+SUCCEEDED in-memory (`MagicBar` present in `WBP_HUD_C:WidgetTree` *and* in the running
+`HubWorld:WBP_HUD_C_0.WidgetTree_0`), but the subsequent save failed and the editor surfaced an
+**interactive modal** — "The asset '/Game/UI/WBP_HUD' failed to save. Cancel / Retry / Continue."
+That modal runs a **nested Slate message loop on the game thread** (`FMessageDialog::Open` →
+`FSlateApplication::AddModalWindow`): the loop pumps Slate (the buttons are clickable) but never returns
+to the caller, so `FEngineLoop::Tick` and any `AsyncTask(GameThread)` the bridge queues are starved →
+**every subsequent MCP call times out** until a human clicks a button. Confirmed: 3 reads in a row timed
+out; the instant Aaron hit **Cancel**, the bridge was responsive again and the in-memory `MagicBar` was
+intact.
+
+Two distinct problems:
+1. **Detection is impossible in-band.** The bridge services requests on the game thread, which is the
+   thread blocked inside the modal loop — so it physically cannot reply "a modal is up." The MCP
+   client-side timeout (write hangs after reads just worked) IS the only available signal.
+2. **The bridge should never let an interactive modal fire at all.** A failed save inside an automated
+   op must become a structured error, not a blocking prompt.
+
+Fix direction (preventive + optional detection):
+- **Preventive (real fix):** bracket bridge asset writes in unattended semantics — `TGuardValue<bool>
+  UnattendedGuard(GIsRunningUnattended, true)` / `FScopedUnattendedScope` — so `FMessageDialog::Open`
+  returns a default answer instead of showing UI. Better: don't route through the interactive
+  `FEditorFileUtils::PromptForCheckoutAndSave` path; save via `UPackage::Save`/`SavePackage` and inspect
+  the returned `FSavePackageResultStruct`, returning a `SAVE_FAILED` MCP error with the reason. This is
+  the same `McpSafeAssetSave` path the 2026-06-18f compile-before-save change touches — fold the
+  no-modal guarantee in there so it covers every handler at once.
+- **Pre-flight:** before saving, check the target `.uasset` is writable (`IFileManager::IsReadOnly`) +
+  source-control state; fail fast with a clear error if not.
+- **Detection (only if wanted):** a non-game watchdog thread reading a game-thread heartbeat timestamp
+  could report "game thread unresponsive (likely modal)" — can't read the dialog text (needs the blocked
+  thread), so low value vs. the preventive fix.
+
+Open sub-question (not the bug, but worth a pre-flight probe): WHY did this particular save fail? The
+`.uasset` is writable on disk (`-rw-r--r--`) and git-clean, so it wasn't a filesystem read-only flag —
+likely a transient lock / second open handle (asset live in the running PIE-less editor world + possibly
+a second editor instance). Reproduce in isolation before assuming the modal is the only issue.
+
+### 2026-06-19d — Save-failure honesty papercuts (found verifying the modal fix, 2026-06-19)
+Surfaced while live-testing the save-modal fix with a read-only `.uasset`. Neither is a regression from
+that fix; both are masked today by the post-op LogSavePackage-error guard (the MCP client still gets a
+correct error), so low urgency — but the handler-level bools lie.
+- [ ] **`McpSafeAssetSave` false-positive `true` when the file EXISTS but the overwrite FAILED.** The final
+  `bExistsOnDisk` check (`McpSafeOperations.h` ~L278) treats "package file present on disk" as success, so a
+  read-only/locked overwrite that genuinely failed still returns `true`. Repro: read-only `.uasset` →
+  `add_variable {save:true}` → `Cannot remove ... as it is read only!` in the log, yet the save path returns
+  true. Fix: distinguish "wrote this call" from "file merely pre-existed" — trust the
+  `SavePackagesForObjects` / `PromptForCheckoutAndSave` result, or compare pre/post file mtime, instead of
+  bare existence.
+- [ ] **`add_variable` reports `saved=true verified=true` on a failed save** (same read-only repro,
+  BlueprintHandlers). Downstream of the `McpSafeAssetSave` heuristic above; fix that and this follows.
+
 ### 2026-06-18c — Cleanup pass LANDED (Batches 1–3, built + live-verified against the editor)
 Worked the 34-finding audit + the 2026-06-18b friction list into three batches, each rebuilt/live-coded
 and verified against the running editor. Bridge source updated (local `dev` fork, uncommitted). Final
@@ -753,7 +857,7 @@ hundreds of sites, a different risk class than dead-code deletion. Do deliberate
   truncation; the schema then spliced a `Truncate` node into float→float connections. Caught when a
   `SetPercent(float)` param became int and truncated 0..1 health to 0. Fixed → `PC_Real` + `PC_Float`/`PC_Double`
   subcategory. **Same bug family as the add_variable PC_Real fix (`c0bff6a`) — that fix never covered MakePinType.**
-- [ ] **`add_node` CallFunction (`memberName`+`memberClass`) → blank "None" node — HIGH (compile-break + PIE hang).**
+- [x] **`add_node` CallFunction (`memberName`+`memberClass`) → blank "None" node — HIGH (compile-break + PIE hang).** ✅ FIXED + VERIFIED 2026-06-19: `add_node` now delegates a `memberName` function call to the `create_node` CallFunction factory (BlueprintHandlers.cpp ~L4944). Live test: `add_node CallFunction memberName=GetPlayerPawn memberClass=GameplayStatics` → real "Get Player Pawn" node (proper pins), `compiled:true` — no None node. (Original report below.)
   Authoring a general `Class::Function` call via `add_node` did NOT resolve the function — it created a pinless
   `K2Node_CallFunction` titled "None". That node breaks compile (`Could not find a function named "None"`) and,
   when the broken widget is later instantiated at runtime, **HUNG PIE** (game thread frozen, log frame counter
@@ -763,7 +867,7 @@ hundreds of sites, a different risk class than dead-code deletion. Do deliberate
   the body via `connect_pins`). The bug is `add_node`-specific: it routes elsewhere and `NewObject`s a bare
   function-less node. Fix: make `add_node` route function-call requests through the `create_node` CallFunction path
   (or fail-fast with FUNCTION_NOT_FOUND) instead of leaving a compile-breaking "None" node.
-- [ ] **`remove_function` false success — HIGH.** `remove_function SetPercent` returned `removed:true,success:true`
+- [x] **`remove_function` false success — HIGH.** ✅ FIXED + VERIFIED 2026-06-19: now `RemoveGraph` → `McpSafeCompileBlueprint` → save (BlueprintHandlers.cpp ~L3700); live test: add `TestFunc` → `remove_function` (`removed:true,saved:true`) → `list_functions` confirms it's actually gone. Original bug: `remove_function SetPercent` returned `removed:true,success:true`
   but left the function (with its broken node) in place; only a later `get_graph_details`/compile revealed it.
   False success left a compile-broken asset. Workaround: `delete_node` the offending node(s), then `compile`.
 - [ ] **`add_event` override path keyed on `eventType`, not `eventName`.** To implement a parent
@@ -774,7 +878,7 @@ hundreds of sites, a different risk class than dead-code deletion. Do deliberate
   `widgetPath`, but `widgetPath`/`slotName`/`parentSlot`/`widgetClass` etc. are NOT in `BuildInputSchema` — they
   only work because the client forwards undeclared params. A schema-strict client can't discover them. Add them
   (doc-only; handlers already read them from the payload).
-- [ ] **`set_position` rejects bare `x`/`y`** — wants `position:{x,y}` or `posX`/`posY`. (`set_size` took
+- [x] **`set_position` rejects bare `x`/`y`** — ✅ FIXED 2026-06-19 (commit 4c76569, built clean): now also accepts bare top-level `x`/`y`. Was: wanted `position:{x,y}` or `posX`/`posY` only. (`set_size` took
   `width`/`height` fine.) Minor param-spelling inconsistency.
 - [ ] **`add_progress_bar` (and siblings) ignore `name`, auto-name "ProgressBar"** — pass-through uses `slotName`,
   not `name`; same `name`↔`slotName` alias gap noted before for other widget adds.
@@ -791,6 +895,14 @@ save/compile discipline, duplication, and graph-authoring robustness. Each findi
 adversarially re-verified against source. Grouped below by class; tackle sequentially. (Surfaced
 while building the HUD `bind_event_to_delegate` work above — the "report success while wiring
 nothing" anti-pattern is the same disease as the binding stubs, and violates [[feedback_fail_fast_no_guessing]].)
+
+**✅ RESOLVED — entire batch landed (commits 2d21b13 / 0bd0017 / cf4638e / 256d9ec), spot-verified
+2026-06-19. Section A lying-success stubs now return honest NOT_IMPLEMENTED or do real work
+(bind_text/visibility/color/enabled, create_property_binding, apply_style_to_widget, set_animation_*,
+GAS add_ability/grant_ability, add_eqs_context, inventory add_*_functions; bind_on_hovered reimplemented
+on the real ComponentBoundEvent path). Section B save/compile discipline fixed centrally in
+McpSafeAssetSave (compile-on-save for dirty BPs) + 10 CDO-value-loss fixes. Section C widget add_* dedup
+landed (ConstructWidgetForAdd). The per-item 🔴/🟡/🟢 markers below are STALE — kept for history.**
 
 **A. Lying-success stubs — return `success:true` while doing/wiring nothing (fail-fast violation).**
 Fix each to either do the real work or return `SendAutomationError(..., NOT_IMPLEMENTED)`; do NOT
