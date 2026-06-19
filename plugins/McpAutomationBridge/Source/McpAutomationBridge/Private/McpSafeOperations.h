@@ -239,8 +239,8 @@ inline bool McpSafeAssetSave(UObject* Asset)
     // failure then surfaces as a quiet 'false' the caller can turn into a structured error, never
     // a hung editor. Restored on every exit path below (UE builds with exceptions off, so the only
     // exits are the explicit returns).
-    const bool bPrevUnattended = GIsRunningUnattended;
-    GIsRunningUnattended = true;
+    const bool bPrevUnattended = GIsRunningUnattendedScript;
+    GIsRunningUnattendedScript = true;
 
     bool bResult = false;
 
@@ -284,7 +284,7 @@ inline bool McpSafeAssetSave(UObject* Asset)
         }
     }
 
-    GIsRunningUnattended = bPrevUnattended;
+    GIsRunningUnattendedScript = bPrevUnattended;
 
     if (!bResult)
     {
@@ -563,10 +563,10 @@ inline bool McpSafeLevelSave(ULevel* Level, const FString& FullPath, int32 MaxRe
     // checkout/save-failed modal hazard as McpSafeAssetSave (a blocking dialog on this game
     // thread starves the bridge). The verify/retry block below is pure file-existence polling,
     // so the guard only needs to span the one call. Restored immediately after.
-    const bool bPrevUnattended = GIsRunningUnattended;
-    GIsRunningUnattended = true;
+    const bool bPrevUnattended = GIsRunningUnattendedScript;
+    GIsRunningUnattendedScript = true;
     bool bSaveSucceeded = FEditorFileUtils::SaveLevel(Level, *SaveFilename);
-    GIsRunningUnattended = bPrevUnattended;
+    GIsRunningUnattendedScript = bPrevUnattended;
 
     if (bSaveSucceeded)
     {
