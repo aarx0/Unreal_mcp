@@ -2331,9 +2331,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             Position.Y = GetJsonNumberField(Payload, TEXT("posY"), 0.0);
             bHavePosition = true;
         }
+        else if (Payload->HasField(TEXT("x")) || Payload->HasField(TEXT("y")))
+        {
+            Position.X = GetJsonNumberField(Payload, TEXT("x"), 0.0);
+            Position.Y = GetJsonNumberField(Payload, TEXT("y"), 0.0);
+            bHavePosition = true;
+        }
         if (!bHavePosition)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing position: provide position:{x,y} or posX/posY"), TEXT("MISSING_PARAMETER"));
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing position: provide position:{x,y}, posX/posY, or x/y"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
