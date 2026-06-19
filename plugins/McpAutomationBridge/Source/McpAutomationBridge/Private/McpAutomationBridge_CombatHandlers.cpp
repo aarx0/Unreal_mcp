@@ -398,18 +398,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_weapon_mesh
     if (SubAction == TEXT("configure_weapon_mesh"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString MeshPath = GetStringFieldCombat(Payload, TEXT("weaponMeshPath"));
         if (!MeshPath.IsEmpty())
@@ -440,18 +430,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_weapon_sockets
     if (SubAction == TEXT("configure_weapon_sockets"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         // Add socket name variables to Blueprint
         FString MuzzleSocket = GetStringFieldCombat(Payload, TEXT("muzzleSocketName"), TEXT("Muzzle"));
@@ -494,18 +474,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // set_weapon_stats
     if (SubAction == TEXT("set_weapon_stats"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double BaseDamage = GetNumberFieldCombat(Payload, TEXT("baseDamage"), 25.0);
         double FireRate = GetNumberFieldCombat(Payload, TEXT("fireRate"), 600.0);
@@ -566,18 +536,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_hitscan
     if (SubAction == TEXT("configure_hitscan"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         bool bHitscanEnabled = GetBoolFieldCombat(Payload, TEXT("hitscanEnabled"), true);
         FString TraceChannel = GetStringFieldCombat(Payload, TEXT("traceChannel"), TEXT("Visibility"));
@@ -627,18 +587,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_projectile
     if (SubAction == TEXT("configure_projectile"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString ProjectileClass = GetStringFieldCombat(Payload, TEXT("projectileClass"));
         double ProjectileSpeed = GetNumberFieldCombat(Payload, TEXT("projectileSpeed"), 5000.0);
@@ -681,18 +631,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_spread_pattern
     if (SubAction == TEXT("configure_spread_pattern"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString PatternType = GetStringFieldCombat(Payload, TEXT("spreadPattern"), TEXT("Random"));
         double SpreadIncrease = GetNumberFieldCombat(Payload, TEXT("spreadIncrease"), 0.5);
@@ -747,18 +687,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_recoil_pattern
     if (SubAction == TEXT("configure_recoil_pattern"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double RecoilPitch = GetNumberFieldCombat(Payload, TEXT("recoilPitch"), 1.0);
         double RecoilYaw = GetNumberFieldCombat(Payload, TEXT("recoilYaw"), 0.3);
@@ -808,18 +738,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_aim_down_sights
     if (SubAction == TEXT("configure_aim_down_sights"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         bool bAdsEnabled = GetBoolFieldCombat(Payload, TEXT("adsEnabled"), true);
         double AdsFov = GetNumberFieldCombat(Payload, TEXT("adsFov"), 60.0);
@@ -954,18 +874,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_projectile_movement
     if (SubAction == TEXT("configure_projectile_movement"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         UProjectileMovementComponent* MovementComp = GetOrCreateSCSComponent<UProjectileMovementComponent>(Blueprint, TEXT("ProjectileMovement"));
         if (MovementComp)
@@ -993,18 +903,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_projectile_collision
     if (SubAction == TEXT("configure_projectile_collision"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         USphereComponent* CollisionComp = GetOrCreateSCSComponent<USphereComponent>(Blueprint, TEXT("CollisionComponent"));
         if (CollisionComp)
@@ -1039,18 +939,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_projectile_homing
     if (SubAction == TEXT("configure_projectile_homing"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         UProjectileMovementComponent* MovementComp = GetOrCreateSCSComponent<UProjectileMovementComponent>(Blueprint, TEXT("ProjectileMovement"));
         if (MovementComp)
@@ -1148,18 +1038,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_damage_execution
     if (SubAction == TEXT("configure_damage_execution"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double DamageImpulse = GetNumberFieldCombat(Payload, TEXT("damageImpulse"), 500.0);
         double CriticalMultiplier = GetNumberFieldCombat(Payload, TEXT("criticalMultiplier"), 2.0);
@@ -1209,18 +1089,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // setup_hitbox_component
     if (SubAction == TEXT("setup_hitbox_component"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString HitboxType = GetStringFieldCombat(Payload, TEXT("hitboxType"), TEXT("Capsule"));
         FString BoneName = GetStringFieldCombat(Payload, TEXT("hitboxBoneName"), TEXT(""));
@@ -1327,18 +1197,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // setup_reload_system
     if (SubAction == TEXT("setup_reload_system"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         int32 MagazineSize = static_cast<int32>(GetNumberFieldCombat(Payload, TEXT("magazineSize"), 30));
         double ReloadTime = GetNumberFieldCombat(Payload, TEXT("reloadTime"), 2.0);
@@ -1419,18 +1279,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // setup_ammo_system
     if (SubAction == TEXT("setup_ammo_system"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString AmmoType = GetStringFieldCombat(Payload, TEXT("ammoType"), TEXT("Default"));
         int32 MaxAmmo = static_cast<int32>(GetNumberFieldCombat(Payload, TEXT("maxAmmo"), 150));
@@ -1501,18 +1351,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // setup_attachment_system
     if (SubAction == TEXT("setup_attachment_system"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         // Parse attachment slots and create actual SceneComponent attach points
         const TArray<TSharedPtr<FJsonValue>>* AttachmentSlotsArray;
@@ -1593,18 +1433,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // setup_weapon_switching
     if (SubAction == TEXT("setup_weapon_switching"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double SwitchInTime = GetNumberFieldCombat(Payload, TEXT("switchInTime"), 0.3);
         double SwitchOutTime = GetNumberFieldCombat(Payload, TEXT("switchOutTime"), 0.2);
@@ -1697,18 +1527,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_muzzle_flash
     if (SubAction == TEXT("configure_muzzle_flash"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString ParticlePath = GetStringFieldCombat(Payload, TEXT("muzzleFlashParticlePath"));
         double Scale = GetNumberFieldCombat(Payload, TEXT("muzzleFlashScale"), 1.0);
@@ -1790,18 +1610,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_tracer
     if (SubAction == TEXT("configure_tracer"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString TracerPath = GetStringFieldCombat(Payload, TEXT("tracerParticlePath"));
         double TracerSpeed = GetNumberFieldCombat(Payload, TEXT("tracerSpeed"), 10000.0);
@@ -1848,18 +1658,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_impact_effects
     if (SubAction == TEXT("configure_impact_effects"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString ParticlePath = GetStringFieldCombat(Payload, TEXT("impactParticlePath"));
         FString SoundPath = GetStringFieldCombat(Payload, TEXT("impactSoundPath"));
@@ -1908,18 +1708,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_shell_ejection
     if (SubAction == TEXT("configure_shell_ejection"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString ShellMeshPath = GetStringFieldCombat(Payload, TEXT("shellMeshPath"));
         double EjectionForce = GetNumberFieldCombat(Payload, TEXT("shellEjectionForce"), 300.0);
@@ -1977,18 +1767,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // create_melee_trace
     if (SubAction == TEXT("create_melee_trace"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString TraceStartSocket = GetStringFieldCombat(Payload, TEXT("meleeTraceStartSocket"), TEXT("WeaponBase"));
         FString TraceEndSocket = GetStringFieldCombat(Payload, TEXT("meleeTraceEndSocket"), TEXT("WeaponTip"));
@@ -2042,18 +1822,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_combo_system
     if (SubAction == TEXT("configure_combo_system"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double ComboWindowTime = GetNumberFieldCombat(Payload, TEXT("comboWindowTime"), 0.5);
         int32 MaxComboCount = static_cast<int32>(GetNumberFieldCombat(Payload, TEXT("maxComboCount"), 3));
@@ -2105,18 +1875,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // create_hit_pause (hitstop)
     if (SubAction == TEXT("create_hit_pause"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double HitPauseDuration = GetNumberFieldCombat(Payload, TEXT("hitPauseDuration"), 0.05);
         double TimeDilation = GetNumberFieldCombat(Payload, TEXT("hitPauseTimeDilation"), 0.1);
@@ -2163,18 +1923,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_hit_reaction
     if (SubAction == TEXT("configure_hit_reaction"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString HitReactionMontage = GetStringFieldCombat(Payload, TEXT("hitReactionMontage"));
         double StunTime = GetNumberFieldCombat(Payload, TEXT("hitReactionStunTime"), 0.5);
@@ -2234,18 +1984,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // setup_parry_block_system
     if (SubAction == TEXT("setup_parry_block_system"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double ParryWindowStart = GetNumberFieldCombat(Payload, TEXT("parryWindowStart"), 0.0);
         double ParryWindowEnd = GetNumberFieldCombat(Payload, TEXT("parryWindowEnd"), 0.15);
@@ -2336,18 +2076,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_weapon_trails
     if (SubAction == TEXT("configure_weapon_trails"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString TrailParticlePath = GetStringFieldCombat(Payload, TEXT("weaponTrailParticlePath"));
         FString TrailStartSocket = GetStringFieldCombat(Payload, TEXT("weaponTrailStartSocket"), TEXT("WeaponBase"));
@@ -2405,18 +2135,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // get_combat_info
     if (SubAction == TEXT("get_combat_info"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         TSharedPtr<FJsonObject> Info = McpHandlerUtils::CreateResultObject();
         Info->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
@@ -2508,18 +2228,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_hit_detection -> alias for setup_hitbox_component
     if (SubAction == TEXT("configure_hit_detection"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString HitboxType = GetStringFieldCombat(Payload, TEXT("hitboxType"), TEXT("Capsule"));
         double DamageMultiplier = GetNumberFieldCombat(Payload, TEXT("damageMultiplier"), 1.0);
@@ -2553,18 +2263,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // get_combat_stats -> alias for get_combat_info
     if (SubAction == TEXT("get_combat_stats"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         TSharedPtr<FJsonObject> Info = McpHandlerUtils::CreateResultObject();
         Info->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
@@ -2643,18 +2343,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // apply_damage - adds damage application variables to a blueprint
     if (SubAction == TEXT("apply_damage"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double DamageAmount = GetNumberFieldCombat(Payload, TEXT("damageAmount"), 25.0);
         FString DamageTypeName = GetStringFieldCombat(Payload, TEXT("damageType"), TEXT("Default"));
@@ -2689,18 +2379,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // heal - adds healing variables to a blueprint
     if (SubAction == TEXT("heal"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double HealAmount = GetNumberFieldCombat(Payload, TEXT("healAmount"), 25.0);
         double MaxHealth = GetNumberFieldCombat(Payload, TEXT("maxHealth"), 100.0);
@@ -2738,18 +2418,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // create_shield - adds shield/barrier variables to a blueprint
     if (SubAction == TEXT("create_shield"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double ShieldAmount = GetNumberFieldCombat(Payload, TEXT("shieldAmount"), 50.0);
         double MaxShield = GetNumberFieldCombat(Payload, TEXT("maxShield"), 100.0);
@@ -2797,18 +2467,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // modify_armor - adds armor/damage reduction variables to a blueprint
     if (SubAction == TEXT("modify_armor"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double ArmorValue = GetNumberFieldCombat(Payload, TEXT("armorValue"), 50.0);
         double DamageReduction = GetNumberFieldCombat(Payload, TEXT("damageReduction"), 0.25);

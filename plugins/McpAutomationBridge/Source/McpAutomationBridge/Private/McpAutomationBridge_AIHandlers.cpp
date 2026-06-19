@@ -662,15 +662,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         FString ControllerPath = GetStringFieldAI(Payload, TEXT("controllerPath"));
         FString BehaviorTreePath = GetStringFieldAI(Payload, TEXT("behaviorTreePath"));
 
-        // CRITICAL: Remove DoesAssetExist pre-check - newly created assets may not yet be
-        // indexed in the asset registry. Rely on LoadObject null-check instead.
-        UBlueprint* ControllerBP = LoadObject<UBlueprint>(nullptr, *ControllerPath);
-        if (!ControllerBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Controller blueprint not found: %s"), *ControllerPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *ControllerBP = ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
+        if (!ControllerBP) return true;
 
         UBehaviorTree* BT = LoadObject<UBehaviorTree>(nullptr, *BehaviorTreePath);
         if (!BT)
@@ -805,15 +798,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             return true;
         }
 
-        // CRITICAL: Remove DoesAssetExist pre-check - newly created assets may not yet be
-        // indexed in the asset registry. Rely on LoadObject null-check instead.
-        UBlueprint* ControllerBP = LoadObject<UBlueprint>(nullptr, *ControllerPath);
-        if (!ControllerBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("AI Controller not found: %s"), *ControllerPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *ControllerBP = ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
+        if (!ControllerBP) return true;
 
         UBlackboardData* BB = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
         if (!BB)
@@ -1783,14 +1769,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             return true;
         }
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
-                                TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
         if (!SCS)
@@ -1836,14 +1816,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             return true;
         }
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
-                                TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         // Get sight config parameters
         double SightRadius = GetNumberFieldAI(Payload, TEXT("sightRadius"), 3000.0);
@@ -1929,14 +1903,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             return true;
         }
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
-                                TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double HearingRange = GetNumberFieldAI(Payload, TEXT("hearingRange"), 3000.0);
         const TSharedPtr<FJsonObject>* HearingConfigObj = nullptr;
@@ -2013,14 +1981,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             return true;
         }
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
-                                TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double MaxAge = 10.0;
         const TSharedPtr<FJsonObject>* DamageConfigObj = nullptr;
@@ -2094,14 +2056,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             return true;
         }
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
-                                TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         bool bAppliedToGenericTeamAgent = false;
         if (Blueprint->GeneratedClass)
@@ -3335,19 +3291,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
     if (SubAction == TEXT("set_ai_perception"))
     {
         FString ControllerPath = GetStringFieldAI(Payload, TEXT("controllerPath"));
-        if (ControllerPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing controllerPath"), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* ControllerBP = LoadObject<UBlueprint>(nullptr, *ControllerPath);
-        if (!ControllerBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Controller blueprint not found: %s"), *ControllerPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *ControllerBP = ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
+        if (!ControllerBP) return true;
 
         if (!ControllerBP->SimpleConstructionScript)
         {
@@ -3495,19 +3440,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
     if (SubAction == TEXT("create_nav_modifier"))
     {
         FString BlueprintPath = GetStringFieldAI(Payload, TEXT("blueprintPath"));
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         if (!Blueprint->SimpleConstructionScript)
         {
@@ -3590,19 +3524,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
     if (SubAction == TEXT("set_ai_movement"))
     {
         FString BlueprintPath = GetStringFieldAI(Payload, TEXT("blueprintPath"));
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         if (!Blueprint->SimpleConstructionScript)
         {
@@ -3831,13 +3754,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             return true;
         }
 
-        UBlueprint* ControllerBP = LoadObject<UBlueprint>(nullptr, *ControllerPath);
-        if (!ControllerBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Blueprint not found: %s"), *ControllerPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *ControllerBP = ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket);
+        if (!ControllerBP) return true;
 
         if (!ControllerBP->SimpleConstructionScript)
         {
@@ -4048,14 +3966,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             FocusActorName = GetStringFieldAI(Payload, TEXT("targetActor"));
         }
 
-        // Load the blueprint - LoadObject handles path resolution
-        UBlueprint* ControllerBP = LoadObject<UBlueprint>(nullptr, *ControllerPath);
-        if (!ControllerBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Controller blueprint not found: %s"), *ControllerPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *ControllerBP = ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
+        if (!ControllerBP) return true;
 
         // Add a FocusActor variable to the BP
         FEdGraphPinType PinType;
@@ -4078,20 +3990,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
     if (SubAction == TEXT("clear_focus"))
     {
         FString ControllerPath = GetStringFieldAI(Payload, TEXT("controllerPath"));
-        if (ControllerPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing controllerPath"), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        // Load blueprint - rely on LoadObject without DoesAssetExist pre-check
-        UBlueprint* ControllerBP = LoadObject<UBlueprint>(nullptr, *ControllerPath);
-        if (!ControllerBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Controller blueprint not found: %s"), *ControllerPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *ControllerBP = ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
+        if (!ControllerBP) return true;
 
         FBlueprintEditorUtils::RemoveMemberVariable(ControllerBP, TEXT("FocusActor"));
 
@@ -4300,14 +4200,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             return true;
         }
 
-        // Load assets directly - DoesAssetExist pre-check can fail on newly created assets
-        UBlueprint* ControllerBP = LoadObject<UBlueprint>(nullptr, *ControllerPath);
-        if (!ControllerBP)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Controller blueprint not found: %s"), *ControllerPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *ControllerBP = ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
+        if (!ControllerBP) return true;
 
         UBehaviorTree* BT = LoadObject<UBehaviorTree>(nullptr, *BTPath);
         if (!BT)

@@ -285,13 +285,8 @@ static bool HandleConfigureNavMeshSettings(
             return true;
         }
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            Self->SendAutomationResponse(Socket, RequestId, false,
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), nullptr, TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = Self->ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+        if (!Blueprint) return true;
     }
 
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
@@ -454,13 +449,8 @@ static bool HandleSetNavAgentProperties(
             return true;
         }
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            Self->SendAutomationResponse(Socket, RequestId, false,
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), nullptr, TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = Self->ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+        if (!Blueprint) return true;
     }
 
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
@@ -572,13 +562,8 @@ static bool HandleRebuildNavigation(
             return true;
         }
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            Self->SendAutomationResponse(Socket, RequestId, false,
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), nullptr, TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = Self->ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+        if (!Blueprint) return true;
     }
 
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
@@ -673,13 +658,8 @@ static bool HandleCreateNavModifierComponent(
     }
 
     // Load the Blueprint
-    UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-    if (!Blueprint)
-    {
-        Self->SendAutomationResponse(Socket, RequestId, false,
-            FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), nullptr, TEXT("NOT_FOUND"));
-        return true;
-    }
+    UBlueprint *Blueprint = Self->ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    if (!Blueprint) return true;
 
     USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
     if (!SCS)
@@ -1543,13 +1523,8 @@ static bool HandleGetNavigationInfo(
             return true;
         }
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            Self->SendAutomationResponse(Socket, RequestId, false,
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), nullptr, TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = Self->ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+        if (!Blueprint) return true;
     }
 
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;

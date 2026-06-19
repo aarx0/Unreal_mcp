@@ -672,19 +672,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("configure_capsule_component"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         float CapsuleRadius = static_cast<float>(GetNumberFieldChar(Payload, TEXT("capsuleRadius"), 42.0));
         float CapsuleHalfHeight = static_cast<float>(GetNumberFieldChar(Payload, TEXT("capsuleHalfHeight"), 96.0));
@@ -724,19 +713,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("configure_mesh_component"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString SkeletalMeshPath = GetStringFieldChar(Payload, TEXT("skeletalMeshPath"));
         FString AnimBPPath = GetStringFieldChar(Payload, TEXT("animBlueprintPath"));
@@ -837,19 +815,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("configure_camera_component"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         float SpringArmLength = static_cast<float>(GetNumberFieldChar(Payload, TEXT("springArmLength"), 300.0));
         bool UsePawnControlRotation = GetBoolFieldChar(Payload, TEXT("cameraUsePawnControlRotation"), true);
@@ -937,19 +904,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("configure_movement_speeds"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         ACharacter* CharCDO = Blueprint->GeneratedClass 
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
@@ -1027,19 +983,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("configure_jump"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         ACharacter* CharCDO = Blueprint->GeneratedClass 
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
@@ -1085,19 +1030,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("configure_rotation"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         ACharacter* CharCDO = Blueprint->GeneratedClass 
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
@@ -1142,19 +1076,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("add_custom_movement_mode"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString ModeName = GetStringFieldChar(Payload, TEXT("modeName"), TEXT("Custom"));
         int32 ModeId = static_cast<int32>(GetNumberFieldChar(Payload, TEXT("modeId"), 0));
@@ -1219,19 +1142,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("configure_nav_movement"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         ACharacter* CharCDO = Blueprint->GeneratedClass 
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
@@ -1277,19 +1189,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("setup_mantling"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         float MantleHeight = static_cast<float>(GetNumberFieldChar(Payload, TEXT("mantleHeight"), 200.0));
         float MantleReach = static_cast<float>(GetNumberFieldChar(Payload, TEXT("mantleReachDistance"), 100.0));
@@ -1343,19 +1244,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("setup_vaulting"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         float VaultHeight = static_cast<float>(GetNumberFieldChar(Payload, TEXT("vaultHeight"), 100.0));
         float VaultDepth = static_cast<float>(GetNumberFieldChar(Payload, TEXT("vaultDepth"), 100.0));
@@ -1409,19 +1299,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("setup_climbing"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         float ClimbSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("climbSpeed"), 300.0));
         FString ClimbableTag = GetStringFieldChar(Payload, TEXT("climbableTag"), TEXT("Climbable"));
@@ -1488,19 +1367,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("setup_sliding"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         float SlideSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("slideSpeed"), 800.0));
         float SlideDuration = static_cast<float>(GetNumberFieldChar(Payload, TEXT("slideDuration"), 1.0));
@@ -1555,19 +1423,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("setup_wall_running"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         float WallRunSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("wallRunSpeed"), 600.0));
         float WallRunDuration = static_cast<float>(GetNumberFieldChar(Payload, TEXT("wallRunDuration"), 2.0));
@@ -1632,19 +1489,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("setup_grappling"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         float GrappleRange = static_cast<float>(GetNumberFieldChar(Payload, TEXT("grappleRange"), 2000.0));
         float GrappleSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("grappleSpeed"), 1500.0));
@@ -1703,19 +1549,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("setup_footstep_system"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         bool Enabled = GetBoolFieldChar(Payload, TEXT("footstepEnabled"), true);
         FString SocketLeft = GetStringFieldChar(Payload, TEXT("footstepSocketLeft"), TEXT("foot_l"));
@@ -1760,19 +1595,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("map_surface_to_sound"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString SurfaceType = GetStringFieldChar(Payload, TEXT("surfaceType"));
         // Add a Map variable for surface-to-sound lookup if not exists
@@ -1805,19 +1629,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("configure_footstep_fx"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         float VolumeMultiplier = static_cast<float>(GetNumberFieldChar(Payload, TEXT("volumeMultiplier"), 1.0));
         float ParticleScale = static_cast<float>(GetNumberFieldChar(Payload, TEXT("particleScale"), 1.0));
@@ -1862,19 +1675,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("get_character_info"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1976,19 +1778,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("setup_movement"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         ACharacter* CharCDO = Blueprint->GeneratedClass
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
@@ -2024,19 +1815,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("set_walk_speed"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double WalkSpeed = GetNumberFieldChar(Payload, TEXT("walkSpeed"), 600.0);
 
@@ -2068,19 +1848,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("set_jump_height"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double JumpHeight = GetNumberFieldChar(Payload, TEXT("jumpHeight"), 600.0);
 
@@ -2112,19 +1881,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("set_gravity_scale"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double GravityScale = GetNumberFieldChar(Payload, TEXT("gravityScale"), 1.0);
 
@@ -2156,19 +1914,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("set_ground_friction"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double GroundFriction = GetNumberFieldChar(Payload, TEXT("groundFriction"), 8.0);
 
@@ -2200,19 +1947,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("set_braking_deceleration"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double Deceleration = GetNumberFieldChar(Payload, TEXT("brakingDeceleration"), 2048.0);
 
@@ -2246,19 +1982,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("configure_crouch"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double CrouchSpeed = GetNumberFieldChar(Payload, TEXT("crouchSpeed"), 300.0);
         double CrouchedHalfHeight = GetNumberFieldChar(Payload, TEXT("crouchedHalfHeight"), 44.0);
@@ -2299,19 +2024,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("configure_sprint"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         double SprintSpeed = GetNumberFieldChar(Payload, TEXT("sprintSpeed"), 900.0);
 

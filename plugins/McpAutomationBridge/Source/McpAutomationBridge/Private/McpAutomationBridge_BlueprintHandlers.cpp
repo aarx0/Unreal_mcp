@@ -1080,6 +1080,26 @@ static void DiagnosticPatternChecks(const FString &CleanAction,
  * @param RequestingSocket WebSocket connection.
  * @return True if handled.
  */
+UBlueprint *UMcpAutomationBridgeSubsystem::ResolveBlueprintOrError(
+    const FString &BlueprintPath, const FString &RequestId,
+    TSharedPtr<FMcpBridgeWebSocket> Socket, const TCHAR *FieldName) {
+  if (BlueprintPath.IsEmpty()) {
+    SendAutomationError(Socket, RequestId,
+                        FString::Printf(TEXT("Missing %s."), FieldName),
+                        TEXT("INVALID_ARGUMENT"));
+    return nullptr;
+  }
+  UBlueprint *Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
+  if (!Blueprint) {
+    SendAutomationError(
+        Socket, RequestId,
+        FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
+        TEXT("NOT_FOUND"));
+    return nullptr;
+  }
+  return Blueprint;
+}
+
 bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,

@@ -437,19 +437,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     // add_ability_system_component
     if (SubAction == TEXT("add_ability_system_component"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString ComponentName = GetStringFieldGAS(Payload, TEXT("componentName"), TEXT("AbilitySystemComponent"));
 
@@ -479,19 +468,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     // configure_asc
     if (SubAction == TEXT("configure_asc"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         FString ComponentName = GetStringFieldGAS(Payload, TEXT("componentName"), TEXT("AbilitySystemComponent"));
         FString ReplicationMode = GetStringFieldGAS(Payload, TEXT("replicationMode"), TEXT("Full"));
@@ -596,13 +574,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         float DefaultValue = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("defaultValue"), 0.0));
 
@@ -744,13 +717,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         float MinValue = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("minValue"), 0.0));
         float MaxValue = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("maxValue"), 100.0));
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         // Verify this is an AttributeSet blueprint
         if (!Blueprint->GeneratedClass || !Blueprint->GeneratedClass->IsChildOf(UAttributeSet::StaticClass()))

@@ -586,13 +586,8 @@ static bool HandleCreateSplineComponent(
         return true;
     }
 
-    UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-    if (!Blueprint)
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), nullptr, TEXT("NOT_FOUND"));
-        return true;
-    }
+    UBlueprint* Blueprint = Subsystem->ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    if (!Blueprint) return true;
 
     USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
     if (!SCS)
@@ -674,13 +669,8 @@ static bool HandleSetReplication(
         return true;
     }
 
-    UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-    if (!Blueprint)
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), nullptr, TEXT("NOT_FOUND"));
-        return true;
-    }
+    UBlueprint* Blueprint = Subsystem->ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    if (!Blueprint) return true;
 
     if (!Blueprint->GeneratedClass)
     {
@@ -737,13 +727,8 @@ static bool HandleCreateReplicatedVariable(
         return true;
     }
 
-    UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-    if (!Blueprint)
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), nullptr, TEXT("NOT_FOUND"));
-        return true;
-    }
+    UBlueprint* Blueprint = Subsystem->ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    if (!Blueprint) return true;
 
     // Determine pin type
     FEdGraphPinType PinType;
@@ -829,13 +814,8 @@ static bool HandleSetNetUpdateFrequency(
         return true;
     }
 
-    UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-    if (!Blueprint)
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), nullptr, TEXT("NOT_FOUND"));
-        return true;
-    }
+    UBlueprint* Blueprint = Subsystem->ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    if (!Blueprint) return true;
 
     if (!Blueprint->GeneratedClass)
     {
@@ -898,13 +878,8 @@ static bool HandleCreateRPC(
         return true;
     }
 
-    UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-    if (!Blueprint)
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), nullptr, TEXT("NOT_FOUND"));
-        return true;
-    }
+    UBlueprint* Blueprint = Subsystem->ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    if (!Blueprint) return true;
 
     // Create new function graph
     UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
@@ -996,13 +971,8 @@ static bool HandleConfigureNetCullDistance(
         return true;
     }
 
-    UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-    if (!Blueprint)
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), nullptr, TEXT("NOT_FOUND"));
-        return true;
-    }
+    UBlueprint* Blueprint = Subsystem->ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    if (!Blueprint) return true;
 
     if (!Blueprint->GeneratedClass)
     {

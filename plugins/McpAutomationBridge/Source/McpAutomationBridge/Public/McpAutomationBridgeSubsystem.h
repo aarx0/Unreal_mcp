@@ -120,6 +120,15 @@ public:
                             const FString &RequestId, const FString &Message,
                             const FString &ErrorCode);
 
+  // Loads the UBlueprint named by BlueprintPath, or sends the standard error and returns
+  // nullptr: INVALID_ARGUMENT when BlueprintPath is empty, NOT_FOUND when it fails to load.
+  // Collapses the load-or-error prologue hand-rolled across handler families; callers do
+  // `UBlueprint* BP = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket); if (!BP) return true;`.
+  UBlueprint *ResolveBlueprintOrError(const FString &BlueprintPath,
+                                      const FString &RequestId,
+                                      TSharedPtr<FMcpBridgeWebSocket> Socket,
+                                      const TCHAR *FieldName = TEXT("blueprintPath"));
+
   /**
    * Send a progress update message during long-running operations.
    * This keeps the request alive by extending its timeout on the server side.
