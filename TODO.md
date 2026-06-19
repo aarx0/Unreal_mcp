@@ -731,12 +731,20 @@ hundreds of sites, a different risk class than dead-code deletion. Do deliberate
 - [ ] **(med) compile/save tail** (`Mark…Modified` + `McpSafeCompileBlueprint` + `McpSafeAssetSave`) hand-written everywhere with
   INCONSISTENT mark/compile/save choices (a correctness risk) → one `McpFinalizeBlueprint(BP, bStructural, bSave)` in McpSafeOperations.h.
 - [ ] **(med) success tail** (`AddVerification` + `SendAutomationResponse(true)`) → `SendSuccessWithVerification(Socket, RequestId, msg, Result, VerifyObj)`.
-- [ ] **(low) per-file JSON-getter alias macros** (`GetStringFieldGAS`/`…Combat`/`…AI`… in ~10 files) — drop, call the shared
-  `GetJsonStringField` etc. directly (~28 #defines of pure churn).
-- [ ] **(low) error-code string literals** (`TEXT("INVALID_ARGUMENT")` etc. at 1000+ sites, typo-prone, undiscoverable) →
-  `namespace McpErrorCode { constexpr … }` + small senders (SendMissingParam/SendNotFound). Do opportunistically.
-- [ ] **(low) two-headers path helpers** — McpHandlerUtils path validators vs McpAutomationBridgeHelpers `IsValidAssetPath`/
-  `SanitizeProjectRelativePath` overlap; consolidate into Helpers.h, verify each before removing.
+- [x] **DONE d57ffb5 (28 macros removed, 1,184 call sites renamed). per-file JSON-getter alias macros** — dropped
+  the per-file `GetStringFieldGAS`/`…Combat`/`…AI`… aliases (all pure 1:1 renames) and call the shared
+  `GetJsonStringField`/`Number`/`Bool`/`IntField` directly. (Aaron: the `#define` indirection obscured that they were all the same fn.)
+- [ ] **DEFERRED (Aaron 2026-06-19: "add to TODO, see if it comes up later"). error-code string literals** —
+  `TEXT("INVALID_ARGUMENT")` etc. at 1000+ sites across THREE mechanisms (SendAutomationError arg, manual `errorCode`
+  field, BuildErrorResponse `code` field). FINDING that downgraded it: nothing matches on the codes — no TS/JS/Py
+  client exists (the only consumer is the LLM reading responses), so there's no typo-safety-with-teeth, only
+  consistency/discoverability; the "do we match on strings / have a taxonomy?" gate came back NO on both. If revisited,
+  prefer the LIGHT version: define `namespace McpErrorCode { inline constexpr … }` as the canonical discoverable set +
+  adopt opportunistically — NOT a 1,000-site/3-mechanism sweep (and don't leave it half-and-half).
+- [x] **DONE d57ffb5. two-headers path helpers** — `McpHandlerUtils::ValidateAssetPath` was a near-duplicate of
+  Helpers.h `SanitizeProjectRelativePath` (same reject-abs/reject-".."/require-root logic + identical warnings);
+  deleted it + migrated its 3 callers to the canonical one. (Aaron: divergent duplicates are a real bug class — the
+  LLM updates one copy and misses the other.) Note: `IsValidAssetPath` is complementary (validation, not sanitization), left as-is.
 
 ### 2026-06-18b — Friction found building the HUD `bind_event_to_delegate` (live MCP authoring)
 - [x] **`MakePinType` PC_Float → INT — FIXED (Live-Coding-only; needs a full rebuild to persist).**
