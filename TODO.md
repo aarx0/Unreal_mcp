@@ -659,14 +659,14 @@ The "structural blueprint change saved WITHOUT a compile (stale generated class/
   `configure_equipment_visuals`/`configure_loot_drop`/`configure_inventory_weight`/`configure_inventory_slots`
   (fallback now writes slotCount, not 0 — verified live: MaxSlots=15); AI `assign_behavior_tree`/`assign_blackboard`;
   Interaction `configure_door_properties`.
-- [ ] **Structural-only (~50) — DEFERRED (🟡, self-heal).** A var/function/dispatcher/SCS-component/state-machine
-  is added then saved without compile, so the on-disk generated class is momentarily stale — BUT the definition lives
-  in `NewVariables`/`FunctionGraphs` and the editor recompiles the blueprint on next load, so it self-heals (only an
-  in-session staleness window before any recompile). Full per-site list in the audit output. Two ways to close it:
-  (a) ~50 targeted `McpSafeCompileBlueprint` inserts before each save, or (b) **the elegant one-place fix** — make
-  `McpSafeAssetSave` compile a dirty UBlueprint before persisting (fixes all + future + the staleness window in one
-  spot, but it's a high-blast-radius change to the core save path used everywhere — needs careful verification, do
-  deliberately/with Aaron's ok, not at 3am). Recommend (b).
+- [x] **Structural-only (~50) — FIXED `cf4638e` via the one-place change (Aaron chose (b)).** `McpSafeAssetSave`
+  now compiles a `BS_Dirty` UBlueprint before persisting, so any structural change saved without an explicit compile
+  gets a fresh generated class on disk + closes the in-session staleness window + auto-covers future handlers. Gated
+  to `BS_Dirty` (already-compiled / value-only saves untouched). Inlined `FKismetEditorUtilities::CompileBlueprint`
+  (can't call `McpSafeCompileBlueprint` — it's in McpAutomationBridgeHelpers.h which includes McpSafeOperations.h →
+  circular). **Verified the key risk** (save-triggered recompile resetting directly-written CDO values does NOT
+  happen — reinstancing preserves them): set_default value survived 2 recompiles, configure_inventory_slots→15,
+  widget add persisted, normal authoring unaffected.
 
 ### 2026-06-18b — Friction found building the HUD `bind_event_to_delegate` (live MCP authoring)
 - [x] **`MakePinType` PC_Float → INT — FIXED (Live-Coding-only; needs a full rebuild to persist).**
