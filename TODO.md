@@ -586,6 +586,24 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### 2026-06-19e — Can't read UInputMappingContext.Mappings via the bridge (generic get_property is blind)
+Hit while diagnosing a "heal input does nothing" report. `inspect get_property {objectPath:<IMC>, propertyName:"Mappings"}`
+returns `value:[]` for EVERY IMC (IMC_CharacterContext / _Inverted / GameCommands) even though the game has
+working bindings — generic reflection can't serialize the `TArray<FEnhancedActionKeyMapping>` (same blind
+spot as python `get_editor_property('mappings')`). No exposed `get_input_info` action in the running build
+(ToolSearch finds none) though memory says one was pushed to dev (1377b81) — so it either didn't make this
+build or isn't registered. Net: no way to read which key an IA is bound to. Fix: expose/verify a
+`get_input_info` (IMC -> [{action, key, modifiers, triggers}]) readback; until then IMC bindings can only be
+confirmed by opening the asset in-editor (or by simulate_input through PIE and observing the effect).
+
+### 2026-06-19f — No bridge readback for a level's GameMode / default pawn (had to use execute_python)
+Diagnosing "does L_CombatGym spawn BP_CPP_Character" needed the level's World Settings GameModeOverride and,
+when null, the project GlobalDefaultGameMode + its DefaultPawnClass. `inspect get_world_settings` returns only
+worldName/levelName (no gamemode), and there's no project-settings readback for the default gamemode. Resorted
+to execute_python (load_asset -> get_world_settings().default_game_mode; GameMapsSettings.global_default_game_mode
+-> CDO.default_pawn_class). Fix: add a get_level_info / get_world_info readback returning
+{gameModeOverride, effectiveGameMode, defaultPawnClass} so "what pawn does map X use" doesn't need python.
+
 ### 2026-06-19c — Graph-authoring papercuts hit wiring the HUD pull-binding (BP_CPP_Character / WBP_HUD)
 Found while converting the player-HUD binding to a self-contained pull model. None block work (all had
 workarounds) but each cost round-trips:
