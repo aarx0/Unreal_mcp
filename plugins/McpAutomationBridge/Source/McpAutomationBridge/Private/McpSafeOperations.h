@@ -28,6 +28,7 @@
 #include "Engine/Level.h"
 #include "Engine/World.h"
 #include "Engine/Blueprint.h"
+#include "Kismet2/KismetEditorUtilities.h" // FKismetEditorUtilities::CompileBlueprint (compile-on-save for dirty blueprints)
 #include "Engine/LevelStreaming.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/WorldSettings.h"
@@ -176,6 +177,25 @@ inline bool McpSafeAssetSave(UObject* Asset)
         Package->HasAnyFlags(RF_Transient))
     {
         return false;
+    }
+
+    // Compile-on-save for a structurally-dirty Blueprint: if a handler structurally modified the
+    // blueprint (new var/function/component/etc. -> Status BS_Dirty) but did not compile, the
+    // generated class/CDO on disk would be stale until the editor recompiles on next load. Compile
+    // here so the persisted class reflects the in-memory structure. Gated to BS_Dirty only, so
+    // already-compiled blueprints (the common case: handlers that compiled themselves, or value-only
+    // edits) are untouched and there is no needless recompile. CDO default values written directly
+    // before this point are preserved across the recompile by reinstancing (same as the editor's own
+    // set-default-then-save flow). FKismetEditorUtilities::CompileBlueprint dispatches to the correct
+    // compiler for UBlueprint subclasses (incl. UWidgetBlueprint/UAnimBlueprint).
+    if (UBlueprint* BlueprintToCompile = Cast<UBlueprint>(AssetToSave))
+    {
+        if (BlueprintToCompile->Status == EBlueprintStatus::BS_Dirty)
+        {
+            FlushRenderingCommands();
+            FKismetEditorUtilities::CompileBlueprint(BlueprintToCompile, EBlueprintCompileOptions::SkipGarbageCollection);
+            FlushRenderingCommands();
+        }
     }
 
     Package->SetDirtyFlag(true);
