@@ -668,6 +668,46 @@ The "structural blueprint change saved WITHOUT a compile (stale generated class/
   happen — reinstancing preserves them): set_default value survived 2 recompiles, configure_inventory_slots→15,
   widget add persisted, normal authoring unaffected.
 
+### 2026-06-19 — Overnight autonomous pass: game architecture deep-dive + bridge robustness sweep
+Aaron green-lit an overnight budget-burn ("Both": game audit + bridge hardening) under a read-only-game / verified-low-risk-bridge contract.
+
+**Game C++ (read-only, REPORT only — no game code changed):** 42-agent deep-dive of `Source/RhyaTowerOfWishes`,
+adversarially verified. 104 findings (8 bug / 34 robustness / 17 simplify / 34 best-practice / 11 design); report
+written to `Saved/game_architecture_review.md` (gitignored) with a curated top-priorities section. Headline real
+issues for Aaron: `AC_HitStop` resolves owner in ctor (null) + `materialInstance` no `UPROPERTY` (GC dangling);
+`AttributeComponent` percent getters div-by-zero → NaN to HUD; `Weapon::OnBoxOverlap` null-derefs for a non-player
+wielder; `GetCurrentAttack` combo off-by-one; Enemy `DirectionalHitReact` always "FromRight". Caveats flagged
+(weapon `damage` likely BP-set; `RotationRate 50000` maybe intended).
+
+**Bridge robustness sweep (4 fresh classes, 16-agent workflow, adversarially verified): 11 confirmed. FIXED + built + committed:**
+- [x] **null-deref: 9 widget layout/styling subactions** deref `WidgetBP->WidgetTree` after only `if (!WidgetBP)`.
+  Hardened ALL bare `if (!WidgetBP)` guards → `if (!WidgetBP || !WidgetBP->WidgetTree)` (covers the 9 + makes the file
+  consistent with the 43 already-guarded sites; fail-safe — a null-WidgetTree WBP is malformed).
+- [x] **null-deref: `get_inventory_info`** `Blueprint->GeneratedClass->GetName()` + **`create_node` CallFunction**
+  `Blueprint->GeneratedClass->FindFunctionByName` — guarded GeneratedClass (matching each file's other sites).
+- [x] **modal-hang (bridge-bricking): `create_animation_bp`, generic `CREATE_ASSET` (EditorFunction), `create_material_instance`**
+  — added `DoesAssetExist(SavePath/Name)` pre-check before `IAssetTools::CreateAsset` (which pops an "overwrite?" modal
+  headlessly → frozen game thread → force-kill). Same class as the known audio hang.
+- [ ] **DEFERRED modal-hang (5 dormant anim/save handlers — same fix, low likelihood for this combat project):**
+  `create_aim_offset` (AnimationHandlers ~3855), `create_pose_library` (~4391), `create_blend_space`/`CreateBlendSpaceAsset`
+  (~320, guard at caller ~723), `HandleCreateAnimBlueprint` (~4660) — each: add `DoesAssetExist(FString::Printf("%s/%s",
+  *SavePath,*Name))` before `CreateAsset`, erroring `ALREADY_EXISTS` (these use the Message/ErrorCode-accumulate style, so
+  wrap the CreateAsset+result block in the `else`, like the create_animation_bp fix). Plus `SAVE_CURRENT_LEVEL`
+  (EditorFunction ~648): `FEditorFileUtils::SaveCurrentLevel()` prompts on an unsaved/read-only level → route through
+  `McpSafeLevelSave` or guard the untitled/unsaved case.
+
+**Function-split (the 🟡 widget-monolith) — PLAN, do by hand in an editor (cut-paste is trivial there; via my
+exact-match edits it's error-prone + high-blast-radius unattended).** `HandleManageWidgetAuthoringAction`
+(~1050–7300) is one giant `if (SubAction.Equals(...))` chain (~90 subactions, order-independent — unique names).
+Cleanest split: extract contiguous spans into member functions `bool HandleWidgetAuthoringPartN(RequestId, Action,
+Payload, RequestingSocket, SubAction, ResultJson)` (member, so `SendAutomation*` stay unqualified; declare N in the
+subsystem header → one full rebuild), each ending `return false;`; main calls them in order, first true wins, final
+unknown-action error after. Natural groups by line: creation/meta (1050–1356), layout panels (1357–1404, 1666–1959,
++ safe_zone/spacer/switcher 6297–6470), leaf widgets (1405–1576, 1960–2095), slot setters (2096–2889, set_font/margin
+6471–6615), bindings (2890–3621, 4597), animations (3622–3892, 6658–6863), templates/composites (3893–4332, 4835–5671,
+6971–7300), tree ops (4333–6293). Behavior-preserving (no reordering). ~1,100 lines already removed by the C dedup;
+this is purely structural.
+
 ### 2026-06-18b — Friction found building the HUD `bind_event_to_delegate` (live MCP authoring)
 - [x] **`MakePinType` PC_Float → INT — FIXED (Live-Coding-only; needs a full rebuild to persist).**
   `McpBlueprintUtils::MakePinType` (McpHandlerUtils.cpp ~682) used the legacy bare `PC_Float` category for

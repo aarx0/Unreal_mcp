@@ -1053,7 +1053,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
         if (UClass *Class = ResolveUClass(MemberClass))
           Func = Class->FindFunctionByName(*MemberName);
       } else {
-        Func = Blueprint->GeneratedClass->FindFunctionByName(*MemberName);
+        Func = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->FindFunctionByName(*MemberName) : nullptr;
         if (!Func) {
           if (UClass *KSL = UKismetSystemLibrary::StaticClass())
             Func = KSL->FindFunctionByName(*MemberName);

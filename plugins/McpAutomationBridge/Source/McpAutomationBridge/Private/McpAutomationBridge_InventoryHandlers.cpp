@@ -2963,7 +2963,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
       Result->SetStringField(TEXT("assetType"), TEXT("Blueprint"));
       Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-      Result->SetStringField(TEXT("className"), Blueprint->GeneratedClass->GetName());
+      Result->SetStringField(TEXT("className"), Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetName() : FString(TEXT("(uncompiled)")));
 
       // Check for inventory/equipment components
       USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;

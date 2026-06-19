@@ -955,6 +955,17 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
       return true;
     }
 
+    // Pre-check: CreateAsset pops an "overwrite?" modal on a path collision, which freezes a
+    // headless bridge (force-kill required). Fail fast on an existing path instead. This is the
+    // generic/most-abusable creation path, so guarding it protects every factory-based create.
+    const FString CreateAssetObjectPath = FString::Printf(TEXT("%s/%s"), *PackagePath, *AssetName);
+    if (UEditorAssetLibrary::DoesAssetExist(CreateAssetObjectPath)) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             FString::Printf(TEXT("Asset already exists: %s"), *CreateAssetObjectPath),
+                             nullptr, TEXT("ALREADY_EXISTS"));
+      return true;
+    }
+
     // Attempt creation
     UObject *NewAsset =
         AssetTools.CreateAsset(AssetName, PackagePath, nullptr, Factory);

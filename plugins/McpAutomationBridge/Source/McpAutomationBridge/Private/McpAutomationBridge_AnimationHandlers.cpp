@@ -622,6 +622,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
 
         FAssetToolsModule &AssetToolsModule =
             FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools");
+        // Pre-check existing asset: IAssetTools::CreateAsset pops an "overwrite?" modal on a
+        // path collision, which freezes a headless bridge (force-kill). Fail fast instead.
+        const FString AnimBpObjectPath = FString::Printf(TEXT("%s/%s"), *SavePath, *Name);
+        if (UEditorAssetLibrary::DoesAssetExist(AnimBpObjectPath)) {
+          Message = FString::Printf(TEXT("Asset already exists: %s"), *AnimBpObjectPath);
+          ErrorCode = TEXT("ALREADY_EXISTS");
+          Resp->SetStringField(TEXT("error"), Message);
+        } else {
         UObject *NewAsset = AssetToolsModule.Get().CreateAsset(
             Name, SavePath, UAnimBlueprint::StaticClass(), Factory);
 
@@ -636,6 +644,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
           Message = TEXT("Failed to create Animation Blueprint asset");
           ErrorCode = TEXT("ASSET_CREATION_FAILED");
           Resp->SetStringField(TEXT("error"), Message);
+        }
         }
         }
       }

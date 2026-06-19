@@ -3955,6 +3955,16 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMaterialInstance(
       NewObject<UMaterialInstanceConstantFactoryNew>();
   Factory->InitialParent = ParentMaterial;
 
+  // Pre-check: CreateAsset pops an "overwrite?" modal on a path collision, which freezes a
+  // headless bridge (force-kill required). Fail fast on an existing path instead.
+  const FString MicObjectPath = FString::Printf(TEXT("%s/%s"), *Path, *Name);
+  if (UEditorAssetLibrary::DoesAssetExist(MicObjectPath)) {
+    SendAutomationResponse(Socket, RequestId, false,
+                           FString::Printf(TEXT("Asset already exists: %s"), *MicObjectPath),
+                           nullptr, TEXT("ALREADY_EXISTS"));
+    return true;
+  }
+
   UObject *NewAsset = AssetTools.CreateAsset(
       Name, Path, UMaterialInstanceConstant::StaticClass(), Factory);
 
