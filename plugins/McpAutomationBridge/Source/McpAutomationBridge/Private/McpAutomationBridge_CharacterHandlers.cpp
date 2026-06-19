@@ -172,7 +172,7 @@
 // - Security validation via IsValidAssetPath() for all blueprint paths.
 // - Blueprint variable defaults use SetBPVarDefaultValue() with Blueprint metadata and CDO reflection.
 // - McpSafeAssetSave() is used directly for UE 5.7+ compatibility.
-// - #define aliases (GetStringFieldChar, etc.) for backward-compatible JSON helpers.
+// - #define aliases (GetJsonStringField, etc.) for backward-compatible JSON helpers.
 // - AddBlueprintVariableChar in anonymous namespace to avoid Unity build collisions.
 //
 // Copyright (c) 2024 MCP Automation Bridge Contributors
@@ -245,9 +245,6 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpCharacterHandlers, Log, All);
 // =============================================================================
 // Use consolidated JSON helpers from McpAutomationBridgeHelpers.h
 // Aliases for backward compatibility with existing code in this file
-#define GetStringFieldChar GetJsonStringField
-#define GetNumberFieldChar GetJsonNumberField
-#define GetBoolFieldChar GetJsonBoolField
 
 // =============================================================================
 // Section 0: Helper Functions
@@ -494,9 +491,9 @@ static FVector GetVectorFromJsonChar(const TSharedPtr<FJsonObject>& Obj)
 {
     if (!Obj.IsValid()) return FVector::ZeroVector;
     return FVector(
-        GetNumberFieldChar(Obj, TEXT("x"), 0.0),
-        GetNumberFieldChar(Obj, TEXT("y"), 0.0),
-        GetNumberFieldChar(Obj, TEXT("z"), 0.0)
+        GetJsonNumberField(Obj, TEXT("x"), 0.0),
+        GetJsonNumberField(Obj, TEXT("y"), 0.0),
+        GetJsonNumberField(Obj, TEXT("z"), 0.0)
     );
 }
 
@@ -510,9 +507,9 @@ static FRotator GetRotatorFromJsonChar(const TSharedPtr<FJsonObject>& Obj)
 {
     if (!Obj.IsValid()) return FRotator::ZeroRotator;
     return FRotator(
-        GetNumberFieldChar(Obj, TEXT("pitch"), 0.0),
-        GetNumberFieldChar(Obj, TEXT("yaw"), 0.0),
-        GetNumberFieldChar(Obj, TEXT("roll"), 0.0)
+        GetJsonNumberField(Obj, TEXT("pitch"), 0.0),
+        GetJsonNumberField(Obj, TEXT("yaw"), 0.0),
+        GetJsonNumberField(Obj, TEXT("roll"), 0.0)
     );
 }
 
@@ -573,7 +570,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         return true;
     }
 
-    FString SubAction = GetStringFieldChar(Payload, TEXT("subAction"));
+    FString SubAction = GetJsonStringField(Payload, TEXT("subAction"));
     if (SubAction.IsEmpty())
     {
         SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'subAction' in payload."), TEXT("INVALID_ARGUMENT"));
@@ -581,9 +578,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     }
 
     // Common parameters
-    FString Name = GetStringFieldChar(Payload, TEXT("name"));
-    FString Path = GetStringFieldChar(Payload, TEXT("path"), TEXT("/Game"));
-    FString BlueprintPath = GetStringFieldChar(Payload, TEXT("blueprintPath"));
+    FString Name = GetJsonStringField(Payload, TEXT("name"));
+    FString Path = GetJsonStringField(Payload, TEXT("path"), TEXT("/Game"));
+    FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
     // ============================================================
     // 14.1 CHARACTER CREATION
@@ -606,7 +603,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
             return true;
         }
 
-        FString SkeletalMeshPath = GetStringFieldChar(Payload, TEXT("skeletalMeshPath"));
+        FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
         USkeletalMesh* RequestedMesh = nullptr;
         if (!SkeletalMeshPath.IsEmpty())
         {
@@ -675,8 +672,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        float CapsuleRadius = static_cast<float>(GetNumberFieldChar(Payload, TEXT("capsuleRadius"), 42.0));
-        float CapsuleHalfHeight = static_cast<float>(GetNumberFieldChar(Payload, TEXT("capsuleHalfHeight"), 96.0));
+        float CapsuleRadius = static_cast<float>(GetJsonNumberField(Payload, TEXT("capsuleRadius"), 42.0));
+        float CapsuleHalfHeight = static_cast<float>(GetJsonNumberField(Payload, TEXT("capsuleHalfHeight"), 96.0));
 
         // Find capsule component in SCS or CDO
         ACharacter* CharCDO = Blueprint->GeneratedClass 
@@ -716,8 +713,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        FString SkeletalMeshPath = GetStringFieldChar(Payload, TEXT("skeletalMeshPath"));
-        FString AnimBPPath = GetStringFieldChar(Payload, TEXT("animBlueprintPath"));
+        FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
+        FString AnimBPPath = GetJsonStringField(Payload, TEXT("animBlueprintPath"));
         USkeletalMesh* RequestedMesh = nullptr;
         UAnimBlueprint* RequestedAnimBP = nullptr;
 
@@ -818,10 +815,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        float SpringArmLength = static_cast<float>(GetNumberFieldChar(Payload, TEXT("springArmLength"), 300.0));
-        bool UsePawnControlRotation = GetBoolFieldChar(Payload, TEXT("cameraUsePawnControlRotation"), true);
-        bool LagEnabled = GetBoolFieldChar(Payload, TEXT("springArmLagEnabled"), false);
-        float LagSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("springArmLagSpeed"), 10.0));
+        float SpringArmLength = static_cast<float>(GetJsonNumberField(Payload, TEXT("springArmLength"), 300.0));
+        bool UsePawnControlRotation = GetJsonBoolField(Payload, TEXT("cameraUsePawnControlRotation"), true);
+        bool LagEnabled = GetJsonBoolField(Payload, TEXT("springArmLagEnabled"), false);
+        float LagSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("springArmLagSpeed"), 10.0));
 
         // Add spring arm + camera to SCS if not present
         bool bHasSpringArm = false;
@@ -924,7 +921,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
 		// configure_sprint variables (which set blueprint-level state vars).
 		if (Payload->HasField(TEXT("walkSpeed")))
 		{
-			Movement->MaxWalkSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("walkSpeed"), 600.0));
+			Movement->MaxWalkSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("walkSpeed"), 600.0));
 			// Warn if runSpeed was also provided (it will be ignored)
 			if (Payload->HasField(TEXT("runSpeed")))
 			{
@@ -933,21 +930,21 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
 		}
 		else if (Payload->HasField(TEXT("runSpeed")))
 		{
-			Movement->MaxWalkSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("runSpeed"), 600.0));
+			Movement->MaxWalkSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("runSpeed"), 600.0));
 			bRunSpeedApplied = true;
 		}
 		if (Payload->HasField(TEXT("crouchSpeed")))
-			Movement->MaxWalkSpeedCrouched = static_cast<float>(GetNumberFieldChar(Payload, TEXT("crouchSpeed"), 300.0));
+			Movement->MaxWalkSpeedCrouched = static_cast<float>(GetJsonNumberField(Payload, TEXT("crouchSpeed"), 300.0));
 		if (Payload->HasField(TEXT("swimSpeed")))
-			Movement->MaxSwimSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("swimSpeed"), 300.0));
+			Movement->MaxSwimSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("swimSpeed"), 300.0));
 		if (Payload->HasField(TEXT("flySpeed")))
-			Movement->MaxFlySpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("flySpeed"), 600.0));
+			Movement->MaxFlySpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("flySpeed"), 600.0));
 		if (Payload->HasField(TEXT("acceleration")))
-			Movement->MaxAcceleration = static_cast<float>(GetNumberFieldChar(Payload, TEXT("acceleration"), 2048.0));
+			Movement->MaxAcceleration = static_cast<float>(GetJsonNumberField(Payload, TEXT("acceleration"), 2048.0));
 		if (Payload->HasField(TEXT("deceleration")))
-			Movement->BrakingDecelerationWalking = static_cast<float>(GetNumberFieldChar(Payload, TEXT("deceleration"), 2048.0));
+			Movement->BrakingDecelerationWalking = static_cast<float>(GetJsonNumberField(Payload, TEXT("deceleration"), 2048.0));
 		if (Payload->HasField(TEXT("groundFriction")))
-			Movement->GroundFriction = static_cast<float>(GetNumberFieldChar(Payload, TEXT("groundFriction"), 8.0));
+			Movement->GroundFriction = static_cast<float>(GetJsonNumberField(Payload, TEXT("groundFriction"), 8.0));
 		AppliedWalkSpeed = Movement->MaxWalkSpeed;
 		bHasAppliedWalkSpeed = true;
 	}
@@ -958,7 +955,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         if (Payload->HasField(TEXT("runSpeed")))
         {
-            Result->SetNumberField(TEXT("runSpeed"), GetNumberFieldChar(Payload, TEXT("runSpeed"), 600.0));
+            Result->SetNumberField(TEXT("runSpeed"), GetJsonNumberField(Payload, TEXT("runSpeed"), 600.0));
             Result->SetBoolField(TEXT("runSpeedApplied"), bRunSpeedApplied);
         }
         if (bHasAppliedWalkSpeed)
@@ -995,17 +992,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
             UCharacterMovementComponent* Movement = CharCDO->GetCharacterMovement();
 
             if (Payload->HasField(TEXT("jumpHeight")))
-                Movement->JumpZVelocity = static_cast<float>(GetNumberFieldChar(Payload, TEXT("jumpHeight"), 600.0));
+                Movement->JumpZVelocity = static_cast<float>(GetJsonNumberField(Payload, TEXT("jumpHeight"), 600.0));
             if (Payload->HasField(TEXT("airControl")))
-                Movement->AirControl = static_cast<float>(GetNumberFieldChar(Payload, TEXT("airControl"), 0.35));
+                Movement->AirControl = static_cast<float>(GetJsonNumberField(Payload, TEXT("airControl"), 0.35));
             if (Payload->HasField(TEXT("gravityScale")))
-                Movement->GravityScale = static_cast<float>(GetNumberFieldChar(Payload, TEXT("gravityScale"), 1.0));
+                Movement->GravityScale = static_cast<float>(GetJsonNumberField(Payload, TEXT("gravityScale"), 1.0));
             if (Payload->HasField(TEXT("fallingLateralFriction")))
-                Movement->FallingLateralFriction = static_cast<float>(GetNumberFieldChar(Payload, TEXT("fallingLateralFriction"), 0.0));
+                Movement->FallingLateralFriction = static_cast<float>(GetJsonNumberField(Payload, TEXT("fallingLateralFriction"), 0.0));
             if (Payload->HasField(TEXT("maxJumpCount")))
-                CharCDO->JumpMaxCount = static_cast<int32>(GetNumberFieldChar(Payload, TEXT("maxJumpCount"), 1));
+                CharCDO->JumpMaxCount = static_cast<int32>(GetJsonNumberField(Payload, TEXT("maxJumpCount"), 1));
             if (Payload->HasField(TEXT("jumpHoldTime")))
-                CharCDO->JumpMaxHoldTime = static_cast<float>(GetNumberFieldChar(Payload, TEXT("jumpHoldTime"), 0.0));
+                CharCDO->JumpMaxHoldTime = static_cast<float>(GetJsonNumberField(Payload, TEXT("jumpHoldTime"), 0.0));
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
@@ -1042,15 +1039,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
             UCharacterMovementComponent* Movement = CharCDO->GetCharacterMovement();
 
             if (Payload->HasField(TEXT("orientToMovement")))
-                Movement->bOrientRotationToMovement = GetBoolFieldChar(Payload, TEXT("orientToMovement"), true);
+                Movement->bOrientRotationToMovement = GetJsonBoolField(Payload, TEXT("orientToMovement"), true);
             if (Payload->HasField(TEXT("useControllerRotationYaw")))
-                CharCDO->bUseControllerRotationYaw = GetBoolFieldChar(Payload, TEXT("useControllerRotationYaw"), false);
+                CharCDO->bUseControllerRotationYaw = GetJsonBoolField(Payload, TEXT("useControllerRotationYaw"), false);
             if (Payload->HasField(TEXT("useControllerRotationPitch")))
-                CharCDO->bUseControllerRotationPitch = GetBoolFieldChar(Payload, TEXT("useControllerRotationPitch"), false);
+                CharCDO->bUseControllerRotationPitch = GetJsonBoolField(Payload, TEXT("useControllerRotationPitch"), false);
             if (Payload->HasField(TEXT("useControllerRotationRoll")))
-                CharCDO->bUseControllerRotationRoll = GetBoolFieldChar(Payload, TEXT("useControllerRotationRoll"), false);
+                CharCDO->bUseControllerRotationRoll = GetJsonBoolField(Payload, TEXT("useControllerRotationRoll"), false);
             if (Payload->HasField(TEXT("rotationRate")))
-                Movement->RotationRate = FRotator(0.0, GetNumberFieldChar(Payload, TEXT("rotationRate"), 540.0), 0.0);
+                Movement->RotationRate = FRotator(0.0, GetJsonNumberField(Payload, TEXT("rotationRate"), 540.0), 0.0);
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
@@ -1079,9 +1076,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        FString ModeName = GetStringFieldChar(Payload, TEXT("modeName"), TEXT("Custom"));
-        int32 ModeId = static_cast<int32>(GetNumberFieldChar(Payload, TEXT("modeId"), 0));
-        float CustomSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("customSpeed"), 600.0));
+        FString ModeName = GetJsonStringField(Payload, TEXT("modeName"), TEXT("Custom"));
+        int32 ModeId = static_cast<int32>(GetJsonNumberField(Payload, TEXT("modeId"), 0));
+        float CustomSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("customSpeed"), 600.0));
 
         // Add state tracking variable (e.g., bIsInCustomMode_0)
         FString StateVarName = FString::Printf(TEXT("bIsIn%sMode"), *ModeName);
@@ -1154,11 +1151,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
             UCharacterMovementComponent* Movement = CharCDO->GetCharacterMovement();
 
             if (Payload->HasField(TEXT("navAgentRadius")))
-                Movement->NavAgentProps.AgentRadius = static_cast<float>(GetNumberFieldChar(Payload, TEXT("navAgentRadius"), 42.0));
+                Movement->NavAgentProps.AgentRadius = static_cast<float>(GetJsonNumberField(Payload, TEXT("navAgentRadius"), 42.0));
             if (Payload->HasField(TEXT("navAgentHeight")))
-                Movement->NavAgentProps.AgentHeight = static_cast<float>(GetNumberFieldChar(Payload, TEXT("navAgentHeight"), 192.0));
+                Movement->NavAgentProps.AgentHeight = static_cast<float>(GetJsonNumberField(Payload, TEXT("navAgentHeight"), 192.0));
             if (Payload->HasField(TEXT("avoidanceEnabled")))
-                Movement->bUseRVOAvoidance = GetBoolFieldChar(Payload, TEXT("avoidanceEnabled"), false);
+                Movement->bUseRVOAvoidance = GetJsonBoolField(Payload, TEXT("avoidanceEnabled"), false);
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
@@ -1192,8 +1189,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        float MantleHeight = static_cast<float>(GetNumberFieldChar(Payload, TEXT("mantleHeight"), 200.0));
-        float MantleReach = static_cast<float>(GetNumberFieldChar(Payload, TEXT("mantleReachDistance"), 100.0));
+        float MantleHeight = static_cast<float>(GetJsonNumberField(Payload, TEXT("mantleHeight"), 200.0));
+        float MantleReach = static_cast<float>(GetJsonNumberField(Payload, TEXT("mantleReachDistance"), 100.0));
         // Add mantling state and configuration variables
         FEdGraphPinType BoolPinType;
         BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
@@ -1247,8 +1244,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        float VaultHeight = static_cast<float>(GetNumberFieldChar(Payload, TEXT("vaultHeight"), 100.0));
-        float VaultDepth = static_cast<float>(GetNumberFieldChar(Payload, TEXT("vaultDepth"), 100.0));
+        float VaultHeight = static_cast<float>(GetJsonNumberField(Payload, TEXT("vaultHeight"), 100.0));
+        float VaultDepth = static_cast<float>(GetJsonNumberField(Payload, TEXT("vaultDepth"), 100.0));
         // Add vaulting state and configuration variables
         FEdGraphPinType BoolPinType;
         BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
@@ -1302,8 +1299,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        float ClimbSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("climbSpeed"), 300.0));
-        FString ClimbableTag = GetStringFieldChar(Payload, TEXT("climbableTag"), TEXT("Climbable"));
+        float ClimbSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("climbSpeed"), 300.0));
+        FString ClimbableTag = GetJsonStringField(Payload, TEXT("climbableTag"), TEXT("Climbable"));
         // Add climbing state and configuration variables
         FEdGraphPinType BoolPinType;
         BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
@@ -1370,9 +1367,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        float SlideSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("slideSpeed"), 800.0));
-        float SlideDuration = static_cast<float>(GetNumberFieldChar(Payload, TEXT("slideDuration"), 1.0));
-        float SlideCooldown = static_cast<float>(GetNumberFieldChar(Payload, TEXT("slideCooldown"), 0.5));
+        float SlideSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("slideSpeed"), 800.0));
+        float SlideDuration = static_cast<float>(GetJsonNumberField(Payload, TEXT("slideDuration"), 1.0));
+        float SlideCooldown = static_cast<float>(GetJsonNumberField(Payload, TEXT("slideCooldown"), 0.5));
         // Add sliding state and configuration variables
         FEdGraphPinType BoolPinType;
         BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
@@ -1426,9 +1423,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        float WallRunSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("wallRunSpeed"), 600.0));
-        float WallRunDuration = static_cast<float>(GetNumberFieldChar(Payload, TEXT("wallRunDuration"), 2.0));
-        float WallRunGravity = static_cast<float>(GetNumberFieldChar(Payload, TEXT("wallRunGravityScale"), 0.25));
+        float WallRunSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("wallRunSpeed"), 600.0));
+        float WallRunDuration = static_cast<float>(GetJsonNumberField(Payload, TEXT("wallRunDuration"), 2.0));
+        float WallRunGravity = static_cast<float>(GetJsonNumberField(Payload, TEXT("wallRunGravityScale"), 0.25));
         // Add wall running state and configuration variables
         FEdGraphPinType BoolPinType;
         BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
@@ -1492,9 +1489,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        float GrappleRange = static_cast<float>(GetNumberFieldChar(Payload, TEXT("grappleRange"), 2000.0));
-        float GrappleSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("grappleSpeed"), 1500.0));
-        FString GrappleTarget = GetStringFieldChar(Payload, TEXT("grappleTargetTag"), TEXT("Grapple"));
+        float GrappleRange = static_cast<float>(GetJsonNumberField(Payload, TEXT("grappleRange"), 2000.0));
+        float GrappleSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("grappleSpeed"), 1500.0));
+        FString GrappleTarget = GetJsonStringField(Payload, TEXT("grappleTargetTag"), TEXT("Grapple"));
         // Add grappling state and configuration variables
         FEdGraphPinType BoolPinType;
         BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
@@ -1552,10 +1549,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        bool Enabled = GetBoolFieldChar(Payload, TEXT("footstepEnabled"), true);
-        FString SocketLeft = GetStringFieldChar(Payload, TEXT("footstepSocketLeft"), TEXT("foot_l"));
-        FString SocketRight = GetStringFieldChar(Payload, TEXT("footstepSocketRight"), TEXT("foot_r"));
-        float TraceDistance = static_cast<float>(GetNumberFieldChar(Payload, TEXT("footstepTraceDistance"), 50.0));
+        bool Enabled = GetJsonBoolField(Payload, TEXT("footstepEnabled"), true);
+        FString SocketLeft = GetJsonStringField(Payload, TEXT("footstepSocketLeft"), TEXT("foot_l"));
+        FString SocketRight = GetJsonStringField(Payload, TEXT("footstepSocketRight"), TEXT("foot_r"));
+        float TraceDistance = static_cast<float>(GetJsonNumberField(Payload, TEXT("footstepTraceDistance"), 50.0));
 
         // Add footstep system variables
         FEdGraphPinType BoolPinType;
@@ -1598,7 +1595,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        FString SurfaceType = GetStringFieldChar(Payload, TEXT("surfaceType"));
+        FString SurfaceType = GetJsonStringField(Payload, TEXT("surfaceType"));
         // Add a Map variable for surface-to-sound lookup if not exists
         // This uses a TMap<FName, FSoftObjectPath> pattern
         FEdGraphPinType MapPinType;
@@ -1632,8 +1629,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        float VolumeMultiplier = static_cast<float>(GetNumberFieldChar(Payload, TEXT("volumeMultiplier"), 1.0));
-        float ParticleScale = static_cast<float>(GetNumberFieldChar(Payload, TEXT("particleScale"), 1.0));
+        float VolumeMultiplier = static_cast<float>(GetJsonNumberField(Payload, TEXT("volumeMultiplier"), 1.0));
+        float ParticleScale = static_cast<float>(GetJsonNumberField(Payload, TEXT("particleScale"), 1.0));
 
         // Add FX configuration variables
         FEdGraphPinType FloatPinType;
@@ -1790,11 +1787,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
             UCharacterMovementComponent* Movement = CharCDO->GetCharacterMovement();
             // walkSpeed takes priority over runSpeed since both set MaxWalkSpeed in UE.
             if (Payload->HasField(TEXT("walkSpeed")))
-                Movement->MaxWalkSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("walkSpeed"), 600.0));
+                Movement->MaxWalkSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("walkSpeed"), 600.0));
             else if (Payload->HasField(TEXT("runSpeed")))
-                Movement->MaxWalkSpeed = static_cast<float>(GetNumberFieldChar(Payload, TEXT("runSpeed"), 600.0));
+                Movement->MaxWalkSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("runSpeed"), 600.0));
             if (Payload->HasField(TEXT("acceleration")))
-                Movement->MaxAcceleration = static_cast<float>(GetNumberFieldChar(Payload, TEXT("acceleration"), 2048.0));
+                Movement->MaxAcceleration = static_cast<float>(GetJsonNumberField(Payload, TEXT("acceleration"), 2048.0));
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
@@ -1818,7 +1815,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        double WalkSpeed = GetNumberFieldChar(Payload, TEXT("walkSpeed"), 600.0);
+        double WalkSpeed = GetJsonNumberField(Payload, TEXT("walkSpeed"), 600.0);
 
         ACharacter* CharCDO = Blueprint->GeneratedClass
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
@@ -1851,7 +1848,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        double JumpHeight = GetNumberFieldChar(Payload, TEXT("jumpHeight"), 600.0);
+        double JumpHeight = GetJsonNumberField(Payload, TEXT("jumpHeight"), 600.0);
 
         ACharacter* CharCDO = Blueprint->GeneratedClass
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
@@ -1884,7 +1881,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        double GravityScale = GetNumberFieldChar(Payload, TEXT("gravityScale"), 1.0);
+        double GravityScale = GetJsonNumberField(Payload, TEXT("gravityScale"), 1.0);
 
         ACharacter* CharCDO = Blueprint->GeneratedClass
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
@@ -1917,7 +1914,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        double GroundFriction = GetNumberFieldChar(Payload, TEXT("groundFriction"), 8.0);
+        double GroundFriction = GetJsonNumberField(Payload, TEXT("groundFriction"), 8.0);
 
         ACharacter* CharCDO = Blueprint->GeneratedClass
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
@@ -1950,7 +1947,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        double Deceleration = GetNumberFieldChar(Payload, TEXT("brakingDeceleration"), 2048.0);
+        double Deceleration = GetJsonNumberField(Payload, TEXT("brakingDeceleration"), 2048.0);
 
         ACharacter* CharCDO = Blueprint->GeneratedClass
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
@@ -1985,9 +1982,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        double CrouchSpeed = GetNumberFieldChar(Payload, TEXT("crouchSpeed"), 300.0);
-        double CrouchedHalfHeight = GetNumberFieldChar(Payload, TEXT("crouchedHalfHeight"), 44.0);
-        bool CanCrouch = GetBoolFieldChar(Payload, TEXT("canCrouch"), true);
+        double CrouchSpeed = GetJsonNumberField(Payload, TEXT("crouchSpeed"), 300.0);
+        double CrouchedHalfHeight = GetJsonNumberField(Payload, TEXT("crouchedHalfHeight"), 44.0);
+        bool CanCrouch = GetJsonBoolField(Payload, TEXT("canCrouch"), true);
 
         ACharacter* CharCDO = Blueprint->GeneratedClass
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
@@ -2027,7 +2024,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        double SprintSpeed = GetNumberFieldChar(Payload, TEXT("sprintSpeed"), 900.0);
+        double SprintSpeed = GetJsonNumberField(Payload, TEXT("sprintSpeed"), 900.0);
 
         // Add sprint state variables
         FEdGraphPinType BoolPinType;
@@ -2072,6 +2069,6 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
 // =============================================================================
 // Cleanup: Undefine local macro aliases
 // =============================================================================
-#undef GetStringFieldChar
-#undef GetNumberFieldChar
-#undef GetBoolFieldChar
+#undef GetJsonStringField
+#undef GetJsonNumberField
+#undef GetJsonBoolField

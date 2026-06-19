@@ -279,15 +279,6 @@ namespace McpHandlerUtils
         return true;
     }
 
-    // =========================================================================
-    // Asset Path Utilities
-    // =========================================================================
-
-    /**
-     * Validate and normalize an asset path.
-     * Returns empty string if invalid.
-     */
-    MCPAUTOMATIONBRIDGE_API FString ValidateAssetPath(const FString& Path);
 
     // =========================================================================
     // Actor/Component Utilities

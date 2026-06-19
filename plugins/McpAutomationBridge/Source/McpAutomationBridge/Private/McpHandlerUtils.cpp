@@ -88,67 +88,6 @@ FString JsonValueToString(const TSharedPtr<FJsonValue>& Value)
     return Serialized;
 }
 
-// =============================================================================
-// Asset Path Utilities
-// =============================================================================
-
-FString ValidateAssetPath(const FString& Path)
-{
-    if (Path.IsEmpty())
-    {
-        return FString();
-    }
-
-    FString CleanPath = Path;
-    
-    // Reject Windows absolute paths
-    if (CleanPath.Len() >= 2 && CleanPath[1] == TEXT(':'))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("ValidateAssetPath: Rejected Windows absolute path: %s"), *Path);
-        return FString();
-    }
-
-    // Normalize slashes
-    CleanPath.ReplaceInline(TEXT("\\"), TEXT("/"));
-    
-    // Remove double slashes
-    while (CleanPath.Contains(TEXT("//")))
-    {
-        CleanPath = CleanPath.Replace(TEXT("//"), TEXT("/"));
-    }
-
-    // Reject path traversal
-    if (CleanPath.Contains(TEXT("..")))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("ValidateAssetPath: Rejected path containing '..': %s"), *Path);
-        return FString();
-    }
-
-    // Ensure path starts with /
-    if (!CleanPath.StartsWith(TEXT("/")))
-    {
-        CleanPath = TEXT("/") + CleanPath;
-    }
-
-    // Validate root
-    const bool bValidRoot = CleanPath.StartsWith(TEXT("/Game/")) ||
-                           CleanPath.StartsWith(TEXT("/Engine/")) ||
-                           CleanPath.StartsWith(TEXT("/Script/"));
-
-    if (!bValidRoot)
-    {
-        // Use engine validation for non-standard roots (plugin paths, etc.)
-        FText Reason;
-        if (!FPackageName::IsValidLongPackageName(CleanPath, true, &Reason))
-        {
-            UE_LOG(LogTemp, Warning, TEXT("ValidateAssetPath: Rejected path without valid root: %s (%s)"),
-                   *Path, *Reason.ToString());
-            return FString();
-        }
-    }
-
-    return CleanPath;
-}
 
 // =============================================================================
 // Actor/Component Utilities

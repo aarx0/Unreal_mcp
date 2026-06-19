@@ -293,9 +293,6 @@ namespace {
 
 // Use consolidated JSON helpers from McpAutomationBridgeHelpers.h
 // Note: These are macros to avoid ODR issues with the anonymous namespace
-#define GetNumberFieldAnimAuth GetJsonNumberField
-#define GetBoolFieldAnimAuth GetJsonBoolField
-#define GetStringFieldAnimAuth GetJsonStringField
 
 // Helper to normalize asset path
 static FString NormalizeAnimPath(const FString& Path)
@@ -364,9 +361,9 @@ static FVector GetVectorFromJsonAnim(const TSharedPtr<FJsonObject>& Obj)
         return FVector::ZeroVector;
     }
     return FVector(
-        GetNumberFieldAnimAuth(Obj, TEXT("x"), 0.0),
-        GetNumberFieldAnimAuth(Obj, TEXT("y"), 0.0),
-        GetNumberFieldAnimAuth(Obj, TEXT("z"), 0.0)
+        GetJsonNumberField(Obj, TEXT("x"), 0.0),
+        GetJsonNumberField(Obj, TEXT("y"), 0.0),
+        GetJsonNumberField(Obj, TEXT("z"), 0.0)
     );
 }
 
@@ -381,18 +378,18 @@ static FRotator GetRotatorFromJsonAnim(const TSharedPtr<FJsonObject>& Obj)
     if (Obj->HasField(TEXT("pitch")) || Obj->HasField(TEXT("yaw")) || Obj->HasField(TEXT("roll")))
     {
         return FRotator(
-            GetNumberFieldAnimAuth(Obj, TEXT("pitch"), 0.0),
-            GetNumberFieldAnimAuth(Obj, TEXT("yaw"), 0.0),
-            GetNumberFieldAnimAuth(Obj, TEXT("roll"), 0.0)
+            GetJsonNumberField(Obj, TEXT("pitch"), 0.0),
+            GetJsonNumberField(Obj, TEXT("yaw"), 0.0),
+            GetJsonNumberField(Obj, TEXT("roll"), 0.0)
         );
     }
     else if (Obj->HasField(TEXT("w")))
     {
         FQuat Quat(
-            GetNumberFieldAnimAuth(Obj, TEXT("x"), 0.0),
-            GetNumberFieldAnimAuth(Obj, TEXT("y"), 0.0),
-            GetNumberFieldAnimAuth(Obj, TEXT("z"), 0.0),
-            GetNumberFieldAnimAuth(Obj, TEXT("w"), 1.0)
+            GetJsonNumberField(Obj, TEXT("x"), 0.0),
+            GetJsonNumberField(Obj, TEXT("y"), 0.0),
+            GetJsonNumberField(Obj, TEXT("z"), 0.0),
+            GetJsonNumberField(Obj, TEXT("w"), 1.0)
         );
         return Quat.Rotator();
     }
@@ -560,30 +557,30 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 {
     TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
     
-    FString SubAction = GetStringFieldAnimAuth(Params, TEXT("subAction"), TEXT(""));
+    FString SubAction = GetJsonStringField(Params, TEXT("subAction"), TEXT(""));
     
     // ===== 10.1 Animation Sequences =====
     
     if (SubAction == TEXT("create_animation_sequence"))
     {
-    FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
     // Schema advertises savePath; older callers pass path. Prefer savePath, fall back to path.
-    FString Path = GetStringFieldAnimAuth(Params, TEXT("savePath"), TEXT(""));
-    if (Path.IsEmpty()) { Path = GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")); }
+    FString Path = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
+    if (Path.IsEmpty()) { Path = GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Animations")); }
     Path = NormalizeAnimPath(Path);
-    FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-    int32 FrameRate = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frameRate"), 30));
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    int32 FrameRate = static_cast<int32>(GetJsonNumberField(Params, TEXT("frameRate"), 30));
     // Schema exposes length (seconds); numFrames is an undocumented override.
     int32 NumFrames = 30;
     if (Params->HasField(TEXT("numFrames")))
     {
-        NumFrames = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("numFrames"), 30));
+        NumFrames = static_cast<int32>(GetJsonNumberField(Params, TEXT("numFrames"), 30));
     }
     else if (Params->HasField(TEXT("length")))
     {
-        NumFrames = FMath::Max(1, FMath::RoundToInt(GetNumberFieldAnimAuth(Params, TEXT("length"), 1.0) * static_cast<double>(FrameRate)));
+        NumFrames = FMath::Max(1, FMath::RoundToInt(GetJsonNumberField(Params, TEXT("length"), 1.0) * static_cast<double>(FrameRate)));
     }
-    bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
     if (FrameRate <= 0)
     {
@@ -679,19 +676,19 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("set_sequence_length"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        int32 FrameRate = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frameRate"), 30));
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        int32 FrameRate = static_cast<int32>(GetJsonNumberField(Params, TEXT("frameRate"), 30));
         // Schema exposes length (seconds); numFrames is an undocumented override.
         int32 NumFrames = 30;
         if (Params->HasField(TEXT("numFrames")))
         {
-            NumFrames = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("numFrames"), 30));
+            NumFrames = static_cast<int32>(GetJsonNumberField(Params, TEXT("numFrames"), 30));
         }
         else if (Params->HasField(TEXT("length")))
         {
-            NumFrames = FMath::Max(1, FMath::RoundToInt(GetNumberFieldAnimAuth(Params, TEXT("length"), 1.0) * static_cast<double>(FrameRate)));
+            NumFrames = FMath::Max(1, FMath::RoundToInt(GetJsonNumberField(Params, TEXT("length"), 1.0) * static_cast<double>(FrameRate)));
         }
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimSequence* Sequence = LoadAnimSequenceFromPath(AssetPath);
         if (!Sequence)
@@ -725,9 +722,9 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("add_bone_track"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString BoneName = GetStringFieldAnimAuth(Params, TEXT("boneName"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString BoneName = GetJsonStringField(Params, TEXT("boneName"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (BoneName.IsEmpty())
         {
@@ -854,10 +851,10 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("set_bone_key"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString BoneName = GetStringFieldAnimAuth(Params, TEXT("boneName"), TEXT(""));
-        int32 Frame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frame"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString BoneName = GetJsonStringField(Params, TEXT("boneName"), TEXT(""));
+        int32 Frame = static_cast<int32>(GetJsonNumberField(Params, TEXT("frame"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         TSharedPtr<FJsonObject> LocationObj = Params->HasField(TEXT("location")) ? Params->GetObjectField(TEXT("location")) : nullptr;
         TSharedPtr<FJsonObject> RotationObj = Params->HasField(TEXT("rotation")) ? Params->GetObjectField(TEXT("rotation")) : nullptr;
@@ -971,12 +968,12 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("set_curve_key"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString CurveName = GetStringFieldAnimAuth(Params, TEXT("curveName"), TEXT(""));
-        int32 Frame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frame"), 0));
-        float Value = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("value"), 0.0));
-        bool bCreateIfMissing = GetBoolFieldAnimAuth(Params, TEXT("createIfMissing"), true);
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString CurveName = GetJsonStringField(Params, TEXT("curveName"), TEXT(""));
+        int32 Frame = static_cast<int32>(GetJsonNumberField(Params, TEXT("frame"), 0));
+        float Value = static_cast<float>(GetJsonNumberField(Params, TEXT("value"), 0.0));
+        bool bCreateIfMissing = GetJsonBoolField(Params, TEXT("createIfMissing"), true);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (CurveName.IsEmpty())
         {
@@ -1023,12 +1020,12 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
 if (SubAction == TEXT("add_notify"))
 {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-    FString NotifyClass = GetStringFieldAnimAuth(Params, TEXT("notifyClass"), TEXT(""));
-    int32 Frame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frame"), 0));
-    int32 TrackIndex = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("trackIndex"), 0));
-    FString NotifyName = GetStringFieldAnimAuth(Params, TEXT("notifyName"), TEXT(""));
-    bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+    FString NotifyClass = GetJsonStringField(Params, TEXT("notifyClass"), TEXT(""));
+    int32 Frame = static_cast<int32>(GetJsonNumberField(Params, TEXT("frame"), 0));
+    int32 TrackIndex = static_cast<int32>(GetJsonNumberField(Params, TEXT("trackIndex"), 0));
+    FString NotifyName = GetJsonStringField(Params, TEXT("notifyName"), TEXT(""));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
     if (NotifyClass.IsEmpty() && NotifyName.IsEmpty())
     {
@@ -1125,13 +1122,13 @@ if (SubAction == TEXT("add_notify"))
 
 if (SubAction == TEXT("add_notify_state"))
 {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-    FString NotifyClass = GetStringFieldAnimAuth(Params, TEXT("notifyClass"), TEXT(""));
-    int32 StartFrame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("startFrame"), 0));
-    int32 EndFrame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("endFrame"), 10));
-    int32 TrackIndex = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("trackIndex"), 0));
-    FString NotifyName = GetStringFieldAnimAuth(Params, TEXT("notifyName"), TEXT(""));
-    bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+    FString NotifyClass = GetJsonStringField(Params, TEXT("notifyClass"), TEXT(""));
+    int32 StartFrame = static_cast<int32>(GetJsonNumberField(Params, TEXT("startFrame"), 0));
+    int32 EndFrame = static_cast<int32>(GetJsonNumberField(Params, TEXT("endFrame"), 10));
+    int32 TrackIndex = static_cast<int32>(GetJsonNumberField(Params, TEXT("trackIndex"), 0));
+    FString NotifyName = GetJsonStringField(Params, TEXT("notifyName"), TEXT(""));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
     if (EndFrame < StartFrame)
     {
@@ -1236,10 +1233,10 @@ if (SubAction == TEXT("add_notify_state"))
 
     if (SubAction == TEXT("add_sync_marker"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString MarkerName = GetStringFieldAnimAuth(Params, TEXT("markerName"), TEXT(""));
-        int32 Frame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frame"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString MarkerName = GetJsonStringField(Params, TEXT("markerName"), TEXT(""));
+        int32 Frame = static_cast<int32>(GetJsonNumberField(Params, TEXT("frame"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (MarkerName.IsEmpty())
         {
@@ -1276,11 +1273,11 @@ if (SubAction == TEXT("add_notify_state"))
 
     if (SubAction == TEXT("set_root_motion_settings"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        bool bEnableRootMotion = GetBoolFieldAnimAuth(Params, TEXT("enableRootMotion"), true);
-        FString RootMotionRootLock = GetStringFieldAnimAuth(Params, TEXT("rootMotionRootLock"), TEXT("RefPose"));
-        bool bForceRootLock = GetBoolFieldAnimAuth(Params, TEXT("forceRootLock"), false);
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        bool bEnableRootMotion = GetJsonBoolField(Params, TEXT("enableRootMotion"), true);
+        FString RootMotionRootLock = GetJsonStringField(Params, TEXT("rootMotionRootLock"), TEXT("RefPose"));
+        bool bForceRootLock = GetJsonBoolField(Params, TEXT("forceRootLock"), false);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimSequence* Sequence = LoadAnimSequenceFromPath(AssetPath);
         if (!Sequence)
@@ -1314,12 +1311,12 @@ if (SubAction == TEXT("add_notify_state"))
 
     if (SubAction == TEXT("set_additive_settings"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString AdditiveAnimType = GetStringFieldAnimAuth(Params, TEXT("additiveAnimType"), TEXT("NoAdditive"));
-        FString BasePoseType = GetStringFieldAnimAuth(Params, TEXT("basePoseType"), TEXT("RefPose"));
-        FString BasePoseAnimation = GetStringFieldAnimAuth(Params, TEXT("basePoseAnimation"), TEXT(""));
-        int32 BasePoseFrame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("basePoseFrame"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString AdditiveAnimType = GetJsonStringField(Params, TEXT("additiveAnimType"), TEXT("NoAdditive"));
+        FString BasePoseType = GetJsonStringField(Params, TEXT("basePoseType"), TEXT("RefPose"));
+        FString BasePoseAnimation = GetJsonStringField(Params, TEXT("basePoseAnimation"), TEXT(""));
+        int32 BasePoseFrame = static_cast<int32>(GetJsonNumberField(Params, TEXT("basePoseFrame"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimSequence* Sequence = LoadAnimSequenceFromPath(AssetPath);
         if (!Sequence)
@@ -1377,24 +1374,24 @@ if (SubAction == TEXT("add_notify_state"))
     
     if (SubAction == TEXT("create_montage"))
     {
-    FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
     // Accept 'path' (legacy) and 'savePath' (the animation_physics schema's
     // param name — previously ignored, so callers passing savePath silently
     // got the /Game/Animations default). Mirrors the fixed
     // create_widget_blueprint fallback chain.
-    FString RawPath = GetStringFieldAnimAuth(Params, TEXT("path"), TEXT(""));
+    FString RawPath = GetJsonStringField(Params, TEXT("path"), TEXT(""));
     if (RawPath.IsEmpty())
     {
-        RawPath = GetStringFieldAnimAuth(Params, TEXT("savePath"), TEXT(""));
+        RawPath = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
     }
     if (RawPath.IsEmpty())
     {
         RawPath = TEXT("/Game/Animations");
     }
     FString Path = NormalizeAnimPath(RawPath);
-    FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-    FString SlotName = GetStringFieldAnimAuth(Params, TEXT("slotName"), TEXT("DefaultSlot"));
-    bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    FString SlotName = GetJsonStringField(Params, TEXT("slotName"), TEXT("DefaultSlot"));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
     if (Name.IsEmpty())
     {
@@ -1461,23 +1458,23 @@ if (SubAction == TEXT("add_notify_state"))
         // Accept assetPath, montagePath, and 'name' (the schema's only
         // name-ish field — callers passed the montage path there and got
         // MONTAGE_NOT_FOUND with an EMPTY path in the message).
-        FString RawAssetPath = GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT(""));
+        FString RawAssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
         if (RawAssetPath.IsEmpty())
         {
-            RawAssetPath = GetStringFieldAnimAuth(Params, TEXT("montagePath"), TEXT(""));
+            RawAssetPath = GetJsonStringField(Params, TEXT("montagePath"), TEXT(""));
         }
         if (RawAssetPath.IsEmpty())
         {
-            RawAssetPath = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
+            RawAssetPath = GetJsonStringField(Params, TEXT("name"), TEXT(""));
         }
         const FString AssetPath = NormalizeAnimPath(RawAssetPath);
-        FString SectionName = GetStringFieldAnimAuth(Params, TEXT("sectionName"), TEXT(""));
+        FString SectionName = GetJsonStringField(Params, TEXT("sectionName"), TEXT(""));
         // 'time' is the schema-advertised field; 'startTime' kept for
         // compatibility with the handler's original contract.
-        float StartTime = static_cast<float>(GetNumberFieldAnimAuth(
+        float StartTime = static_cast<float>(GetJsonNumberField(
             Params, TEXT("startTime"),
-            GetNumberFieldAnimAuth(Params, TEXT("time"), 0.0)));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+            GetJsonNumberField(Params, TEXT("time"), 0.0)));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
         if (SectionName.IsEmpty())
         {
@@ -1517,11 +1514,11 @@ if (SubAction == TEXT("add_notify_state"))
 
     if (SubAction == TEXT("add_montage_slot"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString AnimationPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("animationPath"), TEXT("")));
-        FString SlotName = GetStringFieldAnimAuth(Params, TEXT("slotName"), TEXT("DefaultSlot"));
-        float StartTime = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("startTime"), 0.0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString AnimationPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("animationPath"), TEXT("")));
+        FString SlotName = GetJsonStringField(Params, TEXT("slotName"), TEXT("DefaultSlot"));
+        float StartTime = static_cast<float>(GetJsonNumberField(Params, TEXT("startTime"), 0.0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimMontage* Montage = Cast<UAnimMontage>(StaticLoadObject(UAnimMontage::StaticClass(), nullptr, *AssetPath));
         if (!Montage)
@@ -1575,9 +1572,9 @@ if (SubAction == TEXT("add_notify_state"))
 
     if (SubAction == TEXT("set_section_timing"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString SectionName = GetStringFieldAnimAuth(Params, TEXT("sectionName"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString SectionName = GetJsonStringField(Params, TEXT("sectionName"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (SectionName.IsEmpty())
         {
@@ -1613,12 +1610,12 @@ if (SubAction == TEXT("add_notify_state"))
 
 if (SubAction == TEXT("add_montage_notify"))
 {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-    FString NotifyClass = GetStringFieldAnimAuth(Params, TEXT("notifyClass"), TEXT(""));
-    float Time = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("time"), 0.0));
-    int32 TrackIndex = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("trackIndex"), 0));
-    FString NotifyName = GetStringFieldAnimAuth(Params, TEXT("notifyName"), TEXT(""));
-    bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+    FString NotifyClass = GetJsonStringField(Params, TEXT("notifyClass"), TEXT(""));
+    float Time = static_cast<float>(GetJsonNumberField(Params, TEXT("time"), 0.0));
+    int32 TrackIndex = static_cast<int32>(GetJsonNumberField(Params, TEXT("trackIndex"), 0));
+    FString NotifyName = GetJsonStringField(Params, TEXT("notifyName"), TEXT(""));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
     if (NotifyClass.IsEmpty() && NotifyName.IsEmpty())
     {
@@ -1717,10 +1714,10 @@ if (SubAction == TEXT("add_montage_notify"))
 
     if (SubAction == TEXT("set_blend_in"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        float BlendTime = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("blendTime"), 0.25));
-        FString BlendOption = GetStringFieldAnimAuth(Params, TEXT("blendOption"), TEXT("Linear"));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        float BlendTime = static_cast<float>(GetJsonNumberField(Params, TEXT("blendTime"), 0.25));
+        FString BlendOption = GetJsonStringField(Params, TEXT("blendOption"), TEXT("Linear"));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimMontage* Montage = Cast<UAnimMontage>(StaticLoadObject(UAnimMontage::StaticClass(), nullptr, *AssetPath));
         if (!Montage)
@@ -1753,10 +1750,10 @@ if (SubAction == TEXT("add_montage_notify"))
 
     if (SubAction == TEXT("set_blend_out"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        float BlendTime = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("blendTime"), 0.25));
-        FString BlendOption = GetStringFieldAnimAuth(Params, TEXT("blendOption"), TEXT("Linear"));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        float BlendTime = static_cast<float>(GetJsonNumberField(Params, TEXT("blendTime"), 0.25));
+        FString BlendOption = GetJsonStringField(Params, TEXT("blendOption"), TEXT("Linear"));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimMontage* Montage = Cast<UAnimMontage>(StaticLoadObject(UAnimMontage::StaticClass(), nullptr, *AssetPath));
         if (!Montage)
@@ -1789,10 +1786,10 @@ if (SubAction == TEXT("add_montage_notify"))
 
     if (SubAction == TEXT("link_sections"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString FromSection = GetStringFieldAnimAuth(Params, TEXT("fromSection"), TEXT(""));
-        FString ToSection = GetStringFieldAnimAuth(Params, TEXT("toSection"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString FromSection = GetJsonStringField(Params, TEXT("fromSection"), TEXT(""));
+        FString ToSection = GetJsonStringField(Params, TEXT("toSection"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (FromSection.IsEmpty() || ToSection.IsEmpty())
         {
@@ -1825,13 +1822,13 @@ if (SubAction == TEXT("add_montage_notify"))
     if (SubAction == TEXT("create_blend_space_1d"))
     {
 #if MCP_HAS_BLENDSPACE_FACTORY
-    FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-    FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")));
-    FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-    FString AxisName = GetStringFieldAnimAuth(Params, TEXT("axisName"), TEXT("Speed"));
-    float AxisMin = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("axisMin"), 0.0));
-    float AxisMax = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("axisMax"), 600.0));
-    bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+    FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Animations")));
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    FString AxisName = GetJsonStringField(Params, TEXT("axisName"), TEXT("Speed"));
+    float AxisMin = static_cast<float>(GetJsonNumberField(Params, TEXT("axisMin"), 0.0));
+    float AxisMax = static_cast<float>(GetJsonNumberField(Params, TEXT("axisMax"), 600.0));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
     if (Name.IsEmpty())
     {
@@ -1939,16 +1936,16 @@ if (SubAction == TEXT("add_montage_notify"))
     if (SubAction == TEXT("create_blend_space_2d"))
     {
 #if MCP_HAS_BLENDSPACE_FACTORY
-    FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-    FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")));
-    FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-    FString HorizontalAxisName = GetStringFieldAnimAuth(Params, TEXT("horizontalAxisName"), TEXT("Direction"));
-    float HorizontalMin = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("horizontalMin"), -180.0));
-    float HorizontalMax = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("horizontalMax"), 180.0));
-    FString VerticalAxisName = GetStringFieldAnimAuth(Params, TEXT("verticalAxisName"), TEXT("Speed"));
-    float VerticalMin = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("verticalMin"), 0.0));
-    float VerticalMax = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("verticalMax"), 600.0));
-    bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+    FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Animations")));
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    FString HorizontalAxisName = GetJsonStringField(Params, TEXT("horizontalAxisName"), TEXT("Direction"));
+    float HorizontalMin = static_cast<float>(GetJsonNumberField(Params, TEXT("horizontalMin"), -180.0));
+    float HorizontalMax = static_cast<float>(GetJsonNumberField(Params, TEXT("horizontalMax"), 180.0));
+    FString VerticalAxisName = GetJsonStringField(Params, TEXT("verticalAxisName"), TEXT("Speed"));
+    float VerticalMin = static_cast<float>(GetJsonNumberField(Params, TEXT("verticalMin"), 0.0));
+    float VerticalMax = static_cast<float>(GetJsonNumberField(Params, TEXT("verticalMax"), 600.0));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
     if (Name.IsEmpty())
     {
@@ -2063,9 +2060,9 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("add_blend_sample"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString AnimationPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("animationPath"), TEXT("")));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString AnimationPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("animationPath"), TEXT("")));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UBlendSpace* BlendSpace2D = Cast<UBlendSpace>(StaticLoadObject(UBlendSpace::StaticClass(), nullptr, *AssetPath));
         UBlendSpace1D* BlendSpace1D = Cast<UBlendSpace1D>(StaticLoadObject(UBlendSpace1D::StaticClass(), nullptr, *AssetPath));
@@ -2098,8 +2095,8 @@ if (SubAction == TEXT("add_montage_notify"))
                 {
                     // 2D blend space
                     TSharedPtr<FJsonObject> SampleObj = SampleVal->AsObject();
-                    SampleValue.X = GetNumberFieldAnimAuth(SampleObj, TEXT("x"), 0.0);
-                    SampleValue.Y = GetNumberFieldAnimAuth(SampleObj, TEXT("y"), 0.0);
+                    SampleValue.X = GetJsonNumberField(SampleObj, TEXT("x"), 0.0);
+                    SampleValue.Y = GetJsonNumberField(SampleObj, TEXT("y"), 0.0);
                 }
             }
         }
@@ -2125,10 +2122,10 @@ if (SubAction == TEXT("add_montage_notify"))
     // have to hunt them down manually.
     if (SubAction == TEXT("force_rebuild_blend_space"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        bool bRebuildBlendParams = GetBoolFieldAnimAuth(Params, TEXT("rebuildBlendParameters"), false);
-        bool bCompileReferencers = GetBoolFieldAnimAuth(Params, TEXT("compileReferencers"), true);
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        bool bRebuildBlendParams = GetJsonBoolField(Params, TEXT("rebuildBlendParameters"), false);
+        bool bCompileReferencers = GetJsonBoolField(Params, TEXT("compileReferencers"), true);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
         UBlendSpace* BlendSpace2D = Cast<UBlendSpace>(StaticLoadObject(UBlendSpace::StaticClass(), nullptr, *AssetPath));
         UBlendSpace1D* BlendSpace1D = Cast<UBlendSpace1D>(StaticLoadObject(UBlendSpace1D::StaticClass(), nullptr, *AssetPath));
@@ -2236,9 +2233,9 @@ if (SubAction == TEXT("add_montage_notify"))
 
     if (SubAction == TEXT("set_axis_settings"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString Axis = GetStringFieldAnimAuth(Params, TEXT("axis"), TEXT("Horizontal"));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString Axis = GetJsonStringField(Params, TEXT("axis"), TEXT("Horizontal"));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UBlendSpace* BlendSpace2D = Cast<UBlendSpace>(StaticLoadObject(UBlendSpace::StaticClass(), nullptr, *AssetPath));
         UBlendSpace1D* BlendSpace1D = Cast<UBlendSpace1D>(StaticLoadObject(UBlendSpace1D::StaticClass(), nullptr, *AssetPath));
@@ -2263,10 +2260,10 @@ if (SubAction == TEXT("add_montage_notify"))
         // may need different approach per UE version
         
         // Log info about what was requested but note it may not take effect in UE 5.7+
-        FString RequestedAxisName = GetStringFieldAnimAuth(Params, TEXT("axisName"), TEXT(""));
-        float RequestedMin = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("minValue"), 0.0));
-        float RequestedMax = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("maxValue"), 100.0));
-        int32 RequestedGridNum = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("gridDivisions"), 4));
+        FString RequestedAxisName = GetJsonStringField(Params, TEXT("axisName"), TEXT(""));
+        float RequestedMin = static_cast<float>(GetJsonNumberField(Params, TEXT("minValue"), 0.0));
+        float RequestedMax = static_cast<float>(GetJsonNumberField(Params, TEXT("maxValue"), 100.0));
+        int32 RequestedGridNum = static_cast<int32>(GetJsonNumberField(Params, TEXT("gridDivisions"), 4));
         
         // Trigger PostEditChange to ensure any internal updates
         BlendSpace->PostEditChange();
@@ -2280,10 +2277,10 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("set_interpolation_settings"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString InterpolationType = GetStringFieldAnimAuth(Params, TEXT("interpolationType"), TEXT("Lerp"));
-        float TargetWeightSpeed = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("targetWeightInterpolationSpeed"), 5.0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString InterpolationType = GetJsonStringField(Params, TEXT("interpolationType"), TEXT("Lerp"));
+        float TargetWeightSpeed = static_cast<float>(GetJsonNumberField(Params, TEXT("targetWeightInterpolationSpeed"), 5.0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UBlendSpace* BlendSpace2D = Cast<UBlendSpace>(StaticLoadObject(UBlendSpace::StaticClass(), nullptr, *AssetPath));
         UBlendSpace1D* BlendSpace1D = Cast<UBlendSpace1D>(StaticLoadObject(UBlendSpace1D::StaticClass(), nullptr, *AssetPath));
@@ -2305,13 +2302,13 @@ if (SubAction == TEXT("add_montage_notify"))
     if (SubAction == TEXT("create_aim_offset"))
     {
 #if MCP_HAS_BLENDSPACE_FACTORY
-    FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
     // Schema advertises savePath; older callers pass path. Prefer savePath, fall back to path.
-    FString Path = GetStringFieldAnimAuth(Params, TEXT("savePath"), TEXT(""));
-    if (Path.IsEmpty()) { Path = GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")); }
+    FString Path = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
+    if (Path.IsEmpty()) { Path = GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Animations")); }
     Path = NormalizeAnimPath(Path);
-    FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-    bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
     if (Name.IsEmpty())
     {
@@ -2366,11 +2363,11 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("add_aim_offset_sample"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString AnimationPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("animationPath"), TEXT("")));
-        float Yaw = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("yaw"), 0.0));
-        float Pitch = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("pitch"), 0.0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString AnimationPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("animationPath"), TEXT("")));
+        float Yaw = static_cast<float>(GetJsonNumberField(Params, TEXT("yaw"), 0.0));
+        float Pitch = static_cast<float>(GetJsonNumberField(Params, TEXT("pitch"), 0.0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAimOffsetBlendSpace* AimOffset = Cast<UAimOffsetBlendSpace>(StaticLoadObject(UAimOffsetBlendSpace::StaticClass(), nullptr, *AssetPath));
         if (!AimOffset)
@@ -2423,14 +2420,14 @@ if (SubAction == TEXT("add_montage_notify"))
         SubAction == TEXT("create_animation_blueprint") ||
         SubAction == TEXT("create_animation_bp"))
     {
-    FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
     // Schema advertises savePath; older callers pass path. Prefer savePath, fall back to path.
-    FString Path = GetStringFieldAnimAuth(Params, TEXT("savePath"), TEXT(""));
-    if (Path.IsEmpty()) { Path = GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Blueprints")); }
+    FString Path = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
+    if (Path.IsEmpty()) { Path = GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Blueprints")); }
     Path = NormalizeAnimPath(Path);
-    FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-    FString ParentClass = GetStringFieldAnimAuth(Params, TEXT("parentClass"), TEXT("AnimInstance"));
-    bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    FString ParentClass = GetJsonStringField(Params, TEXT("parentClass"), TEXT("AnimInstance"));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
     if (Name.IsEmpty())
     {
@@ -2537,11 +2534,11 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("add_state_machine"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString StateMachineName = GetStringFieldAnimAuth(Params, TEXT("stateMachineName"), TEXT(""));
-        int32 NodePosX = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 0));
-        int32 NodePosY = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"), TEXT(""));
+        int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
+        int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (StateMachineName.IsEmpty())
         {
@@ -2625,12 +2622,12 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("add_state"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString StateMachineName = GetStringFieldAnimAuth(Params, TEXT("stateMachineName"), TEXT(""));
-        FString StateName = GetStringFieldAnimAuth(Params, TEXT("stateName"), TEXT(""));
-        int32 NodePosX = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 200));
-        int32 NodePosY = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"), TEXT(""));
+        FString StateName = GetJsonStringField(Params, TEXT("stateName"), TEXT(""));
+        int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 200));
+        int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (StateName.IsEmpty())
         {
@@ -2765,12 +2762,12 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("add_transition"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString StateMachineName = GetStringFieldAnimAuth(Params, TEXT("stateMachineName"), TEXT(""));
-        FString FromState = GetStringFieldAnimAuth(Params, TEXT("fromState"), TEXT(""));
-        FString ToState = GetStringFieldAnimAuth(Params, TEXT("toState"), TEXT(""));
-        float CrossfadeDuration = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("crossfadeDuration"), 0.2));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"), TEXT(""));
+        FString FromState = GetJsonStringField(Params, TEXT("fromState"), TEXT(""));
+        FString ToState = GetJsonStringField(Params, TEXT("toState"), TEXT(""));
+        float CrossfadeDuration = static_cast<float>(GetJsonNumberField(Params, TEXT("crossfadeDuration"), 0.2));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (FromState.IsEmpty() || ToState.IsEmpty())
         {
@@ -2900,15 +2897,15 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("set_transition_rules"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString StateMachineName = GetStringFieldAnimAuth(Params, TEXT("stateMachineName"), TEXT(""));
-        FString FromState = GetStringFieldAnimAuth(Params, TEXT("fromState"), TEXT(""));
-        FString ToState = GetStringFieldAnimAuth(Params, TEXT("toState"), TEXT(""));
-        float CrossfadeDuration = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("crossfadeDuration"), -1.0));
-        int32 PriorityOrder = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("priorityOrder"), -1));
-        bool bAutomatic = GetBoolFieldAnimAuth(Params, TEXT("automaticRule"), false);
-        bool bBidirectional = GetBoolFieldAnimAuth(Params, TEXT("bidirectional"), false);
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"), TEXT(""));
+        FString FromState = GetJsonStringField(Params, TEXT("fromState"), TEXT(""));
+        FString ToState = GetJsonStringField(Params, TEXT("toState"), TEXT(""));
+        float CrossfadeDuration = static_cast<float>(GetJsonNumberField(Params, TEXT("crossfadeDuration"), -1.0));
+        int32 PriorityOrder = static_cast<int32>(GetJsonNumberField(Params, TEXT("priorityOrder"), -1));
+        bool bAutomatic = GetJsonBoolField(Params, TEXT("automaticRule"), false);
+        bool bBidirectional = GetJsonBoolField(Params, TEXT("bidirectional"), false);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         // Try to find in-memory version first (may have unsaved changes)
         UAnimBlueprint* AnimBP = FindObject<UAnimBlueprint>(nullptr, *BlueprintPath);
@@ -2989,12 +2986,12 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("add_blend_node"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString BlendType = GetStringFieldAnimAuth(Params, TEXT("blendType"), TEXT("TwoWayBlend"));
-        FString NodeName = GetStringFieldAnimAuth(Params, TEXT("nodeName"), TEXT(""));
-        int32 NodePosX = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 0));
-        int32 NodePosY = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString BlendType = GetJsonStringField(Params, TEXT("blendType"), TEXT("TwoWayBlend"));
+        FString NodeName = GetJsonStringField(Params, TEXT("nodeName"), TEXT(""));
+        int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
+        int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(StaticLoadObject(UAnimBlueprint::StaticClass(), nullptr, *BlueprintPath));
         if (!AnimBP)
@@ -3098,11 +3095,11 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("add_cached_pose"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString CacheName = GetStringFieldAnimAuth(Params, TEXT("cacheName"), TEXT(""));
-        int32 NodePosX = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 0));
-        int32 NodePosY = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString CacheName = GetJsonStringField(Params, TEXT("cacheName"), TEXT(""));
+        int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
+        int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (CacheName.IsEmpty())
         {
@@ -3146,12 +3143,12 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("add_slot_node"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString SlotName = GetStringFieldAnimAuth(Params, TEXT("slotName"), TEXT(""));
-        FString GroupName = GetStringFieldAnimAuth(Params, TEXT("groupName"), TEXT("DefaultGroup"));
-        int32 NodePosX = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 0));
-        int32 NodePosY = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString SlotName = GetJsonStringField(Params, TEXT("slotName"), TEXT(""));
+        FString GroupName = GetJsonStringField(Params, TEXT("groupName"), TEXT("DefaultGroup"));
+        int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
+        int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (SlotName.IsEmpty())
         {
@@ -3200,11 +3197,11 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("add_layered_blend_per_bone"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString BoneName = GetStringFieldAnimAuth(Params, TEXT("boneName"), TEXT(""));
-        int32 NodePosX = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 0));
-        int32 NodePosY = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString BoneName = GetJsonStringField(Params, TEXT("boneName"), TEXT(""));
+        int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
+        int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(StaticLoadObject(UAnimBlueprint::StaticClass(), nullptr, *BlueprintPath));
         if (!AnimBP)
@@ -3245,10 +3242,10 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("set_anim_graph_node_value"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString NodeName = GetStringFieldAnimAuth(Params, TEXT("nodeName"), TEXT(""));
-        FString PropertyName = GetStringFieldAnimAuth(Params, TEXT("propertyName"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString NodeName = GetJsonStringField(Params, TEXT("nodeName"), TEXT(""));
+        FString PropertyName = GetJsonStringField(Params, TEXT("propertyName"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (NodeName.IsEmpty() || PropertyName.IsEmpty())
         {
@@ -3383,12 +3380,12 @@ if (SubAction == TEXT("add_montage_notify"))
 // ControlRig factory static methods (CreateNewControlRigAsset, CreateControlRigFromSkeletalMeshOrSkeleton)
 // are only available in UE 5.5+ where ControlRigBlueprintFactory.h is in Public folder
 #if MCP_HAS_CONTROLRIG_FACTORY && MCP_HAS_CONTROLRIG_BLUEPRINT && ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/ControlRigs")));
-        FString SkeletalMeshPath = GetStringFieldAnimAuth(Params, TEXT("skeletalMeshPath"), TEXT(""));
-        FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-        bool bModularRig = GetBoolFieldAnimAuth(Params, TEXT("modularRig"), false);
-    bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/ControlRigs")));
+        FString SkeletalMeshPath = GetJsonStringField(Params, TEXT("skeletalMeshPath"), TEXT(""));
+        FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+        bool bModularRig = GetJsonBoolField(Params, TEXT("modularRig"), false);
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
     if (Name.IsEmpty())
         {
@@ -3441,10 +3438,10 @@ if (SubAction == TEXT("add_montage_notify"))
 #elif MCP_HAS_CONTROLRIG_BLUEPRINT
         // Factory static methods not available in UE 5.1-5.4 (header is in Private folder)
         // Use the Subsystem's CreateControlRigBlueprint method as fallback
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/ControlRigs")));
-        FString SkeletalMeshPath = GetStringFieldAnimAuth(Params, TEXT("skeletalMeshPath"), TEXT(""));
-        FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/ControlRigs")));
+        FString SkeletalMeshPath = GetJsonStringField(Params, TEXT("skeletalMeshPath"), TEXT(""));
+        FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
 
         if (Name.IsEmpty())
         {
@@ -3517,7 +3514,7 @@ if (SubAction == TEXT("add_montage_notify"))
             }
         }
         
-        if (!SaveAnimAsset(ControlRigBP, GetBoolFieldAnimAuth(Params, TEXT("save"), true)))
+        if (!SaveAnimAsset(ControlRigBP, GetJsonBoolField(Params, TEXT("save"), true)))
         {
             ANIM_ERROR_RESPONSE(TEXT("Failed to save Control Rig Blueprint"), TEXT("SAVE_FAILED"));
         }
@@ -3534,9 +3531,9 @@ if (SubAction == TEXT("add_montage_notify"))
     if (SubAction == TEXT("add_control"))
     {
 #if MCP_HAS_CONTROLRIG
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString ControlName = GetStringFieldAnimAuth(Params, TEXT("controlName"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString ControlName = GetJsonStringField(Params, TEXT("controlName"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (ControlName.IsEmpty())
         {
@@ -3555,8 +3552,8 @@ if (SubAction == TEXT("add_montage_notify"))
     if (SubAction == TEXT("add_rig_unit"))
     {
 #if MCP_HAS_CONTROLRIG
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString UnitType = GetStringFieldAnimAuth(Params, TEXT("unitType"), TEXT(""));
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString UnitType = GetJsonStringField(Params, TEXT("unitType"), TEXT(""));
         
         ANIM_ERROR_RESPONSE(
             TEXT("add_rig_unit is handled by the animation_physics runtime authoring route; call animation_physics with action=add_rig_unit."),
@@ -3582,10 +3579,10 @@ if (SubAction == TEXT("add_montage_notify"))
     if (SubAction == TEXT("create_pose_library"))
     {
 #if MCP_HAS_POSEASSET
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")));
-        FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Animations")));
+        FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (Name.IsEmpty())
         {
@@ -3612,11 +3609,11 @@ if (SubAction == TEXT("add_montage_notify"))
 if (SubAction == TEXT("create_ik_rig"))
 {
 #if MCP_HAS_IKRIG_FACTORY && MCP_HAS_IKRIG
-    FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-    FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Retargeting")));
-    FString SkeletalMeshPath = GetStringFieldAnimAuth(Params, TEXT("skeletalMeshPath"), TEXT(""));
-    FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-    bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+    FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Retargeting")));
+    FString SkeletalMeshPath = GetJsonStringField(Params, TEXT("skeletalMeshPath"), TEXT(""));
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
     if (Name.IsEmpty())
     {
@@ -3693,8 +3690,8 @@ if (SubAction == TEXT("create_ik_rig"))
     if (SubAction == TEXT("add_ik_chain"))
     {
 #if MCP_HAS_IKRIG
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString ChainName = GetStringFieldAnimAuth(Params, TEXT("chainName"), TEXT(""));
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString ChainName = GetJsonStringField(Params, TEXT("chainName"), TEXT(""));
         
         if (ChainName.IsEmpty())
         {
@@ -3713,11 +3710,11 @@ if (SubAction == TEXT("create_ik_rig"))
     if (SubAction == TEXT("create_ik_retargeter"))
     {
 #if MCP_HAS_IKRETARGET_FACTORY && MCP_HAS_IKRETARGETER
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Retargeting")));
-        FString SourceIKRigPath = GetStringFieldAnimAuth(Params, TEXT("sourceIKRigPath"), TEXT(""));
-        FString TargetIKRigPath = GetStringFieldAnimAuth(Params, TEXT("targetIKRigPath"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Retargeting")));
+        FString SourceIKRigPath = GetJsonStringField(Params, TEXT("sourceIKRigPath"), TEXT(""));
+        FString TargetIKRigPath = GetJsonStringField(Params, TEXT("targetIKRigPath"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (Name.IsEmpty())
         {
@@ -3810,9 +3807,9 @@ Retargeter->TargetIKRigAsset = TargetRig;
     if (SubAction == TEXT("set_retarget_chain_mapping"))
     {
 #if MCP_HAS_IKRETARGETER
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString SourceChain = GetStringFieldAnimAuth(Params, TEXT("sourceChain"), TEXT(""));
-        FString TargetChain = GetStringFieldAnimAuth(Params, TEXT("targetChain"), TEXT(""));
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString SourceChain = GetJsonStringField(Params, TEXT("sourceChain"), TEXT(""));
+        FString TargetChain = GetJsonStringField(Params, TEXT("targetChain"), TEXT(""));
         
         if (SourceChain.IsEmpty() || TargetChain.IsEmpty())
         {
@@ -3830,7 +3827,7 @@ Retargeter->TargetIKRigAsset = TargetRig;
     
     if (SubAction == TEXT("get_animation_info"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         
         UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
         if (!Asset)
@@ -3944,17 +3941,17 @@ Retargeter->TargetIKRigAsset = TargetRig;
     // custom event name is load-bearing and must match the notify name.
     if (SubAction == TEXT("bind_anim_notify"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
         if (BlueprintPath.IsEmpty())
         {
-            BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
+            BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         }
-        const FString NotifyName      = GetStringFieldAnimAuth(Params, TEXT("notifyName"), TEXT(""));
-        const FString FunctionName    = GetStringFieldAnimAuth(Params, TEXT("functionName"), TEXT(""));
-        const FString TargetClassName = GetStringFieldAnimAuth(Params, TEXT("targetClass"), TEXT(""));
-        const bool bSave              = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        const int32 NodePosX          = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 0));
-        const int32 NodePosY          = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
+        const FString NotifyName      = GetJsonStringField(Params, TEXT("notifyName"), TEXT(""));
+        const FString FunctionName    = GetJsonStringField(Params, TEXT("functionName"), TEXT(""));
+        const FString TargetClassName = GetJsonStringField(Params, TEXT("targetClass"), TEXT(""));
+        const bool bSave              = GetJsonBoolField(Params, TEXT("save"), true);
+        const int32 NodePosX          = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
+        const int32 NodePosY          = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
 
         if (BlueprintPath.IsEmpty()) { ANIM_ERROR_RESPONSE(TEXT("blueprintPath (or assetPath) is required"), TEXT("MISSING_BLUEPRINT_PATH")); }
         if (NotifyName.IsEmpty())    { ANIM_ERROR_RESPONSE(TEXT("notifyName is required"), TEXT("MISSING_NOTIFY_NAME")); }
@@ -4147,8 +4144,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAnimationAuthoringAction(
 #undef ANIM_ERROR_RESPONSE
 #undef ANIM_SUCCESS_RESPONSE
 
-#undef GetStringFieldAnimAuth
-#undef GetNumberFieldAnimAuth
-#undef GetBoolFieldAnimAuth
+#undef GetJsonStringField
+#undef GetJsonNumberField
+#undef GetJsonBoolField
 
 #endif // WITH_EDITOR

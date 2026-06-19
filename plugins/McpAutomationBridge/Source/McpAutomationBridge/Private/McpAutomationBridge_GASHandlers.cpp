@@ -118,9 +118,6 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpGASHandlers, Log, All);
 
 // Use consolidated JSON helpers from McpAutomationBridgeHelpers.h
 // Aliases for backward compatibility with existing code in this file
-#define GetStringFieldGAS GetJsonStringField
-#define GetNumberFieldGAS GetJsonNumberField
-#define GetBoolFieldGAS GetJsonBoolField
 
 // Helper to save package
 // Note: This helper is used for NEW assets created with CreatePackage + factory.
@@ -148,13 +145,13 @@ static FString GetGASStringFieldWithFallback(
     const TCHAR* FallbackField,
     const FString& DefaultValue = FString())
 {
-    FString Value = GetStringFieldGAS(Payload, PrimaryField);
+    FString Value = GetJsonStringField(Payload, PrimaryField);
     if (!Value.IsEmpty())
     {
         return Value;
     }
 
-    Value = GetStringFieldGAS(Payload, FallbackField);
+    Value = GetJsonStringField(Payload, FallbackField);
     return Value.IsEmpty() ? DefaultValue : Value;
 }
 
@@ -417,7 +414,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         return true;
     }
 
-    FString SubAction = GetStringFieldGAS(Payload, TEXT("subAction"));
+    FString SubAction = GetJsonStringField(Payload, TEXT("subAction"));
     if (SubAction.IsEmpty())
     {
         SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'subAction' in payload."), TEXT("INVALID_ARGUMENT"));
@@ -425,10 +422,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     }
 
     // Common parameters
-    FString Name = GetStringFieldGAS(Payload, TEXT("name"));
-    FString Path = GetStringFieldGAS(Payload, TEXT("path"), TEXT("/Game"));
-    FString BlueprintPath = GetStringFieldGAS(Payload, TEXT("blueprintPath"));
-    FString AssetPath = GetStringFieldGAS(Payload, TEXT("assetPath"));
+    FString Name = GetJsonStringField(Payload, TEXT("name"));
+    FString Path = GetJsonStringField(Payload, TEXT("path"), TEXT("/Game"));
+    FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
+    FString AssetPath = GetJsonStringField(Payload, TEXT("assetPath"));
 
     // ============================================================
     // 13.1 COMPONENTS & ATTRIBUTES
@@ -440,7 +437,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        FString ComponentName = GetStringFieldGAS(Payload, TEXT("componentName"), TEXT("AbilitySystemComponent"));
+        FString ComponentName = GetJsonStringField(Payload, TEXT("componentName"), TEXT("AbilitySystemComponent"));
 
         USCS_Node* NewNode = Blueprint->SimpleConstructionScript->CreateNode(
             UAbilitySystemComponent::StaticClass(), FName(*ComponentName));
@@ -471,8 +468,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        FString ComponentName = GetStringFieldGAS(Payload, TEXT("componentName"), TEXT("AbilitySystemComponent"));
-        FString ReplicationMode = GetStringFieldGAS(Payload, TEXT("replicationMode"), TEXT("Full"));
+        FString ComponentName = GetJsonStringField(Payload, TEXT("componentName"), TEXT("AbilitySystemComponent"));
+        FString ReplicationMode = GetJsonStringField(Payload, TEXT("replicationMode"), TEXT("Full"));
         const FString ReplicationModeToken = NormalizeGASToken(ReplicationMode);
 
         // Find ASC in SCS
@@ -567,7 +564,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString AttributeName = GetStringFieldGAS(Payload, TEXT("attributeName"));
+        FString AttributeName = GetJsonStringField(Payload, TEXT("attributeName"));
         if (AttributeName.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing attributeName."), TEXT("INVALID_ARGUMENT"));
@@ -577,7 +574,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        float DefaultValue = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("defaultValue"), 0.0));
+        float DefaultValue = static_cast<float>(GetJsonNumberField(Payload, TEXT("defaultValue"), 0.0));
 
         // Add FGameplayAttributeData member variable
         FEdGraphPinType PinType;
@@ -610,14 +607,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString AttributeName = GetStringFieldGAS(Payload, TEXT("attributeName"));
+        FString AttributeName = GetJsonStringField(Payload, TEXT("attributeName"));
         if (AttributeName.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing attributeName."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
 
-        float BaseValue = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("baseValue"), 0.0));
+        float BaseValue = static_cast<float>(GetJsonNumberField(Payload, TEXT("baseValue"), 0.0));
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -707,15 +704,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString AttributeName = GetStringFieldGAS(Payload, TEXT("attributeName"));
+        FString AttributeName = GetJsonStringField(Payload, TEXT("attributeName"));
         if (AttributeName.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing attributeName."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
 
-        float MinValue = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("minValue"), 0.0));
-        float MaxValue = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("maxValue"), 100.0));
+        float MinValue = static_cast<float>(GetJsonNumberField(Payload, TEXT("minValue"), 0.0));
+        float MaxValue = static_cast<float>(GetJsonNumberField(Payload, TEXT("maxValue"), 100.0));
 
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
@@ -980,7 +977,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString CostEffectPath = GetStringFieldGAS(Payload, TEXT("costEffectPath"));
+        FString CostEffectPath = GetJsonStringField(Payload, TEXT("costEffectPath"));
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -1032,7 +1029,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString CooldownEffectPath = GetStringFieldGAS(Payload, TEXT("cooldownEffectPath"));
+        FString CooldownEffectPath = GetJsonStringField(Payload, TEXT("cooldownEffectPath"));
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -1086,9 +1083,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
 
         FString TargetingType = GetGASStringFieldWithFallback(Payload, TEXT("targetingType"), TEXT("targetingMode"), TEXT("self"));
         float TargetingRange = static_cast<float>(GetGASNumberFieldWithFallback(Payload, TEXT("targetingRange"), TEXT("targetRange"), 1000.0));
-        float AOERadius = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("aoeRadius"), 0.0));
-        bool bRequiresLineOfSight = GetBoolFieldGAS(Payload, TEXT("requiresLineOfSight"), false);
-        float TargetingAngle = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("targetingAngle"), 360.0));
+        float AOERadius = static_cast<float>(GetJsonNumberField(Payload, TEXT("aoeRadius"), 0.0));
+        bool bRequiresLineOfSight = GetJsonBoolField(Payload, TEXT("requiresLineOfSight"), false);
+        float TargetingAngle = static_cast<float>(GetJsonNumberField(Payload, TEXT("targetingAngle"), 360.0));
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -1233,14 +1230,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString TaskType = GetStringFieldGAS(Payload, TEXT("taskType"));
+        FString TaskType = GetJsonStringField(Payload, TEXT("taskType"));
         if (TaskType.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing taskType."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
         
-        FString TaskClassName = GetStringFieldGAS(Payload, TEXT("taskClassName"));
+        FString TaskClassName = GetJsonStringField(Payload, TEXT("taskClassName"));
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -1405,9 +1402,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString ActivationPolicy = GetStringFieldGAS(Payload, TEXT("activationPolicy"));
+        FString ActivationPolicy = GetJsonStringField(Payload, TEXT("activationPolicy"));
         const FString PolicyDefault = ActivationPolicy.IsEmpty() ? FString(TEXT("local_predicted")) : ActivationPolicy;
-        FString Policy = GetStringFieldGAS(Payload, TEXT("policy"), PolicyDefault);
+        FString Policy = GetJsonStringField(Payload, TEXT("policy"), PolicyDefault);
         const FString PolicyToken = NormalizeGASToken(Policy);
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
@@ -1560,7 +1557,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString DurationType = GetStringFieldGAS(Payload, TEXT("durationType"), TEXT("Instant"));
+        FString DurationType = GetJsonStringField(Payload, TEXT("durationType"), TEXT("Instant"));
         const FString DurationTypeToken = NormalizeGASToken(DurationType);
 
         // Only set duration policy on CDO if we created a new blueprint
@@ -1628,9 +1625,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString DurationType = GetStringFieldGAS(Payload, TEXT("durationType"), TEXT("Instant"));
+        FString DurationType = GetJsonStringField(Payload, TEXT("durationType"), TEXT("Instant"));
         const FString DurationTypeToken = NormalizeGASToken(DurationType);
-        float Duration = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("duration"), 0.0));
+        float Duration = static_cast<float>(GetJsonNumberField(Payload, TEXT("duration"), 0.0));
 
         if (DurationTypeToken == TEXT("instant"))
         {
@@ -1749,7 +1746,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        int32 ModifierIndex = static_cast<int32>(GetNumberFieldGAS(Payload, TEXT("modifierIndex"), 0));
+        int32 ModifierIndex = static_cast<int32>(GetJsonNumberField(Payload, TEXT("modifierIndex"), 0));
         float Value = static_cast<float>(GetGASNumberFieldWithFallback(Payload, TEXT("value"), TEXT("modifierMagnitude"), 0.0));
         FString MagnitudeType = GetGASStringFieldWithFallback(Payload, TEXT("magnitudeType"), TEXT("magnitudeCalculationType"), TEXT("ScalableFloat"));
 
@@ -1782,7 +1779,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString CalculationClassPath = GetStringFieldGAS(Payload, TEXT("calculationClass"));
+        FString CalculationClassPath = GetJsonStringField(Payload, TEXT("calculationClass"));
         if (CalculationClassPath.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing calculationClass."), TEXT("INVALID_ARGUMENT"));
@@ -1837,7 +1834,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString CueTag = GetStringFieldGAS(Payload, TEXT("cueTag"));
+        FString CueTag = GetJsonStringField(Payload, TEXT("cueTag"));
         if (CueTag.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing cueTag."), TEXT("INVALID_ARGUMENT"));
@@ -1901,7 +1898,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString StackingType = GetStringFieldGAS(Payload, TEXT("stackingType"), TEXT("None"));
+        FString StackingType = GetJsonStringField(Payload, TEXT("stackingType"), TEXT("None"));
         const FString StackingTypeToken = NormalizeGASToken(StackingType);
         int32 StackLimit = static_cast<int32>(GetGASNumberFieldWithFallback(Payload, TEXT("stackLimit"), TEXT("stackLimitCount"), 1));
 
@@ -1939,7 +1936,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
 
         EffectCDO->StackLimitCount = StackLimit;
 
-        FString StackDurationRefreshPolicy = GetStringFieldGAS(Payload, TEXT("stackDurationRefreshPolicy"));
+        FString StackDurationRefreshPolicy = GetJsonStringField(Payload, TEXT("stackDurationRefreshPolicy"));
         const FString StackDurationRefreshPolicyToken = NormalizeGASToken(StackDurationRefreshPolicy);
         if (StackDurationRefreshPolicyToken == TEXT("refreshonsuccessfulapplication"))
         {
@@ -1959,7 +1956,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
 #endif
         }
 
-        FString StackPeriodResetPolicy = GetStringFieldGAS(Payload, TEXT("stackPeriodResetPolicy"));
+        FString StackPeriodResetPolicy = GetJsonStringField(Payload, TEXT("stackPeriodResetPolicy"));
         const FString StackPeriodResetPolicyToken = NormalizeGASToken(StackPeriodResetPolicy);
         if (StackPeriodResetPolicyToken == TEXT("resetonsuccessfulapplication"))
         {
@@ -1970,7 +1967,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             EffectCDO->StackPeriodResetPolicy = EGameplayEffectStackingPeriodPolicy::NeverReset;
         }
 
-        FString StackExpirationPolicy = GetStringFieldGAS(Payload, TEXT("stackExpirationPolicy"));
+        FString StackExpirationPolicy = GetJsonStringField(Payload, TEXT("stackExpirationPolicy"));
         const FString StackExpirationPolicyToken = NormalizeGASToken(StackExpirationPolicy);
         if (StackExpirationPolicyToken == TEXT("clearentirestack"))
         {
@@ -2116,9 +2113,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString CueType = GetStringFieldGAS(Payload, TEXT("cueType"), TEXT("Static"));
+        FString CueType = GetJsonStringField(Payload, TEXT("cueType"), TEXT("Static"));
         const FString CueTypeToken = NormalizeGASToken(CueType);
-        FString CueTag = GetStringFieldGAS(Payload, TEXT("cueTag"));
+        FString CueTag = GetJsonStringField(Payload, TEXT("cueTag"));
 
         UClass* ParentClass = (CueTypeToken == TEXT("actor"))
             ? AGameplayCueNotify_Actor::StaticClass()
@@ -2186,7 +2183,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString TriggerType = GetStringFieldGAS(Payload, TEXT("triggerType"), TEXT("Executed"));
+        FString TriggerType = GetJsonStringField(Payload, TEXT("triggerType"), TEXT("Executed"));
         const FString TriggerTypeToken = NormalizeGASToken(TriggerType);
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
@@ -2233,7 +2230,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         FString ParticleSystem = GetGASStringFieldWithFallback(Payload, TEXT("particleSystem"), TEXT("particleSystemPath"));
         FString Sound = GetGASStringFieldWithFallback(Payload, TEXT("sound"), TEXT("soundPath"));
         FString CameraShake = GetGASStringFieldWithFallback(Payload, TEXT("cameraShake"), TEXT("cameraShakePath"));
-        FString Decal = GetStringFieldGAS(Payload, TEXT("decalPath"));
+        FString Decal = GetJsonStringField(Payload, TEXT("decalPath"));
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -2383,7 +2380,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString TagString = GetStringFieldGAS(Payload, TEXT("tag"));
+        FString TagString = GetJsonStringField(Payload, TEXT("tag"));
         if (TagString.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing tag."), TEXT("INVALID_ARGUMENT"));
@@ -2608,8 +2605,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        const FString ActorName = GetStringFieldGAS(Payload, TEXT("actorName"));
-        const FString AttributeName = GetStringFieldGAS(Payload, TEXT("attribute"));
+        const FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
+        const FString AttributeName = GetJsonStringField(Payload, TEXT("attribute"));
         if (AttributeName.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId,
@@ -2843,10 +2840,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     // create_ability_set - Create UGameplayAbilitySet (data asset with granted abilities)
     if (SubAction == TEXT("create_ability_set"))
     {
-        FString SetPath = GetStringFieldGAS(Payload, TEXT("setPath"));
+        FString SetPath = GetJsonStringField(Payload, TEXT("setPath"));
         if (SetPath.IsEmpty())
         {
-            SetPath = GetStringFieldGAS(Payload, TEXT("assetPath"));
+            SetPath = GetJsonStringField(Payload, TEXT("assetPath"));
         }
         if (SetPath.IsEmpty())
         {
@@ -2951,7 +2948,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         StringType.PinCategory = UEdGraphSchema_K2::PC_String;
         FBlueprintEditorUtils::AddMemberVariable(SetBlueprint, TEXT("SetDisplayName"), StringType);
 
-        FString SetName = GetStringFieldGAS(Payload, TEXT("setName"));
+        FString SetName = GetJsonStringField(Payload, TEXT("setName"));
         if (SetName.IsEmpty())
         {
             SetName = AssetName;
@@ -2981,17 +2978,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     // add_ability - Add ability class reference to ability set
     if (SubAction == TEXT("add_ability"))
     {
-        FString SetPath = GetStringFieldGAS(Payload, TEXT("setPath"));
+        FString SetPath = GetJsonStringField(Payload, TEXT("setPath"));
         if (SetPath.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing setPath"), TEXT("INVALID_ARGUMENT"));
             return true;
         }
 
-        FString AbilityPath = GetStringFieldGAS(Payload, TEXT("abilityPath"));
+        FString AbilityPath = GetJsonStringField(Payload, TEXT("abilityPath"));
         if (AbilityPath.IsEmpty())
         {
-            AbilityPath = GetStringFieldGAS(Payload, TEXT("abilityClass"));
+            AbilityPath = GetJsonStringField(Payload, TEXT("abilityClass"));
         }
         if (AbilityPath.IsEmpty())
         {
@@ -3041,10 +3038,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     // grant_ability - Grant ability to actor's AbilitySystemComponent at runtime
     if (SubAction == TEXT("grant_ability"))
     {
-        FString ActorPath = GetStringFieldGAS(Payload, TEXT("actorPath"));
+        FString ActorPath = GetJsonStringField(Payload, TEXT("actorPath"));
         if (ActorPath.IsEmpty())
         {
-            ActorPath = GetStringFieldGAS(Payload, TEXT("blueprintPath"));
+            ActorPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
         }
         if (ActorPath.IsEmpty())
         {
@@ -3052,10 +3049,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString AbilityPath = GetStringFieldGAS(Payload, TEXT("abilityPath"));
+        FString AbilityPath = GetJsonStringField(Payload, TEXT("abilityPath"));
         if (AbilityPath.IsEmpty())
         {
-            AbilityPath = GetStringFieldGAS(Payload, TEXT("abilityClass"));
+            AbilityPath = GetJsonStringField(Payload, TEXT("abilityClass"));
         }
         if (AbilityPath.IsEmpty())
         {
@@ -3238,6 +3235,6 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
-#undef GetStringFieldGAS
-#undef GetNumberFieldGAS
-#undef GetBoolFieldGAS
+#undef GetJsonStringField
+#undef GetJsonNumberField
+#undef GetJsonBoolField

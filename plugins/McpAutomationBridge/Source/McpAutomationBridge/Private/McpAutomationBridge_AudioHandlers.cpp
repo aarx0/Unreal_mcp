@@ -1920,7 +1920,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
     // If a soundPath is provided, we can configure a SoundCue with doppler
     if (!SoundPath.IsEmpty()) {
       // Validate path for security
-      FString ValidatedPath = McpHandlerUtils::ValidateAssetPath(SoundPath);
+      FString ValidatedPath = SanitizeProjectRelativePath(SoundPath);
       if (ValidatedPath.IsEmpty()) {
         SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Invalid sound path"), TEXT("INVALID_PATH"));
@@ -2019,7 +2019,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
 
     if (!SoundPath.IsEmpty()) {
       // Validate path for security
-      FString ValidatedPath = McpHandlerUtils::ValidateAssetPath(SoundPath);
+      FString ValidatedPath = SanitizeProjectRelativePath(SoundPath);
       if (ValidatedPath.IsEmpty()) {
         SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Invalid sound path"), TEXT("INVALID_PATH"));
