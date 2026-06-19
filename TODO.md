@@ -723,10 +723,10 @@ the module + routing tables, reflection/string-dispatch ruled out). DONE + built
 
 **Refactor backlog (from the simplify sweep — boilerplate dedup; NOT auto-applied: these transform LIVE code at
 hundreds of sites, a different risk class than dead-code deletion. Do deliberately / greenlight individually):**
-- [ ] **(high, ~575 lines) `InitializeHandlers()` RegisterHandler boilerplate** — ~115 trivial registrations are each a
+- [x] **DONE 0c7ccb3 (-536 lines, routing smoke-tested). (high, ~575 lines) `InitializeHandlers()` RegisterHandler boilerplate** — ~115 trivial registrations are each a
   5-line forwarding lambda `[this](R,A,P,S){ return HandleXxx(R,A,P,S); }`. Add `#define MCP_REGISTER_HANDLER(name, fn)`
   and collapse each to one line. Leave the genuine multi-branch routing lambdas alone (judgement per-site → why not auto-applied).
-- [ ] **(med) load-blueprint prologue** repeated ~90× — `ResolveBlueprintParamOrError(Payload, RequestId, Socket, field="blueprintPath")`
+- [x] **DONE bd1568f (89 sites, -790 lines; helper named ResolveBlueprintOrError; 27 GeneratedClass/sanitized-path/etc. sites correctly skipped). (med) load-blueprint prologue** repeated ~90× — `ResolveBlueprintParamOrError(Payload, RequestId, Socket, field="blueprintPath")`
   returning the BP or sending the error + nullptr (handler: `if (!BP) return true;`). Collapses ~10 lines → 2 per site.
 - [ ] **(med) compile/save tail** (`Mark…Modified` + `McpSafeCompileBlueprint` + `McpSafeAssetSave`) hand-written everywhere with
   INCONSISTENT mark/compile/save choices (a correctness risk) → one `McpFinalizeBlueprint(BP, bStructural, bSave)` in McpSafeOperations.h.
