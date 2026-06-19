@@ -32,8 +32,7 @@ A `tools/call` passes through three native layers (see [docs/extending-the-bridg
 It's a normal UE plugin. For this project it already lives at
 `Plugins/Unreal_mcp/plugins/McpAutomationBridge`, and UE discovers the nested `.uplugin` automatically.
 For another project, clone this repo into the project's `Plugins/` directory (or copy just
-`plugins/McpAutomationBridge` with [`scripts/sync-mcp-plugin.js`](scripts/sync-mcp-plugin.js)), then
-rebuild the editor.
+`plugins/McpAutomationBridge` into it), then rebuild the editor.
 
 ## Enable & connect
 
