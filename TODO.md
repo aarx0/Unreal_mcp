@@ -636,6 +636,27 @@ bake-rebuild done so the on-disk DLL matches source.
 - `manage_audio` `create_sound_class`/`create_sound_mix` hang (needs in-editor debugger — Aaron-gated).
 - Widget-authoring params undeclared in the `manage_blueprint` schema (doc-only); no runtime component-function call.
 
+### 2026-06-18e — Adversarial review of the cleanup change set (cd3c711..HEAD)
+Ran a 15-agent verify workflow (6 parallel reviewers by dimension → independent skeptic refutes each finding)
+over tonight's Batches 1–3 + the full C dedup. Verdict: **the work is sound** — 7 confirmed findings, 6 minor/
+benign, only 1 real bug. Fixed in `651bbe4`:
+- [x] **`add_event` eventName→eventType alias could mis-route a custom-event request — FIXED.** When a caller
+  passed BOTH `customEventName` and `eventName` but no `eventType`, the alias copied eventName into eventType →
+  override path → EVENT_NOT_FOUND (the old code created the custom event). Guard: alias only applies when
+  `customEventName` is also absent. Verified both paths live.
+- [x] **Helper error messages genericized — RESTORED.** `ConstructWidgetForAdd`/`AddFinalizeRespondWidget` now
+  name the widget class again in the construct-failure / tree-add-failure messages (error codes were already kept).
+- Benign/intentional (left as-is): `GetSlotName` now honors `name`/`widgetName` for add_* (the deliberate Batch-1
+  alias); all add_* now emit the `verification` field (additive, harmonizes the 13 outliers with their siblings).
+
+Real bug FOUND by the review but DEFERRED (off critical path, niche inventory handler — do deliberately):
+- [ ] **`configure_inventory_slots` silent no-op when `MaxSlots` doesn't pre-exist** (InventoryHandlers.cpp ~483-506).
+  When the CDO has no `MaxSlots` property it `AddMemberVariable`s one then Mark+Save WITHOUT compiling, so the var
+  lands at its type-default 0 instead of `slotCount` (the requested value is never written to the recompiled CDO).
+  Fix: after AddMemberVariable, `McpSafeCompileBlueprint(Blueprint)` then re-find the CDO `MaxSlots` and
+  `ApplyJsonValueToProperty(SlotCount)` before saving. (Same compile-before-CDO-write class as the audit's B-🟡
+  Inventory/Interaction note.)
+
 ### 2026-06-18b — Friction found building the HUD `bind_event_to_delegate` (live MCP authoring)
 - [x] **`MakePinType` PC_Float → INT — FIXED (Live-Coding-only; needs a full rebuild to persist).**
   `McpBlueprintUtils::MakePinType` (McpHandlerUtils.cpp ~682) used the legacy bare `PC_Float` category for
