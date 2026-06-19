@@ -443,22 +443,6 @@ int32 ApplyJsonValuesToObject(UObject* Object, const TMap<FName, TSharedPtr<FJso
     return SuccessCount;
 }
 
-int32 ApplyJsonObjectToObject(UObject* Object, const TSharedPtr<FJsonObject>& JsonObject, TMap<FName, FString>* OutErrors)
-{
-    if (!Object || !JsonObject.IsValid())
-    {
-        return 0;
-    }
-
-    TMap<FName, TSharedPtr<FJsonValue>> Values;
-    for (const auto& Pair : JsonObject->Values)
-    {
-        Values.Add(FName(*Pair.Key), Pair.Value);
-    }
-
-    return ApplyJsonValuesToObject(Object, Values, OutErrors);
-}
-
 FString GetPropertyTypeName(FProperty* Property)
 {
     if (!Property)
@@ -500,104 +484,6 @@ FString GetPropertyTypeName(FProperty* Property)
     if (Property->IsA<FTextProperty>()) return TEXT("Text");
 
     return Property->GetClass()->GetName();
-}
-
-bool IsPropertyTypeSupported(FProperty* Property)
-{
-    if (!Property) return false;
-    
-    return Property->IsA<FStrProperty>() ||
-           Property->IsA<FNameProperty>() ||
-           Property->IsA<FBoolProperty>() ||
-           Property->IsA<FFloatProperty>() ||
-           Property->IsA<FDoubleProperty>() ||
-           Property->IsA<FIntProperty>() ||
-           Property->IsA<FInt64Property>() ||
-           Property->IsA<FByteProperty>() ||
-           Property->IsA<FEnumProperty>() ||
-           Property->IsA<FObjectProperty>() ||
-           Property->IsA<FSoftObjectProperty>() ||
-           Property->IsA<FSoftClassProperty>() ||
-           Property->IsA<FStructProperty>() ||
-           Property->IsA<FArrayProperty>() ||
-           Property->IsA<FMapProperty>() ||
-           Property->IsA<FSetProperty>();
-}
-
-FString GetPropertyValueAsString(UObject* Object, FProperty* Property)
-{
-    if (!Object || !Property) return FString();
-
-    FString Result;
-    MCP_PROPERTY_EXPORT_TEXT(Property, Result, Property->ContainerPtrToValuePtr<void>(Object), nullptr, nullptr, PPF_None);
-    return Result;
-}
-
-bool SetPropertyValueFromString(UObject* Object, FProperty* Property, const FString& ValueString, FString* OutError)
-{
-    if (!Object || !Property)
-    {
-        if (OutError) *OutError = TEXT("Invalid object or property");
-        return false;
-    }
-
-    void* Container = Property->ContainerPtrToValuePtr<void>(Object);
-    if (!Container)
-    {
-        if (OutError) *OutError = TEXT("Failed to get property container");
-        return false;
-    }
-
-    // UE 5.1+ uses ImportText_Direct instead of ImportText
-    const TCHAR* Result = nullptr;
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
-    Result = Property->ImportText_Direct(*ValueString, Container, nullptr, PPF_None, nullptr);
-#else
-    // UE 5.0: ImportText takes (Buffer, Data, PortFlags, OwnerObject, ErrorText)
-    Result = Property->ImportText(*ValueString, Container, PPF_None, nullptr);
-#endif
-    if (!Result)
-    {
-        if (OutError) *OutError = FString::Printf(TEXT("Failed to import value '%s' for property '%s'"), *ValueString, *Property->GetName());
-        return false;
-    }
-
-    return true;
-}
-
-TArray<FString> GetEnumValueNames(UEnum* Enum)
-{
-    TArray<FString> Names;
-    if (!Enum) return Names;
-
-    for (int32 i = 0; i < Enum->NumEnums(); ++i)
-    {
-        if (Enum->HasMetaData(TEXT("Hidden"), i) || Enum->HasMetaData(TEXT("Deprecated"), i))
-        {
-            continue;
-        }
-        Names.Add(Enum->GetNameStringByIndex(i));
-    }
-
-    return Names;
-}
-
-FString EnumValueToName(UEnum* Enum, int64 Value)
-{
-    if (!Enum) return FString();
-    return Enum->GetNameStringByValue(Value);
-}
-
-bool EnumNameToValue(UEnum* Enum, const FString& Name, int64& OutValue)
-{
-    if (!Enum) return false;
-
-    OutValue = Enum->GetValueByNameString(Name);
-    if (OutValue != INDEX_NONE) return true;
-
-    FString FullName = Enum->GenerateFullEnumName(*Name);
-    OutValue = Enum->GetValueByName(FName(*FullName));
-    return OutValue != INDEX_NONE;
 }
 
 int32 GetArrayPropertyCount(void* Container, FArrayProperty* ArrayProp)

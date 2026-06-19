@@ -689,41 +689,6 @@ static void FMcpAutomationBridge_AppendPinsJson(
   }
 }
 
-static bool FMcpAutomationBridge_CollectVariableMetadata(
-    const UBlueprint *Blueprint, const FBPVariableDescription &VarDesc,
-    TSharedPtr<FJsonObject> &OutMetadata) {
-  OutMetadata.Reset();
-
-#if WITH_EDITOR
-  if (Blueprint) {
-    TSharedPtr<FJsonObject> MetaJson = McpHandlerUtils::CreateResultObject();
-    bool bAny = false;
-    UBlueprint *MutableBlueprint = const_cast<UBlueprint *>(Blueprint);
-    if (FProperty *Property = FMcpAutomationBridge_FindProperty(
-            MutableBlueprint, VarDesc.VarName.ToString())) {
-      if (const TMap<FName, FString> *MetaMap = Property->GetMetaDataMap()) {
-        for (const TPair<FName, FString> &Pair : *MetaMap) {
-          if (!Pair.Value.IsEmpty()) {
-            MetaJson->SetStringField(Pair.Key.ToString(), Pair.Value);
-            bAny = true;
-          }
-        }
-      }
-    }
-    if (bAny && MetaJson->Values.Num() > 0) {
-      OutMetadata = MetaJson;
-      return true;
-    }
-  }
-#endif
-
-  return false;
-}
-
-static TSharedPtr<FJsonObject>
-FMcpAutomationBridge_BuildVariableJson(const UBlueprint *Blueprint,
-                                       const FBPVariableDescription &VarDesc);
-
 static FString
 FMcpAutomationBridge_DescribePropertyType(const FProperty *Property) {
   if (!Property) {
@@ -744,49 +709,6 @@ FMcpAutomationBridge_DescribePropertyType(const FProperty *Property) {
   FString ExtendedType;
   const FString BaseType = Property->GetCPPType(&ExtendedType);
   return ExtendedType.IsEmpty() ? BaseType : BaseType + ExtendedType;
-}
-
-static void FMcpAutomationBridge_AnnotateVariableJson(
-    const TSharedPtr<FJsonObject> &Obj, const UBlueprint *RequestedBlueprint,
-    const UBlueprint *DeclaringBlueprint, bool bIsSCSVariable) {
-  if (!Obj.IsValid()) {
-    return;
-  }
-
-  // Mark as inherited if: RequestedBlueprint is valid AND
-  // (DeclaringBlueprint is null = native parent, OR different blueprint)
-  Obj->SetBoolField(TEXT("inherited"),
-      RequestedBlueprint && (DeclaringBlueprint ? RequestedBlueprint != DeclaringBlueprint : true));
-  if (DeclaringBlueprint) {
-    Obj->SetStringField(TEXT("declaredInBlueprintPath"),
-                        DeclaringBlueprint->GetPathName());
-  }
-  if (bIsSCSVariable) {
-    Obj->SetBoolField(TEXT("component"), true);
-  }
-}
-
-static TSharedPtr<FJsonObject>
-FMcpAutomationBridge_BuildVariableJson(const UBlueprint *Blueprint,
-                                       const FBPVariableDescription &VarDesc) {
-  TSharedPtr<FJsonObject> Obj = McpHandlerUtils::CreateResultObject();
-  Obj->SetStringField(TEXT("name"), VarDesc.VarName.ToString());
-  Obj->SetStringField(TEXT("type"),
-                      FMcpAutomationBridge_DescribePinType(VarDesc.VarType));
-  Obj->SetBoolField(TEXT("replicated"), (VarDesc.PropertyFlags & CPF_Net) != 0);
-  Obj->SetBoolField(TEXT("public"),
-                    (VarDesc.PropertyFlags & CPF_BlueprintReadOnly) == 0);
-  const FString CategoryStr =
-      VarDesc.Category.IsEmpty() ? FString() : VarDesc.Category.ToString();
-  if (!CategoryStr.IsEmpty()) {
-    Obj->SetStringField(TEXT("category"), CategoryStr);
-  }
-  TSharedPtr<FJsonObject> Metadata;
-  if (FMcpAutomationBridge_CollectVariableMetadata(Blueprint, VarDesc,
-                                                   Metadata)) {
-    Obj->SetObjectField(TEXT("metadata"), Metadata);
-  }
-  return Obj;
 }
 
 static TArray<TSharedPtr<FJsonValue>>

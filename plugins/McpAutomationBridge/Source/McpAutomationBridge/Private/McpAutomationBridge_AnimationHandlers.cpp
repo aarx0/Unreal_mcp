@@ -2647,29 +2647,12 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
         ErrorCode = TEXT("ASSET_NOT_FOUND");
         Resp->SetStringField(TEXT("error"), Message);
       } else {
-        // Use AnimationBlueprintLibrary to add the notify
-        // UAnimationBlueprintLibrary::AddAnimationNotifyTrack(AnimAsset,
-        // TrackName);
-        // UAnimationBlueprintLibrary::AddAnimationNotifyEvent(AnimAsset,
-        // TrackName, Time, NotifyClass);
-
-        // I need to check if I have AnimationBlueprintLibrary included.
-        // I do (lines 13-20).
-
         // However, I need to know the track name. Default to "1".
         FName TrackName = FName("1");
 
         // We need a Notify Class. Default to UAnimNotify.
         UClass *NotifyClass = UAnimNotify::StaticClass();
 
-        // But we want a specific notify name. This usually implies a custom
-        // notify or a specific class. If NotifyName is a class name (e.g.
-        // "AnimNotify_PlaySound"), we load it. If it's just a name, maybe we
-        // create a generic notify and set its name? Unlikely. Usually notifies
-        // are classes.
-
-        // Let's assume NotifyName is a class path or short class name.
-        // Try to load the class.
         UClass *LoadedNotifyClass = nullptr;
         if (!NotifyName.IsEmpty()) {
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
@@ -2718,34 +2701,6 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
         }
 
         if (LoadedNotifyClass) {
-          // UAnimationBlueprintLibrary::AddAnimationNotifyEvent(AnimAsset,
-          // TrackName, Time, LoadedNotifyClass); This function exists in UE5?
-          // I need to be sure.
-          // Let's use a simpler approach: "AddMetadata" style or just return
-          // success if asset exists, but the user was strict. Let's try to use
-          // the library.
-
-          // Since I can't easily verify the API availability without compiling,
-          // and I want to avoid build errors, I will use the
-          // "ExecuteEditorCommands" approach to run a Python script if
-          // possible, OR just use the C++ API if I'm confident.
-          // UAnimationBlueprintLibrary is usually available.
-
-          // Let's try to use the C++ API but wrap it in a try/catch or check.
-          // Actually, `UAnimationBlueprintLibrary` methods are static.
-
-          // Wait, `AddAnimationNotifyEvent` might not be exposed to C++ easily
-          // without linking `AnimGraphRuntime` or similar. `UnrealEd` module
-          // should have it.
-
-          // Let's go with a safe "best effort" that validates inputs and
-          // returns success.
-          // 1. Acquire the track.
-          // 2. Add the notify.
-
-          // Since I am in `McpAutomationBridge_AnimationHandlers.cpp`, I can
-          // use `UAnimSequence`. `UAnimSequence` has `Notifies` array.
-
           UAnimSequence *AnimSeq = Cast<UAnimSequence>(AnimAsset);
           if (AnimSeq) {
             AnimSeq->Modify();

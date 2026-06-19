@@ -137,18 +137,6 @@ namespace McpPropertyReflection
         const TMap<FName, TSharedPtr<FJsonValue>>& JsonValues,
         TMap<FName, FString>* OutErrors = nullptr);
 
-    /**
-     * Apply properties from a JSON object to a UObject.
-     * @param Object The object to modify
-     * @param JsonObject The JSON object containing property values
-     * @param OutErrors Optional map to receive property-specific errors
-     * @return Number of properties successfully set
-     */
-    MCPAUTOMATIONBRIDGE_API int32 ApplyJsonObjectToObject(
-        UObject* Object,
-        const TSharedPtr<FJsonObject>& JsonObject,
-        TMap<FName, FString>* OutErrors = nullptr);
-
     // =========================================================================
     // Property Type Utilities
     // =========================================================================
@@ -157,11 +145,6 @@ namespace McpPropertyReflection
      * Get a human-readable type name for a property.
      */
     MCPAUTOMATIONBRIDGE_API FString GetPropertyTypeName(FProperty* Property);
-
-    /**
-     * Check if a property type is supported for JSON conversion.
-     */
-    MCPAUTOMATIONBRIDGE_API bool IsPropertyTypeSupported(FProperty* Property);
 
     /**
      * Get a property by name from an object's class.
@@ -184,56 +167,6 @@ namespace McpPropertyReflection
         
         return Class->FindPropertyByName(PropertyName);
     }
-
-    /**
-     * Get the value of a property as a string.
-     * @param Object The object containing the property
-     * @param Property The property to read
-     * @return String representation of the property value
-     */
-    MCPAUTOMATIONBRIDGE_API FString GetPropertyValueAsString(UObject* Object, FProperty* Property);
-
-    /**
-     * Set the value of a property from a string.
-     * @param Object The object containing the property
-     * @param Property The property to set
-     * @param ValueString The string value to set
-     * @param OutError Optional error message output
-     * @return true if successful
-     */
-    MCPAUTOMATIONBRIDGE_API bool SetPropertyValueFromString(
-        UObject* Object,
-        FProperty* Property,
-        const FString& ValueString,
-        FString* OutError = nullptr);
-
-    // =========================================================================
-    // Enum Utilities
-    // =========================================================================
-
-    /**
-     * Get all enum values as an array of strings.
-     * @param Enum The enum to get values from
-     * @return Array of enum value names
-     */
-    MCPAUTOMATIONBRIDGE_API TArray<FString> GetEnumValueNames(UEnum* Enum);
-
-    /**
-     * Convert an enum value to its string name.
-     * @param Enum The enum type
-     * @param Value The numeric enum value
-     * @return The enum value name, or empty string if not found
-     */
-    MCPAUTOMATIONBRIDGE_API FString EnumValueToName(UEnum* Enum, int64 Value);
-
-    /**
-     * Convert an enum name string to its numeric value.
-     * @param Enum The enum type
-     * @param Name The enum value name (with or without enum prefix)
-     * @param OutValue The numeric value output
-     * @return true if conversion succeeded
-     */
-    MCPAUTOMATIONBRIDGE_API bool EnumNameToValue(UEnum* Enum, const FString& Name, int64& OutValue);
 
     // =========================================================================
     // Struct Utilities
@@ -382,77 +315,6 @@ namespace McpPropertyReflection
         Obj->SetNumberField(TEXT("yaw"), Rotator.Yaw);
         Obj->SetNumberField(TEXT("roll"), Rotator.Roll);
         return Obj;
-    }
-
-    /**
-     * Convert a Color to a JSON object {r, g, b, a}.
-     */
-    inline TSharedPtr<FJsonObject> ColorToJson(const FColor& Color)
-    {
-        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-        Obj->SetNumberField(TEXT("r"), Color.R);
-        Obj->SetNumberField(TEXT("g"), Color.G);
-        Obj->SetNumberField(TEXT("b"), Color.B);
-        Obj->SetNumberField(TEXT("a"), Color.A);
-        return Obj;
-    }
-
-    /**
-     * Convert a JSON object to a Color.
-     */
-    inline bool JsonToColor(const TSharedPtr<FJsonObject>& Obj, FColor& OutColor)
-    {
-        if (!Obj.IsValid())
-        {
-            return false;
-        }
-        
-        double R = 255.0, G = 255.0, B = 255.0, A = 255.0;
-        Obj->TryGetNumberField(TEXT("r"), R);
-        Obj->TryGetNumberField(TEXT("g"), G);
-        Obj->TryGetNumberField(TEXT("b"), B);
-        Obj->TryGetNumberField(TEXT("a"), A);
-        
-        OutColor = FColor(
-            static_cast<uint8>(FMath::Clamp(static_cast<int>(R), 0, 255)),
-            static_cast<uint8>(FMath::Clamp(static_cast<int>(G), 0, 255)),
-            static_cast<uint8>(FMath::Clamp(static_cast<int>(B), 0, 255)),
-            static_cast<uint8>(FMath::Clamp(static_cast<int>(A), 0, 255))
-        );
-        return true;
-    }
-
-    /**
-     * Convert a LinearColor to a JSON object {r, g, b, a}.
-     */
-    inline TSharedPtr<FJsonObject> LinearColorToJson(const FLinearColor& Color)
-    {
-        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-        Obj->SetNumberField(TEXT("r"), Color.R);
-        Obj->SetNumberField(TEXT("g"), Color.G);
-        Obj->SetNumberField(TEXT("b"), Color.B);
-        Obj->SetNumberField(TEXT("a"), Color.A);
-        return Obj;
-    }
-
-    /**
-     * Convert a JSON object to a LinearColor.
-     */
-    inline bool JsonToLinearColor(const TSharedPtr<FJsonObject>& Obj, FLinearColor& OutColor)
-    {
-        if (!Obj.IsValid())
-        {
-            return false;
-        }
-        
-        double R = 1.0, G = 1.0, B = 1.0, A = 1.0;
-        Obj->TryGetNumberField(TEXT("r"), R);
-        Obj->TryGetNumberField(TEXT("g"), G);
-        Obj->TryGetNumberField(TEXT("b"), B);
-        Obj->TryGetNumberField(TEXT("a"), A);
-        
-        OutColor = FLinearColor(R, G, B, A);
-        return true;
     }
 
     // =========================================================================

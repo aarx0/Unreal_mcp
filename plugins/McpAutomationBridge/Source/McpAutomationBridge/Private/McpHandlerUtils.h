@@ -144,30 +144,6 @@ namespace McpHandlerUtils
     }
 
     /**
-     * Extract a required integer field with validation.
-     */
-    inline bool TryGetRequiredInt(
-        const TSharedPtr<FJsonObject>& Payload,
-        const FString& FieldName,
-        int32& OutValue,
-        FString& OutError)
-    {
-        if (!Payload.IsValid())
-        {
-            OutError = FString::Printf(TEXT("Payload is null when extracting '%s'"), *FieldName);
-            return false;
-        }
-        
-        if (!Payload->TryGetNumberField(FieldName, OutValue))
-        {
-            OutError = FString::Printf(TEXT("Missing required integer field '%s'"), *FieldName);
-            return false;
-        }
-        
-        return true;
-    }
-
-    /**
      * Extract an optional integer field with default value.
      */
     inline int32 GetOptionalInt(
@@ -200,54 +176,6 @@ namespace McpHandlerUtils
     }
 
     /**
-     * Extract a required float/double field with validation.
-     */
-    inline bool TryGetRequiredFloat(
-        const TSharedPtr<FJsonObject>& Payload,
-        const FString& FieldName,
-        double& OutValue,
-        FString& OutError)
-    {
-        if (!Payload.IsValid())
-        {
-            OutError = FString::Printf(TEXT("Payload is null when extracting '%s'"), *FieldName);
-            return false;
-        }
-        
-        if (!Payload->TryGetNumberField(FieldName, OutValue))
-        {
-            OutError = FString::Printf(TEXT("Missing required number field '%s'"), *FieldName);
-            return false;
-        }
-        
-        return true;
-    }
-
-    /**
-     * Extract a required boolean field with validation.
-     */
-    inline bool TryGetRequiredBool(
-        const TSharedPtr<FJsonObject>& Payload,
-        const FString& FieldName,
-        bool& OutValue,
-        FString& OutError)
-    {
-        if (!Payload.IsValid())
-        {
-            OutError = FString::Printf(TEXT("Payload is null when extracting '%s'"), *FieldName);
-            return false;
-        }
-        
-        if (!Payload->TryGetBoolField(FieldName, OutValue))
-        {
-            OutError = FString::Printf(TEXT("Missing required boolean field '%s'"), *FieldName);
-            return false;
-        }
-        
-        return true;
-    }
-
-    /**
      * Extract an optional boolean field with default value.
      */
     inline bool GetOptionalBool(
@@ -261,58 +189,6 @@ namespace McpHandlerUtils
             Payload->TryGetBoolField(FieldName, Value);
         }
         return Value;
-    }
-
-    /**
-     * Extract a required object field with validation.
-     */
-    inline bool TryGetRequiredObject(
-        const TSharedPtr<FJsonObject>& Payload,
-        const FString& FieldName,
-        TSharedPtr<FJsonObject>& OutValue,
-        FString& OutError)
-    {
-        if (!Payload.IsValid())
-        {
-            OutError = FString::Printf(TEXT("Payload is null when extracting '%s'"), *FieldName);
-            return false;
-        }
-        
-        const TSharedPtr<FJsonObject>* ObjectPtr;
-        if (!Payload->TryGetObjectField(FieldName, ObjectPtr))
-        {
-            OutError = FString::Printf(TEXT("Missing required object field '%s'"), *FieldName);
-            return false;
-        }
-        
-        OutValue = *ObjectPtr;
-        return OutValue.IsValid();
-    }
-
-    /**
-     * Extract a required array field with validation.
-     */
-    inline bool TryGetRequiredArray(
-        const TSharedPtr<FJsonObject>& Payload,
-        const FString& FieldName,
-        TArray<TSharedPtr<FJsonValue>>& OutValue,
-        FString& OutError)
-    {
-        if (!Payload.IsValid())
-        {
-            OutError = FString::Printf(TEXT("Payload is null when extracting '%s'"), *FieldName);
-            return false;
-        }
-        
-        const TArray<TSharedPtr<FJsonValue>>* ArrayPtr;
-        if (!Payload->TryGetArrayField(FieldName, ArrayPtr))
-        {
-            OutError = FString::Printf(TEXT("Missing required array field '%s'"), *FieldName);
-            return false;
-        }
-        
-        OutValue = *ArrayPtr;
-        return true;
     }
 
     // =========================================================================
@@ -346,18 +222,6 @@ namespace McpHandlerUtils
         Obj->SetNumberField(TEXT("pitch"), Rotator.Pitch);
         Obj->SetNumberField(TEXT("yaw"), Rotator.Yaw);
         Obj->SetNumberField(TEXT("roll"), Rotator.Roll);
-        return Obj;
-    }
-
-    /**
-     * Convert a FTransform to a JSON object.
-     */
-    inline TSharedPtr<FJsonObject> TransformToJson(const FTransform& Transform)
-    {
-        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-        Obj->SetObjectField(TEXT("location"), VectorToJson(Transform.GetTranslation()));
-        Obj->SetObjectField(TEXT("rotation"), RotatorToJson(Transform.Rotator()));
-        Obj->SetObjectField(TEXT("scale"), VectorToJson(Transform.GetScale3D()));
         return Obj;
     }
 
@@ -415,93 +279,6 @@ namespace McpHandlerUtils
         return true;
     }
 
-    /**
-     * Parse a JSON object or array to FLinearColor.
-     * Accepts both {r, g, b, a} object and [r, g, b, a] array formats.
-     */
-    inline bool JsonToLinearColor(const TSharedPtr<FJsonObject>& Obj, FLinearColor& OutColor)
-    {
-        if (!Obj.IsValid())
-        {
-            return false;
-        }
-        
-        double R = 1.0, G = 1.0, B = 1.0, A = 1.0;
-        Obj->TryGetNumberField(TEXT("r"), R);
-        Obj->TryGetNumberField(TEXT("g"), G);
-        Obj->TryGetNumberField(TEXT("b"), B);
-        Obj->TryGetNumberField(TEXT("a"), A);
-        
-        OutColor = FLinearColor(R, G, B, A);
-        return true;
-    }
-
-    /**
-     * Convert FLinearColor to a JSON object.
-     */
-    inline TSharedPtr<FJsonObject> LinearColorToJson(const FLinearColor& Color)
-    {
-        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-        Obj->SetNumberField(TEXT("r"), Color.R);
-        Obj->SetNumberField(TEXT("g"), Color.G);
-        Obj->SetNumberField(TEXT("b"), Color.B);
-        Obj->SetNumberField(TEXT("a"), Color.A);
-        return Obj;
-    }
-
-    // =========================================================================
-    // Action Dispatch Helpers
-    // =========================================================================
-
-    /**
-     * Normalize an action string for case-insensitive comparison.
-     * Also extracts sub-action from payload if present.
-     * 
-     * @param Action The action string to normalize
-     * @param Payload Optional payload to check for subAction field
-     * @return Normalized lowercase action string
-     */
-    inline FString NormalizeAction(const FString& Action, const TSharedPtr<FJsonObject>& Payload = nullptr)
-    {
-        FString Normalized = Action.ToLower();
-        
-        // Check for subAction in payload
-        if (Payload.IsValid())
-        {
-            FString SubAction;
-            if (Payload->TryGetStringField(TEXT("subAction"), SubAction) && !SubAction.IsEmpty())
-            {
-                Normalized = SubAction.ToLower();
-            }
-        }
-        
-        return Normalized;
-    }
-
-    /**
-     * Check if an action matches a pattern (case-insensitive).
-     */
-    inline bool ActionMatches(const FString& Action, const FString& Pattern)
-    {
-        return Action.ToLower().Equals(Pattern.ToLower());
-    }
-
-    /**
-     * Check if action matches any of multiple patterns.
-     */
-    inline bool ActionMatchesAny(const FString& Action, const TArray<FString>& Patterns)
-    {
-        const FString LowerAction = Action.ToLower();
-        for (const FString& Pattern : Patterns)
-        {
-            if (LowerAction.Equals(Pattern.ToLower()))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
     // =========================================================================
     // Asset Path Utilities
     // =========================================================================
@@ -511,33 +288,6 @@ namespace McpHandlerUtils
      * Returns empty string if invalid.
      */
     MCPAUTOMATIONBRIDGE_API FString ValidateAssetPath(const FString& Path);
-
-    /**
-     * Extract asset name from a full path.
-     */
-    inline FString ExtractAssetName(const FString& Path)
-    {
-        int32 LastSlash;
-        if (Path.FindLastChar('/', LastSlash))
-        {
-            return Path.Mid(LastSlash + 1);
-        }
-        return Path;
-    }
-
-    /**
-     * Extract package path from a full asset path.
-     * e.g., /Game/MyFolder/MyAsset -> /Game/MyFolder
-     */
-    inline FString ExtractPackagePath(const FString& AssetPath)
-    {
-        int32 LastSlash;
-        if (AssetPath.FindLastChar('/', LastSlash) && LastSlash > 0)
-        {
-            return AssetPath.Left(LastSlash);
-        }
-        return AssetPath;
-    }
 
     // =========================================================================
     // Actor/Component Utilities
@@ -562,36 +312,6 @@ namespace McpHandlerUtils
         class AActor* Actor, 
         const FString& ComponentName);
 #endif
-
-    // =========================================================================
-    // String Utilities
-    // =========================================================================
-
-    /**
-     * Convert a string to a safe asset name (remove invalid characters).
-     */
-    MCPAUTOMATIONBRIDGE_API FString ToSafeAssetName(const FString& Input);
-
-    /**
-     * Generate a unique asset name by appending a number if necessary.
-     * @param BaseName The base name to make unique
-     * @param PackagePath The package path to check for existing assets
-     * @return A unique asset name
-     */
-    MCPAUTOMATIONBRIDGE_API FString MakeUniqueAssetName(const FString& BaseName, const FString& PackagePath);
-
-    // =========================================================================
-    // Logging Utilities
-    // =========================================================================
-
-    /**
-     * Log an automation request (for debugging).
-     */
-    inline void LogAutomationRequest(const FString& RequestId, const FString& Action, const FString& PayloadPreview)
-    {
-        UE_LOG(LogTemp, Verbose, TEXT("[MCP] Request %s: Action='%s' Payload='%s'"),
-            *RequestId, *Action, *PayloadPreview.Left(200));
-    }
 
     // =========================================================================
     // Object and Property Resolution Helpers
@@ -631,18 +351,6 @@ namespace McpHandlerUtils
         UObject* Object,
         const FString& PropertyName);
 
-    /**
-     * Truncate a string for logging (prevent log spam).
-     */
-    inline FString TruncateForLog(const FString& Input, int32 MaxLength = 256)
-    {
-        if (Input.Len() <= MaxLength)
-        {
-            return Input;
-        }
-        return Input.Left(MaxLength) + TEXT("...");
-    }
-
     // =========================================================================
     // Standard Response Builders (reduces MakeShared<FJsonObject> duplication)
     // =========================================================================
@@ -667,75 +375,11 @@ namespace McpHandlerUtils
     }
     
     /**
-     * Create a result object with name and path fields (common pattern).
-     */
-    inline TSharedPtr<FJsonObject> CreateNamedResult(const FString& Name, const FString& Path)
-    {
-        TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-        Result->SetStringField(TEXT("name"), Name);
-        Result->SetStringField(TEXT("path"), Path);
-        return Result;
-    }
-    
-    /**
      * Add common verification fields to a result object.
      * Determines actor vs asset automatically.
      */
     MCPAUTOMATIONBRIDGE_API void AddVerification(TSharedPtr<FJsonObject>& Result, UObject* Object);
 }
-
-// =============================================================================
-// Action Dispatch Macros
-// =============================================================================
-
-/**
- * Macro for dispatching actions based on string matching.
- * Usage:
- *   MCP_DISPATCH_ACTION(Action, "spawn", HandleSpawn(RequestId, Payload, Socket))
- *   MCP_DISPATCH_ACTION(Action, "delete", HandleDelete(RequestId, Payload, Socket))
- */
-#define MCP_DISPATCH_ACTION(ActionVar, ActionName, HandlerCall) \
-    if (McpHandlerUtils::ActionMatches(ActionVar, TEXT(ActionName))) \
-    { \
-        return HandlerCall; \
-    }
-
-/**
- * Macro for dispatching actions with subAction extraction.
- * Automatically extracts subAction from payload if present.
- */
-#define MCP_DISPATCH_SUBACTION(ActionVar, Payload, SubActionName, HandlerCall) \
-    { \
-        FString SubAction = McpHandlerUtils::NormalizeAction(ActionVar, Payload); \
-        if (SubAction.Equals(TEXT(SubActionName), ESearchCase::IgnoreCase)) \
-        { \
-            return HandlerCall; \
-        } \
-    }
-
-/**
- * Macro for standard error response when payload is invalid.
- */
-#define MCP_ERROR_INVALID_PAYLOAD(SendError, RequestId, Message) \
-    SendError(nullptr, RequestId, Message, TEXT("INVALID_PAYLOAD"))
-
-/**
- * Macro for standard error response when a required parameter is missing.
- */
-#define MCP_ERROR_MISSING_PARAM(SendError, RequestId, ParamName) \
-    SendError(nullptr, RequestId, FString::Printf(TEXT("Missing required parameter: %s"), *ParamName), TEXT("MISSING_PARAMETER"))
-
-/**
- * Macro for standard error response when an operation is not found.
- */
-#define MCP_ERROR_NOT_FOUND(SendError, RequestId, ItemName, ItemId) \
-    SendError(nullptr, RequestId, FString::Printf(TEXT("%s not found: %s"), *ItemName, *ItemId), TEXT("NOT_FOUND"))
-
-/**
- * Macro for standard success response with optional message.
- */
-#define MCP_SUCCESS_RESPONSE(SendResponse, RequestId, Message, ResultObj) \
-    SendResponse(nullptr, RequestId, true, Message, ResultObj)
 
 // =============================================================================
 // Blueprint Graph Utilities (Editor-only)
@@ -754,16 +398,6 @@ namespace McpBlueprintUtils
      * Find an execution pin on a node by direction.
      */
     MCPAUTOMATIONBRIDGE_API UEdGraphPin* FindExecPin(UEdGraphNode* Node, EEdGraphPinDirection Direction);
-
-    /**
-     * Find an output pin on a node by name.
-     */
-    MCPAUTOMATIONBRIDGE_API UEdGraphPin* FindOutputPin(UEdGraphNode* Node, const FName& PinName = NAME_None);
-
-    /**
-     * Find an input pin on a node by name.
-     */
-    MCPAUTOMATIONBRIDGE_API UEdGraphPin* FindInputPin(UEdGraphNode* Node, const FName& PinName);
 
     /**
      * Find a data pin on a node by direction and optionally by name.
@@ -820,16 +454,6 @@ namespace McpBlueprintUtils
      * Collect all functions from a blueprint as JSON.
      */
     MCPAUTOMATIONBRIDGE_API TArray<TSharedPtr<FJsonValue>> CollectBlueprintFunctions(UBlueprint* Blueprint);
-
-    /**
-     * Find a property in a blueprint by name.
-     */
-    MCPAUTOMATIONBRIDGE_API FProperty* FindBlueprintProperty(UBlueprint* Blueprint, const FString& PropertyName);
-
-    /**
-     * Find a function in a blueprint by name.
-     */
-    MCPAUTOMATIONBRIDGE_API UFunction* FindBlueprintFunction(UBlueprint* Blueprint, const FString& FunctionName);
 }
 
 #endif // WITH_EDITOR && MCP_HAS_EDGRAPH_SCHEMA_K2

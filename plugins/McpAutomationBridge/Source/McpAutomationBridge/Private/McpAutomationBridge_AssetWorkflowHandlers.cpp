@@ -3075,19 +3075,6 @@ bool UMcpAutomationBridgeSubsystem::HandleListAssets(
       }
 
       // Difference in slashes determines depth
-      // /Game (1 slash) vs /Game/A (2 slashes) -> Diff 1 -> Depth 0 (immediate
-      // child) Wait, PackagePath for /Game/A is /Game. PackagePath for
-      // /Game/Sub/B is /Game/Sub.
-
-      // Let's test:
-      // Filter: /Game (Slash=1)
-      // Asset: /Game/A (PackagePath=/Game, Slash=1). Diff=0. Depth 0? Yes.
-      // Asset: /Game/Sub/B (PackagePath=/Game/Sub, Slash=2). Diff=1. Depth 1?
-      // Yes.
-
-      // If Depth=0, we want Diff=0.
-      // If Depth=1, we want Diff<=1.
-
       return (SlashCount - BaseSlashCount) > Depth;
     });
   }
@@ -3113,19 +3100,6 @@ bool UMcpAutomationBridgeSubsystem::HandleListAssets(
     // If non-recursive (or depth limited), we generally want at least the
     // immediate subfolders. GetSubPaths is non-recursive by default.
     AssetRegistry.GetSubPaths(PathFilter, SubPathList, false);
-
-    // If Depth is specified, we might want deeper folders?
-    // Actually, standard 'ls' behavior on a folder shows immediate children
-    // (files and folders). If recursive, it shows everything. Let keeps it
-    // simple: If we are listing a path, show its immediate subfolders. Getting
-    // ALL recursive folders might be too much info if strictly not requested,
-    // but 'GetSubPaths' with bInRecurse=true gets everything.
-
-    // Decision:
-    // If Recursive=true (and Depth not limited), maybe we don't strictly need
-    // folders as assets cover it? But user asked for folders when assets are
-    // missing. Default 'ls' shows immediate folders. So let's always include
-    // immediate subfolders of the requested path.
   }
 
   TArray<TSharedPtr<FJsonValue>> AssetsArray;
@@ -4284,10 +4258,6 @@ bool UMcpAutomationBridgeSubsystem::HandleListMaterialInstances(
             MakeShared<FJsonValueString>(Asset.ToSoftObjectPath().ToString()));
 #endif
       }
-    } else {
-      // Fallback: load asset (slow, but accurate)
-      // Only do this if tag is missing? Or maybe skip to avoid perf hit.
-      // Let's rely on tag for now.
     }
   }
 

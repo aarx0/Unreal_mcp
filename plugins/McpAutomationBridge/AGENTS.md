@@ -28,7 +28,7 @@ McpAutomationBridge/
 |------|----------|-------|
 | Add action handler | `Private/McpAutomationBridge_*Handlers.cpp` | Keep domain naming aligned with existing files |
 | Register handler | `Private/McpAutomationBridgeSubsystem.cpp` | Add to `InitializeHandlers()` |
-| Declare handler | `Private/McpHandlerDeclarations.h` or subsystem header | Match existing declaration location |
+| Declare handler | `Public/McpAutomationBridgeSubsystem.h` (member) or a file-local fwd decl | Handlers are subsystem methods / free functions; there is no separate declarations header |
 | Route requests | `Private/McpAutomationBridge_ProcessRequest.cpp` | Game-thread dispatch, unsafe-state deferral, reentrancy guard |
 | WebSocket bridge | `Private/McpConnectionManager.cpp`, `Private/McpBridgeWebSocket.cpp` | Listen host, ports, token auth, rate limits |
 | Native MCP | `Private/MCP/` | See nested AGENTS for `/mcp` transport and tool registry rules |
