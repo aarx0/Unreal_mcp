@@ -3257,16 +3257,19 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 
     FString EventType;
     LocalPayload->TryGetStringField(TEXT("eventType"), EventType);
-    if (EventType.IsEmpty()) {
+    FString CustomName;
+    LocalPayload->TryGetStringField(TEXT("customEventName"), CustomName);
+    if (EventType.IsEmpty() && CustomName.IsEmpty()) {
       // Accept "eventName" as an alias for the override path: callers naturally pass the
       // parent event they want to override here (e.g. eventName:"BeginPlay"). Without this,
       // an empty eventType defaulted to "custom" and silently produced a GUID-named blank
       // custom event. If the name isn't an overridable parent function the override branch
       // fails fast with EVENT_NOT_FOUND, so this can't create garbage.
+      // GUARD: only when customEventName is absent — a caller that supplied customEventName
+      // is unambiguously requesting a CUSTOM event, so we must not divert it to the override
+      // path (that would fail with EVENT_NOT_FOUND for the same input the old code handled).
       LocalPayload->TryGetStringField(TEXT("eventName"), EventType);
     }
-    FString CustomName;
-    LocalPayload->TryGetStringField(TEXT("customEventName"), CustomName);
     const TArray<TSharedPtr<FJsonValue>> *ParamsField = nullptr;
     LocalPayload->TryGetArrayField(TEXT("parameters"), ParamsField);
     TArray<TSharedPtr<FJsonValue>> Params =

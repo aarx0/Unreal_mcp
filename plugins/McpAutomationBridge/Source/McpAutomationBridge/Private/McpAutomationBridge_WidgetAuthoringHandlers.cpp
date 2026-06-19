@@ -956,7 +956,9 @@ namespace
         UWidget* NewWidget = WidgetBP->WidgetTree->ConstructWidget<UWidget>(WidgetClass, FName(*SlotName));
         if (!NewWidget)
         {
-            Self->SendAutomationError(Socket, RequestId, TEXT("Failed to construct widget"), TEXT("CREATION_ERROR"));
+            Self->SendAutomationError(Socket, RequestId,
+                FString::Printf(TEXT("Failed to construct widget of class '%s'"), *WidgetClass->GetName()),
+                TEXT("CREATION_ERROR"));
             return nullptr;
         }
 
@@ -987,7 +989,9 @@ namespace
         if (!SafeAddWidgetToTree(WidgetBP, NewWidget, ParentSlot, &AddErr))
         {
             Self->SendAutomationError(Socket, RequestId,
-                AddErr.IsEmpty() ? FString(TEXT("Failed to add widget to widget tree")) : AddErr,
+                AddErr.IsEmpty()
+                    ? FString::Printf(TEXT("Failed to add %s to the widget tree"), *NewWidget->GetClass()->GetName())
+                    : AddErr,
                 TEXT("TREE_ERROR"));
             return true;
         }
