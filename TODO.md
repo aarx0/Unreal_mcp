@@ -668,7 +668,7 @@ The "structural blueprint change saved WITHOUT a compile (stale generated class/
   happen — reinstancing preserves them): set_default value survived 2 recompiles, configure_inventory_slots→15,
   widget add persisted, normal authoring unaffected.
 
-### 2026-06-19 — Overnight autonomous pass: game architecture deep-dive + bridge robustness sweep
+### 2026-06-18 — Overnight autonomous pass: game architecture deep-dive + bridge robustness + simplification
 Aaron green-lit an overnight budget-burn ("Both": game audit + bridge hardening) under a read-only-game / verified-low-risk-bridge contract.
 
 **Game C++ (read-only, REPORT only — no game code changed):** 42-agent deep-dive of `Source/RhyaTowerOfWishes`,
@@ -707,6 +707,36 @@ unknown-action error after. Natural groups by line: creation/meta (1050–1356),
 6471–6615), bindings (2890–3621, 4597), animations (3622–3892, 6658–6863), templates/composites (3893–4332, 4835–5671,
 6971–7300), tree ops (4333–6293). Behavior-preserving (no reordering). ~1,100 lines already removed by the C dedup;
 this is purely structural.
+
+**Simplification sweep (3 classes, adversarially verified — each removal independently confirmed zero callers across
+the module + routing tables, reflection/string-dispatch ruled out). DONE + built + committed (943912c): ~1,880 lines deleted.**
+- [x] Deleted `McpHandlerDeclarations.h` (843 lines, never #included — orphaned IMcpHandler/MCP_DECLARE_HANDLER API
+  never adopted; real dispatch is the subsystem's RegisterHandler/FAutomationHandler). Fixed AGENTS.md pointer.
+- [x] `McpHandlerUtils.h/.cpp`: 12 unused inline helpers, 6 never-invoked dispatch/error macros (+ now-dead
+  ActionMatches/NormalizeAction), MakeUniqueAssetName/ToSafeAssetName, 4 unused McpBlueprintUtils Find* fns.
+- [x] `McpPropertyReflection.h/.cpp`: 7 unused fns + dead color converters (incl. a LinearColor pair duplicated in both headers).
+- [x] `BlueprintHandlers.cpp`: transitively-dead static cluster (BuildVariableJson/AnnotateVariableJson/CollectVariableMetadata).
+- [x] `McpToolRegistry.h/.cpp`: 3 uncalled methods (GetAllTools/GetToolCategories/InvalidateCache).
+- [x] Stripped "thinking out loud" narration + a rejected commented-out impl + an empty else (AnimationHandlers, AssetWorkflowHandlers).
+- [ ] **Follow-up: `add_notify_old_unused` subaction branch (AnimationHandlers ~2624)** looks dead (a renamed-aside of the live
+  `add_notify`); left in place — verify it's unrouted then delete the whole branch.
+
+**Refactor backlog (from the simplify sweep — boilerplate dedup; NOT auto-applied: these transform LIVE code at
+hundreds of sites, a different risk class than dead-code deletion. Do deliberately / greenlight individually):**
+- [ ] **(high, ~575 lines) `InitializeHandlers()` RegisterHandler boilerplate** — ~115 trivial registrations are each a
+  5-line forwarding lambda `[this](R,A,P,S){ return HandleXxx(R,A,P,S); }`. Add `#define MCP_REGISTER_HANDLER(name, fn)`
+  and collapse each to one line. Leave the genuine multi-branch routing lambdas alone (judgement per-site → why not auto-applied).
+- [ ] **(med) load-blueprint prologue** repeated ~90× — `ResolveBlueprintParamOrError(Payload, RequestId, Socket, field="blueprintPath")`
+  returning the BP or sending the error + nullptr (handler: `if (!BP) return true;`). Collapses ~10 lines → 2 per site.
+- [ ] **(med) compile/save tail** (`Mark…Modified` + `McpSafeCompileBlueprint` + `McpSafeAssetSave`) hand-written everywhere with
+  INCONSISTENT mark/compile/save choices (a correctness risk) → one `McpFinalizeBlueprint(BP, bStructural, bSave)` in McpSafeOperations.h.
+- [ ] **(med) success tail** (`AddVerification` + `SendAutomationResponse(true)`) → `SendSuccessWithVerification(Socket, RequestId, msg, Result, VerifyObj)`.
+- [ ] **(low) per-file JSON-getter alias macros** (`GetStringFieldGAS`/`…Combat`/`…AI`… in ~10 files) — drop, call the shared
+  `GetJsonStringField` etc. directly (~28 #defines of pure churn).
+- [ ] **(low) error-code string literals** (`TEXT("INVALID_ARGUMENT")` etc. at 1000+ sites, typo-prone, undiscoverable) →
+  `namespace McpErrorCode { constexpr … }` + small senders (SendMissingParam/SendNotFound). Do opportunistically.
+- [ ] **(low) two-headers path helpers** — McpHandlerUtils path validators vs McpAutomationBridgeHelpers `IsValidAssetPath`/
+  `SanitizeProjectRelativePath` overlap; consolidate into Helpers.h, verify each before removing.
 
 ### 2026-06-18b — Friction found building the HUD `bind_event_to_delegate` (live MCP authoring)
 - [x] **`MakePinType` PC_Float → INT — FIXED (Live-Coding-only; needs a full rebuild to persist).**
