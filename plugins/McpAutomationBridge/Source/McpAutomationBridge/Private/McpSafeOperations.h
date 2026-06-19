@@ -229,6 +229,21 @@ inline bool McpSafeAssetSave(UObject* Asset)
     };
 
 #if MCP_HAS_PACKAGE_TOOLS
+    // Bridge saves run on the game thread that also services MCP requests. The editor's
+    // interactive save paths (PromptForCheckoutAndSave, and SavePackagesForObjects on a write
+    // failure) can pop a BLOCKING modal — e.g. "The asset failed to save. Cancel/Retry/Continue" —
+    // which runs a nested Slate message loop on THIS thread. That loop never returns to us, so
+    // FEngineLoop::Tick and any AsyncTask(GameThread) the bridge queues are starved and every
+    // subsequent MCP call times out until a human clicks a button. Force unattended around the
+    // save so FMessageDialog::Open returns its default answer (no UI) instead; a genuine save
+    // failure then surfaces as a quiet 'false' the caller can turn into a structured error, never
+    // a hung editor. Restored on every exit path below (UE builds with exceptions off, so the only
+    // exits are the explicit returns).
+    const bool bPrevUnattended = GIsRunningUnattended;
+    GIsRunningUnattended = true;
+
+    bool bResult = false;
+
     if (AssetToSave && AssetToSave != Package)
     {
         TArray<UObject*> ObjectsToSave;
@@ -240,10 +255,9 @@ inline bool McpSafeAssetSave(UObject* Asset)
         if (bSaved && PackageExistsOnDisk())
         {
             ScanSavedPackage();
-            return true;
+            bResult = true;
         }
-
-        if (bSaved)
+        else if (bSaved)
         {
             UE_LOG(LogMcpSafeOperations, Warning,
                 TEXT("McpSafeAssetSave: SavePackagesForObjects reported success but no package file exists for %s; trying package save fallback"),
@@ -251,23 +265,35 @@ inline bool McpSafeAssetSave(UObject* Asset)
         }
     }
 
-    TArray<UPackage*> PackagesToSave;
-    PackagesToSave.Add(Package);
-    const FEditorFileUtils::EPromptReturnCode PromptSaveResult =
-        FEditorFileUtils::PromptForCheckoutAndSave(PackagesToSave, false, false);
-    const bool bPromptSaveSucceeded =
-        PromptSaveResult == FEditorFileUtils::PR_Success;
-    const bool bEditorSaveSucceeded =
-        !bPromptSaveSucceeded && UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, false);
-    const bool bExistsOnDisk = PackageExistsOnDisk();
-
-    if (bPromptSaveSucceeded || bEditorSaveSucceeded || bExistsOnDisk)
+    if (!bResult)
     {
-        ScanSavedPackage();
-        return true;
+        TArray<UPackage*> PackagesToSave;
+        PackagesToSave.Add(Package);
+        const FEditorFileUtils::EPromptReturnCode PromptSaveResult =
+            FEditorFileUtils::PromptForCheckoutAndSave(PackagesToSave, false, false);
+        const bool bPromptSaveSucceeded =
+            PromptSaveResult == FEditorFileUtils::PR_Success;
+        const bool bEditorSaveSucceeded =
+            !bPromptSaveSucceeded && UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, false);
+        const bool bExistsOnDisk = PackageExistsOnDisk();
+
+        if (bPromptSaveSucceeded || bEditorSaveSucceeded || bExistsOnDisk)
+        {
+            ScanSavedPackage();
+            bResult = true;
+        }
     }
 
-    return false;
+    GIsRunningUnattended = bPrevUnattended;
+
+    if (!bResult)
+    {
+        UE_LOG(LogMcpSafeOperations, Warning,
+            TEXT("McpSafeAssetSave: failed to save package '%s' (no modal shown — the editor save path "
+                 "reported failure). Check the .uasset is writable and not blocked by source control."),
+            *PackageName);
+    }
+    return bResult;
 #else
     return false;
 #endif
