@@ -2598,50 +2598,112 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorCallFunction(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     TSharedPtr<FMcpBridgeWebSocket> Socket) {
 #if WITH_EDITOR
-  FString ActorName, FunctionName;
+  FString ActorName, FunctionName, ComponentName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
   Payload->TryGetStringField(TEXT("functionName"), FunctionName);
-  
+  Payload->TryGetStringField(TEXT("componentName"), ComponentName);
+
   if (ActorName.IsEmpty() || FunctionName.IsEmpty()) {
     SendAutomationError(Socket, RequestId, TEXT("actorName and functionName are required"), TEXT("MISSING_PARAM"));
     return true;
   }
-  
+
   AActor* Actor = FindActorByName(ActorName);
   if (!Actor) {
     SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Actor not found: %s"), *ActorName), TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
-  
-  // Find and call the function
-  UFunction* Function = Actor->FindFunction(*FunctionName);
-  if (Function) {
-    // Check if function has parameters - passing nullptr to a function expecting
-    // parameters can cause crashes or undefined behavior
-    if (Function->ParmsSize > 0) {
-      // Function has parameters - we need to provide a buffer
-      // Allocate zeroed memory for parameters
-      void* ParmsBuffer = FMemory::Malloc(Function->ParmsSize, 16);
-      FMemory::Memzero(ParmsBuffer, Function->ParmsSize);
-      
-      // Call with parameter buffer
-      Actor->ProcessEvent(Function, ParmsBuffer);
-      
-      // Free the buffer
-      FMemory::Free(ParmsBuffer);
-    } else {
-      // No parameters, safe to pass nullptr
-      Actor->ProcessEvent(Function, nullptr);
+
+  // Resolve the call target: the actor by default, or one of its components when
+  // componentName is given. UObject::FindFunction only sees functions on the
+  // target's own class, so a component UFUNCTION (e.g. AttributeComponent::RemoveMagic)
+  // is unreachable through the actor.
+  UObject* Target = Actor;
+  if (!ComponentName.IsEmpty()) {
+    UActorComponent* Component = FindComponentByName(Actor, ComponentName);
+    if (!Component) {
+      SendAutomationError(Socket, RequestId,
+          FString::Printf(TEXT("Component not found: %s on actor: %s"), *ComponentName, *ActorName),
+          TEXT("COMPONENT_NOT_FOUND"));
+      return true;
     }
-    
-    TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
-    Data->SetStringField(TEXT("actorName"), ActorName);
-    Data->SetStringField(TEXT("functionName"), FunctionName);
-    SendStandardSuccessResponse(this, Socket, RequestId, TEXT("Function called"), Data);
+    Target = Component;
+  }
+
+  UFunction* Function = Target->FindFunction(*FunctionName);
+  if (!Function) {
+    SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Function not found: %s"), *FunctionName), TEXT("FUNCTION_NOT_FOUND"));
     return true;
   }
-  
-  SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Function not found: %s"), *FunctionName), TEXT("FUNCTION_NOT_FOUND"));
+
+  // Positional arguments, stringified so ImportText can parse each into its
+  // matching parameter type (the tool schema sends them as strings).
+  TArray<FString> Arguments;
+  const TArray<TSharedPtr<FJsonValue>>* ArgsArray = nullptr;
+  if (Payload->TryGetArrayField(TEXT("arguments"), ArgsArray)) {
+    for (const TSharedPtr<FJsonValue>& Arg : *ArgsArray) {
+      if (Arg->Type == EJson::Number) {
+        const double D = Arg->AsNumber();
+        Arguments.Add(FMath::Frac(D) == 0.0 ? FString::Printf(TEXT("%lld"), (int64)D)
+                                            : FString::SanitizeFloat(D));
+      } else if (Arg->Type == EJson::Boolean) {
+        Arguments.Add(Arg->AsBool() ? TEXT("True") : TEXT("False"));
+      } else {
+        Arguments.Add(Arg->AsString());
+      }
+    }
+  }
+
+  if (Function->ParmsSize > 0) {
+    // Construct a real parameter frame so non-POD params (FString, arrays...) are
+    // valid, fill input params in declaration order from the supplied arguments,
+    // call, then destroy the frame to avoid leaking those params.
+    uint8* ParmsBuffer = (uint8*)FMemory::Malloc(Function->ParmsSize, 16);
+    FMemory::Memzero(ParmsBuffer, Function->ParmsSize);
+    for (TFieldIterator<FProperty> It(Function); It && (It->PropertyFlags & CPF_Parm); ++It) {
+      It->InitializeValue_InContainer(ParmsBuffer);
+    }
+
+    int32 ArgIndex = 0;
+    for (TFieldIterator<FProperty> It(Function); It && (It->PropertyFlags & CPF_Parm); ++It) {
+      FProperty* Prop = *It;
+      // Skip the return value and pure output params — the caller supplies neither.
+      if (Prop->PropertyFlags & CPF_ReturnParm) {
+        continue;
+      }
+      if ((Prop->PropertyFlags & CPF_OutParm) && !(Prop->PropertyFlags & CPF_ReferenceParm)) {
+        continue;
+      }
+      if (ArgIndex >= Arguments.Num()) {
+        break;
+      }
+      void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(ParmsBuffer);
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+      Prop->ImportText_Direct(*Arguments[ArgIndex], ValuePtr, Target, PPF_None);
+#else
+      Prop->ImportText(*Arguments[ArgIndex], ValuePtr, PPF_None, Target);
+#endif
+      ++ArgIndex;
+    }
+
+    Target->ProcessEvent(Function, ParmsBuffer);
+
+    for (TFieldIterator<FProperty> It(Function); It && (It->PropertyFlags & CPF_Parm); ++It) {
+      It->DestroyValue_InContainer(ParmsBuffer);
+    }
+    FMemory::Free(ParmsBuffer);
+  } else {
+    Target->ProcessEvent(Function, nullptr);
+  }
+
+  TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
+  Data->SetStringField(TEXT("actorName"), ActorName);
+  if (!ComponentName.IsEmpty()) {
+    Data->SetStringField(TEXT("componentName"), ComponentName);
+  }
+  Data->SetStringField(TEXT("functionName"), FunctionName);
+  Data->SetNumberField(TEXT("argumentsApplied"), Arguments.Num());
+  SendStandardSuccessResponse(this, Socket, RequestId, TEXT("Function called"), Data);
   return true;
 #else
   return false;
