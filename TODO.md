@@ -649,13 +649,24 @@ benign, only 1 real bug. Fixed in `651bbe4`:
 - Benign/intentional (left as-is): `GetSlotName` now honors `name`/`widgetName` for add_* (the deliberate Batch-1
   alias); all add_* now emit the `verification` field (additive, harmonizes the 13 outliers with their siblings).
 
-Real bug FOUND by the review but DEFERRED (off critical path, niche inventory handler — do deliberately):
-- [ ] **`configure_inventory_slots` silent no-op when `MaxSlots` doesn't pre-exist** (InventoryHandlers.cpp ~483-506).
-  When the CDO has no `MaxSlots` property it `AddMemberVariable`s one then Mark+Save WITHOUT compiling, so the var
-  lands at its type-default 0 instead of `slotCount` (the requested value is never written to the recompiled CDO).
-  Fix: after AddMemberVariable, `McpSafeCompileBlueprint(Blueprint)` then re-find the CDO `MaxSlots` and
-  `ApplyJsonValueToProperty(SlotCount)` before saving. (Same compile-before-CDO-write class as the audit's B-🟡
-  Inventory/Interaction note.)
+### 2026-06-18f — Exhaustive compile-before-save audit (workflow, 11 handler files, adversarially verified)
+The "structural blueprint change saved WITHOUT a compile (stale generated class/CDO)" anti-pattern is **pervasive**:
+60 confirmed sites (Inventory 19, Interaction 17, AI 13, AnimationAuthoring 7, GAS 2, Misc 2). Triaged into two classes:
+- **Genuine DATA LOSS (10) — FIXED `256d9ec`.** A CDO default written to a *freshly-added* property BEFORE any
+  compile → `FindPropertyByName` misses it → the value silently no-ops to the type default. Fixed by compiling
+  before the CDO write (AI re-fetches the CDO after compile, since compile regenerates it):
+  Inventory `configure_pickup_respawn`/`configure_pickup_effects`/`configure_equipment_effects`/
+  `configure_equipment_visuals`/`configure_loot_drop`/`configure_inventory_weight`/`configure_inventory_slots`
+  (fallback now writes slotCount, not 0 — verified live: MaxSlots=15); AI `assign_behavior_tree`/`assign_blackboard`;
+  Interaction `configure_door_properties`.
+- [ ] **Structural-only (~50) — DEFERRED (🟡, self-heal).** A var/function/dispatcher/SCS-component/state-machine
+  is added then saved without compile, so the on-disk generated class is momentarily stale — BUT the definition lives
+  in `NewVariables`/`FunctionGraphs` and the editor recompiles the blueprint on next load, so it self-heals (only an
+  in-session staleness window before any recompile). Full per-site list in the audit output. Two ways to close it:
+  (a) ~50 targeted `McpSafeCompileBlueprint` inserts before each save, or (b) **the elegant one-place fix** — make
+  `McpSafeAssetSave` compile a dirty UBlueprint before persisting (fixes all + future + the staleness window in one
+  spot, but it's a high-blast-radius change to the core save path used everywhere — needs careful verification, do
+  deliberately/with Aaron's ok, not at 3am). Recommend (b).
 
 ### 2026-06-18b — Friction found building the HUD `bind_event_to_delegate` (live MCP authoring)
 - [x] **`MakePinType` PC_Float → INT — FIXED (Live-Coding-only; needs a full rebuild to persist).**
