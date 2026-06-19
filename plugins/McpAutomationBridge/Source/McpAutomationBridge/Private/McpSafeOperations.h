@@ -559,7 +559,14 @@ inline bool McpSafeLevelSave(ULevel* Level, const FString& FullPath, int32 MaxRe
     // package name. This causes "World Memory Leaks" crashes when load_level is called because
     // McpSafeLoadMap doesn't recognize the saved level as the current level (package name mismatch).
     // FEditorFileUtils::SaveLevel properly updates the world's package to match the save path.
+    // Force unattended around the save itself: SaveLevel shares the same interactive
+    // checkout/save-failed modal hazard as McpSafeAssetSave (a blocking dialog on this game
+    // thread starves the bridge). The verify/retry block below is pure file-existence polling,
+    // so the guard only needs to span the one call. Restored immediately after.
+    const bool bPrevUnattended = GIsRunningUnattended;
+    GIsRunningUnattended = true;
     bool bSaveSucceeded = FEditorFileUtils::SaveLevel(Level, *SaveFilename);
+    GIsRunningUnattended = bPrevUnattended;
 
     if (bSaveSucceeded)
     {
