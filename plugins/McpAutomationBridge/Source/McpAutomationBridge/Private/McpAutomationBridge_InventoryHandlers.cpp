@@ -496,6 +496,18 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       if (!bExists) {
         FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("MaxSlots"), IntType);
       }
+      // Compile so the new MaxSlots property lands on the CDO, then write the requested value —
+      // otherwise the variable stays at its type-default 0 instead of slotCount (silent no-op).
+      McpSafeCompileBlueprint(Blueprint);
+      if (Blueprint->GeneratedClass) {
+        if (UObject* FreshCDO = Blueprint->GeneratedClass->GetDefaultObject()) {
+          if (FProperty* MaxSlotsProp = FreshCDO->GetClass()->FindPropertyByName(TEXT("MaxSlots"))) {
+            TSharedPtr<FJsonValue> SlotValue = MakeShared<FJsonValueNumber>(static_cast<double>(SlotCount));
+            FString ApplyError;
+            ApplyJsonValueToProperty(FreshCDO, MaxSlotsProp, SlotValue, ApplyError);
+          }
+        }
+      }
       bConfigured = true;
     }
 
@@ -1004,6 +1016,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("RespawnTime"), FloatType);
     }
 
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+
     // Set default values on the CDO if available
     if (Blueprint->GeneratedClass) {
       UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
@@ -1111,6 +1127,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarName, FloatType);
       }
     }
+
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
 
     // Set default values on the CDO if available
     if (Blueprint->GeneratedClass) {
@@ -1411,6 +1431,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+
     // Set default values on CDO if available
     if (Blueprint->GeneratedClass) {
       UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
@@ -1630,6 +1654,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         AddedVars.Add(MakeShared<FJsonValueString>(VarPair.Key.ToString()));
       }
     }
+
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
 
     // Set default values on CDO if available
     if (Blueprint->GeneratedClass) {
@@ -1887,6 +1915,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("OnLootDropped"), DelegateType);
       AddedVars.Add(MakeShared<FJsonValueString>(TEXT("OnLootDropped")));
     }
+
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
 
     // Set default values on CDO if available
     if (Blueprint->GeneratedClass) {
@@ -2707,6 +2739,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("OnEncumberanceChanged"), DelegateType);
       AddedVars.Add(MakeShared<FJsonValueString>(TEXT("OnEncumberanceChanged")));
     }
+
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
 
     // Set default values on CDO if available
     if (Blueprint->GeneratedClass) {

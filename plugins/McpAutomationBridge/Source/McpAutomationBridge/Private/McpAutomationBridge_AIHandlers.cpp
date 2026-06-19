@@ -714,12 +714,20 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
                     const FName VarName = TEXT("DefaultBehaviorTree");
                     if (FBlueprintEditorUtils::AddMemberVariable(ControllerBP, VarName, PinType))
                     {
-                        // Set the default value for the variable
-                        FProperty* NewProp = ControllerBP->GeneratedClass->FindPropertyByName(VarName);
+                        // Compile so the new variable exists on the generated class, then RE-FETCH the
+                        // CDO (compile regenerates it — the earlier CDO pointer is now stale) and write
+                        // the default. Without the compile FindPropertyByName misses the new var and the
+                        // Behavior Tree reference is silently dropped.
+                        McpSafeCompileBlueprint(ControllerBP);
+                        UObject* FreshCDO = ControllerBP->GeneratedClass ? ControllerBP->GeneratedClass->GetDefaultObject() : nullptr;
+                        FProperty* NewProp = ControllerBP->GeneratedClass ? ControllerBP->GeneratedClass->FindPropertyByName(VarName) : nullptr;
                         if (FObjectProperty* ObjProp = CastField<FObjectProperty>(NewProp))
                         {
-                            ObjProp->SetObjectPropertyValue(ObjProp->ContainerPtrToValuePtr<void>(CDO), BT);
-                            bPropertySet = true;
+                            if (FreshCDO)
+                            {
+                                ObjProp->SetObjectPropertyValue(ObjProp->ContainerPtrToValuePtr<void>(FreshCDO), BT);
+                                bPropertySet = true;
+                            }
                         }
                     }
                     Result->SetStringField(TEXT("propertyName"), VarName.ToString());
@@ -848,12 +856,20 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
                     const FName VarName = TEXT("DefaultBlackboard");
                     if (FBlueprintEditorUtils::AddMemberVariable(ControllerBP, VarName, PinType))
                     {
-                        // Set the default value for the variable
-                        FProperty* NewProp = ControllerBP->GeneratedClass->FindPropertyByName(VarName);
+                        // Compile so the new variable exists on the generated class, then RE-FETCH the
+                        // CDO (compile regenerates it — the earlier CDO pointer is now stale) and write
+                        // the default. Without the compile FindPropertyByName misses the new var and the
+                        // Blackboard reference is silently dropped.
+                        McpSafeCompileBlueprint(ControllerBP);
+                        UObject* FreshCDO = ControllerBP->GeneratedClass ? ControllerBP->GeneratedClass->GetDefaultObject() : nullptr;
+                        FProperty* NewProp = ControllerBP->GeneratedClass ? ControllerBP->GeneratedClass->FindPropertyByName(VarName) : nullptr;
                         if (FObjectProperty* ObjProp = CastField<FObjectProperty>(NewProp))
                         {
-                            ObjProp->SetObjectPropertyValue(ObjProp->ContainerPtrToValuePtr<void>(CDO), BB);
-                            bPropertySet = true;
+                            if (FreshCDO)
+                            {
+                                ObjProp->SetObjectPropertyValue(ObjProp->ContainerPtrToValuePtr<void>(FreshCDO), BB);
+                                bPropertySet = true;
+                            }
                         }
                     }
                     Result->SetStringField(TEXT("propertyName"), VarName.ToString());

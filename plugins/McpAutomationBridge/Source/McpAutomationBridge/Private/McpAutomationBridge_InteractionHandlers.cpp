@@ -858,6 +858,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("bIsOpen"), BoolType);
     }
 
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+
     // Set default values on CDO if available
     if (Blueprint->GeneratedClass) {
       UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
