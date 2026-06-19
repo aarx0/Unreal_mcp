@@ -3060,21 +3060,13 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        // Find the GrantedAbilities variable and add to its default value
-        // This is complex because we need to modify the CDO's array
-        // For simplicity, we'll add a note that the array should be configured in editor
-        
-        // Mark as modified
-        FBlueprintEditorUtils::MarkBlueprintAsModified(SetBlueprint);
-        McpSafeAssetSave(SetBlueprint);
-
-        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetStringField(TEXT("setPath"), SetPath);
-        Result->SetStringField(TEXT("abilityPath"), AbilityPath);
-        Result->SetStringField(TEXT("abilityClass"), AbilityClass->GetName());
-        Result->SetStringField(TEXT("note"), TEXT("Ability reference validated. Add to GrantedAbilities array in the Data Asset editor."));
-
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Ability validated for set"), Result);
+        // This only validated the classes then saved an UNCHANGED asset — it never added the ability to
+        // GrantedAbilities (that means editing a struct array on the set's CDO). Fail honestly.
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("add_ability is not implemented: it does not add '%s' to '%s' GrantedAbilities. "
+                "Add it in the ability-set Data Asset editor, or write the array via set_default / "
+                "set_asset_property on the set's CDO."), *AbilityClass->GetName(), *SetPath),
+            TEXT("NOT_IMPLEMENTED"));
         return true;
     }
 
@@ -3170,49 +3162,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        // To grant abilities at design time, we need to add them to the ASC's DefaultAbilitiesGranted
-        // or use a custom initialization. For now, we'll add a variable to track granted abilities.
-        
-        // Check if GrantedAbilities variable exists
-        bool bHasGrantedVar = false;
-        for (const FBPVariableDescription& VarDesc : ActorBlueprint->NewVariables)
-        {
-            if (VarDesc.VarName == TEXT("InitialAbilities"))
-            {
-                bHasGrantedVar = true;
-                break;
-            }
-        }
-
-        if (!bHasGrantedVar)
-        {
-            // Add InitialAbilities array variable
-            FEdGraphPinType AbilityArrayType;
-            AbilityArrayType.PinCategory = UEdGraphSchema_K2::PC_SoftClass;
-            AbilityArrayType.PinSubCategoryObject = UGameplayAbility::StaticClass();
-            AbilityArrayType.ContainerType = EPinContainerType::Array;
-            
-            FBlueprintEditorUtils::AddMemberVariable(ActorBlueprint, TEXT("InitialAbilities"), AbilityArrayType);
-            FBlueprintEditorUtils::SetBlueprintVariableCategory(ActorBlueprint, TEXT("InitialAbilities"), nullptr, 
-                FText::FromString(TEXT("GAS")));
-        }
-
-        int32 AbilityLevel = static_cast<int32>(GetNumberFieldGAS(Payload, TEXT("abilityLevel"), 1.0));
-        int32 InputID = static_cast<int32>(GetNumberFieldGAS(Payload, TEXT("inputID"), -1.0));
-
-        FBlueprintEditorUtils::MarkBlueprintAsModified(ActorBlueprint);
-        McpSafeAssetSave(ActorBlueprint);
-
-        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetStringField(TEXT("actorPath"), ActorPath);
-        Result->SetStringField(TEXT("abilityClass"), AbilityClass->GetName());
-        Result->SetNumberField(TEXT("abilityLevel"), AbilityLevel);
-        Result->SetNumberField(TEXT("inputID"), InputID);
-        Result->SetBoolField(TEXT("hasASC"), bHasASC);
-        Result->SetBoolField(TEXT("createdInitialAbilitiesVar"), !bHasGrantedVar);
-        Result->SetStringField(TEXT("note"), TEXT("Add ability to InitialAbilities array. Call GiveAbility on ASC in BeginPlay to grant."));
-
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Ability grant configured"), Result);
+        // This created an EMPTY InitialAbilities array variable but never inserted the requested ability,
+        // then reported "grant configured". Actually granting means writing the ability into an array
+        // default (or calling GiveAbility at runtime) — unbuilt. Fail honestly. (ASC presence verified above.)
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("grant_ability is not implemented: it does not grant '%s'. Grant at runtime "
+                "by calling GiveAbility on the AbilitySystemComponent in BeginPlay, or populate the actor's "
+                "ability-array default via set_default / set_asset_property on the CDO."), *AbilityClass->GetName()),
+            TEXT("NOT_IMPLEMENTED"));
         return true;
     }
 

@@ -546,18 +546,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
                 TEXT("DATALAYER_NOT_FOUND"));
         }
 #else
-        // Fallback simulation
-        UE_LOG(LogMcpAutomationBridgeSubsystem, Warning, 
-            TEXT("DataLayerEditorSubsystem not available. set_datalayer skipped."));
-
-        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetStringField(TEXT("actorName"), ActorPath);
-        Result->SetStringField(TEXT("dataLayerName"), DataLayerName);
-        Result->SetBoolField(TEXT("added"), false);
-        Result->SetStringField(TEXT("note"), TEXT("Simulated - Subsystem missing"));
-
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
-            TEXT("Actor added to DataLayer (Simulated - Subsystem missing)."), Result);
+        // No DataLayerEditorSubsystem in this build — nothing was added. Fail honestly (matching the
+        // DATALAYER_NOT_FOUND sibling above) instead of reporting a "simulated" success with added:false.
+        UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
+            TEXT("DataLayerEditorSubsystem not available. set_datalayer cannot run."));
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("set_datalayer is unavailable: DataLayerEditorSubsystem is not present in this build/configuration."),
+            TEXT("SUBSYSTEM_NOT_FOUND"));
 #endif
         return true;
     }

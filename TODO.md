@@ -75,6 +75,84 @@ Flakiness in shipped surface erodes trust during real authoring.
   remote Insights profiling is still unstarted (test results above are now covered).
 
 ### B. Authoring capability gaps — new features that unblock real workflows
+- ✅ **`bind_event_to_delegate` — functional widget data-binding DONE 2026-06-18** (the plan below, built + verified
+  end-to-end). New `manage_blueprint` widget-authoring action: subscribes a widget event graph to a multicast
+  delegate on an EXTERNAL object reached via an event output pin — authors `UK2Node_AddDelegate` + a
+  signature-matched `UK2Node_CustomEvent` + an optional handler-body call (member-widget getter → function),
+  appended to the END of the source event's exec run so repeated binds stack. Params: `widgetPath`, `eventName`,
+  `ownerPin`, `delegateName`, opt `handlerEventName`/`handlerTargetWidget`/`handlerFunction`. Built clean per the
+  audit findings: `FScopedTransaction`, `K2Schema->TryCreateConnection` (not raw MakeLinkTo), compile + `McpSafeAssetSave`,
+  idempotent by handler-event name, no post-`Finalize` `AllocateDefaultPins` (dodges the duplicate-pin trap).
+  Routing in `WidgetAuthoring()` (header → full rebuild done); handler in `McpAutomationBridge_WidgetAuthoringHandlers.cpp`.
+  **VERIFIED end-to-end:** authored WBP_HUD.InitializeHud → AddDelegate(`AttributeComponent.OnHealthPercentUpdateDelegate`)
+  → custom event → ProgressBar.SetPercent (6/6 links, deadNodeCount 0); **survived an editor reload** (byte-identical
+  graph — the real test); **drove the bar at runtime** (PIE in L_CombatGym: `ReceiveDamage(5)` → health 20 → live
+  bound ProgressBar `Percent=0.20`). Game side: new C++ `UCombatHudWidget : UUserWidget` (BlueprintImplementableEvent
+  `InitializeHud(UAttributeComponent*)`), player BeginPlay creates WBP_HUD + AddToViewport + InitializeHud (push model).
+  **Uncommitted** (bridge local on `dev`; game C++ on `main`) — Aaron's call. **Remaining:** (a) ✅ DONE — now drives
+  Aaron's styled `WBP_Player_HealthBar` (its `SetPercent`→`ProgressBar_19.SetPercent` body authored via **`create_node`
+  CallFunction** — the friction was `add_node` only; `create_node` resolves `memberName`+`memberClass` fine; marked
+  `ProgressBar_19` `bIsVariable` to clear the "not blueprint visible" compile warning; PlayerHealthBar set visible;
+  standalone test bar removed). Re-verified in PIE: `ReceiveDamage(40)`→health 60→live `ProgressBar_19.Percent=0.60`.
+  (b) wire the magic bar (same action, `OnMagicPercentUpdateDelegate` → its own SetPercent/bar); (c) HUD-creation in
+  player BeginPlay works in the gym but should guard the not-yet-possessed case (level-placed pawns) — e.g.
+  `NotifyControllerChanged`/`IsLocallyControlled`; (d) `MakePinType` fix is Live-Coding-only this session (source
+  edited) — bake in on the next full rebuild.
+- 🟡 **(superseded by the above — kept for the design rationale) Functional data-binding for widgets — original PLAN (2026-06-17).**
+  Surfaced planning the game's heal/health HUD. **Finding after auditing the widget-authoring system:**
+  the *visual* scaffolding is rich and works (panels, `add_progress_bar`, `add_image`, `set_style`,
+  layout, animations, `create_hud_widget`, `add_health_bar`), and **widget-self delegate binding is
+  real** — `bind_on_clicked` (WidgetAuthoringHandlers.cpp ~L3967) authors a genuine
+  `UK2Node_ComponentBoundEvent` for any `BlueprintAssignable` multicast delegate on a *child widget*
+  (works for UButton, CommonUI, custom), optionally wiring the event to a self function. That is the
+  proven K2-authoring pattern to build on (`FGraphNodeCreator` + compile + `McpSafeAssetSave` + self-layout).
+  **But the actual binding the HUD needs is missing.** The "binding" actions that would wire a widget's
+  *value* to live data are stubs that return success + an instruction string and wire **nothing**:
+  - `create_property_binding` (~L4435): returns `instruction` "Create function … use Property Binding dropdown".
+  - `bind_text` / `bind_visibility` / `bind_color` / `bind_enabled` (~L3784+): same — advisory only.
+  - `set_widget_binding` (~L5474): only *verifies* the property is bindable, then saves; no binding made.
+  - `add_health_bar` (~L4973): builds HBox+label+ProgressBar but calls `SetPercent(1.0)` **statically** —
+    a full bar wired to nothing.
+
+  **Gap:** no action connects a widget value to a runtime data source. For this project the target rail is
+  the event-driven one (see `UAttributeComponent::OnHealthPercentUpdateDelegate` /
+  `OnMagicPercentUpdateDelegate`, broadcast from `ReceiveDamage`/`AddHealth`/`AddMagic`): subscribe in the
+  widget's Event Construct, update `ProgressBar.Percent` only on change. This is harder than
+  `bind_on_clicked` because the delegate lives on an **external** object (the player's AttributeComponent),
+  resolved at runtime — not a child-widget property — so it's `UK2Node_AddDelegate` + a `UK2Node_CustomEvent`
+  handler + a get-source chain, NOT a `ComponentBoundEvent`.
+
+  **Proposed work (staged; each stage independently testable, build live before moving on):**
+  1. **`bind_event_to_delegate`** (generic, the core). Params: `widgetPath`, `delegateOwnerExpr` (how to
+     reach the object carrying the delegate — see design decision below), `delegateName`,
+     `handlerName` (custom event to create/reuse), optional `targetWidget`+`setterFunction`+`argName`
+     so the generated custom event calls e.g. `ProgressBar::SetPercent(Percentage)` directly. Builds
+     `UK2Node_AddDelegate` (off Event Construct) bound to the source's delegate, a `UK2Node_CustomEvent`
+     matching the delegate signature, and the setter call. Reuse `bind_on_clicked`'s creator/compile/save/
+     layout helpers. **Heed the `add_event` duplicate-default-pin trap (Bugs §, L623)** — create the custom
+     event via the same canonical path that fix landed on, or chains die on the next editor load.
+  2. **Source-resolution** for the HUD: author the Event-Construct chain to get the delegate owner. Cleanest
+     and most testable is to NOT author a fragile `GetPlayerPawn→Cast→GetAttributes` chain generically, but
+     to support a **provided self/library getter function** whose return feeds `AddDelegate`'s target.
+  3. **Convenience HUD macro:** extend `add_health_bar` (and add `add_attribute_bar` / magic) with an opt-in
+     `bindToAttribute` that composes stages 1–2 for the player AttributeComponent → bar `Percent`, and sets
+     the bar's initial `Percent` from the live value instead of a hardcoded `1.0`.
+  4. **Honesty fix (cheap, do alongside):** the advisory stubs (`create_property_binding`, `bind_*`,
+     `set_widget_binding`) currently report `success:true` while wiring nothing — either make them real
+     (UMG property binding = `FDelegateRuntimeBinding` + a generated getter) or have them return a clear
+     "advisory only / use bind_event_to_delegate" status so callers aren't misled.
+
+  **Design decision for Aaron (shapes the API — his call, not a guess):** HUD↔player link — *pull* (HUD
+  resolves the player in Construct) vs *push* (player's BeginPlay calls a BlueprintCallable
+  `InitializeHud(UAttributeComponent*)` on the widget, which then binds). Push is more robust (no
+  Construct-timing/race on who exists first) and makes source-resolution trivial; pull needs no C++ change
+  to the character. This choice decides stage-2's shape.
+
+  **Build/test:** new action names go in `WidgetAuthoring()` in `McpConsolidatedActionRouting.h` (header →
+  **full rebuild**, close editor first, `-NoUBA`); handler bodies are `.cpp`-only (`WidgetAuthoringHandlers.cpp`)
+  so iteration after the first rebuild can use `system_control live_coding_compile`. Verify live on a scratch
+  WBP: bind → compile → **reload editor** (the duplicate-pin bug only bites on reload) → PIE, take damage,
+  watch the bar move. Do NOT land any of this without the live reload+PIE check.
 - ✅ **`get_graph_details` 1-call graph-hygiene pass** — DONE 2026-06-10. Per-node `x`/`y`
   (`NodePosX/Y`), `enabledState` (`GetDesiredEnabledState()` → Enabled/Disabled/DevelopmentOnly),
   `linkCount` (sum of pin `LinkedTo`), `pinCount`, and `isOrphan` (pin-bearing node with zero
@@ -220,6 +298,20 @@ Flakiness in shipped surface erodes trust during real authoring.
 - 🟡 **Enhanced Input authoring depth** — IMC/IA creation + key mapping exist (Input group);
   verify round-trips and fill the sparse trigger/modifier authoring (modifier/trigger
   factories are thin).
+  - **Specifics found authoring IA_Heal end-to-end 2026-06-17** (worked fully via the bridge —
+    `create_input_action` → `set_input_trigger Down` → `add_mapping` ×2 → `set_default` HealAction
+    on `BP_CPP_Character` → `compile`; all readback-verified). The rough edges:
+    1. `create_input_action` takes no `valueType` — to set `ValueType` you must leave the input
+       group for `set_asset_property propertyName=ValueType value="Boolean"`. (No-op for bool IAs
+       since the `UInputAction` default is already Boolean, but undiscoverable.) → add an optional
+       `valueType` param to `create_input_action`.
+    2. `get_input_info` on a `UInputAction` reports `valueType`/`consumeInput` but NOT its own
+       `Triggers[]` — only IMC mappings carry a `triggerCount`. So after `set_input_trigger` you
+       can't confirm the trigger *class* via the input group. → emit a `triggers[]` (class names)
+       for IAs in `get_input_info`.
+    3. `set_input_trigger` is append-only (`InAction->Triggers.Add`, no dedup) → re-running an
+       otherwise-idempotent authoring script stacks duplicate triggers. → add `replace:true`
+       (Empty before Add) or dedup by class.
 - 🟡 **Common UI completeness** — have: add button/text/border, assign style, bind input action,
   and (NEW 2026-06-07) **style-asset creation**. Missing / runtime-only: activatable-widget stack
   push/pop + focus/nav, input-action→click wiring. Some is inherently runtime
@@ -493,6 +585,176 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 ---
 
 ## Bugs (found while using the bridge — track, fix when convenient)
+
+### 2026-06-18c — Cleanup pass LANDED (Batches 1–3, built + live-verified against the editor)
+Worked the 34-finding audit + the 2026-06-18b friction list into three batches, each rebuilt/live-coded
+and verified against the running editor. Bridge source updated (local `dev` fork, uncommitted). Final
+bake-rebuild done so the on-disk DLL matches source.
+
+**Batch 1 — fail-fast / no lying-success.** All verified to return NOT_IMPLEMENTED or an honest result:
+- WidgetAuthoring stubs → NOT_IMPLEMENTED with guidance: `bind_text`/`bind_visibility`/`bind_color`/
+  `bind_enabled`, `create_property_binding`, `set_widget_binding`, `apply_style_to_widget`,
+  `set_animation_speed`, `add_animation_keyframe`, `set_animation_loop` (no more success-while-wiring-nothing).
+- `add_ability`/`grant_ability` (GAS), `add_eqs_context` (AI), `set_datalayer` `#else` (WorldPartition) → honest errors.
+- Inventory `add_inventory_functions`/`add_equipment_functions` → dropped the fake "(implement in Blueprint)"
+  function entries; report only the real vars/dispatchers actually added (`dispatchersAdded`).
+- `GetSlotName` accepts `name`; `add_progress_bar` honors it (no more auto-"ProgressBar").
+- `add_event` accepts `eventName` as an alias for `eventType` on the override path (was → blank GUID custom event).
+
+**Batch 2 — graph-authoring correctness.** Live-verified:
+- `bind_on_hovered`: was a lying stub; now shares `bind_on_clicked`'s real ComponentBoundEvent path
+  (default delegate `OnHovered`, `functionName` alias for `targetFunction`) — dedups the two handlers.
+- `remove_function`: now compiles + saves after `RemoveGraph` (was false success — removal never persisted;
+  verified ScratchFn actually gone afterward).
+- `add_node` CallFunction: `memberName`(+`memberClass`) delegates to the `create_node` factory (real resolved
+  node, verified Print String with pins); empty function → fail-fast INVALID_ARGUMENT. No more "None" node /
+  compile-break / PIE-hang.
+
+**Batch 3 — widget-authoring save discipline (data-loss fix).** Disk-verified (mtime/size advance):
+- New `FinalizeWidgetEdit(WidgetBP, Payload)` (mark + opt-in save, default true) routed into all 26 `add_*`
+  tree-construction handlers — edits now persist (were lost on editor close/GC). Pass `"save": false` to batch.
+- `create_widget_blueprint` now saves the new `.uasset` (was created in-memory only).
+- CommonUI `add_common_button`/`add_common_text`/`add_common_border` + style setters + `set_common_button_input_action`
+  now save (added `McpSafeOperations` include/`using` — they were relying on a unity-build using-leak).
+
+**Still open (deliberately deferred — not bugs / higher risk / gated):**
+- **C monolith dedup** — PARTLY DONE (2026-06-18d). Extracted file-local helpers `ConstructWidgetForAdd`
+  (load+construct+register, returns the widget) + `AddFinalizeRespondWidget` (SafeAddToTree + FinalizeWidgetEdit
+  + Validate + respond) in the `WidgetAuthoringHelpers` namespace — they call the subsystem's public send helpers
+  via a `Self` pointer, so they stay `.cpp`-only. Collapsed **all 11 §19.2 layout panels** onto them
+  (canvas/hbox/vbox/overlay/grid/uniform_grid/wrap_box/scroll_box/size_box/scale_box/border): pure panels are
+  ~5 lines; property panels do construct → set type-specific props on the cast → addfinalize. ~600 boilerplate
+  lines removed. Build clean + live-verified (canvas via name alias; size_box WidthOverride=250 persisted; correct
+  tree). **Remaining:** the ~12 §19.3+ leaf widgets (text/rich_text/image/button/check_box/slider/progress_bar/
+  text_input/combo_box/spin_box/list_view/tree_view) — now a trivial mechanical conversion onto the same helpers,
+  preserving each one's property block; plus the 🟡 7,350-line-function split + error-literal/response-tail dedup.
+- **D** — extract the shared graph-event-chain helper; add `FScopedTransaction` + `TryCreateConnection` to
+  `bind_on_clicked`/`bind_on_value_changed` (🟢 robustness).
+- **B 🟡/🟢** — Inventory/Interaction structural adds save-without-compile (stale CDO); InputHandlers
+  `add_mapping`/`remove_mapping` missing `Context->Modify()`.
+- `manage_audio` `create_sound_class`/`create_sound_mix` hang (needs in-editor debugger — Aaron-gated).
+- Widget-authoring params undeclared in the `manage_blueprint` schema (doc-only); no runtime component-function call.
+
+### 2026-06-18b — Friction found building the HUD `bind_event_to_delegate` (live MCP authoring)
+- [x] **`MakePinType` PC_Float → INT — FIXED (Live-Coding-only; needs a full rebuild to persist).**
+  `McpBlueprintUtils::MakePinType` (McpHandlerUtils.cpp ~682) used the legacy bare `PC_Float` category for
+  "float"/"double", so user-defined pins (add_function/add_event params) compiled to an **INT** — silent
+  truncation; the schema then spliced a `Truncate` node into float→float connections. Caught when a
+  `SetPercent(float)` param became int and truncated 0..1 health to 0. Fixed → `PC_Real` + `PC_Float`/`PC_Double`
+  subcategory. **Same bug family as the add_variable PC_Real fix (`c0bff6a`) — that fix never covered MakePinType.**
+- [ ] **`add_node` CallFunction (`memberName`+`memberClass`) → blank "None" node — HIGH (compile-break + PIE hang).**
+  Authoring a general `Class::Function` call via `add_node` did NOT resolve the function — it created a pinless
+  `K2Node_CallFunction` titled "None". That node breaks compile (`Could not find a function named "None"`) and,
+  when the broken widget is later instantiated at runtime, **HUNG PIE** (game thread frozen, log frame counter
+  stuck — required a force-kill). **WORKAROUND CONFIRMED: use `create_node` (NOT `add_node`)** — `create_node`
+  CallFunction DOES resolve a general call (`memberName`+`memberClass` → `ResolveUClass`→`FindFunctionByName`→
+  `SetFromFunction`, BlueprintGraphHandlers.cpp ~L1045; verified: produced a real "Set Percent" node, then wired
+  the body via `connect_pins`). The bug is `add_node`-specific: it routes elsewhere and `NewObject`s a bare
+  function-less node. Fix: make `add_node` route function-call requests through the `create_node` CallFunction path
+  (or fail-fast with FUNCTION_NOT_FOUND) instead of leaving a compile-breaking "None" node.
+- [ ] **`remove_function` false success — HIGH.** `remove_function SetPercent` returned `removed:true,success:true`
+  but left the function (with its broken node) in place; only a later `get_graph_details`/compile revealed it.
+  False success left a compile-broken asset. Workaround: `delete_node` the offending node(s), then `compile`.
+- [ ] **`add_event` override path keyed on `eventType`, not `eventName`.** To implement a parent
+  BlueprintImplementableEvent override, pass `eventType:"<EventName>"` (walks ParentClass→FindFunctionByName).
+  Passing `eventName` leaves `eventType` empty → defaults "custom" → creates a GUID-named blank custom event
+  (silent wrong result). Accept `eventName` as an alias on the override path, or document.
+- [ ] **Widget-authoring params undeclared in the `manage_blueprint` schema.** `get_widget_info` requires
+  `widgetPath`, but `widgetPath`/`slotName`/`parentSlot`/`widgetClass` etc. are NOT in `BuildInputSchema` — they
+  only work because the client forwards undeclared params. A schema-strict client can't discover them. Add them
+  (doc-only; handlers already read them from the payload).
+- [ ] **`set_position` rejects bare `x`/`y`** — wants `position:{x,y}` or `posX`/`posY`. (`set_size` took
+  `width`/`height` fine.) Minor param-spelling inconsistency.
+- [ ] **`add_progress_bar` (and siblings) ignore `name`, auto-name "ProgressBar"** — pass-through uses `slotName`,
+  not `name`; same `name`↔`slotName` alias gap noted before for other widget adds.
+- [ ] **No runtime component-function call / no runtime ApplyDamage.** `control_actor call_actor_function` is
+  actor-only; firing `AttributeComponent::ReceiveDamage`/`AddHealth` to test the HUD needed `execute_python`
+  (`UnrealEditorSubsystem.get_game_world()` → pawn → `get_component_by_class(AttributeComponent)` →
+  `call_method("ReceiveDamage")`). `manage_combat apply_damage` is authoring-only (confirmed). Consider a
+  `call_component_function` and/or runtime `apply_damage`. (NB: a protected UPROPERTY like `HudWidget` is not
+  readable via python `get_editor_property`.)
+
+### 2026-06-18 — Automated cleanup audit batch (34 confirmed findings, HUD-work session)
+Multi-agent read-only audit of `Source/McpAutomationBridge/Private/` for lying-success stubs,
+save/compile discipline, duplication, and graph-authoring robustness. Each finding was
+adversarially re-verified against source. Grouped below by class; tackle sequentially. (Surfaced
+while building the HUD `bind_event_to_delegate` work above — the "report success while wiring
+nothing" anti-pattern is the same disease as the binding stubs, and violates [[feedback_fail_fast_no_guessing]].)
+
+**A. Lying-success stubs — return `success:true` while doing/wiring nothing (fail-fast violation).**
+Fix each to either do the real work or return `SendAutomationError(..., NOT_IMPLEMENTED)`; do NOT
+return success with only an advisory `instruction` string. (Several also needlessly
+`MarkBlueprintAsStructurallyModified` for a no-op — drop that on the NOT_IMPLEMENTED path.)
+- 🔴 `bind_text` (WidgetAuthoringHandlers.cpp 3784-3829), `bind_visibility` (3832-3874),
+  `bind_color` (3877-3919), `bind_enabled` (3922-3964) — find the widget, then only set an
+  `instruction` string + return "…binding configured". No `WidgetBP->Bindings` entry, no getter.
+- 🔴 `bind_on_hovered` (4163-4205) — casts to `UButton` only (misses Common UI), wires no
+  `UK2Node_ComponentBoundEvent`; the exact old-stub shape `bind_on_clicked` was already fixed away from.
+  Reimplement on the shared binder helper (delegateName default `OnHovered`), drop the UButton cast.
+- 🔴 `create_property_binding` (4435-4488) — "use the Property Binding dropdown" advisory; no `FDelegateRuntimeBinding`.
+- 🔴 `set_widget_binding` (5473-5585) — only verifies the prop is bindable, then `saved:true` (a save
+  of no change) + "binding target verified". Especially misleading. Comment claims it "wraps bind_text…" but doesn't.
+- 🔴 `apply_style_to_widget` (7542-7582) — hardcoded `success:true` + "Applied style to widget"; only probes the style var exists.
+- 🔴 `set_animation_speed` (7588-7638) — true no-op: `SetPlaybackRange(GetPlaybackRange())`; speed param never applied.
+- 🔴 `add_animation_keyframe` (4663-4712) — echoes time/value, writes no MovieScene channel.
+- 🟡 `set_animation_loop` (4715-4763) — echoes loop/loopCount, persists nothing.
+- 🔴 GAS `add_ability` (GASHandlers.cpp 3063-3078) — "Ability validated for set"; never touches GrantedAbilities.
+- 🟡 GAS `grant_ability` (3173-3216) — adds an EMPTY `InitialAbilities` var; never inserts the requested ability.
+- 🔴 AI `add_eqs_context` (AIHandlers.cpp 1509-1529) — `MarkPackageDirty` only; no context created/assigned, no save.
+- 🟡 WorldPartition `set_datalayer` `#else` fallback (WorldPartitionHandlers.cpp 548-561) — returns
+  `success:true` "Actor added to DataLayer (Simulated…)" with `added:false`. Return SUBSYSTEM_NOT_FOUND like its sibling.
+- 🟡 Inventory `add_inventory_functions` (InventoryHandlers.cpp 602-629) / `add_equipment_functions`
+  (1552-1579) — list function names with " (implement in Blueprint)" suffix in `functionsAdded`; no UFunctions created.
+
+**B. Silent no-persist / stale-class (save+compile discipline — the documented IMC dirty class).**
+- 🔴 ALL widget-construction `add_*` (WidgetAuthoringHandlers.cpp: add_canvas_panel 1242 … add_tree_view
+  2976, 23 subactions) `MarkBlueprintAsStructurallyModified` but **never `McpSafeAssetSave`** — edits live
+  in memory, lost on editor close/GC. Slot setters (set_position 3245 etc.) DO save — inconsistent.
+  Fix: factor `FinalizeWidgetEdit(WidgetBP, Payload)` (mark + dirty + save, opt-in `save` flag default true), call from every tree-mutating branch.
+- 🔴 `create_widget_blueprint` (1044) — creates the BP, marks dirty, **never saves** the new .uasset.
+  (NOTE: this contradicts the older "create_widget_blueprint savePath" Done entry — savePath is read, but no save call fires.)
+- 🔴 CommonUI mutations (CommonUIHandlers.cpp 196/270/337/422/595) — never save; only the StyleBP create-branch (502) does.
+- 🟡 Inventory (InventoryHandlers.cpp 424/502/615/685) + Interaction (InteractionHandlers.cpp 492/558)
+  structural var/event adds saved WITHOUT an intervening `McpSafeCompileBlueprint` → stale generated class/CDO
+  on disk; pre-compile CDO writes (e.g. configure_inventory_slots MaxSlots) silently no-op. Combat/GameFramework compile-before-save is the correct pattern to mirror.
+- 🟢 InputHandlers `add_mapping`/`remove_mapping` (411/497) mutate IMC without `Context->Modify()` (set_input_modifier does). Benign today (MapKey Modifies internally) but inconsistent near the known DefaultKeyMappings dirty trap.
+
+**C. Duplication / monolith (widget-authoring refactor — pairs with the binder helper below).**
+- 🔴 ~28 `add_*` handlers are copies of one ~50-line skeleton (load BP → ConstructWidget → RegisterWidgetGuid
+  → SafeAddWidgetToTree → MarkModified → Validate → respond); ~1,400+ mechanical lines incl. CommonUIHandlers.
+  Extract `ConstructAndAddWidget(WidgetBP, UClass*, slot, parentSlot, OutError)` into WidgetAuthoringHelpers.
+- 🟡 `HandleManageWidgetAuthoringAction` is ONE ~7,350-line function (872-8223), `#pragma warning(disable:4883)`
+  to silence too-large. Split into per-family members / a `TMap<FString, handler>` after the helpers land.
+- 🟡 Hard-coded error literals duplicated (≈"Widget blueprint not found"×81, "Missing…widgetPath"×48) with
+  divergence (WIDGET_NOT_FOUND vs NOT_FOUND for same msg). Fold into the resolve/respond helpers.
+- 🟡 Response-tail (success+slotName+AddVerification+SendAutomationResponse) hand-rolled 87×; `success` set
+  twice (also the bool arg). Add `SendWidgetAuthoringSuccess(...)`.
+- 🟢 Half-applied helper layer: `GetColorFromJsonWidget`/`GetObjectField` exist but color/x-y still parsed inline (add_text_block 1484, add_image 1567, set_anchor 3031). Add `TryGetColorField`/`GetVector2DField`.
+
+**D. Graph-authoring robustness (informs the new bind_event_to_delegate — build it clean from the start).**
+- 🟡 Three delegate/event-authoring sites duplicate boilerplate: `bind_on_clicked` (3967-4161),
+  `bind_on_value_changed` (4208-4429), `bind_anim_notify` (AnimationAuthoringHandlers.cpp 3945-4100). Extract a
+  shared graph-event-chain helper (reused-or-created event node + BaseX/Y anchor + the FObjectProperty
+  widget-var resolver w/ compile-once retry, dup'd verbatim at 4036-4042 vs 4279-4285). **The new
+  `bind_event_to_delegate` should be a thin wrapper over this helper.**
+- 🟢 `bind_on_clicked`/`bind_on_value_changed` author nodes WITHOUT an `FScopedTransaction` (bind_anim_notify
+  has one) → not one undo unit; partial wiring can't roll back. **My new action will use FScopedTransaction.**
+- 🟢 `bind_on_value_changed` links via raw `MakeLinkTo` guarded only by null-pin checks (bypasses schema) →
+  can report `wiredLiveUpdate:true` with a type-mismatched wire. **My new action will use `K2Schema->TryCreateConnection`.**
+- 🟡 BlueprintGraphHandlers.cpp `create_node` dynamic fallback (1487-1514): hand-rolls
+  NewObject→AddNode→AllocateDefaultPins, no `Node->Modify()`, and `SaveLoadedAssetThrottled` WITHOUT a
+  CompileBlueprint (every other structural path compiles first). Route through `FGraphNodeCreator` + compile.
+
+
+
+### [ ] WATCH: native MCP session is connection-bound (found 2026-06-17, direct-HTTP driving)
+Low priority — normal Claude Code MCP client keeps one persistent connection and never hits this.
+Surfaced only when driving the bridge directly: an `initialize` returns an `Mcp-Session-Id`, but
+reusing that id from a *new* TCP connection (e.g. one `Invoke-WebRequest` per call) gets
+`-32600 "Invalid or expired session ID"`. Reusing a single keep-alive connection (`HttpClient`)
+for the whole exchange works. Per the MCP streamable-HTTP spec the session should resume across
+connections via the header alone; the pull-architecture rewrite likely tied session state to the
+live socket. Worth confirming if any headless/cron client ever opens per-call connections.
 
 ### [ ] Raw `execute_python` IMC / BP-default authoring traps (found 2026-06-13, Option C IA_Block)
 Two silent persistence traps hit authoring input via **raw `execute_python`** instead of the

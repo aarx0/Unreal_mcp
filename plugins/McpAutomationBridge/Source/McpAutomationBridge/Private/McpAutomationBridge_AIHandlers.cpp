@@ -1520,12 +1520,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             return true;
         }
 
-        Query->MarkPackageDirty();
-        Result->SetStringField(TEXT("contextType"), ContextType);
-        Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Context %s configured"), *ContextType));
-
-        McpHandlerUtils::AddVerification(Result, Query);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Context added"), Result);
+        // Only marked the package dirty — no EnvQueryContext was created or assigned, and it never saved.
+        (void)ContextType;
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("add_eqs_context is not implemented: it creates/assigns no EnvQueryContext. Author the "
+                 "context as a UEnvQueryContext subclass and reference it from the query's generator/tests."),
+            TEXT("NOT_IMPLEMENTED"));
         return true;
     }
 

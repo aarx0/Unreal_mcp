@@ -3257,6 +3257,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 
     FString EventType;
     LocalPayload->TryGetStringField(TEXT("eventType"), EventType);
+    if (EventType.IsEmpty()) {
+      // Accept "eventName" as an alias for the override path: callers naturally pass the
+      // parent event they want to override here (e.g. eventName:"BeginPlay"). Without this,
+      // an empty eventType defaulted to "custom" and silently produced a GUID-named blank
+      // custom event. If the name isn't an overridable parent function the override branch
+      // fails fast with EVENT_NOT_FOUND, so this can't create garbage.
+      LocalPayload->TryGetStringField(TEXT("eventName"), EventType);
+    }
     FString CustomName;
     LocalPayload->TryGetStringField(TEXT("customEventName"), CustomName);
     const TArray<TSharedPtr<FJsonValue>> *ParamsField = nullptr;
@@ -3747,7 +3755,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
       FBlueprintEditorUtils::RemoveGraph(Blueprint, TargetGraph,
                                          EGraphRemoveFlags::Default);
       FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+      // Must compile + save like add_function/add_event do. Without the recompile the
+      // generated class still carries the (now-removed) UFunction, and without the save the
+      // removal never reaches disk — the old code did neither, so it reported removed:true
+      // while a later get_graph_details/compile still found the function (false success).
+      McpSafeCompileBlueprint(Blueprint);
+      const bool bSaved = SaveLoadedAssetThrottled(Blueprint);
       Resp->SetBoolField(TEXT("removed"), true);
+      Resp->SetBoolField(TEXT("saved"), bSaved);
     } else {
       Resp->SetBoolField(TEXT("removed"), false);
       Resp->SetBoolField(TEXT("alreadyAbsent"), true);
@@ -4981,6 +4996,27 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
       }
     }
 
+    // A CallFunction request authored with memberName(+memberClass) — the create_node
+    // convention — must resolve through the create_node CallFunction factory, which reads
+    // those fields. The generic spawn below only honors functionName, so this form produced
+    // a function-less "None" node that breaks the next compile and can hang PIE when the
+    // owning asset is later instantiated. Delegate it. (A "Class::Function" functionName or
+    // an explicit functionName is left to the capable in-place resolver below.)
+    {
+      const FString Lowered = NodeType.ToLower();
+      const bool bIsFunctionCall =
+          Lowered.Contains(TEXT("callfunction")) ||
+          (Lowered.Contains(TEXT("function")) && !NodeType.Contains(TEXT("::")));
+      FString MemberName;
+      LocalPayload->TryGetStringField(TEXT("memberName"), MemberName);
+      if (bIsFunctionCall && FunctionName.IsEmpty() && !MemberName.IsEmpty()) {
+        LocalPayload->SetStringField(TEXT("subAction"), TEXT("create_node"));
+        LocalPayload->SetStringField(TEXT("nodeType"), TEXT("CallFunction"));
+        return HandleBlueprintGraphAction(RequestId, TEXT("manage_blueprint"),
+                                          LocalPayload, RequestingSocket);
+      }
+    }
+
     // Declare RegistryKey outside the conditional blocks
     const FString RegistryKey = Path;
 
@@ -5090,31 +5126,38 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 
     if (NodeTypeLower.Contains(TEXT("callfunction")) ||
         NodeTypeLower.Contains(TEXT("function"))) {
-      UFunction *FoundFunc = nullptr;
-      if (!FunctionName.IsEmpty()) {
-        FoundFunc = FMcpAutomationBridge_ResolveFunction(BP, FunctionName);
-        if (!FoundFunc) {
-          // Fail fast: silently creating a bare CallFunction node (the old
-          // behavior) leaves a misconfigured node that breaks the next compile
-          // while the add reports success.
-          TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-          Result->SetStringField(TEXT("error"), FunctionName);
-          SendAutomationResponse(
-              RequestingSocket, RequestId, false,
-              FString::Printf(
-                  TEXT("Function '%s' not found. Tried the blueprint's class "
-                       "hierarchy and the Class::Function / Class.Function / "
-                       "/Script/Module.Class.Function forms."),
-                  *FunctionName),
-              Result, TEXT("FUNCTION_NOT_FOUND"));
-          return true;
-        }
+      if (FunctionName.IsEmpty()) {
+        // No function to bind (the memberName form was already delegated to create_node
+        // above). Refuse rather than NewObject a blank "None" CallFunction node — that node
+        // breaks the next compile and has been observed to hang PIE when the owning asset is
+        // later instantiated.
+        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+        SendAutomationResponse(
+            RequestingSocket, RequestId, false,
+            TEXT("CallFunction node requires functionName (or memberName[+memberClass]). "
+                 "Refusing to create a function-less 'None' node."),
+            Result, TEXT("INVALID_ARGUMENT"));
+        return true;
+      }
+      UFunction *FoundFunc = FMcpAutomationBridge_ResolveFunction(BP, FunctionName);
+      if (!FoundFunc) {
+        // Fail fast: silently creating a bare CallFunction node (the old behavior) leaves a
+        // misconfigured node that breaks the next compile while the add reports success.
+        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+        Result->SetStringField(TEXT("error"), FunctionName);
+        SendAutomationResponse(
+            RequestingSocket, RequestId, false,
+            FString::Printf(
+                TEXT("Function '%s' not found. Tried the blueprint's class "
+                     "hierarchy and the Class::Function / Class.Function / "
+                     "/Script/Module.Class.Function forms."),
+                *FunctionName),
+            Result, TEXT("FUNCTION_NOT_FOUND"));
+        return true;
       }
       UK2Node_CallFunction *FuncNode =
           NewObject<UK2Node_CallFunction>(TargetGraph);
-      if (FuncNode && FoundFunc) {
-        FuncNode->SetFromFunction(FoundFunc);
-      }
+      FuncNode->SetFromFunction(FoundFunc);
       NewNode = FuncNode;
     } else if (NodeTypeLower.Contains(TEXT("variableget")) ||
                NodeTypeLower.Contains(TEXT("getvar"))) {

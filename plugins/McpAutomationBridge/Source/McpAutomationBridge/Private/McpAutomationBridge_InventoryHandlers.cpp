@@ -599,18 +599,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    // Mark as expected functions to implement in Blueprint
-    TArray<FString> FunctionStubs = {
-      TEXT("AddItem"),
-      TEXT("RemoveItem"),
-      TEXT("GetItemCount"),
-      TEXT("HasItem"),
-      TEXT("TransferItem")
-    };
-
-    for (const FString& FuncName : FunctionStubs) {
-      FunctionsAdded.Add(MakeShared<FJsonValueString>(FuncName + TEXT(" (implement in Blueprint)")));
-    }
+    // NOTE: this action adds the helper variables + event-dispatcher delegates above (real work). It does
+    // NOT create the AddItem/RemoveItem/etc. UFunctions — authoring function graphs is a separate step
+    // (add_function). Report only what was actually added; do not list fake "(implement in Blueprint)"
+    // entries that imply functions exist.
 
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
@@ -619,10 +611,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetArrayField(TEXT("functionsAdded"), FunctionsAdded);
+    Result->SetArrayField(TEXT("dispatchersAdded"), FunctionsAdded);
     Result->SetArrayField(TEXT("variablesAdded"), VariablesAdded);
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetStringField(TEXT("note"), TEXT("Helper variables and event dispatchers added. Implement function logic in Blueprint graph using these variables."));
+    Result->SetStringField(TEXT("note"), TEXT("Added helper variables and event-dispatcher delegates only. No UFunctions were created — author AddItem/RemoveItem/etc. with add_function, then implement their logic in the Blueprint graph."));
 
     SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Inventory functions added"), Result);
@@ -1549,18 +1541,9 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    // Mark as expected functions to implement in Blueprint
-    TArray<FString> FunctionStubs = {
-      TEXT("EquipItem"),
-      TEXT("UnequipItem"),
-      TEXT("GetEquippedItem"),
-      TEXT("CanEquip"),
-      TEXT("SwapEquipment")
-    };
-
-    for (const FString& FuncName : FunctionStubs) {
-      FunctionsAdded.Add(MakeShared<FJsonValueString>(FuncName + TEXT(" (implement in Blueprint)")));
-    }
+    // Adds the helper variables + event-dispatcher delegates above (real work). It does NOT create the
+    // EquipItem/UnequipItem/etc. UFunctions — that is a separate step (add_function). Report only what was
+    // actually added; do not list fake "(implement in Blueprint)" entries that imply functions exist.
 
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
@@ -1569,10 +1552,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetArrayField(TEXT("functionsAdded"), FunctionsAdded);
+    Result->SetArrayField(TEXT("dispatchersAdded"), FunctionsAdded);
     Result->SetArrayField(TEXT("variablesAdded"), VariablesAdded);
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetStringField(TEXT("note"), TEXT("Helper variables and event dispatchers added. Implement function logic in Blueprint graph."));
+    Result->SetStringField(TEXT("note"), TEXT("Added helper variables and event-dispatcher delegates only. No UFunctions were created — author EquipItem/UnequipItem/etc. with add_function, then implement their logic in the Blueprint graph."));
 
     SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Equipment functions added"), Result);

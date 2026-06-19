@@ -679,9 +679,19 @@ FEdGraphPinType MakePinType(const FString& InType)
     const FString Lower = InType.ToLower();
     const FString CleanType = InType.TrimStartAndEnd();
 
-    if (Lower == TEXT("float") || Lower == TEXT("double"))
+    if (Lower == TEXT("float"))
     {
-        PinType.PinCategory = UEdGraphSchema_K2::PC_Float;
+        // UE5 float pins are PC_Real + a Float subcategory. The legacy bare
+        // PC_Float category compiles to an INT property (silent truncation) — it
+        // spliced a Truncate node into float param connections. Same bug family
+        // as the add_variable PC_Real fix.
+        PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+        PinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+    }
+    else if (Lower == TEXT("double"))
+    {
+        PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+        PinType.PinSubCategory = UEdGraphSchema_K2::PC_Double;
     }
     else if (Lower == TEXT("int") || Lower == TEXT("integer"))
     {
