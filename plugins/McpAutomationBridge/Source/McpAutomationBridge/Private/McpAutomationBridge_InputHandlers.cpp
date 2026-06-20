@@ -456,6 +456,11 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
             return true;
         }
 
+        // Modify() before mutating the mapping array so the transaction/dirty
+        // tracking matches set_input_modifier (and the DefaultKeyMappings dirty
+        // trap right next door) — MapKey dirties internally today, but relying
+        // on that is the inconsistency this aligns.
+        Context->Modify();
         Context->MapKey(InAction, Key);
         SaveLoadedAssetThrottled(Context, -1.0, true);
 
@@ -540,6 +545,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
             return true;
         }
 
+        Context->Modify();
         for (const FKey& KeyToRemove : KeysToRemove)
         {
             Context->UnmapKey(InAction, KeyToRemove);

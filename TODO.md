@@ -71,8 +71,31 @@ Flakiness in shipped surface erodes trust during real authoring.
   Minor known interaction: starting tests directly leaves the worker's `bExecuteNextNetworkCommand`
   false, so for tests 2+ in a run *we* (not the worker) call the concluding `StopTest` (handled by
   the guarded fallback). Helper: `scripts/mcp-call.ps1` (one-shot MCP initialize + tools/call).
-- 🟡 **Log/profiling streaming** — `docs/Roadmap.md` Phase 5 real-time streaming for logs +
-  remote Insights profiling is still unstarted (test results above are now covered).
+- ✅ **Log + profiling VISIBILITY (pull-based) — DONE 2026-06-20** (built + verified live on a baked
+  `-NoUBA` build). The old `manage_logs subscribe` was a **lying-success stub**: it registered an
+  output device that formatted every line to JSON and dispatched it to `SendRawMessage` — a no-op
+  since the WebSocket push path was removed (pull-only architecture). So `subscribe` reported
+  `subscribed:true` while NO log ever reached the caller, burning CPU per line. Replaced with a
+  pull-correct **server-side ring buffer** (always-on from Initialize, 5000 lines, O(1) circular
+  append, formatting deferred to read time) + poll actions on `system_control` (→ `HandleLogAction`):
+  - `get_log`/`tail_log` — recent lines with `count` (≤2000), incremental `sinceSeq` cursor
+    (response carries `nextSeq` + `dropped` so an evicted gap is never silent), and `category` /
+    `verbosity` (min-severity) / `contains` filters. `clear_log` empties the ring (seq stays
+    monotonic so cursors don't alias). `subscribe`/`unsubscribe` kept but now HONEST (toggle capture;
+    read via tail, no fake push). Verified: 1539 boot lines captured, filter → exactly the 3
+    LogStaticMesh Nanite warnings, `sinceSeq` returned only newer seqs with nextSeq advanced,
+    clear → ringCount 3 / oldestSeq 1548 (monotonic).
+  - **`get_profile`** (alias `capture_stats`/`get_perf_stats`, on `manage_performance`) — READS BACK
+    live counters as JSON instead of writing a `.ue4stats` file the agent can't consume:
+    `averageFPS`/`averageFrameMs` (the `extern ENGINE_API` globals — no public header, declared
+    locally like the engine's own TUs), per-thread `gameThreadMs`/`renderThreadMs`/`rhiThreadMs`
+    (RenderTimer.h `RENDERCORE_API`) + `gpuMs` (`RHIGetGPUFrameCycles()` — the non-deprecated
+    replacement for `GGPUFrameTime`), and memory (`FPlatformMemory::GetStats()` → used/peak/avail MB).
+    Verified live: real game-thread 87ms / GPU 10ms / 5.26GB used.
+  - **Still future (🟡):** true real-time PUSH streaming + remote Unreal Insights trace capture
+    (`FTraceAuxiliary` — TraceLog/TraceAnalysis ARE linked). Push doesn't fit the pull-only transport,
+    so a poll loop on `tail_log`/`get_profile` is the current model; an Insights `start_trace`/
+    `stop_trace` to a `.utrace` is the natural next step if wanted.
 
 ### B. Authoring capability gaps — new features that unblock real workflows
 - ✅ **`bind_event_to_delegate` — functional widget data-binding DONE 2026-06-18** (the plan below, built + verified
@@ -823,8 +846,10 @@ bake-rebuild done so the on-disk DLL matches source.
   `HandleManageWidgetAuthoringAction` function + fold the duplicated error literals / response-tail; not a bug.
 - **D** — extract the shared graph-event-chain helper; add `FScopedTransaction` + `TryCreateConnection` to
   `bind_on_clicked`/`bind_on_value_changed` (🟢 robustness).
-- **B 🟡/🟢** — Inventory/Interaction structural adds save-without-compile (stale CDO); InputHandlers
-  `add_mapping`/`remove_mapping` missing `Context->Modify()`.
+- **B 🟡/🟢** — Inventory/Interaction structural adds save-without-compile (stale CDO) [structural-only
+  class now covered centrally by `McpSafeAssetSave` compile-on-save, 2026-06-18f]; ✅ InputHandlers
+  `add_mapping`/`remove_mapping` `Context->Modify()` ADDED 2026-06-20 (baked) — now matches
+  set_input_modifier; MapKey/UnmapKey dirty internally but the explicit Modify aligns the inconsistency.
 - `manage_audio` `create_sound_class`/`create_sound_mix` hang (needs in-editor debugger — Aaron-gated).
 - Widget-authoring params undeclared in the `manage_blueprint` schema (doc-only); no runtime component-function call.
 

@@ -86,6 +86,16 @@
 #include "LevelEditor.h"
 #include "ProfilingDebugging/ScopedTimers.h"
 #include "Subsystems/EditorActorSubsystem.h"
+#include "RenderTimer.h"          // GGameThreadTime / GRenderThreadTime / GRHIThreadTime (RENDERCORE_API)
+#include "DynamicRHI.h"           // RHIGetGPUFrameCycles (replaces deprecated GGPUFrameTime)
+#include "HAL/PlatformMemory.h"   // FPlatformMemory::GetStats
+#include "Misc/App.h"             // FApp::GetDeltaTime
+
+// GAverageFPS/GAverageMS are exported ENGINE_API but declared only inside
+// UnrealEngine.cpp (no public header), so we redeclare the externs here exactly
+// as the engine's own translation units do.
+extern ENGINE_API float GAverageFPS;
+extern ENGINE_API float GAverageMS;
 
 #endif // WITH_EDITOR
 
@@ -128,6 +138,9 @@ bool UMcpAutomationBridgeSubsystem::HandlePerformanceAction(
       !Lower.StartsWith(TEXT("merge_actors")) &&
       !Lower.StartsWith(TEXT("start_profiling")) &&
       !Lower.StartsWith(TEXT("stop_profiling")) &&
+      !Lower.StartsWith(TEXT("get_profile")) &&
+      !Lower.StartsWith(TEXT("capture_stats")) &&
+      !Lower.StartsWith(TEXT("get_perf_stats")) &&
       !Lower.StartsWith(TEXT("show_fps")) &&
       !Lower.StartsWith(TEXT("show_stats")) &&
       !Lower.StartsWith(TEXT("set_scalability")) &&
@@ -187,6 +200,50 @@ bool UMcpAutomationBridgeSubsystem::HandlePerformanceAction(
 
     SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Memory report generated"), nullptr);
+    return true;
+  }
+  // ===========================================================================
+  // get_profile - READ BACK live performance counters as JSON (no console file)
+  // ===========================================================================
+  // Unlike start/stop_profiling (which write a .ue4stats file to disk the agent
+  // can't consume), this returns the engine's running perf numbers directly so
+  // a caller can see FPS / frame timings / memory without leaving the bridge.
+  else if (Lower == TEXT("get_profile") || Lower == TEXT("capture_stats") ||
+           Lower == TEXT("get_perf_stats")) {
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+
+    // Frame rate / frame time (engine running averages, updated every frame).
+    Result->SetNumberField(TEXT("averageFPS"), GAverageFPS);
+    Result->SetNumberField(TEXT("averageFrameMs"), GAverageMS);
+    Result->SetNumberField(TEXT("deltaSeconds"), FApp::GetDeltaTime());
+    Result->SetNumberField(TEXT("frameNumber"), static_cast<double>(GFrameCounter));
+
+    // Per-thread timings (cycles -> ms). Meaningful while frames are rendering
+    // (editor viewport or PIE); a thread reads ~0 when idle/disabled.
+    TSharedPtr<FJsonObject> Timings = MakeShared<FJsonObject>();
+    Timings->SetNumberField(TEXT("gameThreadMs"), FPlatformTime::ToMilliseconds(GGameThreadTime));
+    Timings->SetNumberField(TEXT("renderThreadMs"), FPlatformTime::ToMilliseconds(GRenderThreadTime));
+    Timings->SetNumberField(TEXT("rhiThreadMs"), FPlatformTime::ToMilliseconds(GRHIThreadTime));
+    Timings->SetNumberField(TEXT("gpuMs"), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));
+    Result->SetObjectField(TEXT("frameTimingsMs"), Timings);
+
+    // Memory (bytes -> MB).
+    const FPlatformMemoryStats MemStats = FPlatformMemory::GetStats();
+    const double ToMB = 1.0 / (1024.0 * 1024.0);
+    TSharedPtr<FJsonObject> Mem = MakeShared<FJsonObject>();
+    Mem->SetNumberField(TEXT("usedPhysicalMB"), static_cast<double>(MemStats.UsedPhysical) * ToMB);
+    Mem->SetNumberField(TEXT("peakUsedPhysicalMB"), static_cast<double>(MemStats.PeakUsedPhysical) * ToMB);
+    Mem->SetNumberField(TEXT("usedVirtualMB"), static_cast<double>(MemStats.UsedVirtual) * ToMB);
+    Mem->SetNumberField(TEXT("availablePhysicalMB"), static_cast<double>(MemStats.AvailablePhysical) * ToMB);
+    Result->SetObjectField(TEXT("memory"), Mem);
+
+    Result->SetBoolField(TEXT("inPIE"), GEditor && GEditor->PlayWorld != nullptr);
+
+    SendAutomationResponse(
+        RequestingSocket, RequestId, true,
+        FString::Printf(TEXT("%.1f FPS (%.2f ms frame)"), GAverageFPS, GAverageMS),
+        Result);
     return true;
   }
   // ===========================================================================

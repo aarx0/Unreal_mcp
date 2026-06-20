@@ -401,6 +401,17 @@ void UMcpAutomationBridgeSubsystem::Initialize(
   // Initialize the handler registry
   InitializeHandlers();
 
+  // Register the always-on log capture ring so get_log/tail_log can report
+  // "what just happened" retrospectively (no prior subscribe needed). Bounded
+  // + cheap append; see McpAutomationBridge_LogHandlers.cpp. Defined here (not
+  // in the LogHandlers TU) because Initialize lives in this TU; the device
+  // type is forward-usable via the subsystem's CaptureLogLine entry point.
+  if (GLog && !LogCaptureDevice.IsValid()) {
+    LogRing.SetNum(LogRingCapacity);
+    LogCaptureDevice = MakeLogCaptureDevice();
+    GLog->AddOutputDevice(LogCaptureDevice.Get());
+  }
+
   // Native MCP Streamable HTTP transport (opt-in)
   {
     const auto* Settings = GetDefault<UMcpAutomationBridgeSettings>();
@@ -1060,7 +1071,10 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                           R, TEXT("console_command"), CmdPayload, S);
                     }
                     if (SubAction == TEXT("subscribe") ||
-                        SubAction == TEXT("unsubscribe")) {
+                        SubAction == TEXT("unsubscribe") ||
+                        SubAction == TEXT("get_log") ||
+                        SubAction == TEXT("tail_log") ||
+                        SubAction == TEXT("clear_log")) {
                       return HandleLogAction(R, TEXT("manage_logs"), P, S);
                     }
                     if (SubAction == TEXT("spawn_category")) {

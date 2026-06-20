@@ -102,6 +102,17 @@ public:
   UFUNCTION(BlueprintCallable, Category = "MCP Automation")
   bool SendRawMessage(const FString &Message);
 
+  // Append one log line to the capture ring (see the log members below and
+  // McpAutomationBridge_LogHandlers.cpp). Called by FMcpLogOutputDevice from
+  // arbitrary threads — thread-safe, cheap (stores raw fields; formatting is
+  // deferred to read time in get_log/tail_log).
+  void CaptureLogLine(ELogVerbosity::Type Verbosity, const FName &Category,
+                      const TCHAR *Message);
+
+  // Constructs the FMcpLogOutputDevice (defined in the LogHandlers TU, so the
+  // concrete type stays encapsulated there). Returned as the base FOutputDevice.
+  TSharedPtr<FOutputDevice> MakeLogCaptureDevice();
+
   UPROPERTY(BlueprintAssignable, Category = "MCP Automation")
   FMcpAutomationMessageReceived OnMessageReceived;
 
@@ -333,6 +344,28 @@ public:
 
   // Active Log Device
   TSharedPtr<FOutputDevice> LogCaptureDevice;
+
+  // ---- Log capture ring (pull-only log visibility) ----------------------
+  // The capture device (registered always-on in Initialize) appends lines
+  // here; manage_logs get_log/tail_log reads them. This replaces the old
+  // server-push path that fed the now-dead SendRawMessage no-op. Bounded so
+  // memory is fixed regardless of log volume; a circular buffer keeps append
+  // O(1) (no front-eviction array shift).
+  struct FMcpLogEntry
+  {
+    uint64 Seq = 0;                                    // monotonic id (survives clear)
+    double Time = 0.0;                                 // FPlatformTime::Seconds() at capture
+    ELogVerbosity::Type Verbosity = ELogVerbosity::Log;
+    FName Category;
+    FString Message;
+  };
+  TArray<FMcpLogEntry> LogRing;        // preallocated to LogRingCapacity
+  int32 LogRingHead = 0;               // index of the oldest valid entry
+  int32 LogRingCount = 0;              // number of valid entries
+  int32 LogRingCapacity = 5000;        // max retained lines
+  uint64 LogRingNextSeq = 0;           // next seq to assign == total ever captured
+  bool bLogCaptureEnabled = true;      // unsubscribe flips this off (device early-outs)
+  FCriticalSection LogRingMutex;       // Serialize() runs on arbitrary threads
 
 private:
   TMap<FString, FAutomationHandler> AutomationHandlers;

@@ -413,6 +413,7 @@ inline const TArray<FString>& SystemControlCore()
 		TEXT("execute_command"), TEXT("console_command"), TEXT("run_ubt"),
 		TEXT("run_tests"), TEXT("list_tests"), TEXT("get_test_results"),
 		TEXT("subscribe"), TEXT("unsubscribe"),
+		TEXT("get_log"), TEXT("tail_log"), TEXT("clear_log"),
 		TEXT("spawn_category"), TEXT("start_session"),
 		TEXT("lumen_update_scene"), TEXT("create_widget"),
 		TEXT("add_widget_child"), TEXT("set_cvar"),
@@ -427,6 +428,7 @@ inline const TArray<FString>& Performance()
 {
 	static const TArray<FString> Actions = {
 		TEXT("start_profiling"), TEXT("stop_profiling"),
+		TEXT("get_profile"), TEXT("capture_stats"), TEXT("get_perf_stats"),
 		TEXT("run_benchmark"), TEXT("show_fps"), TEXT("show_stats"),
 		TEXT("generate_memory_report"), TEXT("set_scalability"),
 		TEXT("set_resolution_scale"), TEXT("set_vsync"),
