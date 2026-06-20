@@ -613,7 +613,16 @@ control_actor. Fix: unify actor lookup (label + object name + path) across contr
 inspect_cdo on BP_TrainingDummy_AoE returned 146k chars and had to be dumped to file — mostly verbose per-component BodyInstance/collision
 defaults at engine defaults. Fix: terser default (skip props equal to engine defaults) or honor `propertyNames`/`componentNames` to scope it.
 
-### 2026-06-19e — Can't read UInputMappingContext.Mappings via the bridge (generic get_property is blind)
+### 2026-06-19e — ✅ RESOLVED: Read UInputMappingContext.Mappings via `get_input_info`
+**Verified live 2026-06-20** (baked build). The action was already in source (`InputHandlers.cpp` ~L861,
+routed via `manage_networking`/`manage_input`) — the original report's "ToolSearch finds none" was just the
+*running* build predating the feature, not a missing implementation. `get_input_info` on an IMC returns
+`mappingCount` + a `mappings[]` of `{action, actionName, key, triggerCount, modifierCount}` straight from
+`UInputMappingContext::GetMappings()` (the canonical accessor — reads the live storage that the raw
+`Mappings` UPROPERTY reflects empty under UE5.7). Verified: `IMC_CharacterContext` → 28 mappings
+(IA_Heal→R / Gamepad_FaceButton_Top, IA_Block→RightMouseButton / Gamepad_LeftShoulder, etc.). No code
+change — verify-only. Original report below.
+
 Hit while diagnosing a "heal input does nothing" report. `inspect get_property {objectPath:<IMC>, propertyName:"Mappings"}`
 returns `value:[]` for EVERY IMC (IMC_CharacterContext / _Inverted / GameCommands) even though the game has
 working bindings — generic reflection can't serialize the `TArray<FEnhancedActionKeyMapping>` (same blind
@@ -623,7 +632,16 @@ build or isn't registered. Net: no way to read which key an IA is bound to. Fix:
 `get_input_info` (IMC -> [{action, key, modifiers, triggers}]) readback; until then IMC bindings can only be
 confirmed by opening the asset in-editor (or by simulate_input through PIE and observing the effect).
 
-### 2026-06-19f — No bridge readback for a level's GameMode / default pawn (had to use execute_python)
+### 2026-06-19f — ✅ FIXED: GameMode / default-pawn readback added to `get_level_info`
+**Fixed + verified live 2026-06-20** (baked build). Extended the loaded-level branch of `get_level_info`
+(`LevelHandlers.cpp`, reached via `manage_level get_summary`/`get_level_info`) to add `gameModeOverride`
+(World Settings' `AWorldSettings::DefaultGameMode`, "" when unset), `effectiveGameMode` (the override, else
+the project `UGameMapsSettings::GetGlobalDefaultGameMode()`), and `defaultPawnClass` (off the effective game
+mode's CDO). Additive — existing JSON shape unchanged. Verified: `get_summary` on HubWorld →
+`gameModeOverride:""`, `effectiveGameMode:/Game/Blueprints/GameMode/BP_GameMode_C`,
+`defaultPawnClass:/Game/Blueprints/Characters/MainRobo/BP_CPP_Character_C` — "what pawn does map X spawn"
+with no python. Original report below.
+
 Diagnosing "does L_CombatGym spawn BP_CPP_Character" needed the level's World Settings GameModeOverride and,
 when null, the project GlobalDefaultGameMode + its DefaultPawnClass. `inspect get_world_settings` returns only
 worldName/levelName (no gamemode), and there's no project-settings readback for the default gamemode. Resorted
@@ -634,18 +652,21 @@ to execute_python (load_asset -> get_world_settings().default_game_mode; GameMap
 ### 2026-06-19c — Graph-authoring papercuts hit wiring the HUD pull-binding (BP_CPP_Character / WBP_HUD)
 Found while converting the player-HUD binding to a self-contained pull model. None block work (all had
 workarounds) but each cost round-trips:
-- 🟡 **`create_node` cast needs `nodeType:"Cast"` (or `"CastTo<Class>"`), NOT `"DynamicCast"`.** Passing
-  `nodeType:"DynamicCast"` (the actual UClass name, and what `get_graph_details` reports) falls through to
-  the generic registered-node path which creates a `K2Node_DynamicCast` but never sets `TargetType` → a
-  "Bad cast node" (Object pin wildcard, no `As<Class>` pin), even with a full `targetClass` path. Only the
-  `NodeType=="Cast" || StartsWith("CastTo")` branch (BlueprintGraphHandlers ~L1449) sets `TargetType`. Fix:
-  route `"DynamicCast"`/`"K2Node_DynamicCast"` to that branch, or read `targetClass` in the generic path.
-- 🟡 **`add_event` for an engine BlueprintImplementableEvent override (e.g. `Construct`) doesn't
-  materialize the node.** `add_event {eventName:"Construct"}` returned `success/saved:true` but the graph
-  still showed only the disabled ghost placeholder; `set_node_property {EnabledState:"Enabled"}` also
-  reported success but left it disabled ("This node is disabled and will not be called"). **What worked:**
-  `connect_pins` from the ghost event's `then` exec pin — wiring it materializes + enables the real event
-  (standard UMG behavior). Consider making `add_event` do that materialization, or document the wire-to-enable path.
+- ✅ **FIXED 2026-06-20: `create_node` cast accepts `nodeType:"DynamicCast"`/`"K2Node_DynamicCast"`.** The
+  cast branch condition (`BlueprintGraphHandlers.cpp` ~L1449) now matches those engine UClass names (what
+  `get_graph_details` reports) in addition to `"Cast"`/`"CastTo<Class>"`, so it reads `targetClass`, resolves
+  the class, and sets `TargetType` (no class → CLASS_NOT_FOUND fail-fast). Verified live: `create_node`
+  `{nodeType:"DynamicCast", targetClass:"/Script/Engine.Pawn"}` → "Cast To Pawn" node with a typed `AsPawn`
+  object pin (+ CastFailed/bSuccess), NOT the old wildcard "Bad cast node".
+- ✅ **FIXED 2026-06-20: `add_event` materializes an engine override (Construct/Tick/PreConstruct).** Root
+  cause confirmed live: a fresh Widget BP's EventGraph is pre-seeded with DISABLED ghost placeholders for
+  those events, so the `bExists` check found the ghost and skipped — reporting success on a node that "will
+  not be called". Fix (`BlueprintHandlers.cpp` add_event): when the override node already exists and is not
+  Enabled, `SetEnabledState(Enabled)` + `NotifyGraphChanged()` (mirrors set_node_property; the existing
+  structural-mark + compile + save tail persists it). Verified live: `add_event {eventName:"Construct"}` on a
+  fresh WBP → "Event Construct" flips Disabled→**Enabled** (Pre Construct/Tick untouched). NB: the report's
+  "set_node_property EnabledState left it disabled" was a stale-build artifact — it works in the current build
+  (used it to diagnose). connect_pins-to-materialize still works too; this just makes add_event self-sufficient.
 - 📝 **Usage note (UE behavior, not a bridge bug): a C++ `BlueprintImplementableEvent` can't be *called*
   from another Blueprint** — `create_node CallFunction` to `UCombatHudWidget::InitializeHud` from
   `BP_CPP_Character` compiled to "Function 'InitializeHud' ... should not be called from a Blueprint"
@@ -721,19 +742,18 @@ Open sub-question (not the bug, but worth a pre-flight probe): WHY did this part
 likely a transient lock / second open handle (asset live in the running PIE-less editor world + possibly
 a second editor instance). Reproduce in isolation before assuming the modal is the only issue.
 
-### 2026-06-19d — Save-failure honesty papercuts (found verifying the modal fix, 2026-06-19)
-Surfaced while live-testing the save-modal fix with a read-only `.uasset`. Neither is a regression from
-that fix; both are masked today by the post-op LogSavePackage-error guard (the MCP client still gets a
-correct error), so low urgency — but the handler-level bools lie.
-- [ ] **`McpSafeAssetSave` false-positive `true` when the file EXISTS but the overwrite FAILED.** The final
-  `bExistsOnDisk` check (`McpSafeOperations.h` ~L278) treats "package file present on disk" as success, so a
-  read-only/locked overwrite that genuinely failed still returns `true`. Repro: read-only `.uasset` →
-  `add_variable {save:true}` → `Cannot remove ... as it is read only!` in the log, yet the save path returns
-  true. Fix: distinguish "wrote this call" from "file merely pre-existed" — trust the
-  `SavePackagesForObjects` / `PromptForCheckoutAndSave` result, or compare pre/post file mtime, instead of
-  bare existence.
-- [ ] **`add_variable` reports `saved=true verified=true` on a failed save** (same read-only repro,
-  BlueprintHandlers). Downstream of the `McpSafeAssetSave` heuristic above; fix that and this follows.
+### 2026-06-19d — ✅ FIXED: Save-failure honesty papercuts (found verifying the modal fix, 2026-06-19)
+**Fixed + verified live 2026-06-20** (baked build). `McpSafeAssetSave` now distinguishes "THIS call wrote the
+file" from "the file merely pre-existed": it snapshots the package file's on-disk mtime *before* any save
+attempt, and the fallback success gate is `bPromptSaveSucceeded || bEditorSaveSucceeded || (bExistsOnDisk &&
+bFileRewritten)` where `bFileRewritten = PackageFileTimestamp() > PreSaveTimestamp` (a new-file appearance
+also advances past `FDateTime::MinValue`). A failed read-only/locked overwrite leaves the old file with its
+old stamp → no longer flips a genuine failure to success. Verified: read-only `.uasset` → `add_variable
+{save:true}` → log shows `McpSafeAssetSave: failed to save package ...` (that warning only fires when
+`bResult==false`) + `SaveLoadedAssetThrottled: failed to save` — both bools now honest, no modal (unattended
+guard held). Both papercuts below fixed by the one change (the second is downstream of the first).
+- [x] **`McpSafeAssetSave` false-positive `true` when the file EXISTS but the overwrite FAILED.** (mtime gate above.)
+- [x] **`add_variable` reports `saved=true verified=true` on a failed save.** Downstream of `McpSafeAssetSave`; now honest.
 
 ### 2026-06-18c — Cleanup pass LANDED (Batches 1–3, built + live-verified against the editor)
 Worked the 34-finding audit + the 2026-06-18b friction list into three batches, each rebuilt/live-coded
@@ -837,13 +857,16 @@ wielder; `GetCurrentAttack` combo off-by-one; Enemy `DirectionalHitReact` always
 - [x] **modal-hang (bridge-bricking): `create_animation_bp`, generic `CREATE_ASSET` (EditorFunction), `create_material_instance`**
   — added `DoesAssetExist(SavePath/Name)` pre-check before `IAssetTools::CreateAsset` (which pops an "overwrite?" modal
   headlessly → frozen game thread → force-kill). Same class as the known audio hang.
-- [ ] **DEFERRED modal-hang (5 dormant anim/save handlers — same fix, low likelihood for this combat project):**
-  `create_aim_offset` (AnimationHandlers ~3855), `create_pose_library` (~4391), `create_blend_space`/`CreateBlendSpaceAsset`
-  (~320, guard at caller ~723), `HandleCreateAnimBlueprint` (~4660) — each: add `DoesAssetExist(FString::Printf("%s/%s",
-  *SavePath,*Name))` before `CreateAsset`, erroring `ALREADY_EXISTS` (these use the Message/ErrorCode-accumulate style, so
-  wrap the CreateAsset+result block in the `else`, like the create_animation_bp fix). Plus `SAVE_CURRENT_LEVEL`
-  (EditorFunction ~648): `FEditorFileUtils::SaveCurrentLevel()` prompts on an unsaved/read-only level → route through
-  `McpSafeLevelSave` or guard the untitled/unsaved case.
+- [x] **✅ DONE 2026-06-20: modal-hang guards on the 5 dormant anim/save handlers.** All baked + verified-compile;
+  blend-space guard verified fail-fast end-to-end. (a) `CreateBlendSpaceAsset` helper (`AnimationHandlers.cpp` ~L290):
+  one `DoesAssetExist(PackagePath/Name.Name)` → return null + "Asset already exists" — covers **all 3 callers**
+  (`create_blend_space` / `_1d` / `_2d`). (b) `create_aim_offset` + (c) `create_pose_library`: inserted an `else if
+  (DoesAssetExist(...))` → `ALREADY_EXISTS` ahead of the create. (d) `HandleCreateAnimBlueprint` (`create_animation_blueprint`):
+  `DoesAssetExist` guard before the factory, `SendAutomationError ALREADY_EXISTS`. (e) `SAVE_CURRENT_LEVEL`
+  (`EditorFunctionHandlers.cpp` ~L644): bracketed `SaveCurrentLevel()` in `GIsRunningUnattendedScript` so an
+  untitled/read-only prompt returns its default (no modal) — same guard McpSafeAssetSave uses. **Verified:** second
+  `create_blend_space` (2D caller, no pre-check of its own) → `ASSET_CREATION_FAILED: Asset already exists: ...`
+  instantly, **no modal/hang** — proving the helper guard fires and the bridge stays responsive.
 
 **Function-split (the 🟡 widget-monolith) — PLAN, do by hand in an editor (cut-paste is trivial there; via my
 exact-match edits it's error-prone + high-blast-radius unattended).** `HandleManageWidgetAuthoringAction`
@@ -867,8 +890,10 @@ the module + routing tables, reflection/string-dispatch ruled out). DONE + built
 - [x] `BlueprintHandlers.cpp`: transitively-dead static cluster (BuildVariableJson/AnnotateVariableJson/CollectVariableMetadata).
 - [x] `McpToolRegistry.h/.cpp`: 3 uncalled methods (GetAllTools/GetToolCategories/InvalidateCache).
 - [x] Stripped "thinking out loud" narration + a rejected commented-out impl + an empty else (AnimationHandlers, AssetWorkflowHandlers).
-- [ ] **Follow-up: `add_notify_old_unused` subaction branch (AnimationHandlers ~2624)** looks dead (a renamed-aside of the live
-  `add_notify`); left in place — verify it's unrouted then delete the whole branch.
+- [x] **✅ DONE 2026-06-20: deleted the dead `add_notify_old_unused` subaction branch** (AnimationHandlers ~L2634, ~126
+  lines). Confirmed unrouted (grep across the plugin: only the branch itself + this TODO referenced the literal; the
+  `_old_unused` suffix is never a client-sent action) — a renamed-aside of the live `add_notify`. Removed; module
+  compiles clean (baked).
 
 **Refactor backlog (from the simplify sweep — boilerplate dedup; NOT auto-applied: these transform LIVE code at
 hundreds of sites, a different risk class than dead-code deletion. Do deliberately / greenlight individually):**

@@ -228,6 +228,31 @@ inline bool McpSafeAssetSave(UObject* Asset)
             (bHasMapFilename && IFileManager::Get().FileExists(*FPaths::ConvertRelativePathToFull(MapFilename)));
     };
 
+    // On-disk modification time of the package file (FDateTime::MinValue if absent).
+    // Used to tell "THIS call wrote the file" from "the file merely pre-existed": a
+    // failed overwrite (e.g. a read-only .uasset) leaves the old file — and its old
+    // timestamp — untouched, so bare existence must NOT be read as save success.
+    auto PackageFileTimestamp = [&PackageName]() -> FDateTime
+    {
+        FString AssetFilename;
+        FString MapFilename;
+        if (FPackageName::TryConvertLongPackageNameToFilename(
+                PackageName, AssetFilename, FPackageName::GetAssetPackageExtension()))
+        {
+            const FString Full = FPaths::ConvertRelativePathToFull(AssetFilename);
+            if (IFileManager::Get().FileExists(*Full))
+                return IFileManager::Get().GetTimeStamp(*Full);
+        }
+        if (FPackageName::TryConvertLongPackageNameToFilename(
+                PackageName, MapFilename, FPackageName::GetMapPackageExtension()))
+        {
+            const FString Full = FPaths::ConvertRelativePathToFull(MapFilename);
+            if (IFileManager::Get().FileExists(*Full))
+                return IFileManager::Get().GetTimeStamp(*Full);
+        }
+        return FDateTime::MinValue();
+    };
+
 #if MCP_HAS_PACKAGE_TOOLS
     // Bridge saves run on the game thread that also services MCP requests. The editor's
     // interactive save paths (PromptForCheckoutAndSave, and SavePackagesForObjects on a write
@@ -241,6 +266,9 @@ inline bool McpSafeAssetSave(UObject* Asset)
     // exits are the explicit returns).
     const bool bPrevUnattended = GIsRunningUnattendedScript;
     GIsRunningUnattendedScript = true;
+
+    // Snapshot before any save attempt so a post-save timestamp advance proves a real write.
+    const FDateTime PreSaveTimestamp = PackageFileTimestamp();
 
     bool bResult = false;
 
@@ -276,8 +304,13 @@ inline bool McpSafeAssetSave(UObject* Asset)
         const bool bEditorSaveSucceeded =
             !bPromptSaveSucceeded && UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, false);
         const bool bExistsOnDisk = PackageExistsOnDisk();
+        // File-exists is only proof of THIS save if the file was actually (re)written —
+        // i.e. its timestamp advanced past the pre-save snapshot (or it newly appeared).
+        // A failed read-only/locked overwrite leaves the old file with its old stamp, so
+        // existence alone must not flip a genuine failure into success.
+        const bool bFileRewritten = PackageFileTimestamp() > PreSaveTimestamp;
 
-        if (bPromptSaveSucceeded || bEditorSaveSucceeded || bExistsOnDisk)
+        if (bPromptSaveSucceeded || bEditorSaveSucceeded || (bExistsOnDisk && bFileRewritten))
         {
             ScanSavedPackage();
             bResult = true;

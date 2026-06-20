@@ -3408,19 +3408,24 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
         return true;
       }
 
-      // Check if node already exists
-      bool bExists = false;
+      // Find an existing override-event node for this function. UMG widget
+      // EventGraphs are pre-seeded with DISABLED ghost placeholders (Construct /
+      // PreConstruct / Tick); "adding" one of those means materializing it —
+      // enabling the placeholder, exactly what the editor does on double-click —
+      // not creating a duplicate. Capture the node so we can enable it rather than
+      // report success on a node that "will not be called".
+      UK2Node_Event *ExistingEventNode = nullptr;
       for (UEdGraphNode *Node : EventGraph->Nodes) {
         if (UK2Node_Event *EventNode = Cast<UK2Node_Event>(Node)) {
           if (EventNode->EventReference.GetMemberName() ==
               EventFunc->GetFName()) {
-            bExists = true;
+            ExistingEventNode = EventNode;
             break;
           }
         }
       }
 
-      if (!bExists) {
+      if (!ExistingEventNode) {
         EventGraph->Modify();
         FGraphNodeCreator<UK2Node_Event> NodeCreator(*EventGraph);
         UK2Node_Event *EventNode = NodeCreator.CreateNode();
@@ -3429,12 +3434,17 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
         EventNode->NodePosX = EventPosX;
         EventNode->NodePosY = EventPosY;
         NodeCreator.Finalize();
+      } else if (ExistingEventNode->GetDesiredEnabledState() !=
+                 ENodeEnabledState::Enabled) {
+        // Materialize a pre-seeded disabled ghost (mirrors set_node_property
+        // EnabledState=Enabled; the structural mark + compile + save below persist it).
+        ExistingEventNode->Modify();
+        ExistingEventNode->SetEnabledState(ENodeEnabledState::Enabled);
+        EventGraph->NotifyGraphChanged();
       } else {
         UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
-               TEXT("Event %s already exists, skipping creation (idempotent "
-                    "success)"),
+               TEXT("Event %s already exists and is enabled; idempotent success"),
                *TargetEventName);
-        bExists = true;
       }
     }
 

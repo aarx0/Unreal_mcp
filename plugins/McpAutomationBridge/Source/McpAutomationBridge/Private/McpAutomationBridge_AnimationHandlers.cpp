@@ -287,6 +287,16 @@ static UObject *CreateBlendSpaceAsset(const FString &AssetName,
                                       bool bTwoDimensional, FString &OutError) {
   OutError.Reset();
 
+  // IAssetTools::CreateAsset pops a blocking "overwrite?" modal when the target asset
+  // already exists — on the bridge's game thread that starves every subsequent MCP call
+  // until a human dismisses it. Fail fast instead (covers all blend-space callers).
+  const FString ExistingObjectPath =
+      FString::Printf(TEXT("%s/%s.%s"), *PackagePath, *AssetName, *AssetName);
+  if (UEditorAssetLibrary::DoesAssetExist(ExistingObjectPath)) {
+    OutError = FString::Printf(TEXT("Asset already exists: %s"), *ExistingObjectPath);
+    return nullptr;
+  }
+
   UFactory *Factory = nullptr;
   UClass *DesiredClass = nullptr;
 
@@ -2621,131 +2631,6 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
         }
       }
     }
-  } else if (LowerSub == TEXT("add_notify_old_unused")) {
-    FString AssetPath;
-    if (!Payload->TryGetStringField(TEXT("animationPath"), AssetPath) ||
-        AssetPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
-    }
-
-    FString NotifyName;
-    Payload->TryGetStringField(TEXT("notifyName"), NotifyName);
-
-    double Time = 0.0;
-    Payload->TryGetNumberField(TEXT("time"), Time);
-
-    if (AssetPath.IsEmpty() || NotifyName.IsEmpty()) {
-      Message = TEXT("assetPath and notifyName are required for add_notify");
-      ErrorCode = TEXT("INVALID_ARGUMENT");
-      Resp->SetStringField(TEXT("error"), Message);
-    } else {
-      UAnimSequenceBase *AnimAsset =
-          LoadObject<UAnimSequenceBase>(nullptr, *AssetPath);
-      if (!AnimAsset) {
-        Message =
-            FString::Printf(TEXT("Animation asset not found: %s"), *AssetPath);
-        ErrorCode = TEXT("ASSET_NOT_FOUND");
-        Resp->SetStringField(TEXT("error"), Message);
-      } else {
-        // However, I need to know the track name. Default to "1".
-        FName TrackName = FName("1");
-
-        // We need a Notify Class. Default to UAnimNotify.
-        UClass *NotifyClass = UAnimNotify::StaticClass();
-
-        UClass *LoadedNotifyClass = nullptr;
-        if (!NotifyName.IsEmpty()) {
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-          // Try to find class (UE 5.1+ API)
-          LoadedNotifyClass = UClass::TryFindTypeSlow<UClass>(NotifyName);
-#else
-          // UE 5.0: Use ResolveClassByName instead of deprecated ANY_PACKAGE
-          LoadedNotifyClass = ResolveClassByName(NotifyName);
-#endif
-          if (!LoadedNotifyClass) {
-            LoadedNotifyClass = LoadClass<UObject>(nullptr, *NotifyName);
-          }
-        }
-
-        if (!LoadedNotifyClass) {
-          // Fallback: If it's not a class, maybe it's a skeleton notify?
-          // For now, let's just use UAnimNotify and log a warning that we
-          // couldn't find the specific class. Or better, fail if we can't find
-          // it. But for the test "AnimNotify_PlaySound", that's a standard
-          // notify. It might be UAnimNotify_PlaySound.
-          FString ClassName = NotifyName;
-          if (!ClassName.StartsWith("U"))
-            ClassName = "U" + ClassName;
-
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-          // Try finding by name again with U prefix (UE 5.1+ API)
-          LoadedNotifyClass = UClass::TryFindTypeSlow<UClass>(ClassName);
-#else
-          // UE 5.0: Use ResolveClassByName instead of deprecated ANY_PACKAGE
-          LoadedNotifyClass = ResolveClassByName(ClassName);
-#endif
-
-          if (!LoadedNotifyClass) {
-            // Try with /Script/Engine.
-            FString EnginePath =
-                FString::Printf(TEXT("/Script/Engine.%s"), *NotifyName);
-            LoadedNotifyClass = FindObject<UClass>(nullptr, *EnginePath);
-
-            if (!LoadedNotifyClass && !ClassName.Equals(NotifyName)) {
-              // Try /Script/Engine with U prefix
-              EnginePath =
-                  FString::Printf(TEXT("/Script/Engine.%s"), *ClassName);
-              LoadedNotifyClass = FindObject<UClass>(nullptr, *EnginePath);
-            }
-          }
-        }
-
-        if (LoadedNotifyClass) {
-          UAnimSequence *AnimSeq = Cast<UAnimSequence>(AnimAsset);
-          if (AnimSeq) {
-            AnimSeq->Modify();
-
-            FAnimNotifyEvent NewEvent;
-            NewEvent.Link(AnimSeq, Time);
-            NewEvent.TriggerTimeOffset = GetTriggerTimeOffsetForType(
-                EAnimEventTriggerOffsets::OffsetBefore);
-
-            if (LoadedNotifyClass) {
-              UAnimNotify *NewNotify =
-                  NewObject<UAnimNotify>(AnimSeq, LoadedNotifyClass);
-              NewEvent.Notify = NewNotify;
-              NewEvent.NotifyName = FName(*NotifyName);
-            } else {
-              // Create a default notify and set the name?
-              // If class not found, we can't really add a functional notify.
-              // But we can add a "None" notify with a name?
-              NewEvent.NotifyName = FName(*NotifyName);
-            }
-
-            AnimSeq->Notifies.Add(NewEvent);
-            AnimSeq->PostEditChange();
-            McpSafeAssetSave(AnimSeq);
-
-            bSuccess = true;
-            Message = FString::Printf(TEXT("Added notify '%s' to %s at %.2fs"),
-                                      *NotifyName, *AssetPath, Time);
-            Resp->SetStringField(TEXT("assetPath"), AssetPath);
-            Resp->SetStringField(TEXT("notifyName"), NotifyName);
-            Resp->SetNumberField(TEXT("time"), Time);
-          } else {
-            Message = TEXT("Asset is not an AnimSequence (Montages not fully "
-                           "supported for add_notify yet)");
-            ErrorCode = TEXT("INVALID_TYPE");
-            Resp->SetStringField(TEXT("error"), Message);
-          }
-        } else {
-          Message =
-              FString::Printf(TEXT("Notify class '%s' not found"), *NotifyName);
-          ErrorCode = TEXT("CLASS_NOT_FOUND");
-          Resp->SetStringField(TEXT("error"), Message);
-        }
-      }
-    }
   }
   // ============================================================
   // Animation Sequence Authoring Actions
@@ -3773,6 +3658,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
         Message = TEXT("Valid skeletonPath required for create_aim_offset");
         ErrorCode = TEXT("INVALID_ARGUMENT");
         Resp->SetStringField(TEXT("error"), Message);
+      } else if (UEditorAssetLibrary::DoesAssetExist(FString::Printf(
+                     TEXT("%s/%s.%s"), *SavePath, *AimOffsetName, *AimOffsetName))) {
+        // IAssetTools::CreateAsset would pop a blocking "overwrite?" modal on an
+        // existing asset, starving the bridge's game thread. Fail fast instead.
+        Message = FString::Printf(TEXT("Asset already exists: %s/%s"), *SavePath,
+                                  *AimOffsetName);
+        ErrorCode = TEXT("ALREADY_EXISTS");
+        Resp->SetStringField(TEXT("error"), Message);
       } else {
         if (!UEditorAssetLibrary::DoesDirectoryExist(SavePath)) {
           UEditorAssetLibrary::MakeDirectory(SavePath);
@@ -4335,6 +4228,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
           Message = FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath);
           ErrorCode = TEXT("ASSET_NOT_FOUND");
           Resp->SetStringField(TEXT("error"), Message);
+        } else if (UEditorAssetLibrary::DoesAssetExist(FString::Printf(
+                       TEXT("%s/%s.%s"), *SavePath, *LibraryName, *LibraryName))) {
+          // IAssetTools::CreateAsset would pop a blocking "overwrite?" modal on an
+          // existing asset, starving the bridge's game thread. Fail fast instead.
+          Message = FString::Printf(TEXT("Asset already exists: %s/%s"), *SavePath,
+                                    *LibraryName);
+          ErrorCode = TEXT("ALREADY_EXISTS");
+          Resp->SetStringField(TEXT("error"), Message);
         } else {
           if (!UEditorAssetLibrary::DoesDirectoryExist(SavePath)) {
             UEditorAssetLibrary::MakeDirectory(SavePath);
@@ -4595,6 +4496,16 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateAnimBlueprint(
   }
 
   FString FullPath = FString::Printf(TEXT("%s/%s"), *SavePath, *BlueprintName);
+
+  // IAssetTools::CreateAsset pops a blocking "overwrite?" modal on an existing asset,
+  // starving the bridge's game thread until a human dismisses it. Fail fast instead.
+  if (UEditorAssetLibrary::DoesAssetExist(
+          FString::Printf(TEXT("%s.%s"), *FullPath, *BlueprintName))) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        FString::Printf(TEXT("Asset already exists: %s"), *FullPath),
+                        TEXT("ALREADY_EXISTS"));
+    return true;
+  }
 
   UAnimBlueprintFactory *Factory = NewObject<UAnimBlueprintFactory>();
   Factory->TargetSkeleton = Skeleton;

@@ -642,11 +642,19 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     }
 
     bool bSaved = false;
+    // SaveCurrentLevel can pop a blocking modal on an untitled / unsaved / read-only
+    // level (e.g. "save as?" or a write-failure prompt). On the bridge's game thread
+    // that starves every subsequent MCP call until a human dismisses it. Force
+    // unattended so the prompt returns its default answer (no UI) — a genuine failure
+    // then surfaces as the quiet false reported below, never a hung editor.
+    const bool bPrevUnattended = GIsRunningUnattendedScript;
+    GIsRunningUnattendedScript = true;
 #if __has_include("EditorLoadingAndSavingUtils.h")
     bSaved = UEditorLoadingAndSavingUtils::SaveCurrentLevel();
 #elif __has_include("FileHelpers.h")
     bSaved = FEditorFileUtils::SaveCurrentLevel();
 #endif
+    GIsRunningUnattendedScript = bPrevUnattended;
 
     TSharedPtr<FJsonObject> Out = McpHandlerUtils::CreateResultObject();
     Out->SetBoolField(TEXT("success"), bSaved);

@@ -54,6 +54,8 @@
 #include "LevelEditor.h"
 #include "RenderingThread.h"
 #include "GameFramework/WorldSettings.h"
+#include "GameFramework/GameModeBase.h"
+#include "GameMapsSettings.h"
 #include "Engine/LevelBounds.h"
 #include "LevelUtils.h"
 #include "EditorBuildUtils.h"
@@ -3317,6 +3319,37 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
       Result->SetStringField(TEXT("levelName"), TargetLevel->GetName());
       Result->SetNumberField(TEXT("actorCount"), TargetLevel->Actors.Num());
       Result->SetBoolField(TEXT("loaded"), true);
+
+      // GameMode / default pawn, so "what pawn does map X spawn" doesn't need python.
+      // World Settings' "GameMode Override" is AWorldSettings::DefaultGameMode; when it's
+      // null the project-wide UGameMapsSettings::GlobalDefaultGameMode applies. The default
+      // pawn is read off the effective game mode's CDO.
+      if (AWorldSettings* WorldSettings = TargetLevel->GetWorldSettings()) {
+        TSubclassOf<AGameModeBase> OverrideGameMode = WorldSettings->DefaultGameMode;
+        Result->SetStringField(TEXT("gameModeOverride"),
+            OverrideGameMode ? OverrideGameMode->GetPathName() : TEXT(""));
+
+        TSubclassOf<AGameModeBase> EffectiveGameMode = OverrideGameMode;
+        if (!EffectiveGameMode) {
+          // GlobalDefaultGameMode is private; the static accessor returns its path string.
+          const FSoftClassPath GlobalGameModePath(
+              UGameMapsSettings::GetGlobalDefaultGameMode());
+          if (GlobalGameModePath.IsValid()) {
+            EffectiveGameMode = GlobalGameModePath.TryLoadClass<AGameModeBase>();
+          }
+        }
+        Result->SetStringField(TEXT("effectiveGameMode"),
+            EffectiveGameMode ? EffectiveGameMode->GetPathName() : TEXT(""));
+
+        if (EffectiveGameMode) {
+          if (const AGameModeBase* GameModeCDO =
+                  EffectiveGameMode->GetDefaultObject<AGameModeBase>()) {
+            Result->SetStringField(TEXT("defaultPawnClass"),
+                GameModeCDO->DefaultPawnClass ? GameModeCDO->DefaultPawnClass->GetPathName()
+                                              : TEXT(""));
+          }
+        }
+      }
 
       SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Level info retrieved"), Result);
       return true;

@@ -1446,7 +1446,15 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
       return true;
     }
 
-    if (NodeType == TEXT("Cast") || NodeType.StartsWith(TEXT("CastTo"))) {
+    // Accept the engine UClass names ("DynamicCast"/"K2Node_DynamicCast" — what
+    // get_graph_details reports) here too, not just "Cast"/"CastTo<Class>". Without
+    // this they fell through to the generic registered-node path, which spawns a
+    // UK2Node_DynamicCast but never sets TargetType → a "Bad cast node" (wildcard
+    // Object pin, no As<Class> output) even with a full targetClass. These names
+    // carry no inline class, so targetClass is required (empty → CLASS_NOT_FOUND).
+    if (NodeType == TEXT("Cast") || NodeType.StartsWith(TEXT("CastTo")) ||
+        NodeType == TEXT("DynamicCast") ||
+        NodeType == TEXT("K2Node_DynamicCast")) {
       FString TargetClassName;
       Payload->TryGetStringField(TEXT("targetClass"), TargetClassName);
       if (TargetClassName.IsEmpty() && NodeType.StartsWith(TEXT("CastTo")))
