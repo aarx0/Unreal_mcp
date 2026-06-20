@@ -102,6 +102,15 @@ public:
 			.String(TEXT("fromPinName"), TEXT("Name of the source pin."))
 			.String(TEXT("toNodeId"), TEXT("ID of the target node."))
 			.String(TEXT("toPinName"), TEXT("Name of the target pin."))
+			// Widget-authoring (UMG) navigation params — this tool re-dispatches the widget
+			// action group. Handlers already read them from the payload; declared here so a
+			// schema-validating client can discover/pass them (per-widget value props still
+			// go through the generic `value`/`properties` fields).
+			.String(TEXT("widgetPath"), TEXT("Widget Blueprint asset path (widget-authoring actions)."))
+			.String(TEXT("widgetName"), TEXT("Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget)."))
+			.String(TEXT("slotName"), TEXT("Name for the widget being added / the slot to target."))
+			.String(TEXT("parentSlot"), TEXT("Name of the parent panel widget to add the new widget under."))
+			.String(TEXT("widgetClass"), TEXT("Widget class for create_widget_blueprint / set_widget_parent_class."))
 			.Required({TEXT("action")})
 			.Build();
 	}

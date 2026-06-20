@@ -229,6 +229,36 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
             return true;
         }
 
+        // Optional ValueType — UInputAction defaults to Boolean; an axis IA otherwise
+        // needs a separate set_asset_property hop (undiscoverable). Parse + validate
+        // BEFORE creating so a bad value fails fast (no half-made asset).
+        EInputActionValueType ParsedValueType = EInputActionValueType::Boolean;
+        bool bHasValueType = false;
+        {
+            FString ValueTypeStr;
+            if (Payload->TryGetStringField(TEXT("valueType"), ValueTypeStr) &&
+                !ValueTypeStr.TrimStartAndEnd().IsEmpty())
+            {
+                bHasValueType = true;
+                const FString V = ValueTypeStr.TrimStartAndEnd();
+                if (V.Equals(TEXT("Boolean"), ESearchCase::IgnoreCase) || V.Equals(TEXT("Bool"), ESearchCase::IgnoreCase))
+                    ParsedValueType = EInputActionValueType::Boolean;
+                else if (V.Equals(TEXT("Axis1D"), ESearchCase::IgnoreCase) || V.Equals(TEXT("Float"), ESearchCase::IgnoreCase) || V.Equals(TEXT("1D"), ESearchCase::IgnoreCase))
+                    ParsedValueType = EInputActionValueType::Axis1D;
+                else if (V.Equals(TEXT("Axis2D"), ESearchCase::IgnoreCase) || V.Equals(TEXT("Vector2D"), ESearchCase::IgnoreCase) || V.Equals(TEXT("2D"), ESearchCase::IgnoreCase))
+                    ParsedValueType = EInputActionValueType::Axis2D;
+                else if (V.Equals(TEXT("Axis3D"), ESearchCase::IgnoreCase) || V.Equals(TEXT("Vector"), ESearchCase::IgnoreCase) || V.Equals(TEXT("3D"), ESearchCase::IgnoreCase))
+                    ParsedValueType = EInputActionValueType::Axis3D;
+                else
+                {
+                    SendAutomationError(RequestingSocket, RequestId,
+                        FString::Printf(TEXT("Invalid valueType '%s' (expected Boolean|Axis1D|Axis2D|Axis3D)"), *ValueTypeStr),
+                        TEXT("INVALID_VALUE"));
+                    return true;
+                }
+            }
+        }
+
         const FString FullPath = FString::Printf(TEXT("%s/%s"), *SanitizedPath, *Name);
         if (UEditorAssetLibrary::DoesAssetExist(FullPath))
         {
@@ -241,8 +271,17 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
                 return true;
             }
 
+            // Idempotent: if valueType was given, ensure the existing IA matches it.
+            if (bHasValueType && ExistingAction->ValueType != ParsedValueType)
+            {
+                ExistingAction->Modify();
+                ExistingAction->ValueType = ParsedValueType;
+                SaveLoadedAssetThrottled(ExistingAction, -1.0, true);
+            }
+
             TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
             Result->SetStringField(TEXT("assetPath"), ExistingAction->GetPathName());
+            Result->SetNumberField(TEXT("valueType"), (int32)ExistingAction->ValueType);
             McpHandlerUtils::AddVerification(Result, ExistingAction);
 
             SendAutomationResponse(RequestingSocket, RequestId, true,
@@ -259,10 +298,19 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
 
         if (NewAsset)
         {
+            UInputAction* CreatedAction = Cast<UInputAction>(NewAsset);
+            if (bHasValueType && CreatedAction)
+            {
+                CreatedAction->ValueType = ParsedValueType;
+            }
             SaveLoadedAssetThrottled(NewAsset, -1.0, true);
 
             TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
             Result->SetStringField(TEXT("assetPath"), NewAsset->GetPathName());
+            if (CreatedAction)
+            {
+                Result->SetNumberField(TEXT("valueType"), (int32)CreatedAction->ValueType);
+            }
             McpHandlerUtils::AddVerification(Result, NewAsset);
 
             SendAutomationResponse(RequestingSocket, RequestId, true,
@@ -610,19 +658,50 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
             return true;
         }
 
-        // Add the trigger to the action
-        InAction->Triggers.Add(NewTrigger);
+        // Triggers.Add is append-only — a plain re-run stacks duplicates of the same
+        // class. Default to idempotent (skip if this trigger class is already present);
+        // replace:true clears all triggers first for a clean full re-author.
+        bool bReplace = false;
+        Payload->TryGetBoolField(TEXT("replace"), bReplace);
 
-        SaveLoadedAssetThrottled(InAction, -1.0, true);
+        InAction->Modify();
+        bool bAlreadyPresent = false;
+        if (bReplace)
+        {
+            InAction->Triggers.Empty();
+        }
+        else
+        {
+            for (const UInputTrigger* Existing : InAction->Triggers)
+            {
+                if (Existing && Existing->GetClass() == NewTrigger->GetClass())
+                {
+                    bAlreadyPresent = true;
+                    break;
+                }
+            }
+        }
+
+        if (!bAlreadyPresent)
+        {
+            InAction->Triggers.Add(NewTrigger);
+            SaveLoadedAssetThrottled(InAction, -1.0, true);
+        }
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("actionPath"), SanitizedActionPath);
         Result->SetStringField(TEXT("triggerType"), TriggerType);
-        Result->SetBoolField(TEXT("triggerSet"), true);
+        Result->SetBoolField(TEXT("triggerSet"), !bAlreadyPresent);
+        Result->SetBoolField(TEXT("alreadyPresent"), bAlreadyPresent);
+        Result->SetBoolField(TEXT("replaced"), bReplace);
+        Result->SetNumberField(TEXT("triggerCount"), InAction->Triggers.Num());
         McpHandlerUtils::AddVerification(Result, InAction);
 
         SendAutomationResponse(RequestingSocket, RequestId, true,
-            FString::Printf(TEXT("Trigger '%s' configured on action."), *TriggerType), Result);
+            bAlreadyPresent
+                ? FString::Printf(TEXT("Trigger '%s' already present (idempotent); pass replace:true to re-author."), *TriggerType)
+                : FString::Printf(TEXT("Trigger '%s' configured on action."), *TriggerType),
+            Result);
         return true;
     }
 
@@ -905,6 +984,19 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
             Result->SetStringField(TEXT("type"), TEXT("InputAction"));
             Result->SetStringField(TEXT("valueType"), FString::FromInt((int32)InputAction->ValueType));
             Result->SetBoolField(TEXT("consumeInput"), InputAction->bConsumeInput);
+            // The IA's OWN triggers (class names) — set_input_trigger writes these, but
+            // only IMC mappings carried a triggerCount, so the trigger *class* was
+            // un-confirmable via the bridge. List them here.
+            TArray<TSharedPtr<FJsonValue>> TriggersArr;
+            for (const UInputTrigger* Trigger : InputAction->Triggers)
+            {
+                if (Trigger)
+                {
+                    TriggersArr.Add(MakeShared<FJsonValueString>(Trigger->GetClass()->GetName()));
+                }
+            }
+            Result->SetArrayField(TEXT("triggers"), TriggersArr);
+            Result->SetNumberField(TEXT("triggerCount"), InputAction->Triggers.Num());
         }
         else if (UInputMappingContext* Context = Cast<UInputMappingContext>(Asset))
         {

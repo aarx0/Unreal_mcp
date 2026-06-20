@@ -295,23 +295,25 @@ Flakiness in shipped surface erodes trust during real authoring.
   `add_decorator`/`add_service` error-with-guidance redirecting to the graph path, or (b) delete
   them, or (c) reimplement them on top of the graph builder. What DOES work today: BT/blackboard
   **asset** creation (`create_behavior_tree`, graph `create`, blackboard assets) and `get_ai_info`.
-- 🟡 **Enhanced Input authoring depth** — IMC/IA creation + key mapping exist (Input group);
-  verify round-trips and fill the sparse trigger/modifier authoring (modifier/trigger
-  factories are thin).
-  - **Specifics found authoring IA_Heal end-to-end 2026-06-17** (worked fully via the bridge —
-    `create_input_action` → `set_input_trigger Down` → `add_mapping` ×2 → `set_default` HealAction
-    on `BP_CPP_Character` → `compile`; all readback-verified). The rough edges:
-    1. `create_input_action` takes no `valueType` — to set `ValueType` you must leave the input
-       group for `set_asset_property propertyName=ValueType value="Boolean"`. (No-op for bool IAs
-       since the `UInputAction` default is already Boolean, but undiscoverable.) → add an optional
-       `valueType` param to `create_input_action`.
-    2. `get_input_info` on a `UInputAction` reports `valueType`/`consumeInput` but NOT its own
-       `Triggers[]` — only IMC mappings carry a `triggerCount`. So after `set_input_trigger` you
-       can't confirm the trigger *class* via the input group. → emit a `triggers[]` (class names)
-       for IAs in `get_input_info`.
-    3. `set_input_trigger` is append-only (`InAction->Triggers.Add`, no dedup) → re-running an
-       otherwise-idempotent authoring script stacks duplicate triggers. → add `replace:true`
-       (Empty before Add) or dedup by class.
+- ✅ **Enhanced Input authoring depth — 3 papercuts FIXED + verified live 2026-06-20** (baked build;
+  verified via direct-HTTP since the typed `manage_networking` schema didn't carry these params — now
+  declared, see below). The modifier/trigger factories are otherwise functional; these were the rough
+  edges found authoring IA_Heal end-to-end 2026-06-17.
+    1. ✅ **`create_input_action` now takes an optional `valueType`** (Boolean|Axis1D|Axis2D|Axis3D, +
+       aliases Bool/Float/Vector2D/Vector/1D/2D/3D) — parsed+validated before creation (fail-fast, no
+       half-made asset), applied on both the new- and existing-asset (idempotent) paths; response echoes
+       `valueType`. Verified: `create_input_action{valueType:"Axis2D"}` → `valueType:2`.
+    2. ✅ **`get_input_info` now emits an IA's own `triggers[]`** (class names) + `triggerCount`.
+       Verified: `IA_Heal` → `triggers:["InputTriggerDown"]` (previously un-confirmable via the bridge).
+    3. ✅ **`set_input_trigger` is no longer blindly append-only** — defaults to idempotent
+       (dedup-by-class: a re-run reports `alreadyPresent:true, triggerSet:false`, no duplicate); pass
+       `replace:true` to `Empty()` then add for a clean re-author. Response carries `triggerSet`/
+       `alreadyPresent`/`replaced`/`triggerCount`. Verified: Hold→Hold (count stays 1)→Pressed replace
+       (count 1, `triggers:["InputTriggerPressed"]`).
+  - Schema: the Input params (`name`/`path`/`valueType`/`assetPath`/`actionPath`/`contextPath`/`key`/
+    `triggerType`/`modifierType`/`replace`) were undeclared in the `manage_networking` tool schema, so a
+    schema-validating client (the normal Claude client) couldn't pass them — declared now (takes effect
+    next MCP session). This also resolves the schema-discoverability half of [[2026-06-18b]] for Input.
 - 🟡 **Common UI completeness** — have: add button/text/border, assign style, bind input action,
   and (NEW 2026-06-07) **style-asset creation**. Missing / runtime-only: activatable-widget stack
   push/pop + focus/nav, input-action→click wiring. Some is inherently runtime
@@ -944,10 +946,13 @@ hundreds of sites, a different risk class than dead-code deletion. Do deliberate
   BlueprintImplementableEvent override, pass `eventType:"<EventName>"` (walks ParentClass→FindFunctionByName).
   Passing `eventName` leaves `eventType` empty → defaults "custom" → creates a GUID-named blank custom event
   (silent wrong result). Accept `eventName` as an alias on the override path, or document.
-- [ ] **Widget-authoring params undeclared in the `manage_blueprint` schema.** `get_widget_info` requires
-  `widgetPath`, but `widgetPath`/`slotName`/`parentSlot`/`widgetClass` etc. are NOT in `BuildInputSchema` — they
-  only work because the client forwards undeclared params. A schema-strict client can't discover them. Add them
-  (doc-only; handlers already read them from the payload).
+- [x] **✅ DONE 2026-06-20: declared the widget-authoring navigation params in the `manage_blueprint` schema**
+  (`McpTool_ManageBlueprint.cpp`): `widgetPath`/`widgetName`/`slotName`/`parentSlot`/`widgetClass`. Handlers
+  already read them from the payload; this makes them discoverable/passable through a schema-validating client
+  (per-widget value props still go via the generic `value`/`properties` fields). Baked; takes effect next MCP
+  session (a running session keeps the connect-time schema cached). NB this gap is more than cosmetic — the
+  typed Claude client DROPS undeclared params, so e.g. Input's `name`/`path` (same class of gap, also fixed
+  this pass for `manage_networking`) were un-passable through the typed tool until declared.
 - [x] **`set_position` rejects bare `x`/`y`** — ✅ FIXED 2026-06-19 (commit 4c76569, built clean): now also accepts bare top-level `x`/`y`. Was: wanted `position:{x,y}` or `posX`/`posY` only. (`set_size` took
   `width`/`height` fine.) Minor param-spelling inconsistency.
 - [ ] **`add_progress_bar` (and siblings) ignore `name`, auto-name "ProgressBar"** — pass-through uses `slotName`,
@@ -1034,9 +1039,13 @@ return success with only an advisory `instruction` string. (Several also needles
   has one) → not one undo unit; partial wiring can't roll back. **My new action will use FScopedTransaction.**
 - 🟢 `bind_on_value_changed` links via raw `MakeLinkTo` guarded only by null-pin checks (bypasses schema) →
   can report `wiredLiveUpdate:true` with a type-mismatched wire. **My new action will use `K2Schema->TryCreateConnection`.**
-- 🟡 BlueprintGraphHandlers.cpp `create_node` dynamic fallback (1487-1514): hand-rolls
-  NewObject→AddNode→AllocateDefaultPins, no `Node->Modify()`, and `SaveLoadedAssetThrottled` WITHOUT a
-  CompileBlueprint (every other structural path compiles first). Route through `FGraphNodeCreator` + compile.
+- ✅ **DONE 2026-06-20: `create_node` dynamic fallback now Modify()s + compiles before save.** Added
+  `TargetGraph->Modify()` (records the add for undo, like the FGraphNodeCreator branches), upgraded
+  `MarkBlueprintAsModified`→`MarkBlueprintAsStructurallyModified`, and a `CompileBlueprint` before
+  `SaveLoadedAssetThrottled` so the saved generated class/CDO reflects the new node (was saved stale).
+  Left the raw NewObject→AddNode→AllocateDefaultPins (a generic UEdGraphNode can't go through the typed
+  `FGraphNodeCreator<T>`). Verified live: fallback `nodeType:"K2Node_IfThenElse"` → real "Branch" node
+  (execute/Condition/then/else pins), BP compiles clean.
 
 
 

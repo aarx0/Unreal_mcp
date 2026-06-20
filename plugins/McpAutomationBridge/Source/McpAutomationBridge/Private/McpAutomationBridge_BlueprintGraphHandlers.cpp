@@ -1496,19 +1496,25 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     if (NodeClass) {
       UEdGraphNode *NewNode = NewObject<UEdGraphNode>(TargetGraph, NodeClass);
       if (NewNode) {
+        // Record the graph mutation for undo (the other create_node branches go
+        // through FGraphNodeCreator, which Modify()s; this hand-rolled fallback didn't).
+        TargetGraph->Modify();
         TargetGraph->AddNode(NewNode, false, false);
         NewNode->CreateNewGuid();
         NewNode->PostPlacedNewNode();
         NewNode->AllocateDefaultPins();
         NewNode->NodePosX = X;
         NewNode->NodePosY = Y;
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        // Compile before persisting — every other structural path does, so the saved
+        // generated class/CDO reflects the new node (was saved stale here).
+        FKismetEditorUtilities::CompileBlueprint(Blueprint);
+
         // CRITICAL: Save the blueprint to persist the new node.
         // Without this, the node exists only in memory and can be lost
         // between requests when the blueprint is reloaded.
         SaveLoadedAssetThrottled(Blueprint);
-        
+
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
         Result->SetStringField(TEXT("nodeName"), NewNode->GetName());
