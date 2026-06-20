@@ -314,10 +314,15 @@ Flakiness in shipped surface erodes trust during real authoring.
     `triggerType`/`modifierType`/`replace`) were undeclared in the `manage_networking` tool schema, so a
     schema-validating client (the normal Claude client) couldn't pass them — declared now (takes effect
     next MCP session). This also resolves the schema-discoverability half of [[2026-06-18b]] for Input.
-- 🟡 **Common UI completeness** — have: add button/text/border, assign style, bind input action,
-  and (NEW 2026-06-07) **style-asset creation**. Missing / runtime-only: activatable-widget stack
-  push/pop + focus/nav, input-action→click wiring. Some is inherently runtime
-  (see `COMMONUI_INTEGRATION_PLAN.md`).
+- ✅ **Common UI completeness — effectively DONE 2026-06-20** (only optional runtime test-tooling left).
+  Shipped + verified: authoring (add button/text/border, assign style, **style-asset creation**,
+  `set_common_button_input_action` = the input-action→click wiring), runtime introspection
+  (`inspect ui_focus`), faithful drive (`control_editor simulate_nav`), and the focus-relay/desired-focus
+  authoring (✅ sub-bullets below). **Only genuinely-open piece: a runtime activatable-stack push/pop drive**
+  — deliberately not built (🟢 low value): it's PIE test-tooling only (CommonUI pushes/pops natively via
+  button clicks at runtime, so the menus don't need a bridge action for it), and it can't be meaningfully
+  verified without a `UCommonActivatableWidgetStack` live in PIE. Promote only if a future test workflow
+  needs to script stack transitions. See `COMMONUI_INTEGRATION_PLAN.md`.
   - 📝 **Gamepad focus/nav (authoring)** — design stub parked in `COMMONUI_FOCUS_NAV.md`. Key
     finding: activation flags (`bAutoActivate`/`bIsModal`/`bSupportsActivationFocus`/
     `bAutoRestoreFocus`) are plain UPROPERTYs settable via `inspect set_property`, and the
@@ -492,12 +497,28 @@ Flakiness in shipped surface erodes trust during real authoring.
     Verified live: created both styles, then `add_common_text` + `set_common_text_style` accepted the
     created text style (passes the `IsChildOf(UCommonTextStyle)` check) — full create→assign pipeline.
     Follow-up if wanted: optional CDO property params (text size/color; button brushes are heavier).
-- 🟡 **Asset import pipeline** — `import` works (Interchange) but there's no post-import
-  configuration: texture compression/sRGB/streaming, audio codec/sample-rate, mesh
-  LOD/Nanite/collision. Add a post-import `configure_import` pass (or params on `import`).
-- 🟢 **GAS ability-graph depth** — GAS scaffolding is broad (create ability/effect/attribute/
-  cue BPs), but multi-step ability *logic* (wait-for-input → montage → apply-effect) is manual
-  graph wiring. Templated ability-task chains would speed the boss/combat work.
+- ✅ **Asset import pipeline — effectively COVERED (assessed 2026-06-20); only a narrow static-mesh-asset
+  collision sliver is uncovered, and it's not needed.** On audit, post-import config is mostly already there:
+  texture compression/group/LOD-bias/streaming/virtual-texture via `set_compression_settings`/
+  `set_texture_group`/`set_lod_bias`/`set_streaming_priority`/`configure_virtual_texture`; mesh
+  LOD/Nanite via `generate_lods`/`nanite_rebuild_mesh`; **sRGB, audio codec/sample-rate/compression,
+  collision *complexity* (`BodySetup.CollisionTraceFlag`), and any other reflected UPROPERTY via the
+  generic `set_asset_property`** (dotted subpaths reach component/struct fields). **Collision *generation*
+  already exists** too — `manage_geometry generate_collision` (box/sphere/capsule/convex/convex_decomposition
+  via Geometry Script) — but it targets a placed **`ADynamicMeshActor`** (`actorName`), NOT a `UStaticMesh`
+  asset. So the ONE genuine hole is generating simple collision on a static-mesh **asset** at import — which
+  the project doesn't need (combat/UI focus) and which collides on both the action name and the C++
+  `HandleGenerateCollision` symbol with the geometry one. **Decision: not built** (tried 2026-06-20, hit the
+  name collision, reverted — don't ship a confusingly-duplicate action for an unneeded capability). If ever
+  needed, the design is ~30 lines: load `UStaticMesh` by `meshPath` → `GetBodySetup()`/`CreateBodySetup()` →
+  size an `FKBoxElem`/`FKSphereElem`/`FKSphylElem` from `GetBoundingBox()` → `AggGeom.*Elems.Add` →
+  `InvalidatePhysicsData`/`CreatePhysicsMeshes` → `McpSafeAssetSave`; register it under a DISTINCT name
+  (e.g. `manage_asset add_static_mesh_collision` / `HandleAddStaticMeshCollision`) to avoid both collisions.
+- ❎ **GAS ability-graph depth — N/A for this project (won't build), 2026-06-20.** Verified the game uses
+  **zero GAS**: no `UAbilitySystemComponent`/`UGameplayAbility`/`UGameplayEffect`/`UAttributeSet` anywhere in
+  `Source/` — combat runs on the custom `UAttributeComponent` ([[project_combat_prep]]). Templated
+  ability-task chains would be capability the project never executes, so this is intentionally not built.
+  (The GAS scaffolding actions remain in the bridge for any future/other project; only the *depth* item is dropped.)
 - ✅ **Montage introspection (read-back) — DONE 2026-06-16.** `get_animation_info` now returns
   `sections[]` ({name,startTime,nextSection}), `blendInTime`/`blendOutTime`/`autoBlendOut`, and
   `slots[]` ({slotName, segments:[{anim,startPos,length}]}); verified live on AM_Block. Also
