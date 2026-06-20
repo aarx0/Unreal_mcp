@@ -23,6 +23,7 @@
 #include "Materials/MaterialInstanceConstant.h"
 #include "Exporters/Exporter.h"
 #include "Misc/FileHelper.h"
+#include "Interfaces/IPluginManager.h"  // generate_test_stub: resolve the plugin Source dir
 #if WITH_LIVE_CODING
 #include "ILiveCodingModule.h"           // live_coding_compile: trigger a Live Coding patch
 #include "Modules/ModuleManager.h"       // FModuleManager::GetModulePtr<ILiveCodingModule>
@@ -48,6 +49,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
       Lower != TEXT("get_test_results") &&
       !Lower.StartsWith(TEXT("test_progress")) &&
       !Lower.StartsWith(TEXT("test_stale")) &&
+      Lower != TEXT("generate_test_stub") &&
       Lower != TEXT("export_asset") &&
       Lower != TEXT("start_session") &&
       Lower != TEXT("execute_python") &&
@@ -60,6 +62,149 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
     SendAutomationError(RequestingSocket, RequestId,
                         TEXT("System control payload missing"),
                         TEXT("INVALID_PAYLOAD"));
+    return true;
+  }
+
+  // ===========================================================================
+  // generate_test_stub - scaffold a correct, registerable C++ automation test
+  // ===========================================================================
+  // The author->compile->run loop for a NEW test previously meant hand-writing
+  // a .cpp and getting the EAutomationTestFlags incantation right (wrong flags =
+  // compiles but never shows under run_tests). This emits the known-good shape
+  // (matching the bridge self-tests) so the only remaining step is compiling it
+  // in (live_coding_compile picks up new files) and running it.
+  if (Lower == TEXT("generate_test_stub")) {
+    FString TestName;
+    Payload->TryGetStringField(TEXT("testName"), TestName);
+    if (TestName.IsEmpty()) {
+      SendAutomationError(RequestingSocket, RequestId,
+          TEXT("generate_test_stub requires 'testName' (e.g. 'Combat.DamageApplies')."),
+          TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    FString TestType = TEXT("simple");
+    Payload->TryGetStringField(TEXT("testType"), TestType);
+    TestType = TestType.ToLower();
+    if (TestType != TEXT("simple") && TestType != TEXT("complex") && TestType != TEXT("latent")) {
+      SendAutomationError(RequestingSocket, RequestId,
+          FString::Printf(TEXT("Unknown testType '%s'. Use simple, complex, or latent."), *TestType),
+          TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    // Derive a valid C++ class symbol from the test name if not supplied.
+    FString ClassName;
+    Payload->TryGetStringField(TEXT("className"), ClassName);
+    if (ClassName.IsEmpty()) {
+      FString Sanitized;
+      for (const TCHAR C : TestName) {
+        if (FChar::IsAlnum(C)) { Sanitized.AppendChar(C); }
+      }
+      if (Sanitized.IsEmpty() || !FChar::IsAlpha(Sanitized[0])) {
+        Sanitized = FString(TEXT("Gen")) + Sanitized;
+      }
+      ClassName = FString(TEXT("F")) + Sanitized + TEXT("Test");
+    }
+
+    // Default flags match the self-tests so the test appears under run_tests
+    // immediately; flagsExpr lets a caller substitute a different mask.
+    FString FlagsExpr = TEXT("EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter");
+    {
+      FString Override;
+      if (Payload->TryGetStringField(TEXT("flagsExpr"), Override) && !Override.IsEmpty()) {
+        FlagsExpr = Override;
+      }
+    }
+
+    // Build the file content for the chosen test type.
+    FString Body;
+    Body += TEXT("// Auto-generated automation test stub (system_control generate_test_stub).\n");
+    Body += TEXT("// Compile it in with system_control live_coding_compile (or a full rebuild),\n");
+    Body += FString::Printf(TEXT("// then: system_control { action:\"run_tests\", filter:\"%s\" }\n\n"), *TestName);
+    Body += TEXT("#include \"Misc/AutomationTest.h\"\n\n");
+    Body += TEXT("#if WITH_AUTOMATION_TESTS\n\n");
+
+    if (TestType == TEXT("simple")) {
+      Body += FString::Printf(TEXT("IMPLEMENT_SIMPLE_AUTOMATION_TEST(\n    %s, \"%s\",\n    %s)\n\n"), *ClassName, *TestName, *FlagsExpr);
+      Body += FString::Printf(TEXT("bool %s::RunTest(const FString& Parameters)\n{\n"), *ClassName);
+      Body += TEXT("    // TODO: replace with real assertions.\n");
+      Body += TEXT("    TestTrue(TEXT(\"stub placeholder\"), true);\n");
+      Body += TEXT("    return true;\n}\n\n");
+    } else if (TestType == TEXT("latent")) {
+      const FString CmdName = ClassName + TEXT("WaitCommand");
+      Body += FString::Printf(TEXT("DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(%s, int32, FramesRemaining);\n\n"), *CmdName);
+      Body += FString::Printf(TEXT("bool %s::Update()\n{\n    if (FramesRemaining > 0) { --FramesRemaining; return false; }\n    return true;\n}\n\n"), *CmdName);
+      Body += FString::Printf(TEXT("IMPLEMENT_SIMPLE_AUTOMATION_TEST(\n    %s, \"%s\",\n    %s)\n\n"), *ClassName, *TestName, *FlagsExpr);
+      Body += FString::Printf(TEXT("bool %s::RunTest(const FString& Parameters)\n{\n"), *ClassName);
+      Body += TEXT("    // TODO: kick off async work, then wait for it via the latent command.\n");
+      Body += FString::Printf(TEXT("    ADD_LATENT_AUTOMATION_COMMAND(%s(3));\n"), *CmdName);
+      Body += TEXT("    return true;\n}\n\n");
+    } else { // complex (parameterized)
+      Body += FString::Printf(TEXT("IMPLEMENT_COMPLEX_AUTOMATION_TEST(\n    %s, \"%s\",\n    %s)\n\n"), *ClassName, *TestName, *FlagsExpr);
+      Body += FString::Printf(TEXT("void %s::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const\n{\n"), *ClassName);
+      Body += TEXT("    // TODO: one entry per parameterized case.\n");
+      Body += TEXT("    OutBeautifiedNames.Add(TEXT(\"Case0\")); OutTestCommands.Add(TEXT(\"0\"));\n");
+      Body += TEXT("    OutBeautifiedNames.Add(TEXT(\"Case1\")); OutTestCommands.Add(TEXT(\"1\"));\n}\n\n");
+      Body += FString::Printf(TEXT("bool %s::RunTest(const FString& Parameters)\n{\n"), *ClassName);
+      Body += TEXT("    const int32 Case = FCString::Atoi(*Parameters);\n");
+      Body += TEXT("    // TODO: assert on the parameterized case.\n");
+      Body += TEXT("    TestTrue(TEXT(\"stub placeholder\"), Case >= 0);\n");
+      Body += TEXT("    return true;\n}\n\n");
+    }
+
+    Body += TEXT("#endif // WITH_AUTOMATION_TESTS\n");
+
+    // Default output: the bridge plugin's GeneratedTests dir (a module that
+    // already has WITH_AUTOMATION_TESTS and is live-coding-watched, so no game
+    // source is touched). Callers can target the game module via outputPath.
+    FString OutputPath;
+    Payload->TryGetStringField(TEXT("outputPath"), OutputPath);
+    if (OutputPath.IsEmpty()) {
+      FString PluginDir;
+      TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("McpAutomationBridge"));
+      if (Plugin.IsValid()) { PluginDir = Plugin->GetBaseDir(); }
+      if (PluginDir.IsEmpty()) {
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("Could not resolve the McpAutomationBridge plugin dir; pass an explicit outputPath."),
+            TEXT("NO_PLUGIN_DIR"));
+        return true;
+      }
+      OutputPath = PluginDir / TEXT("Source/McpAutomationBridge/Private/GeneratedTests") /
+                   (ClassName.RightChop(1) + TEXT(".cpp"));  // strip leading 'F' for the filename
+    }
+    OutputPath = FPaths::ConvertRelativePathToFull(OutputPath);
+
+    bool bOverwrite = false;
+    Payload->TryGetBoolField(TEXT("overwrite"), bOverwrite);
+    if (FPaths::FileExists(OutputPath) && !bOverwrite) {
+      SendAutomationError(RequestingSocket, RequestId,
+          FString::Printf(TEXT("File already exists: %s (pass overwrite:true to replace)."), *OutputPath),
+          TEXT("ALREADY_EXISTS"));
+      return true;
+    }
+
+    // SaveStringToFile does not create parent dirs.
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(OutputPath), /*Tree=*/true);
+
+    if (!FFileHelper::SaveStringToFile(Body, *OutputPath)) {
+      SendAutomationError(RequestingSocket, RequestId,
+          FString::Printf(TEXT("Failed to write test stub to %s"), *OutputPath),
+          TEXT("WRITE_FAILED"));
+      return true;
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("path"), OutputPath);
+    Result->SetStringField(TEXT("className"), ClassName);
+    Result->SetStringField(TEXT("testPath"), TestName);
+    Result->SetStringField(TEXT("testType"), TestType);
+    Result->SetStringField(TEXT("nextSteps"),
+        FString::Printf(TEXT("live_coding_compile (new files are picked up), then run_tests filter=\"%s\". A brand-new file in a not-yet-rebuilt module may need one full rebuild before Live Coding sees it."), *TestName));
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+        FString::Printf(TEXT("Wrote %s test '%s' to %s"), *TestType, *TestName, *OutputPath),
+        Result);
     return true;
   }
 

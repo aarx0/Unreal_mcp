@@ -412,6 +412,7 @@ inline const TArray<FString>& SystemControlCore()
 		TEXT("screenshot"),
 		TEXT("execute_command"), TEXT("console_command"), TEXT("run_ubt"),
 		TEXT("run_tests"), TEXT("list_tests"), TEXT("get_test_results"),
+		TEXT("generate_test_stub"),
 		TEXT("subscribe"), TEXT("unsubscribe"),
 		TEXT("get_log"), TEXT("tail_log"), TEXT("clear_log"),
 		TEXT("spawn_category"), TEXT("start_session"),

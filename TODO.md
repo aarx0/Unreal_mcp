@@ -614,9 +614,18 @@ Remaining gaps:
 - ✅ **C++ automation test runner** — DONE 2026-06-07 (see §A "Automation test results").
   `run_tests`/`get_test_results` execute real `FAutomationTestFramework` tests and return
   pass/fail/errors, so the author→(play)→assert loop is scriptable for any C++ automation test
-  (incl. functional/latent tests, which the worker drives over real frames). Gap that remains:
-  authoring NEW tests still needs a `.cpp` + rebuild (or live-coding patch) — there's no
-  bridge action to generate a test stub.
+  (incl. functional/latent tests, which the worker drives over real frames).
+  - ✅ **Test-stub authoring — DONE 2026-06-20** (closes the "authoring NEW tests needs a .cpp"
+    gap). New `system_control generate_test_stub` writes a correct, registerable automation-test
+    `.cpp` — the value isn't the boilerplate (an agent can write a file) but **correct-by-construction
+    flags**: it emits the known-good `EAutomationTestFlags::EditorContext | EngineFilter` +
+    `WITH_AUTOMATION_TESTS` shape matching the self-tests (wrong flags = compiles but never appears
+    under run_tests). Params: `testName` (the registered path + run_tests filter), `testType`
+    (simple|complex|latent), `className`/`outputPath`/`flagsExpr`/`overwrite` (defaults: derived
+    symbol, the plugin's `Private/GeneratedTests/` dir, editor+engine flags). **Verified the WHOLE
+    author→compile→run loop with NO editor restart:** generate_test_stub → `live_coding_compile`
+    (Live Coding DOES pick up brand-new files) → list_tests shows it registered → run_tests/
+    get_test_results → `passed:1`. So a test can now be authored AND run entirely over MCP.
 - 🟢 **Gameplay-aware assertion helpers** — optional sugar over `runtime_report`/`inspect`
   (read an attribute, confirm an ability tag) for combat verification.
 
