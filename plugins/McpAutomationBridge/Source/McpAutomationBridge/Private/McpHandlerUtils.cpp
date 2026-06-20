@@ -112,7 +112,13 @@ AActor* FindActorByName(const FString& ActorName, bool bExactMatch)
         for (TActorIterator<AActor> It(World); It; ++It)
         {
             AActor* Actor = *It;
-            if (Actor && Actor->GetName().Equals(SearchName, ESearchCase::IgnoreCase))
+            // Match either the object name (e.g. BP_Telegraph_C_0) or the editor
+            // label (e.g. BP_Telegraph0); callers use both interchangeably.
+            if (Actor && (Actor->GetName().Equals(SearchName, ESearchCase::IgnoreCase)
+#if WITH_EDITOR
+                          || Actor->GetActorLabel().Equals(SearchName, ESearchCase::IgnoreCase)
+#endif
+                              ))
             {
                 return Actor;
             }
@@ -124,7 +130,11 @@ AActor* FindActorByName(const FString& ActorName, bool bExactMatch)
         for (TActorIterator<AActor> It(World); It; ++It)
         {
             AActor* Actor = *It;
-            if (Actor && Actor->GetName().StartsWith(SearchName, ESearchCase::IgnoreCase))
+            if (Actor && (Actor->GetName().StartsWith(SearchName, ESearchCase::IgnoreCase)
+#if WITH_EDITOR
+                          || Actor->GetActorLabel().StartsWith(SearchName, ESearchCase::IgnoreCase)
+#endif
+                              ))
             {
                 return Actor;
             }

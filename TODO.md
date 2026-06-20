@@ -586,6 +586,33 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### 2026-06-20a — ✅ FIXED: `control_editor set_camera` doesn't move the editor viewport (location+rotation ignored)
+**Fixed + verified live 2026-06-20.** Root cause: handler pre-extracted the `location` object then called `ReadVectorField(*Loc, TEXT(""), ...)`, but that helper unwraps the *named* field itself — an empty name found no nested field and returned the default `(0,0,0)`, so the camera always went to origin/zero rotation. Now reads `location`/`rotation` off the parent payload and seeds from the current pose (partial updates preserve the other axis). Verified: `set_camera {500,100,800 / pitch -60 yaw 30}` then `get_viewport_info` round-trips the exact pose.
+
+Hit framing a top-down screenshot of a ground telegraph. `control_editor set_camera {location:{x:400,y:200,z:700}, rotation:{pitch:-90}}`
+returns `{success:true}` but the perspective viewport did not move (stayed at the prior low/side angle); repeated calls had no effect.
+Workaround that DID work: `execute_python` → `get_editor_subsystem(UnrealEditorSubsystem).set_level_viewport_camera_info(loc, rot)`.
+Fix: route set_camera/set_viewport_camera through `set_level_viewport_camera_info` on the active level viewport (and confirm the rotation convention).
+
+### 2026-06-20b — ✅ FIXED: `get_viewport_info` returns only width/height (no camera pose)
+**Fixed + verified live 2026-06-20.** Added `location`/`rotation` from `UUnrealEditorSubsystem::GetLevelViewportCameraInfo` (same source `set_camera` writes, so set/get round-trip). Verified above.
+
+Returned `{width,height}` only — no camera location/rotation/FOV, so you can't read back where the viewport camera is (made the set_camera
+bug above harder to diagnose). Fix: include the active viewport camera's location/rotation/FOV.
+
+### 2026-06-20c — ✅ FIXED: Actor-name resolution inconsistent across actions
+**Fixed + verified live 2026-06-20.** `focus_actor` matched only `GetActorLabel()`; `FindActorByName` (control_actor) matched only `GetName()`. Both now match either object name OR label. Verified: `focus_actor` on object name `BP_Telegraph_C_1` (previously ACTOR_NOT_FOUND) now focuses.
+
+`control_editor focus_actor {actorName:"BP_Telegraph_C_0"}` → ACTOR_NOT_FOUND, but the same actor resolved as `"BP_Telegraph0"` (label),
+and `control_actor set_actor_location`/`destroy_actor` accepted `"BP_Telegraph_C_0"`. focus_actor matches a different name field than
+control_actor. Fix: unify actor lookup (label + object name + path) across control_editor and control_actor.
+
+### 2026-06-20d — ✅ FIXED: `inspect_cdo detailed:true` on a component-heavy BP overflows the token cap (minor)
+**Fixed + verified live 2026-06-20.** The schema advertised `componentNames` but the all-components loop ignored it. Now `componentNames` filters the components array (native + SCS), so callers can scope a large CDO. Verified: `inspect_cdo {componentNames:["Disc"]}` → `componentCount:1`. (Default behaviour unchanged when no filter is given.)
+
+inspect_cdo on BP_TrainingDummy_AoE returned 146k chars and had to be dumped to file — mostly verbose per-component BodyInstance/collision
+defaults at engine defaults. Fix: terser default (skip props equal to engine defaults) or honor `propertyNames`/`componentNames` to scope it.
+
 ### 2026-06-19e — Can't read UInputMappingContext.Mappings via the bridge (generic get_property is blind)
 Hit while diagnosing a "heal input does nothing" report. `inspect get_property {objectPath:<IMC>, propertyName:"Mappings"}`
 returns `value:[]` for EVERY IMC (IMC_CharacterContext / _Inverted / GameCommands) even though the game has

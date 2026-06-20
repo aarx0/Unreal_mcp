@@ -3001,7 +3001,8 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorFocusActor(
     for (AActor *Actor : Actors) {
       if (!Actor)
         continue;
-      if (Actor->GetActorLabel().Equals(ActorName, ESearchCase::IgnoreCase)) {
+      if (Actor->GetActorLabel().Equals(ActorName, ESearchCase::IgnoreCase) ||
+          Actor->GetName().Equals(ActorName, ESearchCase::IgnoreCase)) {
         GEditor->SelectNone(true, true, false);
         GEditor->SelectActor(Actor, true, true, true);
         GEditor->Exec(nullptr, TEXT("EDITORTEMPVIEWPORT"));
@@ -3026,15 +3027,20 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetCamera(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     TSharedPtr<FMcpBridgeWebSocket> Socket) {
 #if WITH_EDITOR
-  const TSharedPtr<FJsonObject> *Loc = nullptr;
+  // Seed with the current pose so a partial request (only location, or only
+  // rotation) preserves the other axis instead of snapping it to zero.
   FVector Location(0, 0, 0);
   FRotator Rotation(0, 0, 0);
-  if (Payload->TryGetObjectField(TEXT("location"), Loc) && Loc &&
-      (*Loc).IsValid())
-    ReadVectorField(*Loc, TEXT(""), Location, Location);
-  if (Payload->TryGetObjectField(TEXT("rotation"), Loc) && Loc &&
-      (*Loc).IsValid())
-    ReadRotatorField(*Loc, TEXT(""), Rotation, Rotation);
+#if defined(MCP_HAS_UNREALEDITOR_SUBSYSTEM)
+  if (UUnrealEditorSubsystem *UESCurrent =
+          GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>())
+    UESCurrent->GetLevelViewportCameraInfo(Location, Rotation);
+#endif
+  // ReadVectorField/ReadRotatorField unwrap the named field themselves: pass the
+  // parent payload + field name, not the pre-extracted object with an empty name
+  // (empty name finds no nested field and returns the default — a silent no-op).
+  ReadVectorField(Payload, TEXT("location"), Location, Location);
+  ReadRotatorField(Payload, TEXT("rotation"), Rotation, Rotation);
 
 #if defined(MCP_HAS_UNREALEDITOR_SUBSYSTEM)
   if (UUnrealEditorSubsystem *UES =

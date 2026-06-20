@@ -1985,6 +1985,26 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectAction(
                 FViewport* Viewport = GEditor->GetActiveViewport();
                 Resp->SetNumberField(TEXT("width"), Viewport->GetSizeXY().X);
                 Resp->SetNumberField(TEXT("height"), Viewport->GetSizeXY().Y);
+
+                // Report the level viewport camera pose (same source set_camera writes)
+                // so callers can read back where the camera is.
+                FVector CamLoc(FVector::ZeroVector);
+                FRotator CamRot(FRotator::ZeroRotator);
+                if (UUnrealEditorSubsystem* UESView =
+                        GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>())
+                {
+                    UESView->GetLevelViewportCameraInfo(CamLoc, CamRot);
+                }
+                TSharedPtr<FJsonObject> LocJson = MakeShared<FJsonObject>();
+                LocJson->SetNumberField(TEXT("x"), CamLoc.X);
+                LocJson->SetNumberField(TEXT("y"), CamLoc.Y);
+                LocJson->SetNumberField(TEXT("z"), CamLoc.Z);
+                Resp->SetObjectField(TEXT("location"), LocJson);
+                TSharedPtr<FJsonObject> RotJson = MakeShared<FJsonObject>();
+                RotJson->SetNumberField(TEXT("pitch"), CamRot.Pitch);
+                RotJson->SetNumberField(TEXT("yaw"), CamRot.Yaw);
+                RotJson->SetNumberField(TEXT("roll"), CamRot.Roll);
+                Resp->SetObjectField(TEXT("rotation"), RotJson);
                 Resp->SetBoolField(TEXT("success"), true);
                 SendAutomationResponse(RequestingSocket, RequestId, true,
                                        TEXT("Viewport info retrieved"), Resp, FString());

@@ -3087,6 +3087,23 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
     bool bDetailed = false;
     Payload->TryGetBoolField(TEXT("detailed"), bDetailed);
 
+    // Optional: restrict the all-components dump to these names. The schema advertised
+    // componentNames but the loops below ignored it, so a component-heavy CDO (every
+    // BodyInstance/collision default per component) could overflow the response.
+    TSet<FString> ComponentNamesFilter;
+    const TArray<TSharedPtr<FJsonValue>>* CompNamesArr = nullptr;
+    if (Payload->TryGetArrayField(TEXT("componentNames"), CompNamesArr) && CompNamesArr)
+    {
+        for (const auto& Val : *CompNamesArr)
+        {
+            FString S;
+            if (Val->TryGetString(S))
+            {
+                ComponentNamesFilter.Add(S.TrimStartAndEnd());
+            }
+        }
+    }
+
     TArray<FName> PropertyNameFilter;
     FString PropertyPathFilter;
     if (Payload->TryGetStringField(TEXT("propertyPath"), PropertyPathFilter))
@@ -3196,6 +3213,10 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
             if (!Comp) continue;
             const FString CompName = Comp->GetName();
             SeenNames.Add(CompName);
+            if (ComponentNamesFilter.Num() > 0 && !ComponentNamesFilter.Contains(CompName))
+            {
+                continue;
+            }
 
             const FString Source = ScsSourceMap.Contains(CompName)
                 ? TEXT("Native_Override") : TEXT("Native");
@@ -3218,6 +3239,10 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
                 const FString VarName = Node->GetVariableName().ToString();
                 if (SeenNames.Contains(VarName)) continue;
                 SeenNames.Add(VarName);
+                if (ComponentNamesFilter.Num() > 0 && !ComponentNamesFilter.Contains(VarName))
+                {
+                    continue;
+                }
 
                 const FString Source = (Bp == Blueprint)
                     ? TEXT("SCS") : TEXT("SCS_Inherited");
