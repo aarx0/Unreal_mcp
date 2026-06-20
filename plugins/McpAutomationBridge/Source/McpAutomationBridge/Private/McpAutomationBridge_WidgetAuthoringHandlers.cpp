@@ -2962,6 +2962,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
             return true;
         }
 
+        // Group all graph mutations (event node + wiring + compile) as one undo unit.
+        const FScopedTransaction Transaction(FText::FromString(
+            bHoveredVariant ? TEXT("Bind On Hovered") : TEXT("Bind On Clicked")));
+        const UEdGraphSchema_K2* K2 = GetDefault<UEdGraphSchema_K2>();
+
         // The widget must be a variable for a bound event to reference it.
         bool bMadeVariable = false;
         if (!Widget->bIsVariable)
@@ -3082,11 +3087,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
 
             UEdGraphPin* EventThen = EventNode->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
             UEdGraphPin* CallExec = CallNode->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
-            if (EventThen && CallExec)
-            {
-                EventThen->MakeLinkTo(CallExec);
-                bWiredTargetFunction = true;
-            }
+            // Schema-checked connect (validates pin compatibility) instead of raw MakeLinkTo.
+            bWiredTargetFunction = EventThen && CallExec && K2->TryCreateConnection(EventThen, CallExec);
         }
 
         // Compile so the binding is generated, then persist.
@@ -3165,6 +3167,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
                 return true;
             }
         }
+
+        // Group all graph mutations (event node + live-update chain + compile) as one undo unit.
+        const FScopedTransaction Transaction(FText::FromString(TEXT("Bind On Value Changed")));
+        const UEdGraphSchema_K2* K2 = GetDefault<UEdGraphSchema_K2>();
 
         // Any widget referenced by a graph node must be a variable.
         bool bMadeVariable = false;
@@ -3309,12 +3315,16 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
                 UEdGraphPin* SetInText= SetNode->FindPin(FName(TEXT("InText")), EGPD_Input);
                 UEdGraphPin* GetOut   = GetNode->FindPin(TextVarProp->GetFName(), EGPD_Output);
 
-                if (EvThen && SetExec)   EvThen->MakeLinkTo(SetExec);
-                if (EvValue && ConvIn)   EvValue->MakeLinkTo(ConvIn);
-                if (ConvOut && SetInText)ConvOut->MakeLinkTo(SetInText);
-                if (GetOut && SetSelf)   GetOut->MakeLinkTo(SetSelf);
+                // Schema-checked connects (validate pin types + auto-insert casts where
+                // needed) instead of raw MakeLinkTo, which could wire a type-mismatched pin
+                // yet still report wiredLiveUpdate:true.
+                auto Connect = [&](UEdGraphPin* A, UEdGraphPin* B) -> bool { return A && B && K2->TryCreateConnection(A, B); };
+                const bool bExec = Connect(EvThen, SetExec);
+                const bool bVal  = Connect(EvValue, ConvIn);
+                const bool bConv = Connect(ConvOut, SetInText);
+                const bool bSelf = Connect(GetOut, SetSelf);
 
-                bWiredLiveUpdate = EvThen && SetExec && EvValue && ConvIn && ConvOut && SetInText && GetOut && SetSelf;
+                bWiredLiveUpdate = bExec && bVal && bConv && bSelf;
             }
         }
 

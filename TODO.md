@@ -853,8 +853,12 @@ bake-rebuild done so the on-disk DLL matches source.
   boilerplate lines removed. Build clean (both waves) + live-verified (size_box WidthOverride=250, progress_bar
   Percent=0.7 persisted; correct trees via name alias). **Remaining C (🟡, optional):** split the still-large
   `HandleManageWidgetAuthoringAction` function + fold the duplicated error literals / response-tail; not a bug.
-- **D** — extract the shared graph-event-chain helper; add `FScopedTransaction` + `TryCreateConnection` to
-  `bind_on_clicked`/`bind_on_value_changed` (🟢 robustness).
+- **D** — ✅ `FScopedTransaction` + `TryCreateConnection` ADDED to `bind_on_clicked`/`bind_on_value_changed`
+  2026-06-20 (mirrors `bind_event_to_delegate`): both now group their graph mutations as one undo unit, and
+  the raw `MakeLinkTo` calls (esp. value_changed's 4 data-pin links) are schema-checked so a type-mismatched
+  pin can't be wired while still reporting `wiredLiveUpdate:true`. Verified live: slider→label live-update
+  chain wired `wiredLiveUpdate:true` (4 links) via the new path. (Still open 🟢: extracting the SHARED
+  graph-event-chain helper across the three binders — pure dedup, not a bug.)
 - **B 🟡/🟢** — Inventory/Interaction structural adds save-without-compile (stale CDO) [structural-only
   class now covered centrally by `McpSafeAssetSave` compile-on-save, 2026-06-18f]; ✅ InputHandlers
   `add_mapping`/`remove_mapping` `Context->Modify()` ADDED 2026-06-20 (baked) — now matches
