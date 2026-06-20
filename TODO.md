@@ -641,6 +641,26 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### 2026-06-20e — Graph-authoring papercuts found building the SaveGame demo (BP_SaveManager)
+Surfaced authoring a real save/load graph end-to-end via the bridge (create_node → connect_pins → set_pin_default_value).
+- ✅ **FIXED: `set_pin_default_value` ignored object/class/soft pins.** It only called `Schema->TrySetDefaultValue(*Pin, Value)`,
+  which sets the string `DefaultValue` — but `PC_Object`/`PC_Class`/`PC_Interface`/`PC_SoftObject`/`PC_SoftClass` pins store their
+  default in `DefaultObject`, so e.g. `CreateSaveGameObject.SaveGameClass` silently stayed unset (→ creates null at runtime). Now
+  detects object-like pins, `StaticLoadObject`s the value, and routes through `Schema->TrySetDefaultObject` (fail-fast OBJECT_NOT_FOUND
+  if unresolved). `.cpp`-only (BlueprintGraphHandlers.cpp), live-coded + verified: `SaveGameClass` now reads back
+  `defaultObjectPath=/Game/.../BP_ShinSaveGame_C` and the BP compiles clean.
+- 📝 **`create_node` CallFunction resolves by C++ UFUNCTION name, not the editor DisplayName/ScriptName.** "Get Actor Transform" in the
+  palette is `AActor::GetTransform()` (DisplayName="Get Actor Transform", ScriptName="GetActorTransform") — but `memberName` must be the
+  C++ name `GetTransform`; both `GetActorTransform` and the K2-prefixed `K2_GetActorTransform` return FUNCTION_NOT_FOUND. (K2_GetActorLocation
+  *does* exist by that name — it's per-function.) Consider a ScriptName/DisplayName-metadata fallback in the resolver so callers can use the
+  name they see in the editor. Minor today (workaround = know the C++ name), but it's a recurring friction point for graph authoring.
+- 📝 **`connect_pins` param names are inconsistent with siblings.** It reads `fromNodeId`/`fromPinName`/`toNodeId`/`toPinName`; most other
+  node actions take `sourceNodeId`/`targetNodeId` (+ material `connect_nodes` takes `fromPin`/`toPin`). Passing the sibling names → silent
+  NODE_NOT_FOUND (empty ids). Consider accepting `sourceNodeId`/`sourcePin`/`targetNodeId`/`targetPin` as aliases.
+- 📝 **Incremental wiring trips the post-op compile-error guard.** Connecting exec before data leaves the graph transiently invalid (e.g.
+  "Object is undetermined" until the cast's input lands), and the guard surfaces those mid-sequence compiles as ENGINE_ERROR even though each
+  link is made and the final graph compiles clean. Benign (wire data pins before exec to avoid, or ignore until the final compile), but noisy.
+
 ### 2026-06-20a — ✅ FIXED: `control_editor set_camera` doesn't move the editor viewport (location+rotation ignored)
 **Fixed + verified live 2026-06-20.** Root cause: handler pre-extracted the `location` object then called `ReadVectorField(*Loc, TEXT(""), ...)`, but that helper unwraps the *named* field itself — an empty name found no nested field and returned the default `(0,0,0)`, so the camera always went to origin/zero rotation. Now reads `location`/`rotation` off the parent payload and seeds from the current pose (partial updates preserve the other axis). Verified: `set_camera {500,100,800 / pitch -60 yaw 30}` then `get_viewport_info` round-trips the exact pose.
 

@@ -2242,9 +2242,34 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     TargetGraph->Modify();
     TargetNode->Modify();
 
-    // Use the schema to properly set the default value
+    // Use the schema to set the default. Object/class/soft pins store their
+    // default in DefaultObject, NOT the string DefaultValue — TrySetDefaultValue
+    // alone silently no-ops on them (e.g. CreateSaveGameObject's SaveGameClass).
+    // Resolve the value to a UObject/UClass and route through TrySetDefaultObject.
     const UEdGraphSchema *Schema = TargetGraph->GetSchema();
-    Schema->TrySetDefaultValue(*Pin, Value);
+    const FName PinCat = Pin->PinType.PinCategory;
+    const bool bObjectLikePin =
+        PinCat == UEdGraphSchema_K2::PC_Object ||
+        PinCat == UEdGraphSchema_K2::PC_Class ||
+        PinCat == UEdGraphSchema_K2::PC_Interface ||
+        PinCat == UEdGraphSchema_K2::PC_SoftObject ||
+        PinCat == UEdGraphSchema_K2::PC_SoftClass;
+    if (bObjectLikePin && !Value.IsEmpty())
+    {
+        UObject *Resolved = StaticLoadObject(UObject::StaticClass(), nullptr, *Value);
+        if (!Resolved)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Could not resolve object/class '%s' for pin '%s'."), *Value, *PinName),
+                TEXT("OBJECT_NOT_FOUND"));
+            return true;
+        }
+        Schema->TrySetDefaultObject(*Pin, Resolved);
+    }
+    else
+    {
+        Schema->TrySetDefaultValue(*Pin, Value);
+    }
 
     FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
     
