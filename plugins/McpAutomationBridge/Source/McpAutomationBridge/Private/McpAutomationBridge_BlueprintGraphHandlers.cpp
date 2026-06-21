@@ -1068,7 +1068,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
       } else {
         SendAutomationError(
             RequestingSocket, RequestId,
-            FString::Printf(TEXT("Function '%s' not found"), *MemberName),
+            FString::Printf(
+                TEXT("No UFunction named '%s' found. Pass the function's C++ "
+                     "UFUNCTION name (e.g. 'SetActorLocation'), not its editor "
+                     "display name. Set 'memberClass' to the owning class to "
+                     "disambiguate; without it only the blueprint's own class, "
+                     "KismetSystemLibrary, GameplayStatics and KismetMathLibrary "
+                     "are searched."),
+                *MemberName),
             TEXT("FUNCTION_NOT_FOUND"));
       }
       return true;
@@ -1526,10 +1533,10 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     TargetGraph->Modify();
 
     FString FromNodeId, FromPinName, ToNodeId, ToPinName;
-    Payload->TryGetStringField(TEXT("fromNodeId"), FromNodeId);
-    Payload->TryGetStringField(TEXT("fromPinName"), FromPinName);
-    Payload->TryGetStringField(TEXT("toNodeId"), ToNodeId);
-    Payload->TryGetStringField(TEXT("toPinName"), ToPinName);
+    Payload->TryGetStringField(TEXT("sourceNodeId"), FromNodeId);
+    Payload->TryGetStringField(TEXT("sourcePinName"), FromPinName);
+    Payload->TryGetStringField(TEXT("targetNodeId"), ToNodeId);
+    Payload->TryGetStringField(TEXT("targetPinName"), ToPinName);
 
     UEdGraphNode *FromNode = FindNodeByIdOrName(FromNodeId);
     UEdGraphNode *ToNode = FindNodeByIdOrName(ToNodeId);

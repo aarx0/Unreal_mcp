@@ -98,10 +98,10 @@ public:
 			.Bool(TEXT("saveAfterCompile"), TEXT(""))
 			.Number(TEXT("timeoutMs"), TEXT(""))
 			.String(TEXT("parentClass"), TEXT("Path or name of the parent class."))
-			.String(TEXT("fromNodeId"), TEXT("ID of the source node."))
-			.String(TEXT("fromPinName"), TEXT("Name of the source pin."))
-			.String(TEXT("toNodeId"), TEXT("ID of the target node."))
-			.String(TEXT("toPinName"), TEXT("Name of the target pin."))
+			.String(TEXT("sourceNodeId"), TEXT("ID of the source node."))
+			.String(TEXT("sourcePinName"), TEXT("Name of the source pin."))
+			.String(TEXT("targetNodeId"), TEXT("ID of the target node."))
+			.String(TEXT("targetPinName"), TEXT("Name of the target pin."))
 			// Widget-authoring (UMG) navigation params — this tool re-dispatches the widget
 			// action group. Handlers already read them from the payload; declared here so a
 			// schema-validating client can discover/pass them (per-widget value props still
