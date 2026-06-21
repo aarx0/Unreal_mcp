@@ -1021,6 +1021,72 @@ namespace
 // Suppress function size warning - this is a large handler function with many sub-actions
 #pragma warning(push)
 #pragma warning(disable: 4883)
+// -----------------------------------------------------------------------------
+// Phase 19 family sub-handlers (filled in pass by pass — see header comment).
+// Empty stubs return false so the dispatcher falls through to the legacy chain
+// for any subaction not yet migrated.
+// -----------------------------------------------------------------------------
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Lifecycle(
+    const FString& SubAction, const FString& RequestId, const FString& Action,
+    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+{
+    return false;
+}
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
+    const FString& SubAction, const FString& RequestId, const FString& Action,
+    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+{
+    return false;
+}
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
+    const FString& SubAction, const FString& RequestId, const FString& Action,
+    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+{
+    return false;
+}
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
+    const FString& SubAction, const FString& RequestId, const FString& Action,
+    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+{
+    return false;
+}
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
+    const FString& SubAction, const FString& RequestId, const FString& Action,
+    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+{
+    return false;
+}
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
+    const FString& SubAction, const FString& RequestId, const FString& Action,
+    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+{
+    return false;
+}
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Style(
+    const FString& SubAction, const FString& RequestId, const FString& Action,
+    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+{
+    return false;
+}
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Tree(
+    const FString& SubAction, const FString& RequestId, const FString& Action,
+    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+{
+    return false;
+}
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
+    const FString& SubAction, const FString& RequestId, const FString& Action,
+    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+{
+    return false;
+}
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Misc(
+    const FString& SubAction, const FString& RequestId, const FString& Action,
+    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+{
+    return false;
+}
+
 bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
     const FString& RequestId,
     const FString& Action,
@@ -1041,6 +1107,21 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
     }
 
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
+
+    // Family sub-handlers. Each returns true once it has handled (and responded
+    // to) SubAction, false if SubAction isn't one of its own. They're filled in
+    // pass by pass; until a family is migrated its stub returns false and the
+    // legacy inline chain below still handles those subactions.
+    if (HandleWidgetAuthoring_Lifecycle(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
+    if (HandleWidgetAuthoring_Containers(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
+    if (HandleWidgetAuthoring_Leaves(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
+    if (HandleWidgetAuthoring_Slot(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
+    if (HandleWidgetAuthoring_Binding(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
+    if (HandleWidgetAuthoring_Animation(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
+    if (HandleWidgetAuthoring_Style(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
+    if (HandleWidgetAuthoring_Tree(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
+    if (HandleWidgetAuthoring_Recipes(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
+    if (HandleWidgetAuthoring_Misc(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
 
     // =========================================================================
     // 19.1 Widget Creation

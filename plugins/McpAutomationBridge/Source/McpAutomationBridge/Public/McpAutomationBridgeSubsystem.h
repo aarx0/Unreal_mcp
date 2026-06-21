@@ -988,6 +988,50 @@ private:
       const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+  // Phase 19 family sub-handlers — each owns one cluster of subactions and
+  // returns false if SubAction isn't one of its own (so the dispatcher falls
+  // through to the next family). Split out of the former monolithic dispatcher
+  // purely for navigability; branch bodies are unchanged.
+  bool HandleWidgetAuthoring_Lifecycle(
+      const FString &SubAction, const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload,
+      TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+  bool HandleWidgetAuthoring_Containers(
+      const FString &SubAction, const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload,
+      TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+  bool HandleWidgetAuthoring_Leaves(
+      const FString &SubAction, const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload,
+      TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+  bool HandleWidgetAuthoring_Slot(
+      const FString &SubAction, const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload,
+      TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+  bool HandleWidgetAuthoring_Binding(
+      const FString &SubAction, const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload,
+      TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+  bool HandleWidgetAuthoring_Animation(
+      const FString &SubAction, const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload,
+      TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+  bool HandleWidgetAuthoring_Style(
+      const FString &SubAction, const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload,
+      TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+  bool HandleWidgetAuthoring_Tree(
+      const FString &SubAction, const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload,
+      TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+  bool HandleWidgetAuthoring_Recipes(
+      const FString &SubAction, const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload,
+      TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+  bool HandleWidgetAuthoring_Misc(
+      const FString &SubAction, const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload,
+      TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
   // Common UI (CommonUI plugin) authoring handlers
   bool HandleCommonUiAction(
       const FString &RequestId, const FString &Action,
