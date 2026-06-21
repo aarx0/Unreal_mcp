@@ -195,10 +195,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 			SendAutomationError(RequestingSocket, RequestId, AddErr, TEXT("TREE_ERROR"));
 			return true;
 		}
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-		// Persist the mutation — these Common UI adds/styles historically only marked the
-		// blueprint modified and never saved, so the edit was lost on editor close/GC.
-		McpSafeAssetSave(WidgetBP);
+		McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
 
 		TSharedPtr<FJsonObject> ResultJson = MakeShared<FJsonObject>();
 		ResultJson->SetBoolField(TEXT("success"), true);
@@ -272,10 +269,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 			SendAutomationError(RequestingSocket, RequestId, AddErr, TEXT("TREE_ERROR"));
 			return true;
 		}
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-		// Persist the mutation — these Common UI adds/styles historically only marked the
-		// blueprint modified and never saved, so the edit was lost on editor close/GC.
-		McpSafeAssetSave(WidgetBP);
+		McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
 
 		TSharedPtr<FJsonObject> ResultJson = MakeShared<FJsonObject>();
 		ResultJson->SetBoolField(TEXT("success"), true);
@@ -342,10 +336,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 			SendAutomationError(RequestingSocket, RequestId, AddErr, TEXT("TREE_ERROR"));
 			return true;
 		}
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-		// Persist the mutation — these Common UI adds/styles historically only marked the
-		// blueprint modified and never saved, so the edit was lost on editor close/GC.
-		McpSafeAssetSave(WidgetBP);
+		McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
 
 		TSharedPtr<FJsonObject> ResultJson = MakeShared<FJsonObject>();
 		ResultJson->SetBoolField(TEXT("success"), true);
@@ -430,10 +421,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 			TextWidget->SetStyle(TSubclassOf<UCommonTextStyle>(StyleClass));
 		}
 
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-		// Persist the mutation — these Common UI adds/styles historically only marked the
-		// blueprint modified and never saved, so the edit was lost on editor close/GC.
-		McpSafeAssetSave(WidgetBP);
+		McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
 
 		TSharedPtr<FJsonObject> ResultJson = MakeShared<FJsonObject>();
 		ResultJson->SetBoolField(TEXT("success"), true);
@@ -605,10 +593,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 		HandlePtr->DataTable = DataTable;
 		HandlePtr->RowName = RowFName;
 
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-		// Persist the mutation — these Common UI adds/styles historically only marked the
-		// blueprint modified and never saved, so the edit was lost on editor close/GC.
-		McpSafeAssetSave(WidgetBP);
+		McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
 
 		TSharedPtr<FJsonObject> ResultJson = MakeShared<FJsonObject>();
 		ResultJson->SetBoolField(TEXT("success"), true);

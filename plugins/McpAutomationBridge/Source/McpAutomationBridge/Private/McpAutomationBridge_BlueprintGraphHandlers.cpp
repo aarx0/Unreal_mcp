@@ -708,12 +708,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
         // AllocateDefaultPins() again after this!
         NodeCreator.Finalize();
 
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        
-        // CRITICAL: Save the blueprint to persist the new node.
-        // Without this, the node exists only in memory and can be lost
-        // between requests when the blueprint is reloaded.
-        SaveLoadedAssetThrottled(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
@@ -1432,9 +1427,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
       TempFunc->MarkAsGarbage();
 
       // Mark blueprint as structurally modified, compile, and save
-      FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-      FKismetEditorUtilities::CompileBlueprint(Blueprint);
-      SaveLoadedAssetThrottled(Blueprint);
+      McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
       // Report success
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
@@ -1505,15 +1498,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
         NewNode->AllocateDefaultPins();
         NewNode->NodePosX = X;
         NewNode->NodePosY = Y;
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        // Compile before persisting — every other structural path does, so the saved
-        // generated class/CDO reflects the new node (was saved stale here).
-        FKismetEditorUtilities::CompileBlueprint(Blueprint);
-
-        // CRITICAL: Save the blueprint to persist the new node.
-        // Without this, the node exists only in memory and can be lost
-        // between requests when the blueprint is reloaded.
-        SaveLoadedAssetThrottled(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
@@ -1602,10 +1587,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     }
 
     if (TargetGraph->GetSchema()->TryCreateConnection(FromPin, ToPin)) {
-      FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-      
-      // CRITICAL: Save the blueprint to persist changes.
-      SaveLoadedAssetThrottled(Blueprint);
+      McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
       
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       McpHandlerUtils::AddVerification(Result, Blueprint);
@@ -1714,10 +1696,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
     TargetNode->Modify();
     TargetGraph->GetSchema()->BreakPinLinks(*Pin, true);
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    
-    // CRITICAL: Save the blueprint to persist changes.
-    SaveLoadedAssetThrottled(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
     
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, Blueprint);
@@ -1771,12 +1750,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
     NodeCreator.Finalize();
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    
-    // CRITICAL: Save the blueprint to persist the new node.
-    // Without this, the node exists only in memory and can be lost
-    // between requests when the blueprint is reloaded.
-    SaveLoadedAssetThrottled(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"), RerouteNode->NodeGuid.ToString());
@@ -2270,10 +2244,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
         Schema->TrySetDefaultValue(*Pin, Value);
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    
-    // CRITICAL: Save the blueprint to persist changes.
-    SaveLoadedAssetThrottled(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"), NodeId);

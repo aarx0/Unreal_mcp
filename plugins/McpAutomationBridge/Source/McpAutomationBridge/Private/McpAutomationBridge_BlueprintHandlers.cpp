@@ -1832,10 +1832,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
                         LocalBP, NewHandle, TargetVarName);
                   }
 #if WITH_EDITOR
-                  FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(
-                      LocalBP);
-                  McpSafeCompileBlueprint(LocalBP);
-                  SaveLoadedAssetThrottled(LocalBP);
+                  McpFinalizeBlueprint(LocalBP, /*bStructural=*/true, /*bSave=*/true);
 #endif
                   bAddedViaSubsystem = true;
                 }
@@ -3626,10 +3623,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
           RemoveGraph->RemoveNode(Node);
         }
         if (NodesToRemove.Num() > 0) {
-          FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(
-              RemoveBlueprint);
-          McpSafeCompileBlueprint(RemoveBlueprint);
-          SaveLoadedAssetThrottled(RemoveBlueprint);
+          McpFinalizeBlueprint(RemoveBlueprint, /*bStructural=*/true, /*bSave=*/true);
         }
       }
     }
@@ -3697,13 +3691,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     if (TargetGraph) {
       FBlueprintEditorUtils::RemoveGraph(Blueprint, TargetGraph,
                                          EGraphRemoveFlags::Default);
-      FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-      // Must compile + save like add_function/add_event do. Without the recompile the
-      // generated class still carries the (now-removed) UFunction, and without the save the
-      // removal never reaches disk — the old code did neither, so it reported removed:true
-      // while a later get_graph_details/compile still found the function (false success).
-      McpSafeCompileBlueprint(Blueprint);
-      const bool bSaved = SaveLoadedAssetThrottled(Blueprint);
+      const bool bSaved = McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
       Resp->SetBoolField(TEXT("removed"), true);
       Resp->SetBoolField(TEXT("saved"), bSaved);
     } else {
@@ -4459,9 +4447,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
                 CDO, FSoftObjectPtr(ClassToSet));
           }
 
-          FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
-          McpSafeCompileBlueprint(BP);
-          bool bSaved = SaveLoadedAssetThrottled(BP);
+          bool bSaved = McpFinalizeBlueprint(BP, /*bStructural=*/false, /*bSave=*/true);
 
           TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
           Result->SetBoolField(TEXT("success"), true);
@@ -4500,11 +4486,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
         ValueWrapObj->Values, GeneratedClass, CDO, 0, 0);
 
     if (bSuccess) {
-      FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
-      McpSafeCompileBlueprint(BP);
-
-      // Save the blueprint to persist changes
-      bool bSaved = SaveLoadedAssetThrottled(BP);
+      bool bSaved = McpFinalizeBlueprint(BP, /*bStructural=*/false, /*bSave=*/true);
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetBoolField(TEXT("success"), true);
@@ -5246,10 +5228,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
       TargetGraph->Modify();
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
-
-    McpSafeCompileBlueprint(BP);
-    bSaved = SaveLoadedAssetThrottled(BP);
+    bSaved = McpFinalizeBlueprint(BP, /*bStructural=*/true, /*bSave=*/true);
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("success"), true);

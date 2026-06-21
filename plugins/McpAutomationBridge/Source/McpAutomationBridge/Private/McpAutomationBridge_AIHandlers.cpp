@@ -864,8 +864,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ControllerBP);
-        bool bSaved = McpSafeAssetSave(ControllerBP);
+        bool bSaved = McpFinalizeBlueprint(ControllerBP, /*bStructural=*/true, /*bSave=*/true);
         Result->SetBoolField(TEXT("saved"), bSaved);
         Result->SetStringField(TEXT("controllerPath"), ControllerPath);
         Result->SetStringField(TEXT("blackboardPath"), BlackboardPath);
