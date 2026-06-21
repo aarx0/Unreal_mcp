@@ -295,8 +295,8 @@ Flakiness in shipped surface erodes trust during real authoring.
   - **Part B (chose option a):** the broken simplistic `add_composite_node`/`add_task_node`/
     `add_decorator`/`add_service` (which `NewObject`'d an orphaned node and falsely reported success)
     now return `Error [USE_GRAPH_AUTHORING]` with a message pointing at `add_node`/`connect_nodes`/
-    `add_subnode`. One guard in `HandleManageAIAction`; the legacy branches are now unreachable
-    (trivial TODO: delete the dead branches).
+    `add_subnode`. One guard in `HandleManageAIAction`. (2026-06-21 `0014826`: confirmed the dead branches were
+    already removed — only the guard handles these sub-actions; corrected the stale "delete the dead branches" comment.)
   Original report below for context.
 - 🔴 **(RESOLVED above) BUG: `manage_ai` simple BT node actions report false success (orphaned nodes)** — found
   2026-06-07. Repro: `create_behavior_tree {name:BT_MCPSweepTest, path:/Game}` →
@@ -649,14 +649,8 @@ Surfaced authoring a real save/load graph end-to-end via the bridge (create_node
   detects object-like pins, `StaticLoadObject`s the value, and routes through `Schema->TrySetDefaultObject` (fail-fast OBJECT_NOT_FOUND
   if unresolved). `.cpp`-only (BlueprintGraphHandlers.cpp), live-coded + verified: `SaveGameClass` now reads back
   `defaultObjectPath=/Game/.../BP_ShinSaveGame_C` and the BP compiles clean.
-- 📝 **`create_node` CallFunction resolves by C++ UFUNCTION name, not the editor DisplayName/ScriptName.** "Get Actor Transform" in the
-  palette is `AActor::GetTransform()` (DisplayName="Get Actor Transform", ScriptName="GetActorTransform") — but `memberName` must be the
-  C++ name `GetTransform`; both `GetActorTransform` and the K2-prefixed `K2_GetActorTransform` return FUNCTION_NOT_FOUND. (K2_GetActorLocation
-  *does* exist by that name — it's per-function.) Consider a ScriptName/DisplayName-metadata fallback in the resolver so callers can use the
-  name they see in the editor. Minor today (workaround = know the C++ name), but it's a recurring friction point for graph authoring.
-- 📝 **`connect_pins` param names are inconsistent with siblings.** It reads `fromNodeId`/`fromPinName`/`toNodeId`/`toPinName`; most other
-  node actions take `sourceNodeId`/`targetNodeId` (+ material `connect_nodes` takes `fromPin`/`toPin`). Passing the sibling names → silent
-  NODE_NOT_FOUND (empty ids). Consider accepting `sourceNodeId`/`sourcePin`/`targetNodeId`/`targetPin` as aliases.
+- ✅ **RESOLVED 2026-06-21 (`707735d`): kept C++ UFUNCTION name as the canonical identifier; improved the not-found error instead of adding a DisplayName fallback.** Decided against a ScriptName/DisplayName-metadata fallback — DisplayNames are localizable and collision-prone, so a fuzzy fallback could silently resolve the wrong overload. `FUNCTION_NOT_FOUND` now states the expected identifier (the C++ name) and that `memberClass` disambiguates the owning class.
+- ✅ **RESOLVED 2026-06-21 (`707735d`): `connect_pins` standardized to `sourceNodeId`/`sourcePinName`/`targetNodeId`/`targetPinName`** (handler + schema); Niagara `connect_pins` aligned the same way (`0014826`); material connect already read source/target and its 4 dead `from`/`to` schema params were removed. No aliases (Aaron's call) — old `from`/`to` names cleanly return NODE_NOT_FOUND, verified live. (BT `parentNodeId`/`childNodeId` + state `fromState`/`toState` left as-is — domain-correct, not pin connections.)
 - 📝 **Incremental wiring trips the post-op compile-error guard.** Connecting exec before data leaves the graph transiently invalid (e.g.
   "Object is undetermined" until the cast's input lands), and the guard surfaces those mid-sequence compiles as ENGINE_ERROR even though each
   link is made and the final graph compiles clean. Benign (wire data pins before exec to avoid, or ignore until the final compile), but noisy.
@@ -906,7 +900,7 @@ bake-rebuild done so the on-disk DLL matches source.
   class now covered centrally by `McpSafeAssetSave` compile-on-save, 2026-06-18f]; ✅ InputHandlers
   `add_mapping`/`remove_mapping` `Context->Modify()` ADDED 2026-06-20 (baked) — now matches
   set_input_modifier; MapKey/UnmapKey dirty internally but the explicit Modify aligns the inconsistency.
-- `manage_audio` `create_sound_class`/`create_sound_mix` hang (needs in-editor debugger — Aaron-gated).
+- ✅ `manage_audio` `create_sound_class`/`create_sound_mix` hang — RESOLVED 2026-06-21 (`0e022d6`): not a modal — a dispatch misroute + an inverted skeleton gate. See the detailed entry below.
 - Widget-authoring params undeclared in the `manage_blueprint` schema (doc-only); no runtime component-function call.
 
 ### 2026-06-18e — Adversarial review of the cleanup change set (cd3c711..HEAD)
@@ -1640,7 +1634,15 @@ Verified live (live-coding): renamed options' `VolumeSlider` row → `Master_Vol
 `desiredFocusUpdated:true`, CDO `DesiredFocusWidget` followed automatically, clean compile+save, no
 ensures, templates kept their instance values, pause spec still 4/4 green.
 
-### [ ] `manage_audio` create_sound_class / create_sound_mix HANG the bridge (300s) — audio-mixing-asset creation modal
+### [x] `manage_audio` create_sound_class / create_sound_mix HANG the bridge (300s) — RESOLVED 2026-06-21 (`0e022d6`)
+**RESOLVED — the "Slate modal" theory below was WRONG.** A minidump + cdb (`~* kn`) showed the GameThread idle with NO handler
+on any stack — there was no modal. Two real root causes: (1) the `manage_audio` registered lambda passed the TOOL NAME
+(`"manage_audio"`) to `HandleAudioAction`, whose gate matches the sub-action prefix (`create_sound_`), so the request never routed
+and parked; (2) `HandleManageSkeleton`'s gate was inverted (`return true` for non-skeleton actions), so it swallowed the unrouted
+request with no response until the 300s watchdog. The legacy dispatch if-chain that let an inverted gate matter at all was then
+deleted (`e0c1bcb`). create_sound_class/mix now return in ~0.3s; diagnostics added so a future hang reports the active modal +
+slate-active state instead of guessing. Original (incorrect) modal analysis kept below for the record.
+
 Found 2026-06-07 during the audio sweep. `create_sound_class` (and `create_sound_mix`) never return —
 the parked tools/call times out at 300s. The GameThread keeps ticking (other tools respond, CleanupStaleRequests
 fires), i.e. a **Slate modal** is up and the handler is blocked in its nested pump waiting for a dismissal
