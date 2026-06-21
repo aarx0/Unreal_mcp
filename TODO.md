@@ -1014,21 +1014,24 @@ hundreds of sites, a different risk class than dead-code deletion. Do deliberate
   and collapse each to one line. Leave the genuine multi-branch routing lambdas alone (judgement per-site → why not auto-applied).
 - [x] **DONE bd1568f (89 sites, -790 lines; helper named ResolveBlueprintOrError; 27 GeneratedClass/sanitized-path/etc. sites correctly skipped). (med) load-blueprint prologue** repeated ~90× — `ResolveBlueprintParamOrError(Payload, RequestId, Socket, field="blueprintPath")`
   returning the BP or sending the error + nullptr (handler: `if (!BP) return true;`). Collapses ~10 lines → 2 per site.
-- [~] **(med) compile/save tail → `McpFinalizeBlueprint`. HELPER BUILT + applied to Inventory (3fbec2a); broader sweep
-  PAUSED for a decision — 2026-06-20.** Added `McpFinalizeBlueprint(BP, bStructural, bSave=true)` to
-  `McpAutomationBridgeHelpers.h` (mark → compile → save) and collapsed all 19 InventoryHandlers finalize tails into it.
-  Verified the compile-before-save is SAFE even at the compile-then-write-CDO sites (live test: `configure_inventory_slots`
-  → CDO `MaxSlots` persists through the added compile because UE's reinstancer copies old-CDO→new-CDO); fixes the stale-
-  generated-class-on-disk case for pure structural adds. **Findings that changed the calculus for the remaining 18 files:**
-  (1) the two correctness bugs this entry implied are ALREADY FIXED in prior work — CommonUI mutations now save
-  (CommonUIHandlers L202, with a comment) and `create_widget_blueprint` saves (WidgetAuthoringHandlers L1617) — so the
-  remaining sweep is **pure DRY, no live bug**. (2) The finalize idiom is **heterogeneous** per file (Mark+MarkPackageDirty
-  / Mark+rawSave / Mark+Compile+throttledSave / Mark+Compile+rawSave / Mark+conditionalSave) — the strict Inventory regex
-  (`scripts/apply-finalize.ps1`) matched 0 of the other 18 files, so there's no single safe transform. (3) `McpFinalizeBlueprint`
-  uses the throttled save, so applying it to the many raw `McpSafeAssetSave` sites is a **raw→throttled behavior change** at
-  ~80 varied sites. **Recommendation:** don't mass-apply autonomously (low value now / real per-site regression surface);
-  adopt `McpFinalizeBlueprint` opportunistically as each file is touched. Open question for the full sweep: should the helper
-  save raw or throttled? (Inventory sites were raw; helper currently throttles.)
+- [x] **(med) compile/save tail → `McpFinalizeBlueprint`. ✅ DONE 2026-06-20 (Aaron greenlit the full sweep).**
+  Added `McpFinalizeBlueprint(BP, bStructural, bSave=true)` to `McpAutomationBridgeHelpers.h` (mark → compile → save,
+  throttled save) and consolidated **135 finalize tails across 12 handler files** into it. Verified the compile-before-save
+  is SAFE even at the compile-then-write-CDO sites (live test: `configure_inventory_slots` → CDO `MaxSlots` persists
+  through the added compile, because UE's reinstancer copies old-CDO→new-CDO); fixes the stale-generated-class-on-disk
+  case for pure structural adds. Applied via four strict, backref-var-matched regex passes (no handler logic ever touched —
+  any real code line between mark and save breaks the match), each git-diff-reviewed + Live-Coding-compiled, plus a final
+  `-NoUBA` rebuild (warnings-as-errors, clean) + runtime smoke (add_variable → var persists). Commits 3fbec2a (Inventory 19),
+  4304f57 (92 adjacent), a01758c (CommonUI 5 + 14 comment/blank-separated), 6fcbf30 (5 redundant-MarkPackageDirty + 2 orphan-
+  comment trims). Save mode kept **throttled** (codebase's preferred wrapper; dirty-flag backstops the skip-as-success).
+  Scripts: `apply-finalize{,2,3,4}.ps1`.
+  **Deliberately LEFT (not mechanically collapsible — collapsing would lose info or reorder logic):**
+  - ~13 save-tails with a separate `bCompiled = McpSafeCompileBlueprint(...)` capture used in the response (the helper
+    returns only the save bool), a runtime-conditional mark (`if/else` choosing structural vs not, e.g. BlueprintGraph
+    ~L1873), or real code between mark and save. These already mark+compile+save correctly — just not via the helper.
+  - ~70 **mark-only** sites (mark dirty, no save — Character/AnimAuthoring/GAS/WidgetAuth) that defer persistence to the
+    save-on-close prompt. These aren't finalize-with-save tails; "should they save eagerly?" is a SEPARATE behaviour
+    question, not part of this DRY consolidation.
 - [ ] **(med, SKIPPABLE) success tail** (`AddVerification` + `SendAutomationResponse(true)`, ~471 sites) →
   `SendSuccessWithVerification(...)`. Pure cosmetic dedup, largest churn, no correctness component — left unless explicitly wanted.
 - [x] **DONE d57ffb5 (28 macros removed, 1,184 call sites renamed). per-file JSON-getter alias macros** — dropped
