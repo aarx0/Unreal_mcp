@@ -984,6 +984,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   MCP_REGISTER_HANDLER("spawn_niagara_actor", HandleSpawnNiagaraActor);
   MCP_REGISTER_HANDLER("modify_niagara_parameter", HandleModifyNiagaraParameter);
   MCP_REGISTER_HANDLER("manage_niagara_authoring", HandleManageNiagaraAuthoringAction);
+  MCP_REGISTER_HANDLER("manage_niagara_graph", HandleNiagaraGraphAction);
 
   // Animation
   MCP_REGISTER_HANDLER("create_anim_blueprint", HandleCreateAnimBlueprint);
@@ -1092,6 +1093,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   MCP_REGISTER_HANDLER("manage_input", HandleInputAction);
 
   MCP_REGISTER_HANDLER("control_actor", HandleControlActorAction);
+  MCP_REGISTER_HANDLER("control_editor", HandleControlEditorAction);
 
   MCP_REGISTER_HANDLER("manage_level", HandleLevelAction);
 
@@ -1131,6 +1133,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   MCP_REGISTER_HANDLER("get_source_control_state", HandleGetSourceControlState);
 
   MCP_REGISTER_HANDLER("manage_material_authoring", HandleManageMaterialAuthoringAction);
+  MCP_REGISTER_HANDLER("manage_material_graph", HandleMaterialGraphAction);
 
   // === Consolidated and legacy action namespace registrations ===
   RegisterHandler(TEXT("manage_blueprint"),
@@ -1209,6 +1212,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   MCP_REGISTER_HANDLER("manage_splines", HandleManageSplinesAction);
 
   MCP_REGISTER_HANDLER("manage_pipeline", HandlePipelineAction);
+  MCP_REGISTER_HANDLER("manage_tests", HandleTestAction);
 
   MCP_REGISTER_HANDLER("manage_behavior_tree", HandleBehaviorTreeAction);
 
@@ -1269,6 +1273,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
 
   MCP_REGISTER_HANDLER("manage_debug", HandleDebugAction);
   MCP_REGISTER_HANDLER("spawn_category", HandleDebugAction);
+  MCP_REGISTER_HANDLER("manage_logs", HandleLogAction);
+  MCP_REGISTER_HANDLER("manage_insights", HandleInsightsAction);
 
   // Phase 21: Game Framework
   MCP_REGISTER_HANDLER("manage_game_framework", HandleManageGameFrameworkAction);
