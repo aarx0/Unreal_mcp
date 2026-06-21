@@ -1014,9 +1014,23 @@ hundreds of sites, a different risk class than dead-code deletion. Do deliberate
   and collapse each to one line. Leave the genuine multi-branch routing lambdas alone (judgement per-site → why not auto-applied).
 - [x] **DONE bd1568f (89 sites, -790 lines; helper named ResolveBlueprintOrError; 27 GeneratedClass/sanitized-path/etc. sites correctly skipped). (med) load-blueprint prologue** repeated ~90× — `ResolveBlueprintParamOrError(Payload, RequestId, Socket, field="blueprintPath")`
   returning the BP or sending the error + nullptr (handler: `if (!BP) return true;`). Collapses ~10 lines → 2 per site.
-- [ ] **(med) compile/save tail** (`Mark…Modified` + `McpSafeCompileBlueprint` + `McpSafeAssetSave`) hand-written everywhere with
-  INCONSISTENT mark/compile/save choices (a correctness risk) → one `McpFinalizeBlueprint(BP, bStructural, bSave)` in McpSafeOperations.h.
-- [ ] **(med) success tail** (`AddVerification` + `SendAutomationResponse(true)`) → `SendSuccessWithVerification(Socket, RequestId, msg, Result, VerifyObj)`.
+- [~] **(med) compile/save tail → `McpFinalizeBlueprint`. HELPER BUILT + applied to Inventory (3fbec2a); broader sweep
+  PAUSED for a decision — 2026-06-20.** Added `McpFinalizeBlueprint(BP, bStructural, bSave=true)` to
+  `McpAutomationBridgeHelpers.h` (mark → compile → save) and collapsed all 19 InventoryHandlers finalize tails into it.
+  Verified the compile-before-save is SAFE even at the compile-then-write-CDO sites (live test: `configure_inventory_slots`
+  → CDO `MaxSlots` persists through the added compile because UE's reinstancer copies old-CDO→new-CDO); fixes the stale-
+  generated-class-on-disk case for pure structural adds. **Findings that changed the calculus for the remaining 18 files:**
+  (1) the two correctness bugs this entry implied are ALREADY FIXED in prior work — CommonUI mutations now save
+  (CommonUIHandlers L202, with a comment) and `create_widget_blueprint` saves (WidgetAuthoringHandlers L1617) — so the
+  remaining sweep is **pure DRY, no live bug**. (2) The finalize idiom is **heterogeneous** per file (Mark+MarkPackageDirty
+  / Mark+rawSave / Mark+Compile+throttledSave / Mark+Compile+rawSave / Mark+conditionalSave) — the strict Inventory regex
+  (`scripts/apply-finalize.ps1`) matched 0 of the other 18 files, so there's no single safe transform. (3) `McpFinalizeBlueprint`
+  uses the throttled save, so applying it to the many raw `McpSafeAssetSave` sites is a **raw→throttled behavior change** at
+  ~80 varied sites. **Recommendation:** don't mass-apply autonomously (low value now / real per-site regression surface);
+  adopt `McpFinalizeBlueprint` opportunistically as each file is touched. Open question for the full sweep: should the helper
+  save raw or throttled? (Inventory sites were raw; helper currently throttles.)
+- [ ] **(med, SKIPPABLE) success tail** (`AddVerification` + `SendAutomationResponse(true)`, ~471 sites) →
+  `SendSuccessWithVerification(...)`. Pure cosmetic dedup, largest churn, no correctness component — left unless explicitly wanted.
 - [x] **DONE d57ffb5 (28 macros removed, 1,184 call sites renamed). per-file JSON-getter alias macros** — dropped
   the per-file `GetStringFieldGAS`/`…Combat`/`…AI`… aliases (all pure 1:1 renames) and call the shared
   `GetJsonStringField`/`Number`/`Bool`/`IntField` directly. (Aaron: the `#define` indirection obscured that they were all the same fn.)
