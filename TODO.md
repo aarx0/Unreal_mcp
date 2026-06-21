@@ -972,17 +972,26 @@ wielder; `GetCurrentAttack` combo off-by-one; Enemy `DirectionalHitReact` always
   `create_blend_space` (2D caller, no pre-check of its own) → `ASSET_CREATION_FAILED: Asset already exists: ...`
   instantly, **no modal/hang** — proving the helper guard fires and the bridge stays responsive.
 
-**Function-split (the 🟡 widget-monolith) — PLAN, do by hand in an editor (cut-paste is trivial there; via my
-exact-match edits it's error-prone + high-blast-radius unattended).** `HandleManageWidgetAuthoringAction`
-(~1050–7300) is one giant `if (SubAction.Equals(...))` chain (~90 subactions, order-independent — unique names).
-Cleanest split: extract contiguous spans into member functions `bool HandleWidgetAuthoringPartN(RequestId, Action,
-Payload, RequestingSocket, SubAction, ResultJson)` (member, so `SendAutomation*` stay unqualified; declare N in the
-subsystem header → one full rebuild), each ending `return false;`; main calls them in order, first true wins, final
-unknown-action error after. Natural groups by line: creation/meta (1050–1356), layout panels (1357–1404, 1666–1959,
-+ safe_zone/spacer/switcher 6297–6470), leaf widgets (1405–1576, 1960–2095), slot setters (2096–2889, set_font/margin
-6471–6615), bindings (2890–3621, 4597), animations (3622–3892, 6658–6863), templates/composites (3893–4332, 4835–5671,
-6971–7300), tree ops (4333–6293). Behavior-preserving (no reordering). ~1,100 lines already removed by the C dedup;
-this is purely structural.
+**Function-split (the 🟡 widget-monolith) — ✅ DONE 2026-06-20 (056b292, 978ebd5, 1e8b486).**
+`HandleManageWidgetAuthoringAction` was one 6,278-line `if (SubAction.Equals(...))` chain (86 blocks / 92 subactions,
+order-independent — unique names). Split by SUBACTION FAMILY into 10 private member sub-handlers
+(`HandleWidgetAuthoring_Lifecycle/Containers/Leaves/Slot/Binding/Animation/Style/Tree/Recipes/Misc`); the dispatcher is
+now 38 lines (prologue → 10 family calls, first-true-wins → terminal). Member fns (so `SendAutomation*` stay
+unqualified; 10 decls in the subsystem header → one full rebuild); each family fn gets a local `ResultJson` preamble
+only if its blocks use it. The "do by hand, exact-match edits are error-prone" worry was sidestepped by a byte-exact
+RELOCATION SCRIPT (`scripts/move-widget-family.ps1`) that moves whole `if{}` blocks by indentation markers and
+self-aborts unless the code-line multiset is preserved; `scripts/clean-widget-dispatcher.ps1` then stripped the unused
+dispatcher-scope `ResultJson` + 196 lines of orphaned section-divider comments. Verified: code-line multiset identical
+before/after the whole reorg (only the 8 needed preambles added, ZERO code lines changed) + clean -NoUBA rebuild
+(warnings-as-errors) + live smoke across 7 families. Pattern is reusable for any other `if`-chain monolith.
+- 📝 **Found in passing — 19 widget subactions are HANDLED but NOT in the `WidgetAuthoring()` routing list**
+  (`McpConsolidatedActionRouting.h`), so they're unreachable via `manage_blueprint` (the dispatch returns
+  "Unknown blueprint action" before reaching the handler): `add_quest_tracker, add_safe_zone, add_spacer,
+  add_widget_component, add_widget_switcher, apply_style_to_widget, bind_localized_text, create_credits_screen,
+  create_shop_ui, create_widget_style, delete_animation, get_animation_info, set_animation_speed, set_font,
+  set_localization_key, set_margin, set_widget_binding, show_widget, create_widget`. Pre-existing (the routing list
+  lagged the handler as it grew); the split didn't touch routing. Fix = add the 19 names to `WidgetAuthoring()`
+  (cheap), but each newly-exposed action should get a smoke before advertising it — so do deliberately, not blind.
 
 **Simplification sweep (3 classes, adversarially verified — each removal independently confirmed zero callers across
 the module + routing tables, reflection/string-dispatch ruled out). DONE + built + committed (943912c): ~1,880 lines deleted.**
@@ -1123,8 +1132,10 @@ return success with only an advisory `instruction` string. (Several also needles
 - 🔴 ~28 `add_*` handlers are copies of one ~50-line skeleton (load BP → ConstructWidget → RegisterWidgetGuid
   → SafeAddWidgetToTree → MarkModified → Validate → respond); ~1,400+ mechanical lines incl. CommonUIHandlers.
   Extract `ConstructAndAddWidget(WidgetBP, UClass*, slot, parentSlot, OutError)` into WidgetAuthoringHelpers.
-- 🟡 `HandleManageWidgetAuthoringAction` is ONE ~7,350-line function (872-8223), `#pragma warning(disable:4883)`
-  to silence too-large. Split into per-family members / a `TMap<FString, handler>` after the helpers land.
+- ✅ DONE 2026-06-20 (056b292/978ebd5/1e8b486): `HandleManageWidgetAuthoringAction` split into 10 per-family member
+  sub-handlers (dispatcher now 38 lines). See the "Function-split" entry above. (Recipes is still ~2.5k lines — could
+  sub-split menus/HUD/game-UI later if it bites; the `#pragma warning(disable:4883)` likely now belongs on that fn,
+  not the dispatcher.)
 - 🟡 Hard-coded error literals duplicated (≈"Widget blueprint not found"×81, "Missing…widgetPath"×48) with
   divergence (WIDGET_NOT_FOUND vs NOT_FOUND for same msg). Fold into the resolve/respond helpers.
 - 🟡 Response-tail (success+slotName+AddVerification+SendAutomationResponse) hand-rolled 87×; `success` set
