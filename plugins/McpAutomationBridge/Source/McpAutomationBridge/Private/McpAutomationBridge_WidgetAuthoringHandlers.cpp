@@ -2645,9 +2645,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
         }
 
         CanvasSlot->SetAlignment(Alignment);
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        WidgetBP->MarkPackageDirty();
-        const bool bAlignSaved = McpSafeAssetSave(WidgetBP);
+        const bool bAlignSaved = McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetNumberField(TEXT("alignmentX"), Alignment.X);
@@ -2720,9 +2718,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
         }
 
         CanvasSlot->SetPosition(Position);
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        WidgetBP->MarkPackageDirty();
-        const bool bPosSaved = McpSafeAssetSave(WidgetBP);
+        const bool bPosSaved = McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetNumberField(TEXT("positionX"), Position.X);
@@ -2802,9 +2798,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
             }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        WidgetBP->MarkPackageDirty();
-        const bool bSizeSaved = McpSafeAssetSave(WidgetBP);
+        const bool bSizeSaved = McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("sizedAs"), SizedAs);
@@ -2884,9 +2878,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
             return true;
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        WidgetBP->MarkPackageDirty();
-        const bool bPadSaved = McpSafeAssetSave(WidgetBP);
+        const bool bPadSaved = McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("paddedSlot"), PaddedSlot);

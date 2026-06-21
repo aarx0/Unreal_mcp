@@ -1426,7 +1426,6 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
       // Clean up the temporary function
       TempFunc->MarkAsGarbage();
 
-      // Mark blueprint as structurally modified, compile, and save
       McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
       // Report success

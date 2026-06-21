@@ -2088,9 +2088,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             SetBPVarDefaultValueAI(Blueprint, TeamVarName, FString::FromInt(TeamId));
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        Blueprint->MarkPackageDirty();
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
         Result->SetNumberField(TEXT("teamId"), TeamId);
         Result->SetBoolField(TEXT("appliedToGenericTeamAgent"), bAppliedToGenericTeamAgent);
         Result->SetBoolField(TEXT("storedBlueprintVariable"), bStoredBlueprintVariable);
@@ -2821,8 +2819,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         
         // Add to SCS
         SCS->AddNode(NewNode);
-        
-        // Mark for compile and save
+
         McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
         
         Result->SetStringField(TEXT("componentName"), ComponentName);
