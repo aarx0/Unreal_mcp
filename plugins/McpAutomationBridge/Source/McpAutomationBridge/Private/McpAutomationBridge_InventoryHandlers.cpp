@@ -421,11 +421,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       // Add MaxWeight float variable
       FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("MaxWeight"), FloatType);
 
-      FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-        if (GetPayloadBool(Payload, TEXT("save"), true)) {
-          McpSafeAssetSave(Blueprint);
-        }
+      McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("componentName"), ComponentName);
@@ -511,11 +507,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       bConfigured = true;
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetNumberField(TEXT("slotCount"), SlotCount);
@@ -616,11 +608,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     // (add_function). Report only what was actually added; do not list fake "(implement in Blueprint)"
     // entries that imply functions exist.
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetArrayField(TEXT("dispatchersAdded"), FunctionsAdded);
@@ -686,11 +674,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetArrayField(TEXT("eventsAdded"), EventsAdded);
@@ -774,11 +758,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("replicated"), bReplicated);
@@ -849,12 +829,8 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         }
       }
 
-      FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(NewBlueprint);
       FAssetRegistryModule::AssetCreated(NewBlueprint);
-
-      if (GetPayloadBool(Payload, TEXT("save"), true)) {
-        McpSafeAssetSave(NewBlueprint);
-      }
+      McpFinalizeBlueprint(NewBlueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("pickupPath"), Package->GetName());
@@ -945,11 +921,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("pickupPath"), PickupPath);
@@ -1040,11 +1012,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("pickupPath"), PickupPath);
@@ -1147,11 +1115,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("pickupPath"), PickupPath);
@@ -1242,11 +1206,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
           FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("SlotNames"), NameArrayType);
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-        if (GetPayloadBool(Payload, TEXT("save"), true)) {
-          McpSafeAssetSave(Blueprint);
-        }
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("componentName"), ComponentName);
@@ -1346,11 +1306,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("EquippedItems"), SoftObjectArrayType);
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1462,11 +1418,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("statModifiersConfigured"), GetPayloadBool(Payload, TEXT("statModifiers"), true));
@@ -1569,11 +1521,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     // EquipItem/UnequipItem/etc. UFunctions — that is a separate step (add_function). Report only what was
     // actually added; do not list fake "(implement in Blueprint)" entries that imply functions exist.
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetArrayField(TEXT("dispatchersAdded"), FunctionsAdded);
@@ -1679,11 +1627,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("attachToSocket"), bAttachToSocket);
@@ -1947,11 +1891,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("actorPath"), ActorPath);
@@ -2195,12 +2135,8 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         }
       }
 
-      FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(StationBlueprint);
       FAssetRegistryModule::AssetCreated(StationBlueprint);
-
-        if (GetPayloadBool(Payload, TEXT("save"), true)) {
-          McpSafeAssetSave(StationBlueprint);
-        }
+      McpFinalizeBlueprint(StationBlueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("stationPath"), Package->GetName());
@@ -2310,11 +2246,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
           }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-        if (GetPayloadBool(Payload, TEXT("save"), true)) {
-          McpSafeAssetSave(Blueprint);
-        }
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("componentName"), ComponentName);
@@ -2778,11 +2710,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -2896,11 +2824,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("stationPath"), StationPath);

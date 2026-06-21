@@ -58,6 +58,7 @@
 #endif
 #include "Engine/Blueprint.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/BlueprintEditorUtils.h"  // FBlueprintEditorUtils (McpFinalizeBlueprint)
 #include "Engine/World.h"
 #include "Engine/LevelStreaming.h"
 #include "GameFramework/WorldSettings.h"
@@ -1485,6 +1486,31 @@ SaveLoadedAssetThrottled(UObject *Asset, double ThrottleSecondsOverride = -1.0,
            TEXT("SaveLoadedAssetThrottled: failed to save '%s'"), *Key);
   }
   return bSaved;
+}
+
+// Finalize a Blueprint after editing it: mark dirty, compile, then optionally
+// save. The mark/compile/save tail was hand-rolled across ~100 sites with
+// inconsistent ordering and omissions — notably saving BEFORE compiling (which
+// persists a stale generated class/CDO) or never saving at all. This is the one
+// correct tail: mark -> compile -> save, so the .uasset on disk reflects the edit.
+//   bStructural : true for changes to the Blueprint's shape (variables,
+//                 functions, graphs, components, parent class) ->
+//                 MarkBlueprintAsStructurallyModified; false for value-only
+//                 edits (e.g. a CDO default) -> MarkBlueprintAsModified.
+//   bSave       : persist the .uasset (throttled). Pass false when a later step
+//                 in the same handler will do the save.
+// Returns true if the (optional) save succeeded or was skipped; false only on a
+// null Blueprint or a failed save.
+static inline bool McpFinalizeBlueprint(UBlueprint *Blueprint, bool bStructural,
+                                        bool bSave = true) {
+  if (!Blueprint)
+    return false;
+  if (bStructural)
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+  else
+    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+  McpSafeCompileBlueprint(Blueprint);
+  return bSave ? SaveLoadedAssetThrottled(Blueprint) : true;
 }
 
 // Force a synchronous scan of a specific package or folder path to ensure
