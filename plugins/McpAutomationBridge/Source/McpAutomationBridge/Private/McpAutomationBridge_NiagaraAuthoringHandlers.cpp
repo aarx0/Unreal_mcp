@@ -160,7 +160,6 @@
 #endif
 
 // Use consolidated JSON helpers from McpAutomationBridgeHelpers.h
-// Aliases for backward compatibility with existing code in this file
 
 
 // Helper to get FVector from JSON object

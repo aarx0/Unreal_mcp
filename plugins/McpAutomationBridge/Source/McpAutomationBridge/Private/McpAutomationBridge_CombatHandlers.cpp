@@ -84,7 +84,6 @@ class UBoxComponent;
 #endif
 
 // Use consolidated JSON helpers from McpAutomationBridgeHelpers.h
-// Aliases for backward compatibility with existing code in this file
 
 #if WITH_EDITOR
 // Helper to create Actor blueprint

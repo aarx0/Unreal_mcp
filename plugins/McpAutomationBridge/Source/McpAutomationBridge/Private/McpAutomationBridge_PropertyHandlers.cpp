@@ -320,7 +320,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       // bHidden (visibility) — skip runtime setter for CDOs, let generic path handle it
       if (!bIsClassDefaultObject && PropertyName.Equals(TEXT("bHidden"), ESearchCase::IgnoreCase))
       {
-          bool bHidden = McpHandlerUtils::GetOptionalBool(Payload, TEXT("value"), false);
+          bool bHidden = GetJsonBoolField(Payload, TEXT("value"), false);
           if (ValueField->Type == EJson::Boolean)
               bHidden = ValueField->AsBool();
           else if (ValueField->Type == EJson::Number)
@@ -379,7 +379,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
   }
 
   // --- Mark Dirty (optional) ---
-  const bool bMarkDirty = McpHandlerUtils::GetOptionalBool(Payload, TEXT("markDirty"), true);
+  const bool bMarkDirty = GetJsonBoolField(Payload, TEXT("markDirty"), true);
   if (bMarkDirty)
   {
       RootObject->MarkPackageDirty();

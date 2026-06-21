@@ -172,7 +172,6 @@
 // - Security validation via IsValidAssetPath() for all blueprint paths.
 // - Blueprint variable defaults use SetBPVarDefaultValue() with Blueprint metadata and CDO reflection.
 // - McpSafeAssetSave() is used directly for UE 5.7+ compatibility.
-// - #define aliases (GetJsonStringField, etc.) for backward-compatible JSON helpers.
 // - AddBlueprintVariableChar in anonymous namespace to avoid Unity build collisions.
 //
 // Copyright (c) 2024 MCP Automation Bridge Contributors
@@ -244,7 +243,6 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpCharacterHandlers, Log, All);
 // JSON Helper Aliases
 // =============================================================================
 // Use consolidated JSON helpers from McpAutomationBridgeHelpers.h
-// Aliases for backward compatibility with existing code in this file
 
 // =============================================================================
 // Section 0: Helper Functions

@@ -127,69 +127,6 @@ namespace McpHandlerUtils
         return true;
     }
 
-    /**
-     * Extract an optional string field with default value.
-     */
-    inline FString GetOptionalString(
-        const TSharedPtr<FJsonObject>& Payload,
-        const FString& FieldName,
-        const FString& DefaultValue = FString())
-    {
-        FString Value;
-        if (Payload.IsValid() && Payload->TryGetStringField(FieldName, Value))
-        {
-            return Value;
-        }
-        return DefaultValue;
-    }
-
-    /**
-     * Extract an optional integer field with default value.
-     */
-    inline int32 GetOptionalInt(
-        const TSharedPtr<FJsonObject>& Payload,
-        const FString& FieldName,
-        int32 DefaultValue = 0)
-    {
-        int32 Value = DefaultValue;
-        if (Payload.IsValid())
-        {
-            Payload->TryGetNumberField(FieldName, Value);
-        }
-        return Value;
-    }
-
-    /**
-     * Extract an optional float/double field with default value.
-     */
-    inline double GetOptionalFloat(
-        const TSharedPtr<FJsonObject>& Payload,
-        const FString& FieldName,
-        double DefaultValue = 0.0)
-    {
-        double Value = DefaultValue;
-        if (Payload.IsValid())
-        {
-            Payload->TryGetNumberField(FieldName, Value);
-        }
-        return Value;
-    }
-
-    /**
-     * Extract an optional boolean field with default value.
-     */
-    inline bool GetOptionalBool(
-        const TSharedPtr<FJsonObject>& Payload,
-        const FString& FieldName,
-        bool DefaultValue = false)
-    {
-        bool Value = DefaultValue;
-        if (Payload.IsValid())
-        {
-            Payload->TryGetBoolField(FieldName, Value);
-        }
-        return Value;
-    }
 
     // =========================================================================
     // JSON Value Conversion

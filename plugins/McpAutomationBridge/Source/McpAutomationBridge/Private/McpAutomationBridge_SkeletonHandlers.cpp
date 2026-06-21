@@ -105,12 +105,10 @@
 // =============================================================================
 
 /* DEPRECATED: JSON field macros are deprecated. Use McpHandlerUtils helpers instead:
- * - McpHandlerUtils::TryGetRequiredString() / GetOptionalString()
+ * - McpHandlerUtils::TryGetRequiredString()
  * - McpHandlerUtils::JsonToVector() / JsonToRotator()
  * - McpHandlerUtils::VectorToJson() / RotatorToJson()
  */
-#define GetJsonIntField(JsonObj, FieldName, DefaultValue) \
-    (JsonObj.IsValid() && JsonObj->HasField(FieldName) ? static_cast<int32>(JsonObj->GetNumberField(FieldName)) : DefaultValue)
 
 // =============================================================================
 // Conditional Includes (version-dependent)

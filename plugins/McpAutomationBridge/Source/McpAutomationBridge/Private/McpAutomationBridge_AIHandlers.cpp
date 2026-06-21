@@ -228,7 +228,6 @@
 DEFINE_LOG_CATEGORY_STATIC(LogMcpAIHandlers, Log, All);
 
 // Use consolidated JSON helpers from McpAutomationBridgeHelpers.h
-// Aliases for backward compatibility with existing code in this file
 
 // =============================================================================
 // Runtime Module Check Helpers

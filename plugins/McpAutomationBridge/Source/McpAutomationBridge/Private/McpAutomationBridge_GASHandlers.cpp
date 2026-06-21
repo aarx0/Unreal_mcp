@@ -117,7 +117,6 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpGASHandlers, Log, All);
 #endif
 
 // Use consolidated JSON helpers from McpAutomationBridgeHelpers.h
-// Aliases for backward compatibility with existing code in this file
 
 // Helper to save package
 // Note: This helper is used for NEW assets created with CreatePackage + factory.
