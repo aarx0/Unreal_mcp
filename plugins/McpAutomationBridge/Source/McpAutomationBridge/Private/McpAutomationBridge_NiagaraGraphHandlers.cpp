@@ -235,10 +235,10 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraGraphAction(
         FString ToNodeId, ToPinName;
         const bool bAutoConnect = GetJsonBoolField(Payload, TEXT("autoConnect"), false);
 
-        if (!Payload->TryGetStringField(TEXT("fromNode"), FromNodeId) ||
-            !Payload->TryGetStringField(TEXT("fromPin"), FromPinName) ||
-            !Payload->TryGetStringField(TEXT("toNode"), ToNodeId) ||
-            !Payload->TryGetStringField(TEXT("toPin"), ToPinName))
+        if (!Payload->TryGetStringField(TEXT("sourceNodeId"), FromNodeId) ||
+            !Payload->TryGetStringField(TEXT("sourcePinName"), FromPinName) ||
+            !Payload->TryGetStringField(TEXT("targetNodeId"), ToNodeId) ||
+            !Payload->TryGetStringField(TEXT("targetPinName"), ToPinName))
         {
             if (bAutoConnect)
             {
@@ -275,10 +275,10 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraGraphAction(
                                 {
                                     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
                                     McpHandlerUtils::AddVerification(Result, System);
-                                    Result->SetStringField(TEXT("fromNode"), FromCandidate->NodeGuid.ToString());
-                                    Result->SetStringField(TEXT("fromPin"), FromCandidatePin->PinName.ToString());
-                                    Result->SetStringField(TEXT("toNode"), ToCandidate->NodeGuid.ToString());
-                                    Result->SetStringField(TEXT("toPin"), ToCandidatePin->PinName.ToString());
+                                    Result->SetStringField(TEXT("sourceNodeId"), FromCandidate->NodeGuid.ToString());
+                                    Result->SetStringField(TEXT("sourcePinName"), FromCandidatePin->PinName.ToString());
+                                    Result->SetStringField(TEXT("targetNodeId"), ToCandidate->NodeGuid.ToString());
+                                    Result->SetStringField(TEXT("targetPinName"), ToCandidatePin->PinName.ToString());
                                     Result->SetBoolField(TEXT("connected"), true);
                                     Result->SetBoolField(TEXT("autoConnected"), true);
 
@@ -374,10 +374,10 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraGraphAction(
         {
             TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
             McpHandlerUtils::AddVerification(Result, System);
-            Result->SetStringField(TEXT("fromNode"), FromNodeId);
-            Result->SetStringField(TEXT("fromPin"), FromPinName);
-            Result->SetStringField(TEXT("toNode"), ToNodeId);
-            Result->SetStringField(TEXT("toPin"), ToPinName);
+            Result->SetStringField(TEXT("sourceNodeId"), FromNodeId);
+            Result->SetStringField(TEXT("sourcePinName"), FromPinName);
+            Result->SetStringField(TEXT("targetNodeId"), ToNodeId);
+            Result->SetStringField(TEXT("targetPinName"), ToPinName);
             Result->SetBoolField(TEXT("connected"), true);
 
             SendAutomationResponse(RequestingSocket, RequestId, true, 

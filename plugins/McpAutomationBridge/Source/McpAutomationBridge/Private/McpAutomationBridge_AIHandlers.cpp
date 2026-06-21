@@ -1069,14 +1069,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
     }
 
     // -----------------------------------------------------------------------
-    // DEPRECATED simplistic BT node actions. add_composite_node / add_task_node /
-    // add_decorator / add_service NewObject a node but never wire it into the
-    // Behavior Tree graph, so the node is orphaned (get_ai_info shows btNodeCount
-    // unchanged) and is discarded when the asset is opened in the BT editor — a
-    // false success. Superseded by the graph-based authoring (add_node /
-    // connect_nodes / add_subnode), which builds real UBehaviorTreeGraphNodes that
-    // compile to RootNode. This guard returns guidance for all four; the legacy
-    // branches below no longer execute (TODO: delete the dead branches).
+    // add_composite_node / add_task_node / add_decorator / add_service NewObject a
+    // node but never wire it into the Behavior Tree graph, so the node is orphaned
+    // (get_ai_info shows btNodeCount unchanged) and is discarded when the asset is
+    // opened in the BT editor — a false success. Rejected here; use the graph-based
+    // authoring instead (add_node / connect_nodes / add_subnode), which builds real
+    // UBehaviorTreeGraphNodes that compile to RootNode.
     // -----------------------------------------------------------------------
     if (SubAction == TEXT("add_composite_node") || SubAction == TEXT("add_task_node") ||
         SubAction == TEXT("add_decorator") || SubAction == TEXT("add_service"))

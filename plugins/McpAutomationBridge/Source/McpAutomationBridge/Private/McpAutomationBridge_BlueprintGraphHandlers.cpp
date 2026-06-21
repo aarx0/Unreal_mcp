@@ -1142,7 +1142,10 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
         // Built‑in types
         if (CleanType.Equals(TEXT("float"), ESearchCase::IgnoreCase)) {
-          PinType.PinCategory = UEdGraphSchema_K2::PC_Float;
+          // PC_Float as the *category* compiles to an int (silent truncation);
+          // a float pin is PC_Real + the float sub-category (cf. the double case).
+          PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+          PinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
           return PinType;
         }
         if (CleanType.Equals(TEXT("double"), ESearchCase::IgnoreCase)) {
