@@ -730,8 +730,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ControllerBP);
-        McpSafeAssetSave(ControllerBP);
+        McpFinalizeBlueprint(ControllerBP, /*bStructural=*/true, /*bSave=*/true);
         Result->SetStringField(TEXT("controllerPath"), ControllerPath);
         Result->SetStringField(TEXT("behaviorTreePath"), BehaviorTreePath);
         McpHandlerUtils::AddVerification(Result, ControllerBP);
@@ -1876,8 +1875,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         SightConfig->SetMaxAge(5.0f);
         PerceptionComp->ConfigureSense(*SightConfig);
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
         Result->SetNumberField(TEXT("sightRadius"), SightRadius);
         Result->SetNumberField(TEXT("loseSightRadius"), LoseSightRadius);
         Result->SetNumberField(TEXT("peripheralVisionAngle"), PeripheralAngle);
@@ -1956,8 +1954,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         HearingConfig->SetMaxAge(5.0f);
         PerceptionComp->ConfigureSense(*HearingConfig);
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
         Result->SetNumberField(TEXT("hearingRange"), HearingRange);
         Result->SetStringField(TEXT("message"), TEXT("Hearing sense configured"));
         McpHandlerUtils::AddVerification(Result, Blueprint);
@@ -2030,8 +2027,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         DamageConfig->SetMaxAge(MaxAge);
         PerceptionComp->ConfigureSense(*DamageConfig);
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
         Result->SetNumberField(TEXT("maxAge"), MaxAge);
         Result->SetStringField(TEXT("message"), TEXT("Damage sense configured"));
         McpHandlerUtils::AddVerification(Result, Blueprint);
@@ -2828,8 +2824,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         SCS->AddNode(NewNode);
         
         // Mark for compile and save
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
         
         Result->SetStringField(TEXT("componentName"), ComponentName);
         Result->SetStringField(TEXT("blueprintPath"), NormalizedPath);
@@ -3410,8 +3405,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ControllerBP);
-        McpSafeAssetSave(ControllerBP);
+        McpFinalizeBlueprint(ControllerBP, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> PerceptionResult = McpHandlerUtils::CreateResultObject();
         PerceptionResult->SetStringField(TEXT("controllerPath"), ControllerPath);
@@ -3502,8 +3496,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> NavModResult = McpHandlerUtils::CreateResultObject();
         NavModResult->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -3647,8 +3640,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             PropertiesSet.Add(TEXT("JumpZVelocity"));
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> MovementResult = McpHandlerUtils::CreateResultObject();
         MovementResult->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -3858,8 +3850,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ControllerBP);
-        McpSafeAssetSave(ControllerBP);
+        McpFinalizeBlueprint(ControllerBP, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> PerceptionResult = McpHandlerUtils::CreateResultObject();
         PerceptionResult->SetStringField(TEXT("controllerPath"), ControllerPath);
@@ -3937,8 +3928,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             return true;
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(NavLinkBP);
-        McpSafeAssetSave(NavLinkBP);
+        McpFinalizeBlueprint(NavLinkBP, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> NavResult = McpHandlerUtils::CreateResultObject();
         NavResult->SetStringField(TEXT("blueprintPath"), SanitizedPath);
@@ -3972,8 +3962,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         PinType.PinSubCategoryObject = AActor::StaticClass();
         FBlueprintEditorUtils::AddMemberVariable(ControllerBP, TEXT("FocusActor"), PinType);
 
-        FBlueprintEditorUtils::MarkBlueprintAsModified(ControllerBP);
-        McpSafeAssetSave(ControllerBP);
+        McpFinalizeBlueprint(ControllerBP, /*bStructural=*/false, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> FocusResult = McpHandlerUtils::CreateResultObject();
         FocusResult->SetStringField(TEXT("controllerPath"), ControllerPath);
@@ -3992,8 +3981,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
 
         FBlueprintEditorUtils::RemoveMemberVariable(ControllerBP, TEXT("FocusActor"));
 
-        FBlueprintEditorUtils::MarkBlueprintAsModified(ControllerBP);
-        McpSafeAssetSave(ControllerBP);
+        McpFinalizeBlueprint(ControllerBP, /*bStructural=*/false, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> ClearResult = McpHandlerUtils::CreateResultObject();
         ClearResult->SetStringField(TEXT("controllerPath"), ControllerPath);
@@ -4214,8 +4202,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         PinType.PinSubCategoryObject = UBehaviorTree::StaticClass();
         FBlueprintEditorUtils::AddMemberVariable(ControllerBP, TEXT("AssignedBehaviorTree"), PinType);
 
-        FBlueprintEditorUtils::MarkBlueprintAsModified(ControllerBP);
-        McpSafeAssetSave(ControllerBP);
+        McpFinalizeBlueprint(ControllerBP, /*bStructural=*/false, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> RunResult = McpHandlerUtils::CreateResultObject();
         RunResult->SetStringField(TEXT("controllerPath"), ControllerPath);
@@ -4248,8 +4235,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         // Remove the BT variable to "stop" it
         FBlueprintEditorUtils::RemoveMemberVariable(ControllerBP, TEXT("AssignedBehaviorTree"));
 
-        FBlueprintEditorUtils::MarkBlueprintAsModified(ControllerBP);
-        McpSafeAssetSave(ControllerBP);
+        McpFinalizeBlueprint(ControllerBP, /*bStructural=*/false, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> StopResult = McpHandlerUtils::CreateResultObject();
         StopResult->SetStringField(TEXT("controllerPath"), ControllerPath);

@@ -512,8 +512,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 			return true;
 		}
 
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(StyleBP);
-		McpSafeAssetSave(StyleBP);
+		McpFinalizeBlueprint(StyleBP, /*bStructural=*/true, /*bSave=*/true);
 
 		TSharedPtr<FJsonObject> ResultJson = MakeShared<FJsonObject>();
 		ResultJson->SetBoolField(TEXT("success"), true);

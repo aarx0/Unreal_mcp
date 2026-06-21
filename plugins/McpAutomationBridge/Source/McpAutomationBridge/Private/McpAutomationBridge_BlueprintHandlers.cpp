@@ -2395,9 +2395,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
       AppliedKeys.Add(MetaKey.ToString());
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeCompileBlueprint(Blueprint);
-    const bool bSaved = SaveLoadedAssetThrottled(Blueprint);
+    const bool bSaved = McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
     const TSharedPtr<FJsonObject> Snapshot =
         FMcpAutomationBridge_BuildBlueprintSnapshot(Blueprint, RegistryKey);
@@ -2782,9 +2780,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     }
 
     Blueprint->NewVariables.Add(NewVar);
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeCompileBlueprint(Blueprint);
-    const bool bSaved = SaveLoadedAssetThrottled(Blueprint);
+    const bool bSaved = McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
     // Real test: Verify the variable actually exists in the compiled class or
     // blueprint
@@ -2972,9 +2968,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     const TSharedPtr<FJsonValue> CurrentValue =
         ExportPropertyToJsonValue(TargetContainer, Property);
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeCompileBlueprint(Blueprint);
-    const bool bSaved = SaveLoadedAssetThrottled(Blueprint);
+    const bool bSaved = McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("propertyName"), PropertyName);
@@ -3060,9 +3054,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     }
 
     FBlueprintEditorUtils::RemoveMemberVariable(Blueprint, TargetVarName);
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeCompileBlueprint(Blueprint);
-    const bool bSaved = SaveLoadedAssetThrottled(Blueprint);
+    const bool bSaved = McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
     UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
            TEXT("HandleBlueprintAction: variable '%s' removed from '%s' "
@@ -3153,9 +3145,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 
     FBlueprintEditorUtils::RenameMemberVariable(Blueprint, OldVarName,
                                                 FName(*NewName));
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeCompileBlueprint(Blueprint);
-    const bool bSaved = SaveLoadedAssetThrottled(Blueprint);
+    const bool bSaved = McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
     UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
            TEXT("HandleBlueprintAction: variable renamed from '%s' to '%s' in "
@@ -3448,9 +3438,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
-    McpSafeCompileBlueprint(BP);
-    const bool bSaved = SaveLoadedAssetThrottled(BP);
+    const bool bSaved = McpFinalizeBlueprint(BP, /*bStructural=*/true, /*bSave=*/true);
 
     // Update Registry (Persistent list of events)
     TSharedPtr<FJsonObject> Entry =
@@ -4019,9 +4007,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
           ParamName, ParamType, EGPD_Output);
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeCompileBlueprint(Blueprint);
-    const bool bSaved = McpSafeAssetSave(Blueprint);
+    const bool bSaved = McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
     TSharedPtr<FJsonObject> Entry =
         FMcpAutomationBridge_EnsureBlueprintEntry(RegistryKey);
@@ -5711,8 +5697,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
       MetadataSet.Add(MetadataKey);
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
-    const bool bSaved = SaveLoadedAssetThrottled(BP);
+    const bool bSaved = McpFinalizeBlueprint(BP, /*bStructural=*/false, /*bSave=*/true);
 
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), true);

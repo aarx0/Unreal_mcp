@@ -450,9 +450,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         Blueprint->SimpleConstructionScript->AddNode(NewNode);
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("componentName"), ComponentName);
@@ -682,9 +680,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
         AttrSetCDO->MarkPackageDirty();
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
@@ -777,9 +773,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1192,9 +1186,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TargetLocation"), VectorPinType);
         FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("TargetLocation"), nullptr, FText::FromString(TEXT("Targeting")));
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1369,9 +1361,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
         VariablesAdded.Add(TaskNameVarName);
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -2428,9 +2418,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                 }
             }
 
-            FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-            McpSafeCompileBlueprint(Blueprint);
-            McpSafeAssetSave(Blueprint);
+            McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
             return true;
         };
 
@@ -2468,8 +2456,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                 }
                 AssetType = TEXT("GameplayAbility");
                 bTagAdded = true;
-                FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-                McpSafeAssetSave(Blueprint);
+                McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
             }
             // Try GameplayEffect
             else if (UGameplayEffect* EffectCDO = Cast<UGameplayEffect>(CDO))
@@ -2487,8 +2474,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                 }
                 AssetType = TEXT("GameplayEffect");
                 bTagAdded = true;
-                FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-                McpSafeAssetSave(Blueprint);
+                McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
             }
             // Try GameplayCue Notify (Static)
             else if (UGameplayCueNotify_Static* CueStaticCDO = Cast<UGameplayCueNotify_Static>(CDO))
@@ -2503,8 +2489,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                 }
                 AssetType = TEXT("GameplayCueNotify_Static");
                 bTagAdded = true;
-                FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-                McpSafeAssetSave(Blueprint);
+                McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
             }
             // Try GameplayCue Notify (Actor)
             else if (AGameplayCueNotify_Actor* CueActorCDO = Cast<AGameplayCueNotify_Actor>(CDO))
@@ -2519,8 +2504,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                 }
                 AssetType = TEXT("GameplayCueNotify_Actor");
                 bTagAdded = true;
-                FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-                McpSafeAssetSave(Blueprint);
+                McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
             }
             // Try Actor with AbilitySystemComponent
             else if (AActor* ActorCDO = Cast<AActor>(CDO))
@@ -2558,8 +2542,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                                 
                                 AssetType = TEXT("Actor with ASC");
                                 bTagAdded = true;
-                                FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-                                McpSafeAssetSave(Blueprint);
+                                McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
                                 break;
                             }
                         }
@@ -3197,9 +3180,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                 FText::FromString(TEXT("Execution Calculation")));
 
 
-            FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-            McpSafeCompileBlueprint(Blueprint);
-            McpSafeAssetSave(Blueprint);
+            McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
         }
 
         // Use the actual blueprint name (which may have been sanitized) in the response

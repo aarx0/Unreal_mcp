@@ -273,8 +273,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
         Template->SetGenerateOverlapEvents(true);
       }
       Blueprint->SimpleConstructionScript->AddNode(Node);
-      FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-      McpSafeAssetSave(Blueprint);
+      McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetBoolField(TEXT("componentAdded"), true);
@@ -384,8 +383,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
     Result->SetNumberField(TEXT("traceRadius"), TraceRadius);
     Result->SetBoolField(TEXT("configured"), bConfigured);
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
       McpHandlerUtils::AddVerification(Result, Blueprint);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Interaction trace configured"), Result);
 #else
@@ -489,8 +487,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
     Result->SetBoolField(TEXT("configured"), true);
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Interaction widget configured"), Result);
 #else
     SendAutomationError(RequestingSocket, RequestId, TEXT("configure_interaction_widget is editor-only"), TEXT("EDITOR_ONLY"));
@@ -555,8 +552,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetNumberField(TEXT("eventCount"), EventNames.Num());
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Interaction events added"), Result);
 #else
     SendAutomationError(RequestingSocket, RequestId, TEXT("add_interaction_events is editor-only"), TEXT("EDITOR_ONLY"));
@@ -758,8 +754,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
       SCS->AddNode(CollisionNode);
       CollisionNode->SetParent(RootNode);
 
-      FBlueprintEditorUtils::MarkBlueprintAsModified(DoorBP);
-      McpSafeAssetSave(DoorBP);
+      McpFinalizeBlueprint(DoorBP, /*bStructural=*/false, /*bSave=*/true);
 
 TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetNumberField(TEXT("openAngle"), OpenAngle);
@@ -896,8 +891,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("configured"), true);
     Result->SetStringField(TEXT("doorPath"), DoorPath);
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Door properties configured"), Result);
 #else
     SendAutomationError(RequestingSocket, RequestId, TEXT("configure_door_properties is editor-only"), TEXT("EDITOR_ONLY"));
@@ -972,8 +966,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       SCS->AddNode(TriggerNode);
       TriggerNode->SetParent(RootNode);
 
-      FBlueprintEditorUtils::MarkBlueprintAsModified(SwitchBP);
-      McpSafeAssetSave(SwitchBP);
+      McpFinalizeBlueprint(SwitchBP, /*bStructural=*/false, /*bSave=*/true);
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("switchPath"), SwitchBP->GetPathName());
@@ -1080,8 +1073,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("configured"), true);
     Result->SetStringField(TEXT("switchPath"), SwitchPath);
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Switch properties configured"), Result);
 #else
     SendAutomationError(RequestingSocket, RequestId, TEXT("configure_switch_properties is editor-only"), TEXT("EDITOR_ONLY"));
@@ -1158,8 +1150,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       SCS->AddNode(TriggerNode);
       TriggerNode->SetParent(RootNode);
 
-      FBlueprintEditorUtils::MarkBlueprintAsModified(ChestBP);
-      McpSafeAssetSave(ChestBP);
+      McpFinalizeBlueprint(ChestBP, /*bStructural=*/false, /*bSave=*/true);
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("chestPath"), ChestBP->GetPathName());
@@ -1282,8 +1273,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("configured"), true);
     Result->SetStringField(TEXT("chestPath"), ChestPath);
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Chest properties configured"), Result);
 #else
     SendAutomationError(RequestingSocket, RequestId, TEXT("configure_chest_properties is editor-only"), TEXT("EDITOR_ONLY"));
@@ -1358,8 +1348,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       SCS->AddNode(TriggerNode);
       TriggerNode->SetParent(RootNode);
 
-      FBlueprintEditorUtils::MarkBlueprintAsModified(LeverBP);
-      McpSafeAssetSave(LeverBP);
+      McpFinalizeBlueprint(LeverBP, /*bStructural=*/false, /*bSave=*/true);
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("leverPath"), LeverBP->GetPathName());
@@ -1519,8 +1508,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("DestructionStage"), IntType);
       }
 
-      FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-      McpSafeAssetSave(Blueprint);
+      McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetBoolField(TEXT("componentAdded"), true);
@@ -1622,8 +1610,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
 
       if (RootNode) { TriggerBP->SimpleConstructionScript->AddNode(RootNode); }
 
-      FBlueprintEditorUtils::MarkBlueprintAsModified(TriggerBP);
-      McpSafeAssetSave(TriggerBP);
+      McpFinalizeBlueprint(TriggerBP, /*bStructural=*/false, /*bSave=*/true);
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("triggerPath"), TriggerBP->GetPathName());
@@ -1687,8 +1674,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("triggerPath"), TriggerPath);
     Result->SetArrayField(TEXT("eventsAdded"), EventsAdded);
     Result->SetNumberField(TEXT("eventCount"), EventsAdded.Num());
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Trigger events configured"), Result);
 #else
     SendAutomationError(RequestingSocket, RequestId, TEXT("configure_trigger_events is editor-only"), TEXT("EDITOR_ONLY"));
@@ -1866,8 +1852,7 @@ if (SubAction == TEXT("configure_trigger_filter")) {
     Result->SetStringField(TEXT("triggerPath"), TriggerPath);
     Result->SetBoolField(TEXT("configured"), true);
     Result->SetArrayField(TEXT("variablesAdded"), VarsAdded);
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Trigger filter configured"), Result);
 #else
     SendAutomationError(RequestingSocket, RequestId, TEXT("configure_trigger_filter is editor-only"), TEXT("EDITOR_ONLY"));
@@ -1921,8 +1906,7 @@ if (SubAction == TEXT("configure_trigger_response")) {
     Result->SetStringField(TEXT("triggerPath"), TriggerPath);
     Result->SetBoolField(TEXT("configured"), true);
     Result->SetArrayField(TEXT("variablesAdded"), VarsAdded);
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Trigger response configured"), Result);
 #else
     SendAutomationError(RequestingSocket, RequestId, TEXT("configure_trigger_response is editor-only"), TEXT("EDITOR_ONLY"));

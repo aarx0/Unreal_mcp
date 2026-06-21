@@ -687,8 +687,7 @@ static bool HandleSetReplication(
     }
 
     Blueprint->Modify();
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
     ResponseJson->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -768,8 +767,7 @@ static bool HandleCreateReplicatedVariable(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
     }
 
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
@@ -837,8 +835,7 @@ static bool HandleSetNetUpdateFrequency(
     }
 
     Blueprint->Modify();
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
     ResponseJson->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -925,9 +922,7 @@ static bool HandleCreateRPC(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
     }
 
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
@@ -993,8 +988,7 @@ static bool HandleConfigureNetCullDistance(
     }
 
     Blueprint->Modify();
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
     ResponseJson->SetStringField(TEXT("blueprintPath"), BlueprintPath);

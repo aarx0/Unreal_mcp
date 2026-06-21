@@ -2070,8 +2070,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     // (generated or hand-edited), not just the chains the binders emit.
     const int32 Arranged = ArrangeBlueprintGraph(TargetGraph);
     TargetGraph->NotifyGraphChanged();
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    SaveLoadedAssetThrottled(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("graphName"), TargetGraph->GetName());

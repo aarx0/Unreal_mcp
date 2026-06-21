@@ -4336,8 +4336,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
         // This prevents ensure failures in WidgetBlueprintCompiler.cpp line 805
         RegisterAnimationGuid(WidgetBP, NewAnim);
         
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        McpSafeAssetSave(WidgetBP);
+        McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
         
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("animationName"), AnimationName);
@@ -4432,8 +4431,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
         ResultJson->SetStringField(TEXT("propertyName"), PropertyName);
         ResultJson->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());
         
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        McpSafeAssetSave(WidgetBP);
+        McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
         
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Animation track added"), ResultJson);
         return true;
@@ -4895,8 +4893,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Style(
             CreatedVariables.Add(MarginVarName);
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        McpSafeAssetSave(WidgetBP);
+        McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
 
         TArray<TSharedPtr<FJsonValue>> VariablesArray;
         for (const FString& VarName : CreatedVariables)
@@ -5177,8 +5174,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Tree(
             }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        McpSafeAssetSave(WidgetBP);
+        McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
@@ -5605,8 +5601,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         // Keeping it for safety in case any edge case widgets were missed
         RegisterAllWidgetGuids(WidgetBP);
         
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        McpSafeAssetSave(WidgetBP);
+        McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
         
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetBP->GetPathName());
@@ -5683,8 +5678,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         // RegisterAllWidgetGuids is now optional cleanup - all widgets already registered
         RegisterAllWidgetGuids(WidgetBP);
         
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        McpSafeAssetSave(WidgetBP);
+        McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
         
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetBP->GetPathName());
@@ -5725,8 +5719,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         // RegisterAllWidgetGuids is now optional cleanup - all widgets already registered
         RegisterAllWidgetGuids(WidgetBP);
         
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        McpSafeAssetSave(WidgetBP);
+        McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
         
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetBP->GetPathName());
@@ -5805,8 +5798,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         // RegisterAllWidgetGuids is now optional cleanup - all widgets already registered
         RegisterAllWidgetGuids(WidgetBP);
         
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        McpSafeAssetSave(WidgetBP);
+        McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
         
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetName"), TEXT("HealthBarContainer"));
@@ -5879,8 +5871,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         // RegisterAllWidgetGuids is now optional cleanup - all widgets already registered
         RegisterAllWidgetGuids(WidgetBP);
         
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        McpSafeAssetSave(WidgetBP);
+        McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
         
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetName"), TEXT("Crosshair"));
@@ -5953,8 +5944,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         // RegisterAllWidgetGuids is now optional cleanup - all widgets already registered
         RegisterAllWidgetGuids(WidgetBP);
         
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-        McpSafeAssetSave(WidgetBP);
+        McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
         
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetName"), TEXT("AmmoCounter"));

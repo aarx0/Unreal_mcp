@@ -1430,8 +1430,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
               #endif // MCP_HAS_ANIM_STATE_TRANSITION
             }
 
-            FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
-            McpSafeAssetSave(AnimBP);
+            McpFinalizeBlueprint(AnimBP, /*bStructural=*/true, /*bSave=*/true);
 
             bSuccess = true;
             Message = FString::Printf(TEXT("State machine '%s' created in %s"), *MachineName, *BlueprintPath);
