@@ -1223,7 +1223,10 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                       return HandleManageAudioAuthoringAction(
                           R, TEXT("manage_audio_authoring"), RoutedPayload, S);
                     }
-                    return HandleAudioAction(R, A, P, S);
+                    // HandleAudioAction's entry gate matches on the sub-action
+                    // prefix, not the tool name; passing A ("manage_audio") fails
+                    // the gate and the request would go unrouted.
+                    return HandleAudioAction(R, SubAction, P, S);
                   });
 
   // Audio authoring - uses subAction field (different from manage_audio which uses action)

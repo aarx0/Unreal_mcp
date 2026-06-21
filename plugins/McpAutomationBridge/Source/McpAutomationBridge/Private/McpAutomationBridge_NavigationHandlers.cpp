@@ -1632,6 +1632,13 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNavigationAction(
     const TSharedPtr<FJsonObject>& Payload,
     TSharedPtr<FMcpBridgeWebSocket> Socket)
 {
+    // Only handle manage_navigation; decline anything else so the dispatcher keeps
+    // trying other handlers and reaches its UNKNOWN_ACTION fallback. Without this
+    // gate the handler claims any unrouted action that reaches it.
+    if (Action != TEXT("manage_navigation"))
+    {
+        return false;
+    }
 #if WITH_EDITOR
     FString SubAction = GetJsonStringFieldNav(Payload, TEXT("subAction"), TEXT(""));
 

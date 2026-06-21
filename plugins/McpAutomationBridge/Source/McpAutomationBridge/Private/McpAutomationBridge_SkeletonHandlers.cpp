@@ -3127,10 +3127,13 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     const TSharedPtr<FJsonObject>& Payload,
     TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
 {
-    // Only handle manage_skeleton action
+    // Only handle manage_skeleton action. Return false so the dispatcher keeps
+    // trying other handlers — returning true here would CLAIM every unrelated
+    // action that reaches this point in the if-chain, swallowing it with no
+    // response (the request then parks until the stale-request watchdog).
     if (Action != TEXT("manage_skeleton"))
     {
-        return true; // Not handled
+        return false; // Not our action
     }
 
     // Read subAction from payload (the actual operation to perform)

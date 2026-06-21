@@ -100,9 +100,12 @@ public:
             return;
         }
 
-        // Drop our own category entirely (the bridge is chatty at Verbose and it
-        // would crowd out the lines a caller actually wants to see).
-        if (Category == LogMcpAutomationBridgeSubsystem.GetCategoryName())
+        // The bridge is chatty at Verbose on its own category, so drop only its
+        // Verbose/VeryVerbose lines. Keep Log/Display/Warning/Error so the
+        // bridge's own dispatch trace and warnings (e.g. "No handler consumed")
+        // are visible when debugging the bridge itself through its own ring.
+        if (Category == LogMcpAutomationBridgeSubsystem.GetCategoryName() &&
+            (Verbosity & ELogVerbosity::VerbosityMask) > ELogVerbosity::Log)
         {
             return;
         }

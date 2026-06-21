@@ -1162,6 +1162,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSessionsAction(
     const TSharedPtr<FJsonObject>& Payload,
     TSharedPtr<FMcpBridgeWebSocket> Socket)
 {
+    // Only handle manage_sessions. Without this gate the handler reads the
+    // sub-action straight from the payload and "claims" any unrouted action that
+    // reaches it in the dispatch if-chain, mislabeling the error (and preempting
+    // the dispatcher's own UNKNOWN_ACTION fallback). Every sibling handler gates
+    // the same way.
+    if (Action != TEXT("manage_sessions"))
+    {
+        return false;
+    }
 #if WITH_EDITOR
     // Extract sub-action from payload
     FString SubAction;

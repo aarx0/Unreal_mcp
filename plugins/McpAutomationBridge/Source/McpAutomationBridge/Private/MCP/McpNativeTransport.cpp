@@ -14,8 +14,30 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Widgets/SWindow.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMcpNativeTransport, Log, All);
+
+// Best-effort description of any active Slate modal window. A request that times
+// out can then report whether the editor was blocked on a modal dialog (the
+// classic game-thread starvation) versus a genuine handler hang — so we KNOW
+// instead of guessing. Game-thread only (Slate access).
+static FString McpDescribeActiveModalWindow()
+{
+	if (!FSlateApplication::IsInitialized())
+	{
+		return TEXT("slate-uninitialized");
+	}
+	FSlateApplication& Slate = FSlateApplication::Get();
+	TSharedPtr<SWindow> Modal = Slate.GetActiveModalWindow();
+	if (!Modal.IsValid())
+	{
+		return TEXT("none");
+	}
+	const FString Title = Modal->GetTitle().ToString();
+	return Title.IsEmpty() ? TEXT("<untitled modal>") : FString::Printf(TEXT("'%s'"), *Title);
+}
 
 // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -1395,11 +1417,16 @@ void FMcpNativeTransport::CleanupStaleRequests()
 		}
 	}
 
+	const bool bAnyExpired = Expired.Num() > 0;
+	const FString ActiveModal = bAnyExpired ? McpDescribeActiveModalWindow() : FString();
+	const bool bSlateAppActive = FSlateApplication::IsInitialized() && FSlateApplication::Get().IsActive();
 	for (const FString& RequestId : Expired)
 	{
 		UE_LOG(LogMcpNativeTransport, Warning,
-			TEXT("Parked request %s timed out after %.0f seconds"),
-			*RequestId, RequestTimeoutSeconds);
+			TEXT("Parked request %s timed out after %.0f seconds "
+			     "(activeModal: %s, slateAppActive: %s)"),
+			*RequestId, RequestTimeoutSeconds, *ActiveModal,
+			bSlateAppActive ? TEXT("true") : TEXT("false"));
 		CompletePendingRequest(RequestId, false, TEXT("Request timed out"),
 			nullptr, TEXT("TIMEOUT"));
 	}

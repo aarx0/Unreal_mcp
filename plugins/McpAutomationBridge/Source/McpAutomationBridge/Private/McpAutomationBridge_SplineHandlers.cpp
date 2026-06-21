@@ -1957,6 +1957,13 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSplinesAction(
     const TSharedPtr<FJsonObject>& Payload,
     TSharedPtr<FMcpBridgeWebSocket> Socket)
 {
+    // Only handle manage_splines; decline anything else so the dispatcher keeps
+    // trying other handlers and reaches its UNKNOWN_ACTION fallback. Without this
+    // gate the handler claims any unrouted action that reaches it.
+    if (Action != TEXT("manage_splines"))
+    {
+        return false;
+    }
 #if WITH_EDITOR
     FString SubAction = GetJsonStringFieldSpline(Payload, TEXT("subAction"), TEXT(""));
     
