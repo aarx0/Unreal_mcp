@@ -661,6 +661,29 @@ Surfaced authoring a real save/load graph end-to-end via the bridge (create_node
   "Object is undetermined" until the cast's input lands), and the guard surfaces those mid-sequence compiles as ENGINE_ERROR even though each
   link is made and the final graph compiles clean. Benign (wire data pins before exec to avoid, or ignore until the final compile), but noisy.
 
+### 2026-06-20f — Self-review notes on the session's 4 commits (32855c8, dfb4389, e6991b6, 953a6bd)
+Adversarial pass over the log/profiling/test-stub/pin-default work. **No live bugs** — every commit is correct for its
+verified path. The following are hardening notes I deliberately did NOT blind-fix while away (each needs a rebuild and one
+carries real regression risk), logged so they're a conscious decision, not a miss:
+- ✅ **Log ring buffer is sound.** All ring mutations + reads are under `LogRingMutex`; matched entries are deep-copied out
+  under the lock (no dangling `FString`); seq/`dropped` math is underflow-guarded; `Deinitialize` `RemoveOutputDevice`s then
+  `Reset`s the device (no dangling `GLog` pointer — mirrors `RequestErrorDevice`). Unlocked reads of `bLogCaptureEnabled`/
+  `LogRingCapacity` are benign races on stable values. No action.
+- 📝 **`set_pin_default_value` reports success it can't confirm.** `Schema->TrySetDefaultObject`/`TrySetDefaultValue` are
+  **void** in UE — there's no return to check, so a validation no-op (e.g. wrong object type for the pin) would still respond
+  "Pin default value set." Honest fix = read back `Pin->DefaultObject`/`Pin->GetDefaultAsString()` and compare. NOT done blind:
+  pin-default string normalization (whitespace/`None`/numeric formatting) makes a naive readback prone to false-negative errors
+  that would REGRESS the verified-working path. Needs a careful readback + a test, not a one-liner.
+- 📝 **Class pins (`PC_Class`/`PC_SoftClass`) need the `_C`-suffixed generated-class path.** A bare asset path
+  (`/Game/.../BP_Foo`) loads the `UBlueprint`, which class-pin validation silently rejects (void return hides it — see above).
+  Verified SaveGame path used the right `..._C` path. Could auto-append `_C` for class pins when the bare load returns a
+  `UBlueprint`. Low priority.
+- 📝 **`generate_test_stub` trusts caller-supplied `className`/`testName`.** A supplied `className` isn't validated as a C++
+  symbol (a space/digit-first → non-compiling file; fail-fast at compile, just unfriendly). `testName` is interpolated into a
+  C++ string literal unescaped — a `"` or `\` in it breaks/injects the generated file (pathological, local-only caller). And
+  the filename does `ClassName.RightChop(1)` assuming a leading `F`, so a non-`F` className loses its first char in the
+  *filename* only (symbol + registration still correct). All cosmetic/pathological; pre-validate + escape if revisited.
+
 ### 2026-06-20a — ✅ FIXED: `control_editor set_camera` doesn't move the editor viewport (location+rotation ignored)
 **Fixed + verified live 2026-06-20.** Root cause: handler pre-extracted the `location` object then called `ReadVectorField(*Loc, TEXT(""), ...)`, but that helper unwraps the *named* field itself — an empty name found no nested field and returned the default `(0,0,0)`, so the camera always went to origin/zero rotation. Now reads `location`/`rotation` off the parent payload and seeds from the current pose (partial updates preserve the other axis). Verified: `set_camera {500,100,800 / pitch -60 yaw 30}` then `get_viewport_info` round-trips the exact pose.
 
