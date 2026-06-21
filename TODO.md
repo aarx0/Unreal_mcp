@@ -984,14 +984,13 @@ self-aborts unless the code-line multiset is preserved; `scripts/clean-widget-di
 dispatcher-scope `ResultJson` + 196 lines of orphaned section-divider comments. Verified: code-line multiset identical
 before/after the whole reorg (only the 8 needed preambles added, ZERO code lines changed) + clean -NoUBA rebuild
 (warnings-as-errors) + live smoke across 7 families. Pattern is reusable for any other `if`-chain monolith.
-- 📝 **Found in passing — 19 widget subactions are HANDLED but NOT in the `WidgetAuthoring()` routing list**
-  (`McpConsolidatedActionRouting.h`), so they're unreachable via `manage_blueprint` (the dispatch returns
-  "Unknown blueprint action" before reaching the handler): `add_quest_tracker, add_safe_zone, add_spacer,
-  add_widget_component, add_widget_switcher, apply_style_to_widget, bind_localized_text, create_credits_screen,
-  create_shop_ui, create_widget_style, delete_animation, get_animation_info, set_animation_speed, set_font,
-  set_localization_key, set_margin, set_widget_binding, show_widget, create_widget`. Pre-existing (the routing list
-  lagged the handler as it grew); the split didn't touch routing. Fix = add the 19 names to `WidgetAuthoring()`
-  (cheap), but each newly-exposed action should get a smoke before advertising it — so do deliberately, not blind.
+- ✅ **FIXED 2026-06-20: 19 widget subactions were HANDLED but NOT in the `WidgetAuthoring()` routing list**
+  (`McpConsolidatedActionRouting.h`), so they returned "Unknown blueprint action" before reaching the handler:
+  `add_quest_tracker, add_safe_zone, add_spacer, add_widget_component, add_widget_switcher, apply_style_to_widget,
+  bind_localized_text, create_credits_screen, create_shop_ui, create_widget_style, delete_animation, get_animation_info,
+  set_animation_speed, set_font, set_localization_key, set_margin, set_widget_binding, show_widget, create_widget`.
+  Pre-existing (routing list lagged the handler as it grew). Added all 19 to `WidgetAuthoring()`; rebuild + smoked each:
+  19/19 now reach their handler (success or a handler-specific validation error, never "Unknown blueprint action").
 
 **Simplification sweep (3 classes, adversarially verified — each removal independently confirmed zero callers across
 the module + routing tables, reflection/string-dispatch ruled out). DONE + built + committed (943912c): ~1,880 lines deleted.**

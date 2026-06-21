@@ -203,7 +203,19 @@ inline const TArray<FString>& WidgetAuthoring()
 		TEXT("replace_widget_class"),
 		// Generic add (any UWidget subclass, incl. ones without a typed add_*
 		// action) + root wrapper (panel becomes root, old root its first child).
-		TEXT("add_widget"), TEXT("wrap_root")
+		TEXT("add_widget"), TEXT("wrap_root"),
+		// Handlers existed in WidgetAuthoringHandlers.cpp but were never routed
+		// here, so manage_blueprint returned "Unknown blueprint action" for them.
+		TEXT("create_widget"), TEXT("show_widget"), TEXT("add_widget_component"),
+		TEXT("add_safe_zone"), TEXT("add_spacer"), TEXT("add_widget_switcher"),
+		TEXT("set_font"), TEXT("set_margin"),
+		TEXT("create_widget_style"), TEXT("apply_style_to_widget"),
+		TEXT("set_widget_binding"), TEXT("bind_localized_text"),
+		TEXT("set_localization_key"),
+		TEXT("get_animation_info"), TEXT("set_animation_speed"),
+		TEXT("delete_animation"),
+		TEXT("create_credits_screen"), TEXT("create_shop_ui"),
+		TEXT("add_quest_tracker")
 	};
 	return Actions;
 }
