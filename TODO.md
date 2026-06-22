@@ -641,6 +641,46 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [x] `.uplugin` `InterchangeOpenUSD` reference force-enables USDCore → editor exits on engines with non-loadable USD binaries
+**FOUND + FIXED 2026-06-12** (HandPanicVR, Meta UE 5.7.3 fork, headless `-unattended` launch).
+The bridge `.uplugin` referenced `InterchangeOpenUSD` (`Enabled:true, Optional:true`). On the
+Meta fork, USDCore's `UnrealUSDWrapper` module fails to load its third-party DLLs → plugin-load
+error dialog → `EngineExit()`. Killer detail: **plugin-to-plugin references override project-level
+disables** — HandPanicVR.uproject `"USDCore": Enabled:false` did NOT stick while the bridge ref
+existed (verified via `Mounting Engine plugin InterchangeOpenUSD` in the log). Fixed by removing
+the `InterchangeOpenUSD` reference from the bridge `.uplugin`; nothing in the bridge hard-requires
+it (Interchange features degrade gracefully). Audit the other `Optional:true, Enabled:true` refs
+for the same footgun on engines where their binaries don't load. (Same-symptom but NOT bridge:
+`GameplayInsights/RewindDebuggerRuntime` also fails to load on this fork — engine-side; disabled
+per-project in HandPanicVR.uproject.)
+
+### [ ] `live_coding_compile` reports `NoChanges` for sources edited outside the editor + returns zero diagnostics
+**FOUND 2026-06-01** (HandPanicVR FingerGun work). Files edited on disk (not via the editor's
+own watcher) → `live_coding_compile` returned `{"success":true,"compileResult":"NoChanges"}`
+while the edits sat uncompiled; cost a multi-step diagnosis (DLL-timestamp archaeology). Two
+gaps: (a) change detection misses external edits — needs a pre-compile rescan or a `force`
+param; (b) the response carries only the result enum — on Failure there are no compiler
+errors/warnings, no patched-module list. Should return structured diagnostics (file:line errors)
+and, on NoChanges, the *reason* (no dirty files seen vs. session inactive).
+
+### [ ] No build/state visibility: `get_build_status` action wanted (+ structured `run_ubt` results)
+**FOUND 2026-06-01** (same session). There's no way to ask the bridge "is the loaded module
+stale vs. its sources?" — had to resort to PowerShell timestamp diffs to learn the editor was
+serving a months-old DLL (which also produced a confusing `NOT_IMPLEMENTED` for a freshly-added
+action). Proposal: `get_build_status` returning per-module loaded-DLL path+timestamp, newest
+source timestamp, dirty flag, and Live Coding session state; `run_ubt` should return structured
+pass/fail + parsed error list. Related: `get_log` (editor/UBT log tail with filters) implemented
+2026-06-12 in `HandleSystemControlAction` + `SystemControlCore()` — pending live verification.
+
+### [ ] `inspect_class` / Python can't resolve native `/Script/<Module>.<Class>` classes
+**FOUND 2026-06-01** (HandPanicVR). `inspect_class classPath=/Script/HandPanicVR.FingerGunComponent`
+→ `CLASS_NOT_FOUND`; Python `unreal.FingerGunComponent` missing and `unreal.load_object(None,
+"/Script/...")` → None (game-module classes aren't exposed as Python attrs). Net effect: no
+one-call way to verify "did my new UPROPERTY land in the running editor?" `inspect_class` should
+resolve native classes via `FindFirstObject<UClass>`/`StaticFindObject` on the `/Script/` path and
+read CDO property lists, not just Blueprint assets.
+
+
 ### 2026-06-20e — Graph-authoring papercuts found building the SaveGame demo (BP_SaveManager)
 Surfaced authoring a real save/load graph end-to-end via the bridge (create_node → connect_pins → set_pin_default_value).
 - ✅ **FIXED: `set_pin_default_value` ignored object/class/soft pins.** It only called `Schema->TrySetDefaultValue(*Pin, Value)`,

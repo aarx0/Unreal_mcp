@@ -83,11 +83,6 @@
       "Optional": true
     },
     {
-      "Name": "InterchangeOpenUSD",
-      "Enabled": true,
-      "Optional": true
-    },
-    {
       "Name": "DataValidation",
       "Enabled": true,
       "Optional": true
