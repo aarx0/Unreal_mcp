@@ -1023,6 +1023,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         if (!OwnerActorName.IsEmpty())
         {
             Owner = NetworkingHelpers::FindActorByName(World, OwnerActorName);
+            if (!Owner)
+            {
+                SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Owner actor '%s' not found"), *OwnerActorName), TEXT("OWNER_NOT_FOUND"));
+                return true;
+            }
         }
 
         Actor->SetOwner(Owner);

@@ -1593,16 +1593,20 @@ if (SubAction == TEXT("add_notify_state"))
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Section not found: %s"), *SectionName), TEXT("SECTION_NOT_FOUND"));
         }
         
-        // Update section timing if startTime is provided
-        if (Params->HasField(TEXT("startTime")))
+        if (!Params->HasField(TEXT("startTime")))
         {
-            float StartTime = static_cast<float>(GetJsonNumberField(Params, TEXT("startTime")));
-            FCompositeSection& Section = Montage->CompositeSections[SectionIndex];
-            Section.SetTime(StartTime);
+            ANIM_ERROR_RESPONSE(TEXT("startTime is required"), TEXT("MISSING_TIME"));
         }
-        
+
+        const float StartTime = static_cast<float>(GetJsonNumberField(Params, TEXT("startTime")));
+        Montage->Modify();
+        FCompositeSection& Section = Montage->CompositeSections[SectionIndex];
+        Section.SetTime(StartTime);
+        Montage->PostEditChange();
+
         SaveAnimAsset(Montage, bSave);
 
+        Response->SetNumberField(TEXT("startTime"), StartTime);
         ANIM_SUCCESS_RESPONSE(TEXT("Section timing updated"));
         McpHandlerUtils::AddVerification(Response, Montage);
         return Response;
@@ -2252,25 +2256,70 @@ if (SubAction == TEXT("add_montage_notify"))
         {
             AxisIndex = 1;
         }
-        
-        // Update axis settings - UE 5.7+ GetBlendParameter returns const ref
-        // We need to use Modify() pattern or just read and report the constraint
-        // For now, skip direct modification since BlendParameters is protected
-        // The creation flow above already sets defaults, this is for runtime update which
-        // may need different approach per UE version
-        
-        // Log info about what was requested but note it may not take effect in UE 5.7+
-        FString RequestedAxisName = GetJsonStringField(Params, TEXT("axisName"), TEXT(""));
-        float RequestedMin = static_cast<float>(GetJsonNumberField(Params, TEXT("minValue"), 0.0));
-        float RequestedMax = static_cast<float>(GetJsonNumberField(Params, TEXT("maxValue"), 100.0));
-        int32 RequestedGridNum = static_cast<int32>(GetJsonNumberField(Params, TEXT("gridDivisions"), 4));
-        
-        // Trigger PostEditChange to ensure any internal updates
-        BlendSpace->PostEditChange();
+
+        // A 1D blend space only has the horizontal axis (index 0); writing the
+        // vertical axis would be a semantic no-op the caller wouldn't see.
+        if (AxisIndex == 1 && BlendSpace1D != nullptr)
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Blend space '%s' is 1D and has no vertical axis"), *AssetPath),
+                TEXT("AXIS_OUT_OF_RANGE"));
+        }
+
+        // BlendParameters is protected; reach it via the same FProperty reflection
+        // used by create_blend_space_1d/2d. The property is a fixed FBlendParameter[3].
+        FProperty* BlendParamsProp = UBlendSpace::StaticClass()->FindPropertyByName(TEXT("BlendParameters"));
+        if (!BlendParamsProp)
+        {
+            ANIM_ERROR_RESPONSE(TEXT("BlendParameters property not found via reflection"), TEXT("REFLECTION_FAILED"));
+        }
+
+        FBlendParameter* BlendParamsPtr = BlendParamsProp->ContainerPtrToValuePtr<FBlendParameter>(BlendSpace);
+        if (!BlendParamsPtr)
+        {
+            ANIM_ERROR_RESPONSE(TEXT("Could not resolve BlendParameters storage"), TEXT("REFLECTION_FAILED"));
+        }
+
+        // Start from the existing axis so unspecified fields keep their value.
+        FBlendParameter Param = BlendParamsPtr[AxisIndex];
+        if (Params->HasField(TEXT("axisName")))
+        {
+            Param.DisplayName = GetJsonStringField(Params, TEXT("axisName"), Param.DisplayName);
+        }
+        if (Params->HasField(TEXT("minValue")))
+        {
+            Param.Min = static_cast<float>(GetJsonNumberField(Params, TEXT("minValue")));
+        }
+        if (Params->HasField(TEXT("maxValue")))
+        {
+            Param.Max = static_cast<float>(GetJsonNumberField(Params, TEXT("maxValue")));
+        }
+        if (Params->HasField(TEXT("gridDivisions")))
+        {
+            Param.GridNum = static_cast<int32>(GetJsonNumberField(Params, TEXT("gridDivisions")));
+        }
+
+        BlendSpace->Modify();
+        BlendParamsPtr[AxisIndex] = Param;
+
+        // Drive the axis-changed rebuild path explicitly so grid + samples revalidate.
+        FPropertyChangedEvent BPEvent(BlendParamsProp);
+        BlendSpace->PostEditChangeProperty(BPEvent);
         BlendSpace->MarkPackageDirty();
-        
-        SaveAnimAsset(BlendSpace, bSave);
-        
+
+        const bool bSaved = SaveAnimAsset(BlendSpace, bSave);
+        if (bSave && !bSaved)
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Axis settings applied in memory but failed to save asset: %s"), *AssetPath),
+                TEXT("BLENDSPACE_SAVE_FAILED"));
+        }
+
+        Response->SetStringField(TEXT("axis"), Axis);
+        Response->SetStringField(TEXT("axisName"), Param.DisplayName);
+        Response->SetNumberField(TEXT("minValue"), Param.Min);
+        Response->SetNumberField(TEXT("maxValue"), Param.Max);
+        Response->SetNumberField(TEXT("gridDivisions"), Param.GridNum);
         ANIM_SUCCESS_RESPONSE(TEXT("Axis settings updated"));
         return Response;
     }

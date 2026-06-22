@@ -46,6 +46,7 @@
 #include "McpAutomationBridgeSubsystem.h"
 #include "MovieScene.h"
 #include "MovieSceneBinding.h"
+#include "MovieSceneBindingReferences.h"
 #include "MovieSceneSection.h"
 #include "MovieSceneSequence.h"
 #include "MovieSceneTrack.h"
@@ -625,18 +626,43 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddCamera(
         CameraClass, FVector::ZeroVector, FRotator::ZeroRotator,
         TEXT("SequenceCamera"));
     if (Spawned) {
-      // Fix for Issue #6: Auto-bind the camera to the sequence
-      if (ULevelSequence *LevelSeq = Cast<ULevelSequence>(SeqObj)) {
-        if (UMovieScene *MovieScene = LevelSeq->GetMovieScene()) {
-          FGuid BindingGuid = MovieScene->AddPossessable(
-              Spawned->GetActorLabel(), Spawned->GetClass());
-          if (MovieScene->FindPossessable(BindingGuid)) {
-            MovieScene->Modify();
-            Resp->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());
-          }
-        }
+      ULevelSequence *LevelSeq = Cast<ULevelSequence>(SeqObj);
+      if (!LevelSeq) {
+        SendAutomationError(Socket, RequestId,
+                            TEXT("Sequence object is not a LevelSequence"),
+                            TEXT("INVALID_SEQUENCE"));
+        return true;
+      }
+      UMovieScene *MovieScene = LevelSeq->GetMovieScene();
+      if (!MovieScene) {
+        SendAutomationError(Socket, RequestId,
+                            TEXT("Sequence has no MovieScene"),
+                            TEXT("INVALID_SEQUENCE"));
+        return true;
       }
 
+      MovieScene->Modify();
+      FGuid BindingGuid = MovieScene->AddPossessable(Spawned->GetActorLabel(),
+                                                     Spawned->GetClass());
+      // AddPossessable only creates the MovieScene struct; the actor stays
+      // unbound until BindPossessableObject writes a binding reference.
+      LevelSeq->Modify();
+      LevelSeq->BindPossessableObject(
+          BindingGuid, *Spawned,
+          GEditor->GetEditorWorldContext().World());
+
+      const FMovieSceneBindingReferences *BindingRefs =
+          LevelSeq->GetBindingReferences();
+      if (!BindingRefs || !BindingRefs->HasBinding(BindingGuid)) {
+        SendAutomationError(
+            Socket, RequestId,
+            TEXT("Camera spawned but failed to bind to the sequence"),
+            TEXT("ADD_CAMERA_BIND_FAILED"));
+        return true;
+      }
+      LevelSeq->MarkPackageDirty();
+
+      Resp->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());
       Resp->SetBoolField(TEXT("success"), true);
       Resp->SetStringField(TEXT("actorLabel"), Spawned->GetActorLabel());
       SendAutomationResponse(Socket, RequestId, true,
@@ -805,16 +831,27 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddActors(
         if (ULevelSequence *LevelSeq = Cast<ULevelSequence>(SeqObj)) {
           UMovieScene *MovieScene = LevelSeq->GetMovieScene();
           if (MovieScene) {
+            MovieScene->Modify();
             FGuid BindingGuid = MovieScene->AddPossessable(
                 Found->GetActorLabel(), Found->GetClass());
-            if (MovieScene->FindPossessable(BindingGuid)) {
+            // AddPossessable only creates the MovieScene struct; the actor
+            // stays unbound until BindPossessableObject writes a binding
+            // reference.
+            LevelSeq->Modify();
+            LevelSeq->BindPossessableObject(
+                BindingGuid, *Found,
+                GEditor->GetEditorWorldContext().World());
+
+            const FMovieSceneBindingReferences *BindingRefs =
+                LevelSeq->GetBindingReferences();
+            if (BindingRefs && BindingRefs->HasBinding(BindingGuid)) {
+              LevelSeq->MarkPackageDirty();
               Item->SetBoolField(TEXT("success"), true);
               Item->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());
-              MovieScene->Modify();
             } else {
               Item->SetBoolField(TEXT("success"), false);
-              Item->SetStringField(
-                  TEXT("error"), TEXT("Failed to create possessable binding"));
+              Item->SetStringField(TEXT("error"),
+                                   TEXT("Failed to bind actor to sequence"));
             }
           } else {
             Item->SetBoolField(TEXT("success"), false);

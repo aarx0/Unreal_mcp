@@ -2263,14 +2263,17 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
         SendAutomationResponse(RequestingSocket, RequestId, true,
                                TEXT("Streaming command executed"), Result);
       } else {
-        // Even if console command returns false, the operation may still be in progress
-        // Remove HANDLED error code — success=true means no error occurred
+        // No ULevelStreaming was located in the world and the StreamLevel Exec
+        // did not handle the command — nothing was actually streamed. Fail loudly
+        // rather than reporting a phantom success.
         Result->SetStringField(TEXT("method"), TEXT("console_command_fallback"));
         Result->SetStringField(TEXT("command"), Cmd);
-        Result->SetBoolField(TEXT("handled"), true);
-        SendAutomationResponse(RequestingSocket, RequestId, true,
-                               TEXT("Streaming command submitted (level may not be in world yet)"), 
-                               Result);
+        SendAutomationResponse(
+            RequestingSocket, RequestId, false,
+            FString::Printf(
+                TEXT("Streaming level not found in world and StreamLevel command failed: %s"),
+                *NormalizedLevelName),
+            Result, TEXT("LEVEL_NOT_FOUND"));
       }
     }
     return true;
@@ -3444,24 +3447,101 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
     }
     
     FString CurrentLevelPath = TargetLevel->GetOutermost() ? TargetLevel->GetOutermost()->GetName() : TEXT("");
-    
+
     // If a specific level path was requested, validate it matches the current level
     if (!RequestedLevelPath.IsEmpty()) {
       if (CurrentLevelPath.ToLower() != RequestedLevelPath.ToLower()) {
         SendAutomationResponse(
             RequestingSocket, RequestId, false,
-            FString::Printf(TEXT("Requested level '%s' is not loaded (current: %s)"), 
+            FString::Printf(TEXT("Requested level '%s' is not loaded (current: %s)"),
                            *RequestedLevelPath, *CurrentLevelPath),
             nullptr, TEXT("LEVEL_NOT_LOADED"));
         return true;
       }
     }
-    
+
+    AWorldSettings* WorldSettings = TargetLevel->GetWorldSettings();
+    if (!WorldSettings) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Level has no WorldSettings actor"), nullptr,
+                             TEXT("NO_WORLD_SETTINGS"));
+      return true;
+    }
+
+    // Collect the property map to apply. Accept a dedicated settings object under
+    // any of the documented aliases, otherwise fall back to top-level payload
+    // fields (minus routing keys) so a flat payload also works.
+    TMap<FName, TSharedPtr<FJsonValue>> SettingsToApply;
+    if (Payload.IsValid()) {
+      const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
+      if (Payload->TryGetObjectField(TEXT("worldSettings"), SettingsObj) ||
+          Payload->TryGetObjectField(TEXT("settings"), SettingsObj) ||
+          Payload->TryGetObjectField(TEXT("properties"), SettingsObj)) {
+        if (SettingsObj && (*SettingsObj).IsValid()) {
+          for (const auto& Pair : (*SettingsObj)->Values) {
+            SettingsToApply.Add(FName(*Pair.Key), Pair.Value);
+          }
+        }
+      } else {
+        static const TSet<FString> RoutingKeys = {
+            TEXT("levelPath"), TEXT("level_path"), TEXT("action"),
+            TEXT("subAction"), TEXT("sub_action")};
+        for (const auto& Pair : Payload->Values) {
+          if (!RoutingKeys.Contains(Pair.Key)) {
+            SettingsToApply.Add(FName(*Pair.Key), Pair.Value);
+          }
+        }
+      }
+    }
+
+    if (SettingsToApply.Num() == 0) {
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("No world settings provided to apply (expected a 'worldSettings' "
+               "object or world-settings property fields)"),
+          nullptr, TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    WorldSettings->Modify();
+    TMap<FName, FString> ApplyErrors;
+    const int32 AppliedCount = McpPropertyReflection::ApplyJsonValuesToObject(
+        WorldSettings, SettingsToApply, &ApplyErrors);
+
+    if (AppliedCount == 0) {
+      TSharedPtr<FJsonObject> ErrResult = McpHandlerUtils::CreateResultObject();
+      ErrResult->SetStringField(TEXT("levelPath"), CurrentLevelPath);
+      for (const auto& Err : ApplyErrors) {
+        ErrResult->SetStringField(Err.Key.ToString(), Err.Value);
+      }
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("No world settings could be applied (no matching properties on "
+               "AWorldSettings)"),
+          ErrResult, TEXT("PROPERTY_CONVERSION_FAILED"));
+      return true;
+    }
+
+    WorldSettings->PostEditChange();
+    WorldSettings->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("levelPath"), CurrentLevelPath);
+    Result->SetNumberField(TEXT("appliedCount"), AppliedCount);
+    Result->SetNumberField(TEXT("requestedCount"), SettingsToApply.Num());
     Result->SetBoolField(TEXT("settingsApplied"), true);
-    
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("World settings updated"), Result);
+    if (ApplyErrors.Num() > 0) {
+      TSharedPtr<FJsonObject> ErrObj = McpHandlerUtils::CreateResultObject();
+      for (const auto& Err : ApplyErrors) {
+        ErrObj->SetStringField(Err.Key.ToString(), Err.Value);
+      }
+      Result->SetObjectField(TEXT("skippedProperties"), ErrObj);
+    }
+    SendAutomationResponse(
+        RequestingSocket, RequestId, true,
+        FString::Printf(TEXT("World settings updated (%d of %d applied)"),
+                        AppliedCount, SettingsToApply.Num()),
+        Result);
     return true;
   }
   if (EffectiveAction == TEXT("set_level_lighting")) {
@@ -3496,24 +3576,103 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
     }
     
     FString CurrentLevelPath = TargetLevel->GetOutermost() ? TargetLevel->GetOutermost()->GetName() : TEXT("");
-    
+
     // If a specific level path was requested, validate it matches the current level
     if (!RequestedLevelPath.IsEmpty()) {
       if (CurrentLevelPath.ToLower() != RequestedLevelPath.ToLower()) {
         SendAutomationResponse(
             RequestingSocket, RequestId, false,
-            FString::Printf(TEXT("Requested level '%s' is not loaded (current: %s)"), 
+            FString::Printf(TEXT("Requested level '%s' is not loaded (current: %s)"),
                            *RequestedLevelPath, *CurrentLevelPath),
             nullptr, TEXT("LEVEL_NOT_LOADED"));
         return true;
       }
     }
-    
+
+    // Lighting-relevant level state (Lightmass quality/bounces/exposure, the
+    // precomputed-lighting toggles) lives on the level's AWorldSettings actor.
+    AWorldSettings* WorldSettings = TargetLevel->GetWorldSettings();
+    if (!WorldSettings) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Level has no WorldSettings actor"), nullptr,
+                             TEXT("NO_WORLD_SETTINGS"));
+      return true;
+    }
+
+    // Accept a dedicated lighting object (so callers can pass nested
+    // LightmassSettings), otherwise fall back to top-level payload fields.
+    TMap<FName, TSharedPtr<FJsonValue>> LightingToApply;
+    if (Payload.IsValid()) {
+      const TSharedPtr<FJsonObject>* LightingObj = nullptr;
+      if (Payload->TryGetObjectField(TEXT("lighting"), LightingObj) ||
+          Payload->TryGetObjectField(TEXT("lightingSettings"), LightingObj) ||
+          Payload->TryGetObjectField(TEXT("settings"), LightingObj) ||
+          Payload->TryGetObjectField(TEXT("properties"), LightingObj)) {
+        if (LightingObj && (*LightingObj).IsValid()) {
+          for (const auto& Pair : (*LightingObj)->Values) {
+            LightingToApply.Add(FName(*Pair.Key), Pair.Value);
+          }
+        }
+      } else {
+        static const TSet<FString> RoutingKeys = {
+            TEXT("levelPath"), TEXT("level_path"), TEXT("action"),
+            TEXT("subAction"), TEXT("sub_action")};
+        for (const auto& Pair : Payload->Values) {
+          if (!RoutingKeys.Contains(Pair.Key)) {
+            LightingToApply.Add(FName(*Pair.Key), Pair.Value);
+          }
+        }
+      }
+    }
+
+    if (LightingToApply.Num() == 0) {
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("No lighting settings provided to apply (expected a 'lighting' "
+               "object or lighting property fields, e.g. LightmassSettings)"),
+          nullptr, TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    WorldSettings->Modify();
+    TMap<FName, FString> ApplyErrors;
+    const int32 AppliedCount = McpPropertyReflection::ApplyJsonValuesToObject(
+        WorldSettings, LightingToApply, &ApplyErrors);
+
+    if (AppliedCount == 0) {
+      TSharedPtr<FJsonObject> ErrResult = McpHandlerUtils::CreateResultObject();
+      ErrResult->SetStringField(TEXT("levelPath"), CurrentLevelPath);
+      for (const auto& Err : ApplyErrors) {
+        ErrResult->SetStringField(Err.Key.ToString(), Err.Value);
+      }
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("No lighting settings could be applied (no matching properties on "
+               "AWorldSettings)"),
+          ErrResult, TEXT("PROPERTY_CONVERSION_FAILED"));
+      return true;
+    }
+
+    WorldSettings->PostEditChange();
+    WorldSettings->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("levelPath"), CurrentLevelPath);
+    Result->SetNumberField(TEXT("appliedCount"), AppliedCount);
+    Result->SetNumberField(TEXT("requestedCount"), LightingToApply.Num());
     Result->SetBoolField(TEXT("lightingSet"), true);
-    
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Level lighting settings updated"), Result);
+    if (ApplyErrors.Num() > 0) {
+      TSharedPtr<FJsonObject> ErrObj = McpHandlerUtils::CreateResultObject();
+      for (const auto& Err : ApplyErrors) {
+        ErrObj->SetStringField(Err.Key.ToString(), Err.Value);
+      }
+      Result->SetObjectField(TEXT("skippedProperties"), ErrObj);
+    }
+    SendAutomationResponse(
+        RequestingSocket, RequestId, true,
+        FString::Printf(TEXT("Level lighting settings updated (%d of %d applied)"),
+                        AppliedCount, LightingToApply.Num()),
+        Result);
     return true;
   }
   if (EffectiveAction == TEXT("add_level_to_world")) {

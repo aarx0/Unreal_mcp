@@ -1602,13 +1602,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGameFrameworkAction(
         }
 
         int32 ConfiguredCount = 0;
-        
+        TSet<ULevel*> ModifiedLevels;
+
         // Find and configure PlayerStart actors
         for (TActorIterator<APlayerStart> It(World); It; ++It)
         {
             APlayerStart* PlayerStart = *It;
             if (!PlayerStart) continue;
-            
+
             // If a specific name is provided, only configure that one
             if (!PlayerStartName.IsEmpty())
             {
@@ -1628,18 +1629,46 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGameFrameworkAction(
             }
 
             PlayerStart->MarkPackageDirty();
+            if (ULevel* OwningLevel = PlayerStart->GetLevel())
+            {
+                ModifiedLevels.Add(OwningLevel);
+            }
             ConfiguredCount++;
-            
-            UE_LOG(LogMcpGameFrameworkHandlers, Log, TEXT("Configured PlayerStart: %s with tag=%s"), 
+
+            UE_LOG(LogMcpGameFrameworkHandlers, Log, TEXT("Configured PlayerStart: %s with tag=%s"),
                    *PlayerStart->GetName(), *PlayerStartTag);
         }
 
-        if (ConfiguredCount == 0 && !PlayerStartName.IsEmpty())
+        if (ConfiguredCount == 0)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("PlayerStart '%s' not found in level."), *PlayerStartName), 
-                TEXT("NOT_FOUND"));
+            const FString Reason = PlayerStartName.IsEmpty()
+                ? TEXT("No PlayerStart actors found in the current level.")
+                : FString::Printf(TEXT("PlayerStart '%s' not found in level."), *PlayerStartName);
+            SendAutomationError(RequestingSocket, RequestId, Reason, TEXT("NOT_FOUND"));
             return true;
+        }
+
+        // Persist the owning level(s) when requested; report any failure honestly.
+        int32 SavedLevelCount = 0;
+        if (bSave)
+        {
+            for (ULevel* ModifiedLevel : ModifiedLevels)
+            {
+                if (!ModifiedLevel) continue;
+                const FString LevelPackagePath = ModifiedLevel->GetOutermost()->GetName();
+                if (McpSafeLevelSave(ModifiedLevel, LevelPackagePath))
+                {
+                    SavedLevelCount++;
+                }
+                else
+                {
+                    SendAutomationError(RequestingSocket, RequestId,
+                        FString::Printf(TEXT("Configured %d PlayerStart actor(s) but failed to save level: %s"),
+                            ConfiguredCount, *LevelPackagePath),
+                        TEXT("SAVE_FAILED"));
+                    return true;
+                }
+            }
         }
 
         TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
@@ -1651,6 +1680,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGameFrameworkAction(
             Response->SetStringField(TEXT("playerStartTag"), PlayerStartTag);
         }
         Response->SetNumberField(TEXT("teamIndex"), TeamIndex);
+        Response->SetBoolField(TEXT("saved"), bSave && SavedLevelCount > 0);
+        Response->SetNumberField(TEXT("savedLevelCount"), SavedLevelCount);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Success"), Response);
         return true;
     }

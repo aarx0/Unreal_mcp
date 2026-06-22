@@ -951,10 +951,12 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
                 OutError = FString::Printf(TEXT("NewObject failed for class '%s'"), *ClassPath);
                 return false;
             }
-            // Apply the subobject's own fields best-effort: a single quirky field (e.g. a
-            // value exported only as ExportText) must not abort re-instancing the object
-            // with the fields that do apply. The new instance is itself the owner for any
+            // Apply every present field that resolves to a property, then assign the
+            // instance so the fields that did land are kept. Any child-apply failure is
+            // aggregated and propagated: a partial apply is reported as a failure rather
+            // than silently swallowed. The new instance is itself the owner for any
             // nested instanced grandchildren.
+            TArray<FString> ChildFailures;
             for (const auto& Field : Obj->Values)
             {
                 if (Field.Key.Equals(TEXT("__class"), ESearchCase::IgnoreCase))
@@ -964,12 +966,22 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
                 FProperty* ChildProp = SubClass->FindPropertyByName(FName(*Field.Key));
                 if (!ChildProp)
                 {
+                    ChildFailures.Add(FString::Printf(TEXT("%s: no such property on '%s'"), *Field.Key, *SubClass->GetName()));
                     continue;
                 }
                 FString ChildErr;
-                ApplyJsonValueToProperty(NewInst, ChildProp, Field.Value, ChildErr, Depth + 1, NewInst);
+                if (!ApplyJsonValueToProperty(NewInst, ChildProp, Field.Value, ChildErr, Depth + 1, NewInst))
+                {
+                    ChildFailures.Add(FString::Printf(TEXT("%s: %s"), *Field.Key, *ChildErr));
+                }
             }
             OP->SetObjectPropertyValue_InContainer(TargetContainer, NewInst);
+            if (ChildFailures.Num() > 0)
+            {
+                OutError = FString::Printf(TEXT("Re-instanced subobject '%s' but %d field(s) failed to apply: %s"),
+                    *ClassPath, ChildFailures.Num(), *FString::Join(ChildFailures, TEXT("; ")));
+                return false;
+            }
             return true;
         }
         if (ValueField->Type == EJson::String)
@@ -1228,12 +1240,16 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
             if (!ApplyJsonValueToProperty(PairPtr, MP->KeyProp, KeyJson, KeyErr, Depth + 1, OwnerForInstancing))
             {
                 OutError = FString::Printf(TEXT("Map key '%s': %s"), *Pair.Key, *KeyErr);
+                // The just-added index is unhashed; Rehash() (NOT RemoveAt on that
+                // index) restores the container to a valid state before bailing.
+                Helper.Rehash();
                 return false;
             }
             FString ValErr;
             if (!ApplyJsonValueToProperty(PairPtr, MP->ValueProp, Pair.Value, ValErr, Depth + 1, OwnerForInstancing))
             {
                 OutError = FString::Printf(TEXT("Map value for '%s': %s"), *Pair.Key, *ValErr);
+                Helper.Rehash();
                 return false;
             }
         }
@@ -1271,6 +1287,9 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
             if (!ApplyJsonValueToProperty(Helper.GetElementPtr(Index), SetP->ElementProp, Elem, ElemErr, Depth + 1, OwnerForInstancing))
             {
                 OutError = FString::Printf(TEXT("Set element: %s"), *ElemErr);
+                // The just-added index is unhashed; Rehash() (NOT RemoveAt on that
+                // index) restores the container to a valid state before bailing.
+                Helper.Rehash();
                 return false;
             }
         }

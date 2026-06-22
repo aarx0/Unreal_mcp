@@ -285,20 +285,17 @@ static FString NormalizeAudioPath(const FString& Path, bool bForLoad = true)
 }
     
 
-// Helper to save asset - UE 5.7+ Fix: Do not save immediately to avoid modal dialogs.
-// modal progress dialogs that block automation. Instead, just mark dirty and notify registry.
 static bool SaveAudioAsset(UObject* Asset, bool bShouldSave)
 {
     if (!bShouldSave || !Asset)
     {
         return true;
     }
-    
-    // Mark dirty and notify asset registry - do NOT save to disk
-    // This avoids modal dialogs and allows the editor to save later
-    Asset->MarkPackageDirty();
-    FAssetRegistryModule::AssetCreated(Asset);
-    return true;
+
+    // McpSafeAssetSave marks dirty, notifies the registry, and performs a verified
+    // on-disk write under an unattended guard; it returns true only when the package
+    // was actually written.
+    return McpSafeAssetSave(Asset);
 }
 
 // Helper to load sound wave from path

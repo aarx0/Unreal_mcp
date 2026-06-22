@@ -903,8 +903,13 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
             TEXT("SpawnRate")
         );
 
-        bool bModuleAdded = (NewModule != nullptr);
-        
+        const bool bModuleAdded = (NewModule != nullptr);
+        if (!bModuleAdded)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add SpawnRate module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+            return true;
+        }
+
         // Also set user-exposed parameters if available
         FNiagaraUserRedirectionParameterStore& UserStore = System->GetExposedParameters();
         FNiagaraVariable SpawnRateVar(FNiagaraTypeDefinition::GetFloatDef(), FName(TEXT("SpawnRate")));
@@ -961,7 +966,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
             TEXT("SpawnBurst")
         );
 
-        bool bModuleAdded = (NewModule != nullptr);
+        const bool bModuleAdded = (NewModule != nullptr);
+        if (!bModuleAdded)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add SpawnBurst module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+            return true;
+        }
 
         if (bSave)
         {
@@ -1010,7 +1020,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
             TEXT("SpawnPerUnit")
         );
 
-        bool bModuleAdded = (NewModule != nullptr);
+        const bool bModuleAdded = (NewModule != nullptr);
+        if (!bModuleAdded)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add SpawnPerUnit module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+            return true;
+        }
 
         if (bSave)
         {
@@ -1059,7 +1074,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
             TEXT("InitializeParticle")
         );
 
-        bool bModuleAdded = (NewModule != nullptr);
+        const bool bModuleAdded = (NewModule != nullptr);
+        if (!bModuleAdded)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add InitializeParticle module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+            return true;
+        }
 
         if (bSave)
         {
@@ -1107,7 +1127,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
             TEXT("ParticleState")
         );
 
-        bool bModuleAdded = (NewModule != nullptr);
+        const bool bModuleAdded = (NewModule != nullptr);
+        if (!bModuleAdded)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add ParticleState module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+            return true;
+        }
 
         if (bSave)
         {
@@ -1196,7 +1221,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
             FString::Printf(TEXT("%sForce"), *ForceType)
         );
 
-        bool bModuleAdded = (NewModule != nullptr);
+        const bool bModuleAdded = (NewModule != nullptr);
+        if (!bModuleAdded)
+        {
+            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Failed to add %s force module to emitter stack."), *ForceType), TEXT("MODULE_ADD_FAILED"));
+            return true;
+        }
 
         if (bSave)
         {
@@ -1269,7 +1299,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
             TEXT("AddVelocity")
         );
 
-        bool bModuleAdded = (NewModule != nullptr);
+        const bool bModuleAdded = (NewModule != nullptr);
+        if (!bModuleAdded)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add velocity module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+            return true;
+        }
 
         if (bSave)
         {
@@ -1300,11 +1335,34 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
             return true;
         }
 
+        FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
+        if (!Handle)
+        {
+            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+            return true;
+        }
+
         const TSharedPtr<FJsonObject>* AccelObj;
         FVector Acceleration = FVector(0, 0, -980);
         if (Payload->TryGetObjectField(TEXT("acceleration"), AccelObj))
         {
             Acceleration = GetVectorFromJsonNiag(*AccelObj);
+        }
+
+        // Acceleration is applied as a per-frame force; mirror add_force_module's
+        // AccelerationForce path so a real stack module is added.
+        UNiagaraNodeFunctionCall* NewModule = AddModuleToEmitterStack(
+            Handle,
+            TEXT("/Niagara/Modules/Update/Forces/AccelerationForce.AccelerationForce"),
+            ENiagaraScriptUsage::ParticleUpdateScript,
+            TEXT("AccelerationForce")
+        );
+
+        const bool bModuleAdded = (NewModule != nullptr);
+        if (!bModuleAdded)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Acceleration module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+            return true;
         }
 
         const bool bParameterAdded = AddOrSetVectorUserParameter(System, TEXT("MCP_Acceleration"), Acceleration);
@@ -1316,10 +1374,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         McpHandlerUtils::AddVerification(Result, System);
         Result->SetStringField(TEXT("moduleName"), TEXT("Acceleration"));
+        Result->SetBoolField(TEXT("moduleAdded"), bModuleAdded);
         Result->SetBoolField(TEXT("parameterAdded"), bParameterAdded);
         Result->SetStringField(TEXT("parameterName"), TEXT("MCP_Acceleration"));
-        Result->SetStringField(TEXT("message"), TEXT("Configured acceleration module."));
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Acceleration module configured."), Result);
+        Result->SetStringField(TEXT("message"), TEXT("Added acceleration module."));
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Acceleration module added."), Result);
         return true;
     }
 
@@ -1338,8 +1397,29 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
             return true;
         }
 
+        FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
+        if (!Handle)
+        {
+            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+            return true;
+        }
+
         FString SizeMode = GetJsonStringField(Payload, TEXT("sizeMode"), TEXT("Uniform"));
         double UniformSize = GetJsonNumberField(Payload, TEXT("uniformSize"), 10.0);
+
+        UNiagaraNodeFunctionCall* NewModule = AddModuleToEmitterStack(
+            Handle,
+            TEXT("/Niagara/Modules/Update/Size/ScaleSpriteSize.ScaleSpriteSize"),
+            ENiagaraScriptUsage::ParticleUpdateScript,
+            TEXT("ScaleSpriteSize")
+        );
+
+        const bool bModuleAdded = (NewModule != nullptr);
+        if (!bModuleAdded)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Size module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+            return true;
+        }
 
         const bool bParameterAdded = AddOrSetFloatUserParameter(System, TEXT("MCP_UniformSize"), static_cast<float>(UniformSize));
 
@@ -1352,10 +1432,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
         Result->SetStringField(TEXT("moduleName"), TEXT("Size"));
         Result->SetStringField(TEXT("sizeMode"), SizeMode);
         Result->SetNumberField(TEXT("uniformSize"), UniformSize);
+        Result->SetBoolField(TEXT("moduleAdded"), bModuleAdded);
         Result->SetBoolField(TEXT("parameterAdded"), bParameterAdded);
         Result->SetStringField(TEXT("parameterName"), TEXT("MCP_UniformSize"));
-        Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Configured size module: mode=%s, size=%.1f"), *SizeMode, UniformSize));
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Size module configured."), Result);
+        Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added size module: mode=%s, size=%.1f"), *SizeMode, UniformSize));
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Size module added."), Result);
         return true;
     }
 
@@ -1374,6 +1455,13 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
             return true;
         }
 
+        FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
+        if (!Handle)
+        {
+            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+            return true;
+        }
+
         const TSharedPtr<FJsonObject>* ColorObj;
         FLinearColor Color = FLinearColor::White;
         if (Payload->TryGetObjectField(TEXT("color"), ColorObj))
@@ -1382,6 +1470,20 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
         }
 
         FString ColorMode = GetJsonStringField(Payload, TEXT("colorMode"), TEXT("Direct"));
+
+        UNiagaraNodeFunctionCall* NewModule = AddModuleToEmitterStack(
+            Handle,
+            TEXT("/Niagara/Modules/Update/Color/Color.Color"),
+            ENiagaraScriptUsage::ParticleUpdateScript,
+            TEXT("Color")
+        );
+
+        const bool bModuleAdded = (NewModule != nullptr);
+        if (!bModuleAdded)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Color module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+            return true;
+        }
 
         const bool bParameterAdded = AddOrSetColorUserParameter(System, TEXT("MCP_Color"), Color);
 
@@ -1393,10 +1495,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
         McpHandlerUtils::AddVerification(Result, System);
         Result->SetStringField(TEXT("moduleName"), TEXT("Color"));
         Result->SetStringField(TEXT("colorMode"), ColorMode);
+        Result->SetBoolField(TEXT("moduleAdded"), bModuleAdded);
         Result->SetBoolField(TEXT("parameterAdded"), bParameterAdded);
         Result->SetStringField(TEXT("parameterName"), TEXT("MCP_Color"));
-        Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Configured color module: mode=%s"), *ColorMode));
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Color module configured."), Result);
+        Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added color module: mode=%s"), *ColorMode));
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Color module added."), Result);
         return true;
     }
 
@@ -1768,6 +1871,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
         );
 
         const bool bModuleAdded = (NewModule != nullptr);
+        if (!bModuleAdded)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Collision module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+            return true;
+        }
         const bool bRestitutionAdded = AddOrSetFloatUserParameter(System, TEXT("MCP_CollisionRestitution"), static_cast<float>(Restitution));
         const bool bFrictionAdded = AddOrSetFloatUserParameter(System, TEXT("MCP_CollisionFriction"), static_cast<float>(Friction));
         const bool bDieOnCollisionAdded = AddOrSetBoolUserParameter(System, TEXT("MCP_DieOnCollision"), bDieOnCollision);
@@ -1822,6 +1930,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
         );
 
         const bool bModuleAdded = (NewModule != nullptr);
+        if (!bModuleAdded)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add KillParticles module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+            return true;
+        }
         const bool bParameterAdded = AddOrSetBoolUserParameter(System, TEXT("MCP_KillParticlesEnabled"), true);
 
         if (bSave)
@@ -1871,6 +1984,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
         );
 
         const bool bModuleAdded = (NewModule != nullptr);
+        if (!bModuleAdded)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add CameraOffset module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+            return true;
+        }
         const bool bParameterAdded = AddOrSetFloatUserParameter(System, TEXT("MCP_CameraOffset"), static_cast<float>(CameraOffset));
 
         if (bSave)

@@ -487,7 +487,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddCameraTrack(
 
     // Get or create camera cut track
     UMovieSceneTrack* CutBase = MovieScene->GetCameraCutTrack();
-    UMovieSceneCameraCutTrack* CameraCutTrack = CutBase ? 
+    UMovieSceneCameraCutTrack* CameraCutTrack = CutBase ?
         Cast<UMovieSceneCameraCutTrack>(CutBase) : nullptr;
 
     if (!CameraCutTrack)
@@ -496,47 +496,61 @@ bool UMcpAutomationBridgeSubsystem::HandleAddCameraTrack(
         CameraCutTrack = Cast<UMovieSceneCameraCutTrack>(NewTrack);
     }
 
-    if (CameraCutTrack)
+    if (!CameraCutTrack)
     {
-        FFrameRate DisplayRate = MovieScene->GetDisplayRate();
-        FFrameTime StartFrameTime = DisplayRate.AsFrameTime(StartTime);
-        FFrameTime EndFrameTime = DisplayRate.AsFrameTime(EndTime);
-        FFrameNumber StartFrame = StartFrameTime.GetFrame();
-        FFrameNumber EndFrame = EndFrameTime.GetFrame();
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("Failed to create camera cut track"), TEXT("TRACK_CREATION_FAILED"));
+        return true;
+    }
 
-        UMovieSceneCameraCutSection* CameraCutSection = 
-            Cast<UMovieSceneCameraCutSection>(CameraCutTrack->CreateNewSection());
-        if (CameraCutSection)
+    FFrameRate DisplayRate = MovieScene->GetDisplayRate();
+    FFrameTime StartFrameTime = DisplayRate.AsFrameTime(StartTime);
+    FFrameTime EndFrameTime = DisplayRate.AsFrameTime(EndTime);
+    FFrameNumber StartFrame = StartFrameTime.GetFrame();
+    FFrameNumber EndFrame = EndFrameTime.GetFrame();
+
+    UMovieSceneCameraCutSection* CameraCutSection =
+        Cast<UMovieSceneCameraCutSection>(CameraCutTrack->CreateNewSection());
+    if (!CameraCutSection)
+    {
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("Failed to create camera cut section"), TEXT("SECTION_CREATION_FAILED"));
+        return true;
+    }
+
+    CameraCutTrack->AddSection(*CameraCutSection);
+    CameraCutSection->SetRange(TRange<FFrameNumber>(StartFrame, EndFrame));
+
+    // Resolve the binding for the SPECIFIC camera the caller named, reusing an
+    // existing possessable bound to it or creating + binding one.
+    UObject* CameraContext = CameraActor->GetWorld();
+    FGuid CameraGuid = LevelSequence->FindPossessableObjectId(*CameraActor, CameraContext);
+    if (!CameraGuid.IsValid())
+    {
+        CameraGuid = MovieScene->AddPossessable(CameraActor->GetActorLabel(), CameraActor->GetClass());
+        if (CameraGuid.IsValid())
         {
-            CameraCutTrack->AddSection(*CameraCutSection);
-            CameraCutSection->SetRange(TRange<FFrameNumber>(StartFrame, EndFrame));
-
-            // Find camera binding
-            FGuid CameraGuid;
-            for (int32 i = 0; i < MovieScene->GetPossessableCount(); ++i)
-            {
-                FMovieScenePossessable& Possessable = MovieScene->GetPossessable(i);
-                if (Possessable.GetPossessedObjectClass() && 
-                    Possessable.GetPossessedObjectClass()->IsChildOf(ACameraActor::StaticClass()))
-                {
-                    CameraGuid = Possessable.GetGuid();
-                    break;
-                }
-            }
-
-            if (CameraGuid.IsValid())
-            {
-                CameraCutSection->SetCameraBindingID(FMovieSceneObjectBindingID(CameraGuid));
-            }
-
-            MovieScene->Modify();
+            LevelSequence->BindPossessableObject(CameraGuid, *CameraActor, CameraContext);
         }
     }
+
+    if (!CameraGuid.IsValid())
+    {
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("Failed to resolve a camera binding for the specified cameraActorPath"),
+            TEXT("CAMERA_BINDING_FAILED"));
+        return true;
+    }
+
+    CameraCutSection->SetCameraBindingID(FMovieSceneObjectBindingID(
+        UE::MovieScene::FFixedObjectBindingID(CameraGuid, MovieSceneSequenceID::Root)));
+    MovieScene->Modify();
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, LevelSequence);
     Result->SetBoolField(TEXT("success"), true);
     Result->SetStringField(TEXT("cameraActorPath"), CameraActorPath);
+    Result->SetStringField(TEXT("cameraBindingGuid"), CameraGuid.ToString());
     Result->SetNumberField(TEXT("startTime"), StartTime);
     Result->SetNumberField(TEXT("endTime"), EndTime);
 

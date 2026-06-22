@@ -172,6 +172,7 @@
 #include "StateTreeState.h"
 #include "StateTreeCompiler.h"
 #include "StateTreeCompilerLog.h"
+#include "StateTreeTaskBase.h"
 
 // UE 5.7+ moved StateTreeComponentSchema to GameplayStateTreeModule
 #if __has_include("Components/StateTreeComponentSchema.h")
@@ -2173,14 +2174,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         McpHandlerUtils::AddVerification(Result, StateTree);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("State Tree created"), Result);
 #elif MCP_HAS_STATE_TREE
-        // Headers not available but version supports it
-        FString Name = GetJsonStringField(Payload, TEXT("name"));
-        FString Path = GetJsonStringField(Payload, TEXT("path"), TEXT("/Game/AI/StateTrees"));
-        Result->SetStringField(TEXT("stateTreePath"), Path / Name);
-        Result->SetStringField(TEXT("message"), TEXT("State Tree creation registered (headers unavailable - enable StateTree plugin)"));
-        Result->SetBoolField(TEXT("headersUnavailable"), true);
-        // Note: No verification since StateTree was not actually created
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("State Tree registered"), Result);
+        // StateTree headers were not present at compile time, so no asset can be created.
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("State Tree creation is unavailable: StateTree editor headers were not present when this plugin was compiled. Rebuild the bridge with the StateTree plugin enabled."),
+            TEXT("STATETREE_HEADERS_UNAVAILABLE"));
 #else
         SendAutomationError(RequestingSocket, RequestId,
                             TEXT("State Trees require UE 5.3+"),
@@ -2282,13 +2279,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         McpHandlerUtils::AddVerification(Result, StateTree);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("State added"), Result);
 #elif MCP_HAS_STATE_TREE
-        FString StateTreePath = GetJsonStringField(Payload, TEXT("stateTreePath"));
-        FString StateName = GetJsonStringField(Payload, TEXT("stateName"));
-        Result->SetStringField(TEXT("stateName"), StateName);
-        Result->SetStringField(TEXT("message"), TEXT("State addition registered (headers unavailable)"));
-        Result->SetBoolField(TEXT("headersUnavailable"), true);
-        // Note: No verification since StateTree headers unavailable
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("State registered"), Result);
+        // StateTree headers were not present at compile time, so no state can be added.
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("Adding a State Tree state is unavailable: StateTree editor headers were not present when this plugin was compiled. Rebuild the bridge with the StateTree plugin enabled."),
+            TEXT("STATETREE_HEADERS_UNAVAILABLE"));
 #else
         SendAutomationError(RequestingSocket, RequestId,
                             TEXT("State Trees require UE 5.3+"),
@@ -2515,13 +2509,76 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             (void)Behavior; // Suppress unused warning
 #endif
 }
-        
+
+        bool bTaskAdded = false;
+        FString ResolvedTaskStructPath;
+        if (!TaskType.IsEmpty())
+        {
+            // Tasks are FInstancedStruct nodes whose struct must derive from
+            // FStateTreeTaskBase (mirrors the BaseStruct meta on UStateTreeState::Tasks).
+            const UScriptStruct* TaskBaseStruct = FStateTreeTaskBase::StaticStruct();
+            const UScriptStruct* TaskStruct = FindObject<UScriptStruct>(nullptr, *TaskType);
+            if (!TaskStruct)
+            {
+                TaskStruct = FindObject<UScriptStruct>(nullptr, *FString::Printf(TEXT("/Script/StateTreeModule.%s"), *TaskType));
+            }
+            if (!TaskStruct)
+            {
+                TaskStruct = FindObject<UScriptStruct>(nullptr, *FString::Printf(TEXT("/Script/StateTreeModule.StateTree%sTask"), *TaskType));
+            }
+            if (!TaskStruct)
+            {
+                TaskStruct = FindFirstObject<UScriptStruct>(*TaskType, EFindFirstObjectOptions::NativeFirst);
+            }
+
+            if (!TaskStruct)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("taskType '%s' did not resolve to a UScriptStruct"), *TaskType),
+                    TEXT("NOT_FOUND"));
+                return true;
+            }
+            if (!TaskStruct->IsChildOf(TaskBaseStruct))
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("taskType '%s' (%s) does not derive from FStateTreeTaskBase"), *TaskType, *TaskStruct->GetPathName()),
+                    TEXT("INVALID_PARAMS"));
+                return true;
+            }
+
+            // Mirror UStateTreeState::AddTask<T> at runtime: add a defaulted editor node,
+            // give it an ID, instantiate the task struct, then init its instance data.
+            FStateTreeEditorNode& TaskNode = FoundState->Tasks.AddDefaulted_GetRef();
+            TaskNode.ID = FGuid::NewGuid();
+            TaskNode.Node.InitializeAs(TaskStruct);
+            if (const FStateTreeNodeBase* NodeBase = TaskNode.Node.GetPtr<FStateTreeNodeBase>())
+            {
+                if (const UScriptStruct* InstanceType = Cast<const UScriptStruct>(NodeBase->GetInstanceDataType()))
+                {
+                    TaskNode.Instance.InitializeAs(InstanceType);
+                }
+                if (const UScriptStruct* RuntimeType = Cast<const UScriptStruct>(NodeBase->GetExecutionRuntimeDataType()))
+                {
+                    TaskNode.ExecutionRuntimeData.InitializeAs(RuntimeType);
+                }
+            }
+            bTaskAdded = true;
+            ResolvedTaskStructPath = TaskStruct->GetPathName();
+        }
+
         // Save
         McpSafeAssetSave(StateTree);
-        
+
         Result->SetStringField(TEXT("stateName"), StateName);
+        Result->SetBoolField(TEXT("taskAdded"), bTaskAdded);
+        if (bTaskAdded)
+        {
+            Result->SetStringField(TEXT("taskType"), ResolvedTaskStructPath);
+        }
         Result->SetNumberField(TEXT("taskCount"), FoundState->Tasks.Num());
-        Result->SetStringField(TEXT("message"), TEXT("State task configuration updated"));
+        Result->SetStringField(TEXT("message"), bTaskAdded
+            ? TEXT("Task added to state")
+            : TEXT("State task configuration updated (no taskType supplied)"));
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Task configured"), Result);
 #elif MCP_HAS_STATE_TREE
         FString StateTreePath = GetJsonStringField(Payload, TEXT("stateTreePath"));
@@ -2590,12 +2647,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         McpHandlerUtils::AddVerification(Result, Definition); // existsAfter/assetPath, matching other creates
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Definition created"), Result);
 #elif MCP_HAS_SMART_OBJECTS
-        FString Name = GetJsonStringField(Payload, TEXT("name"));
-        FString Path = GetJsonStringField(Payload, TEXT("path"), TEXT("/Game/AI/SmartObjects"));
-        Result->SetStringField(TEXT("definitionPath"), Path / Name);
-        Result->SetStringField(TEXT("message"), TEXT("Smart Object Definition registered (headers unavailable - enable SmartObjects plugin)"));
-        Result->SetBoolField(TEXT("headersUnavailable"), true);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Definition registered"), Result);
+        // SmartObjects headers were not present at compile time, so no asset can be created.
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("Smart Object Definition creation is unavailable: SmartObjects headers were not present when this plugin was compiled. Rebuild the bridge with the SmartObjects plugin enabled."),
+            TEXT("SMARTOBJECTS_HEADERS_UNAVAILABLE"));
 #else
         SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Smart Objects require UE 5.0+"),
@@ -2893,12 +2948,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         McpHandlerUtils::AddVerification(Result, ConfigAsset); // existsAfter/assetPath, matching other creates
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Config created"), Result);
 #elif MCP_HAS_MASS_AI
-        FString Name = GetJsonStringField(Payload, TEXT("name"));
-        FString Path = GetJsonStringField(Payload, TEXT("path"), TEXT("/Game/AI/Mass"));
-        Result->SetStringField(TEXT("configPath"), Path / Name);
-        Result->SetStringField(TEXT("message"), TEXT("Mass Entity Config registered (headers unavailable - enable MassEntity plugin)"));
-        Result->SetBoolField(TEXT("headersUnavailable"), true);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Config registered"), Result);
+        // MassEntity headers were not present at compile time, so no asset can be created.
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("Mass Entity Config creation is unavailable: MassEntity headers were not present when this plugin was compiled. Rebuild the bridge with the MassEntity plugin enabled."),
+            TEXT("MASS_HEADERS_UNAVAILABLE"));
 #else
         SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Mass AI requires UE 5.0+ with MassEntity plugin"),

@@ -2573,20 +2573,27 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetCollision(
     return true;
   }
   
-  // Set collision on root component
-  if (USceneComponent* RootComp = Actor->GetRootComponent()) {
-    if (UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(RootComp)) {
-      if (bCollisionEnabled) {
-        PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-      } else {
-        PrimComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-      }
+  const ECollisionEnabled::Type NewCollision =
+      bCollisionEnabled ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision;
+  int32 ModifiedCount = 0;
+  for (UActorComponent* Comp : Actor->GetComponents()) {
+    if (UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(Comp)) {
+      PrimComp->SetCollisionEnabled(NewCollision);
+      ++ModifiedCount;
     }
   }
-  
+
+  if (ModifiedCount == 0) {
+    SendAutomationError(Socket, RequestId,
+        FString::Printf(TEXT("Actor has no primitive component to set collision on: %s"), *ActorName),
+        TEXT("NO_PRIMITIVE_COMPONENT"));
+    return true;
+  }
+
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   Data->SetStringField(TEXT("actorName"), ActorName);
   Data->SetBoolField(TEXT("collisionEnabled"), bCollisionEnabled);
+  Data->SetNumberField(TEXT("componentsModified"), ModifiedCount);
   SendStandardSuccessResponse(this, Socket, RequestId, TEXT("Collision setting updated"), Data);
   return true;
 #else

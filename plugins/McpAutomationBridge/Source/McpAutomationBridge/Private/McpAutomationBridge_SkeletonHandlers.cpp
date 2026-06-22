@@ -1164,10 +1164,15 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigurePhysicsBody(
     double Mass = 0.0;
     if (Payload->TryGetNumberField(TEXT("mass"), Mass))
     {
-        // Mass is set via DefaultInstance
-        BodySetup->DefaultInstance.MassScale = 1.0f;
-        BodySetup->DefaultInstance.bOverrideMass = true;
-        // Note: Actual mass is calculated from density and volume
+        // MassInKgOverride is clamped to >= 0.001 by the engine; reject non-positive input loudly.
+        if (Mass < 0.001)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("mass must be >= 0.001 kg (got %f)"), Mass),
+                TEXT("UNSUPPORTED_PARAM"));
+            return true;
+        }
+        BodySetup->DefaultInstance.SetMassOverride(static_cast<float>(Mass), true);
     }
 
     double LinearDamping = 0.0;
@@ -2016,24 +2021,13 @@ bool UMcpAutomationBridgeSubsystem::HandleNormalizeWeights(
         return true;
     }
 
-    // Weight normalization is typically done during import
-    // The mesh's skin weights should already be normalized
-    // We can trigger a rebuild of the weights
-    
-    Mesh->Build();
-    McpSafeAssetSave(Mesh);
-
-    // Save if requested
-    bool bSave = false;
-    Payload->TryGetBoolField(TEXT("save"), bSave);
-    if (bSave)
-    {
-    }
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
-
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Skin weights normalized"), Result);
+    // A plain Mesh->Build() does NOT renormalize skin weights; it only rebuilds
+    // render data from the existing imported weights. Re-weighting requires the
+    // Skeletal Mesh Editor's weight tools (no safe in-place API on UE 5.7).
+    SendAutomationError(RequestingSocket, RequestId,
+        TEXT("Skin weight normalization is not supported via the bridge. Use the Skeletal Mesh Editor's ")
+        TEXT("Skin Weights tools (or re-import with normalization enabled). A plain rebuild does not renormalize weights."),
+        TEXT("MANUAL_INTERVENTION_REQUIRED"));
     return true;
 }
 
@@ -2064,26 +2058,14 @@ bool UMcpAutomationBridgeSubsystem::HandlePruneWeights(
         return true;
     }
 
-    // Skin weight pruning is done during import/build
-    // For runtime, we can trigger a rebuild with the threshold
-    // Note: This requires setting import options which are not accessible post-import
-    
-    Mesh->Build();
-    McpSafeAssetSave(Mesh);
-
-    // Save if requested
-    bool bSave = false;
-    Payload->TryGetBoolField(TEXT("save"), bSave);
-    if (bSave)
-    {
-    }
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
-    Result->SetNumberField(TEXT("threshold"), Threshold);
-
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
-        FString::Printf(TEXT("Weights pruned with threshold %f"), Threshold), Result);
+    // The prune threshold is an import-time option; a post-import Mesh->Build()
+    // does NOT drop low influences (it rebuilds render data from existing weights).
+    // Pruning safely requires the editor's Skin Weights tools or a re-import.
+    SendAutomationError(RequestingSocket, RequestId,
+        FString::Printf(TEXT("Skin weight pruning (threshold %f) is not supported via the bridge. ")
+            TEXT("Re-import the mesh with the influence threshold set, or use the Skeletal Mesh Editor. ")
+            TEXT("A plain rebuild does not prune influences."), Threshold),
+        TEXT("MANUAL_INTERVENTION_REQUIRED"));
     return true;
 }
 
@@ -3729,16 +3711,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     }
     else if (SubAction == TEXT("auto_skin_weights"))
     {
-        // Auto skin weights computation - typically done during import
-        // We trigger a mesh rebuild which recalculates default weights
         FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
-        
+
         if (SkeletalMeshPath.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
             return true;
         }
-        
+
         FString Error;
         USkeletalMesh* Mesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
         if (!Mesh)
@@ -3746,17 +3726,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
             SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
             return true;
         }
-        
-        // Rebuild the mesh - this recalculates skin weights based on bone positions
-        Mesh->Build();
-        McpSafeAssetSave(Mesh);
-        
-        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
-        Result->SetBoolField(TEXT("rebuilt"), true);
-        
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
-            TEXT("Mesh rebuilt with recalculated skin weights"), Result);
+
+        // Mesh->Build() rebuilds render data from existing weights; it does NOT compute
+        // auto/heat-map skin weights from bone positions. Auto-skinning lives in the
+        // DCC import pipeline / editor tools, with no safe in-place API on UE 5.7.
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("Automatic skin weight computation is not supported via the bridge. Auto-skinning is an ")
+            TEXT("import-time / DCC operation; re-import the mesh with auto weights, or bind weights in the ")
+            TEXT("Skeletal Mesh Editor. A plain rebuild does not compute new weights."),
+            TEXT("MANUAL_INTERVENTION_REQUIRED"));
         return true;
     }
     else if (SubAction == TEXT("copy_weights"))
@@ -3830,41 +3808,16 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
             return true;
         }
         
-        FSkeletalMeshLODModel& SourceLOD = SourceModel->LODModels[LODIndex];
-        FSkeletalMeshLODModel& TargetLOD = TargetModel->LODModels[LODIndex];
-        
-        // Create skin weight profile on target
-        FSkinWeightProfileInfo NewProfile;
-        NewProfile.Name = FName(*ProfileName);
-        TargetMesh->AddSkinWeightProfile(NewProfile);
-        
-        FImportedSkinWeightProfileData& ProfileData = TargetLOD.SkinWeightProfiles.FindOrAdd(FName(*ProfileName));
-        
-        // Copy weights from source (limited by vertex count)
-        uint32 VertsToCopy = FMath::Min(SourceLOD.NumVertices, TargetLOD.NumVertices);
-        ProfileData.SkinWeights.SetNum(TargetLOD.NumVertices);
-        
-        // Initialize with zeros
-        for (uint32 i = 0; i < TargetLOD.NumVertices; ++i)
-        {
-            FMemory::Memzero(&ProfileData.SkinWeights[i], sizeof(FRawSkinWeight));
-        }
-        
-        // Note: Direct weight copying requires accessing the source vertex buffer
-        // For now we indicate the profile was created and user should use the editor for precise transfer
-        
-        TargetMesh->Build();
-        McpSafeAssetSave(TargetMesh);
-        
-        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetStringField(TEXT("sourceMeshPath"), SourceMeshPath);
-        Result->SetStringField(TEXT("targetMeshPath"), TargetMeshPath);
-        Result->SetStringField(TEXT("profileName"), ProfileName);
-        Result->SetNumberField(TEXT("lodIndex"), LODIndex);
-        Result->SetStringField(TEXT("note"), TEXT("Skin weight profile created. Use FSkinWeightProfileHelpers::ImportSkinWeightProfile for precise transfer."));
-        
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
-            FString::Printf(TEXT("Skin weight profile '%s' created on target mesh"), *ProfileName), Result);
+        // Per-vertex weight transfer requires mapping source vertices onto target
+        // topology (closest-point / barycentric) and the SkeletalMeshUtilitiesCommon
+        // transfer API. Creating an empty profile and zeroing every influence is NOT
+        // a copy, so report an honest error instead of fabricating one.
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("Skin weight transfer from '%s' to '%s' is not supported via the bridge. ")
+                TEXT("Use the Skeletal Mesh Editor's 'Transfer Skin Weights' tool (or a DCC weight-transfer) ")
+                TEXT("for a correct mapping; the bridge will not write an empty profile and call it copied."),
+                *SourceMeshPath, *TargetMeshPath),
+            TEXT("MANUAL_INTERVENTION_REQUIRED"));
         return true;
 #else
         SendAutomationError(RequestingSocket, RequestId, TEXT("copy_weights requires editor mode"), TEXT("NOT_EDITOR"));

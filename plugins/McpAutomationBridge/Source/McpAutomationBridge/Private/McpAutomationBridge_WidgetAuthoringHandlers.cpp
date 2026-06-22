@@ -6183,16 +6183,26 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         // Add to root or parent
         UPanelWidget* Parent = Cast<UPanelWidget>(WidgetBP->WidgetTree->RootWidget);
-        if (Parent)
+        if (!Parent)
         {
-            Parent->AddChild(MinimapContainer);
-            if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(MinimapContainer->Slot))
-            {
-                Slot->SetAnchors(FAnchors(1.0f, 0.0f, 1.0f, 0.0f)); // Top-right
-                Slot->SetAlignment(FVector2D(1.0f, 0.0f));
-                Slot->SetSize(FVector2D(Size, Size));
-                Slot->SetPosition(FVector2D(-20.0f, 20.0f)); // Offset from corner
-            }
+            DiscardUnaddedWidget(WidgetBP, PlayerIndicator);
+            DiscardUnaddedWidget(WidgetBP, MapImage);
+            DiscardUnaddedWidget(WidgetBP, MinimapBorder);
+            DiscardUnaddedWidget(WidgetBP, MinimapContainer);
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("Cannot add minimap: the widget blueprint has no panel root to parent it under. ")
+                TEXT("Give the blueprint a panel root first (e.g. add_canvas_panel)."),
+                TEXT("ADD_FAILED"));
+            return true;
+        }
+
+        Parent->AddChild(MinimapContainer);
+        if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(MinimapContainer->Slot))
+        {
+            Slot->SetAnchors(FAnchors(1.0f, 0.0f, 1.0f, 0.0f)); // Top-right
+            Slot->SetAlignment(FVector2D(1.0f, 0.0f));
+            Slot->SetSize(FVector2D(Size, Size));
+            Slot->SetPosition(FVector2D(-20.0f, 20.0f)); // Offset from corner
         }
 
         // CRITICAL: Register all widget GUIDs to prevent ensure failures during compilation
@@ -6243,16 +6253,25 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         CompassContainer->AddChild(DirectionIndicator);
 
         UPanelWidget* Parent = Cast<UPanelWidget>(WidgetBP->WidgetTree->RootWidget);
-        if (Parent)
+        if (!Parent)
         {
-            Parent->AddChild(CompassContainer);
-            if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CompassContainer->Slot))
-            {
-                Slot->SetAnchors(FAnchors(0.5f, 0.0f, 0.5f, 0.0f)); // Top-center
-                Slot->SetAlignment(FVector2D(0.5f, 0.0f));
-                Slot->SetSize(FVector2D(400.0f, 40.0f));
-                Slot->SetPosition(FVector2D(0.0f, 20.0f));
-            }
+            DiscardUnaddedWidget(WidgetBP, DirectionIndicator);
+            DiscardUnaddedWidget(WidgetBP, CompassImage);
+            DiscardUnaddedWidget(WidgetBP, CompassContainer);
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("Cannot add compass: the widget blueprint has no panel root to parent it under. ")
+                TEXT("Give the blueprint a panel root first (e.g. add_canvas_panel)."),
+                TEXT("ADD_FAILED"));
+            return true;
+        }
+
+        Parent->AddChild(CompassContainer);
+        if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CompassContainer->Slot))
+        {
+            Slot->SetAnchors(FAnchors(0.5f, 0.0f, 0.5f, 0.0f)); // Top-center
+            Slot->SetAlignment(FVector2D(0.5f, 0.0f));
+            Slot->SetSize(FVector2D(400.0f, 40.0f));
+            Slot->SetPosition(FVector2D(0.0f, 20.0f));
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
@@ -6301,15 +6320,24 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         PromptContainer->AddChild(PromptText);
 
         UPanelWidget* Parent = Cast<UPanelWidget>(WidgetBP->WidgetTree->RootWidget);
-        if (Parent)
+        if (!Parent)
         {
-            Parent->AddChild(PromptContainer);
-            if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(PromptContainer->Slot))
-            {
-                Slot->SetAnchors(FAnchors(0.5f, 0.7f, 0.5f, 0.7f)); // Center-bottom area
-                Slot->SetAlignment(FVector2D(0.5f, 0.5f));
-                Slot->SetAutoSize(true);
-            }
+            DiscardUnaddedWidget(WidgetBP, PromptText);
+            DiscardUnaddedWidget(WidgetBP, KeyIcon);
+            DiscardUnaddedWidget(WidgetBP, PromptContainer);
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("Cannot add interaction prompt: the widget blueprint has no panel root to parent it under. ")
+                TEXT("Give the blueprint a panel root first (e.g. add_canvas_panel)."),
+                TEXT("ADD_FAILED"));
+            return true;
+        }
+
+        Parent->AddChild(PromptContainer);
+        if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(PromptContainer->Slot))
+        {
+            Slot->SetAnchors(FAnchors(0.5f, 0.7f, 0.5f, 0.7f)); // Center-bottom area
+            Slot->SetAlignment(FVector2D(0.5f, 0.5f));
+            Slot->SetAutoSize(true);
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
@@ -6366,16 +6394,28 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         ObjectiveList->AddChild(SampleObjective);
 
         UPanelWidget* Parent = Cast<UPanelWidget>(WidgetBP->WidgetTree->RootWidget);
-        if (Parent)
+        if (!Parent)
         {
-            Parent->AddChild(ObjectiveContainer);
-            if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(ObjectiveContainer->Slot))
-            {
-                Slot->SetAnchors(FAnchors(1.0f, 0.0f, 1.0f, 0.0f)); // Top-right
-                Slot->SetAlignment(FVector2D(1.0f, 0.0f));
-                Slot->SetPosition(FVector2D(-20.0f, 100.0f));
-                Slot->SetAutoSize(true);
-            }
+            DiscardUnaddedWidget(WidgetBP, ObjectiveText);
+            DiscardUnaddedWidget(WidgetBP, ObjectiveCheck);
+            DiscardUnaddedWidget(WidgetBP, SampleObjective);
+            DiscardUnaddedWidget(WidgetBP, ObjectiveList);
+            DiscardUnaddedWidget(WidgetBP, ObjectiveTitle);
+            DiscardUnaddedWidget(WidgetBP, ObjectiveContainer);
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("Cannot add objective tracker: the widget blueprint has no panel root to parent it under. ")
+                TEXT("Give the blueprint a panel root first (e.g. add_canvas_panel)."),
+                TEXT("ADD_FAILED"));
+            return true;
+        }
+
+        Parent->AddChild(ObjectiveContainer);
+        if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(ObjectiveContainer->Slot))
+        {
+            Slot->SetAnchors(FAnchors(1.0f, 0.0f, 1.0f, 0.0f)); // Top-right
+            Slot->SetAlignment(FVector2D(1.0f, 0.0f));
+            Slot->SetPosition(FVector2D(-20.0f, 100.0f));
+            Slot->SetAutoSize(true);
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
@@ -6423,22 +6463,37 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         DamageOverlay->AddChild(DirectionalCanvas);
 
         // Add directional indicators (N, S, E, W)
+        TArray<UImage*> DirIndicators;
         for (const FString& Dir : { TEXT("Top"), TEXT("Bottom"), TEXT("Left"), TEXT("Right") })
         {
             UImage* DirIndicator = CreateAndRegisterWidget<UImage>(WidgetBP, WidgetBP->WidgetTree, *(SlotName + TEXT("_") + Dir));
             DirIndicator->SetVisibility(ESlateVisibility::Hidden);
             DirectionalCanvas->AddChild(DirIndicator);
+            DirIndicators.Add(DirIndicator);
         }
 
         UPanelWidget* Parent = Cast<UPanelWidget>(WidgetBP->WidgetTree->RootWidget);
-        if (Parent)
+        if (!Parent)
         {
-            Parent->AddChild(DamageOverlay);
-            if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(DamageOverlay->Slot))
+            for (UImage* DirIndicator : DirIndicators)
             {
-                Slot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f)); // Full screen
-                Slot->SetOffsets(FMargin(0.0f));
+                DiscardUnaddedWidget(WidgetBP, DirIndicator);
             }
+            DiscardUnaddedWidget(WidgetBP, DirectionalCanvas);
+            DiscardUnaddedWidget(WidgetBP, VignetteImage);
+            DiscardUnaddedWidget(WidgetBP, DamageOverlay);
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("Cannot add damage indicator: the widget blueprint has no panel root to parent it under. ")
+                TEXT("Give the blueprint a panel root first (e.g. add_canvas_panel)."),
+                TEXT("ADD_FAILED"));
+            return true;
+        }
+
+        Parent->AddChild(DamageOverlay);
+        if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(DamageOverlay->Slot))
+        {
+            Slot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f)); // Full screen
+            Slot->SetOffsets(FMargin(0.0f));
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);

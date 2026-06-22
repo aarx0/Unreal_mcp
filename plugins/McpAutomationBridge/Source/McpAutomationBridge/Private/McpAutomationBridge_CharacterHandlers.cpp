@@ -625,19 +625,45 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         bool bSkeletalMeshAssigned = false;
         if (RequestedMesh)
         {
-            for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
+            if (Blueprint->SimpleConstructionScript)
             {
-                if (Node && Node->ComponentTemplate && 
-                    Node->ComponentTemplate->IsA<USkeletalMeshComponent>())
+                for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
                 {
-                    USkeletalMeshComponent* MeshComp = Cast<USkeletalMeshComponent>(Node->ComponentTemplate);
-                    if (MeshComp)
+                    if (Node && Node->ComponentTemplate &&
+                        Node->ComponentTemplate->IsA<USkeletalMeshComponent>())
                     {
-                        MeshComp->SetSkeletalMesh(RequestedMesh);
-                        bSkeletalMeshAssigned = true;
+                        USkeletalMeshComponent* MeshComp = Cast<USkeletalMeshComponent>(Node->ComponentTemplate);
+                        if (MeshComp)
+                        {
+                            MeshComp->SetSkeletalMesh(RequestedMesh);
+                            bSkeletalMeshAssigned = true;
+                        }
+                        break;
                     }
-                    break;
                 }
+            }
+
+            // ACharacter's mesh is an inherited component, so the SCS usually has no
+            // skeletal mesh node. Fall back to the inherited mesh on the CDO.
+            if (!bSkeletalMeshAssigned)
+            {
+                ACharacter* CharCDO = Blueprint->GeneratedClass
+                    ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
+                    : nullptr;
+                if (CharCDO && CharCDO->GetMesh())
+                {
+                    CharCDO->GetMesh()->SetSkeletalMesh(RequestedMesh);
+                    bSkeletalMeshAssigned = true;
+                }
+            }
+
+            if (!bSkeletalMeshAssigned)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("No skeletal mesh component found to assign '%s' on blueprint '%s'."),
+                        *SkeletalMeshPath, *(Path / Name)),
+                    TEXT("NO_MESH_COMPONENT"));
+                return true;
             }
         }
 
@@ -673,15 +699,36 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         float CapsuleRadius = static_cast<float>(GetJsonNumberField(Payload, TEXT("capsuleRadius"), 42.0));
         float CapsuleHalfHeight = static_cast<float>(GetJsonNumberField(Payload, TEXT("capsuleHalfHeight"), 96.0));
 
-        // Find capsule component in SCS or CDO
-        ACharacter* CharCDO = Blueprint->GeneratedClass 
+        ACharacter* CharCDO = Blueprint->GeneratedClass
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
             : nullptr;
-        
-        if (CharCDO && CharCDO->GetCapsuleComponent())
+        if (!CharCDO)
         {
-            CharCDO->GetCapsuleComponent()->SetCapsuleRadius(CapsuleRadius);
-            CharCDO->GetCapsuleComponent()->SetCapsuleHalfHeight(CapsuleHalfHeight);
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no capsule to configure."), *BlueprintPath),
+                TEXT("NOT_A_CHARACTER"));
+            return true;
+        }
+
+        UCapsuleComponent* Capsule = CharCDO->GetCapsuleComponent();
+        if (!Capsule)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Character blueprint '%s' has no capsule component."), *BlueprintPath),
+                TEXT("NO_CAPSULE"));
+            return true;
+        }
+
+        Capsule->SetCapsuleRadius(CapsuleRadius);
+        Capsule->SetCapsuleHalfHeight(CapsuleHalfHeight);
+
+        if (Capsule->GetUnscaledCapsuleRadius() != CapsuleRadius ||
+            Capsule->GetUnscaledCapsuleHalfHeight() != CapsuleHalfHeight)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Capsule on '%s' did not retain the requested dimensions."), *BlueprintPath),
+                TEXT("VERIFY_FAILED"));
+            return true;
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
