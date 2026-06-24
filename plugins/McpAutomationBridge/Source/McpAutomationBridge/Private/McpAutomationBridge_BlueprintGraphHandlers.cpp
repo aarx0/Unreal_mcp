@@ -74,6 +74,7 @@
 #include "K2Node_BreakStruct.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CommutativeAssociativeBinaryOperator.h"
+#include "K2Node_ConstructObjectFromClass.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_DynamicCast.h"
 #include "K2Node_Event.h"
@@ -1495,6 +1496,59 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
     // ========== DYNAMIC FALLBACK: Create ANY node class by name ==========
     UClass *NodeClass = FindNodeClassByName(NodeType);
+
+    // The ConstructObjectFromClass family (SpawnActorFromClass, ConstructObject,
+    // CreateWidget, AddComponentByClass, ...) derives its pins from a Class pin and
+    // requires AllocateDefaultPins to run BEFORE PostPlacedNewNode: e.g.
+    // UK2Node_SpawnActorFromClass::PostPlacedNewNode() calls GetScaleMethodPin()
+    // (FindPinChecked) on a pin that AllocateDefaultPins creates. The generic path
+    // below runs PostPlacedNewNode before AllocateDefaultPins, so FindPinChecked
+    // asserts (EdGraphNode.h:586) and hard-crashes the editor for these nodes.
+    // Allocate first, then PostPlaced; if a class was supplied (targetClass), set it
+    // and reconstruct so the class's expose-on-spawn pins appear.
+    if (NodeClass &&
+        NodeClass->IsChildOf(UK2Node_ConstructObjectFromClass::StaticClass())) {
+      UClass *SpawnClass = nullptr;
+      FString SpawnClassName;
+      if (Payload->TryGetStringField(TEXT("targetClass"), SpawnClassName) &&
+          !SpawnClassName.IsEmpty()) {
+        SpawnClass = ResolveUClass(SpawnClassName);
+        if (!SpawnClass) {
+          SendAutomationError(
+              RequestingSocket, RequestId,
+              FString::Printf(TEXT("Class '%s' not found"), *SpawnClassName),
+              TEXT("CLASS_NOT_FOUND"));
+          return true;
+        }
+      }
+      UEdGraphNode *NewNode = NewObject<UEdGraphNode>(TargetGraph, NodeClass);
+      TargetGraph->Modify();
+      TargetGraph->AddNode(NewNode, false, false);
+      NewNode->CreateNewGuid();
+      NewNode->AllocateDefaultPins();
+      NewNode->PostPlacedNewNode();
+      if (SpawnClass) {
+        if (UK2Node_ConstructObjectFromClass *ConstructNode =
+                Cast<UK2Node_ConstructObjectFromClass>(NewNode)) {
+          if (UEdGraphPin *ClassPin = ConstructNode->GetClassPin()) {
+            ClassPin->DefaultObject = SpawnClass;
+            NewNode->ReconstructNode();
+          }
+        }
+      }
+      NewNode->NodePosX = X;
+      NewNode->NodePosY = Y;
+      McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
+
+      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+      Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
+      Result->SetStringField(TEXT("nodeName"), NewNode->GetName());
+      Result->SetStringField(TEXT("nodeClass"), NodeClass->GetName());
+      SendAutomationResponse(RequestingSocket, RequestId, true,
+                             TEXT("Node created."), Result);
+      return true;
+    }
+
     if (NodeClass) {
       UEdGraphNode *NewNode = NewObject<UEdGraphNode>(TargetGraph, NodeClass);
       if (NewNode) {

@@ -641,6 +641,75 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [x] 2026-06-22a — `create_node nodeType:"SpawnActorFromClass"` hard-crashes the editor (assert `EdGraphNode.h:586`)
+Repro (live, 2026-06-22, building a telegraph-spawner BP in the combat gym): `create_node` on a fresh
+Actor BP's `EventGraph` with `nodeType:"SpawnActorFromClass"` (only `posX`/`posY` set) → client call
+times out, then the editor hard-crashes — `Assertion failed: Result [EdGraphNode.h:586]` (generic
+node-construction assert; ~1 min to CrashReporter). Process gone, port 3123 refused on next call.
+The assert is in base `UEdGraphNode` (not SpawnActor-specific), so other `create_node` node types may
+share the fault — treat bridge BP-graph authoring as crash-risky until root-caused. Likely the spawn
+factory adds the node without a valid graph/schema or mis-orders `AllocateDefaultPins`.
+Workaround used this session: wrote the spawner in C++ (`ATelegraphSpawner`) instead of authoring a graph.
+
+**ROOT CAUSE (confirmed against engine source 2026-06-22):** the generic fallback runs
+`PostPlacedNewNode()` BEFORE `AllocateDefaultPins()` (`McpAutomationBridge_BlueprintGraphHandlers.cpp`
+:1506 then :1507). `UK2Node_SpawnActorFromClass::PostPlacedNewNode()` calls `GetScaleMethodPin()` →
+`FindPinChecked(TransformScaleMethodPin)` on a pin that `AllocateDefaultPins()` only creates →
+`check(Result)` at `EdGraphNode.h:586`. (`FGraphNodeCreator::Finalize` uses the same PostPlaced→Allocate
+order, so it'd crash too; the engine's menu path only survives by duplicating a *pre-allocated template*
+whose pins already exist.)
+
+**FIX (live-verified + committed 2026-06-23):** dedicated branch for the
+`UK2Node_ConstructObjectFromClass` family — allocate pins BEFORE `PostPlacedNewNode`, then if `targetClass`
+is supplied set the class pin + `ReconstructNode` so expose-on-spawn pins appear. Generic fallback left
+untouched (correct for static-pin nodes; a global reorder would risk Timeline etc.).
+Live test (scratch `BP_McpSpawnNodeTest`, `SpawnActorFromClass`): no crash; bare node creates; with
+`targetClass:/Game/VFX/Telegraph/BP_Telegraph.BP_Telegraph_C` the `Class` pin is set, the `ReturnValue`
+pin re-specializes to `BP_Telegraph_C`, and the `TransformScaleMethod` pin (whose absence triggered the
+assert) is present. Gotcha for callers: Blueprint classes need the `.<Name>_C` generated-class suffix in
+`targetClass` (a bare asset path returns `CLASS_NOT_FOUND` — by design, fails loud).
+
+### [ ] 2026-06-22b — Anim state-machine reads via `get_graph_details`: works, two gaps
+Live-verified 2026-06-22 against `ABP_Robo_MainStates`. `get_graph_details` reads anim graphs cleanly:
+`AnimGraph` returns the root + state-machine nodes + cached-pose nodes; a state-machine graph addressed
+by its title (`Main States`, `Ground Locomotion`) returns its states + transition nodes (titles like
+"GroundLocomotion to InAir"). So topology IS readable, including nested state machines — the earlier
+"fuzzy/maybe-unsupported" worry was wrong. Two real gaps remain:
+1. **False dead-node flags on dataflow AnimGraphs.** Reading the root `AnimGraph` reported all 6 nodes
+   as `deadNodes` / reason `feeds-nothing-live`. The dead-node heuristic uses exec-reachability, which is
+   meaningless in a pose-dataflow graph (no exec pins) → every anim node is mislabeled "dead." (The
+   state-machine graphs correctly report `deadNodeCount:0`.) Fix: skip/relax dead-node detection for
+   AnimGraph-class graphs, or treat pose-pin links as liveness.
+2. **Transition conditions not surfaced.** Transition nodes appear by title but the rule graph that
+   decides *when* they fire (IsFalling / GroundSpeed compares) isn't returned — you get topology, not the
+   "why." Would need each `AnimStateTransitionNode`'s bound rule graph exposed.
+
+### [x] 2026-06-22c — Recurring: first `tools/call` after editor launch hangs the game thread
+Hit on 3/3 post-rebuild relaunches 2026-06-22. Symptom: bridge connects (`MCP session initialized`
+logged), the FIRST `tools/call` is received (logged) but never completes; every later call queues behind
+it and times out. Editor process is ALIVE, `Responding=True`, CPU LOW/idle (not busy-looping), log goes
+silent after the first call's line, no visible modal (Aaron is remote, confirms not a dialog). So the
+request executor blocks on the first request and never returns — a deadlock / blocking-wait, not slowness
+(waited 7 min on one, never returned). Force-kill + relaunch is the only recovery (clean `QUIT_EDITOR`
+can't be sent — bridge wedged), but it reproduced 3×. Aaron confirms PRE-EXISTING (seen before this
+session). Likely a lock/ordering issue between request dispatch and the game-thread tick, possibly
+sensitive to heavy post-launch state (shader-autogen compile was in flight). Caveat: appeared correlated
+with a bridge-DLL rebuild, but the hung handlers (manage_level/asset) never touch the rebuilt create_node
+code and the module loads + receives requests fine → not obviously the create_node change. HIGH impact:
+wedges all bridge ops; needs root-cause.
+
+**DIAGNOSED 2026-06-23 — it's the unclean-shutdown "Restore Packages" modal.** Back at the machine (not
+remote), the wedged editor was sitting on the engine's startup *"Editor did not shut down cleanly — restore
+auto-saves?"* dialog. It blocks the game thread the bridge tick rides on, so the first `tools/call` is
+received then never serviced; `Responding=True` because the modal still pumps the window message loop; CPU
+idle because it's waiting on a click. The earlier "not a dialog" was a bad inference from remote (no eyes on
+the screen). ROOT CAUSE is self-inflicted: this modal only appears after a **force-kill** — which is exactly
+the hang's own "recovery" (force-kill + relaunch), so the kill-loop *manufactured* the next hang. WORKAROUND
+(already standing policy): never force-kill; clean-quit via `QUIT_EDITOR`/console so no crash auto-save state
+is left. Clicking `Skip Restore` immediately freed the game thread and the bridge serviced calls normally.
+Potential hardening: extend the `GIsRunningUnattendedScript` auto-dismiss guard (added for save modals) to
+the startup package-restore prompt so a force-killed editor self-recovers instead of wedging.
+
 ### [x] `.uplugin` `InterchangeOpenUSD` reference force-enables USDCore → editor exits on engines with non-loadable USD binaries
 **FOUND + FIXED 2026-06-12** (HandPanicVR, Meta UE 5.7.3 fork, headless `-unattended` launch).
 The bridge `.uplugin` referenced `InterchangeOpenUSD` (`Enabled:true, Optional:true`). On the
