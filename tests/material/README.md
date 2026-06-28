@@ -11,7 +11,7 @@ pwsh -File tests/material/material-authoring-test.ps1
 ```
 Exits non-zero if any assertion fails; self-cleans the scratch material even on failure.
 
-## Coverage (15 assertions, green 2026-06-28)
+## Coverage (18 assertions, green 2026-06-28)
 - `set_node_value` on `Constant3Vector` (r/g/b), `ScalarParameter` (value→DefaultValue), and an
   arithmetic node (`constA`/`constB`, the reflection path), each confirmed by a `get_node_properties`
   read-back of the written value.
@@ -19,7 +19,9 @@ Exits non-zero if any assertion fails; self-cleans the scratch material even on 
 - `get_material_info` reports `compiled` (and omits `errors[]` on a valid material).
 - `get_material_stats` reports `compiled` + an honest `instructionCountNote`.
 - `compile_material` reports `compiled:true` on a valid material.
+- `compile_material {waitForShaders}` catches a real shader-**backend** error (guaranteed-invalid HLSL
+  in a Custom node): the fast path is blind (`compiled:true`) while `waitForShaders` returns
+  `compiled:false` + `errors[]` with the DXC message.
 
-Guards the features added in commits `a612c523` (set_node_value) and `ca2c4564` (read-back errors[]).
-Does **not** assert `compile_material {waitForShaders}` catches a backend error — that catch-path is
-unvalidated/best-effort (see TODO.md / commit `1a159b1b`); the reliable shader-error check remains the log.
+Guards the features in commits `a612c523` (set_node_value), `ca2c4564` (read-back errors[]), and the
+validated `waitForShaders` shader-backend-error path.

@@ -20,7 +20,9 @@ param(
   [string]$Url = 'http://127.0.0.1:3123/mcp',
   [string]$ScratchPath = '/Game/VFX/Telegraph/M_ZZ_MatAuthTest',
   [string]$ScratchFolder = '/Game/VFX/Telegraph',
-  [string]$ScratchName = 'M_ZZ_MatAuthTest'
+  [string]$ScratchName = 'M_ZZ_MatAuthTest',
+  [string]$BadPath = '/Game/VFX/Telegraph/M_ZZ_MatAuthTestBad',
+  [string]$BadName = 'M_ZZ_MatAuthTestBad'
 )
 $ErrorActionPreference = 'Stop'
 $accept = 'application/json, text/event-stream'
@@ -96,10 +98,25 @@ try {
 
   $cm = Mcp 'manage_asset' @{ action='compile_material'; assetPath=$ScratchPath }
   Assert ($cm.compiled -eq $true) 'compile_material compiled:true'
+
+  # compile_material waitForShaders catches a real shader-BACKEND error (forced synchronous
+  # recompile) where the fast path is blind. Guaranteed-invalid HLSL in a Custom node -> EmissiveColor.
+  Mcp 'manage_asset' @{ action='create_material'; name=$BadName; path=$ScratchFolder } | Out-Null
+  $bc = Mcp 'manage_asset' @{ action='add_custom_expression'; assetPath=$BadPath; code='float qx = AAAA BBBB CCCC zzz; return float3(qx, qx, qx);'; outputType='Float3' }
+  Mcp 'manage_asset' @{ action='connect_nodes'; assetPath=$BadPath; sourceNodeId=$bc.nodeId; targetNodeId='Main'; inputName='EmissiveColor' } | Out-Null
+  $fast = Mcp 'manage_asset' @{ action='compile_material'; assetPath=$BadPath }
+  Assert ($fast.compiled -eq $true) 'broken shader: fast path is blind (compiled:true without waitForShaders)'
+  $wait = Mcp 'manage_asset' @{ action='compile_material'; assetPath=$BadPath; waitForShaders=$true }
+  Assert ($wait.compiled -eq $false) 'broken shader: waitForShaders catches it (compiled:false)'
+  Assert (@($wait.errors).Count -ge 1 -and "$($wait.errors)" -match 'error') 'broken shader: errors[] populated'
 }
 finally {
-  try { $del = Mcp 'manage_asset' @{ action='delete_asset'; assetPath=$ScratchPath }
-        Assert ($del.existsAfter -eq $false) 'cleanup delete_asset' } catch { Write-Host "  WARN  cleanup failed: $($_.Exception.Message)" -ForegroundColor Yellow }
+  $allGone = $true
+  foreach ($p in @($ScratchPath, $BadPath)) {
+    try { $d = Mcp 'manage_asset' @{ action='delete_asset'; assetPath=$p }; if ($d.existsAfter -ne $false) { $allGone = $false } }
+    catch { Write-Host "  WARN  cleanup failed for $p" -ForegroundColor Yellow; $allGone = $false }
+  }
+  Assert $allGone 'cleanup (scratch assets removed)'
 }
 
 Write-Host ""
