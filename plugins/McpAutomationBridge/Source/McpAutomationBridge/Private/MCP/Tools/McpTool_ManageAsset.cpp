@@ -103,6 +103,13 @@ public:
 			.String(TEXT("expressionIndex"), TEXT("ID of the node."))
 			.ArrayOfObjects(TEXT("inputs"), TEXT("add_custom_expression/update_custom_expression: named HLSL input pins, e.g. [{\"name\":\"UV\"}]. Each name becomes a connect_nodes inputName."))
 			.ArrayOfObjects(TEXT("additionalOutputs"), TEXT("add_custom_expression/update_custom_expression: extra named outputs beyond the primary return, e.g. [{\"name\":\"Mask\",\"type\":\"Float1\"}]."))
+			.Number(TEXT("r"), TEXT("set_node_value: red/X channel of a Constant2/3/4Vector or VectorParameter default."))
+			.Number(TEXT("g"), TEXT("set_node_value: green/Y channel."))
+			.Number(TEXT("b"), TEXT("set_node_value: blue/Z channel."))
+			.Number(TEXT("a"), TEXT("set_node_value: alpha/W channel (Constant4Vector / VectorParameter)."))
+			.Number(TEXT("constA"), TEXT("set_node_value: ConstA default of an arithmetic node (Add/Multiply/…) when input A is unconnected."))
+			.Number(TEXT("constB"), TEXT("set_node_value: ConstB default of an arithmetic node when input B is unconnected."))
+			.Bool(TEXT("waitForShaders"), TEXT("compile_material: block on the async shader workers so backend (not just translation) errors are reported. Slower; off by default."))
 			.Required({TEXT("action")})
 			.Build();
 	}

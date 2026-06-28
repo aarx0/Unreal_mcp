@@ -103,6 +103,7 @@ inline const TArray<FString>& MaterialAuthoring()
 		TEXT("add_landscape_layer"), TEXT("configure_layer_blend"),
 		TEXT("compile_material"), TEXT("get_material_info"), TEXT("find_node"),
 		TEXT("get_node_connections"), TEXT("get_node_properties"),
+		TEXT("set_node_value"),
 		TEXT("set_static_switch_parameter_value"), TEXT("delete_node"),
 		TEXT("update_custom_expression"), TEXT("get_node_chain"),
 		TEXT("get_connected_subgraph"), TEXT("add_material_node"),

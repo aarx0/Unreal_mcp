@@ -37,10 +37,18 @@ Flakiness in shipped surface erodes trust during real authoring.
   shader workers) + a version-safe way to read shader-backend errors (they don't reliably land in
   `GetCompileErrors()`), which is uncertain engine-internal territory — not worth rushing into a schema
   rebuild and risking a game-thread stall or breaking a working handler. Meanwhile **verify decal shaders
-  via `tail_log` (LogShaderCompilers/LogMaterial), not compile_material**. **Follow-up (still open, 🟡):**
-  add the `FinishCompilation` pass; surface the same `errors[]` on `get_material_info`, and fix
-  `get_material_stats` (returns `instructionCount:-1` with no message on a failed compile). Origin: the
-  gap caused a live misdiagnosis — blind to the real error, the assistant guessed the cause from docs.
+  via `tail_log` (LogShaderCompilers/LogMaterial), not compile_material**. **Follow-up — `FinishCompilation`
+  pass DONE 2026-06-28** (opt-in, verified): `compile_material {waitForShaders:true}` now calls
+  `FMaterialResource::FinishCompilation()` (blocks on the shader workers) then reads the backend signal via
+  `UMaterial::IsCompilingOrHadCompileError(GMaxRHIShaderPlatform)` — the **EShaderPlatform** overload, since
+  the `ERHIFeatureLevel::Type` one is `UE_DEPRECATED(5.7)` (verified against engine source; using it would
+  fail a deprecation-as-error build). A backend failure with no recoverable string still fails loudly (a
+  synthesized errors[] entry pointing at the shader log). Default `false` preserves the fast path exactly, so
+  no existing caller is slowed and the working handler is untouched; response carries `waitedForShaders`.
+  Verified: a valid scratch material → `{compiled:true, waitedForShaders:true}`, no game-thread stall.
+  **Still open (🟡):** surface the same `errors[]` on `get_material_info`, and fix `get_material_stats`
+  (returns `instructionCount:-1` with no message on a failed compile). Origin: the gap caused a live
+  misdiagnosis — blind to the real error, the assistant guessed the cause from docs.
 - ✅ **`add_custom_expression`/`update_custom_expression` `inputs`/`additionalOutputs` were undeclared in
   the `manage_asset` schema** — FOUND + FIXED 2026-06-27. The handlers parse `inputs:[{name}]` /
   `additionalOutputs:[{name,type}]` correctly, but the params were never declared in
@@ -53,15 +61,23 @@ Flakiness in shipped surface erodes trust during real authoring.
   cached (`FMcpToolRegistry::EnsureCache`, invalidated only on tool *registration*), so a schema change
   needs a **rebuild + editor restart + MCP reconnect** to go live — Live Coding patches `BuildInputSchema`
   but the cache still serves the old schema, and a plain restart reverts the in-memory patch.
-- 🟡 **No setter for material-expression constant VALUES** (found 2026-06-24 building the telegraph
-  radial mask). The bridge can *read* constant values (`get_material_node_details`) but has no action to
-  *set* them: a scalar `Constant`'s value is only settable via the batch `add_node` path's `value`
-  field, while `Constant2Vector/3/4` R/G/B/A and math-node `ConstA/ConstB` have no setter at all.
-  Consequence: a multi-node math subgraph that needs literal constants (e.g. a radial circle mask needing
-  a `(0.5,0.5)` center) can't be built node-by-node — fall back to a single `add_custom_expression`
-  (Custom HLSL) node that embeds the constants in code. Fix: add a `set_node_value` /
-  `set_expression_property` action covering `Constant`/`Constant2Vector`/`Constant3Vector`/`Constant4Vector`
-  + common math-node `ConstA/ConstB` defaults.
+- ✅ **`set_node_value` — material-expression constant VALUE setter DONE 2026-06-28** (built + rebuilt
+  `-NoUBA` + verified end-to-end over direct-HTTP). `manage_asset set_node_value {assetPath, nodeId, ...}`
+  writes the literal value(s) the old graph couldn't set node-by-node (forcing a single `add_custom_expression`
+  with constants baked into HLSL). Coverage by node class: `Constant` ← `value` (R); `Constant2Vector` ←
+  `r`/`g`; `Constant3Vector`/`Constant4Vector` ← `r`/`g`/`b`/`a` on the `Constant` FLinearColor (omitted
+  channel = partial update; a bare `value` sets every colour channel uniformly); `ScalarParameter.DefaultValue`
+  ← `value`; `VectorParameter.DefaultValue` ← `r`/`g`/`b`/`a`; arithmetic nodes ← `constA`/`constB` (and a
+  bare `value`→ConstA). The ConstA/ConstB path is **reflection-based** (`FindFProperty<FFloatProperty>`), so it
+  covers the open set of arithmetic classes (Add/Subtract/Multiply/Divide/Min/Max/Fmod/…) with no per-class
+  cast or include. Unsupported nodes return `UNSUPPORTED_NODE`. `FINALIZE_HOST()` + `save` (default true).
+  Verified: Constant3Vector→`(0.1,0.2,0.3)`, ScalarParameter→`0.7`, Add→`ConstA=1.5 ConstB=2.5` (all confirmed
+  by `get_node_properties` readback), TextureCoordinate→`UNSUPPORTED_NODE`, scratch asset deleted clean.
+  Routing in `MaterialAuthoring()` (so it lands in both the `ManageAsset()` schema enum and the
+  `IsMaterialAuthoringAction` dispatch). Schema declares `r/g/b/a/constA/constB`. **Caveat:** the existing
+  `value` param is schema-typed `FreeformObject`, so the *typed* client may not forward a bare numeric `value`
+  (direct-HTTP is unaffected); the dedicated `r/g/b/a/constA/constB` are `.Number()`. Tighten `value`'s schema
+  type if a typed-client scalar set ever misbehaves.
 - ✅ **Transport mid-call drop — RESOLVED** (2026-06-06; see `docs/pull-architecture.md`).
   Solved **pull-only** rather than via the keepalive/result-cache idea: de-streamed `tools/call`
   to plain HTTP request/response, removed all server push + keepalive, deleted the WebSocket

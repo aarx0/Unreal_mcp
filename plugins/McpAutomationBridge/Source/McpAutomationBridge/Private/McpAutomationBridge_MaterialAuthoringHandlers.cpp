@@ -2913,14 +2913,37 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 
     // Read back compile errors so we report real status instead of assuming success.
     // Material *translation* errors (e.g. an invalid Substrate decal graph) are populated
-    // synchronously by the PostEditChange recompile above.
+    // synchronously by the PostEditChange recompile above. Shader-*backend* errors (e.g. a
+    // decal Custom node referencing an undefined symbol) only surface after the async shader
+    // workers run, so they're invisible unless the caller opts into blocking for them.
+    bool bWaitForShaders = false;
+    Payload->TryGetBoolField(TEXT("waitForShaders"), bWaitForShaders);
+
     TArray<FString> CompileErrors;
+    bool bShaderError = false;
     if (Material) {
+      if (bWaitForShaders) {
+        // Block on the shader workers so backend errors become visible. Opt-in only —
+        // this can stall the game thread for seconds while shaders compile.
+        if (FMaterialResource *Res = Material->GetMaterialResource(GMaxRHIShaderPlatform)) {
+          Res->FinishCompilation();
+        }
+        // The reliable backend signal: after FinishCompilation the "compiling" half is false,
+        // so a true result means the shader map failed to build — even when GetCompileErrors()
+        // can't recover the exact backend message. (EShaderPlatform overload; the
+        // ERHIFeatureLevel one is deprecated in 5.7.)
+        bShaderError = Material->IsCompilingOrHadCompileError(GMaxRHIShaderPlatform);
+      }
       if (const FMaterialResource *Res = Material->GetMaterialResource(GMaxRHIShaderPlatform)) {
         CompileErrors = Res->GetCompileErrors();
       }
     }
-    const bool bCompiled = CompileErrors.Num() == 0;
+    // A backend failure with no recoverable string still has to fail loudly.
+    if (bShaderError && CompileErrors.Num() == 0) {
+      CompileErrors.Add(TEXT("Shader compilation failed (backend error); see the "
+                             "LogShaderCompilers/LogMaterial output for the exact message."));
+    }
+    const bool bCompiled = CompileErrors.Num() == 0 && !bShaderError;
 
     bool bSave = true;
     Payload->TryGetBoolField(TEXT("save"), bSave);
@@ -2938,6 +2961,7 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
                            Material ? TEXT("Material") : TEXT("MaterialFunction"));
     Result->SetBoolField(TEXT("compiled"), bCompiled);
     Result->SetBoolField(TEXT("saved"), bSave);
+    Result->SetBoolField(TEXT("waitedForShaders"), bWaitForShaders);
     if (!bCompiled) {
       TArray<TSharedPtr<FJsonValue>> ErrorArray;
       for (const FString &Err : CompileErrors) {
@@ -3756,6 +3780,187 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     }
 
     SendAutomationResponse(Socket, RequestId, true, TEXT("Node properties retrieved."), Result);
+    return true;
+  }
+
+  // --------------------------------------------------------------------------
+  // set_node_value — write the literal value(s) held by a constant /
+  // parameter-default / arithmetic-const node. Closes the gap where
+  // add_material_node creates these nodes but never sets their value.
+  //   value           Constant.R · ScalarParameter.DefaultValue · (math) ConstA
+  //   r/g/b/a          Constant2/3/4Vector · VectorParameter.DefaultValue channels
+  //   constA / constB  arithmetic-node unconnected-input defaults (Add/Multiply/…)
+  // An omitted vector channel keeps its current value (partial update); a bare
+  // `value` on a vector node sets every colour channel uniformly.
+  // --------------------------------------------------------------------------
+  if (SubAction == TEXT("set_node_value")) {
+    LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
+
+    FString NodeId;
+    Payload->TryGetStringField(TEXT("nodeId"), NodeId);
+    if (NodeId.IsEmpty()) {
+      SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId'."),
+                          TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    UMaterialExpression *Expr = FIND_EXPR_IN_HOST(NodeId);
+    if (!Expr) {
+      SendAutomationError(Socket, RequestId, TEXT("Node not found."),
+                          TEXT("NODE_NOT_FOUND"));
+      return true;
+    }
+
+    double ValueNum = 0.0;
+    const bool bHasValue = Payload->TryGetNumberField(TEXT("value"), ValueNum);
+    double Rin = 0, Gin = 0, Bin = 0, Ain = 0;
+    const bool bHasR = Payload->TryGetNumberField(TEXT("r"), Rin);
+    const bool bHasG = Payload->TryGetNumberField(TEXT("g"), Gin);
+    const bool bHasB = Payload->TryGetNumberField(TEXT("b"), Bin);
+    const bool bHasA = Payload->TryGetNumberField(TEXT("a"), Ain);
+    double ConstAin = 0, ConstBin = 0;
+    const bool bHasConstA = Payload->TryGetNumberField(TEXT("constA"), ConstAin);
+    const bool bHasConstB = Payload->TryGetNumberField(TEXT("constB"), ConstBin);
+
+    if (!bHasValue && !bHasR && !bHasG && !bHasB && !bHasA && !bHasConstA &&
+        !bHasConstB) {
+      SendAutomationError(Socket, RequestId,
+                          TEXT("No value provided. Supply 'value', any of "
+                               "'r'/'g'/'b'/'a', or 'constA'/'constB'."),
+                          TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    // Sets a named float UPROPERTY by reflection — used for the open-ended set of
+    // arithmetic nodes (Add/Subtract/Multiply/Divide/Min/Max/Fmod/…) that all
+    // expose identically-named ConstA/ConstB, so no per-class cast/include is needed.
+    auto SetNamedFloat = [](UMaterialExpression *E, const TCHAR *PropName,
+                            float Val) -> bool {
+      if (FFloatProperty *P = FindFProperty<FFloatProperty>(E->GetClass(), PropName)) {
+        P->SetPropertyValue_InContainer(E, Val);
+        return true;
+      }
+      return false;
+    };
+
+    FString Applied;
+    bool bHandled = false;
+
+    if (UMaterialExpressionConstant *C = Cast<UMaterialExpressionConstant>(Expr)) {
+      if (!bHasValue) {
+        SendAutomationError(Socket, RequestId, TEXT("Constant needs 'value'."),
+                            TEXT("INVALID_ARGUMENT"));
+        return true;
+      }
+      C->R = (float)ValueNum;
+      Applied = FString::Printf(TEXT("R=%g"), C->R);
+      bHandled = true;
+    } else if (UMaterialExpressionConstant2Vector *C2 =
+                   Cast<UMaterialExpressionConstant2Vector>(Expr)) {
+      if (bHasValue && !bHasR && !bHasG) { C2->R = C2->G = (float)ValueNum; }
+      if (bHasR) C2->R = (float)Rin;
+      if (bHasG) C2->G = (float)Gin;
+      Applied = FString::Printf(TEXT("R=%g G=%g"), C2->R, C2->G);
+      bHandled = true;
+    } else if (UMaterialExpressionConstant3Vector *C3 =
+                   Cast<UMaterialExpressionConstant3Vector>(Expr)) {
+      if (bHasValue && !bHasR && !bHasG && !bHasB) {
+        C3->Constant.R = C3->Constant.G = C3->Constant.B = (float)ValueNum;
+      }
+      if (bHasR) C3->Constant.R = (float)Rin;
+      if (bHasG) C3->Constant.G = (float)Gin;
+      if (bHasB) C3->Constant.B = (float)Bin;
+      Applied = FString::Printf(TEXT("R=%g G=%g B=%g"), C3->Constant.R,
+                                C3->Constant.G, C3->Constant.B);
+      bHandled = true;
+    } else if (UMaterialExpressionConstant4Vector *C4 =
+                   Cast<UMaterialExpressionConstant4Vector>(Expr)) {
+      if (bHasValue && !bHasR && !bHasG && !bHasB && !bHasA) {
+        C4->Constant.R = C4->Constant.G = C4->Constant.B = C4->Constant.A =
+            (float)ValueNum;
+      }
+      if (bHasR) C4->Constant.R = (float)Rin;
+      if (bHasG) C4->Constant.G = (float)Gin;
+      if (bHasB) C4->Constant.B = (float)Bin;
+      if (bHasA) C4->Constant.A = (float)Ain;
+      Applied = FString::Printf(TEXT("R=%g G=%g B=%g A=%g"), C4->Constant.R,
+                                C4->Constant.G, C4->Constant.B, C4->Constant.A);
+      bHandled = true;
+    } else if (UMaterialExpressionScalarParameter *SP =
+                   Cast<UMaterialExpressionScalarParameter>(Expr)) {
+      if (!bHasValue) {
+        SendAutomationError(Socket, RequestId,
+                            TEXT("ScalarParameter needs 'value'."),
+                            TEXT("INVALID_ARGUMENT"));
+        return true;
+      }
+      SP->DefaultValue = (float)ValueNum;
+      Applied = FString::Printf(TEXT("DefaultValue=%g"), SP->DefaultValue);
+      bHandled = true;
+    } else if (UMaterialExpressionVectorParameter *VP =
+                   Cast<UMaterialExpressionVectorParameter>(Expr)) {
+      if (bHasValue && !bHasR && !bHasG && !bHasB && !bHasA) {
+        VP->DefaultValue.R = VP->DefaultValue.G = VP->DefaultValue.B =
+            (float)ValueNum;
+      }
+      if (bHasR) VP->DefaultValue.R = (float)Rin;
+      if (bHasG) VP->DefaultValue.G = (float)Gin;
+      if (bHasB) VP->DefaultValue.B = (float)Bin;
+      if (bHasA) VP->DefaultValue.A = (float)Ain;
+      Applied = FString::Printf(TEXT("R=%g G=%g B=%g A=%g"), VP->DefaultValue.R,
+                                VP->DefaultValue.G, VP->DefaultValue.B,
+                                VP->DefaultValue.A);
+      bHandled = true;
+    } else {
+      // Arithmetic / other node: set ConstA/ConstB (a bare `value` maps to ConstA).
+      TArray<FString> SetParts;
+      const bool bWantA = bHasConstA || bHasValue;
+      const float ValA = bHasConstA ? (float)ConstAin : (float)ValueNum;
+      if (bWantA && SetNamedFloat(Expr, TEXT("ConstA"), ValA)) {
+        SetParts.Add(FString::Printf(TEXT("ConstA=%g"), ValA));
+      }
+      if (bHasConstB && SetNamedFloat(Expr, TEXT("ConstB"), (float)ConstBin)) {
+        SetParts.Add(FString::Printf(TEXT("ConstB=%g"), (float)ConstBin));
+      }
+      if (SetParts.Num() > 0) {
+        Applied = FString::Join(SetParts, TEXT(" "));
+        bHandled = true;
+      }
+    }
+
+    if (!bHandled) {
+      SendAutomationError(
+          Socket, RequestId,
+          FString::Printf(
+              TEXT("Node type '%s' has no settable literal value (or the "
+                   "provided fields don't apply to it). Supported: Constant, "
+                   "Constant2Vector, Constant3Vector, Constant4Vector, "
+                   "ScalarParameter, VectorParameter, and arithmetic nodes "
+                   "exposing ConstA or ConstB."),
+              *Expr->GetClass()->GetName()),
+          TEXT("UNSUPPORTED_NODE"));
+      return true;
+    }
+
+    Expr->PostEditChange();
+    FINALIZE_HOST();
+
+    bool bSave = true;
+    Payload->TryGetBoolField(TEXT("save"), bSave);
+    if (bSave) {
+      if (Material) { SaveMaterialAsset(Material); }
+      else if (Function) { SaveMaterialFunctionAsset(Function); }
+    }
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    Result->SetStringField(TEXT("nodeId"), MCP_NODE_ID(Expr));
+    Result->SetStringField(TEXT("type"), Expr->GetClass()->GetName());
+    Result->SetStringField(TEXT("applied"), Applied);
+    Result->SetBoolField(TEXT("saved"), bSave);
+    SendAutomationResponse(
+        Socket, RequestId, true,
+        FString::Printf(TEXT("Set %s on '%s'."), *Applied, *MCP_NODE_ID(Expr)),
+        Result);
     return true;
   }
 
