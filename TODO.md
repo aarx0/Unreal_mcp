@@ -1898,6 +1898,18 @@ no stale GUID survives; (b) treat the `SeenVariableNames` ensure as benign in th
 compile-path save not gate on the dirty flag when `save:true` was explicitly requested (or fall
 back to a direct package save) so structural deletes always persist.
 
+### [ ] `delete_asset` post-op guard mis-reports a benign SourceControl line as `ENGINE_ERROR`
+Found 2026-06-28 deleting an orphaned material (`M_TelegraphCircle`, 0 referencers). The handler
+reported success and the `.uasset` was actually removed from disk, but the call returned
+`Error [ENGINE_ERROR]: Handler reported success but Unreal logged errors: [SourceControl] Updated 0
+paths from the index`. That `[SourceControl] Updated 0 paths from the index` is git source-control
+status noise (the project has SC enabled), not a failure — same over-trigger class as the handled-
+ensure false-positives above, different benign string. Fix direction: in the post-op "Unreal logged
+errors" classifier, treat informational `[SourceControl]` lines (at minimum `Updated N paths from
+the index`) as benign so a clean delete under source control doesn't surface as ENGINE_ERROR.
+Workaround until then: on an ENGINE_ERROR from `delete_asset`, confirm via the file/registry — the
+delete usually succeeded.
+
 ### [x] Common UI `add_common_button` / `add_common_text` fire a handled ensure on a dirty WBP
 **RESOLVED 2026-06-06.** Root cause: `SafeAddWidgetToTree`'s non-panel-root *replacement* path
 removed the old root with a bare `WidgetTree->RemoveWidget()`, which only nulls the root pointer and
