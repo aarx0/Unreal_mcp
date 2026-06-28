@@ -2913,9 +2913,15 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 
     // Read back compile errors so we report real status instead of assuming success.
     // Material *translation* errors (e.g. an invalid Substrate decal graph) are populated
-    // synchronously by the PostEditChange recompile above. Shader-*backend* errors (e.g. a
-    // decal Custom node referencing an undefined symbol) only surface after the async shader
-    // workers run, so they're invisible unless the caller opts into blocking for them.
+    // synchronously by the PostEditChange recompile above.
+    //
+    // waitForShaders is a BEST-EFFORT pass at shader-*backend* errors (which surface only after
+    // the async workers run). It is verified SAFE — no stall, no crash, no false-positive on a
+    // valid material — but its catch-path is UNVALIDATED: a deliberately-broken Custom node
+    // (undefined HLSL symbol → EmissiveColor) compiled CLEAN through this path (recompileshaders
+    // reported 0.07s, no error), so the bridge compile apparently doesn't surface that error class
+    // to IsCompilingOrHadCompileError. Do NOT rely on it; the reliable shader-error check remains
+    // the LOG (`recompileshaders material <Name>` + tail_log LogShaderCompilers/LogMaterial).
     bool bWaitForShaders = false;
     Payload->TryGetBoolField(TEXT("waitForShaders"), bWaitForShaders);
 
@@ -2923,15 +2929,14 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     bool bShaderError = false;
     if (Material) {
       if (bWaitForShaders) {
-        // Block on the shader workers so backend errors become visible. Opt-in only —
-        // this can stall the game thread for seconds while shaders compile.
+        // Block on the shader workers so any outstanding compile finishes before we read state.
+        // Opt-in only — this can stall the game thread for seconds while shaders compile.
         if (FMaterialResource *Res = Material->GetMaterialResource(GMaxRHIShaderPlatform)) {
           Res->FinishCompilation();
         }
-        // The reliable backend signal: after FinishCompilation the "compiling" half is false,
-        // so a true result means the shader map failed to build — even when GetCompileErrors()
-        // can't recover the exact backend message. (EShaderPlatform overload; the
-        // ERHIFeatureLevel one is deprecated in 5.7.)
+        // Backend signal: after FinishCompilation a true result means the shader map failed to
+        // build. (EShaderPlatform overload; the ERHIFeatureLevel one is deprecated in 5.7.)
+        // NOTE: observed to stay false for an undefined-symbol Custom node — see the caveat above.
         bShaderError = Material->IsCompilingOrHadCompileError(GMaxRHIShaderPlatform);
       }
       if (const FMaterialResource *Res = Material->GetMaterialResource(GMaxRHIShaderPlatform)) {
