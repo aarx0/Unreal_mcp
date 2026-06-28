@@ -101,6 +101,8 @@ public:
 			.String(TEXT("type"), TEXT(""))
 			.FreeformObject(TEXT("defaultValue"), TEXT("Generic value (any type)."))
 			.String(TEXT("expressionIndex"), TEXT("ID of the node."))
+			.ArrayOfObjects(TEXT("inputs"), TEXT("add_custom_expression/update_custom_expression: named HLSL input pins, e.g. [{\"name\":\"UV\"}]. Each name becomes a connect_nodes inputName."))
+			.ArrayOfObjects(TEXT("additionalOutputs"), TEXT("add_custom_expression/update_custom_expression: extra named outputs beyond the primary return, e.g. [{\"name\":\"Mask\",\"type\":\"Float1\"}]."))
 			.Required({TEXT("action")})
 			.Build();
 	}

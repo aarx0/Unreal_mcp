@@ -30,10 +30,29 @@ Flakiness in shipped surface erodes trust during real authoring.
   hardcoded `{compiled:true}`. Verified against a Substrate decal fed a `SubstrateUnlitBSDF` →
   `{"compiled":false,"errors":["Decals only support Substrate Slabs and Shading Model nodes, not Unlit
   node...","Substrate material errors encountered."]}`. Translation errors are populated synchronously
-  by `PostEditChange`; async shader-backend errors may still need a `FinishCompilation` step — not yet
-  covered. **Follow-up (still open, 🟡):** surface the same `errors[]` on `get_material_info`, and fix
+  by `PostEditChange`; **async shader-backend errors are NOT covered** (e.g. `no member named 'TexCoords'
+  in 'FMaterialPixelParameters'` from a deferred-decal Custom node — compile_material returned
+  `compiled:true` while the shader actually failed; caught only in the shader log). Deferred deliberately
+  2026-06-27: reliably catching these needs `FinishCompilation()` on the `FMaterialResource` (block on the
+  shader workers) + a version-safe way to read shader-backend errors (they don't reliably land in
+  `GetCompileErrors()`), which is uncertain engine-internal territory — not worth rushing into a schema
+  rebuild and risking a game-thread stall or breaking a working handler. Meanwhile **verify decal shaders
+  via `tail_log` (LogShaderCompilers/LogMaterial), not compile_material**. **Follow-up (still open, 🟡):**
+  add the `FinishCompilation` pass; surface the same `errors[]` on `get_material_info`, and fix
   `get_material_stats` (returns `instructionCount:-1` with no message on a failed compile). Origin: the
   gap caused a live misdiagnosis — blind to the real error, the assistant guessed the cause from docs.
+- ✅ **`add_custom_expression`/`update_custom_expression` `inputs`/`additionalOutputs` were undeclared in
+  the `manage_asset` schema** — FOUND + FIXED 2026-06-27. The handlers parse `inputs:[{name}]` /
+  `additionalOutputs:[{name,type}]` correctly, but the params were never declared in
+  `McpTool_ManageAsset.cpp::BuildInputSchema`, so a schema-validating client (Claude Code) strips the
+  arrays before they reach the bridge. Result: the Custom node keeps its single **default input named
+  `None`**, so the HLSL's named pin (e.g. `UV`) can never be wired and the shader references an undefined
+  symbol. Cost a long misdiagnosis — an `inputCount:1` readback is the *default* input, NOT proof the
+  array applied; always confirm via `get_node_properties` input **names**. Fix: declared both as
+  `.ArrayOfObjects(...)` (mirrors `manage_blueprint`'s `inputs`). ⚠️ The tool schema is built once and
+  cached (`FMcpToolRegistry::EnsureCache`, invalidated only on tool *registration*), so a schema change
+  needs a **rebuild + editor restart + MCP reconnect** to go live — Live Coding patches `BuildInputSchema`
+  but the cache still serves the old schema, and a plain restart reverts the in-memory patch.
 - 🟡 **No setter for material-expression constant VALUES** (found 2026-06-24 building the telegraph
   radial mask). The bridge can *read* constant values (`get_material_node_details`) but has no action to
   *set* them: a scalar `Constant`'s value is only settable via the batch `add_node` path's `value`
