@@ -67,7 +67,8 @@
 
 // Material Core
 #include "Materials/Material.h"
-#include "MaterialShared.h" // FMaterialResource::GetCompileErrors()
+#include "MaterialShared.h" // FMaterialResource::GetCompileErrors(), FMaterialUpdateContext
+#include "MaterialShaderPrecompileMode.h" // EMaterialShaderPrecompileMode::Synchronous
 #include "Materials/MaterialFunction.h"
 #include "Materials/MaterialFunctionInterface.h"
 #include "Materials/MaterialInstanceConstant.h"
@@ -2905,50 +2906,45 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
       return true;
     }
 
+    bool bWaitForShaders = false;
+    Payload->TryGetBoolField(TEXT("waitForShaders"), bWaitForShaders);
+
     // Force recompile / update
     UObject *Host = Material ? static_cast<UObject*>(Material) : static_cast<UObject*>(Function);
     Host->PreEditChange(nullptr);
     Host->PostEditChange();
     Host->MarkPackageDirty();
 
-    // Read back compile errors so we report real status instead of assuming success.
-    // Material *translation* errors (e.g. an invalid Substrate decal graph) are populated
-    // synchronously by the PostEditChange recompile above.
-    //
-    // waitForShaders is a BEST-EFFORT pass at shader-*backend* errors (which surface only after
-    // the async workers run). It is verified SAFE — no stall, no crash, no false-positive on a
-    // valid material — but its catch-path is UNVALIDATED: a deliberately-broken Custom node
-    // (undefined HLSL symbol → EmissiveColor) compiled CLEAN through this path (recompileshaders
-    // reported 0.07s, no error), so the bridge compile apparently doesn't surface that error class
-    // to IsCompilingOrHadCompileError. Do NOT rely on it; the reliable shader-error check remains
-    // the LOG (`recompileshaders material <Name>` + tail_log LogShaderCompilers/LogMaterial).
-    bool bWaitForShaders = false;
-    Payload->TryGetBoolField(TEXT("waitForShaders"), bWaitForShaders);
-
+    // Report real compile status instead of assuming success.
+    //  - TRANSLATION errors (e.g. an invalid Substrate decal graph) land synchronously in
+    //    GetCompileErrors() — the material editor reads the same array (MaterialEditor.cpp).
+    //  - SHADER-BACKEND errors (bad HLSL in a Custom node, an undefined param in a decal shader,
+    //    etc.) are NOT caught by PostEditChange: it never queues the backend compile for a
+    //    standalone material (the failing compile otherwise only fires later, on save). So
+    //    waitForShaders forces a SYNCHRONOUS recompile here; the engine then writes the shader
+    //    errors into the same CompileErrors array on failure (ShaderCompiler.cpp:2177), so
+    //    GetCompileErrors() returns them. Opt-in: a synchronous shader compile can stall the game
+    //    thread for seconds. (Verified end-to-end: a guaranteed-invalid Custom node returns
+    //    compiled:false + the DXC error here, while the fast path reports compiled:true.)
     TArray<FString> CompileErrors;
-    bool bShaderError = false;
     if (Material) {
       if (bWaitForShaders) {
-        // Block on the shader workers so any outstanding compile finishes before we read state.
-        // Opt-in only — this can stall the game thread for seconds while shaders compile.
+        // Wrapped in an update context — CacheResourceShadersForRendering (reached via
+        // ForceRecompileForRendering) expects one to keep render state consistent.
+        {
+          FMaterialUpdateContext UpdateContext;
+          UpdateContext.AddMaterial(Material);
+          Material->ForceRecompileForRendering(EMaterialShaderPrecompileMode::Synchronous);
+        }
         if (FMaterialResource *Res = Material->GetMaterialResource(GMaxRHIShaderPlatform)) {
           Res->FinishCompilation();
         }
-        // Backend signal: after FinishCompilation a true result means the shader map failed to
-        // build. (EShaderPlatform overload; the ERHIFeatureLevel one is deprecated in 5.7.)
-        // NOTE: observed to stay false for an undefined-symbol Custom node — see the caveat above.
-        bShaderError = Material->IsCompilingOrHadCompileError(GMaxRHIShaderPlatform);
       }
       if (const FMaterialResource *Res = Material->GetMaterialResource(GMaxRHIShaderPlatform)) {
         CompileErrors = Res->GetCompileErrors();
       }
     }
-    // A backend failure with no recoverable string still has to fail loudly.
-    if (bShaderError && CompileErrors.Num() == 0) {
-      CompileErrors.Add(TEXT("Shader compilation failed (backend error); see the "
-                             "LogShaderCompilers/LogMaterial output for the exact message."));
-    }
-    const bool bCompiled = CompileErrors.Num() == 0 && !bShaderError;
+    const bool bCompiled = CompileErrors.Num() == 0;
 
     bool bSave = true;
     Payload->TryGetBoolField(TEXT("save"), bSave);

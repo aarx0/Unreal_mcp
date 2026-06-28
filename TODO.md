@@ -37,21 +37,24 @@ Flakiness in shipped surface erodes trust during real authoring.
   shader workers) + a version-safe way to read shader-backend errors (they don't reliably land in
   `GetCompileErrors()`), which is uncertain engine-internal territory — not worth rushing into a schema
   rebuild and risking a game-thread stall or breaking a working handler. Meanwhile **verify decal shaders
-  via `tail_log` (LogShaderCompilers/LogMaterial), not compile_material**. **Follow-up — `FinishCompilation`
-  pass added 2026-06-28, but its catch-path is UNVALIDATED (best-effort).** `compile_material {waitForShaders:true}`
-  calls `FMaterialResource::FinishCompilation()` (blocks on the shader workers) then reads
-  `UMaterial::IsCompilingOrHadCompileError(GMaxRHIShaderPlatform)` — the **EShaderPlatform** overload, since
-  the `ERHIFeatureLevel::Type` one is `UE_DEPRECATED(5.7)` (verified vs engine source; the deprecated one
-  would fail a deprecation-as-error build). Default `false` preserves the fast path exactly (no existing caller
-  slowed, working handler untouched); response carries `waitedForShaders`. **Verified SAFE** — valid material →
-  `{compiled:true, waitedForShaders:true}`, no game-thread stall, no false-positive. **NOT verified to actually
-  CATCH a backend error:** a deliberately-broken Custom node (`return float3(NoSuchSymbol123,0,0)` → EmissiveColor,
-  connection confirmed) compiled **clean** through the bridge (`recompileshaders material … took 0.07s`, zero
-  Error log lines, `IsCompilingOrHadCompileError` stayed false). So the bridge compile path apparently does not
-  surface that error class — the original "uncertain engine-internal territory" caveat stands. Treat
-  waitForShaders as best-effort; the reliable shader-error check is still the LOG. Open: find a repro the bridge
-  compile actually fails on (likely the decal-domain `Parameters.TexCoords` case on a Substrate decal), or drop
-  the option if it can't be made to catch real errors.
+  via `tail_log` (LogShaderCompilers/LogMaterial), not compile_material**. **Follow-up — shader-backend errors
+  DONE + VALIDATED 2026-06-28.** `compile_material {waitForShaders:true}` now reliably reports backend
+  (shader-compiler) failures, not just translation errors. **Root cause of the earlier dead-ends** (traced
+  through engine source): `PostEditChange` never *queues* a backend shader compile for a standalone material —
+  the failing compile otherwise only fires later (e.g. on save), so `FinishCompilation()` had nothing
+  outstanding and both object APIs read clean. Also `IsCompilingOrHadCompileError` is just
+  `GetGameThreadShaderMap()==nullptr` (`Material.cpp:1649`) and a failed material falls back to the **Default
+  Material's** map (so it stays false), and re-translation clears `GetCompileErrors()`. **Fix:** force a
+  `UMaterial::ForceRecompileForRendering(EMaterialShaderPrecompileMode::Synchronous)` (wrapped in an
+  `FMaterialUpdateContext`) so the backend compiles *now*; on failure the engine writes the shader errors into
+  `Material->CompileErrors` (`ShaderCompiler.cpp:2177`), which `GetCompileErrors()` then returns (the same array
+  the material editor reads, `MaterialEditor.cpp:2950`). Dropped the unreliable `IsCompilingOrHadCompileError`
+  signal and a log-scan attempt (redundant once the forced compile populates `GetCompileErrors`). Default
+  `false` preserves the fast path; `waitForShaders` opt-in can stall the game thread for seconds (synchronous
+  compile). **Verified end-to-end:** guaranteed-invalid Custom HLSL (`float qx = AAAA BBBB CCCC;`) → fast path
+  `compiled:true` (blind) vs `waitForShaders` `compiled:false` + the exact DXC errors (`use of undeclared
+  identifier 'AAAA'`); a valid material → `compiled:true`, no false-positive. Covered by a negative-path
+  assertion in `tests/material/material-authoring-test.ps1` (18/18).
   **Read-back errors[] DONE 2026-06-28** (cpp-only, Live-Coding hot-patched + verified): `get_material_info`
   and `get_material_stats` now both carry `compiled` + (on failure) the same `errors[]` from
   `GetCompileErrors()`, so a read call diagnoses a broken material instead of a silent value;
