@@ -34,6 +34,15 @@ Flakiness in shipped surface erodes trust during real authoring.
   covered. **Follow-up (still open, 🟡):** surface the same `errors[]` on `get_material_info`, and fix
   `get_material_stats` (returns `instructionCount:-1` with no message on a failed compile). Origin: the
   gap caused a live misdiagnosis — blind to the real error, the assistant guessed the cause from docs.
+- 🟡 **No setter for material-expression constant VALUES** (found 2026-06-24 building the telegraph
+  radial mask). The bridge can *read* constant values (`get_material_node_details`) but has no action to
+  *set* them: a scalar `Constant`'s value is only settable via the batch `add_node` path's `value`
+  field, while `Constant2Vector/3/4` R/G/B/A and math-node `ConstA/ConstB` have no setter at all.
+  Consequence: a multi-node math subgraph that needs literal constants (e.g. a radial circle mask needing
+  a `(0.5,0.5)` center) can't be built node-by-node — fall back to a single `add_custom_expression`
+  (Custom HLSL) node that embeds the constants in code. Fix: add a `set_node_value` /
+  `set_expression_property` action covering `Constant`/`Constant2Vector`/`Constant3Vector`/`Constant4Vector`
+  + common math-node `ConstA/ConstB` defaults.
 - ✅ **Transport mid-call drop — RESOLVED** (2026-06-06; see `docs/pull-architecture.md`).
   Solved **pull-only** rather than via the keepalive/result-cache idea: de-streamed `tools/call`
   to plain HTTP request/response, removed all server push + keepalive, deleted the WebSocket
