@@ -4437,11 +4437,34 @@ bool UMcpAutomationBridgeSubsystem::HandleGetMaterialStats(
   }
   Stats->SetStringField(TEXT("shadingModel"), ShadingModelStr);
 
-  // Get instruction count from material resource
-  // Note: GetMaxNumInstructionsForShader takes FShaderType* in UE 5.6, EShaderFrequency in some earlier versions
-  // Skip this in 5.6 as there's no clean way to get a FShaderType* for the pixel shader
-  int32 InstructionCount = -1; // Not easily available in this UE version
-  Stats->SetNumberField(TEXT("instructionCount"), InstructionCount);
+  // Report compile status + errors so a failed compile is diagnosable instead of a
+  // silent instructionCount:-1. Translation errors are populated by EnsureIsComplete above.
+  TArray<FString> CompileErrors;
+  if (UMaterial *BaseMatForErrors = Material->GetMaterial()) {
+    if (const FMaterialResource *Res =
+            BaseMatForErrors->GetMaterialResource(GMaxRHIShaderPlatform)) {
+      CompileErrors = Res->GetCompileErrors();
+    }
+  }
+  const bool bMatCompiled = CompileErrors.Num() == 0;
+  Stats->SetBoolField(TEXT("compiled"), bMatCompiled);
+  if (!bMatCompiled) {
+    TArray<TSharedPtr<FJsonValue>> ErrArr;
+    for (const FString &E : CompileErrors) {
+      ErrArr.Add(MakeShared<FJsonValueString>(E));
+    }
+    Stats->SetArrayField(TEXT("errors"), ErrArr);
+  }
+
+  // The instruction count needs a representative FShaderType* (the MaterialEditor
+  // stats path), which isn't linked here — surface -1 with an explicit reason
+  // rather than a silent value that reads like a real measurement.
+  Stats->SetNumberField(TEXT("instructionCount"), -1);
+  Stats->SetStringField(
+      TEXT("instructionCountNote"),
+      bMatCompiled
+          ? TEXT("not surfaced over the bridge (needs the MaterialEditor stats path)")
+          : TEXT("-1 because the material failed to compile; see errors[]"));
 
   // Count texture samplers used in the material
   int32 SamplerCount = 0;

@@ -3028,6 +3028,25 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     Result->SetNumberField(TEXT("nodeCount"), AllExpressions.Num());
 
     if (Material) {
+      // Compile status + errors so a read call can diagnose a broken material
+      // (mirrors compile_material; translation errors only — async shader-backend
+      // errors still need compile_material{waitForShaders:true}).
+      {
+        TArray<FString> InfoCompileErrors;
+        if (const FMaterialResource *Res =
+                Material->GetMaterialResource(GMaxRHIShaderPlatform)) {
+          InfoCompileErrors = Res->GetCompileErrors();
+        }
+        Result->SetBoolField(TEXT("compiled"), InfoCompileErrors.Num() == 0);
+        if (InfoCompileErrors.Num() > 0) {
+          TArray<TSharedPtr<FJsonValue>> ErrArr;
+          for (const FString &E : InfoCompileErrors) {
+            ErrArr.Add(MakeShared<FJsonValueString>(E));
+          }
+          Result->SetArrayField(TEXT("errors"), ErrArr);
+        }
+      }
+
       // Domain
       switch (Material->MaterialDomain) {
       case EMaterialDomain::MD_Surface:

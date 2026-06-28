@@ -46,9 +46,14 @@ Flakiness in shipped surface erodes trust during real authoring.
   synthesized errors[] entry pointing at the shader log). Default `false` preserves the fast path exactly, so
   no existing caller is slowed and the working handler is untouched; response carries `waitedForShaders`.
   Verified: a valid scratch material → `{compiled:true, waitedForShaders:true}`, no game-thread stall.
-  **Still open (🟡):** surface the same `errors[]` on `get_material_info`, and fix `get_material_stats`
-  (returns `instructionCount:-1` with no message on a failed compile). Origin: the gap caused a live
-  misdiagnosis — blind to the real error, the assistant guessed the cause from docs.
+  **Read-back errors[] DONE 2026-06-28** (cpp-only, Live-Coding hot-patched + verified): `get_material_info`
+  and `get_material_stats` now both carry `compiled` + (on failure) the same `errors[]` from
+  `GetCompileErrors()`, so a read call diagnoses a broken material instead of a silent value;
+  `get_material_stats` keeps `instructionCount:-1` but adds an honest `instructionCountNote` (the real count
+  needs a representative `FShaderType*` via the MaterialEditor stats path, which isn't linked here — not worth
+  a module dependency for a stat). Verified compiled-true path on M_AoE_Telegraph; failure path reuses the
+  exact `GetCompileErrors()` already proven in compile_material. Origin: the gap caused a live misdiagnosis —
+  blind to the real error, the assistant guessed the cause from docs.
 - ✅ **`add_custom_expression`/`update_custom_expression` `inputs`/`additionalOutputs` were undeclared in
   the `manage_asset` schema** — FOUND + FIXED 2026-06-27. The handlers parse `inputs:[{name}]` /
   `additionalOutputs:[{name,type}]` correctly, but the params were never declared in
