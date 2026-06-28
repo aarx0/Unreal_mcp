@@ -24,6 +24,16 @@ as they land.
 
 ### A. Reliability & correctness — harden what already ships
 Flakiness in shipped surface erodes trust during real authoring.
+- ✅ **`compile_material` now reports real compile status** — RESOLVED 2026-06-24 (live-verified).
+  It reads `Material->GetMaterialResource(GMaxRHIShaderPlatform)->GetCompileErrors()` after its
+  `PostEditChange` recompile and returns `compiled:false` + an `errors[]` array instead of the old
+  hardcoded `{compiled:true}`. Verified against a Substrate decal fed a `SubstrateUnlitBSDF` →
+  `{"compiled":false,"errors":["Decals only support Substrate Slabs and Shading Model nodes, not Unlit
+  node...","Substrate material errors encountered."]}`. Translation errors are populated synchronously
+  by `PostEditChange`; async shader-backend errors may still need a `FinishCompilation` step — not yet
+  covered. **Follow-up (still open, 🟡):** surface the same `errors[]` on `get_material_info`, and fix
+  `get_material_stats` (returns `instructionCount:-1` with no message on a failed compile). Origin: the
+  gap caused a live misdiagnosis — blind to the real error, the assistant guessed the cause from docs.
 - ✅ **Transport mid-call drop — RESOLVED** (2026-06-06; see `docs/pull-architecture.md`).
   Solved **pull-only** rather than via the keepalive/result-cache idea: de-streamed `tools/call`
   to plain HTTP request/response, removed all server push + keepalive, deleted the WebSocket
@@ -709,6 +719,22 @@ the hang's own "recovery" (force-kill + relaunch), so the kill-loop *manufacture
 is left. Clicking `Skip Restore` immediately freed the game thread and the bridge serviced calls normally.
 Potential hardening: extend the `GIsRunningUnattendedScript` auto-dismiss guard (added for save modals) to
 the startup package-restore prompt so a force-killed editor self-recovers instead of wedging.
+
+### [ ] 2026-06-23 — `add_montage_notify` w/ `notifyClass` never sets the Notify object's NotifyName → PlayMontageNotify broadcasts NAME_None
+FOUND (source-inferred, not live-repro'd) 2026-06-23, wiring a MiliBot dummy's montage→SpawnAoE. The
+authoring handler (`McpAutomationBridge_AnimationAuthoringHandlers.cpp` ~1688-1709) builds the
+`FAnimNotifyEvent`, sets `NotifyEvent.NotifyName` (the EVENT's name) and `NotifyEvent.Notify =
+NewObject<UAnimNotify>(class)` — but never sets `NewNotify->NotifyName` (the notify OBJECT's own member).
+The "Play Montage" BP node keys off the OBJECT member: `UAnimNotify_PlayMontageNotify::BranchingPointNotify`
+broadcasts `OnPlayMontageNotifyBegin.Broadcast(NotifyName)` using *its own* `NotifyName`
+(`AnimNotify_PlayMontageNotify.cpp:30`, the ONLY broadcast site engine-wide). So a bridge-created
+PlayMontageNotify fires `On Notify Begin` with `None` → can't be matched by name in Blueprint, the whole
+"Play Montage → On Notify Begin → branch on name" pattern silently no-ops. Fix: when the resolved class
+`IsChildOf(UAnimNotify_PlayMontageNotify::StaticClass())` (or the Window variant), also
+`NewNotify->NotifyName = FName(*NotifyName)`. Workaround until then: add "Montage Notify" in the Persona
+montage editor (it sets the object name). NB: two `add_montage_notify` handlers exist
+(`AnimationAuthoringHandlers.cpp:1615` has `notifyClass`; `AnimationHandlers.cpp:3205` doesn't) — confirm
+which one the `animation_physics` route actually dispatches to.
 
 ### [x] `.uplugin` `InterchangeOpenUSD` reference force-enables USDCore → editor exits on engines with non-loadable USD binaries
 **FOUND + FIXED 2026-06-12** (HandPanicVR, Meta UE 5.7.3 fork, headless `-unattended` launch).

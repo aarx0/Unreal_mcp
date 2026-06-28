@@ -67,6 +67,7 @@
 
 // Material Core
 #include "Materials/Material.h"
+#include "MaterialShared.h" // FMaterialResource::GetCompileErrors()
 #include "Materials/MaterialFunction.h"
 #include "Materials/MaterialFunctionInterface.h"
 #include "Materials/MaterialInstanceConstant.h"
@@ -2910,6 +2911,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     Host->PostEditChange();
     Host->MarkPackageDirty();
 
+    // Read back compile errors so we report real status instead of assuming success.
+    // Material *translation* errors (e.g. an invalid Substrate decal graph) are populated
+    // synchronously by the PostEditChange recompile above.
+    TArray<FString> CompileErrors;
+    if (Material) {
+      if (const FMaterialResource *Res = Material->GetMaterialResource(GMaxRHIShaderPlatform)) {
+        CompileErrors = Res->GetCompileErrors();
+      }
+    }
+    const bool bCompiled = CompileErrors.Num() == 0;
+
     bool bSave = true;
     Payload->TryGetBoolField(TEXT("save"), bSave);
     if (bSave) {
@@ -2924,10 +2936,20 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     Result->SetStringField(TEXT("assetPath"), AssetPath);
     Result->SetStringField(TEXT("assetType"),
                            Material ? TEXT("Material") : TEXT("MaterialFunction"));
-    Result->SetBoolField(TEXT("compiled"), true);
+    Result->SetBoolField(TEXT("compiled"), bCompiled);
     Result->SetBoolField(TEXT("saved"), bSave);
+    if (!bCompiled) {
+      TArray<TSharedPtr<FJsonValue>> ErrorArray;
+      for (const FString &Err : CompileErrors) {
+        ErrorArray.Add(MakeShared<FJsonValueString>(Err));
+      }
+      Result->SetArrayField(TEXT("errors"), ErrorArray);
+    }
     SendAutomationResponse(Socket, RequestId, true,
-                           Material ? TEXT("Material compiled.") : TEXT("Material function updated."),
+                           Material
+                               ? (bCompiled ? TEXT("Material compiled.")
+                                            : TEXT("Material has compile errors."))
+                               : TEXT("Material function updated."),
                            Result);
     return true;
   }
