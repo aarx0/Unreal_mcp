@@ -106,7 +106,8 @@ inline const TArray<FString>& MaterialAuthoring()
 		TEXT("set_node_value"),
 		TEXT("set_static_switch_parameter_value"), TEXT("delete_node"),
 		TEXT("update_custom_expression"), TEXT("get_node_chain"),
-		TEXT("get_connected_subgraph"), TEXT("add_material_node"),
+		TEXT("get_connected_subgraph"), TEXT("arrange_graph"),
+		TEXT("add_material_node"),
 		TEXT("rebuild_material"), TEXT("set_material_parameter"),
 		TEXT("get_material_node_details"), TEXT("remove_material_node"),
 		TEXT("set_two_sided")

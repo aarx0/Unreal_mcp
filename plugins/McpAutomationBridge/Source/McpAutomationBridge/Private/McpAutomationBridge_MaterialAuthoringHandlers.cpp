@@ -47,6 +47,7 @@
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpVersionCompatibility.h"
+#include "McpGraphLayoutUtils.h"
 
 // JSON & Serialization
 #include "Dom/JsonObject.h"
@@ -153,6 +154,19 @@ static UMaterialExpression* FindExpressionByIdOrNameInFunction(UMaterialFunction
 static UObject* LoadMaterialOrFunction(const FString& AssetPath, UMaterial*& OutMaterial, UMaterialFunction*& OutFunction);
 static void AddExpressionToContainer(UMaterial* Material, UMaterialFunction* Function, UMaterialExpression* Expr);
 static FString FunctionInputTypeToString(EFunctionInputType InType);
+
+// --- Shared graph-layout (arrange_graph) helpers (defined at end of file) ---
+static void SetMaterialRootNodePosition(UMaterial* M, int32 X, int32 Y);
+static FVector2D EstimateMaterialNodeSize(UMaterialExpression* Expr);
+static void BuildMaterialLayoutInput(
+    UMaterial* Material, UMaterialFunction* Function,
+    McpGraphLayout::FMcpGraphLayoutInput& OutInput,
+    TMap<int32, UMaterialExpression*>& OutIdToExpr,
+    int32& OutMainId);
+static int32 ApplyMaterialLayout(
+    const McpGraphLayout::FMcpGraphLayoutResult& R,
+    const TMap<int32, UMaterialExpression*>& IdToExpr,
+    int32 MainId, UMaterial* Material);
 #endif
 static bool SaveMaterialAsset(UMaterial *Material);
 static bool SaveMaterialFunctionAsset(UMaterialFunction *Function);
@@ -1585,6 +1599,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
           else if (InputName == TEXT("SubsurfaceColor")) { SetMainInputOutputIndex(MCP_GET_MATERIAL_INPUT(Material, SubsurfaceColor)); }
           else if (InputName == TEXT("WorldPositionOffset")) { SetMainInputOutputIndex(MCP_GET_MATERIAL_INPUT(Material, WorldPositionOffset)); }
 #endif
+          // Root-aware place: position the (otherwise orphaned) material output
+          // node just right of the source now wired into it — but ONLY if the
+          // root is still at its default (0,0), so the fix lands once and never
+          // churns on subsequent connects.
+#if WITH_EDITORONLY_DATA
+          if (Material->EditorX == 0 && Material->EditorY == 0) {
+            SetMaterialRootNodePosition(Material,
+                                        SourceExpr->MaterialExpressionEditorX + 300,
+                                        SourceExpr->MaterialExpressionEditorY);
+          }
+#endif
           FINALIZE_HOST();
           SendAutomationResponse(Socket, RequestId, true,
                                  TEXT("Connected to main material node."));
@@ -1621,6 +1646,16 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         } else {
           TargetOutput->A.OutputIndex = 0;
         }
+        // Root-aware place: position the FunctionOutput node just right of the
+        // source now wired into it, but ONLY if it is still at its default
+        // (0,0), so it lands once and never churns on subsequent connects.
+#if WITH_EDITORONLY_DATA
+        if (TargetOutput->MaterialExpressionEditorX == 0 &&
+            TargetOutput->MaterialExpressionEditorY == 0) {
+          TargetOutput->MaterialExpressionEditorX = SourceExpr->MaterialExpressionEditorX + 300;
+          TargetOutput->MaterialExpressionEditorY = SourceExpr->MaterialExpressionEditorY;
+        }
+#endif
         FINALIZE_HOST();
         SendAutomationResponse(Socket, RequestId, true,
                                TEXT("Connected to function output."));
@@ -4979,6 +5014,48 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     return true;
   }
 
+  // --------------------------------------------------------------------------
+  // arrange_graph — auto-layout the material/MF expression graph headlessly via
+  // the shared McpGraphLayout core. Sink polarity: the output ("Main" for a
+  // UMaterial, each FunctionOutput for a UMaterialFunction) anchors at the
+  // rightmost column; constants/parameters flow left into it.
+  // --------------------------------------------------------------------------
+  if (SubAction == TEXT("arrange_graph")) {
+    LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
+
+    McpGraphLayout::FMcpGraphLayoutInput In;
+    TMap<int32, UMaterialExpression*> IdToExpr;
+    int32 MainId = INDEX_NONE;
+    BuildMaterialLayoutInput(Material, Function, In, IdToExpr, MainId);
+
+    McpGraphLayout::FMcpGraphLayoutResult R = McpGraphLayout::LayoutGraph(In);
+    const int32 Arranged = ApplyMaterialLayout(R, IdToExpr, MainId, Material);
+
+    // Positions are cosmetic editor-only data: mark dirty so the change persists,
+    // but skip FINALIZE_HOST()/PostEditChange() — arranging must not trigger a
+    // shader recompile.
+    if (HostOuter) { HostOuter->MarkPackageDirty(); }
+    bool bSave = true;
+    Payload->TryGetBoolField(TEXT("save"), bSave);
+    if (bSave) {
+      if (Material) { SaveMaterialAsset(Material); }
+      else { SaveMaterialFunctionAsset(Function); }
+    }
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    Result->SetNumberField(TEXT("arrangedNodes"), Arranged);
+    Result->SetNumberField(TEXT("maxColumn"), R.MaxColumn);
+    if (Material) {
+#if WITH_EDITORONLY_DATA
+      Result->SetNumberField(TEXT("rootX"), Material->EditorX);
+      Result->SetNumberField(TEXT("rootY"), Material->EditorY);
+#endif
+    }
+    McpHandlerUtils::AddVerification(Result, HostOuter);
+    SendAutomationResponse(Socket, RequestId, true, TEXT("Graph arranged."), Result);
+    return true;
+  }
+
 #undef LOAD_MATERIAL_OR_RETURN
 #undef LOAD_MATERIAL_OR_FUNCTION_OR_RETURN
 #undef FIND_EXPR_IN_HOST
@@ -5024,6 +5101,207 @@ static bool SaveMaterialInstanceAsset(UMaterialInstanceConstant *Instance) {
 
   // Use McpSafeAssetSave for proper asset registry notification
   return McpSafeAssetSave(Instance);
+}
+
+// =============================================================================
+// arrange_graph helpers (shared McpGraphLayout core adapter)
+// =============================================================================
+
+// Position a UMaterial's root/output node headlessly. The root node has no
+// separate position storage — UMaterialGraphNode_Root reads NodePosX/Y back from
+// UMaterial::EditorX/EditorY when the graph is (re)built. Setting EditorX/Y +
+// MarkPackageDirty + save is sufficient and correct for the no-open-editor case.
+// (Live-editor hazard: an open Material Editor's next graph->material sync would
+// clobber this — out of scope for headless.) No PostEditChange() here: position
+// is purely editor-cosmetic and PostEditChange would force a recompile.
+static void SetMaterialRootNodePosition(UMaterial* M, int32 X, int32 Y) {
+  if (!M) { return; }
+#if WITH_EDITORONLY_DATA
+  M->Modify();
+  M->EditorX = X;          // Material.h:969 — source-of-truth root field
+  M->EditorY = Y;          // Material.h:972
+  M->MarkPackageDirty();
+#endif
+}
+
+// Headless node-extent estimate for a material expression. No Slate geometry
+// exists for an unopened graph. Width scales with the title length; height is a
+// flat constant. (Per resolution: do NOT call GetInputs()/GetOutputs() — those
+// signatures are a compile risk in this fork.)
+static FVector2D EstimateMaterialNodeSize(UMaterialExpression* Expr) {
+  if (!Expr) { return FVector2D(128.f, 96.f); }
+  const FString Title = Expr->GetDescription();
+  const float Width = FMath::Max(128.f, 24.f + 7.f * Title.Len());
+  const float Height = 96.f;
+  return FVector2D(Width, Height);
+}
+
+// Extract the material/MF expression graph into a pure McpGraphLayout input.
+// Edges are oriented From=upstream source, To=downstream consumer. RootRole=Sink
+// (the output anchors at the rightmost column). Reuses the exact extraction
+// patterns from get_material_info.
+static void BuildMaterialLayoutInput(
+    UMaterial* Material, UMaterialFunction* Function,
+    McpGraphLayout::FMcpGraphLayoutInput& OutInput,
+    TMap<int32, UMaterialExpression*>& OutIdToExpr,
+    int32& OutMainId) {
+  OutMainId = INDEX_NONE;
+  OutInput.Orientation = { McpGraphLayout::ELayoutAxis::Horizontal,
+                           McpGraphLayout::ERootRole::Sink };
+
+  if (!Material && !Function) { return; }
+
+  // Stable expression array (true lvalue TArray&) — the asset's expression-array
+  // order is the stable layout key.
+  auto& AllExpressions = Material
+      ? MCP_GET_MATERIAL_EXPRESSIONS(Material)
+      : MCP_GET_FUNCTION_EXPRESSIONS(Function);
+
+  // Assign dense int32 ids in iteration order; build name->id and id->expr.
+  TMap<FString, int32> NameToId;
+  int32 NextId = 0;
+  for (UMaterialExpression* Expr : AllExpressions) {
+    if (!Expr) { continue; }
+    const int32 Id = NextId++;
+    NameToId.Add(MCP_NODE_ID(Expr), Id);
+    OutIdToExpr.Add(Id, Expr);
+
+    McpGraphLayout::FLayoutNode LN;
+    LN.Id = Id;
+    LN.Size = EstimateMaterialNodeSize(Expr);
+    LN.Label = Expr->GetDescription();
+    OutInput.Nodes.Add(LN);
+  }
+
+  // Synthetic "Main" node for a UMaterial (the material output). For an MF, each
+  // UMaterialExpressionFunctionOutput is a real sink expression — no synthetic.
+  if (Material) {
+    OutMainId = NextId++;
+    McpGraphLayout::FLayoutNode MainNode;
+    MainNode.Id = OutMainId;
+    MainNode.Size = FVector2D(160.f, 200.f);
+    MainNode.Label = TEXT("Main");
+    OutInput.Nodes.Add(MainNode);
+  }
+
+  // Helper: add an edge From=source expr, To=this id (centering always true).
+  auto AddEdgeFromExpr = [&](UMaterialExpression* SourceExpr, int32 ToId) {
+    if (!SourceExpr || ToId == INDEX_NONE) { return; }
+    const int32* FromId = NameToId.Find(MCP_NODE_ID(SourceExpr));
+    if (!FromId) { return; }
+    McpGraphLayout::FLayoutEdge E;
+    E.FromId = *FromId;
+    E.ToId = ToId;
+    E.bContributesToRowCentering = true;   // materials have no exec/pure split
+    OutInput.Edges.Add(E);
+  };
+
+  // Expression-to-expression edges (reflection over FExpressionInput props,
+  // Custom node inputs, MaterialFunctionCall inputs) — same patterns as
+  // get_material_info's EmitExprConnections.
+  for (UMaterialExpression* TargetExpr : AllExpressions) {
+    if (!TargetExpr) { continue; }
+    const int32* ToIdPtr = NameToId.Find(MCP_NODE_ID(TargetExpr));
+    if (!ToIdPtr) { continue; }
+    const int32 ToId = *ToIdPtr;
+
+    for (TFieldIterator<FStructProperty> It(TargetExpr->GetClass()); It; ++It) {
+      FStructProperty* StructProp = *It;
+      if (!StructProp->Struct ||
+          StructProp->Struct->GetFName() != FName(TEXT("ExpressionInput"))) {
+        continue;
+      }
+      FExpressionInput* InputPtr =
+          StructProp->ContainerPtrToValuePtr<FExpressionInput>(TargetExpr);
+      if (!InputPtr || !InputPtr->Expression) { continue; }
+      AddEdgeFromExpr(InputPtr->Expression, ToId);
+    }
+
+    if (UMaterialExpressionCustom* CExpr = Cast<UMaterialExpressionCustom>(TargetExpr)) {
+      for (int32 ci = 0; ci < CExpr->Inputs.Num(); ++ci) {
+        if (CExpr->Inputs[ci].Input.Expression) {
+          AddEdgeFromExpr(CExpr->Inputs[ci].Input.Expression, ToId);
+        }
+      }
+    }
+
+    if (UMaterialExpressionMaterialFunctionCall* MFC =
+            Cast<UMaterialExpressionMaterialFunctionCall>(TargetExpr)) {
+      for (const FFunctionExpressionInput& FI : MFC->FunctionInputs) {
+        if (FI.Input.Expression) {
+          AddEdgeFromExpr(FI.Input.Expression, ToId);
+        }
+      }
+    }
+  }
+
+  if (Material) {
+    // Material root pins -> synthetic Main (From=source, To=Main).
+#if WITH_EDITORONLY_DATA
+    auto AddMainEdge = [&](const FExpressionInput& Input) {
+      if (Input.Expression) { AddEdgeFromExpr(Input.Expression, OutMainId); }
+    };
+    AddMainEdge(MCP_GET_MATERIAL_INPUT(Material, BaseColor));
+    AddMainEdge(MCP_GET_MATERIAL_INPUT(Material, EmissiveColor));
+    AddMainEdge(MCP_GET_MATERIAL_INPUT(Material, Roughness));
+    AddMainEdge(MCP_GET_MATERIAL_INPUT(Material, Metallic));
+    AddMainEdge(MCP_GET_MATERIAL_INPUT(Material, Specular));
+    AddMainEdge(MCP_GET_MATERIAL_INPUT(Material, Normal));
+    AddMainEdge(MCP_GET_MATERIAL_INPUT(Material, Opacity));
+    AddMainEdge(MCP_GET_MATERIAL_INPUT(Material, OpacityMask));
+    AddMainEdge(MCP_GET_MATERIAL_INPUT(Material, AmbientOcclusion));
+    AddMainEdge(MCP_GET_MATERIAL_INPUT(Material, SubsurfaceColor));
+    AddMainEdge(MCP_GET_MATERIAL_INPUT(Material, WorldPositionOffset));
+#endif
+  } else if (Function) {
+    // MF: edge From=source, To=functionOutputExprId via each FunctionOutput's A.
+#if WITH_EDITORONLY_DATA
+    for (UMaterialExpression* Expr : AllExpressions) {
+      if (UMaterialExpressionFunctionOutput* FO =
+              Cast<UMaterialExpressionFunctionOutput>(Expr)) {
+        const int32* OutIdPtr = NameToId.Find(MCP_NODE_ID(FO));
+        if (OutIdPtr && FO->A.Expression) {
+          AddEdgeFromExpr(FO->A.Expression, *OutIdPtr);
+        }
+      }
+    }
+#endif
+  }
+
+  // RootId = synthetic Main for a UMaterial; INDEX_NONE for an MF (structural
+  // Sink derivation finds each FunctionOutput as a no-outgoing-edge sink).
+  OutInput.RootId = OutMainId;
+}
+
+// Write the core's positions back onto the material expressions. The synthetic
+// "Main" id routes to SetMaterialRootNodePosition (no UMaterialExpression to
+// move). Returns the count written. PostEditChange/MarkPackageDirty is handled
+// once by the caller's FINALIZE_HOST().
+static int32 ApplyMaterialLayout(
+    const McpGraphLayout::FMcpGraphLayoutResult& R,
+    const TMap<int32, UMaterialExpression*>& IdToExpr,
+    int32 MainId, UMaterial* Material) {
+  int32 Count = 0;
+  for (const TPair<int32, FVector2D>& Pair : R.Positions) {
+    const int32 Id = Pair.Key;
+    const FVector2D& Pos = Pair.Value;
+    if (Id == MainId) {
+      if (Material) {
+        SetMaterialRootNodePosition(Material, FMath::RoundToInt(Pos.X),
+                                    FMath::RoundToInt(Pos.Y));
+        ++Count;
+      }
+      continue;
+    }
+    UMaterialExpression* E = IdToExpr.FindRef(Id);
+    if (!E) { continue; }
+#if WITH_EDITORONLY_DATA
+    E->MaterialExpressionEditorX = FMath::RoundToInt(Pos.X);
+    E->MaterialExpressionEditorY = FMath::RoundToInt(Pos.Y);
+    ++Count;
+#endif
+  }
+  return Count;
 }
 
 // Shared lookup logic for expressions in any array.

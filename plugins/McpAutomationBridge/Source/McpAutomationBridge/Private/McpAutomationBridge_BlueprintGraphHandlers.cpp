@@ -53,6 +53,7 @@
 #include "McpAutomationBridgeHelpers.h"
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpGraphLayoutUtils.h"
 #include "Misc/ScopeExit.h"
 
 #if WITH_EDITOR
@@ -253,70 +254,52 @@ void ComputeGraphLiveness(const UEdGraph* Graph,
     }
 }
 
-// Longest-path column: column = 1 + max(predecessor columns). Memoised; the
-// Visiting set turns any back-edge in an exec/data cycle into a no-op so it
-// terminates.
-int32 ArrangeColumn(UEdGraphNode* Node,
-                    const TMap<UEdGraphNode*, TArray<UEdGraphNode*>>& ColPred,
-                    TMap<UEdGraphNode*, int32>& Col,
-                    TSet<UEdGraphNode*>& Visiting)
-{
-    if (const int32* Cached = Col.Find(Node)) { return *Cached; }
-    if (Visiting.Contains(Node)) { return 0; }
-    Visiting.Add(Node);
-    int32 Best = 0;
-    if (const TArray<UEdGraphNode*>* Preds = ColPred.Find(Node))
-    {
-        for (UEdGraphNode* P : *Preds)
-        {
-            Best = FMath::Max(Best, ArrangeColumn(P, ColPred, Col, Visiting) + 1);
-        }
-    }
-    Visiting.Remove(Node);
-    Col.Add(Node, Best);
-    return Best;
-}
-
-// DFS row assignment: leaves consume the monotonic cursor, parents center on
-// their children. Visited guard makes shared feeders / cycles safe (placed once).
-float ArrangeRow(UEdGraphNode* Node,
-                 const TMap<UEdGraphNode*, TArray<UEdGraphNode*>>& Children,
-                 TMap<UEdGraphNode*, float>& Row,
-                 TSet<UEdGraphNode*>& Visited,
-                 float& Cursor)
-{
-    if (const float* Cached = Row.Find(Node)) { return *Cached; }
-    const TArray<UEdGraphNode*>* Kids = Children.Find(Node);
-    if (Visited.Contains(Node) || !Kids || Kids->Num() == 0)
-    {
-        const float Leaf = Cursor; Cursor += 1.0f; Row.Add(Node, Leaf); return Leaf;
-    }
-    Visited.Add(Node);
-    float Sum = 0.0f;
-    for (UEdGraphNode* K : *Kids)
-    {
-        Sum += ArrangeRow(K, Children, Row, Visited, Cursor);
-    }
-    const float Centered = Sum / Kids->Num();
-    Row.Add(Node, Centered);
-    return Centered;
-}
-
 // Lay out every node in Graph; returns the count repositioned.
+// ArrangeColumn / ArrangeRow and the placement algorithm now live in the shared,
+// UE-agnostic core (McpGraphLayoutUtils). This adapter only translates the K2
+// exec/data pin topology into McpGraphLayout::FLayoutEdge / FLayoutNode, runs
+// the core, then writes the integral positions back onto the EdGraph nodes.
 int32 ArrangeBlueprintGraph(UEdGraph* Graph)
 {
     if (!Graph) { return 0; }
-    TArray<UEdGraphNode*> Nodes;
-    for (UEdGraphNode* N : Graph->Nodes) { if (N) { Nodes.Add(N); } }
-    if (Nodes.Num() == 0) { return 0; }
 
-    TMap<UEdGraphNode*, TArray<UEdGraphNode*>> ColPred;       // X: exec preds + data sources
-    TMap<UEdGraphNode*, TArray<UEdGraphNode*>> Children;      // Y: exec successors + pure feeders
-    TMap<UEdGraphNode*, TArray<UEdGraphNode*>> PureConsumers; // pure node -> nodes it feeds
-    TArray<UEdGraphNode*> Roots;                              // event/entry nodes (no exec input)
-
-    for (UEdGraphNode* N : Nodes)
+    // Call-local dense id map, in Graph->Nodes order (see resolution: preserve
+    // Graph->Nodes order rather than sorting by NodeGuid).
+    TArray<UEdGraphNode*> IdToNode;
+    TMap<UEdGraphNode*, McpGraphLayout::FNodeId> NodeToId;
+    for (UEdGraphNode* N : Graph->Nodes)
     {
+        if (!N) { continue; }
+        NodeToId.Add(N, IdToNode.Num());
+        IdToNode.Add(N);
+    }
+    if (IdToNode.Num() == 0) { return 0; }
+
+    McpGraphLayout::FMcpGraphLayoutInput In;
+    In.Orientation = { McpGraphLayout::ELayoutAxis::Horizontal, McpGraphLayout::ERootRole::Source };
+    In.RowStep  = (float)ArrangeRowStepY;
+    In.GapMajor = ArrangeGapX;
+    In.GapMinor = ArrangeGapY;
+    In.Nodes.Reserve(IdToNode.Num());
+    for (McpGraphLayout::FNodeId Id = 0; Id < IdToNode.Num(); ++Id)
+    {
+        UEdGraphNode* N = IdToNode[Id];
+        McpGraphLayout::FLayoutNode LN;
+        LN.Id    = Id;
+        LN.Size  = ArrangeEstimateNodeSize(N);
+        LN.Label = N->GetNodeTitle(ENodeTitleType::ListView).ToString();
+        In.Nodes.Add(LN);
+    }
+
+    // Pin-walk: emit FLayoutEdge (From=upstream, To=downstream) + roots.
+    //   exec output -> successor : centering=true (exec successor).
+    //   data input  <- feeder    : centering=ArrangeNodeIsPure(feeder) (pure
+    //                              feeders are Y-children; non-pure data sources
+    //                              still push N right but don't center).
+    //   roots (!bPure && no connected exec input) -> AdditionalRoots.
+    for (McpGraphLayout::FNodeId Id = 0; Id < IdToNode.Num(); ++Id)
+    {
+        UEdGraphNode* N = IdToNode[Id];
         const bool bPure = ArrangeNodeIsPure(N);
         bool bHasExecInput = false;
         for (UEdGraphPin* P : N->Pins)
@@ -330,8 +313,14 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph)
                     UEdGraphNode* M = L ? L->GetOwningNode() : nullptr;
                     if (M && M != N)
                     {
-                        ColPred.FindOrAdd(M).AddUnique(N);   // successor sits right of N
-                        Children.FindOrAdd(N).AddUnique(M);  // ...and is N's Y-child
+                        const McpGraphLayout::FNodeId* MId = NodeToId.Find(M);
+                        if (MId)
+                        {
+                            McpGraphLayout::FLayoutEdge E;
+                            E.FromId = Id; E.ToId = *MId;
+                            E.bContributesToRowCentering = true;   // exec successor
+                            In.Edges.Add(E);
+                        }
                     }
                 }
             }
@@ -349,99 +338,35 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph)
                     UEdGraphNode* F = L ? L->GetOwningNode() : nullptr;
                     if (F && F != N)
                     {
-                        ColPred.FindOrAdd(N).AddUnique(F);   // data source pushes N right
-                        if (ArrangeNodeIsPure(F))
+                        const McpGraphLayout::FNodeId* FId = NodeToId.Find(F);
+                        if (FId)
                         {
-                            Children.FindOrAdd(N).AddUnique(F);   // pure feeder is a Y-child of N
-                            PureConsumers.FindOrAdd(F).AddUnique(N);
+                            McpGraphLayout::FLayoutEdge E;
+                            E.FromId = *FId; E.ToId = Id;          // feeder pushes N right (X)
+                            E.bContributesToRowCentering = ArrangeNodeIsPure(F);
+                            E.bCenterParentIsTo = true;            // ...but N centers over F (Y), matching original
+                            In.Edges.Add(E);
                         }
                     }
                 }
             }
         }
-        if (!bPure && !bHasExecInput) { Roots.Add(N); }
+        if (!bPure && !bHasExecInput) { In.AdditionalRoots.Add(Id); }
     }
 
-    // X pass 1 — longest-path columns over the combined exec+data DAG.
-    TMap<UEdGraphNode*, int32> Col;
-    {
-        TSet<UEdGraphNode*> Visiting;
-        for (UEdGraphNode* N : Nodes) { ArrangeColumn(N, ColPred, Col, Visiting); }
-    }
-    // X pass 2 — a pure node with no inputs (a lone getter) would land in column
-    // 0 beside the events; pull it to just-left-of its leftmost consumer instead.
-    TMap<UEdGraphNode*, int32> FinalCol = Col;
-    for (UEdGraphNode* N : Nodes)
-    {
-        if (!ArrangeNodeIsPure(N)) { continue; }
-        const TArray<UEdGraphNode*>* Cons = PureConsumers.Find(N);
-        if (!Cons || Cons->Num() == 0) { continue; }
-        int32 MinConsumerCol = MAX_int32;
-        for (UEdGraphNode* C : *Cons) { MinConsumerCol = FMath::Min(MinConsumerCol, Col.FindRef(C)); }
-        FinalCol.Add(N, FMath::Max(Col.FindRef(N), MinConsumerCol - 1));
-    }
+    const McpGraphLayout::FMcpGraphLayoutResult R = McpGraphLayout::LayoutGraph(In);
 
-    // Y — non-resetting cursor + parent-centering from each root, then any nodes
-    // not reached from a root (orphans / disconnected) get their own rows.
-    TMap<UEdGraphNode*, float> Row;
-    {
-        // Roots are processed in discovery order; order only decides which rows
-        // each independent tree occupies, never whether any nodes overlap.
-        TSet<UEdGraphNode*> Visited;
-        float Cursor = 0.0f;
-        for (UEdGraphNode* R : Roots) { ArrangeRow(R, Children, Row, Visited, Cursor); }
-        for (UEdGraphNode* N : Nodes)
-        {
-            if (!Row.Contains(N)) { ArrangeRow(N, Children, Row, Visited, Cursor); }
-        }
-    }
-
-    // Size-aware placement. X: cumulative column origins from per-column max
-    // widths. Y: within each column, nodes keep their computed row as the
-    // target but get pushed down until they clear the previous node's bottom.
-    TMap<UEdGraphNode*, FVector2D> Size;
-    int32 MaxCol = 0;
-    for (UEdGraphNode* N : Nodes)
-    {
-        Size.Add(N, ArrangeEstimateNodeSize(N));
-        MaxCol = FMath::Max(MaxCol, FinalCol.FindRef(N));
-    }
-
-    TArray<float> ColWidth;
-    ColWidth.Init(0.f, MaxCol + 1);
-    for (UEdGraphNode* N : Nodes)
-    {
-        const int32 C = FinalCol.FindRef(N);
-        ColWidth[C] = FMath::Max(ColWidth[C], (float)Size.FindRef(N).X);
-    }
-    TArray<float> ColX;
-    ColX.Init(0.f, MaxCol + 1);
-    for (int32 C = 1; C <= MaxCol; ++C)
-    {
-        ColX[C] = ColX[C - 1] + ColWidth[C - 1] + ArrangeGapX;
-    }
-
-    TMap<int32, TArray<UEdGraphNode*>> ByCol;
-    for (UEdGraphNode* N : Nodes) { ByCol.FindOrAdd(FinalCol.FindRef(N)).Add(N); }
-
+    // Mutation loop (editor-only): write the core's integral positions back.
     int32 Count = 0;
-    for (TPair<int32, TArray<UEdGraphNode*>>& Pair : ByCol)
+    for (const TPair<McpGraphLayout::FNodeId, FVector2D>& Pair : R.Positions)
     {
-        Pair.Value.Sort([&Row](const UEdGraphNode& A, const UEdGraphNode& B)
-        {
-            return Row.FindRef(const_cast<UEdGraphNode*>(&A)) < Row.FindRef(const_cast<UEdGraphNode*>(&B));
-        });
-        float PrevBottom = -FLT_MAX;
-        for (UEdGraphNode* N : Pair.Value)
-        {
-            const float TargetY = Row.FindRef(N) * ArrangeRowStepY;
-            const float Y = FMath::Max(TargetY, PrevBottom);
-            N->Modify();
-            N->NodePosX = FMath::RoundToInt(ColX[Pair.Key]);
-            N->NodePosY = FMath::RoundToInt(Y);
-            PrevBottom = Y + (float)Size.FindRef(N).Y + ArrangeGapY;
-            ++Count;
-        }
+        if (!IdToNode.IsValidIndex(Pair.Key)) { continue; }
+        UEdGraphNode* N = IdToNode[Pair.Key];
+        if (!N) { continue; }
+        N->Modify();
+        N->NodePosX = FMath::RoundToInt(Pair.Value.X);
+        N->NodePosY = FMath::RoundToInt(Pair.Value.Y);
+        ++Count;
     }
     return Count;
 }
