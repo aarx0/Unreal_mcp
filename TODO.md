@@ -15,6 +15,13 @@ as they land.
 
 ---
 
+> **Architecture review (2026-07-02):** full structural review in
+> [`docs/architecture-review-2026-07-02.md`](docs/architecture-review-2026-07-02.md) — 9 verified
+> findings (F1–F9) + a 10-step incremental refactoring roadmap. Highest-leverage first steps: loud
+> registration + startup schema/routing drift check (F1/F2), honest persistence for the throttled-save
+> / `AddAssetVerification` / dirty-only `save:true` paths (F3), inline the 10 deferred `AsyncTask`
+> completions (F4), delete the dead `FMcpBridgeWebSocket` parameter currency (F5).
+
 ## Roadmap — missing / incomplete capabilities
 
 > Grouped by theme; reliability items cross-reference the **Bugs** section below. Rough
