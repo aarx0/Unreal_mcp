@@ -54,6 +54,7 @@
 #include "GameFramework/Actor.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeHelpers.h"
+#include "McpResponseHelpers.h"
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpLandscapeMetadataTags.h"

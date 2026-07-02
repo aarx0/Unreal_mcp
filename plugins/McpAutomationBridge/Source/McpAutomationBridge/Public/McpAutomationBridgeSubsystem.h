@@ -8,6 +8,9 @@
 #include "Runtime/Launch/Resources/Version.h"
 #include "Templates/SharedPointer.h"
 #include "Engine/DataAsset.h"
+// FMcpResponseHandle + the subsystem log category live in Globals.h so the
+// helpers layer does not need this header.
+#include "McpAutomationBridgeGlobals.h"
 class FMcpNativeTransport;
 
 #include "McpAutomationBridgeSubsystem.generated.h"
@@ -75,15 +78,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMcpAutomationMessageReceived,
                                             const FMcpAutomationMessage &,
                                             Message);
 
-// Inert response-routing handle threaded through handler signatures. Always
-// null: the legacy WebSocket transport was deleted and responses route by
-// RequestId via FMcpNativeTransport's pending-request map. The class is never
-// defined, so the handle cannot be dereferenced. (Redeclared identically in
-// McpAutomationBridgeGlobals.h, which some TUs include first.)
-class FMcpBridgeWebSocket;
-using FMcpResponseHandle = TSharedPtr<FMcpBridgeWebSocket>;
-
-DECLARE_LOG_CATEGORY_EXTERN(LogMcpAutomationBridgeSubsystem, Log, All);
 
 enum class ERequestOrigin : uint8
 {
