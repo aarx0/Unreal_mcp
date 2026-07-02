@@ -3499,11 +3499,23 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorScreenshot(
   // Keep the editor rendering even when it is NOT the foreground window. The editor
   // throttles background-window rendering ("Use Less CPU in Background"); with that on,
   // the forced Draw() below would not produce a frame while the editor sits behind the
-  // client. We set the live value only (no PostEditChange/save) so we don't rewrite the
-  // user's saved editor preferences.
-  if (UEditorPerformanceSettings* PerfSettings = GetMutableDefault<UEditorPerformanceSettings>()) {
-    PerfSettings->bThrottleCPUWhenNotForeground = false;
-  }
+  // client. Live value only (no PostEditChange/save), and restored on scope exit so the
+  // user's preference isn't leaked past this capture.
+  struct FScopedUnthrottle {
+    UEditorPerformanceSettings* Settings = GetMutableDefault<UEditorPerformanceSettings>();
+    bool bPrevious = false;
+    FScopedUnthrottle() {
+      if (Settings) {
+        bPrevious = Settings->bThrottleCPUWhenNotForeground;
+        Settings->bThrottleCPUWhenNotForeground = false;
+      }
+    }
+    ~FScopedUnthrottle() {
+      if (Settings) {
+        Settings->bThrottleCPUWhenNotForeground = bPrevious;
+      }
+    }
+  } ScopedUnthrottle;
 
   // Optional downscale cap so the PNG stays legible but not huge (0/absent = native).
   int32 MaxWidth = 0;

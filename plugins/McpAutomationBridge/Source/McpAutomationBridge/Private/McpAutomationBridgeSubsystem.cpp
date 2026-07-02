@@ -401,12 +401,15 @@ void UMcpAutomationBridgeSubsystem::Initialize(
   // Initialize the handler registry
   InitializeHandlers();
 
-  // Register the always-on log capture ring so get_log/tail_log can report
-  // "what just happened" retrospectively (no prior subscribe needed). Bounded
-  // + cheap append; see McpAutomationBridge_LogHandlers.cpp. Defined here (not
-  // in the LogHandlers TU) because Initialize lives in this TU; the device
-  // type is forward-usable via the subsystem's CaptureLogLine entry point.
-  if (GLog && !LogCaptureDevice.IsValid()) {
+  const auto* Settings = GetDefault<UMcpAutomationBridgeSettings>();
+  const bool bBridgeEnabled = Settings && Settings->bEnableNativeMCP;
+
+  // Register the log capture ring so get_log/tail_log can report "what just
+  // happened" retrospectively (no prior subscribe needed). Bounded + cheap
+  // append; see McpAutomationBridge_LogHandlers.cpp. Gated on the transport:
+  // with the bridge off nothing can read the ring, so don't tax every log
+  // line in ordinary editor sessions.
+  if (bBridgeEnabled && GLog && !LogCaptureDevice.IsValid()) {
     LogRing.SetNum(LogRingCapacity);
     LogCaptureDevice = MakeLogCaptureDevice();
     GLog->AddOutputDevice(LogCaptureDevice.Get());
@@ -414,8 +417,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
 
   // Native MCP Streamable HTTP transport (opt-in)
   {
-    const auto* Settings = GetDefault<UMcpAutomationBridgeSettings>();
-    if (Settings && Settings->bEnableNativeMCP)
+    if (bBridgeEnabled)
     {
       // Find plugin directory for loading tool schemas
       FString PluginDir;
@@ -1366,20 +1368,22 @@ void UMcpAutomationBridgeSubsystem::ProcessPendingAutomationRequests() {
     return;
   }
 
-  TArray<FPendingAutomationRequest> LocalQueue;
+  // One request per tick: the core ticker calls this every frame, so a burst
+  // of queued requests spreads across frames instead of stacking all their
+  // handler runtimes into one editor stall. Requests re-queued mid-dispatch
+  // (reentrancy/GC guards) land at the back and retry next tick.
+  FPendingAutomationRequest Req;
   {
     FScopeLock Lock(&PendingAutomationRequestsMutex);
     if (PendingAutomationRequests.Num() == 0) {
       return;
     }
-    LocalQueue = MoveTemp(PendingAutomationRequests);
-    PendingAutomationRequests.Empty();
+    Req = MoveTemp(PendingAutomationRequests[0]);
+    PendingAutomationRequests.RemoveAt(0);
   }
 
-  for (const FPendingAutomationRequest &Req : LocalQueue) {
-    ProcessAutomationRequest(Req.RequestId, Req.Action, Req.Payload,
-                             Req.RequestingSocket, Req.Origin);
-  }
+  ProcessAutomationRequest(Req.RequestId, Req.Action, Req.Payload,
+                           Req.RequestingSocket, Req.Origin);
 }
 
 // ============================================================================

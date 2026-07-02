@@ -1239,6 +1239,80 @@ void FMcpNativeTransport::HandleToolsCall(
 		return;
 	}
 
+	// Warn-first argument validation against the published schema (arch review
+	// F7). The server historically never checked its own schema; a misspelled
+	// enum value silently matched no handler branch and returned success.
+	// Log-only so no existing client behavior changes; promote required/enum
+	// violations to INVALID_PARAMS rejections once the warnings prove quiet.
+	// Unknown top-level keys stay log-only forever: handlers legitimately read
+	// params the schema doesn't declare.
+	auto WarnOnSchemaViolations = [](const FString& InToolName, const TSharedPtr<FJsonObject>& InArguments)
+	{
+		FMcpToolDefinition* Def = FMcpToolRegistry::Get().FindTool(InToolName);
+		if (!Def || !InArguments.IsValid())
+		{
+			return;
+		}
+		const TSharedPtr<FJsonObject> Schema = Def->BuildInputSchema();
+		if (!Schema.IsValid())
+		{
+			return;
+		}
+		const TSharedPtr<FJsonObject>* Props = nullptr;
+		Schema->TryGetObjectField(TEXT("properties"), Props);
+
+		const TArray<TSharedPtr<FJsonValue>>* Required = nullptr;
+		if (Schema->TryGetArrayField(TEXT("required"), Required))
+		{
+			for (const TSharedPtr<FJsonValue>& R : *Required)
+			{
+				FString Name;
+				if (R->TryGetString(Name) && !InArguments->HasField(Name))
+				{
+					UE_LOG(LogMcpNativeTransport, Warning,
+						TEXT("%s: required argument '%s' missing"), *InToolName, *Name);
+				}
+			}
+		}
+
+		if (!Props)
+		{
+			return;
+		}
+		for (const auto& Pair : InArguments->Values)
+		{
+			const TSharedPtr<FJsonObject>* PropSchema = nullptr;
+			if (!(*Props)->TryGetObjectField(Pair.Key, PropSchema))
+			{
+				UE_LOG(LogMcpNativeTransport, Verbose,
+					TEXT("%s: argument '%s' is not declared in the schema"), *InToolName, *Pair.Key);
+				continue;
+			}
+			const TArray<TSharedPtr<FJsonValue>>* EnumArr = nullptr;
+			FString Value;
+			if ((*PropSchema)->TryGetArrayField(TEXT("enum"), EnumArr) && Pair.Value->TryGetString(Value))
+			{
+				bool bFound = false;
+				for (const TSharedPtr<FJsonValue>& E : *EnumArr)
+				{
+					FString EnumValue;
+					if (E->TryGetString(EnumValue) && EnumValue == Value)
+					{
+						bFound = true;
+						break;
+					}
+				}
+				if (!bFound)
+				{
+					UE_LOG(LogMcpNativeTransport, Warning,
+						TEXT("%s: argument '%s' value '%s' is not in the schema enum"),
+						*InToolName, *Pair.Key, *Value);
+				}
+			}
+		}
+	};
+	WarnOnSchemaViolations(ToolName, Arguments);
+
 	// Unknown names get UNKNOWN_TOOL, not TOOL_DISABLED: a manage_tools enable
 	// cannot fix a typo, and steering a client toward one masks the real error.
 	if (!FMcpToolRegistry::Get().FindTool(ToolName))

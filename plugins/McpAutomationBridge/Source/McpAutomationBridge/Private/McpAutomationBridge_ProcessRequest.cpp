@@ -124,6 +124,14 @@ void UMcpAutomationBridgeSubsystem::ProcessAutomationRequest(
                     "RequestId=%s action='%s' (%.3f ms) engineErrors=%s"),
                *ConsumedHandlerLabel, *RequestId, *Action, DurationMs,
                bHadEngineErrors ? TEXT("true") : TEXT("false"));
+        // A handler holding the game thread past a second stalls the whole
+        // editor; surface it without requiring Verbose logging.
+        if (DurationMs > 1000.0) {
+          UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
+                 TEXT("Slow automation request: action='%s' took %.0f ms on "
+                      "the game thread (RequestId=%s)"),
+                 *Action, DurationMs, *RequestId);
+        }
       } else {
         UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
                TEXT("ProcessAutomationRequest: No handler consumed "
