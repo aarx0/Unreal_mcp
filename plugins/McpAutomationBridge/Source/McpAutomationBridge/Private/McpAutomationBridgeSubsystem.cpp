@@ -954,90 +954,10 @@ void UMcpAutomationBridgeSubsystem::RegisterHandler(
                   })
 
 void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
-  // Core & Properties
-  MCP_REGISTER_HANDLER("execute_editor_function", HandleExecuteEditorFunction);
-  MCP_REGISTER_HANDLER("set_object_property", HandleSetObjectProperty);
-  MCP_REGISTER_HANDLER("get_object_property", HandleGetObjectProperty);
-
-  // Containers (Arrays, Maps, Sets)
-  MCP_REGISTER_HANDLER("array_append", HandleArrayAppend);
-  MCP_REGISTER_HANDLER("array_remove", HandleArrayRemove);
-  MCP_REGISTER_HANDLER("array_insert", HandleArrayInsert);
-  MCP_REGISTER_HANDLER("array_get_element", HandleArrayGetElement);
-  MCP_REGISTER_HANDLER("array_set_element", HandleArraySetElement);
-  MCP_REGISTER_HANDLER("array_clear", HandleArrayClear);
-
-  MCP_REGISTER_HANDLER("map_set_value", HandleMapSetValue);
-  MCP_REGISTER_HANDLER("map_get_value", HandleMapGetValue);
-  MCP_REGISTER_HANDLER("map_remove_key", HandleMapRemoveKey);
-  MCP_REGISTER_HANDLER("map_has_key", HandleMapHasKey);
-  MCP_REGISTER_HANDLER("map_get_keys", HandleMapGetKeys);
-  MCP_REGISTER_HANDLER("map_clear", HandleMapClear);
-
-  MCP_REGISTER_HANDLER("set_add", HandleSetAdd);
-  MCP_REGISTER_HANDLER("set_remove", HandleSetRemove);
-  MCP_REGISTER_HANDLER("set_contains", HandleSetContains);
-  MCP_REGISTER_HANDLER("set_clear", HandleSetClear);
-
-  // Asset Dependency
-  MCP_REGISTER_HANDLER("get_asset_references", HandleGetAssetReferences);
-  MCP_REGISTER_HANDLER("get_asset_dependencies", HandleGetAssetDependencies);
-
-  // Asset Workflow
-  MCP_REGISTER_HANDLER("fixup_redirectors", HandleFixupRedirectors);
-  MCP_REGISTER_HANDLER("source_control_checkout", HandleSourceControlCheckout);
-  MCP_REGISTER_HANDLER("source_control_submit", HandleSourceControlSubmit);
-  MCP_REGISTER_HANDLER("bulk_rename_assets", HandleBulkRenameAssets);
-  MCP_REGISTER_HANDLER("bulk_delete_assets", HandleBulkDeleteAssets);
-  MCP_REGISTER_HANDLER("generate_thumbnail", HandleGenerateThumbnail);
-
-  // Landscape
-  MCP_REGISTER_HANDLER("create_landscape", HandleCreateLandscape);
-  MCP_REGISTER_HANDLER("create_procedural_terrain", HandleCreateProceduralTerrain);
-  MCP_REGISTER_HANDLER("create_landscape_grass_type", HandleCreateLandscapeGrassType);
-  MCP_REGISTER_HANDLER("sculpt_landscape", HandleSculptLandscape);
-  MCP_REGISTER_HANDLER("set_landscape_material", HandleSetLandscapeMaterial);
-  MCP_REGISTER_HANDLER("modify_heightmap", HandleModifyHeightmap);
-  MCP_REGISTER_HANDLER("edit_landscape", HandleEditLandscape);
-
-  // Foliage
-  MCP_REGISTER_HANDLER("add_foliage_type", HandleAddFoliageType);
-  MCP_REGISTER_HANDLER("create_procedural_foliage", HandleCreateProceduralFoliage);
-  MCP_REGISTER_HANDLER("paint_foliage", HandlePaintFoliage);
-  MCP_REGISTER_HANDLER("add_foliage_instances", HandleAddFoliageInstances);
-  MCP_REGISTER_HANDLER("remove_foliage", HandleRemoveFoliage);
-  MCP_REGISTER_HANDLER("get_foliage_instances", HandleGetFoliageInstances);
-
-  // Niagara
-  MCP_REGISTER_HANDLER("create_niagara_system", HandleCreateNiagaraSystem);
-  MCP_REGISTER_HANDLER("create_niagara_ribbon", HandleCreateNiagaraRibbon);
-  MCP_REGISTER_HANDLER("create_niagara_emitter", HandleCreateNiagaraEmitter);
-  MCP_REGISTER_HANDLER("spawn_niagara_actor", HandleSpawnNiagaraActor);
-  MCP_REGISTER_HANDLER("modify_niagara_parameter", HandleModifyNiagaraParameter);
-  MCP_REGISTER_HANDLER("manage_niagara_authoring", HandleManageNiagaraAuthoringAction);
-  MCP_REGISTER_HANDLER("manage_niagara_graph", HandleNiagaraGraphAction);
-
-  // Animation
-  MCP_REGISTER_HANDLER("create_anim_blueprint", HandleCreateAnimBlueprint);
-  MCP_REGISTER_HANDLER("play_anim_montage", HandlePlayAnimMontage);
-  MCP_REGISTER_HANDLER("setup_ragdoll", HandleSetupRagdoll);
-  MCP_REGISTER_HANDLER("activate_ragdoll", HandleActivateRagdoll);
-
-  // Material Graph
-  MCP_REGISTER_HANDLER("add_material_texture_sample", HandleAddMaterialTextureSample);
-  MCP_REGISTER_HANDLER("add_material_expression", HandleAddMaterialExpression);
-  MCP_REGISTER_HANDLER("create_material_nodes", HandleCreateMaterialNodes);
-
-  // Sequencer
-  MCP_REGISTER_HANDLER("add_sequencer_keyframe", HandleAddSequencerKeyframe);
-  MCP_REGISTER_HANDLER("manage_sequencer_track", HandleManageSequencerTrack);
-  MCP_REGISTER_HANDLER("add_camera_track", HandleAddCameraTrack);
-  MCP_REGISTER_HANDLER("add_animation_track", HandleAddAnimationTrack);
-  MCP_REGISTER_HANDLER("add_transform_track", HandleAddTransformTrack);
-
-  // UI & Environment
-  MCP_REGISTER_HANDLER("manage_ui", HandleUiAction);
-  MCP_REGISTER_HANDLER("control_environment", HandleControlEnvironmentAction);
+  // Only the 22 canonical MCP tool names are registered: the transport
+  // dispatches by tool name alone, so any other key is unreachable. The
+  // legacy per-action registrations from the Node-server era were removed
+  // 2026-07-02.
   RegisterHandler(TEXT("build_environment"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
@@ -1053,8 +973,6 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                   });
 
   // Tools & System
-  MCP_REGISTER_HANDLER("console_command", HandleConsoleCommandAction);
-  MCP_REGISTER_HANDLER("batch_console_commands", HandleConsoleCommandAction);
   MCP_REGISTER_HANDLER("inspect", HandleInspectAction);
   RegisterHandler(TEXT("system_control"),
                   [this](const FString &R, const FString &A,
@@ -1124,11 +1042,6 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                     }
                     return HandleSystemControlAction(R, A, P, S);
                   });
-  MCP_REGISTER_HANDLER("list_blueprints", HandleListBlueprints);
-  MCP_REGISTER_HANDLER("manage_world_partition", HandleWorldPartitionAction);
-  MCP_REGISTER_HANDLER("manage_render", HandleRenderAction);
-
-  MCP_REGISTER_HANDLER("manage_input", HandleInputAction);
 
   MCP_REGISTER_HANDLER("control_actor", HandleControlActorAction);
   MCP_REGISTER_HANDLER("control_editor", HandleControlEditorAction);
@@ -1152,28 +1065,6 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                     return HandleAssetAction(R, A, P, S);
                   });
 
-  // CRITICAL: Register asset_query for O(1) dispatch - fixes timeout issues
-  // This handler processes search_assets, find_by_tag, get_source_control_state, etc.
-  MCP_REGISTER_HANDLER("asset_query", HandleAssetQueryAction);
-
-  // Direct action aliases for common asset_query subActions
-  // These allow TS to call executeAutomationRequest('search_assets', {...}) directly
-  MCP_REGISTER_HANDLER("search_assets", HandleSearchAssets);
-
-  MCP_REGISTER_HANDLER("find_by_tag", HandleFindByTag);
-
-  // Direct action aliases for manage_asset subActions that TS calls directly
-  // These allow O(1) dispatch for GPU-heavy and common operations
-  MCP_REGISTER_HANDLER("generate_lods", HandleGenerateLODs);
-
-  MCP_REGISTER_HANDLER("create_thumbnail", HandleGenerateThumbnail);
-
-  MCP_REGISTER_HANDLER("get_source_control_state", HandleGetSourceControlState);
-
-  MCP_REGISTER_HANDLER("manage_material_authoring", HandleManageMaterialAuthoringAction);
-  MCP_REGISTER_HANDLER("manage_material_graph", HandleMaterialGraphAction);
-
-  // === Consolidated and legacy action namespace registrations ===
   RegisterHandler(TEXT("manage_blueprint"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
@@ -1197,10 +1088,6 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
 
   MCP_REGISTER_HANDLER("manage_geometry", HandleGeometryAction);
 
-  MCP_REGISTER_HANDLER("manage_skeleton", HandleManageSkeleton);
-
-  MCP_REGISTER_HANDLER("manage_texture", HandleManageTextureAction);
-
   MCP_REGISTER_HANDLER("manage_gas", HandleManageGASAction);
 
   MCP_REGISTER_HANDLER("manage_character", HandleManageCharacterAction);
@@ -1212,8 +1099,6 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   MCP_REGISTER_HANDLER("manage_inventory", HandleManageInventoryAction);
 
   MCP_REGISTER_HANDLER("manage_interaction", HandleManageInteractionAction);
-
-  MCP_REGISTER_HANDLER("manage_widget_authoring", HandleManageWidgetAuthoringAction);
 
   RegisterHandler(TEXT("manage_networking"),
                   [this](const FString &R, const FString &A,
@@ -1233,13 +1118,6 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                     return HandleManageNetworkingAction(R, A, P, S);
                   });
 
-  MCP_REGISTER_HANDLER("manage_splines", HandleManageSplinesAction);
-
-  MCP_REGISTER_HANDLER("manage_pipeline", HandlePipelineAction);
-  MCP_REGISTER_HANDLER("manage_tests", HandleTestAction);
-
-  MCP_REGISTER_HANDLER("manage_behavior_tree", HandleBehaviorTreeAction);
-
   RegisterHandler(TEXT("manage_audio"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
@@ -1257,14 +1135,6 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                     return HandleAudioAction(R, SubAction, P, S);
                   });
 
-  // Audio authoring - uses subAction field (different from manage_audio which uses action)
-  MCP_REGISTER_HANDLER("manage_audio_authoring", HandleManageAudioAuthoringAction);
-
-  MCP_REGISTER_HANDLER("manage_lighting", HandleLightingAction);
-
-  MCP_REGISTER_HANDLER("manage_physics", HandleAnimationPhysicsAction);
-
-  // Animation physics alias - TS uses 'animation_physics' as the tool name
   RegisterHandler(TEXT("animation_physics"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
@@ -1282,31 +1152,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                     return HandleAnimationPhysicsAction(R, A, P, S);
                   });
 
-  // Animation authoring - uses subAction field (different from animation_physics which uses action)
-  MCP_REGISTER_HANDLER("manage_animation_authoring", HandleManageAnimationAuthoringAction);
-
   MCP_REGISTER_HANDLER("manage_effect", HandleEffectAction);
 
-  // Common effect aliases used by the Node server; registering them here keeps
-  // dispatch O(1) and avoids relying on the late handler chain.
-  MCP_REGISTER_HANDLER("create_effect", HandleEffectAction);
-  MCP_REGISTER_HANDLER("clear_debug_shapes", HandleEffectAction);
-
-  MCP_REGISTER_HANDLER("manage_performance", HandlePerformanceAction);
-  MCP_REGISTER_HANDLER("enable_gpu_timing", HandlePerformanceAction);
-
-  MCP_REGISTER_HANDLER("manage_debug", HandleDebugAction);
-  MCP_REGISTER_HANDLER("spawn_category", HandleDebugAction);
-  MCP_REGISTER_HANDLER("manage_logs", HandleLogAction);
-  MCP_REGISTER_HANDLER("manage_insights", HandleInsightsAction);
-
-  // Phase 21: Game Framework
-  MCP_REGISTER_HANDLER("manage_game_framework", HandleManageGameFrameworkAction);
-
-  // Phase 22: Sessions & Local Multiplayer
-  MCP_REGISTER_HANDLER("manage_sessions", HandleManageSessionsAction);
-
-  // Phase 23: Level Structure
   RegisterHandler(TEXT("manage_level_structure"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
@@ -1316,55 +1163,6 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                       return HandleManageVolumesAction(R, TEXT("manage_volumes"), P, S);
                     }
                     return HandleManageLevelStructureAction(R, A, P, S);
-                  });
-
-  // Phase 24: Volumes & Zones
-  MCP_REGISTER_HANDLER("manage_volumes", HandleManageVolumesAction);
-
-  // Phase 25: Navigation System
-  MCP_REGISTER_HANDLER("manage_navigation", HandleManageNavigationAction);
-
-  // Phase 27: Misc (camera, viewport, bookmarks, post-process, networking helpers)
-  MCP_REGISTER_HANDLER("manage_misc", HandleMiscAction);
-
-  // Direct action aliases for misc handlers
-  // Note: create_post_process_volume is handled via manage_volumes tool
-  MCP_REGISTER_HANDLER("create_camera", HandleMiscAction);
-  MCP_REGISTER_HANDLER("set_camera_fov", HandleMiscAction);
-  MCP_REGISTER_HANDLER("set_viewport_resolution", HandleMiscAction);
-  MCP_REGISTER_HANDLER("set_game_speed", HandleMiscAction);
-  MCP_REGISTER_HANDLER("create_bookmark", HandleMiscAction);
-
-  // PIE State Handler - for checking Play-In-Editor state
-  RegisterHandler(TEXT("check_pie_state"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         FMcpResponseHandle S) {
-#if WITH_EDITOR
-                    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-                    bool bIsInPIE = false;
-                    FString PieState = TEXT("stopped");
-                    
-                    if (GEditor && GEditor->PlayWorld) {
-                      bIsInPIE = true;
-                      if (GEditor->PlayWorld->IsPaused()) {
-                        PieState = TEXT("paused");
-                      } else {
-                        PieState = TEXT("playing");
-                      }
-                    }
-                    
-                    Result->SetBoolField(TEXT("isInPIE"), bIsInPIE);
-                    Result->SetStringField(TEXT("pieState"), PieState);
-                    
-                    SendAutomationResponse(S, R, true, 
-                        bIsInPIE ? TEXT("PIE is active") : TEXT("PIE is not active"),
-                        Result);
-                    return true;
-#else
-                    SendAutomationError(S, R, TEXT("PIE state check requires editor build"), TEXT("NOT_AVAILABLE"));
-                    return true;
-#endif
                   });
 
 #undef MCP_REGISTER_HANDLER
