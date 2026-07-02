@@ -173,6 +173,34 @@ static bool SaveMaterialAsset(UMaterial *Material);
 static bool SaveMaterialFunctionAsset(UMaterialFunction *Function);
 static bool SaveMaterialInstanceAsset(UMaterialInstanceConstant *Instance);
 
+// Finalize an edit on either host container: notify, dirty, then honor the
+// schema's 'save' promise (default true; pass save:false to batch a series of
+// edits). A failed save logs at Error so the per-request capture escalates the
+// response to ENGINE_ERROR even though call sites ignore the outcome.
+// Out-of-line on purpose: FINALIZE_HOST expands at ~29 sites inside one huge
+// dispatch function, and inlining this body there trips C4883.
+static void FinalizeMaterialHost(UMaterial *Material, UMaterialFunction *Function,
+                                 const TSharedPtr<FJsonObject> &Payload) {
+  if (Material) {
+    Material->PostEditChange();
+    Material->MarkPackageDirty();
+  } else if (Function) {
+    Function->PostEditChange();
+    Function->MarkPackageDirty();
+  }
+  bool bSave = true;
+  Payload->TryGetBoolField(TEXT("save"), bSave);
+  if (bSave) {
+    const bool bSaved = Material ? SaveMaterialAsset(Material)
+                                 : SaveMaterialFunctionAsset(Function);
+    if (!bSaved) {
+      UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
+             TEXT("FINALIZE_HOST: failed to save '%s' after edit"),
+             Material ? *Material->GetPathName() : *Function->GetPathName());
+    }
+  }
+}
+
 
 bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
     const FString &RequestId, const FString &Action,
@@ -800,12 +828,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
     (Material ? FindExpressionByIdOrName(Material, (NodeIdOrName))             \
               : FindExpressionByIdOrNameInFunction(Function, (NodeIdOrName)))
 
-  // Finalize edits for either container.
-  #define FINALIZE_HOST()                                                      \
-    do {                                                                       \
-      if (Material) { Material->PostEditChange(); Material->MarkPackageDirty(); } \
-      else if (Function) { Function->PostEditChange(); Function->MarkPackageDirty(); } \
-    } while (0)
+  // Finalize edits for either container — see FinalizeMaterialHost above.
+  #define FINALIZE_HOST() FinalizeMaterialHost(Material, Function, Payload)
 
   // Stable node ID: use UObject name (e.g. "MaterialExpressionCustom_0")
   // which is unique within an asset and immune to GUID duplication.
@@ -2107,6 +2131,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
     Func->PostEditChange();
     Func->MarkPackageDirty();
 
+    bool bSave = true;
+    Payload->TryGetBoolField(TEXT("save"), bSave);
+    if (bSave) {
+      SaveMaterialFunctionAsset(Func);
+    }
+
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"),
                            MCP_NODE_ID(NewExpr));
@@ -2205,6 +2235,16 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
 
     HostOuter->PostEditChange();
     HostOuter->MarkPackageDirty();
+
+    bool bSave = true;
+    Payload->TryGetBoolField(TEXT("save"), bSave);
+    if (bSave) {
+      if (Material) {
+        SaveMaterialAsset(Material);
+      } else if (HostFunction) {
+        SaveMaterialFunctionAsset(HostFunction);
+      }
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"),
@@ -2780,6 +2820,7 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
       int32 DotIndex = AssetPathStr.Find(TEXT("."), ESearchCase::IgnoreCase, ESearchDir::FromEnd);
       if (DotIndex != INDEX_NONE) { AssetPathStr.LeftInline(DotIndex); }
       LayerInfo->MarkPackageDirty();
+      McpSafeAssetSave(LayerInfo);
     }
     
     // Notify asset registry
@@ -2983,12 +3024,10 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 
     bool bSave = true;
     Payload->TryGetBoolField(TEXT("save"), bSave);
+    bool bSaved = false;
     if (bSave) {
-      if (Material) {
-        SaveMaterialAsset(Material);
-      } else {
-        SaveMaterialFunctionAsset(Function);
-      }
+      bSaved = Material ? SaveMaterialAsset(Material)
+                        : SaveMaterialFunctionAsset(Function);
     }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
@@ -2996,7 +3035,7 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     Result->SetStringField(TEXT("assetType"),
                            Material ? TEXT("Material") : TEXT("MaterialFunction"));
     Result->SetBoolField(TEXT("compiled"), bCompiled);
-    Result->SetBoolField(TEXT("saved"), bSave);
+    Result->SetBoolField(TEXT("saved"), bSaved);
     Result->SetBoolField(TEXT("waitedForShaders"), bWaitForShaders);
     if (!bCompiled) {
       TArray<TSharedPtr<FJsonValue>> ErrorArray;
@@ -4000,18 +4039,11 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     Expr->PostEditChange();
     FINALIZE_HOST();
 
-    bool bSave = true;
-    Payload->TryGetBoolField(TEXT("save"), bSave);
-    if (bSave) {
-      if (Material) { SaveMaterialAsset(Material); }
-      else if (Function) { SaveMaterialFunctionAsset(Function); }
-    }
-
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"), MCP_NODE_ID(Expr));
     Result->SetStringField(TEXT("type"), Expr->GetClass()->GetName());
     Result->SetStringField(TEXT("applied"), Applied);
-    Result->SetBoolField(TEXT("saved"), bSave);
+    Result->SetBoolField(TEXT("saved"), !HostOuter->GetOutermost()->IsDirty());
     SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Set %s on '%s'."), *Applied, *MCP_NODE_ID(Expr)),
@@ -4771,6 +4803,16 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     HostOuter->PostEditChange();
     HostOuter->MarkPackageDirty();
 
+    bool bSave = true;
+    Payload->TryGetBoolField(TEXT("save"), bSave);
+    if (bSave) {
+      if (Material) {
+        SaveMaterialAsset(Material);
+      } else if (Function) {
+        SaveMaterialFunctionAsset(Function);
+      }
+    }
+
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"), MCP_NODE_ID(NewExpr));
     Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -4841,6 +4883,16 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 
     if (Material) { Material->PostEditChange(); Material->MarkPackageDirty(); }
     else { Function->PostEditChange(); Function->MarkPackageDirty(); }
+
+    bool bSave = true;
+    Payload->TryGetBoolField(TEXT("save"), bSave);
+    if (bSave) {
+      if (Material) {
+        SaveMaterialAsset(Material);
+      } else if (Function) {
+        SaveMaterialFunctionAsset(Function);
+      }
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"), NodeId);
@@ -4974,6 +5026,12 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     bool bTwoSided = GetJsonBoolField(Payload, TEXT("twoSided"), true);
     Material->TwoSided = bTwoSided ? 1 : 0;
     Material->MarkPackageDirty();
+
+    bool bSave = true;
+    Payload->TryGetBoolField(TEXT("save"), bSave);
+    if (bSave) {
+      SaveMaterialAsset(Material);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("assetPath"), AssetPath);

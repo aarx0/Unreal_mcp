@@ -324,6 +324,13 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGraphAction(
             Material->PostEditChange();
             Material->MarkPackageDirty();
 
+            bool bSave = true;
+            Payload->TryGetBoolField(TEXT("save"), bSave);
+            if (bSave)
+            {
+                McpSafeAssetSave(Material);
+            }
+
             TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
             McpHandlerUtils::AddVerification(Result, Material);
             Result->SetStringField(TEXT("nodeId"), NewExpr->GetName());
@@ -381,6 +388,13 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGraphAction(
 
             Material->PostEditChange();
             Material->MarkPackageDirty();
+
+            bool bSave = true;
+            Payload->TryGetBoolField(TEXT("save"), bSave);
+            if (bSave)
+            {
+                McpSafeAssetSave(Material);
+            }
 
             TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
             McpHandlerUtils::AddVerification(Result, Material);
@@ -503,6 +517,13 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGraphAction(
                 Material->PostEditChange();
                 Material->MarkPackageDirty();
 
+                bool bSave = true;
+                Payload->TryGetBoolField(TEXT("save"), bSave);
+                if (bSave)
+                {
+                    McpSafeAssetSave(Material);
+                }
+
                 TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
                 McpHandlerUtils::AddVerification(Result, Material);
                 Result->SetStringField(TEXT("inputName"), InputName);
@@ -542,6 +563,13 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGraphAction(
                                 InputPtr->Expression = SourceExpr;
                                 Material->PostEditChange();
                                 Material->MarkPackageDirty();
+
+                                bool bSave = true;
+                                Payload->TryGetBoolField(TEXT("save"), bSave);
+                                if (bSave)
+                                {
+                                    McpSafeAssetSave(Material);
+                                }
 
                                 TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
                                 McpHandlerUtils::AddVerification(Result, Material);
@@ -644,6 +672,13 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGraphAction(
                     Material->PostEditChange();
                     Material->MarkPackageDirty();
 
+                    bool bSave = true;
+                    Payload->TryGetBoolField(TEXT("save"), bSave);
+                    if (bSave)
+                    {
+                        McpSafeAssetSave(Material);
+                    }
+
                     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
                     McpHandlerUtils::AddVerification(Result, Material);
                     Result->SetStringField(TEXT("pinName"), PinName);
@@ -667,6 +702,13 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGraphAction(
             // Note: Generic input clearing not implemented - requires property iteration
             Material->PostEditChange();
             Material->MarkPackageDirty();
+
+            bool bSave = true;
+            Payload->TryGetBoolField(TEXT("save"), bSave);
+            if (bSave)
+            {
+                McpSafeAssetSave(Material);
+            }
 
             TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
             McpHandlerUtils::AddVerification(Result, Material);

@@ -1437,11 +1437,10 @@ ExportPropertyToJsonValue(void *TargetContainer, FProperty *Property) {
 
 #if WITH_EDITOR
 // Throttled wrapper around McpSafeAssetSave to avoid triggering rapid repeated
-// editor-owned package saves during heavy test activity. The helper consults a
-// plugin-wide map of recent save timestamps (GRecentAssetSaveTs) and skips saves
-// that occur within the configured throttle window. Skipped saves return 'true'
-// to preserve idempotent behavior for callers that treat a skipped save as a
-// success.
+// editor-owned package saves during heavy test activity. A save inside the
+// throttle window is skipped ONLY when the package is not dirty (the skip is a
+// true no-op); a dirty package always saves, so this can never report success
+// while leaving an edit off disk.
 //
 // bForce: If true, ignore throttling and force an immediate save.
 static inline bool
@@ -1462,12 +1461,12 @@ SaveLoadedAssetThrottled(UObject *Asset, double ThrottleSecondsOverride = -1.0,
     if (!bForce) {
       if (double *Last = GRecentAssetSaveTs.Find(Key)) {
         const double Elapsed = Now - *Last;
-        if (Elapsed < Throttle) {
+        const UPackage *Package = Asset->GetOutermost();
+        if (Elapsed < Throttle && Package && !Package->IsDirty()) {
           UE_LOG(LogMcpAutomationBridgeSubsystem, VeryVerbose,
-                 TEXT("SaveLoadedAssetThrottled: skipping save for '%s' "
+                 TEXT("SaveLoadedAssetThrottled: skipping clean '%s' "
                       "(last=%.3fs, throttle=%.3fs)"),
                  *Key, Elapsed, Throttle);
-          // Treat skip as success to avoid bubbling save failures into tests
           return true;
         }
       }
@@ -1482,7 +1481,9 @@ SaveLoadedAssetThrottled(UObject *Asset, double ThrottleSecondsOverride = -1.0,
     UE_LOG(LogMcpAutomationBridgeSubsystem, VeryVerbose,
            TEXT("SaveLoadedAssetThrottled: saved '%s' (throttle reset)"), *Key);
   } else {
-    UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
+    // Error level on purpose: most call sites discard this bool, and the
+    // per-request GLog capture coerces the response to ENGINE_ERROR.
+    UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
            TEXT("SaveLoadedAssetThrottled: failed to save '%s'"), *Key);
   }
   return bSaved;
@@ -2893,15 +2894,22 @@ static inline void AddComponentVerification(TSharedPtr<FJsonObject> Response, US
 
 /**
  * Add asset verification data to a JSON response.
- * Includes: assetPath, assetName, existsAfter
+ * Includes: assetPath, assetName, existsAfter (in memory), existsOnDisk,
+ * unsavedChanges. existsOnDisk/unsavedChanges are observed, not assumed:
+ * a created-but-unsaved asset reports existsOnDisk=false, and a dirty
+ * package reports unsavedChanges=true so clients can see the persistence gap.
  */
 static inline void AddAssetVerification(TSharedPtr<FJsonObject> Response, UObject* Asset) {
   if (!Response || !Asset) return;
-  
-  FString AssetPath = Asset->GetPackage() ? Asset->GetPackage()->GetPathName() : Asset->GetPathName();
+
+  UPackage* Package = Asset->GetPackage();
+  FString AssetPath = Package ? Package->GetPathName() : Asset->GetPathName();
   Response->SetStringField(TEXT("assetPath"), AssetPath);
   Response->SetStringField(TEXT("assetName"), Asset->GetName());
   Response->SetBoolField(TEXT("existsAfter"), true);
+  Response->SetBoolField(TEXT("existsOnDisk"),
+      Package && FPackageName::DoesPackageExist(Package->GetName()));
+  Response->SetBoolField(TEXT("unsavedChanges"), Package && Package->IsDirty());
   Response->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
 }
 
@@ -2914,13 +2922,9 @@ static inline void AddAssetVerification(TSharedPtr<FJsonObject> Response, UObjec
  */
 static inline void AddAssetVerificationNested(TSharedPtr<FJsonObject> Response, const FString& FieldName, UObject* Asset) {
   if (!Response || !Asset) return;
-  
+
   TSharedPtr<FJsonObject> VerificationObj = MakeShared<FJsonObject>();
-  FString AssetPath = Asset->GetPackage() ? Asset->GetPackage()->GetPathName() : Asset->GetPathName();
-  VerificationObj->SetStringField(TEXT("assetPath"), AssetPath);
-  VerificationObj->SetStringField(TEXT("assetName"), Asset->GetName());
-  VerificationObj->SetBoolField(TEXT("existsAfter"), true);
-  VerificationObj->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
+  AddAssetVerification(VerificationObj, Asset);
   Response->SetObjectField(FieldName, VerificationObj);
 }
 

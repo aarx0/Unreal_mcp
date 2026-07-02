@@ -941,29 +941,6 @@ inline UMaterialInterface* McpLoadMaterialWithFallback(const FString& MaterialPa
 }
 
 /**
- * Throttled wrapper around McpSafeAssetSave to avoid rapid repeated save calls.
- *
- * @param Asset The asset to save
- * @param ThrottleSecondsOverride Override throttle time (default uses global setting)
- * @param bForce If true, ignore throttling and force immediate save
- * @return true if save succeeded or was skipped due to throttle
- */
-inline bool SaveLoadedAssetThrottled(UObject* Asset, double ThrottleSecondsOverride = -1.0, bool bForce = false)
-{
-    if (!Asset)
-    {
-        return false;
-    }
-
-    // Throttling parameters reserved for future implementation.
-    // For now this always uses the real editor-owned save path.
-    (void)ThrottleSecondsOverride; // Reserved for throttle duration override
-    (void)bForce; // Reserved for forcing immediate save bypassing throttle
-
-    return McpSafeAssetSave(Asset);
-}
-
-/**
  * Force a synchronous scan of a specific package or folder path.
  *
  * @param InPath The path to scan
@@ -2671,7 +2648,6 @@ inline bool McpSafeAssetSave(void* Asset) { return false; }
 inline bool McpSafeLevelSave(void* Level, const FString& Path, int32 = 1) { return false; }
 inline bool McpSafeLoadMap(const FString& MapPath, bool = true) { return false; }
 inline class UMaterialInterface* McpLoadMaterialWithFallback(const FString& = FString(), bool = false) { return nullptr; }
-inline bool SaveLoadedAssetThrottled(void* Asset, double = -1.0, bool = false) { return false; }
 inline void ScanPathSynchronous(const FString&, bool = true) {}
 
 #endif // WITH_EDITOR

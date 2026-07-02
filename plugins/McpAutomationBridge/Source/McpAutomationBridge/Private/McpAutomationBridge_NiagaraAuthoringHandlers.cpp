@@ -504,7 +504,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
         
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -557,7 +557,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -920,7 +920,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -975,7 +975,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1029,7 +1029,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1083,7 +1083,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1136,7 +1136,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1230,7 +1230,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1308,7 +1308,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1369,7 +1369,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1425,7 +1425,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1489,7 +1489,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1580,7 +1580,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1667,7 +1667,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1750,7 +1750,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1826,7 +1826,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1882,7 +1882,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1939,7 +1939,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -1993,7 +1993,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -2067,7 +2067,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -2142,7 +2142,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -2275,7 +2275,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -2323,7 +2323,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -2373,7 +2373,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -2405,7 +2405,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -2437,7 +2437,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -2469,7 +2469,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -2540,7 +2540,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -2637,7 +2637,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -2733,7 +2733,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -2794,7 +2794,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
@@ -2897,7 +2897,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         if (bSave)
         {
-            System->MarkPackageDirty();
+            McpSafeAssetSave(System);
         }
 
         McpHandlerUtils::AddVerification(Result, System);
