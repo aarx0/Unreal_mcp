@@ -4,6 +4,7 @@
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_ManageInventory : public FMcpToolDefinition
 {
@@ -21,41 +22,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), {
-				TEXT("create_item_data_asset"),
-				TEXT("set_item_properties"),
-				TEXT("create_item_category"),
-				TEXT("assign_item_category"),
-				TEXT("create_inventory_component"),
-				TEXT("configure_inventory_slots"),
-				TEXT("add_inventory_functions"),
-				TEXT("configure_inventory_events"),
-				TEXT("set_inventory_replication"),
-				TEXT("create_pickup_actor"),
-				TEXT("configure_pickup_interaction"),
-				TEXT("configure_pickup_respawn"),
-				TEXT("configure_pickup_effects"),
-				TEXT("create_equipment_component"),
-				TEXT("define_equipment_slots"),
-				TEXT("configure_equipment_effects"),
-				TEXT("add_equipment_functions"),
-				TEXT("configure_equipment_visuals"),
-				TEXT("create_loot_table"),
-				TEXT("add_loot_entry"),
-				TEXT("configure_loot_drop"),
-				TEXT("set_loot_quality_tiers"),
-				TEXT("create_crafting_recipe"),
-				TEXT("configure_recipe_requirements"),
-				TEXT("create_crafting_station"),
-				TEXT("add_crafting_component"),
-				TEXT("configure_item_stacking"),
-				TEXT("set_item_icon"),
-				TEXT("add_recipe_ingredient"),
-				TEXT("remove_loot_entry"),
-				TEXT("configure_inventory_weight"),
-				TEXT("configure_station_recipes"),
-				TEXT("get_inventory_info")
-			}, TEXT("Inventory action to perform."))
+			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageInventory(), TEXT("Inventory action to perform."))
 			.String(TEXT("name"), TEXT("Name of the asset to create."))
 			.String(TEXT("path"), TEXT("Directory path for asset creation."))
 			.Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))

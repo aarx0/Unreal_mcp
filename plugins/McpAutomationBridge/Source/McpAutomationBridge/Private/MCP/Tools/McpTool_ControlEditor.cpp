@@ -1,9 +1,10 @@
-// McpTool_ControlEditor.cpp — control_editor tool definition (40 actions)
+// McpTool_ControlEditor.cpp — control_editor tool definition 
 
 #include "McpVersionCompatibility.h"
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_ControlEditor : public FMcpToolDefinition
 {
@@ -21,49 +22,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), {
-				TEXT("play"),
-				TEXT("stop"),
-				TEXT("stop_pie"),
-				TEXT("pause"),
-				TEXT("resume"),
-				TEXT("eject"),
-				TEXT("possess"),
-				TEXT("set_game_speed"),
-				TEXT("set_fixed_delta_time"),
-				TEXT("set_camera"),
-				TEXT("set_camera_position"),
-				TEXT("set_viewport_camera"),
-				TEXT("set_camera_fov"),
-				TEXT("set_view_mode"),
-				TEXT("set_viewport_resolution"),
-				TEXT("console_command"),
-				TEXT("execute_command"),
-				TEXT("screenshot"),
-				TEXT("take_screenshot"),
-				TEXT("step_frame"),
-				TEXT("single_frame_step"),
-				TEXT("start_recording"),
-				TEXT("stop_recording"),
-				TEXT("create_bookmark"),
-				TEXT("jump_to_bookmark"),
-				TEXT("set_preferences"),
-				TEXT("set_viewport_realtime"),
-				TEXT("open_asset"),
-				TEXT("close_asset"),
-				TEXT("simulate_input"),
-				TEXT("simulate_nav"),
-				TEXT("open_level"),
-				TEXT("focus_actor"),
-				TEXT("show_stats"),
-				TEXT("hide_stats"),
-				TEXT("set_editor_mode"),
-				TEXT("set_immersive_mode"),
-				TEXT("set_game_view"),
-				TEXT("undo"),
-				TEXT("redo"),
-				TEXT("save_all")
-			}, TEXT("Editor action. screenshot/take_screenshot captures the active "
+			.StringEnum(TEXT("action"), McpConsolidatedActions::ControlEditor(), TEXT("Editor action. screenshot/take_screenshot captures the active "
 				"viewport synchronously; the PNG is written to the returned "
 				"absolute 'path' before the call returns, so it can be read back "
 				"immediately to evaluate the result."))

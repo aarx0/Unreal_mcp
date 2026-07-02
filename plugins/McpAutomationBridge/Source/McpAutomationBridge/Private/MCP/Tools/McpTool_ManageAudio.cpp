@@ -4,6 +4,7 @@
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_ManageAudio : public FMcpToolDefinition
 {
@@ -22,58 +23,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), {
-				TEXT("create_sound_cue"),
-				TEXT("play_sound_at_location"),
-				TEXT("play_sound_2d"),
-				TEXT("create_audio_component"),
-				TEXT("create_sound_mix"),
-				TEXT("push_sound_mix"),
-				TEXT("pop_sound_mix"),
-				TEXT("set_sound_mix_class_override"),
-				TEXT("clear_sound_mix_class_override"),
-				TEXT("set_base_sound_mix"),
-				TEXT("prime_sound"),
-				TEXT("play_sound_attached"),
-				TEXT("spawn_sound_at_location"),
-				TEXT("fade_sound_in"),
-				TEXT("fade_sound_out"),
-				TEXT("create_ambient_sound"),
-				TEXT("create_sound_class"),
-				TEXT("set_sound_attenuation"),
-				TEXT("create_reverb_zone"),
-				TEXT("enable_audio_analysis"),
-				TEXT("fade_sound"),
-				TEXT("set_doppler_effect"),
-				TEXT("set_audio_occlusion"),
-				TEXT("add_cue_node"),
-				TEXT("connect_cue_nodes"),
-				TEXT("set_cue_attenuation"),
-				TEXT("set_cue_concurrency"),
-				TEXT("create_metasound"),
-				TEXT("add_metasound_node"),
-				TEXT("connect_metasound_nodes"),
-				TEXT("add_metasound_input"),
-				TEXT("add_metasound_output"),
-				TEXT("set_metasound_default"),
-				TEXT("set_class_properties"),
-				TEXT("set_class_parent"),
-				TEXT("add_mix_modifier"),
-				TEXT("configure_mix_eq"),
-				TEXT("create_attenuation_settings"),
-				TEXT("configure_distance_attenuation"),
-				TEXT("configure_spatialization"),
-				TEXT("configure_occlusion"),
-				TEXT("configure_reverb_send"),
-				TEXT("create_dialogue_voice"),
-				TEXT("create_dialogue_wave"),
-				TEXT("set_dialogue_context"),
-				TEXT("create_reverb_effect"),
-				TEXT("create_source_effect_chain"),
-				TEXT("add_source_effect"),
-				TEXT("create_submix_effect"),
-				TEXT("get_audio_info")
-			}, TEXT("Action"))
+			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageAudio(), TEXT("Action"))
 			.String(TEXT("name"), TEXT("Name identifier."))
 			.String(TEXT("soundPath"), TEXT("Sound asset path."))
 			.Object(TEXT("location"), TEXT("3D location (x, y, z)."),

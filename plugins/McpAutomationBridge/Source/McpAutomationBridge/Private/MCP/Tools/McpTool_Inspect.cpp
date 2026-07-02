@@ -4,6 +4,7 @@
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_Inspect : public FMcpToolDefinition
 {
@@ -34,46 +35,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), {
-				TEXT("inspect_object"),
-				TEXT("get_actor_details"),
-				TEXT("get_blueprint_details"),
-				TEXT("get_mesh_details"),
-				TEXT("get_texture_details"),
-				TEXT("get_material_details"),
-				TEXT("get_level_details"),
-				TEXT("get_component_details"),
-				TEXT("set_property"),
-				TEXT("get_property"),
-				TEXT("get_components"),
-				TEXT("get_component_property"),
-				TEXT("set_component_property"),
-				TEXT("inspect_class"),
-				TEXT("inspect_cdo"),
-				TEXT("diff_asset"),
-				TEXT("runtime_report"),
-				TEXT("pie_report"),
-				TEXT("ui_focus"),
-				TEXT("find_objects"),
-				TEXT("list_objects"),
-				TEXT("get_metadata"),
-				TEXT("add_tag"),
-				TEXT("find_by_tag"),
-				TEXT("create_snapshot"),
-				TEXT("restore_snapshot"),
-				TEXT("export"),
-				TEXT("delete_object"),
-				TEXT("find_by_class"),
-				TEXT("get_bounding_box"),
-				TEXT("get_project_settings"),
-				TEXT("get_world_settings"),
-				TEXT("get_viewport_info"),
-				TEXT("get_selected_actors"),
-				TEXT("get_scene_stats"),
-				TEXT("get_performance_stats"),
-				TEXT("get_memory_stats"),
-				TEXT("get_editor_settings")
-			}, TEXT("Action"))
+			.StringEnum(TEXT("action"), McpConsolidatedActions::Inspect(), TEXT("Action"))
 			.String(TEXT("objectPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 			.String(TEXT("propertyName"), TEXT("Name of the property."))
 			.String(TEXT("propertyPath"), TEXT(""))

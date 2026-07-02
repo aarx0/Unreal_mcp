@@ -4,6 +4,7 @@
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_ManageCharacter : public FMcpToolDefinition
 {
@@ -21,35 +22,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), {
-				TEXT("create_character_blueprint"),
-				TEXT("configure_capsule_component"),
-				TEXT("configure_mesh_component"),
-				TEXT("configure_camera_component"),
-				TEXT("configure_movement_speeds"),
-				TEXT("configure_jump"),
-				TEXT("configure_rotation"),
-				TEXT("add_custom_movement_mode"),
-				TEXT("configure_nav_movement"),
-				TEXT("setup_mantling"),
-				TEXT("setup_vaulting"),
-				TEXT("setup_climbing"),
-				TEXT("setup_sliding"),
-				TEXT("setup_wall_running"),
-				TEXT("setup_grappling"),
-				TEXT("setup_footstep_system"),
-				TEXT("map_surface_to_sound"),
-				TEXT("configure_footstep_fx"),
-				TEXT("get_character_info"),
-				TEXT("setup_movement"),
-				TEXT("set_walk_speed"),
-				TEXT("set_jump_height"),
-				TEXT("set_gravity_scale"),
-				TEXT("set_ground_friction"),
-				TEXT("set_braking_deceleration"),
-				TEXT("configure_crouch"),
-				TEXT("configure_sprint")
-			}, TEXT("Character action to perform."))
+			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageCharacter(), TEXT("Character action to perform."))
 			.String(TEXT("name"), TEXT("Name of the asset to create."))
 			.String(TEXT("path"), TEXT("Directory path for asset creation."))
 			.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))

@@ -4,6 +4,7 @@
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_ManageGAS : public FMcpToolDefinition
 {
@@ -21,39 +22,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), {
-				TEXT("add_ability_system_component"),
-				TEXT("configure_asc"),
-				TEXT("create_attribute_set"),
-				TEXT("add_attribute"),
-				TEXT("set_attribute_base_value"),
-				TEXT("set_attribute_clamping"),
-				TEXT("create_gameplay_ability"),
-				TEXT("set_ability_tags"),
-				TEXT("set_ability_costs"),
-				TEXT("set_ability_cooldown"),
-				TEXT("set_ability_targeting"),
-				TEXT("add_ability_task"),
-				TEXT("set_activation_policy"),
-				TEXT("set_instancing_policy"),
-				TEXT("create_gameplay_effect"),
-				TEXT("set_effect_duration"),
-				TEXT("add_effect_modifier"),
-				TEXT("set_modifier_magnitude"),
-				TEXT("add_effect_execution_calculation"),
-				TEXT("add_effect_cue"),
-				TEXT("set_effect_stacking"),
-				TEXT("set_effect_tags"),
-				TEXT("create_gameplay_cue_notify"),
-				TEXT("configure_cue_trigger"),
-				TEXT("set_cue_effects"),
-				TEXT("add_tag_to_asset"),
-				TEXT("get_gas_info"),
-				TEXT("get_attribute"),
-				TEXT("create_ability_set"),
-				TEXT("add_ability"),
-				TEXT("create_execution_calculation")
-			}, TEXT("GAS action to perform."))
+			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageGAS(), TEXT("GAS action to perform."))
 			.String(TEXT("name"), TEXT("Name of the asset to create."))
 			.String(TEXT("actorName"), TEXT("get_attribute: live PIE actor to read (object name or label; defaults to the player pawn)."))
 			.String(TEXT("attribute"), TEXT("get_attribute: attribute to read at runtime (e.g. 'Health')."))

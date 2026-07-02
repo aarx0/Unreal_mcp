@@ -4,6 +4,7 @@
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_ManageLevel : public FMcpToolDefinition
 {
@@ -20,32 +21,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), {
-				TEXT("load"),
-				TEXT("load_level"),
-				TEXT("save"),
-				TEXT("save_level"),
-				TEXT("save_as"),
-				TEXT("save_level_as"),
-				TEXT("stream"),
-				TEXT("unload"),
-				TEXT("unload_level"),
-				TEXT("create_level"),
-				TEXT("create_light"),
-				TEXT("build_lighting"),
-				TEXT("set_metadata"),
-				TEXT("export_level"),
-				TEXT("import_level"),
-				TEXT("list_levels"),
-				TEXT("get_summary"),
-				TEXT("delete"),
-				TEXT("delete_level"),
-				TEXT("validate_level"),
-				TEXT("add_sublevel"),
-				TEXT("rename_level"),
-				TEXT("duplicate_level"),
-				TEXT("get_current_level")
-			}, TEXT("Action"))
+			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageLevel(), TEXT("Action"))
 			.String(TEXT("levelPath"), TEXT("Level asset path."))
 			.String(TEXT("assetPath"), TEXT("Asset path for metadata or validation aliases."))
 			.Array(TEXT("levelPaths"), TEXT(""))

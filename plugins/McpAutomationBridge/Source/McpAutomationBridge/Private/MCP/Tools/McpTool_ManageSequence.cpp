@@ -4,6 +4,7 @@
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_ManageSequence : public FMcpToolDefinition
 {
@@ -21,41 +22,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), {
-				TEXT("create"),
-				TEXT("open"),
-				TEXT("add_camera"),
-				TEXT("add_actor"),
-				TEXT("add_actors"),
-				TEXT("remove_actors"),
-				TEXT("get_bindings"),
-				TEXT("play"),
-				TEXT("pause"),
-				TEXT("stop"),
-				TEXT("set_playback_speed"),
-				TEXT("add_keyframe"),
-				TEXT("get_properties"),
-				TEXT("set_properties"),
-				TEXT("duplicate"),
-				TEXT("rename"),
-				TEXT("delete"),
-				TEXT("list"),
-				TEXT("get_metadata"),
-				TEXT("set_metadata"),
-				TEXT("add_spawnable_from_class"),
-				TEXT("add_track"),
-				TEXT("add_section"),
-				TEXT("set_display_rate"),
-				TEXT("set_tick_resolution"),
-				TEXT("set_work_range"),
-				TEXT("set_view_range"),
-				TEXT("set_track_muted"),
-				TEXT("set_track_solo"),
-				TEXT("set_track_locked"),
-				TEXT("list_tracks"),
-				TEXT("remove_track"),
-				TEXT("list_track_types")
-			}, TEXT("Action"))
+			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageSequence(), TEXT("Action"))
 			.String(TEXT("name"), TEXT("Name identifier."))
 			.String(TEXT("path"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 			.String(TEXT("actorName"), TEXT("Name of the actor."))

@@ -408,6 +408,32 @@ inline const TArray<FString>& AudioAuthoring()
 	return Actions;
 }
 
+inline const TArray<FString>& ManageAudioCore()
+{
+	static const TArray<FString> Actions = {
+		TEXT("create_sound_cue"), TEXT("play_sound_at_location"),
+		TEXT("play_sound_2d"), TEXT("create_audio_component"),
+		TEXT("create_sound_mix"), TEXT("push_sound_mix"),
+		TEXT("pop_sound_mix"), TEXT("set_sound_mix_class_override"),
+		TEXT("clear_sound_mix_class_override"), TEXT("set_base_sound_mix"),
+		TEXT("prime_sound"), TEXT("play_sound_attached"),
+		TEXT("spawn_sound_at_location"), TEXT("fade_sound_in"),
+		TEXT("fade_sound_out"), TEXT("create_ambient_sound"),
+		TEXT("create_sound_class"), TEXT("set_sound_attenuation"),
+		TEXT("create_reverb_zone"), TEXT("enable_audio_analysis"),
+		TEXT("fade_sound"), TEXT("set_doppler_effect"),
+		TEXT("set_audio_occlusion")
+	};
+	return Actions;
+}
+
+inline TArray<FString> ManageAudio()
+{
+	TArray<FString> Actions = ManageAudioCore();
+	AppendUniqueActions(Actions, AudioAuthoring());
+	return Actions;
+}
+
 inline const TArray<FString>& SystemControlCore()
 {
 	// Truth in advertising (2026-06-11 drift sweep): removed actions that had
@@ -653,6 +679,340 @@ inline TArray<FString> ManageAI()
 	return Actions;
 }
 
+// Single-handler tools: no routed families, so the whole enum is the core list.
+// The *Union wrappers exist only because FMcpToolRouting::SchemaUnion returns by
+// value while these lists return by reference.
+inline const TArray<FString>& ControlActor()
+{
+	static const TArray<FString> Actions = {
+		TEXT("spawn"), TEXT("spawn_actor"), TEXT("spawn_blueprint"),
+		TEXT("delete"), TEXT("destroy_actor"), TEXT("delete_by_tag"),
+		TEXT("duplicate"), TEXT("apply_force"), TEXT("set_transform"),
+		TEXT("teleport_actor"), TEXT("set_actor_location"),
+		TEXT("set_actor_rotation"), TEXT("set_actor_scale"),
+		TEXT("set_actor_transform"), TEXT("get_transform"),
+		TEXT("get_actor_transform"), TEXT("set_visibility"),
+		TEXT("set_actor_visible"), TEXT("add_component"),
+		TEXT("remove_component"), TEXT("set_component_properties"),
+		TEXT("set_component_property"), TEXT("get_component_property"),
+		TEXT("get_components"), TEXT("get_actor_components"),
+		TEXT("get_actor_bounds"), TEXT("add_tag"), TEXT("remove_tag"),
+		TEXT("find_by_tag"), TEXT("find_actors_by_tag"), TEXT("find_by_name"),
+		TEXT("find_actors_by_name"), TEXT("find_by_class"),
+		TEXT("find_actors_by_class"), TEXT("list"),
+		TEXT("set_blueprint_variables"), TEXT("create_snapshot"),
+		TEXT("attach"), TEXT("attach_actor"), TEXT("detach"),
+		TEXT("detach_actor"), TEXT("set_actor_collision"),
+		TEXT("call_actor_function")
+	};
+	return Actions;
+}
+inline TArray<FString> ControlActorUnion() { return ControlActor(); }
+
+inline const TArray<FString>& ControlEditor()
+{
+	static const TArray<FString> Actions = {
+		TEXT("play"), TEXT("stop"), TEXT("stop_pie"), TEXT("pause"),
+		TEXT("resume"), TEXT("eject"), TEXT("possess"),
+		TEXT("set_game_speed"), TEXT("set_fixed_delta_time"),
+		TEXT("set_camera"), TEXT("set_camera_position"),
+		TEXT("set_viewport_camera"), TEXT("set_camera_fov"),
+		TEXT("set_view_mode"), TEXT("set_viewport_resolution"),
+		TEXT("console_command"), TEXT("execute_command"),
+		TEXT("screenshot"), TEXT("take_screenshot"), TEXT("step_frame"),
+		TEXT("single_frame_step"), TEXT("start_recording"),
+		TEXT("stop_recording"), TEXT("create_bookmark"),
+		TEXT("jump_to_bookmark"), TEXT("set_preferences"),
+		TEXT("set_viewport_realtime"), TEXT("open_asset"),
+		TEXT("close_asset"), TEXT("simulate_input"), TEXT("simulate_nav"),
+		TEXT("open_level"), TEXT("focus_actor"), TEXT("show_stats"),
+		TEXT("hide_stats"), TEXT("set_editor_mode"),
+		TEXT("set_immersive_mode"), TEXT("set_game_view"), TEXT("undo"),
+		TEXT("redo"), TEXT("save_all")
+	};
+	return Actions;
+}
+inline TArray<FString> ControlEditorUnion() { return ControlEditor(); }
+
+inline const TArray<FString>& Inspect()
+{
+	static const TArray<FString> Actions = {
+		TEXT("inspect_object"), TEXT("get_actor_details"),
+		TEXT("get_blueprint_details"), TEXT("get_mesh_details"),
+		TEXT("get_texture_details"), TEXT("get_material_details"),
+		TEXT("get_level_details"), TEXT("get_component_details"),
+		TEXT("set_property"), TEXT("get_property"), TEXT("get_components"),
+		TEXT("get_component_property"), TEXT("set_component_property"),
+		TEXT("inspect_class"), TEXT("inspect_cdo"), TEXT("diff_asset"),
+		TEXT("runtime_report"), TEXT("pie_report"), TEXT("ui_focus"),
+		TEXT("find_objects"), TEXT("list_objects"), TEXT("get_metadata"),
+		TEXT("add_tag"), TEXT("find_by_tag"), TEXT("create_snapshot"),
+		TEXT("restore_snapshot"), TEXT("export"), TEXT("delete_object"),
+		TEXT("find_by_class"), TEXT("get_bounding_box"),
+		TEXT("get_project_settings"), TEXT("get_world_settings"),
+		TEXT("get_viewport_info"), TEXT("get_selected_actors"),
+		TEXT("get_scene_stats"), TEXT("get_performance_stats"),
+		TEXT("get_memory_stats"), TEXT("get_editor_settings")
+	};
+	return Actions;
+}
+inline TArray<FString> InspectUnion() { return Inspect(); }
+
+inline const TArray<FString>& ManageLevel()
+{
+	static const TArray<FString> Actions = {
+		TEXT("load"), TEXT("load_level"), TEXT("save"), TEXT("save_level"),
+		TEXT("save_as"), TEXT("save_level_as"), TEXT("stream"),
+		TEXT("unload"), TEXT("unload_level"), TEXT("create_level"),
+		TEXT("create_light"), TEXT("build_lighting"), TEXT("set_metadata"),
+		TEXT("export_level"), TEXT("import_level"), TEXT("list_levels"),
+		TEXT("get_summary"), TEXT("delete"), TEXT("delete_level"),
+		TEXT("validate_level"), TEXT("add_sublevel"), TEXT("rename_level"),
+		TEXT("duplicate_level"), TEXT("get_current_level")
+	};
+	return Actions;
+}
+inline TArray<FString> ManageLevelUnion() { return ManageLevel(); }
+
+inline const TArray<FString>& ManageSequence()
+{
+	static const TArray<FString> Actions = {
+		TEXT("create"), TEXT("open"), TEXT("add_camera"), TEXT("add_actor"),
+		TEXT("add_actors"), TEXT("remove_actors"), TEXT("get_bindings"),
+		TEXT("play"), TEXT("pause"), TEXT("stop"),
+		TEXT("set_playback_speed"), TEXT("add_keyframe"),
+		TEXT("get_properties"), TEXT("set_properties"), TEXT("duplicate"),
+		TEXT("rename"), TEXT("delete"), TEXT("list"), TEXT("get_metadata"),
+		TEXT("set_metadata"), TEXT("add_spawnable_from_class"),
+		TEXT("add_track"), TEXT("add_section"), TEXT("set_display_rate"),
+		TEXT("set_tick_resolution"), TEXT("set_work_range"),
+		TEXT("set_view_range"), TEXT("set_track_muted"),
+		TEXT("set_track_solo"), TEXT("set_track_locked"),
+		TEXT("list_tracks"), TEXT("remove_track"), TEXT("list_track_types")
+	};
+	return Actions;
+}
+inline TArray<FString> ManageSequenceUnion() { return ManageSequence(); }
+
+inline const TArray<FString>& ManageGeometry()
+{
+	static const TArray<FString> Actions = {
+		TEXT("create_box"), TEXT("create_sphere"), TEXT("create_cylinder"),
+		TEXT("create_cone"), TEXT("create_capsule"), TEXT("create_torus"),
+		TEXT("create_plane"), TEXT("create_disc"), TEXT("create_stairs"),
+		TEXT("create_spiral_stairs"), TEXT("create_ring"),
+		TEXT("create_arch"), TEXT("create_pipe"), TEXT("create_ramp"),
+		TEXT("boolean_union"), TEXT("boolean_subtract"),
+		TEXT("boolean_intersection"), TEXT("boolean_trim"),
+		TEXT("self_union"), TEXT("extrude"), TEXT("inset"), TEXT("outset"),
+		TEXT("bevel"), TEXT("offset_faces"), TEXT("shell"), TEXT("revolve"),
+		TEXT("chamfer"), TEXT("extrude_along_spline"), TEXT("bridge"),
+		TEXT("loft"), TEXT("sweep"), TEXT("duplicate_along_spline"),
+		TEXT("loop_cut"), TEXT("edge_split"), TEXT("quadrangulate"),
+		TEXT("bend"), TEXT("twist"), TEXT("taper"), TEXT("noise_deform"),
+		TEXT("smooth"), TEXT("relax"), TEXT("stretch"), TEXT("spherify"),
+		TEXT("cylindrify"), TEXT("lattice_deform"),
+		TEXT("displace_by_texture"), TEXT("triangulate"), TEXT("poke"),
+		TEXT("mirror"), TEXT("array_linear"), TEXT("array_radial"),
+		TEXT("simplify_mesh"), TEXT("subdivide"), TEXT("remesh_uniform"),
+		TEXT("merge_vertices"), TEXT("remesh_voxel"), TEXT("weld_vertices"),
+		TEXT("fill_holes"), TEXT("remove_degenerates"), TEXT("auto_uv"),
+		TEXT("project_uv"), TEXT("transform_uvs"), TEXT("unwrap_uv"),
+		TEXT("pack_uv_islands"), TEXT("recalculate_normals"),
+		TEXT("flip_normals"), TEXT("recompute_tangents"),
+		TEXT("generate_collision"), TEXT("generate_complex_collision"),
+		TEXT("simplify_collision"), TEXT("generate_lods"),
+		TEXT("set_lod_settings"), TEXT("set_lod_screen_sizes"),
+		TEXT("convert_to_nanite"), TEXT("convert_to_static_mesh"),
+		TEXT("get_mesh_info")
+	};
+	return Actions;
+}
+inline TArray<FString> ManageGeometryUnion() { return ManageGeometry(); }
+
+inline const TArray<FString>& ManageEffect()
+{
+	static const TArray<FString> Actions = {
+		TEXT("particle"), TEXT("niagara"), TEXT("debug_shape"),
+		TEXT("spawn_niagara"), TEXT("create_dynamic_light"),
+		TEXT("create_niagara_system"), TEXT("create_niagara_emitter"),
+		TEXT("create_volumetric_fog"), TEXT("create_particle_trail"),
+		TEXT("create_environment_effect"), TEXT("create_impact_effect"),
+		TEXT("create_niagara_ribbon"), TEXT("activate"),
+		TEXT("activate_effect"), TEXT("activate_niagara"),
+		TEXT("deactivate"), TEXT("deactivate_niagara"),
+		// "reset" removed (2026-06-11): never had a handler — it is a
+		// bool payload FIELD of activate_niagara, not an action.
+		TEXT("advance_simulation"), TEXT("add_niagara_module"),
+		TEXT("connect_niagara_pins"), TEXT("remove_niagara_node"),
+		TEXT("set_niagara_parameter"), TEXT("clear_debug_shapes"),
+		TEXT("cleanup"), TEXT("list_debug_shapes"),
+		TEXT("add_emitter_to_system"), TEXT("set_emitter_properties"),
+		TEXT("add_spawn_rate_module"), TEXT("add_spawn_burst_module"),
+		TEXT("add_spawn_per_unit_module"),
+		TEXT("add_initialize_particle_module"),
+		TEXT("add_particle_state_module"), TEXT("add_force_module"),
+		TEXT("add_velocity_module"), TEXT("add_acceleration_module"),
+		TEXT("add_size_module"), TEXT("add_color_module"),
+		TEXT("add_sprite_renderer_module"), TEXT("add_mesh_renderer_module"),
+		TEXT("add_ribbon_renderer_module"),
+		TEXT("add_light_renderer_module"), TEXT("add_collision_module"),
+		TEXT("add_kill_particles_module"), TEXT("add_camera_offset_module"),
+		TEXT("add_user_parameter"), TEXT("set_parameter_value"),
+		TEXT("bind_parameter_to_source"),
+		TEXT("add_skeletal_mesh_data_interface"),
+		TEXT("add_static_mesh_data_interface"),
+		TEXT("add_spline_data_interface"),
+		TEXT("add_audio_spectrum_data_interface"),
+		TEXT("add_collision_query_data_interface"),
+		TEXT("add_event_generator"), TEXT("add_event_receiver"),
+		TEXT("configure_event_payload"), TEXT("enable_gpu_simulation"),
+		TEXT("add_simulation_stage"), TEXT("get_niagara_info"),
+		TEXT("validate_niagara_system")
+	};
+	return Actions;
+}
+inline TArray<FString> ManageEffectUnion() { return ManageEffect(); }
+
+inline const TArray<FString>& ManageGAS()
+{
+	static const TArray<FString> Actions = {
+		TEXT("add_ability_system_component"), TEXT("configure_asc"),
+		TEXT("create_attribute_set"), TEXT("add_attribute"),
+		TEXT("set_attribute_base_value"), TEXT("set_attribute_clamping"),
+		TEXT("create_gameplay_ability"), TEXT("set_ability_tags"),
+		TEXT("set_ability_costs"), TEXT("set_ability_cooldown"),
+		TEXT("set_ability_targeting"), TEXT("add_ability_task"),
+		TEXT("set_activation_policy"), TEXT("set_instancing_policy"),
+		TEXT("create_gameplay_effect"), TEXT("set_effect_duration"),
+		TEXT("add_effect_modifier"), TEXT("set_modifier_magnitude"),
+		TEXT("add_effect_execution_calculation"), TEXT("add_effect_cue"),
+		TEXT("set_effect_stacking"), TEXT("set_effect_tags"),
+		TEXT("create_gameplay_cue_notify"), TEXT("configure_cue_trigger"),
+		TEXT("set_cue_effects"), TEXT("add_tag_to_asset"),
+		TEXT("get_gas_info"), TEXT("get_attribute"),
+		TEXT("create_ability_set"), TEXT("add_ability"),
+		TEXT("create_execution_calculation")
+	};
+	return Actions;
+}
+inline TArray<FString> ManageGASUnion() { return ManageGAS(); }
+
+inline const TArray<FString>& ManageCharacter()
+{
+	static const TArray<FString> Actions = {
+		TEXT("create_character_blueprint"),
+		TEXT("configure_capsule_component"),
+		TEXT("configure_mesh_component"),
+		TEXT("configure_camera_component"),
+		TEXT("configure_movement_speeds"), TEXT("configure_jump"),
+		TEXT("configure_rotation"), TEXT("add_custom_movement_mode"),
+		TEXT("configure_nav_movement"), TEXT("setup_mantling"),
+		TEXT("setup_vaulting"), TEXT("setup_climbing"),
+		TEXT("setup_sliding"), TEXT("setup_wall_running"),
+		TEXT("setup_grappling"), TEXT("setup_footstep_system"),
+		TEXT("map_surface_to_sound"), TEXT("configure_footstep_fx"),
+		TEXT("get_character_info"), TEXT("setup_movement"),
+		TEXT("set_walk_speed"), TEXT("set_jump_height"),
+		TEXT("set_gravity_scale"), TEXT("set_ground_friction"),
+		TEXT("set_braking_deceleration"), TEXT("configure_crouch"),
+		TEXT("configure_sprint")
+	};
+	return Actions;
+}
+inline TArray<FString> ManageCharacterUnion() { return ManageCharacter(); }
+
+inline const TArray<FString>& ManageCombat()
+{
+	static const TArray<FString> Actions = {
+		TEXT("create_weapon_blueprint"), TEXT("configure_weapon_mesh"),
+		TEXT("configure_weapon_sockets"), TEXT("set_weapon_stats"),
+		TEXT("configure_hitscan"), TEXT("configure_projectile"),
+		TEXT("configure_spread_pattern"), TEXT("configure_recoil_pattern"),
+		TEXT("configure_aim_down_sights"),
+		TEXT("create_projectile_blueprint"),
+		TEXT("configure_projectile_movement"),
+		TEXT("configure_projectile_collision"),
+		TEXT("configure_projectile_homing"), TEXT("create_damage_type"),
+		TEXT("configure_damage_execution"), TEXT("setup_hitbox_component"),
+		TEXT("setup_reload_system"), TEXT("setup_ammo_system"),
+		TEXT("setup_attachment_system"), TEXT("setup_weapon_switching"),
+		TEXT("configure_muzzle_flash"), TEXT("configure_tracer"),
+		TEXT("configure_impact_effects"), TEXT("configure_shell_ejection"),
+		TEXT("create_melee_trace"), TEXT("configure_combo_system"),
+		TEXT("create_hit_pause"), TEXT("configure_hit_reaction"),
+		TEXT("setup_parry_block_system"), TEXT("configure_weapon_trails"),
+		TEXT("get_combat_info"), TEXT("setup_damage_type"),
+		TEXT("configure_hit_detection"), TEXT("get_combat_stats"),
+		TEXT("create_damage_effect"), TEXT("apply_damage"), TEXT("heal"),
+		TEXT("create_shield"), TEXT("modify_armor")
+	};
+	return Actions;
+}
+inline TArray<FString> ManageCombatUnion() { return ManageCombat(); }
+
+inline const TArray<FString>& ManageInventory()
+{
+	static const TArray<FString> Actions = {
+		TEXT("create_item_data_asset"), TEXT("set_item_properties"),
+		TEXT("create_item_category"), TEXT("assign_item_category"),
+		TEXT("create_inventory_component"),
+		TEXT("configure_inventory_slots"), TEXT("add_inventory_functions"),
+		TEXT("configure_inventory_events"),
+		TEXT("set_inventory_replication"), TEXT("create_pickup_actor"),
+		TEXT("configure_pickup_interaction"),
+		TEXT("configure_pickup_respawn"), TEXT("configure_pickup_effects"),
+		TEXT("create_equipment_component"), TEXT("define_equipment_slots"),
+		TEXT("configure_equipment_effects"), TEXT("add_equipment_functions"),
+		TEXT("configure_equipment_visuals"), TEXT("create_loot_table"),
+		TEXT("add_loot_entry"), TEXT("configure_loot_drop"),
+		TEXT("set_loot_quality_tiers"), TEXT("create_crafting_recipe"),
+		TEXT("configure_recipe_requirements"),
+		TEXT("create_crafting_station"), TEXT("add_crafting_component"),
+		TEXT("configure_item_stacking"), TEXT("set_item_icon"),
+		TEXT("add_recipe_ingredient"), TEXT("remove_loot_entry"),
+		TEXT("configure_inventory_weight"),
+		TEXT("configure_station_recipes"), TEXT("get_inventory_info")
+	};
+	return Actions;
+}
+inline TArray<FString> ManageInventoryUnion() { return ManageInventory(); }
+
+inline const TArray<FString>& ManageInteraction()
+{
+	static const TArray<FString> Actions = {
+		TEXT("create_interaction_component"),
+		TEXT("configure_interaction_trace"),
+		TEXT("configure_interaction_widget"),
+		TEXT("add_interaction_events"),
+		TEXT("create_interactable_interface"), TEXT("create_door_actor"),
+		TEXT("configure_door_properties"), TEXT("create_switch_actor"),
+		TEXT("configure_switch_properties"), TEXT("create_chest_actor"),
+		TEXT("configure_chest_properties"), TEXT("create_lever_actor"),
+		TEXT("setup_destructible_mesh"),
+		TEXT("configure_destruction_levels"),
+		TEXT("configure_destruction_effects"),
+		TEXT("configure_destruction_damage"),
+		TEXT("add_destruction_component"), TEXT("create_trigger_actor"),
+		TEXT("configure_trigger_events"), TEXT("configure_trigger_filter"),
+		TEXT("configure_trigger_response"), TEXT("get_interaction_info")
+	};
+	return Actions;
+}
+inline TArray<FString> ManageInteractionUnion() { return ManageInteraction(); }
+
+// Named *Actions to avoid reading as the manage_tools tool itself.
+inline const TArray<FString>& ManageToolsActions()
+{
+	static const TArray<FString> Actions = {
+		TEXT("list_tools"), TEXT("list_categories"), TEXT("enable_tools"),
+		TEXT("disable_tools"), TEXT("enable_category"),
+		TEXT("disable_category"), TEXT("get_status"), TEXT("reset")
+	};
+	return Actions;
+}
+inline TArray<FString> ManageToolsUnion() { return ManageToolsActions(); }
+
 inline bool IsMaterialAuthoringAction(const FString& Action) { return ContainsAction(MaterialAuthoring(), Action); }
 inline bool IsTextureAction(const FString& Action) { return ContainsAction(Texture(), Action); }
 inline bool IsBlueprintGraphAction(const FString& Action) { return ContainsAction(BlueprintGraph(), Action); }
@@ -721,7 +1081,20 @@ inline const TArray<FMcpToolRouting>& GetToolRoutingTable()
 		{ TEXT("manage_ai"), {}, &ManageAICore, &ManageAI },
 		{ TEXT("manage_audio"),
 		  { { TEXT("AudioAuthoring"), &AudioAuthoring } },
-		  nullptr, nullptr },
+		  &ManageAudioCore, &ManageAudio },
+		{ TEXT("control_actor"), {}, &ControlActor, &ControlActorUnion },
+		{ TEXT("control_editor"), {}, &ControlEditor, &ControlEditorUnion },
+		{ TEXT("inspect"), {}, &Inspect, &InspectUnion },
+		{ TEXT("manage_level"), {}, &ManageLevel, &ManageLevelUnion },
+		{ TEXT("manage_sequence"), {}, &ManageSequence, &ManageSequenceUnion },
+		{ TEXT("manage_geometry"), {}, &ManageGeometry, &ManageGeometryUnion },
+		{ TEXT("manage_effect"), {}, &ManageEffect, &ManageEffectUnion },
+		{ TEXT("manage_gas"), {}, &ManageGAS, &ManageGASUnion },
+		{ TEXT("manage_character"), {}, &ManageCharacter, &ManageCharacterUnion },
+		{ TEXT("manage_combat"), {}, &ManageCombat, &ManageCombatUnion },
+		{ TEXT("manage_inventory"), {}, &ManageInventory, &ManageInventoryUnion },
+		{ TEXT("manage_interaction"), {}, &ManageInteraction, &ManageInteractionUnion },
+		{ TEXT("manage_tools"), {}, &ManageToolsActions, &ManageToolsUnion },
 	};
 	return Table;
 }

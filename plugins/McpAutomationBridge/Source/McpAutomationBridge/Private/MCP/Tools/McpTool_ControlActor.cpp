@@ -4,6 +4,7 @@
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_ControlActor : public FMcpToolDefinition
 {
@@ -21,51 +22,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), {
-				TEXT("spawn"),
-				TEXT("spawn_actor"),
-				TEXT("spawn_blueprint"),
-				TEXT("delete"),
-				TEXT("destroy_actor"),
-				TEXT("delete_by_tag"),
-				TEXT("duplicate"),
-				TEXT("apply_force"),
-				TEXT("set_transform"),
-				TEXT("teleport_actor"),
-				TEXT("set_actor_location"),
-				TEXT("set_actor_rotation"),
-				TEXT("set_actor_scale"),
-				TEXT("set_actor_transform"),
-				TEXT("get_transform"),
-				TEXT("get_actor_transform"),
-				TEXT("set_visibility"),
-				TEXT("set_actor_visible"),
-				TEXT("add_component"),
-				TEXT("remove_component"),
-				TEXT("set_component_properties"),
-				TEXT("set_component_property"),
-				TEXT("get_component_property"),
-				TEXT("get_components"),
-				TEXT("get_actor_components"),
-				TEXT("get_actor_bounds"),
-				TEXT("add_tag"),
-				TEXT("remove_tag"),
-				TEXT("find_by_tag"),
-				TEXT("find_actors_by_tag"),
-				TEXT("find_by_name"),
-				TEXT("find_actors_by_name"),
-				TEXT("find_by_class"),
-				TEXT("find_actors_by_class"),
-				TEXT("list"),
-				TEXT("set_blueprint_variables"),
-				TEXT("create_snapshot"),
-				TEXT("attach"),
-				TEXT("attach_actor"),
-				TEXT("detach"),
-				TEXT("detach_actor"),
-				TEXT("set_actor_collision"),
-				TEXT("call_actor_function")
-			}, TEXT("Action"))
+			.StringEnum(TEXT("action"), McpConsolidatedActions::ControlActor(), TEXT("Action"))
 			.String(TEXT("actorName"), TEXT("Name of the actor."))
 			.Array(TEXT("actorNames"), TEXT("Actor names for bulk actor operations."))
 			.String(TEXT("childActor"),

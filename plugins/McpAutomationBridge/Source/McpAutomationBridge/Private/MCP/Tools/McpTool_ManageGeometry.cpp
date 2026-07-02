@@ -4,6 +4,7 @@
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_ManageGeometry : public FMcpToolDefinition
 {
@@ -21,84 +22,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), {
-				TEXT("create_box"),
-				TEXT("create_sphere"),
-				TEXT("create_cylinder"),
-				TEXT("create_cone"),
-				TEXT("create_capsule"),
-				TEXT("create_torus"),
-				TEXT("create_plane"),
-				TEXT("create_disc"),
-				TEXT("create_stairs"),
-				TEXT("create_spiral_stairs"),
-				TEXT("create_ring"),
-				TEXT("create_arch"),
-				TEXT("create_pipe"),
-				TEXT("create_ramp"),
-				TEXT("boolean_union"),
-				TEXT("boolean_subtract"),
-				TEXT("boolean_intersection"),
-				TEXT("boolean_trim"),
-				TEXT("self_union"),
-				TEXT("extrude"),
-				TEXT("inset"),
-				TEXT("outset"),
-				TEXT("bevel"),
-				TEXT("offset_faces"),
-				TEXT("shell"),
-				TEXT("revolve"),
-				TEXT("chamfer"),
-				TEXT("extrude_along_spline"),
-				TEXT("bridge"),
-				TEXT("loft"),
-				TEXT("sweep"),
-				TEXT("duplicate_along_spline"),
-				TEXT("loop_cut"),
-				TEXT("edge_split"),
-				TEXT("quadrangulate"),
-				TEXT("bend"),
-				TEXT("twist"),
-				TEXT("taper"),
-				TEXT("noise_deform"),
-				TEXT("smooth"),
-				TEXT("relax"),
-				TEXT("stretch"),
-				TEXT("spherify"),
-				TEXT("cylindrify"),
-				TEXT("lattice_deform"),
-				TEXT("displace_by_texture"),
-				TEXT("triangulate"),
-				TEXT("poke"),
-				TEXT("mirror"),
-				TEXT("array_linear"),
-				TEXT("array_radial"),
-				TEXT("simplify_mesh"),
-				TEXT("subdivide"),
-				TEXT("remesh_uniform"),
-				TEXT("merge_vertices"),
-				TEXT("remesh_voxel"),
-				TEXT("weld_vertices"),
-				TEXT("fill_holes"),
-				TEXT("remove_degenerates"),
-				TEXT("auto_uv"),
-				TEXT("project_uv"),
-				TEXT("transform_uvs"),
-				TEXT("unwrap_uv"),
-				TEXT("pack_uv_islands"),
-				TEXT("recalculate_normals"),
-				TEXT("flip_normals"),
-				TEXT("recompute_tangents"),
-				TEXT("generate_collision"),
-				TEXT("generate_complex_collision"),
-				TEXT("simplify_collision"),
-				TEXT("generate_lods"),
-				TEXT("set_lod_settings"),
-				TEXT("set_lod_screen_sizes"),
-				TEXT("convert_to_nanite"),
-				TEXT("convert_to_static_mesh"),
-				TEXT("get_mesh_info")
-			}, TEXT("Geometry action to perform"))
+			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageGeometry(), TEXT("Geometry action to perform"))
 			.String(TEXT("outputPath"), TEXT("Output file or directory path."))
 			.String(TEXT("actorName"), TEXT("Name of the actor."))
 			.Number(TEXT("width"), TEXT("Width value."))

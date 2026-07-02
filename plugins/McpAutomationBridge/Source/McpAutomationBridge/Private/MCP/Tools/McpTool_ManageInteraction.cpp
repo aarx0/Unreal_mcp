@@ -4,6 +4,7 @@
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_ManageInteraction : public FMcpToolDefinition
 {
@@ -21,30 +22,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), {
-				TEXT("create_interaction_component"),
-				TEXT("configure_interaction_trace"),
-				TEXT("configure_interaction_widget"),
-				TEXT("add_interaction_events"),
-				TEXT("create_interactable_interface"),
-				TEXT("create_door_actor"),
-				TEXT("configure_door_properties"),
-				TEXT("create_switch_actor"),
-				TEXT("configure_switch_properties"),
-				TEXT("create_chest_actor"),
-				TEXT("configure_chest_properties"),
-				TEXT("create_lever_actor"),
-				TEXT("setup_destructible_mesh"),
-				TEXT("configure_destruction_levels"),
-				TEXT("configure_destruction_effects"),
-				TEXT("configure_destruction_damage"),
-				TEXT("add_destruction_component"),
-				TEXT("create_trigger_actor"),
-				TEXT("configure_trigger_events"),
-				TEXT("configure_trigger_filter"),
-				TEXT("configure_trigger_response"),
-				TEXT("get_interaction_info")
-			}, TEXT("The interaction action to perform."))
+			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageInteraction(), TEXT("The interaction action to perform."))
 			.String(TEXT("name"), TEXT("Name identifier."))
 			.String(TEXT("folder"), TEXT("Path to a directory."))
 			.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))

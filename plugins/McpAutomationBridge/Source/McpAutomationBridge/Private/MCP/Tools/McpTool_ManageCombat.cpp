@@ -4,6 +4,7 @@
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_ManageCombat : public FMcpToolDefinition
 {
@@ -21,47 +22,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), {
-				TEXT("create_weapon_blueprint"),
-				TEXT("configure_weapon_mesh"),
-				TEXT("configure_weapon_sockets"),
-				TEXT("set_weapon_stats"),
-				TEXT("configure_hitscan"),
-				TEXT("configure_projectile"),
-				TEXT("configure_spread_pattern"),
-				TEXT("configure_recoil_pattern"),
-				TEXT("configure_aim_down_sights"),
-				TEXT("create_projectile_blueprint"),
-				TEXT("configure_projectile_movement"),
-				TEXT("configure_projectile_collision"),
-				TEXT("configure_projectile_homing"),
-				TEXT("create_damage_type"),
-				TEXT("configure_damage_execution"),
-				TEXT("setup_hitbox_component"),
-				TEXT("setup_reload_system"),
-				TEXT("setup_ammo_system"),
-				TEXT("setup_attachment_system"),
-				TEXT("setup_weapon_switching"),
-				TEXT("configure_muzzle_flash"),
-				TEXT("configure_tracer"),
-				TEXT("configure_impact_effects"),
-				TEXT("configure_shell_ejection"),
-				TEXT("create_melee_trace"),
-				TEXT("configure_combo_system"),
-				TEXT("create_hit_pause"),
-				TEXT("configure_hit_reaction"),
-				TEXT("setup_parry_block_system"),
-				TEXT("configure_weapon_trails"),
-				TEXT("get_combat_info"),
-				TEXT("setup_damage_type"),
-				TEXT("configure_hit_detection"),
-				TEXT("get_combat_stats"),
-				TEXT("create_damage_effect"),
-				TEXT("apply_damage"),
-				TEXT("heal"),
-				TEXT("create_shield"),
-				TEXT("modify_armor")
-			}, TEXT("Combat action to perform"))
+			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageCombat(), TEXT("Combat action to perform"))
 			.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 			.String(TEXT("name"), TEXT("Name identifier."))
 			.String(TEXT("path"), TEXT("Directory path for asset creation."))

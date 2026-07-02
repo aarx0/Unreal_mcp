@@ -1,9 +1,10 @@
-// McpTool_ManageEffect.cpp — manage_effect tool definition (58 actions)
+// McpTool_ManageEffect.cpp — manage_effect tool definition 
 
 #include "McpVersionCompatibility.h"
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_ManageEffect : public FMcpToolDefinition
 {
@@ -22,69 +23,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), {
-				TEXT("particle"),
-				TEXT("niagara"),
-				TEXT("debug_shape"),
-				TEXT("spawn_niagara"),
-				TEXT("create_dynamic_light"),
-				TEXT("create_niagara_system"),
-				TEXT("create_niagara_emitter"),
-				TEXT("create_volumetric_fog"),
-				TEXT("create_particle_trail"),
-				TEXT("create_environment_effect"),
-				TEXT("create_impact_effect"),
-				TEXT("create_niagara_ribbon"),
-				TEXT("activate"),
-				TEXT("activate_effect"),
-				TEXT("activate_niagara"),
-				TEXT("deactivate"),
-				TEXT("deactivate_niagara"),
-				// "reset" removed (2026-06-11): never had a handler — it is a
-				// bool payload FIELD of activate_niagara, not an action.
-				TEXT("advance_simulation"),
-				TEXT("add_niagara_module"),
-				TEXT("connect_niagara_pins"),
-				TEXT("remove_niagara_node"),
-				TEXT("set_niagara_parameter"),
-				TEXT("clear_debug_shapes"),
-				TEXT("cleanup"),
-				TEXT("list_debug_shapes"),
-				TEXT("add_emitter_to_system"),
-				TEXT("set_emitter_properties"),
-				TEXT("add_spawn_rate_module"),
-				TEXT("add_spawn_burst_module"),
-				TEXT("add_spawn_per_unit_module"),
-				TEXT("add_initialize_particle_module"),
-				TEXT("add_particle_state_module"),
-				TEXT("add_force_module"),
-				TEXT("add_velocity_module"),
-				TEXT("add_acceleration_module"),
-				TEXT("add_size_module"),
-				TEXT("add_color_module"),
-				TEXT("add_sprite_renderer_module"),
-				TEXT("add_mesh_renderer_module"),
-				TEXT("add_ribbon_renderer_module"),
-				TEXT("add_light_renderer_module"),
-				TEXT("add_collision_module"),
-				TEXT("add_kill_particles_module"),
-				TEXT("add_camera_offset_module"),
-				TEXT("add_user_parameter"),
-				TEXT("set_parameter_value"),
-				TEXT("bind_parameter_to_source"),
-				TEXT("add_skeletal_mesh_data_interface"),
-				TEXT("add_static_mesh_data_interface"),
-				TEXT("add_spline_data_interface"),
-				TEXT("add_audio_spectrum_data_interface"),
-				TEXT("add_collision_query_data_interface"),
-				TEXT("add_event_generator"),
-				TEXT("add_event_receiver"),
-				TEXT("configure_event_payload"),
-				TEXT("enable_gpu_simulation"),
-				TEXT("add_simulation_stage"),
-				TEXT("get_niagara_info"),
-				TEXT("validate_niagara_system")
-			}, TEXT("Effect/Niagara action to perform."))
+			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageEffect(), TEXT("Effect/Niagara action to perform."))
 			.String(TEXT("name"), TEXT("Name identifier."))
 			.String(TEXT("path"), TEXT("Directory path for asset creation."))
 			.String(TEXT("savePath"), TEXT("Path to save the asset."))
