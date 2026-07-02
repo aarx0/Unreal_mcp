@@ -249,11 +249,26 @@ static inline bool IsAllowedUnrealMountPrefixAt(
 }
 
 static inline bool IsAllowedUnrealMountPath(const FString &Value, int32 Index) {
-  return IsAllowedUnrealMountPrefixAt(Value, Index, TEXT("/Game")) ||
-         IsAllowedUnrealMountPrefixAt(Value, Index, TEXT("/Engine")) ||
-         IsAllowedUnrealMountPrefixAt(Value, Index, TEXT("/Script")) ||
-         IsAllowedUnrealMountPrefixAt(Value, Index, TEXT("/Temp")) ||
-         IsAllowedUnrealMountPrefixAt(Value, Index, TEXT("/Niagara"));
+  // /Script and /Temp are object-path roots, not content mounts, so they are
+  // not in QueryRootContentPaths.
+  if (IsAllowedUnrealMountPrefixAt(Value, Index, TEXT("/Script")) ||
+      IsAllowedUnrealMountPrefixAt(Value, Index, TEXT("/Temp"))) {
+    return true;
+  }
+  // Every registered content mount (/Game, /Engine, plugin mounts). Queried
+  // per call, not cached: plugin mounts can register after startup, and the
+  // input side accepts them (IsValidLongPackageName), so redacting them here
+  // would mangle legitimate asset paths in error messages.
+  TArray<FString> RootPaths;
+  FPackageName::QueryRootContentPaths(RootPaths);
+  for (const FString &Root : RootPaths) {
+    FString Mount = Root;
+    Mount.RemoveFromEnd(TEXT("/"));
+    if (IsAllowedUnrealMountPrefixAt(Value, Index, *Mount)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 static inline bool IsResponsePathChar(TCHAR C) {
@@ -1053,9 +1068,16 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                     // advertised by the system_control schema but their real
                     // implementations live behind other canonical action
                     // names — re-dispatch like the Performance branch above.
-                    // (Anything not intercepted here falls through to
-                    // HandleSystemControlAction and then the linear chain's
-                    // HandleUiAction, which owns the widget/screenshot set.)
+                    // (The old linear chain that used to catch fall-throughs
+                    // is gone; anything not routed here dies in
+                    // HandleSystemControlAction's entry gate.)
+                    if (SubAction == TEXT("screenshot") ||
+                        SubAction == TEXT("create_widget") ||
+                        SubAction == TEXT("add_widget_child") ||
+                        SubAction == TEXT("get_project_settings") ||
+                        SubAction == TEXT("set_project_setting")) {
+                      return HandleUiAction(R, A, P, S);
+                    }
                     if (SubAction == TEXT("console_command") ||
                         SubAction == TEXT("execute_command")) {
                       // Same path control_editor uses; inherits the console

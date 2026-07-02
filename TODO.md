@@ -726,6 +726,24 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] 2026-07-02 — `system_control` advertises 5 actions its dispatch can no longer reach (UNKNOWN_ACTION)
+Found rewriting `docs/handler-mapping.md` (code cross-check, not live repro). `SystemControlCore`
+(McpConsolidatedActionRouting.h) still lists `screenshot`, `create_widget`, `add_widget_child`,
+`get_project_settings`, `set_project_setting`, whose implementations live in `HandleUiAction`
+(McpAutomationBridge_UiHandlers.cpp, registered only under the internal `manage_ui` name). The
+`system_control` registration lambda intercepts Performance + console/log/debug/render sub-actions,
+then falls through to `HandleSystemControlAction`, whose entry gate (SystemControlHandlers.cpp:46)
+only accepts run_ubt/run_tests/list_tests/get_test_results/test_progress/test_stale/
+generate_test_stub/export_asset/start_session/execute_python/live_coding_compile — everything else
+returns `false`, and since the deferral inlining there is no secondary dispatch chain
+(McpAutomationBridge_ProcessRequest.cpp:161 "There is no secondary linear scan"), so these 5 land on
+`UNKNOWN_ACTION`. The lambda comment (McpAutomationBridgeSubsystem.cpp:1056–1058) still claims they
+"fall through … to the linear chain's HandleUiAction" — stale. Fix = either re-dispatch them to
+`HandleUiAction` in the lambda (like the Log/Debug/Render branches) or drop them from
+`SystemControlCore` + schema; also update the stale comment. Startup validation can't catch this
+class of drift (it checks list disjointness, not that a fallthrough handler implements its core list).
+Note: `screenshot`/`get_project_settings` remain reachable via `control_editor`/`inspect`.
+
 ### [x] 2026-06-22a — `create_node nodeType:"SpawnActorFromClass"` hard-crashes the editor (assert `EdGraphNode.h:586`)
 Repro (live, 2026-06-22, building a telegraph-spawner BP in the combat gym): `create_node` on a fresh
 Actor BP's `EventGraph` with `nodeType:"SpawnActorFromClass"` (only `posX`/`posY` set) → client call

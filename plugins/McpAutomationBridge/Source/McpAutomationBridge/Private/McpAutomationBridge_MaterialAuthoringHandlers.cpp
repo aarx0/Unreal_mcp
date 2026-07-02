@@ -2816,9 +2816,6 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     bool bSave = true;
     Payload->TryGetBoolField(TEXT("save"), bSave);
     if (bSave) {
-      FString AssetPathStr = LayerInfo->GetPathName();
-      int32 DotIndex = AssetPathStr.Find(TEXT("."), ESearchCase::IgnoreCase, ESearchDir::FromEnd);
-      if (DotIndex != INDEX_NONE) { AssetPathStr.LeftInline(DotIndex); }
       LayerInfo->MarkPackageDirty();
       McpSafeAssetSave(LayerInfo);
     }
@@ -5025,6 +5022,9 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 
     bool bTwoSided = GetJsonBoolField(Payload, TEXT("twoSided"), true);
     Material->TwoSided = bTwoSided ? 1 : 0;
+    // TwoSided changes the compiled shader; without PostEditChange the live
+    // material keeps rendering single-sided until something else recompiles it.
+    Material->PostEditChange();
     Material->MarkPackageDirty();
 
     bool bSave = true;
