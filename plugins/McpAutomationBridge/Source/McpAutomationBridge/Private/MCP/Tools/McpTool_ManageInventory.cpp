@@ -13,8 +13,10 @@ public:
 
 	FString GetDescription() const override
 	{
-		return TEXT("Create item data assets, inventory components, "
-			"world pickups, loot tables, and crafting recipes.");
+		return TEXT("Create item data assets, world pickups, loot tables, and crafting "
+			"recipes. Component/system actions scaffold convention-named variables "
+			"and defaults for game code to consume; they do not implement runtime "
+			"inventory logic.");
 	}
 
 	FString GetCategory() const override { return TEXT("gameplay"); }

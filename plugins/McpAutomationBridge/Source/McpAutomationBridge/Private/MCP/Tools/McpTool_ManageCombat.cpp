@@ -13,8 +13,10 @@ public:
 
 	FString GetDescription() const override
 	{
-		return TEXT("Create weapons with hitscan/projectile firing, configure damage types, "
-			"hitboxes, reload, and melee combat (combos, parry, block).");
+		return TEXT("Scaffold combat data on Blueprints: weapon/combat assets plus "
+			"convention-named variables and CDO defaults (damage types, hitboxes, "
+			"reload, melee combo/parry/block parameters). Most actions declare data "
+			"for game code to consume; they do not implement runtime combat logic.");
 	}
 
 	FString GetCategory() const override { return TEXT("gameplay"); }

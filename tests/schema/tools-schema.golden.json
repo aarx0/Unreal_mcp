@@ -3197,7 +3197,7 @@
   },
   {
     "category": "gameplay",
-    "description": "Create Character Blueprints with movement, locomotion, and animation state machines.",
+    "description": "Create Character Blueprints with movement setup and animation assets. Advanced gameplay actions scaffold convention-named variables and defaults; they do not implement runtime logic.",
     "inputSchema": {
       "properties": {
         "acceleration": {
@@ -3495,7 +3495,7 @@
   },
   {
     "category": "gameplay",
-    "description": "Create weapons with hitscan/projectile firing, configure damage types, hitboxes, reload, and melee combat (combos, parry, block).",
+    "description": "Scaffold combat data on Blueprints: weapon/combat assets plus convention-named variables and CDO defaults (damage types, hitboxes, reload, melee combo/parry/block parameters). Most actions declare data for game code to consume; they do not implement runtime combat logic.",
     "inputSchema": {
       "properties": {
         "action": {
@@ -5290,7 +5290,7 @@
   },
   {
     "category": "gameplay",
-    "description": "Create item data assets, inventory components, world pickups, loot tables, and crafting recipes.",
+    "description": "Create item data assets, world pickups, loot tables, and crafting recipes. Component/system actions scaffold convention-named variables and defaults for game code to consume; they do not implement runtime inventory logic.",
     "inputSchema": {
       "properties": {
         "abilityGrants": {

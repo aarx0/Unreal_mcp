@@ -13,8 +13,9 @@ public:
 
 	FString GetDescription() const override
 	{
-		return TEXT("Create Character Blueprints with movement, "
-			"locomotion, and animation state machines.");
+		return TEXT("Create Character Blueprints with movement setup and animation "
+			"assets. Advanced gameplay actions scaffold convention-named variables "
+			"and defaults; they do not implement runtime logic.");
 	}
 
 	FString GetCategory() const override { return TEXT("gameplay"); }
