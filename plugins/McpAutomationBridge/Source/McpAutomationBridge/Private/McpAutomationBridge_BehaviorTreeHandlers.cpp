@@ -175,6 +175,9 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAction(
     FString SavePath;
     if (!Payload->TryGetStringField(TEXT("savePath"), SavePath) ||
         SavePath.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("path"), SavePath);
+    }
+    if (SavePath.IsEmpty()) {
       SavePath = TEXT("/Game");
     }
 
@@ -205,6 +208,22 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAction(
       return true;
     }
 
+    // Resolve the requested blackboard before creating anything so a bad path
+    // fails without leaving a half-created asset.
+    FString BlackboardPath;
+    Payload->TryGetStringField(TEXT("blackboardPath"), BlackboardPath);
+    UBlackboardData *Blackboard = nullptr;
+    if (!BlackboardPath.IsEmpty()) {
+      Blackboard = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
+      if (!Blackboard) {
+        SendAutomationError(
+            RequestingSocket, RequestId,
+            FString::Printf(TEXT("Blackboard not found: %s"), *BlackboardPath),
+            TEXT("BLACKBOARD_NOT_FOUND"));
+        return true;
+      }
+    }
+
     // Create the behavior tree asset
     UPackage *Package = CreatePackage(*PackagePath);
     if (!Package) {
@@ -232,11 +251,23 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAction(
 
     // Create default nodes (Root)
     NewGraph->GetSchema()->CreateDefaultNodesForGraph(*NewGraph);
+
+    // The engine root node auto-picks the first loaded BlackboardData in
+    // PostPlacedNewNode and writes it into the asset — an arbitrary,
+    // project-dependent binding. Force the caller's choice (or none).
+    for (UEdGraphNode *GraphNode : NewGraph->Nodes) {
+      if (UBehaviorTreeGraphNode_Root *RootNode =
+              Cast<UBehaviorTreeGraphNode_Root>(GraphNode)) {
+        RootNode->BlackboardAsset = Blackboard;
+        break;
+      }
+    }
 #else
     // UE 5.0-5.2: BehaviorTreeGraph classes not available in BehaviorTreeEditor module
     // The graph will be initialized when the asset is first opened in the editor
     NewBT->BTGraph = nullptr;
 #endif
+    NewBT->BlackboardAsset = Blackboard;
 
     // Save the asset using safe helper
     FAssetRegistryModule::AssetCreated(NewBT);
@@ -245,8 +276,16 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAction(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("assetPath"), NewBT->GetPathName());
+    Result->SetStringField(TEXT("behaviorTreePath"), NewBT->GetPathName());
     Result->SetStringField(TEXT("name"), Name);
     Result->SetBoolField(TEXT("saved"), bSaved);
+    if (Blackboard) {
+      Result->SetStringField(TEXT("assignedBlackboard"),
+                             Blackboard->GetPathName());
+    } else {
+      Result->SetField(TEXT("assignedBlackboard"),
+                       MakeShared<FJsonValueNull>());
+    }
     McpHandlerUtils::AddVerification(Result, NewBT);
 
     SendAutomationResponse(RequestingSocket, RequestId, true,
@@ -289,9 +328,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAction(
 
   UEdGraph *BTGraph = BT->BTGraph;
   if (!BTGraph) {
-    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("Behavior Tree has no graph."),
-                        TEXT("GRAPH_NOT_FOUND"));
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(
+            TEXT("Behavior Tree '%s' has no graph, so it cannot be edited here. "
+                 "Open it once in the BT editor to build its graph, or recreate "
+                 "it with the 'create' action (which initializes the graph)."),
+            *AssetPath),
+        TEXT("GRAPH_NOT_FOUND"));
     return true;
   }
 
@@ -459,6 +503,15 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAction(
       }
     }
 
+    if (NodeInstanceClass && NodeInstanceClass->HasAnyClassFlags(CLASS_Abstract)) {
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(TEXT("Node class %s is abstract and cannot be instantiated"),
+                          *NodeInstanceClass->GetName()),
+          TEXT("INVALID_CLASS"));
+      return true;
+    }
+
     if (NodeClass) {
       // Use NewObject with UClass* parameter to avoid GetPrivateStaticClass requirement
       // The templated NewObject<UBehaviorTreeGraphNode>() triggers the unexported symbol issue
@@ -501,10 +554,71 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAction(
           return true;
         }
 
+        // Optional parentNodeId ('root' or a node id) connects the new node in
+        // the same call; a failed connection removes the node again so the call
+        // never half-applies.
+        FString ParentNodeIdStr;
+        Payload->TryGetStringField(TEXT("parentNodeId"), ParentNodeIdStr);
+        if (!ParentNodeIdStr.IsEmpty()) {
+          UEdGraphNode *Parent = nullptr;
+          if (ParentNodeIdStr.Equals(TEXT("root"), ESearchCase::IgnoreCase)) {
+            for (UEdGraphNode *GraphNode : BTGraph->Nodes) {
+              if (Cast<UBehaviorTreeGraphNode_Root>(GraphNode)) {
+                Parent = GraphNode;
+                break;
+              }
+            }
+          } else {
+            Parent = FindGraphNodeByIdOrName(ParentNodeIdStr);
+          }
+          UEdGraphPin *ParentOut = nullptr;
+          if (Parent && Parent != NewNode) {
+            for (UEdGraphPin *Pin : Parent->Pins) {
+              if (Pin->Direction == EGPD_Output) {
+                ParentOut = Pin;
+                break;
+              }
+            }
+          }
+          UEdGraphPin *ChildIn = nullptr;
+          for (UEdGraphPin *Pin : NewNode->Pins) {
+            if (Pin->Direction == EGPD_Input) {
+              ChildIn = Pin;
+              break;
+            }
+          }
+          if (!Parent || Parent == NewNode) {
+            BTGraph->RemoveNode(NewNode);
+            SendAutomationError(
+                RequestingSocket, RequestId,
+                FString::Printf(TEXT("Parent node not found: %s"),
+                                *ParentNodeIdStr),
+                TEXT("NODE_NOT_FOUND"));
+            return true;
+          }
+          if (!ParentOut || !ChildIn ||
+              !BTGraph->GetSchema()->TryCreateConnection(ParentOut, ChildIn)) {
+            BTGraph->RemoveNode(NewNode);
+            SendAutomationError(
+                RequestingSocket, RequestId,
+                FString::Printf(
+                    TEXT("Cannot connect a '%s' node under parent '%s' (rejected "
+                         "by the Behavior Tree schema)"),
+                    *NodeType, *ParentNodeIdStr),
+                TEXT("CONNECT_FAILED"));
+            return true;
+          }
+          Parent->Modify();
+        }
+
         UpdateBehaviorTreeAsset();
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
+        if (!ParentNodeIdStr.IsEmpty()) {
+          Result->SetStringField(TEXT("parentNodeId"), ParentNodeIdStr);
+          Result->SetBoolField(TEXT("connectedToParent"), true);
+        }
         McpHandlerUtils::AddVerification(Result, BT);
 
         SendAutomationResponse(RequestingSocket, RequestId, true,
@@ -896,16 +1010,38 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAction(
       return true;
     }
 
-    // Resolve subnode UClass. TS wrapper expands aliases like "Cooldown" →
-    // "BTDecorator_Cooldown"; ANY_PACKAGE was deprecated in UE 5.1+ so we use
+    // Resolve subnode UClass. ANY_PACKAGE was deprecated in UE 5.1+ so we use
     // TryFindTypeSlow. LoadObject is the cross-asset (BP-class) fallback.
     UClass* NodeInstanceClass = UClass::TryFindTypeSlow<UClass>(NodeClass);
     if (!NodeInstanceClass) {
       NodeInstanceClass = LoadObject<UClass>(nullptr, *NodeClass);
     }
+    // Short names ("Cooldown", "DefaultFocus") expand to the engine prefix for
+    // the requested subnodeType.
+    if (!NodeInstanceClass && !NodeClass.Contains(TEXT("/")) &&
+        !NodeClass.StartsWith(TEXT("BT"))) {
+      const FString Prefixed =
+          (SubnodeType.Equals(TEXT("Service"), ESearchCase::IgnoreCase)
+               ? TEXT("BTService_")
+               : TEXT("BTDecorator_")) +
+          NodeClass;
+      NodeInstanceClass = UClass::TryFindTypeSlow<UClass>(Prefixed);
+    }
     if (!NodeInstanceClass) {
       SendAutomationError(RequestingSocket, RequestId,
-        FString::Printf(TEXT("Subnode class not found: %s"), *NodeClass),
+        FString::Printf(TEXT("Subnode class not found: %s. Use an engine class "
+                             "name (e.g. 'BTDecorator_Blackboard', "
+                             "'BTService_DefaultFocus'), a short name that "
+                             "expands to one (e.g. 'Cooldown'), or a Blueprint "
+                             "class path."),
+                        *NodeClass),
+        TEXT("INVALID_CLASS"));
+      return true;
+    }
+    if (NodeInstanceClass->HasAnyClassFlags(CLASS_Abstract)) {
+      SendAutomationError(RequestingSocket, RequestId,
+        FString::Printf(TEXT("Subnode class %s is abstract and cannot be instantiated"),
+                        *NodeInstanceClass->GetName()),
         TEXT("INVALID_CLASS"));
       return true;
     }

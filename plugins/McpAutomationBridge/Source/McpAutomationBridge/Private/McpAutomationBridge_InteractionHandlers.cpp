@@ -49,14 +49,16 @@
 // configure_interaction_trace:
 //   Payload: { "blueprintPath": string, "traceType"?: string, "traceDistance"?: number,
 //              "traceRadius"?: number }
-//   Response: { "traceType": string, "traceDistance": number, "traceRadius": number,
-//              "configured": bool, assetVerification... }
+//   Response: { "traceType"?: string, "traceDistance"?: number, "traceRadius"?: number,
+//              "componentsUpdated": number, "variablesAdded": string[],
+//              "appliedProperties": string[], "configured": bool, assetVerification... }
 //
 // configure_interaction_widget:
 //   Payload: { "blueprintPath": string, "widgetClass"?: string, "showOnHover"?: bool,
 //              "showPromptText"?: bool, "promptTextFormat"?: string }
-//   Response: { "widgetClass": string, "showOnHover": bool, "showPromptText": bool,
-//              "promptTextFormat": string, "configured": bool, "blueprintPath": string }
+//   Response: { "widgetClass"?: string, "showOnHover"?: bool, "showPromptText"?: bool,
+//              "promptTextFormat"?: string, "variablesAdded": string[],
+//              "appliedProperties": string[], "configured": bool, "blueprintPath": string }
 //
 // add_interaction_events:
 //   Payload: { "blueprintPath": string }
@@ -71,28 +73,35 @@
 //   Payload: { "name": string, "folder"?: string, "openAngle"?: number, "openTime"?: number,
 //              "autoClose"?: bool, "autoCloseDelay"?: number, "requiresKey"?: bool }
 //   Response: { "openAngle": number, "openTime": number, "autoClose": bool,
-//              "autoCloseDelay": number, "requiresKey": bool, assetVerification... }
+//              "autoCloseDelay": number, "requiresKey": bool,
+//              "appliedProperties": string[], assetVerification... }
 //
 // configure_door_properties:
-//   Payload: { "doorPath": string, "openAngle"?: number, "openTime"?: number, "locked"?: bool }
-//   Response: { "openAngle": number, "openTime": number, "locked": bool, "configured": bool }
+//   Payload: { "doorPath": string, "openAngle"?: number, "openTime"?: number, "locked"?: bool,
+//              "autoClose"?: bool, "autoCloseDelay"?: number, "requiresKey"?: bool }
+//   Response: { applied params echoed, "variablesAdded": string[],
+//              "appliedProperties": string[], "configured": bool }
 //
 // create_switch_actor:
 //   Payload: { "name": string, "folder"?: string, "switchType"?: string }
-//   Response: { "switchPath": string, "blueprintPath": string, "switchType": string }
+//   Response: { "switchPath": string, "blueprintPath": string, "switchType": string,
+//              "appliedProperties": string[] }
 //
 // configure_switch_properties:
 //   Payload: { "switchPath": string, "switchType"?: string, "canToggle"?: bool, "resetTime"?: number }
-//   Response: { "switchType": string, "canToggle": bool, "resetTime": number, "configured": bool }
+//   Response: { applied params echoed, "variablesAdded": string[],
+//              "appliedProperties": string[], "configured": bool }
 //
 // create_chest_actor:
 //   Payload: { "name": string, "folder"?: string, "locked"?: bool }
-//   Response: { "chestPath": string, "blueprintPath": string, "locked": bool }
+//   Response: { "chestPath": string, "blueprintPath": string, "locked": bool,
+//              "appliedProperties": string[] }
 //
 // configure_chest_properties:
 //   Payload: { "chestPath": string, "locked"?: bool, "openAngle"?: number, "openTime"?: number,
 //              "lootTablePath"?: string }
-//   Response: { "locked": bool, "openAngle": number, "openTime": number, "configured": bool }
+//   Response: { applied params echoed, "variablesAdded": string[],
+//              "appliedProperties": string[], "configured": bool }
 //
 // create_lever_actor:
 //   Payload: { "name": string, "folder"?: string }
@@ -116,8 +125,10 @@
 //   Response: { "configured": bool }
 //
 // get_interaction_info:
-//   Payload: { "blueprintPath"?: string, "actorName"?: string }
-//   Response: { "blueprintPath"?: string, "blueprintName"?: string,
+//   Payload: { "blueprintPath"?: string, "actorName"?: string, "doorPath"?: string,
+//              "switchPath"?: string, "chestPath"?: string, "triggerPath"?: string }
+//   Response: { "assetType": string, "name"?: string, "variables"?: object,
+//              "variableCount"?: number, "components"?: object[],
 //              "actorName"?: string, "actorClass"?: string }
 //
 // HandleCreateInteractionComponent (runtime):
@@ -211,6 +222,99 @@
 DEFINE_LOG_CATEGORY_STATIC(LogMcpInteractionHandlers, Log, All);
 
 // =============================================================================
+// Section 0: Blueprint Variable Helpers
+// =============================================================================
+
+#if WITH_EDITOR
+// Adds the member variable when missing. Returns true only when newly added.
+static bool McpInteractionEnsureVar(UBlueprint* Blueprint, FName VarName, const FEdGraphPinType& Type) {
+  for (const FBPVariableDescription& Var : Blueprint->NewVariables) {
+    if (Var.VarName == VarName) {
+      return false;
+    }
+  }
+  return FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarName, Type);
+}
+
+// Persist a variable default on an already-compiled Blueprint. The value is
+// imported into the generated-class CDO (immediate readback; serialized with
+// the asset) and recorded in the variable description, which the compiler
+// re-imports whenever the class is regenerated. Both writes are required: a
+// bare CDO write does not survive a recompile.
+static bool McpInteractionApplyVarDefault(UBlueprint* Blueprint, FName VarName,
+                                          const FString& Value, FString& OutError) {
+  UClass* GeneratedClass = Blueprint->GeneratedClass;
+  UObject* CDO = GeneratedClass ? GeneratedClass->GetDefaultObject() : nullptr;
+  FProperty* Property = GeneratedClass ? FindFProperty<FProperty>(GeneratedClass, VarName) : nullptr;
+  if (!CDO || !Property) {
+    OutError = FString::Printf(TEXT("Variable '%s' does not exist on the compiled class"), *VarName.ToString());
+    return false;
+  }
+  if (!FBlueprintEditorUtils::PropertyValueFromString(Property, Value, reinterpret_cast<uint8*>(CDO), CDO)) {
+    OutError = FString::Printf(TEXT("Value '%s' could not be imported into variable '%s' (%s)"),
+                               *Value, *VarName.ToString(), *Property->GetClass()->GetName());
+    return false;
+  }
+  for (FBPVariableDescription& VarDesc : Blueprint->NewVariables) {
+    if (VarDesc.VarName == VarName) {
+      VarDesc.DefaultValue = Value;
+      break;
+    }
+  }
+  return true;
+}
+
+// Reads every Blueprint member variable's current value into Result.variables
+// (from the CDO, or from Container when inspecting a placed actor instance).
+static void McpInteractionAddVariableReadback(const TSharedPtr<FJsonObject>& Result,
+                                              UBlueprint* Blueprint,
+                                              UObject* Container = nullptr) {
+  if (!Container && Blueprint->GeneratedClass) {
+    Container = Blueprint->GeneratedClass->GetDefaultObject();
+  }
+  TSharedPtr<FJsonObject> Variables = MakeShared<FJsonObject>();
+  for (const FBPVariableDescription& VarDesc : Blueprint->NewVariables) {
+    const FString VarName = VarDesc.VarName.ToString();
+    FProperty* Property = Container ? FindFProperty<FProperty>(Container->GetClass(), VarDesc.VarName) : nullptr;
+    if (!Property) {
+      Variables->SetField(VarName, MakeShared<FJsonValueNull>());
+      continue;
+    }
+    if (FBoolProperty* BoolProp = CastField<FBoolProperty>(Property)) {
+      Variables->SetBoolField(VarName, BoolProp->GetPropertyValue_InContainer(Container));
+    } else if (FNumericProperty* NumProp = CastField<FNumericProperty>(Property)) {
+      const void* ValuePtr = NumProp->ContainerPtrToValuePtr<void>(Container);
+      Variables->SetNumberField(VarName,
+                                NumProp->IsFloatingPoint()
+                                    ? NumProp->GetFloatingPointPropertyValue(ValuePtr)
+                                    : static_cast<double>(NumProp->GetSignedIntPropertyValue(ValuePtr)));
+    } else {
+      FString ValueString;
+      FBlueprintEditorUtils::PropertyValueToString(Property, reinterpret_cast<const uint8*>(Container), ValueString, Container);
+      Variables->SetStringField(VarName, ValueString);
+    }
+  }
+  Result->SetObjectField(TEXT("variables"), Variables);
+  Result->SetNumberField(TEXT("variableCount"), Blueprint->NewVariables.Num());
+}
+
+// Lists the Blueprint's SCS components into Result.components.
+static void McpInteractionAddComponentReadback(const TSharedPtr<FJsonObject>& Result, UBlueprint* Blueprint) {
+  TArray<TSharedPtr<FJsonValue>> Components;
+  if (USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript) {
+    for (USCS_Node* Node : SCS->GetAllNodes()) {
+      if (!Node) continue;
+      TSharedPtr<FJsonObject> Component = MakeShared<FJsonObject>();
+      Component->SetStringField(TEXT("name"), Node->GetVariableName().ToString());
+      Component->SetStringField(TEXT("class"), Node->ComponentClass ? Node->ComponentClass->GetName() : FString());
+      Components.Add(MakeShared<FJsonValueObject>(Component));
+    }
+  }
+  Result->SetArrayField(TEXT("components"), Components);
+}
+#endif // WITH_EDITOR
+
+// =============================================================================
 // Section 1: Main Interaction Handler Dispatcher
 // =============================================================================
 
@@ -249,6 +353,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
   if (SubAction == TEXT("create_interaction_component")) {
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
     FString ComponentName = GetJsonStringField(Payload, TEXT("componentName"), TEXT("InteractionComponent"));
+
+    if (BlueprintPath.IsEmpty()) {
+      SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: blueprintPath"), TEXT("MISSING_PARAMETER"));
+      return true;
+    }
 
 #if WITH_EDITOR
     FString ResolvedPath, LoadError;
@@ -292,19 +401,29 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
   /**
    * configure_interaction_trace
    * ---------------------------
-   * Configures interaction trace parameters on Blueprint components and adds
-   * TraceDistance/TraceType variables to the Blueprint.
+   * Configures interaction trace parameters on Blueprint shape components and
+   * writes TraceDistance/TraceType variable defaults. Only parameters present
+   * in the payload are applied; everything else is left untouched.
    *
    * Payload: { "blueprintPath": string, "traceType"?: string, "traceDistance"?: number,
    *            "traceRadius"?: number }
-   * Response: { "traceType": string, "traceDistance": number, "traceRadius": number,
-   *            "configured": bool, assetVerification... }
+   * Response: { "traceType"?: string, "traceDistance"?: number, "traceRadius"?: number,
+   *            "componentsUpdated": number, "variablesAdded": string[],
+   *            "appliedProperties": string[], "configured": bool, assetVerification... }
    */
   if (SubAction == TEXT("configure_interaction_trace")) {
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
-    FString TraceType = GetJsonStringField(Payload, TEXT("traceType"), TEXT("sphere"));
-    double TraceDistance = GetJsonNumberField(Payload, TEXT("traceDistance"), 200.0);
-    double TraceRadius = GetJsonNumberField(Payload, TEXT("traceRadius"), 50.0);
+    FString TraceType;
+    const bool bHasTraceType = Payload->TryGetStringField(TEXT("traceType"), TraceType);
+    double TraceDistance = 0.0;
+    const bool bHasTraceDistance = Payload->TryGetNumberField(TEXT("traceDistance"), TraceDistance);
+    double TraceRadius = 0.0;
+    const bool bHasTraceRadius = Payload->TryGetNumberField(TEXT("traceRadius"), TraceRadius);
+
+    if (BlueprintPath.IsEmpty()) {
+      SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: blueprintPath"), TEXT("MISSING_PARAMETER"));
+      return true;
+    }
 
 #if WITH_EDITOR
     FString ResolvedPath, LoadError;
@@ -314,38 +433,38 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
       return true;
     }
 
-    bool bConfigured = false;
+    int32 ComponentsUpdated = 0;
 
-    // Find or create interaction component and configure it
+    // Apply requested trace values to existing interaction shape components
     USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
-    if (SCS) {
+    if (SCS && (bHasTraceDistance || bHasTraceRadius)) {
       for (USCS_Node* Node : SCS->GetAllNodes()) {
         if (!Node || !Node->ComponentClass) continue;
 
-        // Configure sphere components for interaction
         if (Node->ComponentClass->IsChildOf(USphereComponent::StaticClass())) {
           USphereComponent* SphereComp = Cast<USphereComponent>(Node->ComponentTemplate);
-          if (SphereComp) {
+          if (SphereComp && bHasTraceDistance) {
             SphereComp->SetSphereRadius(static_cast<float>(TraceDistance));
             SphereComp->SetCollisionProfileName(TEXT("OverlapAll"));
             SphereComp->SetGenerateOverlapEvents(true);
-            bConfigured = true;
+            ++ComponentsUpdated;
           }
         }
-        // Configure box components for interaction
         else if (Node->ComponentClass->IsChildOf(UBoxComponent::StaticClass())) {
           UBoxComponent* BoxComp = Cast<UBoxComponent>(Node->ComponentTemplate);
           if (BoxComp) {
-            BoxComp->SetBoxExtent(FVector(static_cast<float>(TraceDistance), static_cast<float>(TraceRadius), static_cast<float>(TraceRadius)));
+            const FVector CurrentExtent = BoxComp->GetUnscaledBoxExtent();
+            const double ExtentX = bHasTraceDistance ? TraceDistance : CurrentExtent.X;
+            const double ExtentYZ = bHasTraceRadius ? TraceRadius : CurrentExtent.Y;
+            BoxComp->SetBoxExtent(FVector(static_cast<float>(ExtentX), static_cast<float>(ExtentYZ), static_cast<float>(ExtentYZ)));
             BoxComp->SetCollisionProfileName(TEXT("OverlapAll"));
             BoxComp->SetGenerateOverlapEvents(true);
-            bConfigured = true;
+            ++ComponentsUpdated;
           }
         }
       }
     }
 
-    // Add trace configuration Blueprint variables
     FEdGraphPinType FloatType;
     FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
     FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
@@ -353,38 +472,57 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
     FEdGraphPinType NameType;
     NameType.PinCategory = UEdGraphSchema_K2::PC_Name;
 
-    // Add TraceDistance variable
-    bool bDistanceExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("TraceDistance")) {
-        bDistanceExists = true;
-        break;
+    TArray<TSharedPtr<FJsonValue>> VariablesAdded;
+    if (McpInteractionEnsureVar(Blueprint, TEXT("TraceDistance"), FloatType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("TraceDistance")));
+    }
+    if (McpInteractionEnsureVar(Blueprint, TEXT("TraceType"), NameType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("TraceType")));
+    }
+
+    if (!McpSafeCompileBlueprint(Blueprint)) {
+      SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint failed to compile; trace values were not written"), TEXT("COMPILE_FAILED"));
+      return true;
+    }
+
+    TArray<TSharedPtr<FJsonValue>> AppliedProperties;
+    auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
+      FString ApplyError;
+      if (!McpInteractionApplyVarDefault(Blueprint, VarName, Value, ApplyError)) {
+        SendAutomationError(RequestingSocket, RequestId,
+                            FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
+                            TEXT("PROPERTY_WRITE_FAILED"));
+        return false;
       }
+      AppliedProperties.Add(MakeShared<FJsonValueString>(VarName.ToString()));
+      return true;
+    };
+
+    if (bHasTraceDistance && !ApplyVar(TEXT("traceDistance"), TEXT("TraceDistance"), FString::SanitizeFloat(TraceDistance))) {
+      return true;
     }
-    if (!bDistanceExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TraceDistance"), FloatType);
+    if (bHasTraceType && !ApplyVar(TEXT("traceType"), TEXT("TraceType"), TraceType)) {
+      return true;
     }
 
-    // Add TraceType variable
-    bool bTypeExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("TraceType")) {
-        bTypeExists = true;
-        break;
-      }
-    }
-    if (!bTypeExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TraceType"), NameType);
-    }
+    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    SaveLoadedAssetThrottled(Blueprint);
 
-      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("traceType"), TraceType);
-    Result->SetNumberField(TEXT("traceDistance"), TraceDistance);
-    Result->SetNumberField(TEXT("traceRadius"), TraceRadius);
-    Result->SetBoolField(TEXT("configured"), bConfigured);
-
-    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
-      McpHandlerUtils::AddVerification(Result, Blueprint);
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    if (bHasTraceType) {
+      Result->SetStringField(TEXT("traceType"), TraceType);
+    }
+    if (bHasTraceDistance) {
+      Result->SetNumberField(TEXT("traceDistance"), TraceDistance);
+    }
+    if (bHasTraceRadius) {
+      Result->SetNumberField(TEXT("traceRadius"), TraceRadius);
+    }
+    Result->SetNumberField(TEXT("componentsUpdated"), ComponentsUpdated);
+    Result->SetArrayField(TEXT("variablesAdded"), VariablesAdded);
+    Result->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
+    Result->SetBoolField(TEXT("configured"), true);
+    McpHandlerUtils::AddVerification(Result, Blueprint);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Interaction trace configured"), Result);
 #else
     SendAutomationError(RequestingSocket, RequestId, TEXT("configure_interaction_trace is editor-only"), TEXT("EDITOR_ONLY"));
@@ -396,19 +534,30 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
    * configure_interaction_widget
    * ----------------------------
    * Configures interaction widget display variables on a Blueprint including
-   * hover behavior, prompt text, and widget class references.
+   * hover behavior, prompt text, and widget class references. Only parameters
+   * present in the payload are applied; everything else is left untouched.
    *
    * Payload: { "blueprintPath": string, "widgetClass"?: string, "showOnHover"?: bool,
    *            "showPromptText"?: bool, "promptTextFormat"?: string }
-   * Response: { "widgetClass": string, "showOnHover": bool, "showPromptText": bool,
-   *            "promptTextFormat": string, "configured": bool, "blueprintPath": string }
+   * Response: { "widgetClass"?: string, "showOnHover"?: bool, "showPromptText"?: bool,
+   *            "promptTextFormat"?: string, "variablesAdded": string[],
+   *            "appliedProperties": string[], "configured": bool, "blueprintPath": string }
    */
   if (SubAction == TEXT("configure_interaction_widget")) {
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
-    FString WidgetClass = GetJsonStringField(Payload, TEXT("widgetClass"));
-    bool ShowOnHover = GetJsonBoolField(Payload, TEXT("showOnHover"), true);
-    bool ShowPromptText = GetJsonBoolField(Payload, TEXT("showPromptText"), true);
-    FString PromptTextFormat = GetJsonStringField(Payload, TEXT("promptTextFormat"), TEXT("Press {Key} to Interact"));
+    FString WidgetClass;
+    const bool bHasWidgetClass = Payload->TryGetStringField(TEXT("widgetClass"), WidgetClass) && !WidgetClass.IsEmpty();
+    bool ShowOnHover = false;
+    const bool bHasShowOnHover = Payload->TryGetBoolField(TEXT("showOnHover"), ShowOnHover);
+    bool ShowPromptText = false;
+    const bool bHasShowPromptText = Payload->TryGetBoolField(TEXT("showPromptText"), ShowPromptText);
+    FString PromptTextFormat;
+    const bool bHasPromptTextFormat = Payload->TryGetStringField(TEXT("promptTextFormat"), PromptTextFormat);
+
+    if (BlueprintPath.IsEmpty()) {
+      SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: blueprintPath"), TEXT("MISSING_PARAMETER"));
+      return true;
+    }
 
 #if WITH_EDITOR
     FString ResolvedPath, LoadError;
@@ -418,76 +567,95 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
       return true;
     }
 
-    // Add widget configuration Blueprint variables
+    // Normalize the widget class to a loadable class object path and verify it
+    FString WidgetClassPath = WidgetClass;
+    if (bHasWidgetClass && !WidgetClassPath.StartsWith(TEXT("/Script/"))) {
+      if (!WidgetClassPath.Contains(TEXT("."))) {
+        WidgetClassPath += TEXT(".") + FPaths::GetBaseFilename(WidgetClassPath) + TEXT("_C");
+      }
+      if (!FPackageName::DoesPackageExist(FPackageName::ObjectPathToPackageName(WidgetClassPath))) {
+        SendAutomationError(RequestingSocket, RequestId,
+                            FString::Printf(TEXT("widgetClass '%s' does not exist"), *WidgetClass),
+                            TEXT("WIDGET_CLASS_NOT_FOUND"));
+        return true;
+      }
+    }
+
     FEdGraphPinType BoolType;
     BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
 
     FEdGraphPinType StringType;
     StringType.PinCategory = UEdGraphSchema_K2::PC_String;
 
-    FEdGraphPinType ClassType;
-    ClassType.PinCategory = UEdGraphSchema_K2::PC_Class;
-
-    // Add bShowOnHover variable
-    bool bShowOnHoverExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("bShowOnHover")) {
-        bShowOnHoverExists = true;
-        break;
-      }
-    }
-    if (!bShowOnHoverExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("bShowOnHover"), BoolType);
-    }
-
-    // Add bShowPromptText variable
-    bool bShowPromptTextExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("bShowPromptText")) {
-        bShowPromptTextExists = true;
-        break;
-      }
-    }
-    if (!bShowPromptTextExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("bShowPromptText"), BoolType);
-    }
-
-    // Add PromptTextFormat variable
-    bool bPromptFormatExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("PromptTextFormat")) {
-        bPromptFormatExists = true;
-        break;
-      }
-    }
-    if (!bPromptFormatExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("PromptTextFormat"), StringType);
-    }
-
-    // Add InteractionWidgetClass variable (soft class reference)
     FEdGraphPinType SoftClassType;
     SoftClassType.PinCategory = UEdGraphSchema_K2::PC_SoftClass;
 
-    bool bWidgetClassExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("InteractionWidgetClass")) {
-        bWidgetClassExists = true;
-        break;
-      }
+    TArray<TSharedPtr<FJsonValue>> VariablesAdded;
+    if (McpInteractionEnsureVar(Blueprint, TEXT("bShowOnHover"), BoolType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("bShowOnHover")));
     }
-    if (!bWidgetClassExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("InteractionWidgetClass"), SoftClassType);
+    if (McpInteractionEnsureVar(Blueprint, TEXT("bShowPromptText"), BoolType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("bShowPromptText")));
+    }
+    if (McpInteractionEnsureVar(Blueprint, TEXT("PromptTextFormat"), StringType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("PromptTextFormat")));
+    }
+    if (McpInteractionEnsureVar(Blueprint, TEXT("InteractionWidgetClass"), SoftClassType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("InteractionWidgetClass")));
     }
 
-      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("widgetClass"), WidgetClass);
-    Result->SetBoolField(TEXT("showOnHover"), ShowOnHover);
-    Result->SetBoolField(TEXT("showPromptText"), ShowPromptText);
-    Result->SetStringField(TEXT("promptTextFormat"), PromptTextFormat);
+    if (!McpSafeCompileBlueprint(Blueprint)) {
+      SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint failed to compile; widget values were not written"), TEXT("COMPILE_FAILED"));
+      return true;
+    }
+
+    TArray<TSharedPtr<FJsonValue>> AppliedProperties;
+    auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
+      FString ApplyError;
+      if (!McpInteractionApplyVarDefault(Blueprint, VarName, Value, ApplyError)) {
+        SendAutomationError(RequestingSocket, RequestId,
+                            FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
+                            TEXT("PROPERTY_WRITE_FAILED"));
+        return false;
+      }
+      AppliedProperties.Add(MakeShared<FJsonValueString>(VarName.ToString()));
+      return true;
+    };
+
+    if (bHasShowOnHover && !ApplyVar(TEXT("showOnHover"), TEXT("bShowOnHover"), ShowOnHover ? TEXT("true") : TEXT("false"))) {
+      return true;
+    }
+    if (bHasShowPromptText && !ApplyVar(TEXT("showPromptText"), TEXT("bShowPromptText"), ShowPromptText ? TEXT("true") : TEXT("false"))) {
+      return true;
+    }
+    if (bHasPromptTextFormat && !ApplyVar(TEXT("promptTextFormat"), TEXT("PromptTextFormat"), PromptTextFormat)) {
+      return true;
+    }
+    if (bHasWidgetClass && !ApplyVar(TEXT("widgetClass"), TEXT("InteractionWidgetClass"), WidgetClassPath)) {
+      return true;
+    }
+
+    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    SaveLoadedAssetThrottled(Blueprint);
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    if (bHasWidgetClass) {
+      Result->SetStringField(TEXT("widgetClass"), WidgetClassPath);
+    }
+    if (bHasShowOnHover) {
+      Result->SetBoolField(TEXT("showOnHover"), ShowOnHover);
+    }
+    if (bHasShowPromptText) {
+      Result->SetBoolField(TEXT("showPromptText"), ShowPromptText);
+    }
+    if (bHasPromptTextFormat) {
+      Result->SetStringField(TEXT("promptTextFormat"), PromptTextFormat);
+    }
+    Result->SetArrayField(TEXT("variablesAdded"), VariablesAdded);
+    Result->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
     Result->SetBoolField(TEXT("configured"), true);
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-
-    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
+    McpHandlerUtils::AddVerification(Result, Blueprint);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Interaction widget configured"), Result);
 #else
     SendAutomationError(RequestingSocket, RequestId, TEXT("configure_interaction_widget is editor-only"), TEXT("EDITOR_ONLY"));
@@ -665,13 +833,16 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
    *     │   └── DoorMesh (StaticMeshComponent)
    *     └── InteractionTrigger (BoxComponent, OverlapAll)
    *
-   * Uses ValidateAssetCreationPath() for path security validation.
+   * Scaffolds the door variables (OpenAngle, OpenTime, bIsLocked, bIsOpen,
+   * bAutoClose, AutoCloseDelay, bRequiresKey) and seeds them with the requested
+   * (or default) values. Uses ValidateAssetCreationPath() for path security.
    *
    * Payload: { "name": string, "folder"?: string, "openAngle"?: number,
    *            "openTime"?: number, "autoClose"?: bool, "autoCloseDelay"?: number,
    *            "requiresKey"?: bool }
    * Response: { "openAngle": number, "openTime": number, "autoClose": bool,
-   *            "autoCloseDelay": number, "requiresKey": bool, assetVerification... }
+   *            "autoCloseDelay": number, "requiresKey": bool,
+   *            "appliedProperties": string[], assetVerification... }
    */
   if (SubAction == TEXT("create_door_actor")) {
     FString Name = GetJsonStringField(Payload, TEXT("name"));
@@ -700,12 +871,16 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
     const FString ObjectPath = PackageName + TEXT(".") + SanitizedName;
     if (UBlueprint* ExistingDoorBP = LoadObject<UBlueprint>(nullptr, *ObjectPath)) {
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-      Result->SetNumberField(TEXT("openAngle"), OpenAngle);
-      Result->SetNumberField(TEXT("openTime"), OpenTime);
-      Result->SetBoolField(TEXT("autoClose"), AutoClose);
-      Result->SetNumberField(TEXT("autoCloseDelay"), AutoCloseDelay);
-      Result->SetBoolField(TEXT("requiresKey"), RequiresKey);
       Result->SetBoolField(TEXT("alreadyExisted"), true);
+      TSharedPtr<FJsonObject> IgnoredParams = MakeShared<FJsonObject>();
+      for (const TCHAR* ParamName : {TEXT("openAngle"), TEXT("openTime"), TEXT("autoClose"), TEXT("autoCloseDelay"), TEXT("requiresKey")}) {
+        if (Payload->HasField(ParamName)) {
+          IgnoredParams->SetStringField(ParamName, TEXT("Door already exists; use configure_door_properties to change it."));
+        }
+      }
+      if (IgnoredParams->Values.Num() > 0) {
+        Result->SetObjectField(TEXT("ignoredParams"), IgnoredParams);
+      }
       McpHandlerUtils::AddVerification(Result, ExistingDoorBP);
       SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Door actor already exists"), Result);
       return true;
@@ -754,14 +929,66 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
       SCS->AddNode(CollisionNode);
       CollisionNode->SetParent(RootNode);
 
-      McpFinalizeBlueprint(DoorBP, /*bStructural=*/false, /*bSave=*/true);
+      // Scaffold the door variables and seed the requested (or default) values
+      FEdGraphPinType FloatType;
+      FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
+      FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
 
-TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+      FEdGraphPinType BoolType;
+      BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+
+      McpInteractionEnsureVar(DoorBP, TEXT("OpenAngle"), FloatType);
+      McpInteractionEnsureVar(DoorBP, TEXT("OpenTime"), FloatType);
+      McpInteractionEnsureVar(DoorBP, TEXT("bIsLocked"), BoolType);
+      McpInteractionEnsureVar(DoorBP, TEXT("bIsOpen"), BoolType);
+      McpInteractionEnsureVar(DoorBP, TEXT("bAutoClose"), BoolType);
+      McpInteractionEnsureVar(DoorBP, TEXT("AutoCloseDelay"), FloatType);
+      McpInteractionEnsureVar(DoorBP, TEXT("bRequiresKey"), BoolType);
+
+      if (!McpSafeCompileBlueprint(DoorBP)) {
+        SendAutomationError(RequestingSocket, RequestId, TEXT("Door blueprint was created but failed to compile; door properties were not written"), TEXT("COMPILE_FAILED"));
+        return true;
+      }
+
+      TArray<TSharedPtr<FJsonValue>> AppliedProperties;
+      auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
+        FString ApplyError;
+        if (!McpInteractionApplyVarDefault(DoorBP, VarName, Value, ApplyError)) {
+          SendAutomationError(RequestingSocket, RequestId,
+                              FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
+                              TEXT("PROPERTY_WRITE_FAILED"));
+          return false;
+        }
+        AppliedProperties.Add(MakeShared<FJsonValueString>(VarName.ToString()));
+        return true;
+      };
+
+      if (!ApplyVar(TEXT("openAngle"), TEXT("OpenAngle"), FString::SanitizeFloat(OpenAngle))) {
+        return true;
+      }
+      if (!ApplyVar(TEXT("openTime"), TEXT("OpenTime"), FString::SanitizeFloat(OpenTime))) {
+        return true;
+      }
+      if (!ApplyVar(TEXT("autoClose"), TEXT("bAutoClose"), AutoClose ? TEXT("true") : TEXT("false"))) {
+        return true;
+      }
+      if (!ApplyVar(TEXT("autoCloseDelay"), TEXT("AutoCloseDelay"), FString::SanitizeFloat(AutoCloseDelay))) {
+        return true;
+      }
+      if (!ApplyVar(TEXT("requiresKey"), TEXT("bRequiresKey"), RequiresKey ? TEXT("true") : TEXT("false"))) {
+        return true;
+      }
+
+      FBlueprintEditorUtils::MarkBlueprintAsModified(DoorBP);
+      SaveLoadedAssetThrottled(DoorBP);
+
+      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetNumberField(TEXT("openAngle"), OpenAngle);
       Result->SetNumberField(TEXT("openTime"), OpenTime);
       Result->SetBoolField(TEXT("autoClose"), AutoClose);
       Result->SetNumberField(TEXT("autoCloseDelay"), AutoCloseDelay);
       Result->SetBoolField(TEXT("requiresKey"), RequiresKey);
+      Result->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
       McpHandlerUtils::AddVerification(Result, DoorBP);
       SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Door actor created"), Result);
     } else {
@@ -776,18 +1003,39 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   /**
    * configure_door_properties
    * --------------------------
-   * Adds door property variables (OpenAngle, OpenTime, bIsLocked, bIsOpen) to a
-   * Blueprint and optionally sets default values on the CDO.
+   * Ensures the door property variables (OpenAngle, OpenTime, bIsLocked, bIsOpen,
+   * bAutoClose, AutoCloseDelay, bRequiresKey) exist and writes defaults for the
+   * parameters present in the payload; everything else is left untouched.
    *
-   * Payload: { "doorPath": string, "openAngle"?: number, "openTime"?: number, "locked"?: bool }
-   * Response: { "openAngle": number, "openTime": number, "locked": bool,
-   *            "configured": bool, "doorPath": string }
+   * Payload: { "doorPath": string, "openAngle"?: number, "openTime"?: number,
+   *            "locked"?: bool, "autoClose"?: bool, "autoCloseDelay"?: number,
+   *            "requiresKey"?: bool }
+   * Response: { "openAngle"?: number, "openTime"?: number, "locked"?: bool,
+   *            "variablesAdded": string[], "appliedProperties": string[],
+   *            "configured": bool, "doorPath": string, assetVerification... }
    */
   if (SubAction == TEXT("configure_door_properties")) {
     FString DoorPath = GetJsonStringField(Payload, TEXT("doorPath"));
-    double OpenAngle = GetJsonNumberField(Payload, TEXT("openAngle"), 90.0);
-    double OpenTime = GetJsonNumberField(Payload, TEXT("openTime"), 0.5);
-    bool Locked = GetJsonBoolField(Payload, TEXT("locked"), false);
+    if (DoorPath.IsEmpty()) {
+      DoorPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
+    }
+    double OpenAngle = 0.0;
+    const bool bHasOpenAngle = Payload->TryGetNumberField(TEXT("openAngle"), OpenAngle);
+    double OpenTime = 0.0;
+    const bool bHasOpenTime = Payload->TryGetNumberField(TEXT("openTime"), OpenTime);
+    bool Locked = false;
+    const bool bHasLocked = Payload->TryGetBoolField(TEXT("locked"), Locked);
+    bool AutoClose = false;
+    const bool bHasAutoClose = Payload->TryGetBoolField(TEXT("autoClose"), AutoClose);
+    double AutoCloseDelay = 0.0;
+    const bool bHasAutoCloseDelay = Payload->TryGetNumberField(TEXT("autoCloseDelay"), AutoCloseDelay);
+    bool RequiresKey = false;
+    const bool bHasRequiresKey = Payload->TryGetBoolField(TEXT("requiresKey"), RequiresKey);
+
+    if (DoorPath.IsEmpty()) {
+      SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: doorPath"), TEXT("MISSING_PARAMETER"));
+      return true;
+    }
 
 #if WITH_EDITOR
     FString ResolvedPath, LoadError;
@@ -797,7 +1045,6 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       return true;
     }
 
-    // Add door property Blueprint variables
     FEdGraphPinType FloatType;
     FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
     FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
@@ -805,93 +1052,93 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     FEdGraphPinType BoolType;
     BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
 
-    // Add OpenAngle variable
-    bool bOpenAngleExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("OpenAngle")) {
-        bOpenAngleExists = true;
-        break;
+    TArray<TSharedPtr<FJsonValue>> VariablesAdded;
+    if (McpInteractionEnsureVar(Blueprint, TEXT("OpenAngle"), FloatType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("OpenAngle")));
+    }
+    if (McpInteractionEnsureVar(Blueprint, TEXT("OpenTime"), FloatType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("OpenTime")));
+    }
+    if (McpInteractionEnsureVar(Blueprint, TEXT("bIsLocked"), BoolType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("bIsLocked")));
+    }
+    if (McpInteractionEnsureVar(Blueprint, TEXT("bIsOpen"), BoolType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("bIsOpen")));
+    }
+    if (McpInteractionEnsureVar(Blueprint, TEXT("bAutoClose"), BoolType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("bAutoClose")));
+    }
+    if (McpInteractionEnsureVar(Blueprint, TEXT("AutoCloseDelay"), FloatType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("AutoCloseDelay")));
+    }
+    if (McpInteractionEnsureVar(Blueprint, TEXT("bRequiresKey"), BoolType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("bRequiresKey")));
+    }
+
+    if (!McpSafeCompileBlueprint(Blueprint)) {
+      SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint failed to compile; door properties were not written"), TEXT("COMPILE_FAILED"));
+      return true;
+    }
+
+    TArray<TSharedPtr<FJsonValue>> AppliedProperties;
+    auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
+      FString ApplyError;
+      if (!McpInteractionApplyVarDefault(Blueprint, VarName, Value, ApplyError)) {
+        SendAutomationError(RequestingSocket, RequestId,
+                            FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
+                            TEXT("PROPERTY_WRITE_FAILED"));
+        return false;
       }
+      AppliedProperties.Add(MakeShared<FJsonValueString>(VarName.ToString()));
+      return true;
+    };
+
+    if (bHasOpenAngle && !ApplyVar(TEXT("openAngle"), TEXT("OpenAngle"), FString::SanitizeFloat(OpenAngle))) {
+      return true;
     }
-    if (!bOpenAngleExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("OpenAngle"), FloatType);
+    if (bHasOpenTime && !ApplyVar(TEXT("openTime"), TEXT("OpenTime"), FString::SanitizeFloat(OpenTime))) {
+      return true;
+    }
+    if (bHasLocked && !ApplyVar(TEXT("locked"), TEXT("bIsLocked"), Locked ? TEXT("true") : TEXT("false"))) {
+      return true;
+    }
+    if (bHasAutoClose && !ApplyVar(TEXT("autoClose"), TEXT("bAutoClose"), AutoClose ? TEXT("true") : TEXT("false"))) {
+      return true;
+    }
+    if (bHasAutoCloseDelay && !ApplyVar(TEXT("autoCloseDelay"), TEXT("AutoCloseDelay"), FString::SanitizeFloat(AutoCloseDelay))) {
+      return true;
+    }
+    if (bHasRequiresKey && !ApplyVar(TEXT("requiresKey"), TEXT("bRequiresKey"), RequiresKey ? TEXT("true") : TEXT("false"))) {
+      return true;
     }
 
-    // Add OpenTime variable
-    bool bOpenTimeExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("OpenTime")) {
-        bOpenTimeExists = true;
-        break;
-      }
-    }
-    if (!bOpenTimeExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("OpenTime"), FloatType);
-    }
-
-    // Add bIsLocked variable
-    bool bLockedExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("bIsLocked")) {
-        bLockedExists = true;
-        break;
-      }
-    }
-    if (!bLockedExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("bIsLocked"), BoolType);
-    }
-
-    // Add bIsOpen variable
-    bool bIsOpenExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("bIsOpen")) {
-        bIsOpenExists = true;
-        break;
-      }
-    }
-    if (!bIsOpenExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("bIsOpen"), BoolType);
-    }
-
-    // Compile first so the just-added variables exist on the generated class/CDO before we
-    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
-    McpSafeCompileBlueprint(Blueprint);
-
-    // Set default values on CDO if available
-    if (Blueprint->GeneratedClass) {
-      UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
-      if (CDO) {
-        FProperty* OpenAngleProp = CDO->GetClass()->FindPropertyByName(TEXT("OpenAngle"));
-        if (OpenAngleProp) {
-          TSharedPtr<FJsonValue> FloatValue = MakeShared<FJsonValueNumber>(OpenAngle);
-          FString ApplyError;
-          ApplyJsonValueToProperty(CDO, OpenAngleProp, FloatValue, ApplyError);
-        }
-
-        FProperty* OpenTimeProp = CDO->GetClass()->FindPropertyByName(TEXT("OpenTime"));
-        if (OpenTimeProp) {
-          TSharedPtr<FJsonValue> FloatValue = MakeShared<FJsonValueNumber>(OpenTime);
-          FString ApplyError;
-          ApplyJsonValueToProperty(CDO, OpenTimeProp, FloatValue, ApplyError);
-        }
-
-        FProperty* LockedProp = CDO->GetClass()->FindPropertyByName(TEXT("bIsLocked"));
-        if (LockedProp) {
-          TSharedPtr<FJsonValue> BoolValue = MakeShared<FJsonValueBoolean>(Locked);
-          FString ApplyError;
-          ApplyJsonValueToProperty(CDO, LockedProp, BoolValue, ApplyError);
-        }
-      }
-    }
+    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    SaveLoadedAssetThrottled(Blueprint);
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetNumberField(TEXT("openAngle"), OpenAngle);
-    Result->SetNumberField(TEXT("openTime"), OpenTime);
-    Result->SetBoolField(TEXT("locked"), Locked);
+    if (bHasOpenAngle) {
+      Result->SetNumberField(TEXT("openAngle"), OpenAngle);
+    }
+    if (bHasOpenTime) {
+      Result->SetNumberField(TEXT("openTime"), OpenTime);
+    }
+    if (bHasLocked) {
+      Result->SetBoolField(TEXT("locked"), Locked);
+    }
+    if (bHasAutoClose) {
+      Result->SetBoolField(TEXT("autoClose"), AutoClose);
+    }
+    if (bHasAutoCloseDelay) {
+      Result->SetNumberField(TEXT("autoCloseDelay"), AutoCloseDelay);
+    }
+    if (bHasRequiresKey) {
+      Result->SetBoolField(TEXT("requiresKey"), RequiresKey);
+    }
+    Result->SetArrayField(TEXT("variablesAdded"), VariablesAdded);
+    Result->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
     Result->SetBoolField(TEXT("configured"), true);
     Result->SetStringField(TEXT("doorPath"), DoorPath);
-
-    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
+    McpHandlerUtils::AddVerification(Result, Blueprint);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Door properties configured"), Result);
 #else
     SendAutomationError(RequestingSocket, RequestId, TEXT("configure_door_properties is editor-only"), TEXT("EDITOR_ONLY"));
@@ -907,10 +1154,13 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
    *     ├── SwitchMesh (StaticMeshComponent)
    *     └── InteractionTrigger (SphereComponent, radius=100, OverlapAll)
    *
-   * Uses ValidateAssetCreationPath() for path security validation.
+   * Scaffolds the switch variables (SwitchType, bCanToggle, bIsActivated,
+   * ResetTime) and seeds SwitchType/bCanToggle. Uses ValidateAssetCreationPath()
+   * for path security validation.
    *
    * Payload: { "name": string, "folder"?: string, "switchType"?: string }
-   * Response: { "switchPath": string, "blueprintPath": string, "switchType": string }
+   * Response: { "switchPath": string, "blueprintPath": string, "switchType": string,
+   *            "appliedProperties": string[], assetVerification... }
    */
   if (SubAction == TEXT("create_switch_actor")) {
     FString Name = GetJsonStringField(Payload, TEXT("name"));
@@ -966,12 +1216,56 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       SCS->AddNode(TriggerNode);
       TriggerNode->SetParent(RootNode);
 
-      McpFinalizeBlueprint(SwitchBP, /*bStructural=*/false, /*bSave=*/true);
+      // Scaffold the switch variables and seed the requested (or default) values
+      FEdGraphPinType NameType;
+      NameType.PinCategory = UEdGraphSchema_K2::PC_Name;
+
+      FEdGraphPinType BoolType;
+      BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+
+      FEdGraphPinType FloatType;
+      FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
+      FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+
+      McpInteractionEnsureVar(SwitchBP, TEXT("SwitchType"), NameType);
+      McpInteractionEnsureVar(SwitchBP, TEXT("bCanToggle"), BoolType);
+      McpInteractionEnsureVar(SwitchBP, TEXT("bIsActivated"), BoolType);
+      McpInteractionEnsureVar(SwitchBP, TEXT("ResetTime"), FloatType);
+
+      if (!McpSafeCompileBlueprint(SwitchBP)) {
+        SendAutomationError(RequestingSocket, RequestId, TEXT("Switch blueprint was created but failed to compile; switch properties were not written"), TEXT("COMPILE_FAILED"));
+        return true;
+      }
+
+      TArray<TSharedPtr<FJsonValue>> AppliedProperties;
+      auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
+        FString ApplyError;
+        if (!McpInteractionApplyVarDefault(SwitchBP, VarName, Value, ApplyError)) {
+          SendAutomationError(RequestingSocket, RequestId,
+                              FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
+                              TEXT("PROPERTY_WRITE_FAILED"));
+          return false;
+        }
+        AppliedProperties.Add(MakeShared<FJsonValueString>(VarName.ToString()));
+        return true;
+      };
+
+      if (!ApplyVar(TEXT("switchType"), TEXT("SwitchType"), SwitchType)) {
+        return true;
+      }
+      if (!ApplyVar(TEXT("canToggle"), TEXT("bCanToggle"), TEXT("true"))) {
+        return true;
+      }
+
+      FBlueprintEditorUtils::MarkBlueprintAsModified(SwitchBP);
+      SaveLoadedAssetThrottled(SwitchBP);
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("switchPath"), SwitchBP->GetPathName());
       Result->SetStringField(TEXT("blueprintPath"), SwitchBP->GetPathName());
       Result->SetStringField(TEXT("switchType"), SwitchType);
+      Result->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
+      McpHandlerUtils::AddVerification(Result, SwitchBP);
       SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Switch actor created"), Result);
     } else {
       SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create switch blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
@@ -985,19 +1279,32 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   /**
    * configure_switch_properties
    * ----------------------------
-   * Adds switch property variables (SwitchType, bCanToggle, bIsActivated, ResetTime)
-   * to a Blueprint for switch behavior configuration.
+   * Ensures the switch property variables (SwitchType, bCanToggle, bIsActivated,
+   * ResetTime) exist and writes defaults for the parameters present in the
+   * payload; everything else is left untouched.
    *
    * Payload: { "switchPath": string, "switchType"?: string, "canToggle"?: bool,
    *            "resetTime"?: number }
-   * Response: { "switchType": string, "canToggle": bool, "resetTime": number,
-   *            "configured": bool, "switchPath": string }
+   * Response: { "switchType"?: string, "canToggle"?: bool, "resetTime"?: number,
+   *            "variablesAdded": string[], "appliedProperties": string[],
+   *            "configured": bool, "switchPath": string, assetVerification... }
    */
   if (SubAction == TEXT("configure_switch_properties")) {
     FString SwitchPath = GetJsonStringField(Payload, TEXT("switchPath"));
-    FString SwitchType = GetJsonStringField(Payload, TEXT("switchType"), TEXT("button"));
-    bool CanToggle = GetJsonBoolField(Payload, TEXT("canToggle"), true);
-    double ResetTime = GetJsonNumberField(Payload, TEXT("resetTime"), 0.0);
+    if (SwitchPath.IsEmpty()) {
+      SwitchPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
+    }
+    FString SwitchType;
+    const bool bHasSwitchType = Payload->TryGetStringField(TEXT("switchType"), SwitchType);
+    bool CanToggle = false;
+    const bool bHasCanToggle = Payload->TryGetBoolField(TEXT("canToggle"), CanToggle);
+    double ResetTime = 0.0;
+    const bool bHasResetTime = Payload->TryGetNumberField(TEXT("resetTime"), ResetTime);
+
+    if (SwitchPath.IsEmpty()) {
+      SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: switchPath"), TEXT("MISSING_PARAMETER"));
+      return true;
+    }
 
 #if WITH_EDITOR
     FString ResolvedPath, LoadError;
@@ -1007,7 +1314,6 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       return true;
     }
 
-    // Add switch property Blueprint variables
     FEdGraphPinType NameType;
     NameType.PinCategory = UEdGraphSchema_K2::PC_Name;
 
@@ -1018,62 +1324,66 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
     FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
 
-    // Add SwitchType variable
-    bool bSwitchTypeExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("SwitchType")) {
-        bSwitchTypeExists = true;
-        break;
-      }
+    TArray<TSharedPtr<FJsonValue>> VariablesAdded;
+    if (McpInteractionEnsureVar(Blueprint, TEXT("SwitchType"), NameType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("SwitchType")));
     }
-    if (!bSwitchTypeExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("SwitchType"), NameType);
+    if (McpInteractionEnsureVar(Blueprint, TEXT("bCanToggle"), BoolType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("bCanToggle")));
     }
-
-    // Add bCanToggle variable
-    bool bCanToggleExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("bCanToggle")) {
-        bCanToggleExists = true;
-        break;
-      }
+    if (McpInteractionEnsureVar(Blueprint, TEXT("bIsActivated"), BoolType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("bIsActivated")));
     }
-    if (!bCanToggleExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("bCanToggle"), BoolType);
+    if (McpInteractionEnsureVar(Blueprint, TEXT("ResetTime"), FloatType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("ResetTime")));
     }
 
-    // Add bIsActivated variable
-    bool bIsActivatedExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("bIsActivated")) {
-        bIsActivatedExists = true;
-        break;
-      }
-    }
-    if (!bIsActivatedExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("bIsActivated"), BoolType);
+    if (!McpSafeCompileBlueprint(Blueprint)) {
+      SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint failed to compile; switch properties were not written"), TEXT("COMPILE_FAILED"));
+      return true;
     }
 
-    // Add ResetTime variable
-    bool bResetTimeExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("ResetTime")) {
-        bResetTimeExists = true;
-        break;
+    TArray<TSharedPtr<FJsonValue>> AppliedProperties;
+    auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
+      FString ApplyError;
+      if (!McpInteractionApplyVarDefault(Blueprint, VarName, Value, ApplyError)) {
+        SendAutomationError(RequestingSocket, RequestId,
+                            FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
+                            TEXT("PROPERTY_WRITE_FAILED"));
+        return false;
       }
+      AppliedProperties.Add(MakeShared<FJsonValueString>(VarName.ToString()));
+      return true;
+    };
+
+    if (bHasSwitchType && !ApplyVar(TEXT("switchType"), TEXT("SwitchType"), SwitchType)) {
+      return true;
     }
-    if (!bResetTimeExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("ResetTime"), FloatType);
+    if (bHasCanToggle && !ApplyVar(TEXT("canToggle"), TEXT("bCanToggle"), CanToggle ? TEXT("true") : TEXT("false"))) {
+      return true;
     }
+    if (bHasResetTime && !ApplyVar(TEXT("resetTime"), TEXT("ResetTime"), FString::SanitizeFloat(ResetTime))) {
+      return true;
+    }
+
+    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    SaveLoadedAssetThrottled(Blueprint);
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("switchType"), SwitchType);
-    Result->SetBoolField(TEXT("canToggle"), CanToggle);
-    Result->SetNumberField(TEXT("resetTime"), ResetTime);
+    if (bHasSwitchType) {
+      Result->SetStringField(TEXT("switchType"), SwitchType);
+    }
+    if (bHasCanToggle) {
+      Result->SetBoolField(TEXT("canToggle"), CanToggle);
+    }
+    if (bHasResetTime) {
+      Result->SetNumberField(TEXT("resetTime"), ResetTime);
+    }
+    Result->SetArrayField(TEXT("variablesAdded"), VariablesAdded);
+    Result->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
     Result->SetBoolField(TEXT("configured"), true);
     Result->SetStringField(TEXT("switchPath"), SwitchPath);
-
-    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
+    McpHandlerUtils::AddVerification(Result, Blueprint);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Switch properties configured"), Result);
 #else
     SendAutomationError(RequestingSocket, RequestId, TEXT("configure_switch_properties is editor-only"), TEXT("EDITOR_ONLY"));
@@ -1091,8 +1401,12 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
    *     │   └── LidMesh (StaticMeshComponent)
    *     └── InteractionTrigger (SphereComponent, radius=150, OverlapAll)
    *
+   * Scaffolds the chest variables (bIsLocked, bIsOpen, LidOpenAngle, OpenTime,
+   * LootTable) and seeds bIsLocked/LidOpenAngle/OpenTime.
+   *
    * Payload: { "name": string, "folder"?: string, "locked"?: bool }
-   * Response: { "chestPath": string, "blueprintPath": string, "locked": bool }
+   * Response: { "chestPath": string, "blueprintPath": string, "locked": bool,
+   *            "appliedProperties": string[], assetVerification... }
    */
   if (SubAction == TEXT("create_chest_actor")) {
     FString Name = GetJsonStringField(Payload, TEXT("name"));
@@ -1150,12 +1464,60 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       SCS->AddNode(TriggerNode);
       TriggerNode->SetParent(RootNode);
 
-      McpFinalizeBlueprint(ChestBP, /*bStructural=*/false, /*bSave=*/true);
+      // Scaffold the chest variables and seed the requested (or default) values
+      FEdGraphPinType BoolType;
+      BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+
+      FEdGraphPinType FloatType;
+      FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
+      FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+
+      FEdGraphPinType SoftObjectType;
+      SoftObjectType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
+
+      McpInteractionEnsureVar(ChestBP, TEXT("bIsLocked"), BoolType);
+      McpInteractionEnsureVar(ChestBP, TEXT("bIsOpen"), BoolType);
+      McpInteractionEnsureVar(ChestBP, TEXT("LidOpenAngle"), FloatType);
+      McpInteractionEnsureVar(ChestBP, TEXT("OpenTime"), FloatType);
+      McpInteractionEnsureVar(ChestBP, TEXT("LootTable"), SoftObjectType);
+
+      if (!McpSafeCompileBlueprint(ChestBP)) {
+        SendAutomationError(RequestingSocket, RequestId, TEXT("Chest blueprint was created but failed to compile; chest properties were not written"), TEXT("COMPILE_FAILED"));
+        return true;
+      }
+
+      TArray<TSharedPtr<FJsonValue>> AppliedProperties;
+      auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
+        FString ApplyError;
+        if (!McpInteractionApplyVarDefault(ChestBP, VarName, Value, ApplyError)) {
+          SendAutomationError(RequestingSocket, RequestId,
+                              FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
+                              TEXT("PROPERTY_WRITE_FAILED"));
+          return false;
+        }
+        AppliedProperties.Add(MakeShared<FJsonValueString>(VarName.ToString()));
+        return true;
+      };
+
+      if (!ApplyVar(TEXT("locked"), TEXT("bIsLocked"), Locked ? TEXT("true") : TEXT("false"))) {
+        return true;
+      }
+      if (!ApplyVar(TEXT("lidOpenAngle"), TEXT("LidOpenAngle"), FString::SanitizeFloat(90.0))) {
+        return true;
+      }
+      if (!ApplyVar(TEXT("openTime"), TEXT("OpenTime"), FString::SanitizeFloat(0.5))) {
+        return true;
+      }
+
+      FBlueprintEditorUtils::MarkBlueprintAsModified(ChestBP);
+      SaveLoadedAssetThrottled(ChestBP);
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("chestPath"), ChestBP->GetPathName());
       Result->SetStringField(TEXT("blueprintPath"), ChestBP->GetPathName());
       Result->SetBoolField(TEXT("locked"), Locked);
+      Result->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
+      McpHandlerUtils::AddVerification(Result, ChestBP);
       SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Chest actor created"), Result);
     } else {
       SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create chest blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
@@ -1169,20 +1531,34 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   /**
    * configure_chest_properties
    * ---------------------------
-   * Adds chest property variables (bIsLocked, bIsOpen, LidOpenAngle, OpenTime, LootTable)
-   * to a Blueprint for chest behavior configuration.
+   * Ensures the chest property variables (bIsLocked, bIsOpen, LidOpenAngle,
+   * OpenTime, LootTable) exist and writes defaults for the parameters present
+   * in the payload; everything else is left untouched.
    *
    * Payload: { "chestPath": string, "locked"?: bool, "openAngle"?: number,
    *            "openTime"?: number, "lootTablePath"?: string }
-   * Response: { "locked": bool, "openAngle": number, "openTime": number,
-   *            "configured": bool, "chestPath": string }
+   * Response: { "locked"?: bool, "openAngle"?: number, "openTime"?: number,
+   *            "lootTablePath"?: string, "variablesAdded": string[],
+   *            "appliedProperties": string[], "configured": bool,
+   *            "chestPath": string, assetVerification... }
    */
   if (SubAction == TEXT("configure_chest_properties")) {
     FString ChestPath = GetJsonStringField(Payload, TEXT("chestPath"));
-    bool Locked = GetJsonBoolField(Payload, TEXT("locked"), false);
-    double OpenAngle = GetJsonNumberField(Payload, TEXT("openAngle"), 90.0);
-    double OpenTime = GetJsonNumberField(Payload, TEXT("openTime"), 0.5);
+    if (ChestPath.IsEmpty()) {
+      ChestPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
+    }
+    bool Locked = false;
+    const bool bHasLocked = Payload->TryGetBoolField(TEXT("locked"), Locked);
+    double OpenAngle = 0.0;
+    const bool bHasOpenAngle = Payload->TryGetNumberField(TEXT("openAngle"), OpenAngle);
+    double OpenTime = 0.0;
+    const bool bHasOpenTime = Payload->TryGetNumberField(TEXT("openTime"), OpenTime);
     FString LootTablePath = GetJsonStringField(Payload, TEXT("lootTablePath"));
+
+    if (ChestPath.IsEmpty()) {
+      SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: chestPath"), TEXT("MISSING_PARAMETER"));
+      return true;
+    }
 
 #if WITH_EDITOR
     FString ResolvedPath, LoadError;
@@ -1192,7 +1568,20 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       return true;
     }
 
-    // Add chest property Blueprint variables
+    // Resolve the loot table before mutating anything
+    FString LootTableObjectPath = LootTablePath;
+    if (!LootTablePath.IsEmpty()) {
+      if (!LootTableObjectPath.Contains(TEXT("."))) {
+        LootTableObjectPath += TEXT(".") + FPaths::GetBaseFilename(LootTableObjectPath);
+      }
+      if (!FPackageName::DoesPackageExist(FPackageName::ObjectPathToPackageName(LootTableObjectPath))) {
+        SendAutomationError(RequestingSocket, RequestId,
+                            FString::Printf(TEXT("lootTablePath '%s' does not exist"), *LootTablePath),
+                            TEXT("ASSET_NOT_FOUND"));
+        return true;
+      }
+    }
+
     FEdGraphPinType BoolType;
     BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
 
@@ -1203,77 +1592,75 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     FEdGraphPinType SoftObjectType;
     SoftObjectType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
 
-    // Add bIsLocked variable
-    bool bLockedExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("bIsLocked")) {
-        bLockedExists = true;
-        break;
-      }
+    TArray<TSharedPtr<FJsonValue>> VariablesAdded;
+    if (McpInteractionEnsureVar(Blueprint, TEXT("bIsLocked"), BoolType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("bIsLocked")));
     }
-    if (!bLockedExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("bIsLocked"), BoolType);
+    if (McpInteractionEnsureVar(Blueprint, TEXT("bIsOpen"), BoolType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("bIsOpen")));
     }
-
-    // Add bIsOpen variable
-    bool bIsOpenExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("bIsOpen")) {
-        bIsOpenExists = true;
-        break;
-      }
+    if (McpInteractionEnsureVar(Blueprint, TEXT("LidOpenAngle"), FloatType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("LidOpenAngle")));
     }
-    if (!bIsOpenExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("bIsOpen"), BoolType);
+    if (McpInteractionEnsureVar(Blueprint, TEXT("OpenTime"), FloatType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("OpenTime")));
+    }
+    if (McpInteractionEnsureVar(Blueprint, TEXT("LootTable"), SoftObjectType)) {
+      VariablesAdded.Add(MakeShared<FJsonValueString>(TEXT("LootTable")));
     }
 
-    // Add LidOpenAngle variable
-    bool bLidAngleExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("LidOpenAngle")) {
-        bLidAngleExists = true;
-        break;
-      }
-    }
-    if (!bLidAngleExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("LidOpenAngle"), FloatType);
+    if (!McpSafeCompileBlueprint(Blueprint)) {
+      SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint failed to compile; chest properties were not written"), TEXT("COMPILE_FAILED"));
+      return true;
     }
 
-    // Add OpenTime variable
-    bool bOpenTimeExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("OpenTime")) {
-        bOpenTimeExists = true;
-        break;
+    TArray<TSharedPtr<FJsonValue>> AppliedProperties;
+    auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
+      FString ApplyError;
+      if (!McpInteractionApplyVarDefault(Blueprint, VarName, Value, ApplyError)) {
+        SendAutomationError(RequestingSocket, RequestId,
+                            FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
+                            TEXT("PROPERTY_WRITE_FAILED"));
+        return false;
       }
+      AppliedProperties.Add(MakeShared<FJsonValueString>(VarName.ToString()));
+      return true;
+    };
+
+    if (bHasLocked && !ApplyVar(TEXT("locked"), TEXT("bIsLocked"), Locked ? TEXT("true") : TEXT("false"))) {
+      return true;
     }
-    if (!bOpenTimeExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("OpenTime"), FloatType);
+    if (bHasOpenAngle && !ApplyVar(TEXT("openAngle"), TEXT("LidOpenAngle"), FString::SanitizeFloat(OpenAngle))) {
+      return true;
+    }
+    if (bHasOpenTime && !ApplyVar(TEXT("openTime"), TEXT("OpenTime"), FString::SanitizeFloat(OpenTime))) {
+      return true;
+    }
+    if (!LootTablePath.IsEmpty() && !ApplyVar(TEXT("lootTablePath"), TEXT("LootTable"), LootTableObjectPath)) {
+      return true;
     }
 
-    // Add LootTable soft reference
-    bool bLootTableExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("LootTable")) {
-        bLootTableExists = true;
-        break;
-      }
-    }
-    if (!bLootTableExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("LootTable"), SoftObjectType);
-    }
+    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    SaveLoadedAssetThrottled(Blueprint);
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetBoolField(TEXT("locked"), Locked);
-    Result->SetNumberField(TEXT("openAngle"), OpenAngle);
-    Result->SetNumberField(TEXT("openTime"), OpenTime);
-    if (!LootTablePath.IsEmpty()) {
-      Result->SetStringField(TEXT("lootTablePath"), LootTablePath);
+    if (bHasLocked) {
+      Result->SetBoolField(TEXT("locked"), Locked);
     }
+    if (bHasOpenAngle) {
+      Result->SetNumberField(TEXT("openAngle"), OpenAngle);
+    }
+    if (bHasOpenTime) {
+      Result->SetNumberField(TEXT("openTime"), OpenTime);
+    }
+    if (!LootTablePath.IsEmpty()) {
+      Result->SetStringField(TEXT("lootTablePath"), LootTableObjectPath);
+    }
+    Result->SetArrayField(TEXT("variablesAdded"), VariablesAdded);
+    Result->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
     Result->SetBoolField(TEXT("configured"), true);
     Result->SetStringField(TEXT("chestPath"), ChestPath);
-
-    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
+    McpHandlerUtils::AddVerification(Result, Blueprint);
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Chest properties configured"), Result);
 #else
     SendAutomationError(RequestingSocket, RequestId, TEXT("configure_chest_properties is editor-only"), TEXT("EDITOR_ONLY"));
@@ -1920,12 +2307,15 @@ if (SubAction == TEXT("configure_trigger_response")) {
   /**
    * get_interaction_info
    * ---------------------
-   * Retrieves interaction information for a Blueprint or actor.
+   * Retrieves interaction information for a Blueprint or actor, including the
+   * current value of every Blueprint variable (read from the CDO, or from the
+   * actor instance when queried by actorName) and the SCS component list.
    * Can query by blueprintPath, actorName, doorPath, switchPath, chestPath, or triggerPath.
    *
    * Payload: { "blueprintPath"?: string, "actorName"?: string, "doorPath"?: string,
    *            "switchPath"?: string, "chestPath"?: string, "triggerPath"?: string }
-   * Response: { "blueprintPath"?: string, "blueprintName"?: string,
+   * Response: { "assetType": string, "name"?: string, "variables"?: object,
+   *            "variableCount"?: number, "components"?: object[],
    *            "actorName"?: string, "actorClass"?: string, ... }
    */
   if (SubAction == TEXT("get_interaction_info")) {
@@ -1947,20 +2337,8 @@ if (SubAction == TEXT("configure_trigger_response")) {
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
 
-    if (!BlueprintPath.IsEmpty()) {
 #if WITH_EDITOR
-      FString ResolvedPath, LoadError;
-      UBlueprint* Blueprint = LoadBlueprintAsset(BlueprintPath, ResolvedPath, LoadError);
-      if (!Blueprint) {
-        SendAutomationError(RequestingSocket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
-        return true;
-      }
-      Result->SetStringField(TEXT("assetType"), TEXT("Blueprint"));
-      Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-      Result->SetStringField(TEXT("blueprintName"), Blueprint->GetName());
-#endif
-    } else if (!ActorName.IsEmpty()) {
-#if WITH_EDITOR
+    if (BlueprintPath.IsEmpty() && !ActorName.IsEmpty()) {
       UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
       if (!World) {
         SendAutomationError(RequestingSocket, RequestId, TEXT("No editor world available"), TEXT("NO_WORLD"));
@@ -1979,52 +2357,49 @@ if (SubAction == TEXT("configure_trigger_response")) {
       Result->SetStringField(TEXT("assetType"), TEXT("Actor"));
       Result->SetStringField(TEXT("actorName"), FoundActor->GetName());
       Result->SetStringField(TEXT("actorClass"), FoundActor->GetClass()->GetName());
-#endif
-    } else if (!DoorPath.IsEmpty()) {
-#if WITH_EDITOR
+      if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(FoundActor->GetClass())) {
+        if (UBlueprint* ActorBP = Cast<UBlueprint>(BPGC->ClassGeneratedBy)) {
+          McpInteractionAddVariableReadback(Result, ActorBP, FoundActor);
+        }
+      }
+    } else {
+      const TCHAR* AssetType = TEXT("Blueprint");
+      const TCHAR* PathField = TEXT("blueprintPath");
+      FString Path = BlueprintPath;
+      if (BlueprintPath.IsEmpty()) {
+        if (!DoorPath.IsEmpty()) {
+          AssetType = TEXT("Door");
+          PathField = TEXT("doorPath");
+          Path = DoorPath;
+        } else if (!SwitchPath.IsEmpty()) {
+          AssetType = TEXT("Switch");
+          PathField = TEXT("switchPath");
+          Path = SwitchPath;
+        } else if (!ChestPath.IsEmpty()) {
+          AssetType = TEXT("Chest");
+          PathField = TEXT("chestPath");
+          Path = ChestPath;
+        } else {
+          AssetType = TEXT("Trigger");
+          PathField = TEXT("triggerPath");
+          Path = TriggerPath;
+        }
+      }
+
       FString ResolvedPath, LoadError;
-      UBlueprint* Blueprint = LoadBlueprintAsset(DoorPath, ResolvedPath, LoadError);
+      UBlueprint* Blueprint = LoadBlueprintAsset(Path, ResolvedPath, LoadError);
       if (!Blueprint) {
         SendAutomationError(RequestingSocket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
         return true;
       }
-      Result->SetStringField(TEXT("assetType"), TEXT("Door"));
-      Result->SetStringField(TEXT("doorPath"), DoorPath);
-#endif
-    } else if (!SwitchPath.IsEmpty()) {
-#if WITH_EDITOR
-      FString ResolvedPath, LoadError;
-      UBlueprint* Blueprint = LoadBlueprintAsset(SwitchPath, ResolvedPath, LoadError);
-      if (!Blueprint) {
-        SendAutomationError(RequestingSocket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
-        return true;
-      }
-      Result->SetStringField(TEXT("assetType"), TEXT("Switch"));
-      Result->SetStringField(TEXT("switchPath"), SwitchPath);
-#endif
-    } else if (!ChestPath.IsEmpty()) {
-#if WITH_EDITOR
-      FString ResolvedPath, LoadError;
-      UBlueprint* Blueprint = LoadBlueprintAsset(ChestPath, ResolvedPath, LoadError);
-      if (!Blueprint) {
-        SendAutomationError(RequestingSocket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
-        return true;
-      }
-      Result->SetStringField(TEXT("assetType"), TEXT("Chest"));
-      Result->SetStringField(TEXT("chestPath"), ChestPath);
-#endif
-    } else if (!TriggerPath.IsEmpty()) {
-#if WITH_EDITOR
-      FString ResolvedPath, LoadError;
-      UBlueprint* Blueprint = LoadBlueprintAsset(TriggerPath, ResolvedPath, LoadError);
-      if (!Blueprint) {
-        SendAutomationError(RequestingSocket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
-        return true;
-      }
-      Result->SetStringField(TEXT("assetType"), TEXT("Trigger"));
-      Result->SetStringField(TEXT("triggerPath"), TriggerPath);
-#endif
+      Result->SetStringField(TEXT("assetType"), AssetType);
+      Result->SetStringField(PathField, Path);
+      Result->SetStringField(TEXT("name"), Blueprint->GetName());
+      Result->SetStringField(TEXT("blueprintName"), Blueprint->GetName());
+      McpInteractionAddVariableReadback(Result, Blueprint);
+      McpInteractionAddComponentReadback(Result, Blueprint);
     }
+#endif
 
     SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Interaction info retrieved"), Result);
     return true;

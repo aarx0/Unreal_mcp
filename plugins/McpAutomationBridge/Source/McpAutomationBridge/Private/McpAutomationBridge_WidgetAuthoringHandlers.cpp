@@ -2493,95 +2493,128 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
         }
 
         UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot);
-        if (CanvasSlot)
+        if (!CanvasSlot)
         {
-            FAnchors Anchors;
-            TSharedPtr<FJsonObject> AnchorMin = GetObjectField(Payload, TEXT("anchorMin"));
-            TSharedPtr<FJsonObject> AnchorMax = GetObjectField(Payload, TEXT("anchorMax"));
-
-            if (AnchorMin.IsValid())
-            {
-                Anchors.Minimum.X = GetJsonNumberField(AnchorMin, TEXT("x"), 0.0);
-                Anchors.Minimum.Y = GetJsonNumberField(AnchorMin, TEXT("y"), 0.0);
-            }
-            if (AnchorMax.IsValid())
-            {
-                Anchors.Maximum.X = GetJsonNumberField(AnchorMax, TEXT("x"), 1.0);
-                Anchors.Maximum.Y = GetJsonNumberField(AnchorMax, TEXT("y"), 1.0);
-            }
-
-            // Handle preset anchors
-            FString Preset = GetJsonStringField(Payload, TEXT("preset"));
-            if (!Preset.IsEmpty())
-            {
-                if (Preset.Equals(TEXT("TopLeft"), ESearchCase::IgnoreCase))
-                {
-                    Anchors.Minimum = FVector2D(0, 0);
-                    Anchors.Maximum = FVector2D(0, 0);
-                }
-                else if (Preset.Equals(TEXT("TopCenter"), ESearchCase::IgnoreCase))
-                {
-                    Anchors.Minimum = FVector2D(0.5, 0);
-                    Anchors.Maximum = FVector2D(0.5, 0);
-                }
-                else if (Preset.Equals(TEXT("TopRight"), ESearchCase::IgnoreCase))
-                {
-                    Anchors.Minimum = FVector2D(1, 0);
-                    Anchors.Maximum = FVector2D(1, 0);
-                }
-                else if (Preset.Equals(TEXT("CenterLeft"), ESearchCase::IgnoreCase))
-                {
-                    Anchors.Minimum = FVector2D(0, 0.5);
-                    Anchors.Maximum = FVector2D(0, 0.5);
-                }
-                else if (Preset.Equals(TEXT("Center"), ESearchCase::IgnoreCase))
-                {
-                    Anchors.Minimum = FVector2D(0.5, 0.5);
-                    Anchors.Maximum = FVector2D(0.5, 0.5);
-                }
-                else if (Preset.Equals(TEXT("CenterRight"), ESearchCase::IgnoreCase))
-                {
-                    Anchors.Minimum = FVector2D(1, 0.5);
-                    Anchors.Maximum = FVector2D(1, 0.5);
-                }
-                else if (Preset.Equals(TEXT("BottomLeft"), ESearchCase::IgnoreCase))
-                {
-                    Anchors.Minimum = FVector2D(0, 1);
-                    Anchors.Maximum = FVector2D(0, 1);
-                }
-                else if (Preset.Equals(TEXT("BottomCenter"), ESearchCase::IgnoreCase))
-                {
-                    Anchors.Minimum = FVector2D(0.5, 1);
-                    Anchors.Maximum = FVector2D(0.5, 1);
-                }
-                else if (Preset.Equals(TEXT("BottomRight"), ESearchCase::IgnoreCase))
-                {
-                    Anchors.Minimum = FVector2D(1, 1);
-                    Anchors.Maximum = FVector2D(1, 1);
-                }
-                else if (Preset.Equals(TEXT("StretchHorizontal"), ESearchCase::IgnoreCase))
-                {
-                    Anchors.Minimum = FVector2D(0, 0.5);
-                    Anchors.Maximum = FVector2D(1, 0.5);
-                }
-                else if (Preset.Equals(TEXT("StretchVertical"), ESearchCase::IgnoreCase))
-                {
-                    Anchors.Minimum = FVector2D(0.5, 0);
-                    Anchors.Maximum = FVector2D(0.5, 1);
-                }
-                else if (Preset.Equals(TEXT("StretchAll"), ESearchCase::IgnoreCase))
-                {
-                    Anchors.Minimum = FVector2D(0, 0);
-                    Anchors.Maximum = FVector2D(1, 1);
-                }
-            }
-
-            CanvasSlot->SetAnchors(Anchors);
+            SendAutomationError(RequestingSocket, RequestId, TEXT("set_anchor requires a Canvas Panel slot"), TEXT("INVALID_SLOT"));
+            return true;
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+        // Accept preset, anchorMin/anchorMax:{x,y}, OR top-level scalars
+        // anchorMinX/anchorMinY/anchorMaxX/anchorMaxY. Strict MCP clients strip
+        // object-valued params, so the preset/scalar forms are the reliable
+        // path; fail loudly rather than silently applying the default top-left
+        // anchor. Unspecified components keep the slot's current values.
+        FAnchors Anchors = CanvasSlot->GetAnchors();
+        bool bHaveAnchor = false;
+        TSharedPtr<FJsonObject> AnchorMin = GetObjectField(Payload, TEXT("anchorMin"));
+        TSharedPtr<FJsonObject> AnchorMax = GetObjectField(Payload, TEXT("anchorMax"));
 
+        if (AnchorMin.IsValid())
+        {
+            Anchors.Minimum.X = GetJsonNumberField(AnchorMin, TEXT("x"), Anchors.Minimum.X);
+            Anchors.Minimum.Y = GetJsonNumberField(AnchorMin, TEXT("y"), Anchors.Minimum.Y);
+            bHaveAnchor = true;
+        }
+        if (AnchorMax.IsValid())
+        {
+            Anchors.Maximum.X = GetJsonNumberField(AnchorMax, TEXT("x"), Anchors.Maximum.X);
+            Anchors.Maximum.Y = GetJsonNumberField(AnchorMax, TEXT("y"), Anchors.Maximum.Y);
+            bHaveAnchor = true;
+        }
+        if (Payload->HasField(TEXT("anchorMinX"))) { Anchors.Minimum.X = GetJsonNumberField(Payload, TEXT("anchorMinX"), Anchors.Minimum.X); bHaveAnchor = true; }
+        if (Payload->HasField(TEXT("anchorMinY"))) { Anchors.Minimum.Y = GetJsonNumberField(Payload, TEXT("anchorMinY"), Anchors.Minimum.Y); bHaveAnchor = true; }
+        if (Payload->HasField(TEXT("anchorMaxX"))) { Anchors.Maximum.X = GetJsonNumberField(Payload, TEXT("anchorMaxX"), Anchors.Maximum.X); bHaveAnchor = true; }
+        if (Payload->HasField(TEXT("anchorMaxY"))) { Anchors.Maximum.Y = GetJsonNumberField(Payload, TEXT("anchorMaxY"), Anchors.Maximum.Y); bHaveAnchor = true; }
+
+        FString Preset = GetJsonStringField(Payload, TEXT("preset"));
+        if (!Preset.IsEmpty())
+        {
+            if (Preset.Equals(TEXT("TopLeft"), ESearchCase::IgnoreCase))
+            {
+                Anchors.Minimum = FVector2D(0, 0);
+                Anchors.Maximum = FVector2D(0, 0);
+            }
+            else if (Preset.Equals(TEXT("TopCenter"), ESearchCase::IgnoreCase))
+            {
+                Anchors.Minimum = FVector2D(0.5, 0);
+                Anchors.Maximum = FVector2D(0.5, 0);
+            }
+            else if (Preset.Equals(TEXT("TopRight"), ESearchCase::IgnoreCase))
+            {
+                Anchors.Minimum = FVector2D(1, 0);
+                Anchors.Maximum = FVector2D(1, 0);
+            }
+            else if (Preset.Equals(TEXT("CenterLeft"), ESearchCase::IgnoreCase))
+            {
+                Anchors.Minimum = FVector2D(0, 0.5);
+                Anchors.Maximum = FVector2D(0, 0.5);
+            }
+            else if (Preset.Equals(TEXT("Center"), ESearchCase::IgnoreCase))
+            {
+                Anchors.Minimum = FVector2D(0.5, 0.5);
+                Anchors.Maximum = FVector2D(0.5, 0.5);
+            }
+            else if (Preset.Equals(TEXT("CenterRight"), ESearchCase::IgnoreCase))
+            {
+                Anchors.Minimum = FVector2D(1, 0.5);
+                Anchors.Maximum = FVector2D(1, 0.5);
+            }
+            else if (Preset.Equals(TEXT("BottomLeft"), ESearchCase::IgnoreCase))
+            {
+                Anchors.Minimum = FVector2D(0, 1);
+                Anchors.Maximum = FVector2D(0, 1);
+            }
+            else if (Preset.Equals(TEXT("BottomCenter"), ESearchCase::IgnoreCase))
+            {
+                Anchors.Minimum = FVector2D(0.5, 1);
+                Anchors.Maximum = FVector2D(0.5, 1);
+            }
+            else if (Preset.Equals(TEXT("BottomRight"), ESearchCase::IgnoreCase))
+            {
+                Anchors.Minimum = FVector2D(1, 1);
+                Anchors.Maximum = FVector2D(1, 1);
+            }
+            else if (Preset.Equals(TEXT("StretchHorizontal"), ESearchCase::IgnoreCase))
+            {
+                Anchors.Minimum = FVector2D(0, 0.5);
+                Anchors.Maximum = FVector2D(1, 0.5);
+            }
+            else if (Preset.Equals(TEXT("StretchVertical"), ESearchCase::IgnoreCase))
+            {
+                Anchors.Minimum = FVector2D(0.5, 0);
+                Anchors.Maximum = FVector2D(0.5, 1);
+            }
+            else if (Preset.Equals(TEXT("StretchAll"), ESearchCase::IgnoreCase))
+            {
+                Anchors.Minimum = FVector2D(0, 0);
+                Anchors.Maximum = FVector2D(1, 1);
+            }
+            else
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Unknown anchor preset '%s'. Valid presets: TopLeft, TopCenter, TopRight, CenterLeft, Center, CenterRight, BottomLeft, BottomCenter, BottomRight, StretchHorizontal, StretchVertical, StretchAll"), *Preset),
+                    TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            bHaveAnchor = true;
+        }
+
+        if (!bHaveAnchor)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing anchors: provide preset, anchorMin/anchorMax:{x,y}, or anchorMinX/anchorMinY/anchorMaxX/anchorMaxY"), TEXT("MISSING_PARAMETER"));
+            return true;
+        }
+
+        CanvasSlot->SetAnchors(Anchors);
+        const bool bAnchorSaved = McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
+
+        const FAnchors Applied = CanvasSlot->GetAnchors();
         ResultJson->SetBoolField(TEXT("success"), true);
+        ResultJson->SetNumberField(TEXT("anchorMinX"), Applied.Minimum.X);
+        ResultJson->SetNumberField(TEXT("anchorMinY"), Applied.Minimum.Y);
+        ResultJson->SetNumberField(TEXT("anchorMaxX"), Applied.Maximum.X);
+        ResultJson->SetNumberField(TEXT("anchorMaxY"), Applied.Maximum.Y);
+        ResultJson->SetBoolField(TEXT("saveSucceeded"), bAnchorSaved);
         ResultJson->SetStringField(TEXT("message"), TEXT("Anchor set"));
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Anchor set"), ResultJson);
@@ -5456,6 +5489,32 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Tree(
         ResultJson->SetStringField(TEXT("slotName"), SlotName);
         ResultJson->SetStringField(TEXT("widgetClass"), TargetWidget->GetClass()->GetName());
         ResultJson->SetBoolField(TEXT("isVisible"), TargetWidget->IsVisible());
+
+        // Generic property dump of the WIDGET itself (Text, ColorAndOpacity,
+        // Percent, ...) — previously only the SLOT was readable, so widget
+        // value edits (e.g. set_text_content) could not be verified.
+        {
+            TSharedPtr<FJsonObject> WidgetProps = MakeShared<FJsonObject>();
+            for (TFieldIterator<FProperty> PropIt(TargetWidget->GetClass()); PropIt; ++PropIt)
+            {
+                FProperty* Prop = *PropIt;
+                if (!Prop || Prop->HasAnyPropertyFlags(CPF_Transient | CPF_Deprecated))
+                {
+                    continue;
+                }
+                if (Prop->GetFName() == TEXT("Slot"))
+                {
+                    continue;
+                }
+                TSharedPtr<FJsonValue> Exported =
+                    McpPropertyReflection::ExportPropertyToJsonValue(TargetWidget, Prop);
+                if (Exported.IsValid())
+                {
+                    WidgetProps->SetField(Prop->GetName(), Exported);
+                }
+            }
+            ResultJson->SetObjectField(TEXT("widgetProperties"), WidgetProps);
+        }
 
         if (UPanelSlot* Slot = TargetWidget->Slot)
         {

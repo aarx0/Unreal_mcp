@@ -145,7 +145,10 @@ engine-error capture and added client-visible latency).
    the response *and* the boot log:
 
    ```powershell
-   pwsh -File scripts/mcp-call.ps1 -Tool manage_blueprint -Arguments @{ action = 'my_action'; ... }
+   pwsh -File scripts/mcp-call.ps1 -Tool manage_blueprint -ArgumentsJson '{ "action": "my_action", ... }'
+   # or, from an existing pwsh session (hashtables can't cross the -File
+   # process boundary, so this form is in-process only):
+   #   ./scripts/mcp-call.ps1 -Tool manage_blueprint -Arguments @{ action = 'my_action' }
    # and after an editor restart, confirm the boot log line:
    #   LogMcpStartupValidation: Action routing validation passed (...)
    ```
@@ -211,6 +214,11 @@ MCP edits** with the editor's in-memory copy. Rules: keep the asset **closed** d
 pass (or close-without-save → reopen to resync); never trust the Details panel over a
 `set_style` read; if you must have it open, reselect/recompile to refresh and don't Save the
 stale tab.
+
+### 8. Container variable types are spelled `Array<Inner>`, not `Inner[]`
+`manage_blueprint add_variable` parses `variableType` container syntax as
+`Array<String>` / `Set<Int>` / `Map<String,Float>` (`T`-prefixed forms also work);
+C-style `String[]` is not recognized and fails as an unresolvable class.
 
 ---
 

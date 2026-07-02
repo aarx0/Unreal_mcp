@@ -28,13 +28,13 @@ public:
 			.String(TEXT("attribute"), TEXT("get_attribute: attribute to read at runtime (e.g. 'Health')."))
 			.String(TEXT("path"), TEXT("Directory path for asset creation."))
 			.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-			.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+			.String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
 			.StringEnum(TEXT("replicationMode"), {
 				TEXT("Full"),
 				TEXT("Minimal"),
 				TEXT("Mixed")
 			}, TEXT("ASC replication mode."))
-			.String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset."))
+			.String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
 			.String(TEXT("attributeName"), TEXT("Name of the attribute."))
 			.StringEnum(TEXT("attributeType"), {
 				TEXT("Health"),
@@ -58,7 +58,7 @@ public:
 				TEXT("Max"),
 				TEXT("MinMax")
 			}, TEXT("Attribute clamping mode."))
-			.String(TEXT("abilityPath"), TEXT("Path to ability asset."))
+			.String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
 			.Array(TEXT("abilityTags"), TEXT("Gameplay tags for this ability."))
 			.Array(TEXT("cancelAbilitiesWithTag"), TEXT("Tags of abilities to cancel when this activates."))
 			.Array(TEXT("blockAbilitiesWithTag"), TEXT("Tags of abilities blocked while this is active."))
@@ -98,7 +98,7 @@ public:
 				TEXT("InstancedPerActor"),
 				TEXT("InstancedPerExecution")
 			}, TEXT("How the ability is instanced."))
-			.String(TEXT("effectPath"), TEXT("Path to effect asset."))
+			.String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
 			.StringEnum(TEXT("durationType"), {
 				TEXT("Instant"),
 				TEXT("Infinite"),
@@ -123,7 +123,7 @@ public:
 			.String(TEXT("targetAttribute"), TEXT("Target attribute for modifier."))
 			.String(TEXT("calculationClass"), TEXT("UGameplayEffectExecutionCalculation class path."))
 			.String(TEXT("cueTag"), TEXT("Gameplay Cue tag (e.g., GameplayCue.Damage.Fire)."))
-			.String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset."))
+			.String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
 			.StringEnum(TEXT("stackingType"), {
 				TEXT("None"),
 				TEXT("AggregateBySource"),
@@ -161,7 +161,8 @@ public:
 			.String(TEXT("soundPath"), TEXT("Sound asset path."))
 			.String(TEXT("cameraShakePath"), TEXT("Path to camera shake asset."))
 			.String(TEXT("decalPath"), TEXT("Path to decal material."))
-			.String(TEXT("tagName"), TEXT("Name of the tag."))
+			.String(TEXT("tag"), TEXT("add_tag_to_asset: gameplay tag to add (must be registered in the project's gameplay tag registry)."))
+			.String(TEXT("tagName"), TEXT("Alias for 'tag'."))
 			.String(TEXT("setPath"), TEXT("create_ability_set/add_ability: path of the ability-set data asset. "
 				"Note: create_ability_set scaffolds a PrimaryDataAsset blueprint with GrantedAbilities/"
 				"GrantedEffects/GrantedTags variables; it is not an engine ability-set type."))

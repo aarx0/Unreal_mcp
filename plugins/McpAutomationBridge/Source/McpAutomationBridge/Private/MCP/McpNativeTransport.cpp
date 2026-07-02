@@ -1113,7 +1113,10 @@ FString FMcpNativeTransport::HandleInitialize(
 
 	auto Capabilities = MakeShared<FJsonObject>();
 	auto ToolsCap = MakeShared<FJsonObject>();
-	ToolsCap->SetBoolField(TEXT("listChanged"), false);  // pull-only: no server->client push
+	// Pull-only: no server->client push, so manage_tools enable/disable emits no
+	// list_changed notification — clients see tool-set changes only on their next
+	// tools/list fetch (for clients that list once at connect, a reconnect).
+	ToolsCap->SetBoolField(TEXT("listChanged"), false);
 	Capabilities->SetObjectField(TEXT("tools"), ToolsCap);
 	Result->SetObjectField(TEXT("capabilities"), Capabilities);
 
@@ -1254,6 +1257,14 @@ void FMcpNativeTransport::HandleToolsCall(
 				};
 				AppendNames(TEXT("notFound"), TEXT("Not found"));
 				AppendNames(TEXT("protected"), TEXT("Protected (unchanged)"));
+				if (Action == TEXT("enable_tools") || Action == TEXT("disable_tools") ||
+					Action == TEXT("enable_category") || Action == TEXT("disable_category") ||
+					Action == TEXT("reset"))
+				{
+					ActionMessage += TEXT(" Changes apply to tools/call immediately for ALL "
+						"connected sessions; no list_changed notification is sent, so clients "
+						"that cache tools/list must re-list (typically reconnect) to see them.");
+				}
 			}
 		}
 		TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
@@ -1354,13 +1365,35 @@ void FMcpNativeTransport::HandleToolsCall(
 		return;
 	}
 
-	// Enforce tool enabled check — tools/list filters, tools/call must also enforce
+	// Enforce tool enabled check — tools/list filters, tools/call must also enforce.
+	// Enablement is one global state shared by every session, so a concurrent
+	// session's manage_tools disable lands here as a transient — the error must
+	// offer remediation, not read as permanent server configuration.
 	if (!ToolManager.IsToolEnabled(ToolName))
 	{
+		FString Message = FString::Printf(
+			TEXT("Tool '%s' is not enabled. Enable it with manage_tools "
+			     "{action:'enable_tools', tools:['%s']} and retry. Tool availability "
+			     "is shared across all sessions, so a concurrent manage_tools call "
+			     "may have just disabled it"),
+			*ToolName, *ToolName);
+		FString LastMutationAction;
+		double LastMutationSecondsAgo = 0.0;
+		if (ToolManager.GetLastMutation(LastMutationAction, LastMutationSecondsAgo))
+		{
+			Message += FString::Printf(TEXT(" (last manage_tools change: '%s' %.0fs ago)"),
+				*LastMutationAction, LastMutationSecondsAgo);
+		}
+		Message += TEXT(".");
+		UE_LOG(LogMcpNativeTransport, Warning,
+			TEXT("tools/call rejected: '%s' disabled (session=%s%s)"),
+			*ToolName,
+			SessionId.IsEmpty() ? TEXT("<no-session>") : *SessionId,
+			LastMutationAction.IsEmpty() ? TEXT("")
+				: *FString::Printf(TEXT(", last manage_tools change: '%s' %.0fs ago"),
+					*LastMutationAction, LastMutationSecondsAgo));
 		TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
-			false,
-			FString::Printf(TEXT("Tool '%s' is not enabled"), *ToolName),
-			nullptr, TEXT("TOOL_DISABLED"));
+			false, Message, nullptr, TEXT("TOOL_DISABLED"));
 		FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
 		SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
 		ClientSocket->Close();

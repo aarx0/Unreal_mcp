@@ -114,6 +114,15 @@ namespace
         }
 #endif
     }
+
+    // Live level-actor writes land in the unsaved level, never directly on disk.
+    void AddLevelActorPersistenceFields(TSharedPtr<FJsonObject>& Result)
+    {
+        Result->SetBoolField(TEXT("saved"), false);
+        Result->SetBoolField(TEXT("markedDirty"), true);
+        Result->SetStringField(TEXT("note"),
+            TEXT("Level actors persist when the level is saved (e.g. control_editor save_all)."));
+    }
 }
 
 bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
@@ -257,11 +266,12 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
               McpPropertyReflection::JsonArrayToVector(ValueField->AsArray(), NewLoc);
           }
           
+          Actor->Modify();
           Actor->SetActorLocation(NewLoc);
-          
+
           TSharedPtr<FJsonObject> ResultPayload = McpHandlerUtils::CreateResultObject();
           ResultPayload->SetStringField(TEXT("propertyName"), PropertyName);
-          ResultPayload->SetBoolField(TEXT("saved"), true);
+          AddLevelActorPersistenceFields(ResultPayload);
           ResultPayload->SetObjectField(TEXT("value"), McpPropertyReflection::VectorToJson(NewLoc));
           AddObjectVerification(ResultPayload, Actor);
           SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Actor location updated."), ResultPayload);
@@ -281,11 +291,12 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
               McpPropertyReflection::JsonArrayToRotator(ValueField->AsArray(), NewRot);
           }
           
+          Actor->Modify();
           Actor->SetActorRotation(NewRot);
-          
+
           TSharedPtr<FJsonObject> ResultPayload = McpHandlerUtils::CreateResultObject();
           ResultPayload->SetStringField(TEXT("propertyName"), PropertyName);
-          ResultPayload->SetBoolField(TEXT("saved"), true);
+          AddLevelActorPersistenceFields(ResultPayload);
           ResultPayload->SetObjectField(TEXT("value"), McpPropertyReflection::RotatorToJson(NewRot));
           AddObjectVerification(ResultPayload, Actor);
           SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Actor rotation updated."), ResultPayload);
@@ -306,11 +317,12 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
               McpPropertyReflection::JsonArrayToVector(ValueField->AsArray(), NewScale);
           }
           
+          Actor->Modify();
           Actor->SetActorScale3D(NewScale);
-          
+
           TSharedPtr<FJsonObject> ResultPayload = McpHandlerUtils::CreateResultObject();
           ResultPayload->SetStringField(TEXT("propertyName"), PropertyName);
-          ResultPayload->SetBoolField(TEXT("saved"), true);
+          AddLevelActorPersistenceFields(ResultPayload);
           ResultPayload->SetObjectField(TEXT("value"), McpPropertyReflection::VectorToJson(NewScale));
           AddObjectVerification(ResultPayload, Actor);
           SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Actor scale updated."), ResultPayload);
@@ -326,11 +338,12 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
           else if (ValueField->Type == EJson::Number)
               bHidden = ValueField->AsNumber() != 0;
           
+          Actor->Modify();
           Actor->SetActorHiddenInGame(bHidden);
-          
+
           TSharedPtr<FJsonObject> ResultPayload = McpHandlerUtils::CreateResultObject();
           ResultPayload->SetStringField(TEXT("propertyName"), PropertyName);
-          ResultPayload->SetBoolField(TEXT("saved"), true);
+          AddLevelActorPersistenceFields(ResultPayload);
           ResultPayload->SetBoolField(TEXT("value"), bHidden);
           AddObjectVerification(ResultPayload, Actor);
           SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Actor visibility updated."), ResultPayload);
@@ -425,10 +438,39 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
   }
 #endif
 
+  // --- Persist ---
+  // 'saved' reports the observed on-disk result, never an assumption. Level and
+  // transient packages are not auto-saved here (that would save the whole map);
+  // markDirty:false implies save:false unless save is explicitly true.
+  const bool bSaveRequested = GetJsonBoolField(Payload, TEXT("save"), bMarkDirty);
+  UPackage* Package = RootObject->GetOutermost();
+  const bool bAssetPackage = Package && Package != GetTransientPackage() &&
+                             !Package->HasAnyFlags(RF_Transient) &&
+                             !Package->ContainsMap();
+  bool bSaved = false;
+  if (bSaveRequested && bAssetPackage)
+  {
+      bSaved = McpSafeAssetSave(Package);
+      if (!bSaved)
+      {
+          SendAutomationError(RequestingSocket, RequestId,
+              FString::Printf(TEXT("Property '%s' was applied in memory but saving package '%s' failed; the package is left dirty. Check the .uasset is writable and not locked, or pass save:false and persist later via control_editor save_all."),
+                  *PropertyName, *Package->GetName()),
+              TEXT("SAVE_FAILED"));
+          return true;
+      }
+  }
+
   // --- Build Response ---
   TSharedPtr<FJsonObject> ResultPayload = McpHandlerUtils::CreateResultObject();
   ResultPayload->SetStringField(TEXT("propertyName"), PropertyName);
-  ResultPayload->SetBoolField(TEXT("saved"), true);
+  ResultPayload->SetBoolField(TEXT("saved"), bSaved);
+  ResultPayload->SetBoolField(TEXT("markedDirty"), Package && Package->IsDirty());
+  if (bSaveRequested && !bAssetPackage)
+  {
+      ResultPayload->SetStringField(TEXT("note"),
+          TEXT("Object lives in a level or transient package; set_property does not auto-save levels. Persist via control_editor save_all."));
+  }
   AddObjectVerification(ResultPayload, RootObject);
 
   // Include the updated value in response
@@ -3448,14 +3490,73 @@ bool UMcpAutomationBridgeSubsystem::HandleDiffAssetAction(
     bool bIncludeDefaults = true;
     Payload->TryGetBoolField(TEXT("includeDefaults"), bIncludeDefaults);
 
-    UObject* OldObj = McpLoadAssetForDiff(OldFilePath, AssetName);
-    UObject* NewObj = McpLoadAssetForDiff(NewFilePath, AssetName);
+    // DiffUtils::LoadPackageForDiff can only read files under a mounted content
+    // root (the /Temp mount covers <Project>/Saved). Stage any outside file into
+    // Saved so arbitrary local paths (e.g. %TEMP% git extracts) diff too.
+    TArray<FString> StagedFiles;
+    FString OldLoadPath = OldFilePath;
+    FString NewLoadPath = NewFilePath;
+    auto StageForDiff = [&StagedFiles](FString& InOutFilePath, FString& OutError) -> bool
+    {
+        FString MountedPackageName;
+        if (FPackageName::TryConvertFilenameToLongPackageName(InOutFilePath, MountedPackageName))
+        {
+            return true;
+        }
+        FString Ext = FPaths::GetExtension(InOutFilePath);
+        if (Ext.IsEmpty()) { Ext = TEXT("uasset"); }
+        const FString StagedPath = FPaths::ProjectSavedDir() / TEXT("McpDiffStaging") /
+            FString::Printf(TEXT("%s_%s.%s"), *FPaths::GetBaseFilename(InOutFilePath),
+                            *FGuid::NewGuid().ToString(EGuidFormats::Digits), *Ext);
+        IFileManager::Get().MakeDirectory(*FPaths::GetPath(StagedPath), true);
+        if (IFileManager::Get().Copy(*StagedPath, *InOutFilePath) != COPY_OK)
+        {
+            OutError = FString::Printf(
+                TEXT("'%s' is outside the project's mounted content roots and staging a copy to '%s' failed. Place the file under <Project>/Saved/ and retry."),
+                *InOutFilePath, *StagedPath);
+            return false;
+        }
+        StagedFiles.Add(StagedPath);
+        InOutFilePath = StagedPath;
+        return true;
+    };
+    {
+        FString StageError;
+        if (!StageForDiff(OldLoadPath, StageError) || !StageForDiff(NewLoadPath, StageError))
+        {
+            for (const FString& Staged : StagedFiles)
+            {
+                IFileManager::Get().Delete(*Staged, false, true, true);
+            }
+            SendAutomationError(RequestingSocket, RequestId, StageError, TEXT("DIFF_STAGE_FAILED"));
+            return true;
+        }
+    }
+
+    UObject* OldObj = McpLoadAssetForDiff(OldLoadPath, AssetName);
+    UObject* NewObj = McpLoadAssetForDiff(NewLoadPath, AssetName);
+
+    // Release both diff packages and purge them synchronously so a later
+    // find_objects/list cannot see the stale copies, then drop staged copies.
+    auto CleanupDiffArtifacts = [OldObj, NewObj, &StagedFiles]()
+    {
+        ReleaseDiffPackage(OldObj);
+        ReleaseDiffPackage(NewObj);
+        CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+        for (const FString& Staged : StagedFiles)
+        {
+            IFileManager::Get().Delete(*Staged, false, true, true);
+        }
+    };
+
     if (!OldObj || !NewObj)
     {
-        SendAutomationError(RequestingSocket, RequestId,
-            FString::Printf(TEXT("Failed to load '%s' for diff (old=%s new=%s)"), *AssetName,
-                            OldObj ? TEXT("ok") : TEXT("null"), NewObj ? TEXT("ok") : TEXT("null")),
-            TEXT("DIFF_LOAD_FAILED"));
+        const FString LoadError = FString::Printf(
+            TEXT("Failed to load '%s' for diff (old=%s new=%s; oldFilePath='%s', newFilePath='%s'). Each file must be a valid .uasset/.umap package saved by a compatible engine version."),
+            *AssetName, OldObj ? TEXT("ok") : TEXT("null"), NewObj ? TEXT("ok") : TEXT("null"),
+            *OldFilePath, *NewFilePath);
+        CleanupDiffArtifacts();
+        SendAutomationError(RequestingSocket, RequestId, LoadError, TEXT("DIFF_LOAD_FAILED"));
         return true;
     }
 
@@ -3508,47 +3609,110 @@ bool UMcpAutomationBridgeSubsystem::HandleDiffAssetAction(
         {
             auto ScsMap = [](UBlueprint* BP)
             {
-                TMap<FString, FString> M;
+                TMap<FString, USCS_Node*> M;
                 if (BP->SimpleConstructionScript)
                 {
                     for (USCS_Node* N : BP->SimpleConstructionScript->GetAllNodes())
                     {
-                        if (!N) { continue; }
-                        UClass* CC = N->ComponentTemplate ? N->ComponentTemplate->GetClass() : N->ComponentClass.Get();
-                        M.Add(N->GetVariableName().ToString(), CC ? CC->GetName() : TEXT("?"));
+                        if (N) { M.Add(N->GetVariableName().ToString(), N); }
                     }
                 }
                 return M;
             };
-            TMap<FString, FString> OldM = ScsMap(OldBP), NewM = ScsMap(NewBP);
-            TArray<TSharedPtr<FJsonValue>> Added, Removed, Changed;
-            for (const TPair<FString, FString>& Kv : NewM)
+            auto NodeClass = [](USCS_Node* N) -> FString
             {
-                const FString* Old = OldM.Find(Kv.Key);
-                if (!Old)
+                UClass* CC = N->ComponentTemplate ? N->ComponentTemplate->GetClass() : N->ComponentClass.Get();
+                return CC ? CC->GetName() : FString(TEXT("?"));
+            };
+            // Object refs inside a template stringify with the per-side diff
+            // package name, so identical refs would read as changed; strip it.
+            const FString OldPkgName = OldObj->GetPackage() ? OldObj->GetPackage()->GetName() : FString();
+            const FString NewPkgName = NewObj->GetPackage() ? NewObj->GetPackage()->GetName() : FString();
+            auto TemplateValueString = [](const TSharedPtr<FJsonValue>& V, const FString& PkgName)
+            {
+                FString S = McpStableJsonValueString(V);
+                if (!PkgName.IsEmpty()) { S.ReplaceInline(*PkgName, TEXT("<pkg>")); }
+                return S;
+            };
+
+            TMap<FString, USCS_Node*> OldM = ScsMap(OldBP), NewM = ScsMap(NewBP);
+            TArray<TSharedPtr<FJsonValue>> Added, Removed, Changed;
+            for (const TPair<FString, USCS_Node*>& Kv : NewM)
+            {
+                USCS_Node* const* OldNode = OldM.Find(Kv.Key);
+                const FString NewClass = NodeClass(Kv.Value);
+                if (!OldNode)
                 {
                     TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
                     E->SetStringField(TEXT("name"), Kv.Key);
-                    E->SetStringField(TEXT("class"), Kv.Value);
+                    E->SetStringField(TEXT("class"), NewClass);
                     Added.Add(MakeShared<FJsonValueObject>(E));
-                    if (McpNameLooksGAS(Kv.Value) || McpNameLooksGAS(Kv.Key)) { GasSignals.Add(MakeShared<FJsonValueString>(TEXT("component +") + Kv.Key + TEXT(" (") + Kv.Value + TEXT(")"))); }
+                    if (McpNameLooksGAS(NewClass) || McpNameLooksGAS(Kv.Key)) { GasSignals.Add(MakeShared<FJsonValueString>(TEXT("component +") + Kv.Key + TEXT(" (") + NewClass + TEXT(")"))); }
                 }
-                else if (*Old != Kv.Value)
+                else if (NodeClass(*OldNode) != NewClass)
                 {
                     TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
                     E->SetStringField(TEXT("name"), Kv.Key);
-                    E->SetStringField(TEXT("oldClass"), *Old);
-                    E->SetStringField(TEXT("newClass"), Kv.Value);
+                    E->SetStringField(TEXT("oldClass"), NodeClass(*OldNode));
+                    E->SetStringField(TEXT("newClass"), NewClass);
                     Changed.Add(MakeShared<FJsonValueObject>(E));
                 }
+                else if ((*OldNode)->ComponentTemplate && Kv.Value->ComponentTemplate)
+                {
+                    // Same class on both sides: diff the template's defaults so
+                    // component-only edits (e.g. root RelativeLocation) surface.
+                    TSharedPtr<FJsonObject> OldProps = McpPropertyReflection::ExportObjectToJson((*OldNode)->ComponentTemplate, false);
+                    TSharedPtr<FJsonObject> NewProps = McpPropertyReflection::ExportObjectToJson(Kv.Value->ComponentTemplate, false);
+                    TArray<TSharedPtr<FJsonValue>> PropChanges;
+                    const int32 PropCap = 50;
+                    if (OldProps.IsValid() && NewProps.IsValid())
+                    {
+                        for (const TPair<FString, TSharedPtr<FJsonValue>>& PropKv : NewProps->Values)
+                        {
+                            if (PropChanges.Num() >= PropCap) { break; }
+                            const TSharedPtr<FJsonValue>* OldV = OldProps->Values.Find(PropKv.Key);
+                            const FString NewS = TemplateValueString(PropKv.Value, NewPkgName);
+                            const FString OldS = OldV ? TemplateValueString(*OldV, OldPkgName) : FString(TEXT("<absent>"));
+                            if (NewS != OldS)
+                            {
+                                TSharedPtr<FJsonObject> PE = MakeShared<FJsonObject>();
+                                PE->SetStringField(TEXT("property"), PropKv.Key);
+                                PE->SetStringField(TEXT("old"), OldS.Left(400));
+                                PE->SetStringField(TEXT("new"), NewS.Left(400));
+                                PropChanges.Add(MakeShared<FJsonValueObject>(PE));
+                            }
+                        }
+                        for (const TPair<FString, TSharedPtr<FJsonValue>>& PropKv : OldProps->Values)
+                        {
+                            if (PropChanges.Num() >= PropCap) { break; }
+                            if (!NewProps->Values.Contains(PropKv.Key))
+                            {
+                                TSharedPtr<FJsonObject> PE = MakeShared<FJsonObject>();
+                                PE->SetStringField(TEXT("property"), PropKv.Key);
+                                PE->SetStringField(TEXT("old"), TemplateValueString(PropKv.Value, OldPkgName).Left(400));
+                                PE->SetStringField(TEXT("new"), TEXT("<absent>"));
+                                PropChanges.Add(MakeShared<FJsonValueObject>(PE));
+                            }
+                        }
+                    }
+                    if (PropChanges.Num() > 0)
+                    {
+                        TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+                        E->SetStringField(TEXT("name"), Kv.Key);
+                        E->SetStringField(TEXT("class"), NewClass);
+                        E->SetArrayField(TEXT("changedProperties"), PropChanges);
+                        Changed.Add(MakeShared<FJsonValueObject>(E));
+                        if (McpNameLooksGAS(NewClass) || McpNameLooksGAS(Kv.Key)) { GasSignals.Add(MakeShared<FJsonValueString>(TEXT("component ~") + Kv.Key)); }
+                    }
+                }
             }
-            for (const TPair<FString, FString>& Kv : OldM)
+            for (const TPair<FString, USCS_Node*>& Kv : OldM)
             {
                 if (!NewM.Contains(Kv.Key))
                 {
                     TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
                     E->SetStringField(TEXT("name"), Kv.Key);
-                    E->SetStringField(TEXT("class"), Kv.Value);
+                    E->SetStringField(TEXT("class"), NodeClass(Kv.Value));
                     Removed.Add(MakeShared<FJsonValueObject>(E));
                 }
             }
@@ -3726,12 +3890,8 @@ bool UMcpAutomationBridgeSubsystem::HandleDiffAssetAction(
         Resp->SetObjectField(TEXT("properties"), O);
     }
 
-    // Everything is extracted into Resp now — release both diff packages so their
-    // on-disk files unlock immediately and GC can reclaim them (no per-call leak,
-    // and no stale cached copy returned by a later diff of the same path).
-    ReleaseDiffPackage(OldObj);
-    ReleaseDiffPackage(NewObj);
-    if (GEngine) { GEngine->ForceGarbageCollection(false); }
+    // Everything is extracted into Resp now.
+    CleanupDiffArtifacts();
 
     Resp->SetArrayField(TEXT("gasSignals"), GasSignals);
     Resp->SetBoolField(TEXT("anyChange"), bAnyChange);

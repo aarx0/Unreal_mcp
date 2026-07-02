@@ -433,7 +433,11 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingAction(
         // Set Name (optional)
         // ---------------------------------------------------------------------
         FString Name;
-        if (Payload->TryGetStringField(TEXT("name"), Name) && !Name.IsEmpty())
+        if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty())
+        {
+            Payload->TryGetStringField(TEXT("actorName"), Name);
+        }
+        if (!Name.IsEmpty())
         {
             NewLight->SetActorLabel(Name);
         }

@@ -265,6 +265,16 @@ static FEdGraphPinType MakeObjectPinType(UClass* ObjectClass)
     PinType.PinSubCategoryObject = ObjectClass;
     return PinType;
 }
+
+static void SetVariablesAdded(const TSharedPtr<FJsonObject>& Result, const TArray<FString>& VarNames)
+{
+    TArray<TSharedPtr<FJsonValue>> VarsAdded;
+    for (const FString& VarName : VarNames)
+    {
+        VarsAdded.Add(MakeShared<FJsonValueString>(VarName));
+    }
+    Result->SetArrayField(TEXT("variablesAdded"), VarsAdded);
+}
 } // namespace
 #endif
 
@@ -386,7 +396,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("fireRate"), FireRate);
         Result->SetNumberField(TEXT("range"), Range);
         Result->SetNumberField(TEXT("spread"), Spread);
-        
+        SetVariablesAdded(Result, {TEXT("BaseDamage"), TEXT("FireRate"), TEXT("Range"), TEXT("Spread")});
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Weapon blueprint created successfully."), Result);
         return true;
     }
@@ -461,7 +472,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetStringField(TEXT("muzzleSocket"), MuzzleSocket);
         Result->SetStringField(TEXT("ejectionSocket"), EjectionSocket);
-        
+        SetVariablesAdded(Result, {TEXT("MuzzleSocketName"), TEXT("EjectionSocketName")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Weapon sockets configured."), Result);
         return true;
@@ -519,7 +531,22 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("fireRate"), FireRate);
         Result->SetNumberField(TEXT("range"), Range);
         Result->SetNumberField(TEXT("spread"), Spread);
-        
+        SetVariablesAdded(Result, {TEXT("BaseDamage"), TEXT("FireRate"), TEXT("Range"), TEXT("Spread")});
+
+        TSharedPtr<FJsonObject> IgnoredParams = MakeShared<FJsonObject>();
+        if (Payload->HasField(TEXT("criticalMultiplier")))
+        {
+            IgnoredParams->SetStringField(TEXT("criticalMultiplier"), TEXT("Not consumed by set_weapon_stats; use configure_damage_execution."));
+        }
+        if (Payload->HasField(TEXT("headshotMultiplier")))
+        {
+            IgnoredParams->SetStringField(TEXT("headshotMultiplier"), TEXT("Not consumed by set_weapon_stats; use configure_damage_execution."));
+        }
+        if (IgnoredParams->Values.Num() > 0)
+        {
+            Result->SetObjectField(TEXT("ignoredParams"), IgnoredParams);
+        }
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Weapon stats configured."), Result);
         return true;
@@ -574,7 +601,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetBoolField(TEXT("hitscanEnabled"), bHitscanEnabled);
         Result->SetStringField(TEXT("traceChannel"), TraceChannel);
         Result->SetNumberField(TEXT("range"), Range);
-        
+        SetVariablesAdded(Result, {TEXT("bIsHitscan"), TEXT("TraceChannel"), TEXT("HitscanRange")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hitscan configured."), Result);
         return true;
@@ -618,7 +646,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetStringField(TEXT("projectileClass"), ProjectileClass);
         Result->SetNumberField(TEXT("projectileSpeed"), ProjectileSpeed);
-        
+        SetVariablesAdded(Result, {TEXT("ProjectileClassPath"), TEXT("ProjectileSpeed")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Projectile firing configured."), Result);
         return true;
@@ -674,7 +703,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("patternType"), PatternType);
         Result->SetNumberField(TEXT("spreadIncrease"), SpreadIncrease);
         Result->SetNumberField(TEXT("spreadRecovery"), SpreadRecovery);
-        
+        SetVariablesAdded(Result, {TEXT("SpreadPatternType"), TEXT("SpreadIncreasePerShot"), TEXT("SpreadRecoveryRate"), TEXT("CurrentSpread")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Spread pattern configured."), Result);
         return true;
@@ -725,7 +755,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("recoilPitch"), RecoilPitch);
         Result->SetNumberField(TEXT("recoilYaw"), RecoilYaw);
         Result->SetNumberField(TEXT("recoilRecovery"), RecoilRecovery);
-        
+        SetVariablesAdded(Result, {TEXT("RecoilPitch"), TEXT("RecoilYaw"), TEXT("RecoilRecoverySpeed")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Recoil pattern configured."), Result);
         return true;
@@ -788,7 +819,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("adsFov"), AdsFov);
         Result->SetNumberField(TEXT("adsSpeed"), AdsSpeed);
         Result->SetNumberField(TEXT("adsSpreadMultiplier"), AdsSpreadMultiplier);
-        
+        SetVariablesAdded(Result, {TEXT("bADSEnabled"), TEXT("ADSFieldOfView"), TEXT("ADSTransitionSpeed"), TEXT("ADSSpreadMultiplier"), TEXT("bIsAiming")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Aim down sights configured."), Result);
         return true;
@@ -1076,7 +1108,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("damageImpulse"), DamageImpulse);
         Result->SetNumberField(TEXT("criticalMultiplier"), CriticalMultiplier);
         Result->SetNumberField(TEXT("headshotMultiplier"), HeadshotMultiplier);
-        
+        SetVariablesAdded(Result, {TEXT("DamageImpulse"), TEXT("CriticalMultiplier"), TEXT("HeadshotMultiplier")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Damage execution configured."), Result);
         return true;
@@ -1092,12 +1125,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         FString BoneName = GetJsonStringField(Payload, TEXT("hitboxBoneName"), TEXT(""));
         bool bIsDamageZoneHead = GetJsonBoolField(Payload, TEXT("isDamageZoneHead"), false);
         double DamageMultiplier = GetJsonNumberField(Payload, TEXT("damageMultiplier"), 1.0);
+        FString ComponentName = Name.IsEmpty()
+            ? FString::Printf(TEXT("Hitbox%s"), *HitboxType)
+            : Name;
         TSharedPtr<FJsonObject> AppliedHitboxSize = MakeShared<FJsonObject>();
 
         // Create appropriate collision component based on type
         if (HitboxType == TEXT("Capsule"))
         {
-            UCapsuleComponent* Hitbox = GetOrCreateSCSComponent<UCapsuleComponent>(Blueprint, TEXT("HitboxCapsule"));
+            UCapsuleComponent* Hitbox = GetOrCreateSCSComponent<UCapsuleComponent>(Blueprint, ComponentName);
             if (Hitbox)
             {
                 auto HitboxSizeObj = Payload->GetObjectField(TEXT("hitboxSize"));
@@ -1114,7 +1150,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         }
         else if (HitboxType == TEXT("Box"))
         {
-            UBoxComponent* Hitbox = GetOrCreateSCSComponent<UBoxComponent>(Blueprint, TEXT("HitboxBox"));
+            UBoxComponent* Hitbox = GetOrCreateSCSComponent<UBoxComponent>(Blueprint, ComponentName);
             if (Hitbox)
             {
                 auto HitboxSizeObj = Payload->GetObjectField(TEXT("hitboxSize"));
@@ -1136,7 +1172,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         }
         else if (HitboxType == TEXT("Sphere"))
         {
-            USphereComponent* Hitbox = GetOrCreateSCSComponent<USphereComponent>(Blueprint, TEXT("HitboxSphere"));
+            USphereComponent* Hitbox = GetOrCreateSCSComponent<USphereComponent>(Blueprint, ComponentName);
             if (Hitbox)
             {
                 auto HitboxSizeObj = Payload->GetObjectField(TEXT("hitboxSize"));
@@ -1152,6 +1188,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         // Add hitbox metadata variables
         AddBlueprintVariableCombat(Blueprint, TEXT("bIsHeadshotZone"), MakeBoolPinType());
         AddBlueprintVariableCombat(Blueprint, TEXT("HitboxDamageMultiplier"), MakeFloatPinType());
+        AddBlueprintVariableCombat(Blueprint, TEXT("HitboxBoneName"), MakeNamePinType());
 
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
         McpSafeCompileBlueprint(Blueprint);
@@ -1169,6 +1206,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
                 {
                     MultProp->SetPropertyValue_InContainer(CDO, DamageMultiplier);
                 }
+                if (FNameProperty* BoneProp = FindFProperty<FNameProperty>(BPGC, TEXT("HitboxBoneName")))
+                {
+                    BoneProp->SetPropertyValue_InContainer(CDO, FName(*BoneName));
+                }
             }
         }
 
@@ -1177,10 +1218,13 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetStringField(TEXT("hitboxType"), HitboxType);
+        Result->SetStringField(TEXT("componentName"), ComponentName);
+        Result->SetStringField(TEXT("hitboxBoneName"), BoneName);
         Result->SetObjectField(TEXT("hitboxSize"), AppliedHitboxSize);
         Result->SetBoolField(TEXT("isDamageZoneHead"), bIsDamageZoneHead);
         Result->SetNumberField(TEXT("damageMultiplier"), DamageMultiplier);
-        
+        SetVariablesAdded(Result, {TEXT("bIsHeadshotZone"), TEXT("HitboxDamageMultiplier"), TEXT("HitboxBoneName")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hitbox component configured."), Result);
         return true;
@@ -1266,7 +1310,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         VarsAdded.Add(MakeShared<FJsonValueString>(TEXT("bIsReloading")));
         if (bReloadAnimLoaded) VarsAdded.Add(MakeShared<FJsonValueString>(TEXT("ReloadAnimation")));
         Result->SetArrayField(TEXT("variablesAdded"), VarsAdded);
-        
+
+        if (Payload->HasField(TEXT("maxAmmo")))
+        {
+            TSharedPtr<FJsonObject> IgnoredParams = MakeShared<FJsonObject>();
+            IgnoredParams->SetStringField(TEXT("maxAmmo"), TEXT("Not consumed by setup_reload_system; use setup_ammo_system."));
+            Result->SetObjectField(TEXT("ignoredParams"), IgnoredParams);
+        }
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Reload system configured with Blueprint variables."), Result);
         return true;
@@ -1532,6 +1583,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         AddBlueprintVariableCombat(Blueprint, TEXT("MuzzleFlashParticlePath"), MakeStringPinType());
         AddBlueprintVariableCombat(Blueprint, TEXT("MuzzleFlashScale"), MakeFloatPinType());
         AddBlueprintVariableCombat(Blueprint, TEXT("MuzzleSoundPath"), MakeStringPinType());
+        TArray<FString> VarsAdded = {TEXT("MuzzleFlashParticlePath"), TEXT("MuzzleFlashScale"), TEXT("MuzzleSoundPath")};
 
         // Load and add object references if paths are valid
         bool bParticleLoaded = false;
@@ -1542,6 +1594,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
             if (NiagaraSystem)
             {
                 AddBlueprintVariableCombat(Blueprint, TEXT("MuzzleFlashNiagara"), MakeObjectPinType(UNiagaraSystem::StaticClass()));
+                VarsAdded.Add(TEXT("MuzzleFlashNiagara"));
                 bParticleLoaded = true;
             }
             else
@@ -1550,6 +1603,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
                 if (ParticleSystem)
                 {
                     AddBlueprintVariableCombat(Blueprint, TEXT("MuzzleFlashParticle"), MakeObjectPinType(UParticleSystem::StaticClass()));
+                    VarsAdded.Add(TEXT("MuzzleFlashParticle"));
                     bParticleLoaded = true;
                 }
             }
@@ -1560,6 +1614,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
             if (SoundCue)
             {
                 AddBlueprintVariableCombat(Blueprint, TEXT("MuzzleSound"), MakeObjectPinType(USoundCue::StaticClass()));
+                VarsAdded.Add(TEXT("MuzzleSound"));
                 bSoundLoaded = true;
             }
         }
@@ -1596,7 +1651,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("scale"), Scale);
         Result->SetBoolField(TEXT("particleLoaded"), bParticleLoaded);
         Result->SetBoolField(TEXT("soundLoaded"), bSoundLoaded);
-        
+        SetVariablesAdded(Result, VarsAdded);
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Muzzle flash configured."), Result);
         return true;
     }
@@ -1644,7 +1700,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetStringField(TEXT("tracerPath"), TracerPath);
         Result->SetNumberField(TEXT("tracerSpeed"), TracerSpeed);
-        
+        SetVariablesAdded(Result, {TEXT("TracerParticlePath"), TEXT("TracerSpeed"), TEXT("bUseTracers")});
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Tracer configured."), Result);
         return true;
     }
@@ -1694,7 +1751,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("particlePath"), ParticlePath);
         Result->SetStringField(TEXT("soundPath"), SoundPath);
         Result->SetStringField(TEXT("decalPath"), DecalPath);
-        
+        SetVariablesAdded(Result, {TEXT("ImpactParticlePath"), TEXT("ImpactSoundPath"), TEXT("ImpactDecalPath")});
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Impact effects configured."), Result);
         return true;
     }
@@ -1749,7 +1807,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("shellMeshPath"), ShellMeshPath);
         Result->SetNumberField(TEXT("ejectionForce"), EjectionForce);
         Result->SetNumberField(TEXT("shellLifespan"), ShellLifespan);
-        
+        SetVariablesAdded(Result, {TEXT("ShellMeshPath"), TEXT("ShellEjectionForce"), TEXT("ShellLifespan"), TEXT("bEjectShells")});
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Shell ejection configured."), Result);
         return true;
     }
@@ -1808,8 +1867,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("traceStartSocket"), TraceStartSocket);
         Result->SetStringField(TEXT("traceEndSocket"), TraceEndSocket);
         Result->SetNumberField(TEXT("traceRadius"), TraceRadius);
-        
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Melee trace configured."), Result);
+        SetVariablesAdded(Result, {TEXT("MeleeTraceStartSocket"), TEXT("MeleeTraceEndSocket"), TEXT("MeleeTraceRadius"), TEXT("bIsTracing")});
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Melee trace variables scaffolded; game code must perform the trace."), Result);
         return true;
     }
 
@@ -1861,7 +1922,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetNumberField(TEXT("comboWindowTime"), ComboWindowTime);
         Result->SetNumberField(TEXT("maxComboCount"), MaxComboCount);
-        
+        SetVariablesAdded(Result, {TEXT("ComboWindowTime"), TEXT("MaxComboCount"), TEXT("CurrentComboIndex"), TEXT("bInComboWindow")});
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Combo system configured."), Result);
         return true;
     }
@@ -1909,8 +1971,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetNumberField(TEXT("hitPauseDuration"), HitPauseDuration);
         Result->SetNumberField(TEXT("timeDilation"), TimeDilation);
-        
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hit pause (hitstop) configured."), Result);
+        SetVariablesAdded(Result, {TEXT("HitPauseDuration"), TEXT("HitPauseTimeDilation"), TEXT("bEnableHitPause")});
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hit pause variables scaffolded; game code must apply the time dilation."), Result);
         return true;
     }
 
@@ -1970,7 +2034,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("hitReactionMontage"), HitReactionMontage);
         Result->SetNumberField(TEXT("stunTime"), StunTime);
         Result->SetBoolField(TEXT("animationLoaded"), bAnimLoaded);
-        
+
+        TArray<FString> VarsAdded = {TEXT("HitReactionMontagePath"), TEXT("HitReactionStunTime"), TEXT("bIsStunned")};
+        if (bAnimLoaded) VarsAdded.Add(TEXT("HitReactionMontage"));
+        SetVariablesAdded(Result, VarsAdded);
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hit reaction configured."), Result);
         return true;
     }
@@ -2117,7 +2185,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("trailParticlePath"), TrailParticlePath);
         Result->SetStringField(TEXT("trailStartSocket"), TrailStartSocket);
         Result->SetStringField(TEXT("trailEndSocket"), TrailEndSocket);
-        
+        SetVariablesAdded(Result, {TEXT("WeaponTrailParticlePath"), TEXT("WeaponTrailStartSocket"), TEXT("WeaponTrailEndSocket"), TEXT("bShowWeaponTrail")});
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Weapon trails configured."), Result);
         return true;
     }
@@ -2243,11 +2312,26 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         }
 
         AddBlueprintVariableCombat(Blueprint, TEXT("HitboxDamageMultiplier"), MakeFloatPinType());
-        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/false);
+
+        if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(Blueprint->GeneratedClass))
+        {
+            if (UObject* CDO = BPGC->GetDefaultObject())
+            {
+                if (FDoubleProperty* MultProp = FindFProperty<FDoubleProperty>(BPGC, TEXT("HitboxDamageMultiplier")))
+                {
+                    MultProp->SetPropertyValue_InContainer(CDO, DamageMultiplier);
+                }
+            }
+        }
+
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetStringField(TEXT("hitboxType"), HitboxType);
+        Result->SetNumberField(TEXT("damageMultiplier"), DamageMultiplier);
+        SetVariablesAdded(Result, {TEXT("HitboxDamageMultiplier")});
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hit detection configured."), Result);
         return true;
     }
@@ -2328,7 +2412,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("duration"), Duration);
         Result->SetNumberField(TEXT("damagePerSecond"), DamagePerSecond);
         Result->SetStringField(TEXT("effectType"), EffectType);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Damage effect created."), Result);
+        SetVariablesAdded(Result, {TEXT("EffectDuration"), TEXT("DamagePerSecond"), TEXT("EffectType"), TEXT("bIsActive")});
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Damage effect blueprint created with scaffold variables; game code must implement the damage-over-time logic."), Result);
         return true;
     }
 
@@ -2364,7 +2450,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetNumberField(TEXT("damageAmount"), DamageAmount);
         Result->SetStringField(TEXT("damageType"), DamageTypeName);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Damage application configured."), Result);
+        SetVariablesAdded(Result, {TEXT("AppliedDamageAmount"), TEXT("AppliedDamageType")});
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Damage variables scaffolded; no damage was applied at runtime."), Result);
         return true;
     }
 
@@ -2403,7 +2491,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetNumberField(TEXT("healAmount"), HealAmount);
         Result->SetNumberField(TEXT("maxHealth"), MaxHealth);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Healing configured."), Result);
+        SetVariablesAdded(Result, {TEXT("CurrentHealth"), TEXT("MaxHealth"), TEXT("HealAmount")});
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Healing variables scaffolded; no healing was applied at runtime."), Result);
         return true;
     }
 
@@ -2452,7 +2542,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("maxShield"), MaxShield);
         Result->SetNumberField(TEXT("shieldRegenRate"), ShieldRegenRate);
         Result->SetNumberField(TEXT("shieldRegenDelay"), ShieldRegenDelay);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Shield system configured."), Result);
+        SetVariablesAdded(Result, {TEXT("CurrentShield"), TEXT("MaxShield"), TEXT("ShieldRegenRate"), TEXT("ShieldRegenDelay"), TEXT("bShieldActive")});
+
+        TSharedPtr<FJsonObject> AppliedDefaults = MakeShared<FJsonObject>();
+        AppliedDefaults->SetNumberField(TEXT("CurrentShield"), ShieldAmount);
+        AppliedDefaults->SetNumberField(TEXT("MaxShield"), MaxShield);
+        AppliedDefaults->SetNumberField(TEXT("ShieldRegenRate"), ShieldRegenRate);
+        AppliedDefaults->SetNumberField(TEXT("ShieldRegenDelay"), ShieldRegenDelay);
+        AppliedDefaults->SetBoolField(TEXT("bShieldActive"), true);
+        Result->SetObjectField(TEXT("appliedDefaults"), AppliedDefaults);
+
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Shield variables scaffolded (shieldAmount stored as CurrentShield); game code must implement absorption and regen."), Result);
         return true;
     }
 
@@ -2488,7 +2589,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetNumberField(TEXT("armorValue"), ArmorValue);
         Result->SetNumberField(TEXT("damageReduction"), DamageReduction);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Armor configured."), Result);
+        SetVariablesAdded(Result, {TEXT("ArmorValue"), TEXT("ArmorDamageReduction")});
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Armor variables scaffolded; game code must apply the damage reduction."), Result);
         return true;
     }
 

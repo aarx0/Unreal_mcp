@@ -52,9 +52,10 @@
 // PAYLOAD/RESPONSE FORMATS:
 // -------------------------
 // create_sound_cue:
-//   Payload:  { "name": string, "packagePath"?: string, "wavePath"?: string,
-//               "looping"?: bool, "volume"?: number, "pitch"?: number,
-//               "attenuationPath"?: string }
+//   Payload:  { "name": string, "path"?: string (aliases: packagePath, savePath),
+//               "wavePath"?: string, "looping"?: bool, "volume"?: number,
+//               "pitch"?: number, "attenuationPath"?: string,
+//               "save"?: bool (default true) }
 //   Response: { "success": bool, "path": string }
 //
 // play_sound_at_location:
@@ -69,14 +70,15 @@
 //   Response: { "success": bool, "soundPath": string, "volume": number, "pitch": number }
 //
 // create_sound_class:
-//   Payload:  { "name": string, "properties"?: { "volume"?: number, "pitch"?: number },
-//               "parentClass"?: string }
+//   Payload:  { "name": string, "path"?: string (aliases: packagePath, savePath),
+//               "properties"?: { "volume"?: number, "pitch"?: number },
+//               "parentClass"?: string, "save"?: bool (default true) }
 //   Response: { "success": bool, "path": string, "name": string }
 //
 // create_sound_mix:
-//   Payload:  { "name": string, "packagePath"?: string, "savePath"?: string,
+//   Payload:  { "name": string, "path"?: string (aliases: packagePath, savePath),
 //               "classAdjusters"?: [{ "soundClass": string, "volumeAdjuster"?: number,
-//               "pitchAdjuster"?: number }] }
+//               "pitchAdjuster"?: number }], "save"?: bool (default true) }
 //   Response: { "success": bool, "path": string, "name": string }
 //
 // push_sound_mix / pop_sound_mix:
@@ -606,9 +608,10 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
   // Creates a USoundCue asset with optional wave player, looping, modulation,
   // and attenuation nodes wired into the cue graph.
   //
-  // Payload:  { "name": string, "packagePath"?: string, "wavePath"?: string,
-  //             "looping"?: bool, "volume"?: number, "pitch"?: number,
-  //             "attenuationPath"?: string }
+  // Payload:  { "name": string, "path"?: string (aliases: packagePath, savePath),
+  //             "wavePath"?: string, "looping"?: bool, "volume"?: number,
+  //             "pitch"?: number, "attenuationPath"?: string,
+  //             "save"?: bool (default true) }
   // Response: { "success": bool, "path": string }
   // -------------------------------------------------------------------------
   if (Lower == TEXT("create_sound_cue") ||
@@ -622,6 +625,10 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
 
     FString PackagePath;
     Payload->TryGetStringField(TEXT("packagePath"), PackagePath);
+    if (PackagePath.IsEmpty())
+      Payload->TryGetStringField(TEXT("savePath"), PackagePath);
+    if (PackagePath.IsEmpty())
+      Payload->TryGetStringField(TEXT("path"), PackagePath);
     if (PackagePath.IsEmpty())
       PackagePath = TEXT("/Game/Audio/Cues");
 
@@ -739,6 +746,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
       }
     }
 
+    bool bSave = true;
+    Payload->TryGetBoolField(TEXT("save"), bSave);
+    if (bSave && !McpSafeAssetSave(SoundCue)) {
+      SendAutomationError(RequestingSocket, RequestId,
+                          TEXT("Failed to save sound cue"),
+                          TEXT("SAVE_FAILED"));
+      return true;
+    }
 
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), true);
@@ -754,8 +769,9 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
   // -------------------------------------------------------------------------
   // Creates a USoundClass asset with optional volume/pitch properties and parent.
   //
-  // Payload:  { "name": string, "properties"?: { "volume"?: number, "pitch"?: number },
-  //             "parentClass"?: string }
+  // Payload:  { "name": string, "path"?: string (aliases: packagePath, savePath),
+  //             "properties"?: { "volume"?: number, "pitch"?: number },
+  //             "parentClass"?: string, "save"?: bool (default true) }
   // Response: { "success": bool, "path": string, "name": string }
   // -------------------------------------------------------------------------
   else if (Lower == TEXT("create_sound_class") ||
@@ -768,7 +784,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
     }
 
     FString PackagePath = TEXT("/Game/Audio/Classes");
-    if (Payload->HasField(TEXT("path"))) {
+    if (Payload->HasField(TEXT("packagePath"))) {
+      PackagePath = GetJsonStringField(Payload, TEXT("packagePath"));
+    } else if (Payload->HasField(TEXT("savePath"))) {
+      PackagePath = GetJsonStringField(Payload, TEXT("savePath"));
+    } else if (Payload->HasField(TEXT("path"))) {
       PackagePath = GetJsonStringField(Payload, TEXT("path"));
     }
 
@@ -810,6 +830,15 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
         }
       }
 
+      bool bSave = true;
+      Payload->TryGetBoolField(TEXT("save"), bSave);
+      if (bSave && !McpSafeAssetSave(SoundClass)) {
+        SendAutomationError(RequestingSocket, RequestId,
+                            TEXT("Failed to save sound class"),
+                            TEXT("SAVE_FAILED"));
+        return true;
+      }
+
       TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       Resp->SetBoolField(TEXT("success"), true);
       Resp->SetStringField(TEXT("path"), SoundClass->GetPathName());
@@ -831,9 +860,10 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
   // -------------------------------------------------------------------------
   // Creates a USoundMix asset with optional class adjusters for volume/pitch.
   //
-  // Payload:  { "name": string, "packagePath"?: string, "savePath"?: string,
+  // Payload:  { "name": string, "path"?: string (aliases: packagePath, savePath),
   //             "classAdjusters"?: [{ "soundClass": string,
-  //             "volumeAdjuster"?: number, "pitchAdjuster"?: number }] }
+  //             "volumeAdjuster"?: number, "pitchAdjuster"?: number }],
+  //             "save"?: bool (default true) }
   // Response: { "success": bool, "path": string, "name": string }
   // -------------------------------------------------------------------------
   else if (Lower == TEXT("create_sound_mix") ||
@@ -888,6 +918,15 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
             }
           }
         }
+      }
+
+      bool bSave = true;
+      Payload->TryGetBoolField(TEXT("save"), bSave);
+      if (bSave && !McpSafeAssetSave(SoundMix)) {
+        SendAutomationError(RequestingSocket, RequestId,
+                            TEXT("Failed to save sound mix"),
+                            TEXT("SAVE_FAILED"));
+        return true;
       }
 
       TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();

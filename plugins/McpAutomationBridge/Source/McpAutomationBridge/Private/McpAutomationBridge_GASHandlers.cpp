@@ -424,6 +424,19 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     FString Name = GetJsonStringField(Payload, TEXT("name"));
     FString Path = GetJsonStringField(Payload, TEXT("path"), TEXT("/Game"));
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
+    if (BlueprintPath.IsEmpty())
+    {
+        // Documented type-specific path params double as blueprintPath; a
+        // wrong-type asset still fails the action's own type check.
+        for (const TCHAR* Alias : { TEXT("attributeSetPath"), TEXT("effectPath"), TEXT("abilityPath"), TEXT("cuePath") })
+        {
+            BlueprintPath = GetJsonStringField(Payload, Alias);
+            if (!BlueprintPath.IsEmpty())
+            {
+                break;
+            }
+        }
+    }
     FString AssetPath = GetJsonStringField(Payload, TEXT("assetPath"));
 
     // ============================================================
@@ -571,7 +584,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        float DefaultValue = static_cast<float>(GetJsonNumberField(Payload, TEXT("defaultValue"), 0.0));
+        double BaseValue = 0.0;
+        bool bHasBaseValue = Payload->TryGetNumberField(TEXT("baseValue"), BaseValue);
+        if (!bHasBaseValue)
+        {
+            bHasBaseValue = Payload->TryGetNumberField(TEXT("defaultValue"), BaseValue);
+        }
 
         // Add FGameplayAttributeData member variable
         FEdGraphPinType PinType;
@@ -585,12 +603,30 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        if (bHasBaseValue)
+        {
+            for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+            {
+                if (VarDesc.VarName == FName(*AttributeName))
+                {
+                    VarDesc.DefaultValue = FString::Printf(
+                        TEXT("(BaseValue=%s,CurrentValue=%s)"),
+                        *FString::SanitizeFloat(BaseValue),
+                        *FString::SanitizeFloat(BaseValue));
+                    break;
+                }
+            }
+        }
+
+        const bool bSaved = McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("attributeName"), AttributeName);
-        Result->SetNumberField(TEXT("defaultValue"), DefaultValue);
+        Result->SetNumberField(TEXT("baseValue"), BaseValue);
+        Result->SetNumberField(TEXT("defaultValue"), BaseValue);
+        Result->SetBoolField(TEXT("baseValueApplied"), bHasBaseValue);
+        Result->SetBoolField(TEXT("saved"), bSaved);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Attribute added"), Result);
         return true;
     }
@@ -853,6 +889,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         TArray<FString> TagsAdded;
+        TArray<FString> TagsNotRegistered;
+        TArray<FString> TagsFailedToApply;
+        int32 TagsRequested = 0;
 
         // Ability tags
         const TArray<TSharedPtr<FJsonValue>>* AbilityTagsArray = nullptr;
@@ -861,6 +900,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             for (const auto& TagValue : *AbilityTagsArray)
             {
                 FString TagStr = TagValue->AsString();
+                ++TagsRequested;
                 FGameplayTag Tag = GetOrRequestTag(TagStr);
                 if (Tag.IsValid())
                 {
@@ -880,6 +920,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
 #endif
                     TagsAdded.Add(TagStr);
                 }
+                else
+                {
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
             }
         }
 
@@ -893,11 +937,21 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         {
             for (const auto& TagValue : *CancelTagsArray)
             {
-                FGameplayTag Tag = GetOrRequestTag(TagValue->AsString());
-                if (Tag.IsValid())
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
+                if (!Tag.IsValid())
                 {
-                    // Use string literal - GET_MEMBER_NAME_CHECKED doesn't work for protected members
-                    AddTagToAbilityContainer(AbilityCDO, FName(TEXT("CancelAbilitiesWithTag")), Tag);
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
+                // Use string literal - GET_MEMBER_NAME_CHECKED doesn't work for protected members
+                else if (AddTagToAbilityContainer(AbilityCDO, FName(TEXT("CancelAbilitiesWithTag")), Tag))
+                {
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsFailedToApply.AddUnique(TagStr);
                 }
             }
         }
@@ -912,11 +966,21 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         {
             for (const auto& TagValue : *BlockTagsArray)
             {
-                FGameplayTag Tag = GetOrRequestTag(TagValue->AsString());
-                if (Tag.IsValid())
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
+                if (!Tag.IsValid())
                 {
-                    // Use string literal - GET_MEMBER_NAME_CHECKED doesn't work for protected members
-                    AddTagToAbilityContainer(AbilityCDO, FName(TEXT("BlockAbilitiesWithTag")), Tag);
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
+                // Use string literal - GET_MEMBER_NAME_CHECKED doesn't work for protected members
+                else if (AddTagToAbilityContainer(AbilityCDO, FName(TEXT("BlockAbilitiesWithTag")), Tag))
+                {
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsFailedToApply.AddUnique(TagStr);
                 }
             }
         }
@@ -926,10 +990,20 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         {
             for (const auto& TagValue : *ActivationRequiredTagsArray)
             {
-                FGameplayTag Tag = GetOrRequestTag(TagValue->AsString());
-                if (Tag.IsValid())
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
+                if (!Tag.IsValid())
                 {
-                    AddTagToAbilityContainer(AbilityCDO, FName(TEXT("ActivationRequiredTags")), Tag);
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
+                else if (AddTagToAbilityContainer(AbilityCDO, FName(TEXT("ActivationRequiredTags")), Tag))
+                {
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsFailedToApply.AddUnique(TagStr);
                 }
             }
         }
@@ -939,12 +1013,50 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         {
             for (const auto& TagValue : *ActivationBlockedTagsArray)
             {
-                FGameplayTag Tag = GetOrRequestTag(TagValue->AsString());
-                if (Tag.IsValid())
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
+                if (!Tag.IsValid())
                 {
-                    AddTagToAbilityContainer(AbilityCDO, FName(TEXT("ActivationBlockedTags")), Tag);
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
+                else if (AddTagToAbilityContainer(AbilityCDO, FName(TEXT("ActivationBlockedTags")), Tag))
+                {
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsFailedToApply.AddUnique(TagStr);
                 }
             }
+        }
+
+        if (TagsRequested == 0)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("No tags provided. Pass abilityTags, cancelAbilitiesWithTag, blockAbilitiesWithTag, activationRequiredTags, or activationBlockedTags."),
+                TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+
+        if (TagsAdded.Num() == 0)
+        {
+            FString Detail;
+            if (TagsNotRegistered.Num() > 0)
+            {
+                Detail = FString::Printf(
+                    TEXT(" Unregistered gameplay tags: %s. Register them in Project Settings > Project > Gameplay Tags (DefaultGameplayTags.ini) and retry."),
+                    *FString::Join(TagsNotRegistered, TEXT(", ")));
+            }
+            if (TagsFailedToApply.Num() > 0)
+            {
+                Detail += FString::Printf(TEXT(" Tag container write failed for: %s."),
+                    *FString::Join(TagsFailedToApply, TEXT(", ")));
+            }
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("None of the %d requested tags were applied.%s"), TagsRequested, *Detail),
+                TEXT("TAGS_NOT_APPLIED"));
+            return true;
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
@@ -957,6 +1069,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             TagsJsonArray.Add(MakeShared<FJsonValueString>(Tag));
         }
         Result->SetArrayField(TEXT("tagsAdded"), TagsJsonArray);
+        if (TagsNotRegistered.Num() > 0)
+        {
+            TArray<TSharedPtr<FJsonValue>> NotRegisteredJson;
+            for (const FString& Tag : TagsNotRegistered)
+            {
+                NotRegisteredJson.Add(MakeShared<FJsonValueString>(Tag));
+            }
+            Result->SetArrayField(TEXT("tagsNotRegistered"), NotRegisteredJson);
+        }
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Ability tags set"), Result);
         return true;
     }
@@ -2009,6 +2130,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         TArray<FString> TagsAdded;
+        TArray<FString> TagsNotRegistered;
+        int32 TagsRequested = 0;
 
         // Granted tags
         const TArray<TSharedPtr<FJsonValue>>* GrantedTagsArray;
@@ -2017,6 +2140,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             for (const auto& TagValue : *GrantedTagsArray)
             {
                 FString TagStr = TagValue->AsString();
+                ++TagsRequested;
                 FGameplayTag Tag = GetOrRequestTag(TagStr);
                 if (Tag.IsValid())
                 {
@@ -2027,6 +2151,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                     PRAGMA_ENABLE_DEPRECATION_WARNINGS
                     TagsAdded.Add(TagStr);
                 }
+                else
+                {
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
             }
         }
 
@@ -2035,12 +2163,19 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         {
             for (const auto& TagValue : *ApplicationRequiredTagsArray)
             {
-                FGameplayTag Tag = GetOrRequestTag(TagValue->AsString());
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
                 if (Tag.IsValid())
                 {
                     PRAGMA_DISABLE_DEPRECATION_WARNINGS
                     EffectCDO->ApplicationTagRequirements.RequireTags.AddTag(Tag);
                     PRAGMA_ENABLE_DEPRECATION_WARNINGS
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsNotRegistered.AddUnique(TagStr);
                 }
             }
         }
@@ -2050,12 +2185,19 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         {
             for (const auto& TagValue : *RemovalTagsArray)
             {
-                FGameplayTag Tag = GetOrRequestTag(TagValue->AsString());
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
                 if (Tag.IsValid())
                 {
                     PRAGMA_DISABLE_DEPRECATION_WARNINGS
                     EffectCDO->RemovalTagRequirements.RequireTags.AddTag(Tag);
                     PRAGMA_ENABLE_DEPRECATION_WARNINGS
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsNotRegistered.AddUnique(TagStr);
                 }
             }
         }
@@ -2065,14 +2207,39 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         {
             for (const auto& TagValue : *ImmunityTagsArray)
             {
-                FGameplayTag Tag = GetOrRequestTag(TagValue->AsString());
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
                 if (Tag.IsValid())
                 {
                     PRAGMA_DISABLE_DEPRECATION_WARNINGS
                     EffectCDO->GrantedApplicationImmunityTags.RequireTags.AddTag(Tag);
                     PRAGMA_ENABLE_DEPRECATION_WARNINGS
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsNotRegistered.AddUnique(TagStr);
                 }
             }
+        }
+
+        if (TagsRequested == 0)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("No tags provided. Pass grantedTags, applicationRequiredTags, removalTags, or immunityTags."),
+                TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+
+        if (TagsAdded.Num() == 0)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(
+                    TEXT("None of the %d requested tags were applied. Unregistered gameplay tags: %s. Register them in Project Settings > Project > Gameplay Tags (DefaultGameplayTags.ini) and retry."),
+                    TagsRequested, *FString::Join(TagsNotRegistered, TEXT(", "))),
+                TEXT("TAGS_NOT_APPLIED"));
+            return true;
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
@@ -2085,6 +2252,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             TagsJsonArray.Add(MakeShared<FJsonValueString>(Tag));
         }
         Result->SetArrayField(TEXT("tagsAdded"), TagsJsonArray);
+        if (TagsNotRegistered.Num() > 0)
+        {
+            TArray<TSharedPtr<FJsonValue>> NotRegisteredJson;
+            for (const FString& Tag : TagsNotRegistered)
+            {
+                NotRegisteredJson.Add(MakeShared<FJsonValueString>(Tag));
+            }
+            Result->SetArrayField(TEXT("tagsNotRegistered"), NotRegisteredJson);
+        }
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Effect tags set"), Result);
         return true;
     }
@@ -2369,10 +2545,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString TagString = GetJsonStringField(Payload, TEXT("tag"));
+        FString TagString = GetGASStringFieldWithFallback(Payload, TEXT("tag"), TEXT("tagName"));
         if (TagString.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing tag."), TEXT("INVALID_ARGUMENT"));
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing tag (alias: tagName)."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
 
@@ -2751,23 +2927,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                             // Use string literals - GET_MEMBER_NAME_CHECKED doesn't work for protected members
                             TEnumAsByte<EGameplayAbilityInstancingPolicy::Type> InstPolicy;
                             TEnumAsByte<EGameplayAbilityNetExecutionPolicy::Type> NetPolicy;
-                            
+
                             if (GetAbilityPropertyValue(AbilityCDO, FName(TEXT("InstancingPolicy")), InstPolicy))
                             {
-                                Result->SetNumberField(TEXT("instancingPolicy"), static_cast<int32>(InstPolicy));
+                                Result->SetStringField(TEXT("instancingPolicy"),
+                                    StaticEnum<EGameplayAbilityInstancingPolicy::Type>()->GetNameStringByValue(static_cast<int64>(InstPolicy.GetValue())));
                             }
-                            else
-                            {
-                                Result->SetNumberField(TEXT("instancingPolicy"), -1);
-                            }
-                            
+
                             if (GetAbilityPropertyValue(AbilityCDO, FName(TEXT("NetExecutionPolicy")), NetPolicy))
                             {
-                                Result->SetNumberField(TEXT("netExecutionPolicy"), static_cast<int32>(NetPolicy));
-                            }
-                            else
-                            {
-                                Result->SetNumberField(TEXT("netExecutionPolicy"), -1);
+                                Result->SetStringField(TEXT("netExecutionPolicy"),
+                                    StaticEnum<EGameplayAbilityNetExecutionPolicy::Type>()->GetNameStringByValue(static_cast<int64>(NetPolicy.GetValue())));
                             }
                         }
                     }
@@ -2779,18 +2949,19 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                             Blueprint->GeneratedClass->GetDefaultObject());
                         if (EffectCDO)
                         {
-                            Result->SetNumberField(TEXT("durationPolicy"),
-                                static_cast<int32>(EffectCDO->DurationPolicy));
+                            Result->SetStringField(TEXT("durationPolicy"),
+                                StaticEnum<EGameplayEffectDurationType>()->GetNameStringByValue(static_cast<int64>(EffectCDO->DurationPolicy)));
                             // UE 5.7+: StackingType is deprecated but GetStackingType() isn't exported
                             // Use deprecation suppression to access the property directly
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
                             PRAGMA_DISABLE_DEPRECATION_WARNINGS
 #endif
-                            Result->SetNumberField(TEXT("stackingType"),
-                                static_cast<int32>(EffectCDO->StackingType));
+                            const EGameplayEffectStackingType StackingTypeValue = EffectCDO->StackingType;
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
                             PRAGMA_ENABLE_DEPRECATION_WARNINGS
 #endif
+                            Result->SetStringField(TEXT("stackingType"),
+                                StaticEnum<EGameplayEffectStackingType>()->GetNameStringByValue(static_cast<int64>(StackingTypeValue)));
                             Result->SetNumberField(TEXT("modifierCount"), EffectCDO->Modifiers.Num());
                             Result->SetNumberField(TEXT("cueCount"), EffectCDO->GameplayCues.Num());
                         }
@@ -3007,13 +3178,84 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        // This only validated the classes then saved an UNCHANGED asset — it never added the ability to
-        // GrantedAbilities (that means editing a struct array on the set's CDO). Fail honestly.
-        SendAutomationError(RequestingSocket, RequestId,
-            FString::Printf(TEXT("add_ability is not implemented: it does not add '%s' to '%s' GrantedAbilities. "
-                "Add it in the ability-set Data Asset editor, or write the array via set_default / "
-                "set_asset_property on the set's CDO."), *AbilityClass->GetName(), *SetPath),
-            TEXT("NOT_IMPLEMENTED"));
+        // The GrantedAbilities variable reaches the generated class only after a compile.
+        FProperty* GrantedProp = SetBlueprint->GeneratedClass
+            ? SetBlueprint->GeneratedClass->FindPropertyByName(TEXT("GrantedAbilities"))
+            : nullptr;
+        if (!GrantedProp)
+        {
+            McpSafeCompileBlueprint(SetBlueprint);
+            GrantedProp = SetBlueprint->GeneratedClass
+                ? SetBlueprint->GeneratedClass->FindPropertyByName(TEXT("GrantedAbilities"))
+                : nullptr;
+        }
+
+        FArrayProperty* GrantedArrayProp = CastField<FArrayProperty>(GrantedProp);
+        if (!GrantedArrayProp)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("'%s' has no GrantedAbilities array property. Create the set via create_ability_set."), *SetPath),
+                TEXT("PROPERTY_NOT_FOUND"));
+            return true;
+        }
+
+        FSoftClassProperty* SoftClassInner = CastField<FSoftClassProperty>(GrantedArrayProp->Inner);
+        FClassProperty* ClassInner = CastField<FClassProperty>(GrantedArrayProp->Inner);
+        if (!SoftClassInner && !ClassInner)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("GrantedAbilities on '%s' is not a class or soft-class array."), *SetPath),
+                TEXT("INVALID_TYPE"));
+            return true;
+        }
+
+        UObject* SetCDO = SetBlueprint->GeneratedClass->GetDefaultObject();
+        FScriptArrayHelper ArrayHelper(GrantedArrayProp, GrantedArrayProp->ContainerPtrToValuePtr<void>(SetCDO));
+
+        const FSoftObjectPath AbilityObjectPath(AbilityClass);
+        bool bAlreadyPresent = false;
+        for (int32 Index = 0; Index < ArrayHelper.Num() && !bAlreadyPresent; ++Index)
+        {
+            if (SoftClassInner)
+            {
+                bAlreadyPresent = SoftClassInner->GetPropertyValue(ArrayHelper.GetRawPtr(Index)).GetUniqueID() == AbilityObjectPath;
+            }
+            else
+            {
+                bAlreadyPresent = ClassInner->GetObjectPropertyValue(ArrayHelper.GetRawPtr(Index)) == AbilityClass;
+            }
+        }
+
+        bool bSaved = true;
+        if (!bAlreadyPresent)
+        {
+            SetCDO->Modify();
+            SetBlueprint->Modify();
+            const int32 NewIndex = ArrayHelper.AddValue();
+            if (SoftClassInner)
+            {
+                SoftClassInner->SetPropertyValue(ArrayHelper.GetRawPtr(NewIndex), FSoftObjectPtr(AbilityObjectPath));
+            }
+            else
+            {
+                ClassInner->SetObjectPropertyValue(ArrayHelper.GetRawPtr(NewIndex), AbilityClass);
+            }
+        }
+        const int32 GrantedCount = ArrayHelper.Num();
+        if (!bAlreadyPresent)
+        {
+            bSaved = McpFinalizeBlueprint(SetBlueprint, /*bStructural=*/false, /*bSave=*/true);
+        }
+
+        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+        Result->SetStringField(TEXT("setPath"), SetPath);
+        Result->SetStringField(TEXT("abilityClass"), AbilityClass->GetPathName());
+        Result->SetStringField(TEXT("arrayProperty"), TEXT("GrantedAbilities"));
+        Result->SetBoolField(TEXT("alreadyPresent"), bAlreadyPresent);
+        Result->SetNumberField(TEXT("grantedAbilityCount"), GrantedCount);
+        Result->SetBoolField(TEXT("saved"), bSaved);
+        SendAutomationResponse(RequestingSocket, RequestId, true,
+            bAlreadyPresent ? TEXT("Ability already in set") : TEXT("Ability added to set"), Result);
         return true;
     }
 

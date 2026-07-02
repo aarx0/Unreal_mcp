@@ -185,6 +185,54 @@ static FLinearColor GetColorFromJsonNiagara(const TSharedPtr<FJsonObject>& Obj)
     );
 }
 
+#if WITH_EDITOR
+// Per-stage module list for readbacks. Walks each stack output node's
+// parameter-map chain by hand; the NiagaraEditor utility that does this
+// (FNiagaraStackGraphUtilities::GetOrderedModuleNodes) is not exported.
+static TArray<TSharedPtr<FJsonValue>> CollectNiagaraModuleStack(UNiagaraScriptSource* ScriptSource)
+{
+    TArray<TSharedPtr<FJsonValue>> ModulesArray;
+    if (!ScriptSource || !ScriptSource->NodeGraph)
+    {
+        return ModulesArray;
+    }
+    for (UEdGraphNode* Node : ScriptSource->NodeGraph->Nodes)
+    {
+        UNiagaraNodeOutput* OutputNode = Cast<UNiagaraNodeOutput>(Node);
+        if (!OutputNode)
+        {
+            continue;
+        }
+        const FString StageName = StaticEnum<ENiagaraScriptUsage>()->GetNameStringByValue(static_cast<int64>(OutputNode->GetUsage()));
+        TArray<TSharedPtr<FJsonValue>> StageModules;
+        TArray<UEdGraphPin*> InputPins;
+        OutputNode->GetInputPins(InputPins);
+        UEdGraphPin* LinkedPin = (InputPins.Num() > 0 && InputPins[0] && InputPins[0]->LinkedTo.Num() > 0) ? InputPins[0]->LinkedTo[0] : nullptr;
+        while (LinkedPin)
+        {
+            UNiagaraNode* OwnerNode = Cast<UNiagaraNode>(LinkedPin->GetOwningNode());
+            if (!OwnerNode)
+            {
+                break;
+            }
+            if (UNiagaraNodeFunctionCall* ModuleNode = Cast<UNiagaraNodeFunctionCall>(OwnerNode))
+            {
+                TSharedPtr<FJsonObject> ModuleObj = MakeShared<FJsonObject>();
+                ModuleObj->SetStringField(TEXT("name"), ModuleNode->GetFunctionName());
+                ModuleObj->SetStringField(TEXT("stage"), StageName);
+                // The walk visits bottom-up; insert to report stack order.
+                StageModules.Insert(MakeShared<FJsonValueObject>(ModuleObj), 0);
+            }
+            TArray<UEdGraphPin*> NodeInputPins;
+            OwnerNode->GetInputPins(NodeInputPins);
+            LinkedPin = (NodeInputPins.Num() > 0 && NodeInputPins[0] && NodeInputPins[0]->LinkedTo.Num() > 0) ? NodeInputPins[0]->LinkedTo[0] : nullptr;
+        }
+        ModulesArray.Append(StageModules);
+    }
+    return ModulesArray;
+}
+#endif
+
 
 bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
     const FString& RequestId,
@@ -383,7 +431,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
         }
 
         McpHandlerUtils::AddVerification(Result, NewSystem);
-        Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Created Niagara System: %s"), *Name));
+        TArray<FString> CreatedEmitterNames;
+        TArray<TSharedPtr<FJsonValue>> CreatedEmittersArray;
+        for (const FNiagaraEmitterHandle& CreatedHandle : NewSystem->GetEmitterHandles())
+        {
+            CreatedEmitterNames.Add(CreatedHandle.GetName().ToString());
+            CreatedEmittersArray.Add(MakeShared<FJsonValueString>(CreatedHandle.GetName().ToString()));
+        }
+        Result->SetNumberField(TEXT("emitterCount"), CreatedEmittersArray.Num());
+        Result->SetArrayField(TEXT("emitters"), CreatedEmittersArray);
+        Result->SetStringField(TEXT("message"), CreatedEmitterNames.Num() > 0
+            ? FString::Printf(TEXT("Created Niagara System: %s (with enabled default emitter: %s)"), *Name, *FString::Join(CreatedEmitterNames, TEXT(", ")))
+            : FString::Printf(TEXT("Created Niagara System: %s"), *Name));
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("System created."), Result);
         return true;
     }
@@ -442,7 +501,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
     {
         if (SystemPath.IsEmpty() || EmitterPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterPath'."), TEXT("INVALID_ARGUMENT"));
+            TArray<FString> MissingParams;
+            if (SystemPath.IsEmpty())
+            {
+                MissingParams.Add(TEXT("systemPath"));
+            }
+            if (EmitterPath.IsEmpty())
+            {
+                MissingParams.Add(TEXT("emitterPath"));
+            }
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Missing '%s'."), *FString::Join(MissingParams, TEXT("' and '"))),
+                TEXT("INVALID_ARGUMENT"));
             return true;
         }
 
@@ -495,10 +565,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
             SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add emitter to Niagara system."), TEXT("CREATE_FAILED"));
             return true;
         }
+        if (!EmitterName.IsEmpty())
+        {
+            // SetName sanitizes and uniquifies against sibling emitters, so
+            // the applied name can differ from the request; the response
+            // echoes the applied one.
+            AddedHandle->SetName(FName(*EmitterName), *System);
+        }
         AddedEmitterName = AddedHandle->GetName().ToString();
 #else
         // UE 5.0 - no version GUID needed
-        FNiagaraEmitterHandle NewHandle = System->AddEmitterHandle(*Emitter, FName(*Emitter->GetName()));
+        FNiagaraEmitterHandle NewHandle = System->AddEmitterHandle(*Emitter, FName(*(EmitterName.IsEmpty() ? Emitter->GetName() : EmitterName)));
         AddedEmitterName = NewHandle.GetName().ToString();
 #endif
         
@@ -509,7 +586,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         McpHandlerUtils::AddVerification(Result, System);
         Result->SetStringField(TEXT("emitterName"), AddedEmitterName);
-        Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added emitter '%s' to system."), *Emitter->GetName()));
+        Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added emitter '%s' to system."), *AddedEmitterName));
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Emitter added to system."), Result);
         return true;
     }
@@ -2970,9 +3047,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
                     if (EmData)
                     {
                         EmitterObj->SetStringField(TEXT("simulationTarget"), EmData->SimTarget == ENiagaraSimTarget::GPUComputeSim ? TEXT("GPU") : TEXT("CPU"));
+                        EmitterObj->SetArrayField(TEXT("modules"), CollectNiagaraModuleStack(Cast<UNiagaraScriptSource>(EmData->GraphSource)));
                     }
                 }
-                
+
                 EmittersArray.Add(MakeShared<FJsonValueObject>(EmitterObj));
             }
             InfoObj->SetArrayField(TEXT("emitters"), EmittersArray);
@@ -3020,6 +3098,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
             if (EmData)
             {
                 InfoObj->SetStringField(TEXT("simulationTarget"), EmData->SimTarget == ENiagaraSimTarget::GPUComputeSim ? TEXT("GPU") : TEXT("CPU"));
+                InfoObj->SetArrayField(TEXT("modules"), CollectNiagaraModuleStack(Cast<UNiagaraScriptSource>(EmData->GraphSource)));
             }
         }
 

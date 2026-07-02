@@ -61,7 +61,8 @@ public:
 			.FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
 			.Bool(TEXT("visible"), TEXT("Whether the item/actor is visible."))
 			.String(TEXT("newName"), TEXT("New name for renaming."))
-			.String(TEXT("name"), TEXT("Name identifier."))
+			.String(TEXT("name"),
+				TEXT("find_by_name query; alias of actorName for spawn actions."))
 			.String(TEXT("tag"), TEXT("Name of the tag."))
 			.FreeformObject(TEXT("variables"), TEXT(""))
 			.String(TEXT("snapshotName"), TEXT(""))

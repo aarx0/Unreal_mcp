@@ -119,8 +119,16 @@
         "axisName": {
           "type": "string"
         },
+        "blendOption": {
+          "description": "set_blend_in/set_blend_out: Linear, Cubic, or Sinusoidal.",
+          "type": "string"
+        },
+        "blendTime": {
+          "description": "set_blend_in/set_blend_out: blend duration in seconds ('time' accepted as alias).",
+          "type": "number"
+        },
         "blueprintPath": {
-          "description": "bind_anim_notify: Anim Blueprint asset path to author the event in.",
+          "description": "Anim Blueprint asset path (bind_anim_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions).",
           "type": "string"
         },
         "boneName": {
@@ -144,6 +152,7 @@
           "type": "string"
         },
         "length": {
+          "description": "Length in seconds (create_animation_sequence, set_sequence_length, create_montage).",
           "type": "number"
         },
         "location": {
@@ -162,6 +171,7 @@
           "type": "object"
         },
         "machineName": {
+          "description": "Alias of stateMachineName.",
           "type": "string"
         },
         "mass": {
@@ -250,6 +260,10 @@
           "description": "Section start time in seconds (alias of 'time').",
           "type": "number"
         },
+        "stateMachineName": {
+          "description": "State machine name for add_state_machine/add_state/add_transition/set_transition_rules.",
+          "type": "string"
+        },
         "stateName": {
           "type": "string"
         },
@@ -275,7 +289,9 @@
           "type": "string"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "animation_physics"
@@ -595,7 +611,9 @@
           "type": "string"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "build_environment"
@@ -750,7 +768,7 @@
           "type": "string"
         },
         "name": {
-          "description": "Name identifier.",
+          "description": "find_by_name query; alias of actorName for spawn actions.",
           "type": "string"
         },
         "newName": {
@@ -827,7 +845,9 @@
           "type": "boolean"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "control_actor"
@@ -1041,14 +1061,16 @@
           "type": "number"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "control_editor"
   },
   {
     "category": "core",
-    "description": "Inspect any UObject: read/write properties, list components, export snapshots, and query class info. Actions: inspect_cdo (Blueprint CDO properties + all components without spawning an actor; use blueprintPath, optional detailed/componentName/propertyNames), inspect_class (class metadata), inspect_object (world actor), get_property/set_property, get_components, list_objects, find_by_class, find_by_tag, runtime_report, ui_focus (CommonUI PIE runtime snapshot: focused widget + path, the activatable owning focus + its desired-focus target, active activatable stack, current input type, and the active root's bound actions), find_objects (loaded-object discovery: className + optional pathContains substring + propertyNames readback — use for widget-tree template subobjects, slot objects, and live PIE widget state), diff_asset (structural diff of two on-disk .uasset versions: oldFilePath vs newFilePath — parent/interfaces/components/variables/graphs + CDO defaults + gasSignals).",
+    "description": "Inspect any UObject: read/write properties, list components, export snapshots, and query class info. Actions: inspect_cdo (Blueprint CDO properties + all components without spawning an actor; use blueprintPath, optional detailed/componentName/propertyNames), inspect_class (class metadata), inspect_object (world actor), get_property/set_property (set_property saves the owning asset package by default; 'saved' reports the on-disk result), get_components, list_objects, find_by_class, find_by_tag, runtime_report, ui_focus (CommonUI PIE runtime snapshot: focused widget + path, the activatable owning focus + its desired-focus target, active activatable stack, current input type, and the active root's bound actions), find_objects (loaded-object discovery: className + optional pathContains substring + propertyNames readback — use for widget-tree template subobjects, slot objects, and live PIE widget state), diff_asset (structural diff of two on-disk .uasset versions: oldFilePath vs newFilePath — parent/interfaces/components/variables/graphs + CDO defaults + gasSignals).",
     "inputSchema": {
       "properties": {
         "action": {
@@ -1147,6 +1169,10 @@
           "description": "find_objects: max objects returned (default 50, cap 200).",
           "type": "integer"
         },
+        "markDirty": {
+          "description": "set_property: mark the owning package dirty (default true).",
+          "type": "boolean"
+        },
         "name": {
           "description": "Name identifier.",
           "type": "string"
@@ -1180,6 +1206,10 @@
         "propertyPath": {
           "type": "string"
         },
+        "save": {
+          "description": "set_property: persist the owning asset package to disk after the write (default true; defaults to false when markDirty is false). Level packages are never auto-saved — use control_editor save_all.",
+          "type": "boolean"
+        },
         "snapshotName": {
           "type": "string"
         },
@@ -1191,7 +1221,9 @@
           "description": "Generic value (any type)."
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "inspect"
@@ -1309,7 +1341,7 @@
           "type": "string"
         },
         "blackboardPath": {
-          "description": "Path to blackboard asset.",
+          "description": "Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned).",
           "type": "string"
         },
         "blueprintPath": {
@@ -1345,11 +1377,10 @@
           "type": "string"
         },
         "compositeType": {
-          "description": "Composite node type.",
+          "description": "Composite node type for add_composite_node.",
           "enum": [
             "Selector",
             "Sequence",
-            "Parallel",
             "SimpleParallel"
           ],
           "type": "string"
@@ -1382,10 +1413,10 @@
           "type": "object"
         },
         "decoratorType": {
-          "description": "Decorator node type.",
+          "description": "Decorator node type for add_decorator (expands to BTDecorator_<type>; 'Custom' uses nodeClass).",
           "enum": [
             "Blackboard",
-            "BlackboardBased",
+            "CheckGameplayTagsOnActor",
             "CompareBBEntries",
             "Cooldown",
             "ConeCheck",
@@ -1624,7 +1655,7 @@
           "type": "string"
         },
         "nodeClass": {
-          "description": "Behavior Tree graph node class.",
+          "description": "Behavior Tree node class: engine name (e.g. 'BTDecorator_Blackboard'), a short name that expands to one, or a Blueprint class path.",
           "type": "string"
         },
         "nodeId": {
@@ -1685,7 +1716,7 @@
           "type": "object"
         },
         "parentNodeId": {
-          "description": "ID of the node.",
+          "description": "Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it.",
           "type": "string"
         },
         "parentStateName": {
@@ -1731,7 +1762,7 @@
           "type": "string"
         },
         "serviceType": {
-          "description": "Service node type.",
+          "description": "Service node type for add_service (expands to BTService_<type>; 'Custom' uses nodeClass).",
           "enum": [
             "DefaultFocus",
             "RunEQS",
@@ -1828,7 +1859,7 @@
           "type": "string"
         },
         "taskType": {
-          "description": "Task node type.",
+          "description": "Task node type for add_task_node (expands to BTTask_<type>; 'Custom' uses nodeClass).",
           "enum": [
             "MoveTo",
             "MoveDirectlyToward",
@@ -1838,12 +1869,11 @@
             "PlayAnimation",
             "PlaySound",
             "RunEQSQuery",
+            "RunBehavior",
             "RunBehaviorDynamic",
-            "SetBlackboardValue",
-            "PushPawnAction",
+            "SetTagCooldown",
             "FinishWithResult",
             "MakeNoise",
-            "GameplayTaskBase",
             "Custom"
           ],
           "type": "string"
@@ -1931,7 +1961,9 @@
           "type": "number"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_ai"
@@ -2138,7 +2170,7 @@
           "type": "string"
         },
         "directory": {
-          "description": "Path to a directory.",
+          "description": "list: directory to list (default /Game).",
           "type": "string"
         },
         "directoryPath": {
@@ -2210,6 +2242,10 @@
         "maxDepth": {
           "type": "number"
         },
+        "maxResults": {
+          "description": "find_by_tag: result cap (default 100, max 1000).",
+          "type": "number"
+        },
         "memberClass": {
           "type": "string"
         },
@@ -2223,7 +2259,7 @@
           "type": "string"
         },
         "newName": {
-          "description": "New name for renaming.",
+          "description": "rename/duplicate/move: new asset name, resolved into the source asset's folder (alternative to destinationPath).",
           "type": "string"
         },
         "nodeId": {
@@ -2307,6 +2343,10 @@
           "description": "set_node_value: red/X channel of a Constant2/3/4Vector or VectorParameter default.",
           "type": "number"
         },
+        "recursive": {
+          "description": "list: recurse into subfolders (default true).",
+          "type": "boolean"
+        },
         "recursiveClasses": {
           "type": "boolean"
         },
@@ -2324,8 +2364,24 @@
           "description": "DataTable row CRUD: the row's key (FName).",
           "type": "string"
         },
+        "rowStruct": {
+          "description": "create_data_table (required): row struct deriving from FTableRowBase — full path ('/Script/Module.Struct' or '/Game/.../UserStruct') or bare struct name.",
+          "type": "string"
+        },
         "save": {
           "description": "Save the asset(s) after the operation.",
+          "type": "boolean"
+        },
+        "searchActors": {
+          "description": "find_by_tag: match level-actor tags (default true).",
+          "type": "boolean"
+        },
+        "searchAssets": {
+          "description": "find_by_tag: match asset registry/metadata tags (default true).",
+          "type": "boolean"
+        },
+        "searchComponents": {
+          "description": "find_by_tag: match component tags (default false).",
           "type": "boolean"
         },
         "searchText": {
@@ -2343,7 +2399,7 @@
           "type": "string"
         },
         "sourcePath": {
-          "description": "Source path for import/move/copy.",
+          "description": "Source path for import/duplicate/rename/move (assetPath also accepted).",
           "type": "string"
         },
         "sourceText": {
@@ -2354,7 +2410,7 @@
           "type": "string"
         },
         "tag": {
-          "description": "Name of the tag.",
+          "description": "find_by_tag: tag key to match (set_tags metadata or asset-registry tag).",
           "type": "string"
         },
         "tags": {
@@ -2395,7 +2451,9 @@
           "type": "number"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_asset"
@@ -2483,6 +2541,10 @@
         },
         "attenuationShape": {
           "type": "string"
+        },
+        "childIndex": {
+          "description": "Input pin index on the source node for connect_cue_nodes.",
+          "type": "number"
         },
         "componentName": {
           "description": "Name of the component.",
@@ -2592,6 +2654,10 @@
         "outputType": {
           "type": "string"
         },
+        "packagePath": {
+          "description": "Directory path for asset creation (alias of path).",
+          "type": "string"
+        },
         "parentClass": {
           "type": "string"
         },
@@ -2638,8 +2704,12 @@
           "type": "object"
         },
         "save": {
-          "description": "Save the asset(s) after the operation.",
+          "description": "Save the asset(s) after the operation. Default true.",
           "type": "boolean"
+        },
+        "savePath": {
+          "description": "Directory path for asset creation (alias of path).",
+          "type": "string"
         },
         "size": {
           "description": "3D scale (x, y, z).",
@@ -2675,7 +2745,7 @@
           "type": "string"
         },
         "sourceNodeId": {
-          "description": "ID of the source node.",
+          "description": "ID of the consuming (parent) node; pass 'Root' in connect_cue_nodes to wire the cue output.",
           "type": "string"
         },
         "sourceOutputName": {
@@ -2687,8 +2757,16 @@
           "type": "string"
         },
         "spatialization": {
-          "description": "Spatialization algorithm.",
+          "description": "Spatialization algorithm: 'panner' or 'hrtf' (alias of spatializationAlgorithm).",
           "type": "string"
+        },
+        "spatializationAlgorithm": {
+          "description": "Spatialization algorithm: 'panner' or 'hrtf'.",
+          "type": "string"
+        },
+        "spatialize": {
+          "description": "Enable spatialization on the attenuation asset (alias of enabled).",
+          "type": "boolean"
         },
         "speakerPath": {
           "description": "Dialogue speaker path.",
@@ -2706,7 +2784,7 @@
           "type": "string"
         },
         "targetNodeId": {
-          "description": "ID of the target node.",
+          "description": "ID of the target (feeding child) node.",
           "type": "string"
         },
         "targetPin": {
@@ -2736,7 +2814,9 @@
           "type": "number"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_audio"
@@ -2896,6 +2976,22 @@
             "create_common_text_style"
           ],
           "type": "string"
+        },
+        "anchorMaxX": {
+          "description": "set_anchor: anchor maximum X (0..1).",
+          "type": "number"
+        },
+        "anchorMaxY": {
+          "description": "set_anchor: anchor maximum Y (0..1).",
+          "type": "number"
+        },
+        "anchorMinX": {
+          "description": "set_anchor: anchor minimum X (0..1).",
+          "type": "number"
+        },
+        "anchorMinY": {
+          "description": "set_anchor: anchor minimum Y (0..1).",
+          "type": "number"
         },
         "applyAndSave": {
           "type": "boolean"
@@ -3072,6 +3168,10 @@
           "description": "Node Y position (graph units).",
           "type": "number"
         },
+        "preset": {
+          "description": "set_anchor: named anchor preset (TopLeft, TopCenter, TopRight, CenterLeft, Center, CenterRight, BottomLeft, BottomCenter, BottomRight, StretchHorizontal, StretchVertical, StretchAll).",
+          "type": "string"
+        },
         "properties": {},
         "propertyName": {
           "description": "Name of the property.",
@@ -3190,7 +3290,9 @@
           "type": "number"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_blueprint"
@@ -3316,6 +3418,7 @@
           "type": "number"
         },
         "jumpHeight": {
+          "description": "Desired jump apex height in cm; converted to JumpZVelocity via sqrt(2*g*h) using effective gravity.",
           "type": "number"
         },
         "jumpHoldTime": {
@@ -3403,6 +3506,7 @@
           "type": "number"
         },
         "runSpeed": {
+          "description": "Run speed; writes MaxWalkSpeed when walkSpeed is absent, otherwise stored as the RunSpeed variable default.",
           "type": "number"
         },
         "skeletalMeshPath": {
@@ -3418,6 +3522,10 @@
         "slideSpeed": {
           "type": "number"
         },
+        "soundPath": {
+          "description": "Sound asset path (SoundBase) mapped to surfaceType by map_surface_to_sound.",
+          "type": "string"
+        },
         "springArmLagEnabled": {
           "description": "Enable camera lag.",
           "type": "boolean"
@@ -3430,6 +3538,7 @@
           "type": "number"
         },
         "sprintSpeed": {
+          "description": "Sprint speed; stored as the SprintSpeed variable default (no CharacterMovement property).",
           "type": "number"
         },
         "surfaceType": {
@@ -3473,6 +3582,7 @@
           "type": "number"
         },
         "walkSpeed": {
+          "description": "Ground speed; writes CharacterMovement MaxWalkSpeed.",
           "type": "number"
         },
         "wallRunDuration": {
@@ -3488,7 +3598,9 @@
           "type": "number"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_character"
@@ -3609,7 +3721,7 @@
           "type": "number"
         },
         "criticalMultiplier": {
-          "description": "Critical hit damage multiplier.",
+          "description": "Critical hit damage multiplier (consumed by configure_damage_execution, not set_weapon_stats).",
           "type": "number"
         },
         "damageAmount": {
@@ -3656,7 +3768,7 @@
           "type": "number"
         },
         "headshotMultiplier": {
-          "description": "Headshot damage multiplier.",
+          "description": "Headshot damage multiplier (consumed by configure_damage_execution, not set_weapon_stats).",
           "type": "number"
         },
         "healAmount": {
@@ -3664,7 +3776,7 @@
           "type": "number"
         },
         "hitboxBoneName": {
-          "description": "Bone name for hitbox.",
+          "description": "Bone name for the hitbox; stored as the HitboxBoneName variable by setup_hitbox_component.",
           "type": "string"
         },
         "hitboxSize": {
@@ -3755,6 +3867,7 @@
           "type": "number"
         },
         "maxAmmo": {
+          "description": "Total reserve ammo (consumed by setup_ammo_system, not setup_reload_system).",
           "type": "number"
         },
         "maxComboCount": {
@@ -3798,7 +3911,7 @@
           "type": "string"
         },
         "name": {
-          "description": "Name identifier.",
+          "description": "Name identifier: asset name for create actions; hitbox component name for setup_hitbox_component.",
           "type": "string"
         },
         "parryAnimationPath": {
@@ -3869,7 +3982,7 @@
           "type": "string"
         },
         "shieldAmount": {
-          "description": "Current shield amount.",
+          "description": "Initial shield value; stored by create_shield as the CurrentShield variable default.",
           "type": "number"
         },
         "shieldRegenDelay": {
@@ -3951,7 +4064,9 @@
           "type": "string"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_combat"
@@ -4346,7 +4461,9 @@
           "type": "string"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_effect"
@@ -4357,7 +4474,7 @@
     "inputSchema": {
       "properties": {
         "abilityPath": {
-          "description": "Path to ability asset.",
+          "description": "Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath.",
           "type": "string"
         },
         "abilityTags": {
@@ -4456,7 +4573,7 @@
           "type": "string"
         },
         "attributeSetPath": {
-          "description": "Path to Attribute Set asset.",
+          "description": "Path to Attribute Set asset (alias for blueprintPath).",
           "type": "string"
         },
         "attributeType": {
@@ -4488,7 +4605,7 @@
           "type": "array"
         },
         "blueprintPath": {
-          "description": "Blueprint asset path.",
+          "description": "Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases.",
           "type": "string"
         },
         "calculationClass": {
@@ -4525,7 +4642,7 @@
           "type": "string"
         },
         "cuePath": {
-          "description": "Path to Gameplay Cue asset.",
+          "description": "Path to Gameplay Cue asset (alias for blueprintPath).",
           "type": "string"
         },
         "cueTag": {
@@ -4558,7 +4675,7 @@
           "type": "string"
         },
         "effectPath": {
-          "description": "Path to effect asset.",
+          "description": "Path to effect asset (alias for blueprintPath).",
           "type": "string"
         },
         "grantedTags": {
@@ -4702,8 +4819,12 @@
           ],
           "type": "string"
         },
+        "tag": {
+          "description": "add_tag_to_asset: gameplay tag to add (must be registered in the project's gameplay tag registry).",
+          "type": "string"
+        },
         "tagName": {
-          "description": "Name of the tag.",
+          "description": "Alias for 'tag'.",
           "type": "string"
         },
         "targetAttribute": {
@@ -4752,7 +4873,9 @@
           "type": "string"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_gas"
@@ -4845,7 +4968,7 @@
           "type": "string"
         },
         "actorName": {
-          "description": "Name of the actor.",
+          "description": "Name of the actor to operate on (also sets the label for create_* actions).",
           "type": "string"
         },
         "amount": {
@@ -4855,6 +4978,10 @@
         "angle": {
           "description": "Angle in degrees.",
           "type": "number"
+        },
+        "assetPath": {
+          "description": "Destination asset path for convert_to_static_mesh/convert_to_nanite (e.g. /Game/Meshes/SM_Rock).",
+          "type": "string"
         },
         "axis": {
           "description": "Axis for deformation operations.",
@@ -4879,6 +5006,10 @@
         "computeWeightedNormals": {
           "description": "Use area-weighted normals.",
           "type": "boolean"
+        },
+        "curveAngle": {
+          "description": "Total sweep angle in degrees for create_spiral_stairs (mutually exclusive with numTurns; default 90).",
+          "type": "number"
         },
         "depth": {
           "description": "Depth value.",
@@ -4939,6 +5070,10 @@
           "description": "Number of iterations for smooth, remesh.",
           "type": "number"
         },
+        "keepTool": {
+          "description": "Keep the tool actor after a boolean operation (default true).",
+          "type": "boolean"
+        },
         "latticeResolution": {
           "description": "Control lattice resolution for lattice deformation.",
           "type": "number"
@@ -4974,6 +5109,10 @@
           "description": "Texture luminance midpoint for displacement.",
           "type": "number"
         },
+        "name": {
+          "description": "Alias of actorName for create_* actions.",
+          "type": "string"
+        },
         "numRings": {
           "description": "Number of rings for sphere, torus.",
           "type": "number"
@@ -4987,11 +5126,11 @@
           "type": "number"
         },
         "numTurns": {
-          "description": "Number of turns for spiral.",
+          "description": "Number of full revolutions for create_spiral_stairs (mutually exclusive with curveAngle).",
           "type": "number"
         },
         "outputPath": {
-          "description": "Output file or directory path.",
+          "description": "Alias of assetPath.",
           "type": "string"
         },
         "radialSegments": {
@@ -5063,16 +5202,28 @@
           "description": "Strength or weight.",
           "type": "number"
         },
+        "targetActor": {
+          "description": "Actor receiving the result of a boolean operation.",
+          "type": "string"
+        },
         "targetEdgeLength": {
           "description": "Target edge length for remeshing.",
           "type": "number"
         },
+        "targetPercentage": {
+          "description": "Percent of triangles to keep for simplify_mesh when targetTriangleCount is absent (default 50).",
+          "type": "number"
+        },
         "targetTriangleCount": {
-          "description": "Target triangle count for simplification.",
+          "description": "Target triangle count for simplify_mesh and remesh_uniform.",
           "type": "number"
         },
         "texturePath": {
           "description": "Texture asset path for displacement.",
+          "type": "string"
+        },
+        "toolActor": {
+          "description": "Actor used as the cutting/combining tool in a boolean operation.",
           "type": "string"
         },
         "uvChannel": {
@@ -5120,7 +5271,9 @@
           "type": "number"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_geometry"
@@ -5283,7 +5436,9 @@
           "type": "string"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_interaction"
@@ -5388,12 +5543,12 @@
           "description": "Enable inventory weight tracking.",
           "type": "boolean"
         },
-        "encumberanceSystem": {
-          "description": "Enable encumberance variables.",
+        "encumbranceSystem": {
+          "description": "Enable encumbrance variables.",
           "type": "boolean"
         },
-        "encumberanceThreshold": {
-          "description": "Encumberance threshold ratio.",
+        "encumbranceThreshold": {
+          "description": "Encumbrance threshold ratio (misspelled 'encumberance*' params still accepted).",
           "type": "number"
         },
         "entryIndex": {
@@ -5478,7 +5633,7 @@
           "type": "string"
         },
         "properties": {
-          "description": "Properties to apply to an item data asset."
+          "description": "Properties to apply to an item data asset (create_item_data_asset, set_item_properties). Keys matching native properties are written via reflection; other string/number/bool values are stored in the asset's string property bag (reported as storedInPropertyBag)."
         },
         "quantity": {
           "description": "Ingredient quantity.",
@@ -5572,7 +5727,9 @@
           "type": "boolean"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_inventory"
@@ -5768,7 +5925,9 @@
           "type": "boolean"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_level"
@@ -5864,6 +6023,13 @@
         "bIsSpatiallyLoaded": {
           "description": "HLOD is spatially loaded.",
           "type": "boolean"
+        },
+        "bounds": {
+          "description": "Volume bounds as [minX, minY, minZ, maxX, maxY, maxZ]; set_volume_bounds alternative to volumeLocation + volumeExtent.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
         },
         "boundsExtent": {
           "description": "Extent of level bounds.",
@@ -6130,14 +6296,16 @@
           "type": "string"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_level_structure"
   },
   {
     "category": "utility",
-    "description": "Configure multiplayer: property replication, RPCs (Server/Client/Multicast), authority, relevancy, and network prediction.",
+    "description": "Multiplayer and input setup: property replication (conditions, RepNotify, push model, dormancy, relevancy), RPCs (Server/Client/Multicast), authority/ownership, network prediction, net driver settings; Enhanced Input authoring (InputActions, mapping contexts, triggers, modifiers); game framework classes (GameMode/GameState/PlayerController/PlayerState/GameInstance/HUD, match and scoring rules); split-screen/local players, LAN host/join, and voice chat.",
     "inputSchema": {
       "properties": {
         "action": {
@@ -6478,7 +6646,9 @@
           "type": "boolean"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_networking"
@@ -6620,7 +6790,9 @@
         },
         "value": {}
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_sequence"
@@ -6656,7 +6828,9 @@
           "type": "array"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "manage_tools"
@@ -6844,7 +7018,9 @@
           "type": "string"
         }
       },
-      "required": "action",
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "name": "system_control"

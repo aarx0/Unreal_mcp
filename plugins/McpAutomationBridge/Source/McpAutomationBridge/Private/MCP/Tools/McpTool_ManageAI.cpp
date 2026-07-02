@@ -29,7 +29,7 @@ public:
 			.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 			.String(TEXT("controllerPath"), TEXT("Path to controller blueprint."))
 			.String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
-			.String(TEXT("blackboardPath"), TEXT("Path to blackboard asset."))
+			.String(TEXT("blackboardPath"), TEXT("Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned)."))
             .String(TEXT("keyName"), TEXT("Name of the key."))
 			.StringEnum(TEXT("keyType"), {
 				TEXT("Bool"),
@@ -47,9 +47,8 @@ public:
             .StringEnum(TEXT("compositeType"), {
 				TEXT("Selector"),
 				TEXT("Sequence"),
-				TEXT("Parallel"),
 				TEXT("SimpleParallel")
-			}, TEXT("Composite node type."))
+			}, TEXT("Composite node type for add_composite_node."))
 			.StringEnum(TEXT("taskType"), {
 				TEXT("MoveTo"),
 				TEXT("MoveDirectlyToward"),
@@ -59,17 +58,16 @@ public:
 				TEXT("PlayAnimation"),
 				TEXT("PlaySound"),
 				TEXT("RunEQSQuery"),
+				TEXT("RunBehavior"),
 				TEXT("RunBehaviorDynamic"),
-				TEXT("SetBlackboardValue"),
-				TEXT("PushPawnAction"),
+				TEXT("SetTagCooldown"),
 				TEXT("FinishWithResult"),
 				TEXT("MakeNoise"),
-				TEXT("GameplayTaskBase"),
 				TEXT("Custom")
-			}, TEXT("Task node type."))
+			}, TEXT("Task node type for add_task_node (expands to BTTask_<type>; 'Custom' uses nodeClass)."))
 			.StringEnum(TEXT("decoratorType"), {
 				TEXT("Blackboard"),
-				TEXT("BlackboardBased"),
+				TEXT("CheckGameplayTagsOnActor"),
 				TEXT("CompareBBEntries"),
 				TEXT("Cooldown"),
 				TEXT("ConeCheck"),
@@ -84,13 +82,13 @@ public:
 				TEXT("ForceSuccess"),
 				TEXT("ConditionalLoop"),
 				TEXT("Custom")
-			}, TEXT("Decorator node type."))
+			}, TEXT("Decorator node type for add_decorator (expands to BTDecorator_<type>; 'Custom' uses nodeClass)."))
 			.StringEnum(TEXT("serviceType"), {
 				TEXT("DefaultFocus"),
 				TEXT("RunEQS"),
 				TEXT("Custom")
-            }, TEXT("Service node type."))
-            .String(TEXT("parentNodeId"), TEXT("ID of the node."))
+            }, TEXT("Service node type for add_service (expands to BTService_<type>; 'Custom' uses nodeClass)."))
+            .String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."))
             .String(TEXT("nodeId"), TEXT("ID of the node."))
             .String(TEXT("queryPath"), TEXT("Path to EQS query asset."))
 			.StringEnum(TEXT("generatorType"), {
@@ -254,7 +252,7 @@ public:
             .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 			.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 			.String(TEXT("savePath"), TEXT("Path to save the asset."))
-			.String(TEXT("nodeClass"), TEXT("Behavior Tree graph node class."))
+			.String(TEXT("nodeClass"), TEXT("Behavior Tree node class: engine name (e.g. 'BTDecorator_Blackboard'), a short name that expands to one, or a Blueprint class path."))
 			.String(TEXT("subnodeType"), TEXT("Behavior Tree graph subnode type."))
 			.String(TEXT("nodeType"), TEXT("Behavior Tree graph node type."))
 			.String(TEXT("childNodeId"), TEXT("Child node ID."))

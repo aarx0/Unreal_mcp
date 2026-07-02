@@ -310,8 +310,11 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSpawn(
     Payload->TryGetStringField(TEXT("className"), ClassPath);
   if (ClassPath.IsEmpty())
     Payload->TryGetStringField(TEXT("actorClass"), ClassPath);
+  // The schema also declares 'name'; accept it as an alias of actorName.
   FString ActorName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
+  if (ActorName.IsEmpty())
+    Payload->TryGetStringField(TEXT("name"), ActorName);
 
   // Idempotency (see docs/pull-architecture.md): a spawn keyed by `actorName` must
   // not create a duplicate when a dropped response causes the caller to retry. If an
@@ -579,8 +582,11 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSpawnBlueprint(
     return true;
   }
 
+  // The schema also declares 'name'; accept it as an alias of actorName.
   FString ActorName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
+  if (ActorName.IsEmpty())
+    Payload->TryGetStringField(TEXT("name"), ActorName);
 
   // Idempotency (see docs/pull-architecture.md): keyed by `actorName`, fail fast on a
   // name conflict instead of spawning a duplicate when a dropped response causes a
@@ -1640,11 +1646,15 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorDetach(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
+  // The schema documents 'childActor' for detach (mirroring attach); accept it
+  // alongside actorName.
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
+  if (TargetName.IsEmpty())
+    Payload->TryGetStringField(TEXT("childActor"), TargetName);
   if (TargetName.IsEmpty()) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+                              TEXT("actorName (or childActor) required"), nullptr);
     return true;
   }
 

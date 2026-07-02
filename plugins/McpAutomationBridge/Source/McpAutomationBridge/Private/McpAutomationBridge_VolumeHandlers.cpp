@@ -101,6 +101,7 @@
 
 // Components
 #include "Components/BrushComponent.h"
+#include "Components/BoxComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/CapsuleComponent.h"
 
@@ -108,6 +109,8 @@
 #include "Engine/Brush.h"
 #include "Engine/Polys.h"
 #include "Builders/CubeBuilder.h"
+#include "GameFramework/Volume.h"
+#include "ActorFactories/ActorFactory.h"
 
 // PostProcessVolume exists in UE 5.1+ (verified in 5.3, 5.6, 5.7)
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
@@ -145,79 +148,179 @@ namespace VolumeHelpers
         return nullptr;
     }
 
-    // Get FVector from JSON object field
-    FVector GetVectorFromPayload(const TSharedPtr<FJsonObject>& Payload, const FString& FieldName, FVector Default = FVector::ZeroVector)
-    {
-        return ExtractVectorField(Payload, *FieldName, Default);
-    }
-
     // Get FRotator from JSON object field
     FRotator GetRotatorFromPayload(const TSharedPtr<FJsonObject>& Payload, const FString& FieldName, FRotator Default = FRotator::ZeroRotator)
     {
         return ExtractRotatorField(Payload, *FieldName, Default);
     }
 
-    // Create a box brush for a volume
-    // Note: UCubeBuilder is allocated with GetTransientPackage() as outer to prevent GC accumulation
+    // First present field wins; earlier names are the documented ones.
+    FVector GetVectorFromPayloadAliases(const TSharedPtr<FJsonObject>& Payload,
+        std::initializer_list<const TCHAR*> FieldNames, const FVector& Default,
+        bool* bOutProvided = nullptr)
+    {
+        for (const TCHAR* FieldName : FieldNames)
+        {
+            if (Payload->HasField(FieldName))
+            {
+                if (bOutProvided)
+                {
+                    *bOutProvided = true;
+                }
+                return ExtractVectorField(Payload, FieldName, Default);
+            }
+        }
+        if (bOutProvided)
+        {
+            *bOutProvided = false;
+        }
+        return Default;
+    }
+
+    // manage_level_structure documents 'volumeLocation'/'volumeExtent'; the
+    // handlers' original 'location'/'extent' names stay accepted.
+    FVector GetVolumeLocation(const TSharedPtr<FJsonObject>& Payload)
+    {
+        return GetVectorFromPayloadAliases(Payload,
+            {TEXT("volumeLocation"), TEXT("location")}, FVector::ZeroVector);
+    }
+
+    FVector GetVolumeExtent(const TSharedPtr<FJsonObject>& Payload, const FVector& Default,
+        bool* bOutProvided = nullptr)
+    {
+        return GetVectorFromPayloadAliases(Payload,
+            {TEXT("volumeExtent"), TEXT("extent")}, Default, bOutProvided);
+    }
+
+    // Build box brush geometry on a volume. CubeBuilder->Build alone writes into
+    // a null UModel on a plain-spawned volume (no geometry, bounds stay 0,0,0);
+    // UActorFactory::CreateBrushForVolumeActor constructs the Model/Polys first,
+    // runs the builder, and csgPreps the brush — the editor's own volume path.
     bool CreateBoxBrushForVolume(ABrush* Volume, const FVector& Extent)
     {
-        if (!Volume)
+        AVolume* AsVolume = Cast<AVolume>(Volume);
+        if (!AsVolume)
         {
             return false;
         }
 
-        // Use UCubeBuilder to create the brush shape
-        // Allocate with transient package as outer to ensure proper GC cleanup
         UCubeBuilder* CubeBuilder = NewObject<UCubeBuilder>(GetTransientPackage());
         CubeBuilder->X = Extent.X * 2.0f;
         CubeBuilder->Y = Extent.Y * 2.0f;
         CubeBuilder->Z = Extent.Z * 2.0f;
 
-        // Build the brush
-        CubeBuilder->Build(Volume->GetWorld(), Volume);
-
-        return true;
+        UActorFactory::CreateBrushForVolumeActor(AsVolume, CubeBuilder);
+        return AsVolume->Brush != nullptr;
     }
 
-    // Create a sphere brush for a volume (for TriggerSphere)
-    // Uses UCubeBuilder for a bounding box but sets the collision shape via the component
+    // Sphere volumes get a bounding-cube brush; actual collision is the USphereComponent.
     bool CreateSphereBrushForVolume(ABrush* Volume, float Radius)
     {
-        if (!Volume)
-        {
-            return false;
-        }
-
-        // For sphere volumes, we create a bounding cube but the actual collision uses USphereComponent
-        // The brush is only for editor visualization
-        UCubeBuilder* CubeBuilder = NewObject<UCubeBuilder>(GetTransientPackage());
-        CubeBuilder->X = Radius * 2.0f;
-        CubeBuilder->Y = Radius * 2.0f;
-        CubeBuilder->Z = Radius * 2.0f;
-
-        CubeBuilder->Build(Volume->GetWorld(), Volume);
-
-        return true;
+        return CreateBoxBrushForVolume(Volume, FVector(Radius));
     }
 
-    // Create a capsule brush for a volume (for TriggerCapsule)
-    // Uses UCubeBuilder for a bounding box but sets the collision shape via the component
+    // Capsule volumes get a bounding-box brush; actual collision is the UCapsuleComponent.
     bool CreateCapsuleBrushForVolume(ABrush* Volume, float Radius, float HalfHeight)
     {
-        if (!Volume)
+        return CreateBoxBrushForVolume(Volume, FVector(Radius, Radius, HalfHeight));
+    }
+
+    // Resize a volume/trigger actor in place: brush volumes get their brush
+    // geometry rebuilt, triggers are resized on the collision shape component.
+    bool ApplyVolumeExtent(AActor* VolumeActor, const FVector& Extent, FString& OutError)
+    {
+        if (ABrush* BrushVolume = Cast<ABrush>(VolumeActor))
+        {
+            if (!CreateBoxBrushForVolume(BrushVolume, Extent))
+            {
+                OutError = TEXT("Failed to rebuild brush geometry");
+                return false;
+            }
+            return true;
+        }
+        if (ATriggerBase* Trigger = Cast<ATriggerBase>(VolumeActor))
+        {
+            UShapeComponent* Shape = Trigger->GetCollisionComponent();
+            if (UBoxComponent* Box = Cast<UBoxComponent>(Shape))
+            {
+                Box->SetBoxExtent(Extent);
+                return true;
+            }
+            if (USphereComponent* Sphere = Cast<USphereComponent>(Shape))
+            {
+                if (!FMath::IsNearlyEqual(Extent.X, Extent.Y) || !FMath::IsNearlyEqual(Extent.X, Extent.Z))
+                {
+                    OutError = TEXT("Sphere triggers need a uniform extent; pass equal x/y/z (the radius)");
+                    return false;
+                }
+                Sphere->SetSphereRadius(Extent.X);
+                return true;
+            }
+            if (UCapsuleComponent* Capsule = Cast<UCapsuleComponent>(Shape))
+            {
+                if (!FMath::IsNearlyEqual(Extent.X, Extent.Y))
+                {
+                    OutError = TEXT("Capsule triggers need equal x/y extents (the radius); z is the half height");
+                    return false;
+                }
+                Capsule->SetCapsuleSize(Extent.X, Extent.Z);
+                return true;
+            }
+        }
+        OutError = FString::Printf(TEXT("Unsupported volume type for extent change: %s"),
+            VolumeActor ? *VolumeActor->GetClass()->GetName() : TEXT("null"));
+        return false;
+    }
+
+    // World-space bounds from the authoritative source: the collision shape for
+    // triggers, the brush geometry for brush volumes. GetActorBounds is wrong
+    // here - it folds in editor sprite bounds and reads stale brush bounds.
+    bool GetVolumeWorldBounds(AActor* VolumeActor, FVector& OutOrigin, FVector& OutExtent)
+    {
+        if (!VolumeActor)
         {
             return false;
         }
-
-        // For capsule volumes, we create a bounding box but the actual collision uses UCapsuleComponent
-        // The brush is only for editor visualization
-        UCubeBuilder* CubeBuilder = NewObject<UCubeBuilder>(GetTransientPackage());
-        CubeBuilder->X = Radius * 2.0f;
-        CubeBuilder->Y = Radius * 2.0f;
-        CubeBuilder->Z = HalfHeight * 2.0f;
-
-        CubeBuilder->Build(Volume->GetWorld(), Volume);
-
+        if (ATriggerBase* Trigger = Cast<ATriggerBase>(VolumeActor))
+        {
+            UShapeComponent* Shape = Trigger->GetCollisionComponent();
+            if (UBoxComponent* Box = Cast<UBoxComponent>(Shape))
+            {
+                OutOrigin = Box->GetComponentLocation();
+                OutExtent = Box->GetScaledBoxExtent();
+                return true;
+            }
+            if (USphereComponent* Sphere = Cast<USphereComponent>(Shape))
+            {
+                const float Radius = Sphere->GetScaledSphereRadius();
+                OutOrigin = Sphere->GetComponentLocation();
+                OutExtent = FVector(Radius, Radius, Radius);
+                return true;
+            }
+            if (UCapsuleComponent* Capsule = Cast<UCapsuleComponent>(Shape))
+            {
+                const float Radius = Capsule->GetScaledCapsuleRadius();
+                OutOrigin = Capsule->GetComponentLocation();
+                OutExtent = FVector(Radius, Radius, Capsule->GetScaledCapsuleHalfHeight());
+                return true;
+            }
+        }
+        if (ABrush* BrushVolume = Cast<ABrush>(VolumeActor))
+        {
+            if (UBrushComponent* BrushComp = BrushVolume->GetBrushComponent())
+            {
+                BrushComp->UpdateBounds();
+                const FBox Box = BrushComp->Bounds.GetBox();
+                if (!Box.GetExtent().IsNearlyZero())
+                {
+                    OutOrigin = Box.GetCenter();
+                    OutExtent = Box.GetExtent();
+                    return true;
+                }
+            }
+            return false;
+        }
+        VolumeActor->GetActorBounds(false, OutOrigin, OutExtent);
         return true;
     }
 
@@ -452,7 +555,7 @@ static bool HandleCreateTriggerVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -461,7 +564,7 @@ static bool HandleCreateTriggerVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(100.0f, 100.0f, 100.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(100.0f, 100.0f, 100.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -522,7 +625,7 @@ static bool HandleCreateTriggerBox(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -531,11 +634,8 @@ static bool HandleCreateTriggerBox(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("boxExtent"), FVector(100.0f, 100.0f, 100.0f));
-    if (Extent == FVector::ZeroVector)
-    {
-        Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(100.0f, 100.0f, 100.0f));
-    }
+    FVector Extent = GetVectorFromPayloadAliases(Payload,
+        {TEXT("volumeExtent"), TEXT("boxExtent"), TEXT("extent")}, FVector(100.0f, 100.0f, 100.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -559,18 +659,26 @@ static bool HandleCreateTriggerBox(
         return true;
     }
 
+    // Apply the requested extent to the collision box (spawn leaves the class default)
+    FVector AppliedExtent = Extent;
+    if (UBoxComponent* BoxComp = Cast<UBoxComponent>(Volume->GetCollisionComponent()))
+    {
+        BoxComp->SetBoxExtent(Extent);
+        AppliedExtent = BoxComp->GetScaledBoxExtent();
+    }
+
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
     ResponseJson->SetStringField(TEXT("volumeName"), Volume->GetActorLabel());
     ResponseJson->SetStringField(TEXT("volumeClass"), TEXT("ATriggerBox"));
-    
+
     // Add verification data
     McpHandlerUtils::AddVerification(ResponseJson, Volume);
-    
+
     // Add box extent for verification
     TSharedPtr<FJsonObject> ExtentObj = McpHandlerUtils::CreateResultObject();
-    ExtentObj->SetNumberField(TEXT("x"), Extent.X);
-    ExtentObj->SetNumberField(TEXT("y"), Extent.Y);
-    ExtentObj->SetNumberField(TEXT("z"), Extent.Z);
+    ExtentObj->SetNumberField(TEXT("x"), AppliedExtent.X);
+    ExtentObj->SetNumberField(TEXT("y"), AppliedExtent.Y);
+    ExtentObj->SetNumberField(TEXT("z"), AppliedExtent.Z);
     ResponseJson->SetObjectField(TEXT("boxExtent"), ExtentObj);
 
     Subsystem->SendAutomationResponse(Socket, RequestId, true,
@@ -596,7 +704,7 @@ static bool HandleCreateTriggerSphere(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -668,7 +776,7 @@ static bool HandleCreateTriggerCapsule(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -746,7 +854,7 @@ static bool HandleCreateBlockingVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -755,7 +863,7 @@ static bool HandleCreateBlockingVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(100.0f, 100.0f, 100.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(100.0f, 100.0f, 100.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -809,7 +917,7 @@ static bool HandleCreateKillZVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -818,7 +926,7 @@ static bool HandleCreateKillZVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(10000.0f, 10000.0f, 100.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(10000.0f, 10000.0f, 100.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -872,7 +980,7 @@ static bool HandleCreatePainCausingVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -881,7 +989,7 @@ static bool HandleCreatePainCausingVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(100.0f, 100.0f, 100.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(100.0f, 100.0f, 100.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -944,7 +1052,7 @@ static bool HandleCreatePhysicsVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -953,7 +1061,7 @@ static bool HandleCreatePhysicsVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(100.0f, 100.0f, 100.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(100.0f, 100.0f, 100.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1022,7 +1130,7 @@ static bool HandleCreateAudioVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1031,7 +1139,7 @@ static bool HandleCreateAudioVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(500.0f, 500.0f, 200.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(500.0f, 500.0f, 200.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1091,7 +1199,7 @@ static bool HandleCreateReverbVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1100,7 +1208,7 @@ static bool HandleCreateReverbVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(500.0f, 500.0f, 200.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(500.0f, 500.0f, 200.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1173,7 +1281,7 @@ static bool HandleCreatePostProcessVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1182,7 +1290,7 @@ static bool HandleCreatePostProcessVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(500.0f, 500.0f, 500.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(500.0f, 500.0f, 500.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1315,7 +1423,7 @@ static bool HandleCreateCullDistanceVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1324,7 +1432,7 @@ static bool HandleCreateCullDistanceVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(1000.0f, 1000.0f, 500.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(1000.0f, 1000.0f, 500.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1402,7 +1510,7 @@ static bool HandleCreatePrecomputedVisibilityVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1411,7 +1519,7 @@ static bool HandleCreatePrecomputedVisibilityVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(1000.0f, 1000.0f, 500.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(1000.0f, 1000.0f, 500.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1465,7 +1573,7 @@ static bool HandleCreateLightmassImportanceVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1474,7 +1582,7 @@ static bool HandleCreateLightmassImportanceVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(5000.0f, 5000.0f, 2000.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(5000.0f, 5000.0f, 2000.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1528,7 +1636,7 @@ static bool HandleCreateNavMeshBoundsVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1537,7 +1645,7 @@ static bool HandleCreateNavMeshBoundsVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(2000.0f, 2000.0f, 500.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(2000.0f, 2000.0f, 500.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1591,7 +1699,7 @@ static bool HandleCreateNavModifierVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1600,7 +1708,7 @@ static bool HandleCreateNavModifierVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(500.0f, 500.0f, 200.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(500.0f, 500.0f, 200.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1654,7 +1762,7 @@ static bool HandleCreateCameraBlockingVolume(
         return true;
     }
 
-    FVector Location = GetVectorFromPayload(Payload, TEXT("location"), FVector::ZeroVector);
+    FVector Location = GetVolumeLocation(Payload);
     if (!ValidateLocation(Location, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1663,7 +1771,7 @@ static bool HandleCreateCameraBlockingVolume(
     }
 
     FRotator Rotation = GetRotatorFromPayload(Payload, TEXT("rotation"), FRotator::ZeroRotator);
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(200.0f, 200.0f, 200.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(200.0f, 200.0f, 200.0f));
     if (!ValidateExtent(Extent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1721,7 +1829,14 @@ static bool HandleSetVolumeExtent(
         return true;
     }
 
-    FVector NewExtent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(100.0f, 100.0f, 100.0f));
+    bool bExtentProvided = false;
+    FVector NewExtent = GetVolumeExtent(Payload, FVector(100.0f, 100.0f, 100.0f), &bExtentProvided);
+    if (!bExtentProvided)
+    {
+        Subsystem->SendAutomationResponse(Socket, RequestId, false,
+            TEXT("volumeExtent (or extent) is required"), nullptr, TEXT("MISSING_PARAMETER"));
+        return true;
+    }
     if (!ValidateExtent(NewExtent, ValidationError))
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
@@ -1745,27 +1860,41 @@ static bool HandleSetVolumeExtent(
         return true;
     }
 
-    ABrush* BrushVolume = Cast<ABrush>(VolumeActor);
-    if (BrushVolume)
+    VolumeActor->Modify();
+    FString ApplyError;
+    if (!ApplyVolumeExtent(VolumeActor, NewExtent, ApplyError))
     {
-        CreateBoxBrushForVolume(BrushVolume, NewExtent);
+        Subsystem->SendAutomationResponse(Socket, RequestId, false,
+            *ApplyError, nullptr, TEXT("SET_EXTENT_FAILED"));
+        return true;
     }
-    else
+
+    FVector ReadBackOrigin, ReadBackExtent;
+    if (!GetVolumeWorldBounds(VolumeActor, ReadBackOrigin, ReadBackExtent))
     {
-        // For non-brush volumes, try to set actor scale
-        VolumeActor->SetActorScale3D(FVector(NewExtent.X / 100.0f, NewExtent.Y / 100.0f, NewExtent.Z / 100.0f));
+        Subsystem->SendAutomationResponse(Socket, RequestId, false,
+            FString::Printf(TEXT("Extent applied but could not be read back for verification on volume: %s"), *VolumeName),
+            nullptr, TEXT("VERIFICATION_FAILED"));
+        return true;
     }
 
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
     ResponseJson->SetStringField(TEXT("volumeName"), VolumeName);
-    
+
     // Add verification data
     McpHandlerUtils::AddVerification(ResponseJson, VolumeActor);
 
+    TSharedPtr<FJsonObject> RequestedJson = McpHandlerUtils::CreateResultObject();
+    RequestedJson->SetNumberField(TEXT("x"), NewExtent.X);
+    RequestedJson->SetNumberField(TEXT("y"), NewExtent.Y);
+    RequestedJson->SetNumberField(TEXT("z"), NewExtent.Z);
+    ResponseJson->SetObjectField(TEXT("requestedExtent"), RequestedJson);
+
+    // newExtent is the read-back value, not an echo of the request
     TSharedPtr<FJsonObject> ExtentJson = McpHandlerUtils::CreateResultObject();
-    ExtentJson->SetNumberField(TEXT("x"), NewExtent.X);
-    ExtentJson->SetNumberField(TEXT("y"), NewExtent.Y);
-    ExtentJson->SetNumberField(TEXT("z"), NewExtent.Z);
+    ExtentJson->SetNumberField(TEXT("x"), ReadBackExtent.X);
+    ExtentJson->SetNumberField(TEXT("y"), ReadBackExtent.Y);
+    ExtentJson->SetNumberField(TEXT("z"), ReadBackExtent.Z);
     ResponseJson->SetObjectField(TEXT("newExtent"), ExtentJson);
 
     Subsystem->SendAutomationResponse(Socket, RequestId, true,
@@ -1974,9 +2103,12 @@ static bool HandleGetVolumesInfo(
         LocationJson->SetNumberField(TEXT("z"), Location.Z);
         VolumeInfo->SetObjectField(TEXT("location"), LocationJson);
 
-        // Try to get bounds
         FVector Origin, BoxExtent;
-        Volume->GetActorBounds(false, Origin, BoxExtent);
+        if (!GetVolumeWorldBounds(Volume, Origin, BoxExtent))
+        {
+            Origin = Location;
+            BoxExtent = FVector::ZeroVector;
+        }
         TSharedPtr<FJsonObject> ExtentJson = McpHandlerUtils::CreateResultObject();
         ExtentJson->SetNumberField(TEXT("x"), BoxExtent.X);
         ExtentJson->SetNumberField(TEXT("y"), BoxExtent.Y);
@@ -2024,9 +2156,12 @@ static bool HandleGetVolumesInfo(
         LocationJson->SetNumberField(TEXT("z"), Location.Z);
         VolumeInfo->SetObjectField(TEXT("location"), LocationJson);
 
-        // Get bounds
         FVector Origin, BoxExtent;
-        Trigger->GetActorBounds(false, Origin, BoxExtent);
+        if (!GetVolumeWorldBounds(Trigger, Origin, BoxExtent))
+        {
+            Origin = Location;
+            BoxExtent = FVector::ZeroVector;
+        }
         TSharedPtr<FJsonObject> ExtentJson = McpHandlerUtils::CreateResultObject();
         ExtentJson->SetNumberField(TEXT("x"), BoxExtent.X);
         ExtentJson->SetNumberField(TEXT("y"), BoxExtent.Y);
@@ -2173,7 +2308,7 @@ static bool HandleAddTriggerVolume(
         return true;
     }
 
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(100.0f, 100.0f, 100.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(100.0f, 100.0f, 100.0f));
     FString ValidationError;
     if (!ValidateExtent(Extent, ValidationError))
     {
@@ -2276,7 +2411,7 @@ static bool HandleAddBlockingVolume(
         return true;
     }
 
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(200.0f, 200.0f, 200.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(200.0f, 200.0f, 200.0f));
     FString ValidationError;
     if (!ValidateExtent(Extent, ValidationError))
     {
@@ -2377,7 +2512,7 @@ static bool HandleAddKillZVolume(
         return true;
     }
 
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(1000.0f, 1000.0f, 100.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(1000.0f, 1000.0f, 100.0f));
     float KillZHeight = GetJsonNumberField(Payload, TEXT("killZHeight"), 0.0f);
     
     FString ValidationError;
@@ -2486,7 +2621,7 @@ static bool HandleAddPhysicsVolume(
         return true;
     }
 
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(300.0f, 300.0f, 300.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(300.0f, 300.0f, 300.0f));
     FString ValidationError;
     if (!ValidateExtent(Extent, ValidationError))
     {
@@ -2598,7 +2733,7 @@ static bool HandleAddCullDistanceVolume(
         return true;
     }
 
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(1000.0f, 1000.0f, 500.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(1000.0f, 1000.0f, 500.0f));
     FString ValidationError;
     if (!ValidateExtent(Extent, ValidationError))
     {
@@ -2724,7 +2859,7 @@ static bool HandleAddPostProcessVolume(
         return true;
     }
 
-    FVector Extent = GetVectorFromPayload(Payload, TEXT("extent"), FVector(500.0f, 500.0f, 500.0f));
+    FVector Extent = GetVolumeExtent(Payload, FVector(500.0f, 500.0f, 500.0f));
     FString ValidationError;
     if (!ValidateExtent(Extent, ValidationError))
     {
@@ -2840,49 +2975,6 @@ static bool HandleSetVolumeBounds(
         return true;
     }
 
-    // Parse bounds array [minX, minY, minZ, maxX, maxY, maxZ]
-    TArray<float> BoundsValues;
-    if (Payload->HasTypedField<EJson::Array>(TEXT("bounds")))
-    {
-        TArray<TSharedPtr<FJsonValue>> BoundsArray = Payload->GetArrayField(TEXT("bounds"));
-        for (const TSharedPtr<FJsonValue>& Value : BoundsArray)
-        {
-            BoundsValues.Add(static_cast<float>(Value->AsNumber()));
-        }
-    }
-
-    if (BoundsValues.Num() != 6)
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("bounds must be an array of 6 values [minX, minY, minZ, maxX, maxY, maxZ]"), nullptr, TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    // Validate bounds values
-    for (float Val : BoundsValues)
-    {
-        if (!FMath::IsFinite(Val))
-        {
-            Subsystem->SendAutomationResponse(Socket, RequestId, false,
-                TEXT("bounds contains NaN or Infinity values"), nullptr, TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-    }
-
-    FVector MinBound(BoundsValues[0], BoundsValues[1], BoundsValues[2]);
-    FVector MaxBound(BoundsValues[3], BoundsValues[4], BoundsValues[5]);
-
-    // Calculate center and extent from bounds
-    FVector Center = (MinBound + MaxBound) * 0.5f;
-    FVector Extent = (MaxBound - MinBound) * 0.5f;
-
-    if (Extent.X <= 0.0f || Extent.Y <= 0.0f || Extent.Z <= 0.0f)
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("bounds must define a valid volume (max > min for all axes)"), nullptr, TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
     UWorld* World = GetEditorWorld();
     if (!World)
     {
@@ -2899,27 +2991,105 @@ static bool HandleSetVolumeBounds(
         return true;
     }
 
-    // Set the volume location to center
-    VolumeActor->SetActorLocation(Center);
-
-    // Update the brush geometry for brush-based volumes
-    ABrush* BrushVolume = Cast<ABrush>(VolumeActor);
-    if (BrushVolume)
+    // Target box comes as the 6-element 'bounds' array [minX, minY, minZ,
+    // maxX, maxY, maxZ], or as volumeExtent plus optional volumeLocation
+    // (center; defaults to the volume's current location).
+    FVector Center = FVector::ZeroVector;
+    FVector Extent = FVector::ZeroVector;
+    if (Payload->HasTypedField<EJson::Array>(TEXT("bounds")))
     {
-        CreateBoxBrushForVolume(BrushVolume, Extent);
+        TArray<float> BoundsValues;
+        TArray<TSharedPtr<FJsonValue>> BoundsArray = Payload->GetArrayField(TEXT("bounds"));
+        for (const TSharedPtr<FJsonValue>& Value : BoundsArray)
+        {
+            BoundsValues.Add(static_cast<float>(Value->AsNumber()));
+        }
+
+        if (BoundsValues.Num() != 6)
+        {
+            Subsystem->SendAutomationResponse(Socket, RequestId, false,
+                TEXT("bounds must be an array of 6 values [minX, minY, minZ, maxX, maxY, maxZ]"), nullptr, TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+
+        // Validate bounds values
+        for (float Val : BoundsValues)
+        {
+            if (!FMath::IsFinite(Val))
+            {
+                Subsystem->SendAutomationResponse(Socket, RequestId, false,
+                    TEXT("bounds contains NaN or Infinity values"), nullptr, TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+        }
+
+        const FVector MinBound(BoundsValues[0], BoundsValues[1], BoundsValues[2]);
+        const FVector MaxBound(BoundsValues[3], BoundsValues[4], BoundsValues[5]);
+        Center = (MinBound + MaxBound) * 0.5f;
+        Extent = (MaxBound - MinBound) * 0.5f;
+
+        if (Extent.X <= 0.0f || Extent.Y <= 0.0f || Extent.Z <= 0.0f)
+        {
+            Subsystem->SendAutomationResponse(Socket, RequestId, false,
+                TEXT("bounds must define a valid volume (max > min for all axes)"), nullptr, TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
     }
     else
     {
-        // For non-brush volumes, use scale
-        VolumeActor->SetActorScale3D(FVector(Extent.X / 100.0f, Extent.Y / 100.0f, Extent.Z / 100.0f));
+        bool bExtentProvided = false;
+        Extent = GetVolumeExtent(Payload, FVector(100.0f, 100.0f, 100.0f), &bExtentProvided);
+        if (!bExtentProvided)
+        {
+            Subsystem->SendAutomationResponse(Socket, RequestId, false,
+                TEXT("Pass bounds [minX, minY, minZ, maxX, maxY, maxZ], or volumeExtent with optional volumeLocation"),
+                nullptr, TEXT("MISSING_PARAMETER"));
+            return true;
+        }
+        if (!ValidateExtent(Extent, ValidationError))
+        {
+            Subsystem->SendAutomationResponse(Socket, RequestId, false,
+                *ValidationError, nullptr, TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+        Center = GetVectorFromPayloadAliases(Payload,
+            {TEXT("volumeLocation"), TEXT("location")}, VolumeActor->GetActorLocation());
+        if (!ValidateLocation(Center, ValidationError))
+        {
+            Subsystem->SendAutomationResponse(Socket, RequestId, false,
+                *ValidationError, nullptr, TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+    }
+
+    VolumeActor->Modify();
+    FString ApplyError;
+    if (!ApplyVolumeExtent(VolumeActor, Extent, ApplyError))
+    {
+        Subsystem->SendAutomationResponse(Socket, RequestId, false,
+            *ApplyError, nullptr, TEXT("SET_BOUNDS_FAILED"));
+        return true;
+    }
+    VolumeActor->SetActorLocation(Center);
+
+    FVector ReadBackOrigin, ReadBackExtent;
+    if (!GetVolumeWorldBounds(VolumeActor, ReadBackOrigin, ReadBackExtent))
+    {
+        Subsystem->SendAutomationResponse(Socket, RequestId, false,
+            FString::Printf(TEXT("Bounds applied but could not be read back for verification on volume: %s"), *VolumeName),
+            nullptr, TEXT("VERIFICATION_FAILED"));
+        return true;
     }
 
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
     ResponseJson->SetStringField(TEXT("volumeName"), VolumeName);
-    
+
     // Add verification data
     McpHandlerUtils::AddVerification(ResponseJson, VolumeActor);
 
+    // Read-back values, not an echo of the request
+    const FVector MinBound = ReadBackOrigin - ReadBackExtent;
+    const FVector MaxBound = ReadBackOrigin + ReadBackExtent;
     TSharedPtr<FJsonObject> BoundsJson = McpHandlerUtils::CreateResultObject();
     TArray<TSharedPtr<FJsonValue>> MinArray, MaxArray;
     MinArray.Add(MakeShared<FJsonValueNumber>(MinBound.X));
@@ -2933,9 +3103,9 @@ static bool HandleSetVolumeBounds(
     ResponseJson->SetObjectField(TEXT("bounds"), BoundsJson);
 
     TSharedPtr<FJsonObject> CenterJson = McpHandlerUtils::CreateResultObject();
-    CenterJson->SetNumberField(TEXT("x"), Center.X);
-    CenterJson->SetNumberField(TEXT("y"), Center.Y);
-    CenterJson->SetNumberField(TEXT("z"), Center.Z);
+    CenterJson->SetNumberField(TEXT("x"), ReadBackOrigin.X);
+    CenterJson->SetNumberField(TEXT("y"), ReadBackOrigin.Y);
+    CenterJson->SetNumberField(TEXT("z"), ReadBackOrigin.Z);
     ResponseJson->SetObjectField(TEXT("center"), CenterJson);
 
     Subsystem->SendAutomationResponse(Socket, RequestId, true,

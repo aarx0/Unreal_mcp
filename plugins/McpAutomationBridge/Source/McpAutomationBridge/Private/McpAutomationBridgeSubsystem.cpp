@@ -283,13 +283,22 @@ static inline bool IsUnrealMountPathChar(TCHAR C) {
 }
 
 static FString RedactFilesystemPathsForResponse(const FString &Input) {
+  // A '/' starts a redactable Unix path only at a token boundary with a path
+  // segment following it: prose like "decorators/services use add_subnode" or
+  // "set_default / set_asset_property" is not a filesystem path.
+  const auto IsTokenChar = [](TCHAR C) {
+    return FChar::IsAlnum(C) || C == '_' || C == '.' || C == '-';
+  };
   FString Output;
   Output.Reserve(Input.Len());
 
   for (int32 Index = 0; Index < Input.Len();) {
     const bool bAllowedUnrealPath = Input[Index] == '/' &&
                                     IsAllowedUnrealMountPath(Input, Index);
-    const bool bUnixPath = Input[Index] == '/' && !bAllowedUnrealPath;
+    const bool bUnixPath = Input[Index] == '/' && !bAllowedUnrealPath &&
+                           (Index == 0 || !IsTokenChar(Input[Index - 1])) &&
+                           Index + 1 < Input.Len() &&
+                           IsTokenChar(Input[Index + 1]);
     const bool bWindowsPath = Index + 2 < Input.Len() &&
                               FChar::IsAlpha(Input[Index]) &&
                               Input[Index + 1] == ':' &&
@@ -359,8 +368,7 @@ static void RedactFollowingValueForResponse(FString &Text, const FString &Marker
   }
 }
 
-static FString SanitizeEngineErrorForResponse(const FString &In) {
-  FString Out = RedactFilesystemPathsForResponse(SanitizeForLog(In));
+static void RedactSecretMarkersForResponse(FString &Out) {
   RedactFollowingValueForResponse(Out, TEXT("token="));
   RedactFollowingValueForResponse(Out, TEXT("capabilitytoken="));
   RedactFollowingValueForResponse(Out, TEXT("password="));
@@ -369,10 +377,25 @@ static FString SanitizeEngineErrorForResponse(const FString &In) {
   RedactFollowingValueForResponse(Out, TEXT("apikey="));
   RedactFollowingValueForResponse(Out, TEXT("authorization:"));
   RedactFollowingValueForResponse(Out, TEXT("bearer "));
+}
+
+// For engine-captured log lines quoted into responses; these can carry
+// absolute filesystem paths, so paths outside content mounts are redacted.
+static FString SanitizeEngineErrorForResponse(const FString &In) {
+  FString Out = RedactFilesystemPathsForResponse(SanitizeForLog(In));
+  RedactSecretMarkersForResponse(Out);
 
   if (Out.Len() > 512) {
     Out = Out.Left(512) + TEXT("[TRUNCATED]");
   }
+  return Out;
+}
+
+// For handler-authored error messages: no path redaction — guidance routinely
+// names action/param tokens and content paths the caller needs verbatim.
+static FString SanitizeHandlerMessageForResponse(const FString &In) {
+  FString Out = SanitizeForLog(In);
+  RedactSecretMarkersForResponse(Out);
   return Out;
 }
 
@@ -801,7 +824,7 @@ void UMcpAutomationBridgeSubsystem::SendAutomationResponse(
 
   if (!bEffectiveSuccess)
   {
-    EffectiveMessage = SanitizeEngineErrorForResponse(EffectiveMessage);
+    EffectiveMessage = SanitizeHandlerMessageForResponse(EffectiveMessage);
   }
 
   // When handlers omit Origin (default Unspecified), use the stored

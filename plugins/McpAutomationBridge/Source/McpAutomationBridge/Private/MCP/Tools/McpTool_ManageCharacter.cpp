@@ -49,16 +49,16 @@ public:
 			.Number(TEXT("springArmLength"), TEXT(""))
 			.Bool(TEXT("springArmLagEnabled"), TEXT("Enable camera lag."))
 			.Number(TEXT("springArmLagSpeed"), TEXT("Camera lag speed."))
-			.Number(TEXT("walkSpeed"), TEXT(""))
-			.Number(TEXT("runSpeed"), TEXT(""))
-			.Number(TEXT("sprintSpeed"), TEXT(""))
+			.Number(TEXT("walkSpeed"), TEXT("Ground speed; writes CharacterMovement MaxWalkSpeed."))
+			.Number(TEXT("runSpeed"), TEXT("Run speed; writes MaxWalkSpeed when walkSpeed is absent, otherwise stored as the RunSpeed variable default."))
+			.Number(TEXT("sprintSpeed"), TEXT("Sprint speed; stored as the SprintSpeed variable default (no CharacterMovement property)."))
 			.Number(TEXT("crouchSpeed"), TEXT(""))
 			.Number(TEXT("swimSpeed"), TEXT(""))
 			.Number(TEXT("flySpeed"), TEXT(""))
 			.Number(TEXT("acceleration"), TEXT(""))
 			.Number(TEXT("deceleration"), TEXT(""))
 			.Number(TEXT("groundFriction"), TEXT(""))
-			.Number(TEXT("jumpHeight"), TEXT(""))
+			.Number(TEXT("jumpHeight"), TEXT("Desired jump apex height in cm; converted to JumpZVelocity via sqrt(2*g*h) using effective gravity."))
 			.Number(TEXT("airControl"), TEXT(""))
 			.Number(TEXT("maxJumpCount"), TEXT(""))
 			.Number(TEXT("jumpHoldTime"), TEXT("Max hold time for variable jump."))
@@ -106,6 +106,7 @@ public:
 				TEXT("Gravel"),
 				TEXT("Custom")
 			}, TEXT("Physical surface type."))
+			.String(TEXT("soundPath"), TEXT("Sound asset path (SoundBase) mapped to surfaceType by map_surface_to_sound."))
 			.Required({TEXT("action")})
 			.Build();
 	}

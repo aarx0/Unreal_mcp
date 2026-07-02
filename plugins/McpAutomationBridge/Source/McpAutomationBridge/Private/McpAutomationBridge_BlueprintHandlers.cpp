@@ -2772,11 +2772,71 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     NewVar.PropertyFlags |= CPF_Edit;
     NewVar.PropertyFlags |= CPF_BlueprintVisible;
     NewVar.PropertyFlags &= ~CPF_BlueprintReadOnly;
+    // isPublic maps to the editor's Instance Editable eyeball.
+    if (!bPublic) {
+      NewVar.PropertyFlags |= CPF_DisableEditOnInstance;
+    }
     if (bReplicated) {
       NewVar.PropertyFlags |= CPF_Net;
     }
 
     Blueprint->NewVariables.Add(NewVar);
+
+    // defaultValue: the property only exists on the generated class after a
+    // compile, so compile first, write the CDO (same mechanism as set_default),
+    // then mirror the value into the variable description so the editor's
+    // details panel and future compiles agree.
+    TSharedPtr<FJsonValue> AppliedDefault;
+    if (DefaultVal.IsValid()) {
+      McpSafeCompileBlueprint(Blueprint);
+      UObject *CDO = Blueprint->GeneratedClass
+                         ? Blueprint->GeneratedClass->GetDefaultObject()
+                         : nullptr;
+      FProperty *DefaultProp =
+          Blueprint->GeneratedClass
+              ? Blueprint->GeneratedClass->FindPropertyByName(FName(*VarName))
+              : nullptr;
+      FString DefaultError;
+      if (!CDO || !DefaultProp ||
+          !ApplyJsonValueToProperty(CDO, DefaultProp, DefaultVal,
+                                    DefaultError)) {
+        if (DefaultError.IsEmpty()) {
+          DefaultError = TEXT("property not found after compile");
+        }
+        Blueprint->NewVariables.RemoveAll(
+            [&NewVar](const FBPVariableDescription &Var) {
+              return Var.VarName == NewVar.VarName;
+            });
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/false);
+        SendAutomationError(
+            RequestingSocket, RequestId,
+            FString::Printf(
+                TEXT("defaultValue could not be applied to variable '%s': %s. "
+                     "The variable was rolled back; fix defaultValue or omit "
+                     "it and use set_default."),
+                *VarName, *DefaultError),
+            TEXT("DEFAULT_VALUE_FAILED"));
+        return true;
+      }
+      FString ExportedDefault;
+      if (void *ValuePtr = DefaultProp->ContainerPtrToValuePtr<void>(CDO)) {
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+        DefaultProp->ExportTextItem_Direct(ExportedDefault, ValuePtr, nullptr,
+                                           CDO, PPF_SerializedAsImportText);
+#else
+        DefaultProp->ExportTextItem(ExportedDefault, ValuePtr, nullptr, CDO,
+                                    PPF_SerializedAsImportText);
+#endif
+      }
+      for (FBPVariableDescription &Var : Blueprint->NewVariables) {
+        if (Var.VarName == NewVar.VarName) {
+          Var.DefaultValue = ExportedDefault;
+          break;
+        }
+      }
+      AppliedDefault = ExportPropertyToJsonValue(CDO, DefaultProp);
+    }
+
     const bool bSaved = McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
     // Real test: Verify the variable actually exists in the compiled class or
@@ -2830,6 +2890,10 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     }
     Response->SetBoolField(TEXT("replicated"), bReplicated);
     Response->SetBoolField(TEXT("public"), bPublic);
+    if (AppliedDefault.IsValid()) {
+      // Read back from the CDO, not echoed from the request.
+      Response->SetField(TEXT("defaultValue"), AppliedDefault);
+    }
     const TSharedPtr<FJsonObject> Snapshot =
         FMcpAutomationBridge_BuildBlueprintSnapshot(Blueprint, RegistryKey);
     if (Snapshot.IsValid()) {
@@ -3965,6 +4029,10 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
       }
     }
 
+    // Function inputs are OUTPUT pins of the entry node (data flows out of the
+    // entry into the body). AllocateDefaultPins drops user pins whose stored
+    // direction fails CanCreateUserDefinedPin, so the wrong direction silently
+    // loses the parameter on the next node reconstruction.
     for (const TSharedPtr<FJsonValue> &Value : Inputs) {
       if (!Value.IsValid() || Value->Type != EJson::Object)
         continue;
@@ -3976,9 +4044,22 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
       FString ParamType;
       Obj->TryGetStringField(TEXT("type"), ParamType);
       FMcpAutomationBridge_AddUserDefinedPin(EntryNode, ParamName, ParamType,
-                                             EGPD_Input);
+                                             EGPD_Output);
     }
 
+    // Function outputs are INPUT pins of the result node; adding them to the
+    // entry node would create extra function INPUTS instead. Fresh user
+    // function graphs start without a result node; create one on demand.
+    if (Outputs.Num() > 0 && !ResultNode && EntryNode) {
+      ResultNode = FBlueprintEditorUtils::FindOrCreateFunctionResultNode(EntryNode);
+    }
+    if (Outputs.Num() > 0 && !ResultNode) {
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("Failed to create a function result node for outputs."),
+          nullptr, TEXT("GRAPH_ERROR"));
+      return true;
+    }
     for (const TSharedPtr<FJsonValue> &Value : Outputs) {
       if (!Value.IsValid() || Value->Type != EJson::Object)
         continue;
@@ -3989,10 +4070,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
       Obj->TryGetStringField(TEXT("name"), ParamName);
       FString ParamType;
       Obj->TryGetStringField(TEXT("type"), ParamType);
-      FMcpAutomationBridge_AddUserDefinedPin(
-          ResultNode ? static_cast<UK2Node *>(ResultNode)
-                     : static_cast<UK2Node *>(EntryNode),
-          ParamName, ParamType, EGPD_Output);
+      FMcpAutomationBridge_AddUserDefinedPin(ResultNode, ParamName, ParamType,
+                                             EGPD_Input);
     }
 
     const bool bSaved = McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
@@ -4528,10 +4607,13 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
           TEXT("INVALID_BLUEPRINT_PATH"));
       return true;
     }
+    // The schema's generic 'save' is an alias for 'saveAfterCompile'.
     bool bSaveAfterCompile = false;
     if (LocalPayload->HasField(TEXT("saveAfterCompile")))
       LocalPayload->TryGetBoolField(TEXT("saveAfterCompile"),
                                     bSaveAfterCompile);
+    else if (LocalPayload->HasField(TEXT("save")))
+      LocalPayload->TryGetBoolField(TEXT("save"), bSaveAfterCompile);
     // Editor-only compile
 #if WITH_EDITOR
     FString Normalized;

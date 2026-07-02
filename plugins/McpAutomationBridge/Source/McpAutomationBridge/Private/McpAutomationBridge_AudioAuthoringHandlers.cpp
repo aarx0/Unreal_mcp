@@ -5,10 +5,9 @@
 //
 // HANDLERS IMPLEMENTED:
 // ---------------------
-// Section 1: Sound Cues
-//   - create_sound_cue             : Create USoundCue asset
-//   - add_sound_node               : Add sound node to cue
-//   - connect_sound_nodes          : Link sound nodes
+// Section 1: Sound Cues (create_sound_cue routes to McpAutomationBridge_AudioHandlers.cpp)
+//   - add_cue_node                 : Add sound node to cue
+//   - connect_cue_nodes            : Link sound nodes ('Root' source wires the cue output)
 //
 // Section 2: MetaSounds (5.1+)
 //   - create_meta_sound            : Create UMetaSound asset
@@ -74,7 +73,6 @@
 #include "SoundCueGraph/SoundCueGraphNode_Root.h"
 
 // Audio Factories
-#include "Factories/SoundCueFactoryNew.h"
 #include "Factories/SoundClassFactory.h"
 #include "Factories/SoundMixFactory.h"
 #include "Factories/SoundAttenuationFactory.h"
@@ -393,123 +391,7 @@ static TSharedPtr<FJsonObject> HandleAudioAuthoringRequest(const TSharedPtr<FJso
     FString SubAction = GetJsonStringField(Params, TEXT("subAction"), TEXT(""));
     
     // ===== 11.1 Sound Cues =====
-    
-    if (SubAction == TEXT("create_sound_cue"))
-    {
-        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAudioPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Audio/Cues")), false);
-        FString WavePath = GetJsonStringField(Params, TEXT("wavePath"), TEXT(""));
-        bool bLooping = GetJsonBoolField(Params, TEXT("looping"), false);
-        float Volume = static_cast<float>(GetJsonNumberField(Params, TEXT("volume"), 1.0));
-        float Pitch = static_cast<float>(GetJsonNumberField(Params, TEXT("pitch"), 1.0));
-        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
-        
-        if (Name.IsEmpty())
-        {
-            return McpHandlerUtils::BuildErrorResponse(TEXT("MISSING_NAME"), TEXT("Name is required"));
-        }
-        
-        // Create package and asset directly to avoid UI dialogs
-        // AssetToolsModule.CreateAsset() shows "Overwrite Existing Object" dialogs
-        // which cause recursive FlushRenderingCommands and D3D12 crashes
-        FString PackagePath = Path / Name;
-        UPackage* Package = CreatePackage(*PackagePath);
-        if (!Package)
-        {
-            return McpHandlerUtils::BuildErrorResponse(TEXT("PACKAGE_ERROR"), TEXT("Failed to create package"));
-        }
-        
-        USoundCueFactoryNew* Factory = NewObject<USoundCueFactoryNew>();
-        USoundCue* NewCue = Cast<USoundCue>(
-            Factory->FactoryCreateNew(USoundCue::StaticClass(), Package,
-                                      FName(*Name), RF_Public | RF_Standalone,
-                                      nullptr, GWarn));
-	if (!NewCue)
-	{
-		return McpHandlerUtils::BuildErrorResponse(TEXT("CREATE_FAILED"), TEXT("Failed to create SoundCue"));
-	}
 
-	// Ensure the graph exists for subsequent ConstructSoundNode / LinkGraphNodesFromSoundNodes calls
-	if (!NewCue->SoundCueGraph)
-	{
-		NewCue->CreateGraph();
-	}
-
-	// If wave path provided, set up basic graph
-	if (!WavePath.IsEmpty())
-	{
-		USoundWave* Wave = LoadSoundWaveFromPath(WavePath);
-		if (Wave)
-		{
-			USoundNodeWavePlayer* PlayerNode = NewCue->ConstructSoundNode<USoundNodeWavePlayer>();
-			PlayerNode->SetSoundWave(Wave);
-
-			USoundNode* LastNode = PlayerNode;
-
-			if (bLooping)
-			{
-				USoundNodeLooping* LoopNode = NewCue->ConstructSoundNode<USoundNodeLooping>();
-				LoopNode->InsertChildNode(0);
-				LoopNode->ChildNodes[0] = LastNode;
-				USoundCueGraphNode* LoopGraphNode = Cast<USoundCueGraphNode>(LoopNode->GetGraphNode());
-				USoundCueGraphNode* LastGraphNode = Cast<USoundCueGraphNode>(LastNode->GetGraphNode());
-				if (LoopGraphNode && LastGraphNode)
-				{
-					TArray<UEdGraphPin*> Pins;
-					LoopGraphNode->GetInputPins(Pins);
-					if (Pins.Num() > 0 && Pins[0] && LastGraphNode->GetOutputPin())
-					{
-						Pins[0]->MakeLinkTo(LastGraphNode->GetOutputPin());
-					}
-				}
-				LastNode = LoopNode;
-			}
-
-			if (Volume != 1.0f || Pitch != 1.0f)
-			{
-				USoundNodeModulator* ModNode = NewCue->ConstructSoundNode<USoundNodeModulator>();
-				ModNode->InsertChildNode(0);
-				ModNode->ChildNodes[0] = LastNode;
-				ModNode->PitchMin = ModNode->PitchMax = Pitch;
-				ModNode->VolumeMin = ModNode->VolumeMax = Volume;
-				USoundCueGraphNode* ModGraphNode = Cast<USoundCueGraphNode>(ModNode->GetGraphNode());
-				USoundCueGraphNode* LastGraphNode = Cast<USoundCueGraphNode>(LastNode->GetGraphNode());
-				if (ModGraphNode && LastGraphNode)
-				{
-					TArray<UEdGraphPin*> Pins;
-					ModGraphNode->GetInputPins(Pins);
-					if (Pins.Num() > 0 && Pins[0] && LastGraphNode->GetOutputPin())
-					{
-						Pins[0]->MakeLinkTo(LastGraphNode->GetOutputPin());
-					}
-				}
-				LastNode = ModNode;
-			}
-
-			// Link root node output to FirstNode's graph node input
-			NewCue->FirstNode = LastNode;
-			USoundCueGraphNode* FirstGraphNode = Cast<USoundCueGraphNode>(LastNode->GetGraphNode());
-			if (FirstGraphNode && NewCue->SoundCueGraph)
-			{
-				TArray<USoundCueGraphNode_Root*> RootNodeList;
-				NewCue->SoundCueGraph->GetNodesOfClass<USoundCueGraphNode_Root>(RootNodeList);
-				if (RootNodeList.Num() > 0 && RootNodeList[0]->Pins.Num() > 0 && FirstGraphNode->GetOutputPin())
-				{
-			RootNodeList[0]->Pins[0]->MakeLinkTo(FirstGraphNode->GetOutputPin());
-			}
-		}
-	}
-	}
-
-	SaveAudioAsset(NewCue, bSave);
-        
-        FString FullPath = NewCue->GetPathName();
-        Response->SetStringField(TEXT("assetPath"), FullPath);
-        Response = McpHandlerUtils::BuildSuccessResponse(FString::Printf(TEXT("SoundCue '%s' created"), *Name));
-        McpHandlerUtils::AddVerification(Response, NewCue);
-        return Response;
-    }
-    
     if (SubAction == TEXT("add_cue_node"))
     {
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
@@ -630,6 +512,12 @@ static TSharedPtr<FJsonObject> HandleAudioAuthoringRequest(const TSharedPtr<FJso
         int32 ChildIndex = static_cast<int32>(GetJsonIntField(Params, TEXT("childIndex"), 0));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
+	if (TargetNodeId.Equals(TEXT("Root"), ESearchCase::IgnoreCase))
+	{
+		return McpHandlerUtils::BuildErrorResponse(TEXT("INVALID_ARGUMENT"),
+			TEXT("'Root' is the cue output and can only be the sourceNodeId; pass the consuming node as source and the feeding node as target"));
+	}
+
 	USoundCue* Cue = LoadSoundCueFromPath(AssetPath);
 	if (!Cue)
 	{
@@ -644,7 +532,7 @@ static TSharedPtr<FJsonObject> HandleAudioAuthoringRequest(const TSharedPtr<FJso
 	// Find source and target nodes
         USoundNode* SourceNode = nullptr;
         USoundNode* TargetNode = nullptr;
-        
+
         for (USoundNode* Node : Cue->AllNodes)
         {
             if (Node && Node->GetName() == SourceNodeId)
@@ -656,10 +544,43 @@ static TSharedPtr<FJsonObject> HandleAudioAuthoringRequest(const TSharedPtr<FJso
                 TargetNode = Node;
             }
         }
-        
+
+        // 'Root' pseudo-node: wire the cue output (FirstNode) to the target node
+        if (SourceNodeId.Equals(TEXT("Root"), ESearchCase::IgnoreCase))
+        {
+            if (!TargetNode)
+            {
+                return McpHandlerUtils::BuildErrorResponse(TEXT("TARGET_NODE_NOT_FOUND"), FString::Printf(TEXT("Target node not found: %s"), *TargetNodeId));
+            }
+
+            USoundCueGraphNode* TargetGraphNode = Cast<USoundCueGraphNode>(TargetNode->GetGraphNode());
+            UEdGraphPin* TargetOutputPin = TargetGraphNode ? TargetGraphNode->GetOutputPin() : nullptr;
+            if (!TargetOutputPin)
+            {
+                return McpHandlerUtils::BuildErrorResponse(TEXT("GRAPH_PIN_ERROR"), TEXT("Target node has no output pin"));
+            }
+
+            TArray<USoundCueGraphNode_Root*> RootNodes;
+            Cue->SoundCueGraph->GetNodesOfClass<USoundCueGraphNode_Root>(RootNodes);
+            if (RootNodes.Num() == 0 || RootNodes[0]->Pins.Num() == 0)
+            {
+                return McpHandlerUtils::BuildErrorResponse(TEXT("GRAPH_NODE_ERROR"), TEXT("SoundCue graph has no root node"));
+            }
+
+            RootNodes[0]->Pins[0]->BreakAllPinLinks();
+            RootNodes[0]->Pins[0]->MakeLinkTo(TargetOutputPin);
+            Cue->CompileSoundNodesFromGraphNodes();
+            SaveAudioAsset(Cue, bSave);
+
+            Response->SetStringField(TEXT("firstNode"), TargetNode->GetName());
+            McpHandlerUtils::AddVerification(Response, Cue);
+            Response->SetBoolField(TEXT("success"), true);
+            return Response;
+        }
+
         if (!SourceNode)
         {
-            return McpHandlerUtils::BuildErrorResponse(TEXT("SOURCE_NODE_NOT_FOUND"), FString::Printf(TEXT("Source node not found: %s"), *SourceNodeId));
+            return McpHandlerUtils::BuildErrorResponse(TEXT("SOURCE_NODE_NOT_FOUND"), FString::Printf(TEXT("Source node not found: %s (pass sourceNodeId 'Root' to wire the cue output)"), *SourceNodeId));
         }
         if (!TargetNode)
         {
@@ -1846,20 +1767,39 @@ if (SubAction == TEXT("create_metasound"))
             return McpHandlerUtils::BuildErrorResponse(TEXT("ATTENUATION_NOT_FOUND"), FString::Printf(TEXT("Could not load SoundAttenuation: %s"), *AssetPath));
         }
         
-        // Configure spatialization
-        Atten->Attenuation.bSpatialize = GetJsonBoolField(Params, TEXT("spatialize"), true);
-        
-        if (Params->HasField(TEXT("spatializationAlgorithm")))
+        // Validate the algorithm before mutating so an unknown value leaves the asset untouched
+        FString Algorithm = GetJsonStringField(Params, TEXT("spatializationAlgorithm"), TEXT(""));
+        if (Algorithm.IsEmpty())
         {
-            FString Algorithm = GetJsonStringField(Params, TEXT("spatializationAlgorithm"), TEXT("panner"));
-            if (Algorithm.ToLower() == TEXT("panner"))
-            {
-                Atten->Attenuation.SpatializationAlgorithm = ESoundSpatializationAlgorithm::SPATIALIZATION_Default;
-            }
-            else if (Algorithm.ToLower() == TEXT("hrtf") || Algorithm.ToLower() == TEXT("binaural"))
-            {
-                Atten->Attenuation.SpatializationAlgorithm = ESoundSpatializationAlgorithm::SPATIALIZATION_HRTF;
-            }
+            Algorithm = GetJsonStringField(Params, TEXT("spatialization"), TEXT(""));
+        }
+        const FString AlgorithmLower = Algorithm.ToLower();
+        const bool bAlgoIsPanner = (AlgorithmLower == TEXT("panner") || AlgorithmLower == TEXT("default"));
+        const bool bAlgoIsHrtf = (AlgorithmLower == TEXT("hrtf") || AlgorithmLower == TEXT("binaural"));
+        if (!Algorithm.IsEmpty() && !bAlgoIsPanner && !bAlgoIsHrtf)
+        {
+            return McpHandlerUtils::BuildErrorResponse(TEXT("INVALID_ARGUMENT"),
+                FString::Printf(TEXT("Unknown spatialization algorithm '%s' - expected 'panner' or 'hrtf'"), *Algorithm));
+        }
+
+        bool bSpatialize = true;
+        if (Params->HasField(TEXT("spatialize")))
+        {
+            bSpatialize = GetJsonBoolField(Params, TEXT("spatialize"), true);
+        }
+        else if (Params->HasField(TEXT("enabled")))
+        {
+            bSpatialize = GetJsonBoolField(Params, TEXT("enabled"), true);
+        }
+        Atten->Attenuation.bSpatialize = bSpatialize;
+
+        if (bAlgoIsPanner)
+        {
+            Atten->Attenuation.SpatializationAlgorithm = ESoundSpatializationAlgorithm::SPATIALIZATION_Default;
+        }
+        else if (bAlgoIsHrtf)
+        {
+            Atten->Attenuation.SpatializationAlgorithm = ESoundSpatializationAlgorithm::SPATIALIZATION_HRTF;
         }
         
 	SaveAudioAsset(Atten, bSave);
@@ -2451,18 +2391,27 @@ if (SubAction == TEXT("create_metasound"))
     
     if (SubAction == TEXT("get_audio_info"))
     {
-        FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
-        
+        const FString RawAssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
+        if (RawAssetPath.IsEmpty())
+        {
+            return McpHandlerUtils::BuildErrorResponse(TEXT("INVALID_ARGUMENT"), TEXT("assetPath is required - pass the path of the audio asset to inspect"));
+        }
+        FString AssetPath = NormalizeAudioPath(RawAssetPath);
+        if (AssetPath.IsEmpty())
+        {
+            return McpHandlerUtils::BuildErrorResponse(TEXT("INVALID_ARGUMENT"), FString::Printf(TEXT("assetPath '%s' was rejected - it must be a project-relative asset path"), *RawAssetPath));
+        }
+
         // Try to load as various audio types
         UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
         if (!Asset)
         {
             return McpHandlerUtils::BuildErrorResponse(TEXT("ASSET_NOT_FOUND"), FString::Printf(TEXT("Could not load asset: %s"), *AssetPath));
         }
-        
+
         Response->SetStringField(TEXT("assetPath"), AssetPath);
         Response->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
-        
+
         // Get type-specific info
         if (USoundCue* Cue = Cast<USoundCue>(Asset))
         {
@@ -2474,6 +2423,51 @@ if (SubAction == TEXT("create_metasound"))
                 Response->SetStringField(TEXT("attenuationPath"), Cue->AttenuationSettings->GetPathName());
             }
         }
+#if MCP_HAS_METASOUND
+        // Must precede the SoundWave branch: UMetaSoundSource derives from USoundWave
+        else if (UMetaSoundSource* MetaSound = Cast<UMetaSoundSource>(Asset))
+        {
+            Response->SetStringField(TEXT("type"), TEXT("MetaSoundSource"));
+            Response->SetNumberField(TEXT("duration"), MetaSound->GetDuration());
+#if MCP_HAS_METASOUND_FRONTEND_V2
+            if (const IMetaSoundDocumentInterface* DocInterface = Cast<IMetaSoundDocumentInterface>(MetaSound))
+            {
+                const FMetasoundFrontendDocument& Doc = DocInterface->GetConstDocument();
+                int32 NodeCount = 0;
+                Doc.RootGraph.IterateGraphPages([&NodeCount](const FMetasoundFrontendGraph& GraphPage)
+                {
+                    NodeCount += GraphPage.Nodes.Num();
+                });
+                Response->SetNumberField(TEXT("nodeCount"), NodeCount);
+
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6
+                const FMetasoundFrontendClassInterface& GraphInterface = Doc.RootGraph.GetDefaultInterface();
+#else
+                const FMetasoundFrontendClassInterface& GraphInterface = Doc.RootGraph.Interface;
+#endif
+                TArray<TSharedPtr<FJsonValue>> InputsArr;
+                for (const FMetasoundFrontendClassInput& Input : GraphInterface.Inputs)
+                {
+                    TSharedPtr<FJsonObject> InputObj = McpHandlerUtils::CreateResultObject();
+                    InputObj->SetStringField(TEXT("name"), Input.Name.ToString());
+                    InputObj->SetStringField(TEXT("type"), Input.TypeName.ToString());
+                    InputsArr.Add(MakeShared<FJsonValueObject>(InputObj));
+                }
+                Response->SetArrayField(TEXT("inputs"), InputsArr);
+
+                TArray<TSharedPtr<FJsonValue>> OutputsArr;
+                for (const FMetasoundFrontendClassOutput& Output : GraphInterface.Outputs)
+                {
+                    TSharedPtr<FJsonObject> OutputObj = McpHandlerUtils::CreateResultObject();
+                    OutputObj->SetStringField(TEXT("name"), Output.Name.ToString());
+                    OutputObj->SetStringField(TEXT("type"), Output.TypeName.ToString());
+                    OutputsArr.Add(MakeShared<FJsonValueObject>(OutputObj));
+                }
+                Response->SetArrayField(TEXT("outputs"), OutputsArr);
+            }
+#endif
+        }
+#endif
         else if (USoundWave* Wave = Cast<USoundWave>(Asset))
         {
             Response->SetStringField(TEXT("type"), TEXT("SoundWave"));

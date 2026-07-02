@@ -3,19 +3,40 @@
   Minimal MCP Streamable-HTTP client for the McpAutomationBridge (port 3123).
   Does the initialize handshake, then one tools/call, and prints the tool result.
 
+.PARAMETER Arguments
+  Tool arguments as a hashtable. In-process use only: a hashtable cannot cross
+  a `pwsh -File` process boundary (it stringifies and fails to bind) — use
+  -ArgumentsJson there.
+
+.PARAMETER ArgumentsJson
+  Tool arguments as a JSON object string. Works across process boundaries.
+
 .EXAMPLE
+  # In-process (same pwsh session)
   ./mcp-call.ps1 -Tool system_control -Arguments @{ action='list_tests'; filter='McpBridge.SelfTest' }
 
 .EXAMPLE
-  ./mcp-call.ps1 -Tool system_control -Arguments @{ action='run_tests'; filter='McpBridge.SelfTest' }
+  # Separate process
+  pwsh -File scripts/mcp-call.ps1 -Tool system_control -ArgumentsJson '{"action":"run_tests","filter":"McpBridge.SelfTest"}'
 #>
 param(
     [string]$Tool = 'system_control',
-    [Parameter(Mandatory = $true)][hashtable]$Arguments,
+    [hashtable]$Arguments,
+    [string]$ArgumentsJson,
     [string]$Url = 'http://127.0.0.1:3123/mcp',
     [int]$TimeoutSec = 180
 )
 $ErrorActionPreference = 'Stop'
+
+if ($PSBoundParameters.ContainsKey('Arguments') -and $PSBoundParameters.ContainsKey('ArgumentsJson')) {
+    throw 'Pass -Arguments or -ArgumentsJson, not both'
+}
+if ($PSBoundParameters.ContainsKey('ArgumentsJson')) {
+    $Arguments = ConvertFrom-Json -InputObject $ArgumentsJson -AsHashtable
+}
+if ($null -eq $Arguments) {
+    throw "Tool arguments required: -Arguments @{...} (in-process) or -ArgumentsJson '{...}' (across a process boundary, e.g. pwsh -File)"
+}
 $accept = 'application/json, text/event-stream'
 
 # 1) initialize -> session id in Mcp-Session-Id response header

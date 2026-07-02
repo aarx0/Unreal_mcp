@@ -1,5 +1,6 @@
 #include "MCP/McpDynamicToolManager.h"
 #include "MCP/McpToolRegistry.h"
+#include "HAL/PlatformTime.h"
 #include "Misc/ScopeLock.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMcpToolManager, Log, All);
@@ -94,6 +95,27 @@ TSet<FString> FMcpDynamicToolManager::GetEnabledToolNames() const
 	return Result;
 }
 
+bool FMcpDynamicToolManager::GetLastMutation(FString& OutAction, double& OutSecondsAgo) const
+{
+	FScopeLock Lock(&StateMutex);
+	if (LastMutationTime == 0.0)
+	{
+		return false;
+	}
+	OutAction = LastMutationAction;
+	OutSecondsAgo = FPlatformTime::Seconds() - LastMutationTime;
+	return true;
+}
+
+void FMcpDynamicToolManager::RecordMutation_NoLock(const FString& Action, bool bChanged)
+{
+	if (bChanged)
+	{
+		LastMutationAction = Action;
+		LastMutationTime = FPlatformTime::Seconds();
+	}
+}
+
 // ─── Action dispatch ────────────────────────────────────────────────────────
 
 TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
@@ -134,6 +156,7 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
 		{
 			FScopeLock Lock(&StateMutex);
 			Result = Reset(bChanged);
+			RecordMutation_NoLock(Action, bChanged);
 		}
 		return Result;
 	}
@@ -153,6 +176,7 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
 		{
 			FScopeLock Lock(&StateMutex);
 			Result = EnableTools(Names, bChanged);
+			RecordMutation_NoLock(Action, bChanged);
 		}
 		return Result;
 	}
@@ -172,6 +196,7 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
 		{
 			FScopeLock Lock(&StateMutex);
 			Result = DisableTools(Names, bChanged);
+			RecordMutation_NoLock(Action, bChanged);
 		}
 		return Result;
 	}
@@ -183,6 +208,7 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
 		{
 			FScopeLock Lock(&StateMutex);
 			Result = EnableCategory(Cat, bChanged);
+			RecordMutation_NoLock(Action, bChanged);
 		}
 		return Result;
 	}
@@ -194,6 +220,7 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
 		{
 			FScopeLock Lock(&StateMutex);
 			Result = DisableCategory(Cat, bChanged);
+			RecordMutation_NoLock(Action, bChanged);
 		}
 		return Result;
 	}

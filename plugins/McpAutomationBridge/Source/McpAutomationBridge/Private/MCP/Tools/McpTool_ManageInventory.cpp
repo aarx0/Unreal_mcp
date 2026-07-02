@@ -30,7 +30,10 @@ public:
 			.Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 			.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 			.String(TEXT("itemPath"), TEXT("Path to item data asset."))
-			.FreeformObject(TEXT("properties"), TEXT("Properties to apply to an item data asset."))
+			.FreeformObject(TEXT("properties"), TEXT("Properties to apply to an item data asset "
+				"(create_item_data_asset, set_item_properties). Keys matching native properties are "
+				"written via reflection; other string/number/bool values are stored in the asset's "
+				"string property bag (reported as storedInPropertyBag)."))
 			.Bool(TEXT("stackable"), TEXT("Whether the item can stack."))
 			.Number(TEXT("maxStackSize"), TEXT("Maximum stack size."))
 			.Bool(TEXT("uniqueItems"), TEXT("Whether each stack entry is unique."))
@@ -40,8 +43,8 @@ public:
 			.Number(TEXT("slotCount"), TEXT(""))
 			.Number(TEXT("maxWeight"), TEXT(""))
 			.Bool(TEXT("enableWeight"), TEXT("Enable inventory weight tracking."))
-			.Bool(TEXT("encumberanceSystem"), TEXT("Enable encumberance variables."))
-			.Number(TEXT("encumberanceThreshold"), TEXT("Encumberance threshold ratio."))
+			.Bool(TEXT("encumbranceSystem"), TEXT("Enable encumbrance variables."))
+			.Number(TEXT("encumbranceThreshold"), TEXT("Encumbrance threshold ratio (misspelled 'encumberance*' params still accepted)."))
 			.Bool(TEXT("replicated"), TEXT("Whether to replicate."))
 			.StringEnum(TEXT("replicationCondition"), {
 				TEXT("None"),

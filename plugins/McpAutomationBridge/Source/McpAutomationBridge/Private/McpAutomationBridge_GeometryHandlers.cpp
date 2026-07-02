@@ -326,6 +326,17 @@ static double ClampDimension(double Value, double Default = 100.0)
     return FMath::Clamp(Value, MIN_DIMENSION, MAX_DIMENSION);
 }
 
+// Create actions accept both "name" and its schema alias "actorName"
+static FString GetCreateActorName(const TSharedPtr<FJsonObject>& Payload, const TCHAR* Default)
+{
+    FString Name = GetJsonStringField(Payload, TEXT("name"));
+    if (Name.IsEmpty())
+    {
+        Name = GetJsonStringField(Payload, TEXT("actorName"));
+    }
+    return Name.IsEmpty() ? FString(Default) : Name;
+}
+
 static ADynamicMeshActor* FindDynamicMeshActorForGeometry(const FString& ActorName)
 {
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
@@ -487,8 +498,7 @@ static FVector AxisVectorFromPayload(const TSharedPtr<FJsonObject>& Payload, con
 static bool HandleCreateBox(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedBox");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedBox"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
 
@@ -593,8 +603,7 @@ static bool HandleCreateBox(UMcpAutomationBridgeSubsystem* Self, const FString& 
 static bool HandleCreateSphere(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                                const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedSphere");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedSphere"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
     double Radius = GetJsonNumberField(Payload, TEXT("radius"), 50.0);
@@ -638,8 +647,7 @@ static bool HandleCreateSphere(UMcpAutomationBridgeSubsystem* Self, const FStrin
 static bool HandleCreateCylinder(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                                  const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedCylinder");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedCylinder"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
     double Radius = GetJsonNumberField(Payload, TEXT("radius"), 50.0);
@@ -684,8 +692,7 @@ static bool HandleCreateCylinder(UMcpAutomationBridgeSubsystem* Self, const FStr
 static bool HandleCreateCone(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                              const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedCone");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedCone"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
 double BaseRadius = GetJsonNumberField(Payload, TEXT("baseRadius"), 50.0);
@@ -731,8 +738,7 @@ double BaseRadius = GetJsonNumberField(Payload, TEXT("baseRadius"), 50.0);
 static bool HandleCreateCapsule(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                                 const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedCapsule");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedCapsule"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
     double Radius = GetJsonNumberField(Payload, TEXT("radius"), 50.0);
@@ -780,8 +786,7 @@ double Length = GetJsonNumberField(Payload, TEXT("length"), 100.0);
 static bool HandleCreateTorus(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                               const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedTorus");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedTorus"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
 double MajorRadius = GetJsonNumberField(Payload, TEXT("majorRadius"), 50.0);
@@ -831,8 +836,7 @@ double MajorRadius = GetJsonNumberField(Payload, TEXT("majorRadius"), 50.0);
 static bool HandleCreatePlane(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                               const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedPlane");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedPlane"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
     double Width = ClampDimension(GetJsonNumberField(Payload, TEXT("width"), 100.0));
@@ -883,8 +887,7 @@ static bool HandleCreatePlane(UMcpAutomationBridgeSubsystem* Self, const FString
 static bool HandleCreateDisc(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                              const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedDisc");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedDisc"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
     double Radius = GetJsonNumberField(Payload, TEXT("radius"), 50.0);
@@ -1306,11 +1309,19 @@ static bool HandleSimplifyMesh(UMcpAutomationBridgeSubsystem* Self, const FStrin
                                const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
+    const bool bHasTargetTriangleCount = Payload.IsValid() && Payload->HasField(TEXT("targetTriangleCount"));
+    int32 RequestedTriangleCount = GetJsonIntField(Payload, TEXT("targetTriangleCount"), 0);
     double TargetPercentage = GetJsonNumberField(Payload, TEXT("targetPercentage"), 50.0);
 
     if (ActorName.IsEmpty())
     {
         Self->SendAutomationError(Socket, RequestId, TEXT("actorName required"), TEXT("INVALID_ARGUMENT"));
+        return true;
+    }
+
+    if (bHasTargetTriangleCount && RequestedTriangleCount <= 0)
+    {
+        Self->SendAutomationError(Socket, RequestId, TEXT("targetTriangleCount must be a positive integer"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -1351,7 +1362,9 @@ static bool HandleSimplifyMesh(UMcpAutomationBridgeSubsystem* Self, const FStrin
     // Use individual query functions instead
     int32 TriCountBefore = Mesh->GetTriangleCount();
 
-    int32 TargetTriCount = FMath::Max(1, FMath::RoundToInt(TriCountBefore * (TargetPercentage / 100.0)));
+    int32 TargetTriCount = bHasTargetTriangleCount
+        ? RequestedTriangleCount
+        : FMath::Max(1, FMath::RoundToInt(TriCountBefore * (TargetPercentage / 100.0)));
 
     UGeometryScriptLibrary_MeshSimplifyFunctions::ApplySimplifyToTriangleCount(
         Mesh,
@@ -1366,6 +1379,7 @@ static bool HandleSimplifyMesh(UMcpAutomationBridgeSubsystem* Self, const FStrin
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("actorName"), ActorName);
+    Result->SetNumberField(TEXT("targetTriangleCount"), TargetTriCount);
     Result->SetNumberField(TEXT("originalTriangles"), TriCountBefore);
     Result->SetNumberField(TEXT("simplifiedTriangles"), TriCountAfter);
     Result->SetNumberField(TEXT("reductionPercent"), (1.0 - ((double)TriCountAfter / (double)TriCountBefore)) * 100.0);
@@ -1519,6 +1533,9 @@ static bool HandleAutoUV(UMcpAutomationBridgeSubsystem* Self, const FString& Req
 
     UDynamicMesh* Mesh = DMC->GetDynamicMesh();
 
+    // XAtlas rejects non-compact meshes (e.g. after boolean ops); compact first
+    UGeometryScriptLibrary_MeshRepairFunctions::CompactMesh(Mesh, nullptr);
+
     // UE 5.7: FGeometryScriptAutoUVOptions was removed, use XAtlas directly
     UGeometryScriptLibrary_MeshUVFunctions::AutoGenerateXAtlasMeshUVs(
         Mesh,
@@ -1541,6 +1558,8 @@ static bool HandleConvertToStaticMesh(UMcpAutomationBridgeSubsystem* Self, const
 {
     FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
     FString AssetPath = GetJsonStringField(Payload, TEXT("assetPath"));
+    if (AssetPath.IsEmpty()) AssetPath = GetJsonStringField(Payload, TEXT("outputPath"));
+    if (AssetPath.IsEmpty()) AssetPath = GetJsonStringField(Payload, TEXT("path"));
 
     if (ActorName.IsEmpty())
     {
@@ -1627,8 +1646,7 @@ static bool HandleConvertToStaticMesh(UMcpAutomationBridgeSubsystem* Self, const
 static bool HandleCreateStairs(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                                const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedStairs");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedStairs"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
 float StepWidth = GetJsonNumberField(Payload, TEXT("stepWidth"), 100.0f);
@@ -1667,14 +1685,22 @@ float StepWidth = GetJsonNumberField(Payload, TEXT("stepWidth"), 100.0f);
 static bool HandleCreateSpiralStairs(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                                      const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedSpiralStairs");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedSpiralStairs"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
 float StepWidth = GetJsonNumberField(Payload, TEXT("stepWidth"), 100.0f);
     float StepHeight = GetJsonNumberField(Payload, TEXT("stepHeight"), 20.0f);
     float InnerRadius = GetJsonNumberField(Payload, TEXT("innerRadius"), 150.0f);
-    float CurveAngle = GetJsonNumberField(Payload, TEXT("curveAngle"), 90.0f);
+    const bool bHasCurveAngle = Payload.IsValid() && Payload->HasField(TEXT("curveAngle"));
+    const bool bHasNumTurns = Payload.IsValid() && Payload->HasField(TEXT("numTurns"));
+    if (bHasCurveAngle && bHasNumTurns)
+    {
+        Self->SendAutomationError(Socket, RequestId, TEXT("Pass either curveAngle (degrees) or numTurns (full revolutions), not both"), TEXT("INVALID_ARGUMENT"));
+        return true;
+    }
+    float CurveAngle = bHasNumTurns
+        ? GetJsonNumberField(Payload, TEXT("numTurns")) * 360.0f
+        : GetJsonNumberField(Payload, TEXT("curveAngle"), 90.0f);
     int32 NumSteps = GetJsonIntField(Payload, TEXT("numSteps"), 8);
     bool bFloating = GetJsonBoolField(Payload, TEXT("floating"), false);
 
@@ -1698,6 +1724,7 @@ float StepWidth = GetJsonNumberField(Payload, TEXT("stepWidth"), 100.0f);
     Result->SetStringField(TEXT("name"), NewActor->GetActorLabel());
     Result->SetNumberField(TEXT("numSteps"), NumSteps);
     Result->SetNumberField(TEXT("curveAngle"), CurveAngle);
+    Result->SetNumberField(TEXT("numTurns"), CurveAngle / 360.0f);
     Self->SendAutomationResponse(Socket, RequestId, true, TEXT("Spiral stairs created"), Result);
     return true;
 }
@@ -1705,8 +1732,7 @@ float StepWidth = GetJsonNumberField(Payload, TEXT("stepWidth"), 100.0f);
 static bool HandleCreateRing(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                              const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedRing");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedRing"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
 double OuterRadius = GetJsonNumberField(Payload, TEXT("outerRadius"), 50.0);
@@ -2991,8 +3017,7 @@ static bool HandleArrayRadial(UMcpAutomationBridgeSubsystem* Self, const FString
 static bool HandleCreateArch(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                              const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedArch");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedArch"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
 double MajorRadius = GetJsonNumberField(Payload, TEXT("majorRadius"), 100.0);
@@ -3033,8 +3058,7 @@ double MajorRadius = GetJsonNumberField(Payload, TEXT("majorRadius"), 100.0);
 static bool HandleCreatePipe(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                              const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedPipe");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedPipe"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
 double OuterRadius = GetJsonNumberField(Payload, TEXT("outerRadius"), 50.0);
@@ -3085,8 +3109,7 @@ double OuterRadius = GetJsonNumberField(Payload, TEXT("outerRadius"), 50.0);
 static bool HandleCreateRamp(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                              const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedRamp");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedRamp"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
 double Width = GetJsonNumberField(Payload, TEXT("width"), 100.0);
@@ -3368,6 +3391,16 @@ FString ProjectionType = GetJsonStringField(Payload, TEXT("projectionType"), TEX
     double Scale = GetJsonNumberField(Payload, TEXT("scale"), 1.0);
     int32 UVChannel = GetJsonIntField(Payload, TEXT("uvChannel"), 0);
 
+    const TSharedPtr<FJsonObject>* UVScaleObject = nullptr;
+    const bool bHasUVScale = Payload.IsValid() && Payload->TryGetObjectField(TEXT("uvScale"), UVScaleObject);
+    if (Payload.IsValid() && Payload->HasField(TEXT("uvScale")) && !bHasUVScale)
+    {
+        Self->SendAutomationError(Socket, RequestId, TEXT("uvScale must be an object with u and v fields"), TEXT("INVALID_ARGUMENT"));
+        return true;
+    }
+    const double UVScaleU = bHasUVScale ? GetJsonNumberField(*UVScaleObject, TEXT("u"), 1.0) : 1.0;
+    const double UVScaleV = bHasUVScale ? GetJsonNumberField(*UVScaleObject, TEXT("v"), 1.0) : 1.0;
+
     if (ActorName.IsEmpty())
     {
         Self->SendAutomationError(Socket, RequestId, TEXT("actorName required"), TEXT("INVALID_ARGUMENT"));
@@ -3430,12 +3463,26 @@ FString ProjectionType = GetJsonStringField(Payload, TEXT("projectionType"), TEX
         return true;
     }
 
+    if (bHasUVScale && (UVScaleU != 1.0 || UVScaleV != 1.0))
+    {
+        UGeometryScriptLibrary_MeshUVFunctions::ScaleMeshUVs(
+            Mesh, UVChannel, FVector2D(UVScaleU, UVScaleV), FVector2D::ZeroVector,
+            FGeometryScriptMeshSelection(), nullptr);
+    }
+
     DMC->NotifyMeshUpdated();
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("actorName"), ActorName);
     Result->SetStringField(TEXT("projectionType"), ProjectionType);
     Result->SetNumberField(TEXT("scale"), Scale);
+    if (bHasUVScale)
+    {
+        TSharedPtr<FJsonObject> UVScaleResult = McpHandlerUtils::CreateResultObject();
+        UVScaleResult->SetNumberField(TEXT("u"), UVScaleU);
+        UVScaleResult->SetNumberField(TEXT("v"), UVScaleV);
+        Result->SetObjectField(TEXT("uvScale"), UVScaleResult);
+    }
     Result->SetNumberField(TEXT("uvChannel"), UVChannel);
     Self->SendAutomationResponse(Socket, RequestId, true, TEXT("UV projection applied"), Result);
     return true;
@@ -3502,8 +3549,7 @@ static bool HandleRecomputeTangents(UMcpAutomationBridgeSubsystem* Self, const F
 static bool HandleRevolve(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                           const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("GeneratedRevolve");
+    FString Name = GetCreateActorName(Payload, TEXT("GeneratedRevolve"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
 double Angle = GetJsonNumberField(Payload, TEXT("angle"), 360.0);
@@ -5416,8 +5462,7 @@ static bool HandleSplitNormals(UMcpAutomationBridgeSubsystem* Self, const FStrin
 static bool HandleCreateProceduralMesh(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
                                        const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty()) Name = TEXT("ProceduralMesh");
+    FString Name = GetCreateActorName(Payload, TEXT("ProceduralMesh"));
 
     FTransform Transform = ReadTransformFromPayload(Payload);
     bool bEnableCollision = GetJsonBoolField(Payload, TEXT("enableCollision"), false);
@@ -6190,6 +6235,9 @@ static bool HandleUnwrapUV(UMcpAutomationBridgeSubsystem* Self, const FString& R
 
     UDynamicMesh* Mesh = DMC->GetDynamicMesh();
 
+    // XAtlas rejects non-compact meshes (e.g. after boolean ops); compact first
+    UGeometryScriptLibrary_MeshRepairFunctions::CompactMesh(Mesh, nullptr);
+
     // Use XAtlas for proper UV unwrapping
     FGeometryScriptXAtlasOptions XAtlasOptions;
     // XAtlas defaults are reasonable for most cases
@@ -6251,6 +6299,9 @@ static bool HandlePackUVIslands(UMcpAutomationBridgeSubsystem* Self, const FStri
 
     UDynamicMesh* Mesh = DMC->GetDynamicMesh();
 
+    // XAtlas rejects non-compact meshes (e.g. after boolean ops); compact first
+    UGeometryScriptLibrary_MeshRepairFunctions::CompactMesh(Mesh, nullptr);
+
     // Use XAtlas with packing - it handles both unwrapping and packing
     FGeometryScriptXAtlasOptions XAtlasOptions;
     // XAtlas will pack islands efficiently by default
@@ -6282,6 +6333,8 @@ static bool HandleConvertToNanite(UMcpAutomationBridgeSubsystem* Self, const FSt
 {
     FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
     FString AssetPath = GetJsonStringField(Payload, TEXT("assetPath"));
+    if (AssetPath.IsEmpty()) AssetPath = GetJsonStringField(Payload, TEXT("outputPath"));
+    if (AssetPath.IsEmpty()) AssetPath = GetJsonStringField(Payload, TEXT("path"));
 
     if (ActorName.IsEmpty())
     {
@@ -6292,6 +6345,14 @@ static bool HandleConvertToNanite(UMcpAutomationBridgeSubsystem* Self, const FSt
     {
         AssetPath = FString::Printf(TEXT("/Game/GeneratedMeshes/%s_Nanite"), *ActorName);
     }
+
+    FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
+    if (SanitizedAssetPath.IsEmpty())
+    {
+        Self->SendAutomationError(Socket, RequestId, TEXT("Invalid assetPath - rejected due to security validation"), TEXT("INVALID_ASSET_PATH"));
+        return true;
+    }
+    AssetPath = SanitizedAssetPath;
 
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     ADynamicMeshActor* TargetActor = nullptr;

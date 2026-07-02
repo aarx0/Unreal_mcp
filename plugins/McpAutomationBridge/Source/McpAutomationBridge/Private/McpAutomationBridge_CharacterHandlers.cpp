@@ -14,7 +14,7 @@
 //
 // Section 2: Movement Component (14.2)
 //   - configure_movement_speeds       : Walk/run/crouch/swim/fly speed, accel, friction
-//   - configure_jump                  : Jump velocity, air control, gravity, hold time
+//   - configure_jump                  : Jump apex height (cm), air control, gravity, hold time
 //   - configure_rotation              : Orient to movement, controller rotation, rotation rate
 //   - add_custom_movement_mode        : Add custom movement mode with state variables
 //   - configure_nav_movement          : Nav agent radius/height, RVO avoidance
@@ -29,7 +29,7 @@
 //
 // Section 4: Footstep System (14.4)
 //   - setup_footstep_system           : Socket names, trace distance, tracking vars
-//   - map_surface_to_sound            : Surface-to-sound map variable
+//   - map_surface_to_sound            : Map a surface type to a footstep sound
 //   - configure_footstep_fx           : Volume multiplier, particle scale
 //
 // Section 5: Utility
@@ -38,7 +38,7 @@
 // Section 6: Aliases & Convenience Sub-Actions
 //   - setup_movement                  : Alias for configure_movement_speeds (subset)
 //   - set_walk_speed                  : Direct walk speed setter
-//   - set_jump_height                 : Direct jump Z velocity setter
+//   - set_jump_height                 : Jump apex height (cm) -> JumpZVelocity
 //   - set_gravity_scale               : Direct gravity scale setter
 //   - set_ground_friction             : Direct ground friction setter
 //   - set_braking_deceleration        : Direct braking deceleration setter
@@ -69,15 +69,21 @@
 //
 // configure_movement_speeds:
 //   Payload:  { "blueprintPath": string, "walkSpeed"?: number, "runSpeed"?: number,
-//               "crouchSpeed"?: number, "swimSpeed"?: number, "flySpeed"?: number,
-//               "acceleration"?: number, "deceleration"?: number, "groundFriction"?: number }
-//   Response: { "blueprintPath": string }
+//               "sprintSpeed"?: number, "crouchSpeed"?: number, "swimSpeed"?: number,
+//               "flySpeed"?: number, "acceleration"?: number, "deceleration"?: number,
+//               "groundFriction"?: number }
+//   Response: { "blueprintPath": string, "walkSpeed": number, "runSpeed"?: number,
+//               "runSpeedApplied"?: bool, "runSpeedTarget"?: string,
+//               "sprintSpeed"?: number, "sprintSpeedTarget"?: string,
+//               "variablesAdded"?: string[] }
 //
 // configure_jump:
-//   Payload:  { "blueprintPath": string, "jumpHeight"?: number, "airControl"?: number,
+//   Payload:  { "blueprintPath": string, "jumpHeight"?: number (apex height in cm,
+//               converted to JumpZVelocity), "airControl"?: number,
 //               "gravityScale"?: number, "fallingLateralFriction"?: number,
 //               "maxJumpCount"?: number, "jumpHoldTime"?: number }
-//   Response: { "blueprintPath": string }
+//   Response: { "blueprintPath": string, "requestedJumpHeight"?: number,
+//               "appliedJumpZVelocity"?: number }
 //
 // configure_rotation:
 //   Payload:  { "blueprintPath": string, "orientToMovement"?: bool,
@@ -141,8 +147,9 @@
 //               "socketRight": string, "traceDistance": number }
 //
 // map_surface_to_sound:
-//   Payload:  { "blueprintPath": string, "surfaceType": string }
-//   Response: { "blueprintPath": string, "surfaceType": string, "mapVariable": string }
+//   Payload:  { "blueprintPath": string, "surfaceType": string, "soundPath": string }
+//   Response: { "blueprintPath": string, "surfaceType": string, "soundPath": string,
+//               "mapVariable": string, "mapSize": number }
 //
 // configure_footstep_fx:
 //   Payload:  { "blueprintPath": string, "volumeMultiplier"?: number,
@@ -212,6 +219,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "PhysicsEngine/PhysicsSettings.h"
 
 // =============================================================================
 // Camera Includes
@@ -227,6 +235,14 @@
 // =============================================================================
 #include "Engine/SkeletalMesh.h"
 #include "Animation/AnimBlueprint.h"
+
+// =============================================================================
+// Audio & Reflection Includes
+// =============================================================================
+#include "Sound/SoundBase.h"
+#include "UObject/SoftObjectPath.h"
+#include "UObject/SoftObjectPtr.h"
+#include "UObject/UnrealType.h"
 
 // =============================================================================
 // Blueprint Graph Includes
@@ -937,75 +953,113 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // configure_movement_speeds
     // -------------------------------------------------------------------------
     // Configures movement speeds and physics on the CharacterMovementComponent CDO.
-    // All fields are optional — only provided fields are applied.
+    // All fields are optional — only provided fields are applied. runSpeed writes
+    // MaxWalkSpeed when walkSpeed is absent (UE has no separate run-speed field);
+    // alongside walkSpeed it lands in a RunSpeed variable default. sprintSpeed
+    // lands in a SprintSpeed variable default (matches configure_sprint).
     //
     // Payload:  { "blueprintPath": string, "walkSpeed"?: 600, "runSpeed"?: 600,
-    //             "crouchSpeed"?: 300, "swimSpeed"?: 300, "flySpeed"?: 600,
-    //             "acceleration"?: 2048, "deceleration"?: 2048, "groundFriction"?: 8 }
-    // Response: { "blueprintPath": string }
+    //             "sprintSpeed"?: 900, "crouchSpeed"?: 300, "swimSpeed"?: 300,
+    //             "flySpeed"?: 600, "acceleration"?: 2048, "deceleration"?: 2048,
+    //             "groundFriction"?: 8 }
+    // Response: { "blueprintPath": string, "walkSpeed": number, "runSpeed"?: number,
+    //             "runSpeedApplied"?: bool, "runSpeedTarget"?: string,
+    //             "sprintSpeed"?: number, "sprintSpeedTarget"?: string,
+    //             "variablesAdded"?: string[] }
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("configure_movement_speeds"))
     {
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        ACharacter* CharCDO = Blueprint->GeneratedClass 
+        ACharacter* CharCDO = Blueprint->GeneratedClass
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
             : nullptr;
-        bool bHasAppliedWalkSpeed = false;
-        bool bRunSpeedApplied = false;
-        double AppliedWalkSpeed = 0.0;
-        
-        if (CharCDO && CharCDO->GetCharacterMovement())
+        UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
+        if (!Movement)
         {
-            UCharacterMovementComponent* Movement = CharCDO->GetCharacterMovement();
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
+                TEXT("NOT_A_CHARACTER"));
+            return true;
+        }
 
-		// walkSpeed sets MaxWalkSpeed directly. runSpeed writes to MaxWalkSpeed
-		// in UE (no separate MaxRunSpeed field). If walkSpeed is also provided,
-		// walkSpeed takes priority and runSpeed is ignored in favor of
-		// configure_sprint variables (which set blueprint-level state vars).
-		if (Payload->HasField(TEXT("walkSpeed")))
-		{
-			Movement->MaxWalkSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("walkSpeed"), 600.0));
-			// Warn if runSpeed was also provided (it will be ignored)
-			if (Payload->HasField(TEXT("runSpeed")))
-			{
-				UE_LOG(LogMcpCharacterHandlers, Warning, TEXT("configure_movement_speeds: Both walkSpeed and runSpeed provided. runSpeed is ignored (both map to MaxWalkSpeed in UE). Use configure_sprint for run speed."));
-			}
-		}
-		else if (Payload->HasField(TEXT("runSpeed")))
-		{
-			Movement->MaxWalkSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("runSpeed"), 600.0));
-			bRunSpeedApplied = true;
-		}
-		if (Payload->HasField(TEXT("crouchSpeed")))
-			Movement->MaxWalkSpeedCrouched = static_cast<float>(GetJsonNumberField(Payload, TEXT("crouchSpeed"), 300.0));
-		if (Payload->HasField(TEXT("swimSpeed")))
-			Movement->MaxSwimSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("swimSpeed"), 300.0));
-		if (Payload->HasField(TEXT("flySpeed")))
-			Movement->MaxFlySpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("flySpeed"), 600.0));
-		if (Payload->HasField(TEXT("acceleration")))
-			Movement->MaxAcceleration = static_cast<float>(GetJsonNumberField(Payload, TEXT("acceleration"), 2048.0));
-		if (Payload->HasField(TEXT("deceleration")))
-			Movement->BrakingDecelerationWalking = static_cast<float>(GetJsonNumberField(Payload, TEXT("deceleration"), 2048.0));
-		if (Payload->HasField(TEXT("groundFriction")))
-			Movement->GroundFriction = static_cast<float>(GetJsonNumberField(Payload, TEXT("groundFriction"), 8.0));
-		AppliedWalkSpeed = Movement->MaxWalkSpeed;
-		bHasAppliedWalkSpeed = true;
-	}
+        const bool bHasWalkSpeed = Payload->HasField(TEXT("walkSpeed"));
+        const bool bHasRunSpeed = Payload->HasField(TEXT("runSpeed"));
+        const bool bHasSprintSpeed = Payload->HasField(TEXT("sprintSpeed"));
+        TArray<TSharedPtr<FJsonValue>> VarsAdded;
+
+        // All CMC writes happen before any SetBPVarDefaultValue: it recompiles
+        // the Blueprint, which reinstances the CDO and would orphan this pointer.
+        if (bHasWalkSpeed)
+        {
+            Movement->MaxWalkSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("walkSpeed"), 600.0));
+        }
+
+        FString RunSpeedTarget;
+        if (bHasRunSpeed && !bHasWalkSpeed)
+        {
+            Movement->MaxWalkSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("runSpeed"), 600.0));
+            RunSpeedTarget = TEXT("MaxWalkSpeed");
+        }
+
+        if (Payload->HasField(TEXT("crouchSpeed")))
+            Movement->MaxWalkSpeedCrouched = static_cast<float>(GetJsonNumberField(Payload, TEXT("crouchSpeed"), 300.0));
+        if (Payload->HasField(TEXT("swimSpeed")))
+            Movement->MaxSwimSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("swimSpeed"), 300.0));
+        if (Payload->HasField(TEXT("flySpeed")))
+            Movement->MaxFlySpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("flySpeed"), 600.0));
+        if (Payload->HasField(TEXT("acceleration")))
+            Movement->MaxAcceleration = static_cast<float>(GetJsonNumberField(Payload, TEXT("acceleration"), 2048.0));
+        if (Payload->HasField(TEXT("deceleration")))
+            Movement->BrakingDecelerationWalking = static_cast<float>(GetJsonNumberField(Payload, TEXT("deceleration"), 2048.0));
+        if (Payload->HasField(TEXT("groundFriction")))
+            Movement->GroundFriction = static_cast<float>(GetJsonNumberField(Payload, TEXT("groundFriction"), 8.0));
+
+        const float AppliedMaxWalkSpeed = Movement->MaxWalkSpeed;
+
+        FEdGraphPinType FloatPinType;
+        FloatPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+        FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+
+        if (bHasRunSpeed && bHasWalkSpeed)
+        {
+            if (AddBlueprintVariableChar(Blueprint, TEXT("RunSpeed"), FloatPinType, TEXT("Movement")))
+            {
+                VarsAdded.Add(MakeShared<FJsonValueString>(TEXT("RunSpeed")));
+            }
+            SetBPVarDefaultValue(Blueprint, FName(TEXT("RunSpeed")), FString::SanitizeFloat(GetJsonNumberField(Payload, TEXT("runSpeed"), 600.0)));
+            RunSpeedTarget = TEXT("RunSpeed");
+        }
+
+        if (bHasSprintSpeed)
+        {
+            if (AddBlueprintVariableChar(Blueprint, TEXT("SprintSpeed"), FloatPinType, TEXT("Sprint")))
+            {
+                VarsAdded.Add(MakeShared<FJsonValueString>(TEXT("SprintSpeed")));
+            }
+            SetBPVarDefaultValue(Blueprint, FName(TEXT("SprintSpeed")), FString::SanitizeFloat(GetJsonNumberField(Payload, TEXT("sprintSpeed"), 900.0)));
+        }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-        if (Payload->HasField(TEXT("runSpeed")))
+        Result->SetNumberField(TEXT("walkSpeed"), AppliedMaxWalkSpeed);
+        if (bHasRunSpeed)
         {
             Result->SetNumberField(TEXT("runSpeed"), GetJsonNumberField(Payload, TEXT("runSpeed"), 600.0));
-            Result->SetBoolField(TEXT("runSpeedApplied"), bRunSpeedApplied);
+            Result->SetBoolField(TEXT("runSpeedApplied"), true);
+            Result->SetStringField(TEXT("runSpeedTarget"), RunSpeedTarget);
         }
-        if (bHasAppliedWalkSpeed)
+        if (bHasSprintSpeed)
         {
-            Result->SetNumberField(TEXT("walkSpeed"), AppliedWalkSpeed);
+            Result->SetNumberField(TEXT("sprintSpeed"), GetJsonNumberField(Payload, TEXT("sprintSpeed"), 900.0));
+            Result->SetStringField(TEXT("sprintSpeedTarget"), TEXT("SprintSpeed"));
+        }
+        if (VarsAdded.Num() > 0)
+        {
+            Result->SetArrayField(TEXT("variablesAdded"), VarsAdded);
         }
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Movement speeds configured"), Result);
@@ -1016,44 +1070,77 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // configure_jump
     // -------------------------------------------------------------------------
     // Configures jump parameters on the CharacterMovementComponent CDO.
-    // All fields optional — only provided fields are applied.
+    // All fields optional — only provided fields are applied. jumpHeight is the
+    // desired apex height in cm, converted to JumpZVelocity via v = sqrt(2*g*h)
+    // using the effective gravity (DefaultGravityZ * GravityScale); gravityScale
+    // is applied first so a same-call change feeds the conversion.
     //
     // Payload:  { "blueprintPath": string, "jumpHeight"?: 600, "airControl"?: 0.35,
     //             "gravityScale"?: 1.0, "fallingLateralFriction"?: 0.0,
     //             "maxJumpCount"?: 1, "jumpHoldTime"?: 0.0 }
-    // Response: { "blueprintPath": string }
+    // Response: { "blueprintPath": string, "requestedJumpHeight"?: number,
+    //             "appliedJumpZVelocity"?: number }
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("configure_jump"))
     {
         UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
         if (!Blueprint) return true;
 
-        ACharacter* CharCDO = Blueprint->GeneratedClass 
+        ACharacter* CharCDO = Blueprint->GeneratedClass
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
             : nullptr;
-        
-        if (CharCDO && CharCDO->GetCharacterMovement())
+        UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
+        if (!Movement)
         {
-            UCharacterMovementComponent* Movement = CharCDO->GetCharacterMovement();
-
-            if (Payload->HasField(TEXT("jumpHeight")))
-                Movement->JumpZVelocity = static_cast<float>(GetJsonNumberField(Payload, TEXT("jumpHeight"), 600.0));
-            if (Payload->HasField(TEXT("airControl")))
-                Movement->AirControl = static_cast<float>(GetJsonNumberField(Payload, TEXT("airControl"), 0.35));
-            if (Payload->HasField(TEXT("gravityScale")))
-                Movement->GravityScale = static_cast<float>(GetJsonNumberField(Payload, TEXT("gravityScale"), 1.0));
-            if (Payload->HasField(TEXT("fallingLateralFriction")))
-                Movement->FallingLateralFriction = static_cast<float>(GetJsonNumberField(Payload, TEXT("fallingLateralFriction"), 0.0));
-            if (Payload->HasField(TEXT("maxJumpCount")))
-                CharCDO->JumpMaxCount = static_cast<int32>(GetJsonNumberField(Payload, TEXT("maxJumpCount"), 1));
-            if (Payload->HasField(TEXT("jumpHoldTime")))
-                CharCDO->JumpMaxHoldTime = static_cast<float>(GetJsonNumberField(Payload, TEXT("jumpHoldTime"), 0.0));
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
+                TEXT("NOT_A_CHARACTER"));
+            return true;
         }
+
+        if (Payload->HasField(TEXT("gravityScale")))
+            Movement->GravityScale = static_cast<float>(GetJsonNumberField(Payload, TEXT("gravityScale"), 1.0));
+
+        const bool bHasJumpHeight = Payload->HasField(TEXT("jumpHeight"));
+        double RequestedJumpHeight = 0.0;
+        if (bHasJumpHeight)
+        {
+            RequestedJumpHeight = GetJsonNumberField(Payload, TEXT("jumpHeight"), 600.0);
+            if (RequestedJumpHeight < 0.0)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("jumpHeight must be >= 0 (apex height in cm; converted to JumpZVelocity)."),
+                    TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            const double GravityMagnitude = FMath::Abs(static_cast<double>(UPhysicsSettings::Get()->DefaultGravityZ) * Movement->GravityScale);
+            if (GravityMagnitude <= KINDA_SMALL_NUMBER)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Cannot convert jumpHeight to JumpZVelocity: effective gravity is zero (gravityScale=%g). Pass a non-zero gravityScale."), Movement->GravityScale),
+                    TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            Movement->JumpZVelocity = static_cast<float>(FMath::Sqrt(2.0 * GravityMagnitude * RequestedJumpHeight));
+        }
+        if (Payload->HasField(TEXT("airControl")))
+            Movement->AirControl = static_cast<float>(GetJsonNumberField(Payload, TEXT("airControl"), 0.35));
+        if (Payload->HasField(TEXT("fallingLateralFriction")))
+            Movement->FallingLateralFriction = static_cast<float>(GetJsonNumberField(Payload, TEXT("fallingLateralFriction"), 0.0));
+        if (Payload->HasField(TEXT("maxJumpCount")))
+            CharCDO->JumpMaxCount = static_cast<int32>(GetJsonNumberField(Payload, TEXT("maxJumpCount"), 1));
+        if (Payload->HasField(TEXT("jumpHoldTime")))
+            CharCDO->JumpMaxHoldTime = static_cast<float>(GetJsonNumberField(Payload, TEXT("jumpHoldTime"), 0.0));
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+        if (bHasJumpHeight)
+        {
+            Result->SetNumberField(TEXT("requestedJumpHeight"), RequestedJumpHeight);
+            Result->SetNumberField(TEXT("appliedJumpZVelocity"), Movement->JumpZVelocity);
+        }
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Jump configured"), Result);
         return true;
@@ -1168,6 +1255,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         Result->SetStringField(TEXT("stateVariable"), StateVarName);
         Result->SetStringField(TEXT("speedVariable"), SpeedVarName);
         Result->SetNumberField(TEXT("customSpeed"), CustomSpeed);
+        Result->SetStringField(TEXT("cmcProperty"), TEXT("MaxCustomMovementSpeed"));
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Custom movement mode added with state tracking variables"), Result);
         return true;
@@ -1332,7 +1420,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     // Configures a climbing system by adding state and configuration Blueprint
     // variables: bIsClimbing, bCanClimb, ClimbSpeed, ClimbableTag, ClimbSurfaceNormal.
-    // Also sets MaxCustomMovementSpeed on the CMC.
+    // The climb speed lives in the ClimbSpeed variable default; no CharacterMovement
+    // property is written (MaxCustomMovementSpeed belongs to add_custom_movement_mode).
     //
     // Payload:  { "blueprintPath": string, "climbSpeed"?: 300,
     //             "climbableTag"?: "Climbable" }
@@ -1372,17 +1461,6 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         SetBPVarDefaultValue(Blueprint, FName(TEXT("ClimbSpeed")), FString::SanitizeFloat(ClimbSpeed));
         SetBPVarDefaultValue(Blueprint, FName(TEXT("ClimbableTag")), ClimbableTag);
 
-        // Configure CMC for custom movement mode
-        ACharacter* CharCDO = Blueprint->GeneratedClass 
-            ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
-            : nullptr;
-        
-        if (CharCDO && CharCDO->GetCharacterMovement())
-        {
-            UCharacterMovementComponent* Movement = CharCDO->GetCharacterMovement();
-            Movement->MaxCustomMovementSpeed = ClimbSpeed;
-        }
-
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
@@ -1390,6 +1468,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         Result->SetNumberField(TEXT("climbSpeed"), ClimbSpeed);
         Result->SetStringField(TEXT("climbableTag"), ClimbableTag);
         Result->SetStringField(TEXT("stateVariable"), TEXT("bIsClimbing"));
+        Result->SetStringField(TEXT("speedVariable"), TEXT("ClimbSpeed"));
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Climbing system configured with state variables"), Result);
         return true;
@@ -1455,7 +1534,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // Configures a wall running system by adding state and configuration Blueprint
     // variables: bIsWallRunning, bIsWallRunningLeft, bIsWallRunningRight,
     // WallRunSpeed, WallRunDuration, WallRunGravityScale, WallRunTimeRemaining,
-    // WallRunNormal (FVector). Also sets MaxCustomMovementSpeed on the CMC.
+    // WallRunNormal (FVector). Passed values land in the variable defaults; no
+    // CharacterMovement property is written (MaxCustomMovementSpeed belongs to
+    // add_custom_movement_mode).
     //
     // Payload:  { "blueprintPath": string, "wallRunSpeed"?: 600,
     //             "wallRunDuration"?: 2.0, "wallRunGravityScale"?: 0.25 }
@@ -1492,16 +1573,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         VectorPinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
         AddBlueprintVariableChar(Blueprint, TEXT("WallRunNormal"), VectorPinType, TEXT("Wall Running"));
 
-        // Configure CMC for custom movement mode
-        ACharacter* CharCDO = Blueprint->GeneratedClass 
-            ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
-            : nullptr;
-        
-        if (CharCDO && CharCDO->GetCharacterMovement())
-        {
-            UCharacterMovementComponent* Movement = CharCDO->GetCharacterMovement();
-            Movement->MaxCustomMovementSpeed = WallRunSpeed;
-        }
+        // Set default values for wall running configuration
+        SetBPVarDefaultValue(Blueprint, FName(TEXT("WallRunSpeed")), FString::SanitizeFloat(WallRunSpeed));
+        SetBPVarDefaultValue(Blueprint, FName(TEXT("WallRunDuration")), FString::SanitizeFloat(WallRunDuration));
+        SetBPVarDefaultValue(Blueprint, FName(TEXT("WallRunGravityScale")), FString::SanitizeFloat(WallRunGravity));
 
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
@@ -1511,6 +1586,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         Result->SetNumberField(TEXT("wallRunDuration"), WallRunDuration);
         Result->SetNumberField(TEXT("wallRunGravityScale"), WallRunGravity);
         Result->SetStringField(TEXT("stateVariable"), TEXT("bIsWallRunning"));
+        Result->SetStringField(TEXT("speedVariable"), TEXT("WallRunSpeed"));
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Wall running system configured with state variables"), Result);
         return true;
@@ -1558,6 +1634,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         VectorPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
         VectorPinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
         AddBlueprintVariableChar(Blueprint, TEXT("GrappleTargetLocation"), VectorPinType, TEXT("Grappling"));
+
+        // Set default values for grappling configuration
+        SetBPVarDefaultValue(Blueprint, FName(TEXT("GrappleRange")), FString::SanitizeFloat(GrappleRange));
+        SetBPVarDefaultValue(Blueprint, FName(TEXT("GrappleSpeed")), FString::SanitizeFloat(GrappleSpeed));
+        SetBPVarDefaultValue(Blueprint, FName(TEXT("GrappleTargetTag")), GrappleTarget);
 
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
@@ -1614,6 +1695,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
         AddBlueprintVariableChar(Blueprint, TEXT("FootstepTraceDistance"), FloatPinType, TEXT("Footsteps"));
 
+        // Set default values for footstep configuration
+        SetBPVarDefaultValue(Blueprint, FName(TEXT("bFootstepSystemEnabled")), Enabled ? TEXT("true") : TEXT("false"));
+        SetBPVarDefaultValue(Blueprint, FName(TEXT("FootstepSocketLeft")), SocketLeft);
+        SetBPVarDefaultValue(Blueprint, FName(TEXT("FootstepSocketRight")), SocketRight);
+        SetBPVarDefaultValue(Blueprint, FName(TEXT("FootstepTraceDistance")), FString::SanitizeFloat(TraceDistance));
+
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
@@ -1629,11 +1716,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     // map_surface_to_sound
     // -------------------------------------------------------------------------
-    // Creates a TMap<FName, FSoftObjectPath> Blueprint variable for surface-to-sound
-    // lookup. This is used to map physical surface types to footstep sounds/particles.
+    // Writes a surfaceType -> sound entry into the FootstepSoundMap
+    // (TMap<FName, TSoftObjectPtr<USoundBase>>) Blueprint variable default,
+    // creating the variable if needed. Entries accumulate across calls;
+    // re-mapping an existing surface replaces its sound.
     //
-    // Payload:  { "blueprintPath": string, "surfaceType": string }
-    // Response: { "blueprintPath": string, "surfaceType": string, "mapVariable": string }
+    // Payload:  { "blueprintPath": string, "surfaceType": string, "soundPath": string }
+    // Response: { "blueprintPath": string, "surfaceType": string, "soundPath": string,
+    //             "mapVariable": string, "mapSize": number }
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("map_surface_to_sound"))
     {
@@ -1641,21 +1731,86 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         if (!Blueprint) return true;
 
         FString SurfaceType = GetJsonStringField(Payload, TEXT("surfaceType"));
-        // Add a Map variable for surface-to-sound lookup if not exists
-        // This uses a TMap<FName, FSoftObjectPath> pattern
+        FString SoundPath = GetJsonStringField(Payload, TEXT("soundPath"));
+        if (SurfaceType.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("Missing 'surfaceType'. Provide the surface name to map (e.g. 'Grass')."),
+                TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+        if (SoundPath.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("Missing 'soundPath'. Provide the sound asset (SoundBase) to map to this surface."),
+                TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+
+        USoundBase* Sound = LoadObject<USoundBase>(nullptr, *SoundPath);
+        if (!Sound)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Sound asset not found: %s"), *SoundPath), TEXT("ASSET_NOT_FOUND"));
+            return true;
+        }
+
         FEdGraphPinType MapPinType;
         MapPinType.PinCategory = UEdGraphSchema_K2::PC_Name;
         MapPinType.ContainerType = EPinContainerType::Map;
         MapPinType.PinValueType.TerminalCategory = UEdGraphSchema_K2::PC_SoftObject;
+        MapPinType.PinValueType.TerminalSubCategoryObject = USoundBase::StaticClass();
         AddBlueprintVariableChar(Blueprint, TEXT("FootstepSoundMap"), MapPinType, TEXT("Footsteps"));
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        McpSafeCompileBlueprint(Blueprint);
+
+        UObject* CDO = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : nullptr;
+        FMapProperty* MapProperty = Blueprint->GeneratedClass
+            ? FindFProperty<FMapProperty>(Blueprint->GeneratedClass, TEXT("FootstepSoundMap"))
+            : nullptr;
+        FSoftObjectProperty* SoundValueProperty = MapProperty ? CastField<FSoftObjectProperty>(MapProperty->ValueProp) : nullptr;
+        if (!CDO || !MapProperty || !CastField<FNameProperty>(MapProperty->KeyProp) || !SoundValueProperty)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("FootstepSoundMap on '%s' is not a TMap<Name, SoftObject> variable; retype or remove the existing variable and retry."), *BlueprintPath),
+                TEXT("VARIABLE_TYPE_MISMATCH"));
+            return true;
+        }
+
+        void* MapPtr = MapProperty->ContainerPtrToValuePtr<void>(CDO);
+        FScriptMapHelper MapHelper(MapProperty, MapPtr);
+        FName SurfaceKey(*SurfaceType);
+        FSoftObjectPtr SoundRef((FSoftObjectPath(Sound)));
+        MapHelper.AddPair(&SurfaceKey, &SoundRef);
+
+        // Keep the variable description's default in sync with the CDO so
+        // recompiles that re-import DefaultValue reproduce the map.
+        FString MapDefaultText;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+        MapProperty->ExportTextItem_Direct(MapDefaultText, MapPtr, nullptr, CDO, PPF_None);
+#else
+        MapProperty->ExportTextItem(MapDefaultText, MapPtr, nullptr, CDO, PPF_None);
+#endif
+        for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+        {
+            if (VarDesc.VarName == FName(TEXT("FootstepSoundMap")))
+            {
+                VarDesc.DefaultValue = MapDefaultText;
+                break;
+            }
+        }
+
+        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        Blueprint->MarkPackageDirty();
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("surfaceType"), SurfaceType);
+        Result->SetStringField(TEXT("soundPath"), SoundPath);
         Result->SetStringField(TEXT("mapVariable"), TEXT("FootstepSoundMap"));
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Surface mapping configured with map variable"), Result);
+        Result->SetNumberField(TEXT("mapSize"), MapHelper.Num());
+        McpHandlerUtils::AddVerification(Result, Blueprint);
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Surface mapped to footstep sound"), Result);
         return true;
     }
 
@@ -1683,6 +1838,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
         AddBlueprintVariableChar(Blueprint, TEXT("FootstepVolumeMultiplier"), FloatPinType, TEXT("Footsteps"));
         AddBlueprintVariableChar(Blueprint, TEXT("FootstepParticleScale"), FloatPinType, TEXT("Footsteps"));
+
+        // Set default values for footstep FX configuration
+        SetBPVarDefaultValue(Blueprint, FName(TEXT("FootstepVolumeMultiplier")), FString::SanitizeFloat(VolumeMultiplier));
+        SetBPVarDefaultValue(Blueprint, FName(TEXT("FootstepParticleScale")), FString::SanitizeFloat(ParticleScale));
 
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
@@ -1883,10 +2042,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // -------------------------------------------------------------------------
     // set_jump_height
     // -------------------------------------------------------------------------
-    // Direct setter for JumpZVelocity on the CharacterMovementComponent.
+    // Sets JumpZVelocity from a desired jump apex height in cm via v = sqrt(2*g*h),
+    // using the effective gravity (DefaultGravityZ * GravityScale).
     //
     // Payload:  { "blueprintPath": string, "jumpHeight"?: 600 }
-    // Response: { "blueprintPath": string, "jumpHeight": number }
+    // Response: { "blueprintPath": string, "jumpHeight": number,
+    //             "appliedJumpZVelocity": number }
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("set_jump_height"))
     {
@@ -1894,21 +2055,42 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         if (!Blueprint) return true;
 
         double JumpHeight = GetJsonNumberField(Payload, TEXT("jumpHeight"), 600.0);
+        if (JumpHeight < 0.0)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("jumpHeight must be >= 0 (apex height in cm; converted to JumpZVelocity)."),
+                TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
 
         ACharacter* CharCDO = Blueprint->GeneratedClass
             ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
             : nullptr;
-
-        if (CharCDO && CharCDO->GetCharacterMovement())
+        UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
+        if (!Movement)
         {
-            CharCDO->GetCharacterMovement()->JumpZVelocity = static_cast<float>(JumpHeight);
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
+                TEXT("NOT_A_CHARACTER"));
+            return true;
         }
+
+        const double GravityMagnitude = FMath::Abs(static_cast<double>(UPhysicsSettings::Get()->DefaultGravityZ) * Movement->GravityScale);
+        if (GravityMagnitude <= KINDA_SMALL_NUMBER)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Cannot convert jumpHeight to JumpZVelocity: effective gravity is zero (gravityScale=%g). Set a non-zero gravityScale first."), Movement->GravityScale),
+                TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+        Movement->JumpZVelocity = static_cast<float>(FMath::Sqrt(2.0 * GravityMagnitude * JumpHeight));
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetNumberField(TEXT("jumpHeight"), JumpHeight);
+        Result->SetNumberField(TEXT("appliedJumpZVelocity"), Movement->JumpZVelocity);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Jump height set"), Result);
         return true;
     }
@@ -2058,11 +2240,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // configure_sprint
     // -------------------------------------------------------------------------
     // Configures sprinting by adding state variables (bIsSprinting, SprintSpeed)
-    // and setting MaxCustomMovementSpeed on the CMC.
+    // and setting the SprintSpeed variable default. No CharacterMovement property
+    // is written; sprint logic must apply SprintSpeed at runtime.
     //
     // Payload:  { "blueprintPath": string, "sprintSpeed"?: 900 }
     // Response: { "blueprintPath": string, "sprintSpeed": number,
-    //             "stateVariable": string }
+    //             "stateVariable": string, "speedVariable": string }
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("configure_sprint"))
     {
@@ -2081,15 +2264,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
         AddBlueprintVariableChar(Blueprint, TEXT("SprintSpeed"), FloatPinType, TEXT("Sprint"));
 
-        ACharacter* CharCDO = Blueprint->GeneratedClass
-            ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
-            : nullptr;
-
-        if (CharCDO && CharCDO->GetCharacterMovement())
-        {
-            // Sprint speed is stored as a variable; base MaxWalkSpeed stays unchanged
-            CharCDO->GetCharacterMovement()->MaxCustomMovementSpeed = static_cast<float>(SprintSpeed);
-        }
+        SetBPVarDefaultValue(Blueprint, FName(TEXT("SprintSpeed")), FString::SanitizeFloat(SprintSpeed));
 
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
@@ -2097,7 +2272,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetNumberField(TEXT("sprintSpeed"), SprintSpeed);
         Result->SetStringField(TEXT("stateVariable"), TEXT("bIsSprinting"));
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Sprint configured with state variables"), Result);
+        Result->SetStringField(TEXT("speedVariable"), TEXT("SprintSpeed"));
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Sprint configured; SprintSpeed stored as variable default"), Result);
         return true;
     }
 

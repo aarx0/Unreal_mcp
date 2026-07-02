@@ -102,6 +102,11 @@ public:
 				[](FMcpSchemaBuilder& S) {
 				S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
 			})
+			.Array(TEXT("bounds"),
+				TEXT("Volume bounds as [minX, minY, minZ, maxX, maxY, maxZ]; "
+					"set_volume_bounds alternative to volumeLocation + "
+					"volumeExtent."),
+				TEXT("number"))
 			.String(TEXT("nodeClass"), TEXT("Node class path."))
 			.Object(TEXT("nodePosition"),
 				TEXT("Position of node in graph."),

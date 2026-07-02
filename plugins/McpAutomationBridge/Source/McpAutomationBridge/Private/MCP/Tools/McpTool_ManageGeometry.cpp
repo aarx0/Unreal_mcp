@@ -23,8 +23,13 @@ public:
 	{
 		return FMcpSchemaBuilder()
 			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageGeometry(), TEXT("Geometry action to perform"))
-			.String(TEXT("outputPath"), TEXT("Output file or directory path."))
-			.String(TEXT("actorName"), TEXT("Name of the actor."))
+			.String(TEXT("assetPath"), TEXT("Destination asset path for convert_to_static_mesh/convert_to_nanite (e.g. /Game/Meshes/SM_Rock)."))
+			.String(TEXT("outputPath"), TEXT("Alias of assetPath."))
+			.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
+			.String(TEXT("name"), TEXT("Alias of actorName for create_* actions."))
+			.String(TEXT("targetActor"), TEXT("Actor receiving the result of a boolean operation."))
+			.String(TEXT("toolActor"), TEXT("Actor used as the cutting/combining tool in a boolean operation."))
+			.Bool(TEXT("keepTool"), TEXT("Keep the tool actor after a boolean operation (default true)."))
 			.Number(TEXT("width"), TEXT("Width value."))
 			.Number(TEXT("height"), TEXT("Height value."))
 			.Number(TEXT("depth"), TEXT("Depth value."))
@@ -42,7 +47,8 @@ public:
 			.Number(TEXT("stepWidth"), TEXT("Width of each stair step."))
 			.Number(TEXT("stepHeight"), TEXT("Height of each stair step."))
 			.Number(TEXT("stepDepth"), TEXT("Depth of each stair step."))
-			.Number(TEXT("numTurns"), TEXT("Number of turns for spiral."))
+			.Number(TEXT("numTurns"), TEXT("Number of full revolutions for create_spiral_stairs (mutually exclusive with curveAngle)."))
+			.Number(TEXT("curveAngle"), TEXT("Total sweep angle in degrees for create_spiral_stairs (mutually exclusive with numTurns; default 90)."))
 			.Number(TEXT("widthSegments"), TEXT("Segments along width."))
 			.Number(TEXT("heightSegments"), TEXT("Segments along height."))
 			.Number(TEXT("depthSegments"), TEXT("Segments along depth."))
@@ -80,7 +86,9 @@ public:
 			.Number(TEXT("iterations"),
 				TEXT("Number of iterations for smooth, remesh."))
 			.Number(TEXT("targetTriangleCount"),
-				TEXT("Target triangle count for simplification."))
+				TEXT("Target triangle count for simplify_mesh and remesh_uniform."))
+			.Number(TEXT("targetPercentage"),
+				TEXT("Percent of triangles to keep for simplify_mesh when targetTriangleCount is absent (default 50)."))
 			.Number(TEXT("targetEdgeLength"),
 				TEXT("Target edge length for remeshing."))
 			.Number(TEXT("weldDistance"),

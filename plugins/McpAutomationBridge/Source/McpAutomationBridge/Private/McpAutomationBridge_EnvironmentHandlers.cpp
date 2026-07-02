@@ -976,6 +976,17 @@ bool UMcpAutomationBridgeSubsystem::HandleBuildEnvironmentAction(
             Payload->TryGetNumberField(TEXT("z"), Location.Z);
         }
 
+        FString FogName;
+        Payload->TryGetStringField(TEXT("name"), FogName);
+        if (FogName.IsEmpty())
+        {
+            Payload->TryGetStringField(TEXT("actorName"), FogName);
+        }
+        if (FogName.IsEmpty())
+        {
+            FogName = TEXT("FogVolume");
+        }
+
         if (!GEditor)
         {
             Message = TEXT("Editor not available");
@@ -992,7 +1003,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBuildEnvironmentAction(
             else
             {
                 AActor *FogVolume = SpawnActorInActiveWorld<AActor>(
-                    FogClass, Location, FRotator::ZeroRotator, TEXT("FogVolume"));
+                    FogClass, Location, FRotator::ZeroRotator, FogName);
                 if (FogVolume)
                 {
                     bSuccess = true;
@@ -2352,37 +2363,80 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectAction(
             {
                 Payload->TryGetStringField(TEXT("classPath"), ClassName);
             }
-            if (!ClassName.IsEmpty())
-            {
-                // Try to find the class
-                UClass* TargetClass = FindObject<UClass>(nullptr, *ClassName);
-                if (!TargetClass && !ClassName.Contains(TEXT(".")))
-                {
-                    // Try with /Script/Engine prefix for common classes
-                    TargetClass = FindObject<UClass>(nullptr, *FString::Printf(TEXT("/Script/Engine.%s"), *ClassName));
-                }
-                if (TargetClass)
-                {
-                    Resp->SetStringField(TEXT("className"), TargetClass->GetName());
-                    Resp->SetStringField(TEXT("classPath"), TargetClass->GetPathName());
-                    Resp->SetStringField(TEXT("parentClass"), TargetClass->GetSuperClass() ? TargetClass->GetSuperClass()->GetName() : TEXT("None"));
-                    Resp->SetBoolField(TEXT("success"), true);
-                    SendAutomationResponse(RequestingSocket, RequestId, true,
-                                           TEXT("Class inspected"), Resp, FString());
-                }
-                else
-                {
-                    SendAutomationError(RequestingSocket, RequestId,
-                                        FString::Printf(TEXT("Class not found: %s"), *ClassName),
-                                        TEXT("CLASS_NOT_FOUND"));
-                }
-            }
-            else
+            if (ClassName.IsEmpty())
             {
                 SendAutomationError(RequestingSocket, RequestId,
                                     TEXT("className is required for inspect_class"),
                                     TEXT("INVALID_ARGUMENT"));
+                return true;
             }
+
+            // Resolve like find_objects: loaded short name, /Script/Module.Class,
+            // /Game/....Name_C, or a Blueprint asset path via its GeneratedClass.
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+            UClass* TargetClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::None);
+#else
+            UClass* TargetClass = FindObject<UClass>(nullptr, *ClassName);
+#endif
+            if (!TargetClass && (ClassName.Contains(TEXT(".")) || ClassName.Contains(TEXT("/"))))
+            {
+                TargetClass = StaticLoadClass(UObject::StaticClass(), nullptr, *ClassName, nullptr, LOAD_NoWarn | LOAD_Quiet);
+            }
+            if (!TargetClass && ClassName.StartsWith(TEXT("/")) && !ClassName.EndsWith(TEXT("_C")))
+            {
+                if (UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *ClassName, nullptr, LOAD_NoWarn | LOAD_Quiet, nullptr))
+                {
+                    TargetClass = BP->GeneratedClass;
+                }
+            }
+            if (!TargetClass && !ClassName.Contains(TEXT(".")))
+            {
+                TargetClass = FindObject<UClass>(nullptr, *FString::Printf(TEXT("/Script/Engine.%s"), *ClassName));
+            }
+            if (!TargetClass)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                                    FString::Printf(TEXT("Class not found: %s — pass a loaded short name, a Script path, a Blueprint asset path, or its _C class path"), *ClassName),
+                                    TEXT("CLASS_NOT_FOUND"));
+                return true;
+            }
+
+            Resp->SetStringField(TEXT("className"), TargetClass->GetName());
+            Resp->SetStringField(TEXT("classPath"), TargetClass->GetPathName());
+            Resp->SetStringField(TEXT("parentClass"), TargetClass->GetSuperClass() ? TargetClass->GetSuperClass()->GetName() : TEXT("None"));
+
+            bool bDetailed = false;
+            Payload->TryGetBoolField(TEXT("detailed"), bDetailed);
+            if (bDetailed)
+            {
+                TArray<TSharedPtr<FJsonValue>> PropsArr;
+                for (TFieldIterator<FProperty> It(TargetClass); It; ++It)
+                {
+                    TSharedPtr<FJsonObject> PropObj = MakeShared<FJsonObject>();
+                    PropObj->SetStringField(TEXT("name"), It->GetName());
+                    PropObj->SetStringField(TEXT("type"), It->GetCPPType());
+                    if (UClass* OwnerClass = It->GetOwnerClass())
+                    {
+                        if (OwnerClass != TargetClass)
+                        {
+                            PropObj->SetStringField(TEXT("inheritedFrom"), OwnerClass->GetName());
+                        }
+                    }
+                    PropsArr.Add(MakeShared<FJsonValueObject>(PropObj));
+                }
+                Resp->SetArrayField(TEXT("properties"), PropsArr);
+
+                TArray<TSharedPtr<FJsonValue>> FuncsArr;
+                for (TFieldIterator<UFunction> It(TargetClass); It; ++It)
+                {
+                    FuncsArr.Add(MakeShared<FJsonValueString>(It->GetName()));
+                }
+                Resp->SetArrayField(TEXT("functions"), FuncsArr);
+            }
+
+            Resp->SetBoolField(TEXT("success"), true);
+            SendAutomationResponse(RequestingSocket, RequestId, true,
+                                   TEXT("Class inspected"), Resp, FString());
             return true;
         }
         // ---------------------------------------------------------------------

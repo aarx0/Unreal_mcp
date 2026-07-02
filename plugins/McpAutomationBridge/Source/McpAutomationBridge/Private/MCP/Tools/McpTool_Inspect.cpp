@@ -16,7 +16,8 @@ public:
 		return TEXT("Inspect any UObject: read/write properties, list components, export snapshots, "
 			"and query class info. Actions: inspect_cdo (Blueprint CDO properties + all components "
 			"without spawning an actor; use blueprintPath, optional detailed/componentName/propertyNames), "
-			"inspect_class (class metadata), inspect_object (world actor), get_property/set_property, "
+			"inspect_class (class metadata), inspect_object (world actor), get_property/set_property "
+			"(set_property saves the owning asset package by default; 'saved' reports the on-disk result), "
 			"get_components, list_objects, find_by_class, find_by_tag, runtime_report, "
 			"ui_focus (CommonUI PIE runtime snapshot: focused widget + path, the activatable "
 			"owning focus + its desired-focus target, active activatable stack, current input "
@@ -40,6 +41,8 @@ public:
 			.String(TEXT("propertyName"), TEXT("Name of the property."))
 			.String(TEXT("propertyPath"), TEXT(""))
 			.FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+			.Bool(TEXT("save"), TEXT("set_property: persist the owning asset package to disk after the write (default true; defaults to false when markDirty is false). Level packages are never auto-saved — use control_editor save_all."))
+			.Bool(TEXT("markDirty"), TEXT("set_property: mark the owning package dirty (default true)."))
 			.String(TEXT("actorName"), TEXT("Name of the actor."))
 			.String(TEXT("name"), TEXT("Name identifier."))
 			.String(TEXT("componentName"), TEXT("Name of the component."))

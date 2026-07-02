@@ -111,6 +111,11 @@ public:
 			.String(TEXT("slotName"), TEXT("Name for the widget being added / the slot to target."))
 			.String(TEXT("parentSlot"), TEXT("Name of the parent panel widget to add the new widget under."))
 			.String(TEXT("widgetClass"), TEXT("Widget class for create_widget_blueprint / set_widget_parent_class."))
+			.Number(TEXT("anchorMinX"), TEXT("set_anchor: anchor minimum X (0..1)."))
+			.Number(TEXT("anchorMinY"), TEXT("set_anchor: anchor minimum Y (0..1)."))
+			.Number(TEXT("anchorMaxX"), TEXT("set_anchor: anchor maximum X (0..1)."))
+			.Number(TEXT("anchorMaxY"), TEXT("set_anchor: anchor maximum Y (0..1)."))
+			.String(TEXT("preset"), TEXT("set_anchor: named anchor preset (TopLeft, TopCenter, TopRight, CenterLeft, Center, CenterRight, BottomLeft, BottomCenter, BottomRight, StretchHorizontal, StretchVertical, StretchAll)."))
 			.Required({TEXT("action")})
 			.Build();
 	}

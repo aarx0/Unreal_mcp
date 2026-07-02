@@ -1398,6 +1398,13 @@ if (SubAction == TEXT("add_notify_state"))
         ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
     }
 
+    const bool bHasLength = Params->HasField(TEXT("length"));
+    const float Length = static_cast<float>(GetJsonNumberField(Params, TEXT("length"), 0.0));
+    if (bHasLength && Length <= 0.0f)
+    {
+        ANIM_ERROR_RESPONSE(TEXT("length must be a positive duration in seconds"), TEXT("INVALID_LENGTH"));
+    }
+
     USkeleton* Skeleton = nullptr;
     if (!SkeletonPath.IsEmpty())
     {
@@ -1426,12 +1433,38 @@ if (SubAction == TEXT("add_notify_state"))
         {
             ANIM_ERROR_RESPONSE(TEXT("Failed to create montage"), TEXT("CREATE_FAILED"));
         }
-        
-        // Add default slot
+
+        if (bHasLength)
+        {
+            NewMontage->SetCompositeLength(Length);
+            Response->SetNumberField(TEXT("length"), Length);
+        }
+
+        // UAnimMontage's constructor already seeds a 'DefaultSlot' track;
+        // rename it rather than appending a duplicate.
         if (!SlotName.IsEmpty())
         {
-            FSlotAnimationTrack& SlotTrack = NewMontage->SlotAnimTracks.AddDefaulted_GetRef();
-            SlotTrack.SlotName = FName(*SlotName);
+            const FName SlotFName(*SlotName);
+            bool bHasSlot = false;
+            for (const FSlotAnimationTrack& Track : NewMontage->SlotAnimTracks)
+            {
+                if (Track.SlotName == SlotFName)
+                {
+                    bHasSlot = true;
+                    break;
+                }
+            }
+            if (!bHasSlot)
+            {
+                if (NewMontage->SlotAnimTracks.Num() > 0)
+                {
+                    NewMontage->SlotAnimTracks[0].SlotName = SlotFName;
+                }
+                else
+                {
+                    NewMontage->SlotAnimTracks.AddDefaulted_GetRef().SlotName = SlotFName;
+                }
+            }
         }
 
         // The factory seeds a "Default" composite section but never calls
@@ -1716,74 +1749,64 @@ if (SubAction == TEXT("add_montage_notify"))
         return Response;
 }
 
-    if (SubAction == TEXT("set_blend_in"))
+    if (SubAction == TEXT("set_blend_in") || SubAction == TEXT("set_blend_out"))
     {
+        const bool bBlendIn = SubAction == TEXT("set_blend_in");
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
-        float BlendTime = static_cast<float>(GetJsonNumberField(Params, TEXT("blendTime"), 0.25));
-        FString BlendOption = GetJsonStringField(Params, TEXT("blendOption"), TEXT("Linear"));
+        // 'time' accepted as an alias of blendTime.
+        const bool bHasBlendTime = Params->HasField(TEXT("blendTime")) || Params->HasField(TEXT("time"));
+        float BlendTime = static_cast<float>(GetJsonNumberField(Params, TEXT("blendTime"),
+            GetJsonNumberField(Params, TEXT("time"), 0.25)));
+        FString BlendOption = GetJsonStringField(Params, TEXT("blendOption"), TEXT(""));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
-        
+
+        if (!bHasBlendTime && BlendOption.IsEmpty())
+        {
+            ANIM_ERROR_RESPONSE(TEXT("Pass blendTime (seconds; 'time' accepted) and/or blendOption (Linear, Cubic, Sinusoidal)"), TEXT("MISSING_BLEND_PARAMS"));
+        }
+
+        EAlphaBlendOption BlendOptionValue = EAlphaBlendOption::Linear;
+        if (!BlendOption.IsEmpty())
+        {
+            if (BlendOption == TEXT("Linear"))
+            {
+                BlendOptionValue = EAlphaBlendOption::Linear;
+            }
+            else if (BlendOption == TEXT("Cubic"))
+            {
+                BlendOptionValue = EAlphaBlendOption::Cubic;
+            }
+            else if (BlendOption == TEXT("Sinusoidal"))
+            {
+                BlendOptionValue = EAlphaBlendOption::Sinusoidal;
+            }
+            else
+            {
+                ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Unknown blendOption '%s' — use Linear, Cubic, or Sinusoidal"), *BlendOption), TEXT("INVALID_BLEND_OPTION"));
+            }
+        }
+
         UAnimMontage* Montage = Cast<UAnimMontage>(StaticLoadObject(UAnimMontage::StaticClass(), nullptr, *AssetPath));
         if (!Montage)
         {
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load montage: %s"), *AssetPath), TEXT("MONTAGE_NOT_FOUND"));
         }
-        
-        Montage->BlendIn.SetBlendTime(BlendTime);
-        
-        // Set blend option
-        if (BlendOption == TEXT("Cubic"))
+
+        FAlphaBlend& Blend = bBlendIn ? Montage->BlendIn : Montage->BlendOut;
+        if (bHasBlendTime)
         {
-            Montage->BlendIn.SetBlendOption(EAlphaBlendOption::Cubic);
+            Blend.SetBlendTime(BlendTime);
+            Response->SetNumberField(TEXT("blendTime"), BlendTime);
         }
-        else if (BlendOption == TEXT("Sinusoidal"))
+        if (!BlendOption.IsEmpty())
         {
-            Montage->BlendIn.SetBlendOption(EAlphaBlendOption::Sinusoidal);
+            Blend.SetBlendOption(BlendOptionValue);
+            Response->SetStringField(TEXT("blendOption"), BlendOption);
         }
-        else
-        {
-            Montage->BlendIn.SetBlendOption(EAlphaBlendOption::Linear);
-        }
-        
+
         SaveAnimAsset(Montage, bSave);
 
-        ANIM_SUCCESS_RESPONSE(TEXT("Blend in settings updated"));
-        McpHandlerUtils::AddVerification(Response, Montage);
-        return Response;
-    }
-
-    if (SubAction == TEXT("set_blend_out"))
-    {
-        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
-        float BlendTime = static_cast<float>(GetJsonNumberField(Params, TEXT("blendTime"), 0.25));
-        FString BlendOption = GetJsonStringField(Params, TEXT("blendOption"), TEXT("Linear"));
-        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
-        
-        UAnimMontage* Montage = Cast<UAnimMontage>(StaticLoadObject(UAnimMontage::StaticClass(), nullptr, *AssetPath));
-        if (!Montage)
-        {
-            ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load montage: %s"), *AssetPath), TEXT("MONTAGE_NOT_FOUND"));
-        }
-        
-        Montage->BlendOut.SetBlendTime(BlendTime);
-        
-        // Set blend option
-        if (BlendOption == TEXT("Cubic"))
-        {
-            Montage->BlendOut.SetBlendOption(EAlphaBlendOption::Cubic);
-        }
-        else if (BlendOption == TEXT("Sinusoidal"))
-        {
-            Montage->BlendOut.SetBlendOption(EAlphaBlendOption::Sinusoidal);
-        }
-        else
-        {
-            Montage->BlendOut.SetBlendOption(EAlphaBlendOption::Linear);
-        }
-        
-        SaveAnimAsset(Montage, bSave);
-
-        ANIM_SUCCESS_RESPONSE(TEXT("Blend out settings updated"));
+        ANIM_SUCCESS_RESPONSE(bBlendIn ? TEXT("Blend in settings updated") : TEXT("Blend out settings updated"));
         McpHandlerUtils::AddVerification(Response, Montage);
         return Response;
     }
@@ -1827,7 +1850,18 @@ if (SubAction == TEXT("add_montage_notify"))
     {
 #if MCP_HAS_BLENDSPACE_FACTORY
     FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
-    FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Animations")));
+    // Accept 'path' (legacy) and 'savePath' (the animation_physics schema's
+    // param name) — mirrors create_montage.
+    FString RawPath = GetJsonStringField(Params, TEXT("path"), TEXT(""));
+    if (RawPath.IsEmpty())
+    {
+        RawPath = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
+    }
+    if (RawPath.IsEmpty())
+    {
+        RawPath = TEXT("/Game/Animations");
+    }
+    FString Path = NormalizeAnimPath(RawPath);
     FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
     FString AxisName = GetJsonStringField(Params, TEXT("axisName"), TEXT("Speed"));
     float AxisMin = static_cast<float>(GetJsonNumberField(Params, TEXT("axisMin"), 0.0));
@@ -1941,7 +1975,18 @@ if (SubAction == TEXT("add_montage_notify"))
     {
 #if MCP_HAS_BLENDSPACE_FACTORY
     FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
-    FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Animations")));
+    // Accept 'path' (legacy) and 'savePath' (the animation_physics schema's
+    // param name) — mirrors create_montage.
+    FString RawPath = GetJsonStringField(Params, TEXT("path"), TEXT(""));
+    if (RawPath.IsEmpty())
+    {
+        RawPath = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
+    }
+    if (RawPath.IsEmpty())
+    {
+        RawPath = TEXT("/Game/Animations");
+    }
+    FString Path = NormalizeAnimPath(RawPath);
     FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
     FString HorizontalAxisName = GetJsonStringField(Params, TEXT("horizontalAxisName"), TEXT("Direction"));
     float HorizontalMin = static_cast<float>(GetJsonNumberField(Params, TEXT("horizontalMin"), -180.0));
@@ -2583,17 +2628,29 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("add_state_machine"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
-        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"), TEXT(""));
+        // The schema documents 'assetPath' and 'machineName' for these
+        // params; blueprintPath/stateMachineName are the original names.
+        FString RawBlueprintPath = GetJsonStringField(Params, TEXT("blueprintPath"), TEXT(""));
+        if (RawBlueprintPath.IsEmpty())
+        {
+            RawBlueprintPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
+        }
+        FString BlueprintPath = NormalizeAnimPath(RawBlueprintPath);
+        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"),
+            GetJsonStringField(Params, TEXT("machineName"), TEXT("")));
         int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
         int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
-        
+
         if (StateMachineName.IsEmpty())
         {
-            ANIM_ERROR_RESPONSE(TEXT("stateMachineName is required"), TEXT("MISSING_STATE_MACHINE_NAME"));
+            ANIM_ERROR_RESPONSE(TEXT("stateMachineName (or machineName) is required"), TEXT("MISSING_STATE_MACHINE_NAME"));
         }
-        
+        if (BlueprintPath.IsEmpty())
+        {
+            ANIM_ERROR_RESPONSE(TEXT("blueprintPath (or assetPath) is required: pass the Anim Blueprint asset path"), TEXT("MISSING_BLUEPRINT_PATH"));
+        }
+
         // Try to find in-memory version first (may have unsaved changes from create_anim_blueprint)
         UAnimBlueprint* AnimBP = FindObject<UAnimBlueprint>(nullptr, *BlueprintPath);
         if (!AnimBP)
@@ -2671,18 +2728,28 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("add_state"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
-        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"), TEXT(""));
+        FString RawBlueprintPath = GetJsonStringField(Params, TEXT("blueprintPath"), TEXT(""));
+        if (RawBlueprintPath.IsEmpty())
+        {
+            RawBlueprintPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
+        }
+        FString BlueprintPath = NormalizeAnimPath(RawBlueprintPath);
+        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"),
+            GetJsonStringField(Params, TEXT("machineName"), TEXT("")));
         FString StateName = GetJsonStringField(Params, TEXT("stateName"), TEXT(""));
         int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 200));
         int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
-        
+
         if (StateName.IsEmpty())
         {
             ANIM_ERROR_RESPONSE(TEXT("stateName is required"), TEXT("MISSING_STATE_NAME"));
         }
-        
+        if (BlueprintPath.IsEmpty())
+        {
+            ANIM_ERROR_RESPONSE(TEXT("blueprintPath (or assetPath) is required: pass the Anim Blueprint asset path"), TEXT("MISSING_BLUEPRINT_PATH"));
+        }
+
         // Try to find in-memory version first (may have unsaved changes from add_state_machine)
         UAnimBlueprint* AnimBP = FindObject<UAnimBlueprint>(nullptr, *BlueprintPath);
         if (!AnimBP)
@@ -2811,18 +2878,28 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("add_transition"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
-        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"), TEXT(""));
+        FString RawBlueprintPath = GetJsonStringField(Params, TEXT("blueprintPath"), TEXT(""));
+        if (RawBlueprintPath.IsEmpty())
+        {
+            RawBlueprintPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
+        }
+        FString BlueprintPath = NormalizeAnimPath(RawBlueprintPath);
+        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"),
+            GetJsonStringField(Params, TEXT("machineName"), TEXT("")));
         FString FromState = GetJsonStringField(Params, TEXT("fromState"), TEXT(""));
         FString ToState = GetJsonStringField(Params, TEXT("toState"), TEXT(""));
         float CrossfadeDuration = static_cast<float>(GetJsonNumberField(Params, TEXT("crossfadeDuration"), 0.2));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
-        
+
         if (FromState.IsEmpty() || ToState.IsEmpty())
         {
             ANIM_ERROR_RESPONSE(TEXT("fromState and toState are required"), TEXT("MISSING_STATES"));
         }
-        
+        if (BlueprintPath.IsEmpty())
+        {
+            ANIM_ERROR_RESPONSE(TEXT("blueprintPath (or assetPath) is required: pass the Anim Blueprint asset path"), TEXT("MISSING_BLUEPRINT_PATH"));
+        }
+
         // Try to find in-memory version first (may have unsaved changes from add_state)
         UAnimBlueprint* AnimBP = FindObject<UAnimBlueprint>(nullptr, *BlueprintPath);
         if (!AnimBP)
@@ -2946,8 +3023,14 @@ if (SubAction == TEXT("add_montage_notify"))
     
     if (SubAction == TEXT("set_transition_rules"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
-        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"), TEXT(""));
+        FString RawBlueprintPath = GetJsonStringField(Params, TEXT("blueprintPath"), TEXT(""));
+        if (RawBlueprintPath.IsEmpty())
+        {
+            RawBlueprintPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
+        }
+        FString BlueprintPath = NormalizeAnimPath(RawBlueprintPath);
+        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"),
+            GetJsonStringField(Params, TEXT("machineName"), TEXT("")));
         FString FromState = GetJsonStringField(Params, TEXT("fromState"), TEXT(""));
         FString ToState = GetJsonStringField(Params, TEXT("toState"), TEXT(""));
         float CrossfadeDuration = static_cast<float>(GetJsonNumberField(Params, TEXT("crossfadeDuration"), -1.0));
@@ -2955,7 +3038,12 @@ if (SubAction == TEXT("add_montage_notify"))
         bool bAutomatic = GetJsonBoolField(Params, TEXT("automaticRule"), false);
         bool bBidirectional = GetJsonBoolField(Params, TEXT("bidirectional"), false);
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
-        
+
+        if (BlueprintPath.IsEmpty())
+        {
+            ANIM_ERROR_RESPONSE(TEXT("blueprintPath (or assetPath) is required: pass the Anim Blueprint asset path"), TEXT("MISSING_BLUEPRINT_PATH"));
+        }
+
         // Try to find in-memory version first (may have unsaved changes)
         UAnimBlueprint* AnimBP = FindObject<UAnimBlueprint>(nullptr, *BlueprintPath);
         if (!AnimBP)

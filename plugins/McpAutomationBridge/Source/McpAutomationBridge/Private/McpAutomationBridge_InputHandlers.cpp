@@ -70,6 +70,20 @@ FKey McpInputKeyFromName(const FString& KeyName)
     return KeyName.IsEmpty() ? FKey() : FKey(FName(*KeyName));
 }
 
+/** Echoes valueType using the schema's string names so readbacks round-trip as inputs. */
+FString McpInputActionValueTypeToString(EInputActionValueType ValueType)
+{
+    switch (ValueType)
+    {
+    case EInputActionValueType::Boolean: return TEXT("Boolean");
+    case EInputActionValueType::Axis1D:  return TEXT("Axis1D");
+    case EInputActionValueType::Axis2D:  return TEXT("Axis2D");
+    case EInputActionValueType::Axis3D:  return TEXT("Axis3D");
+    }
+    checkNoEntry();
+    return TEXT("Boolean");
+}
+
 /** Adds verified mapping readback for an action after key-specific edits. */
 void AddInputMappingSummary(
     TSharedPtr<FJsonObject> Result,
@@ -281,7 +295,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
 
             TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
             Result->SetStringField(TEXT("assetPath"), ExistingAction->GetPathName());
-            Result->SetNumberField(TEXT("valueType"), (int32)ExistingAction->ValueType);
+            Result->SetStringField(TEXT("valueType"), McpInputActionValueTypeToString(ExistingAction->ValueType));
             McpHandlerUtils::AddVerification(Result, ExistingAction);
 
             SendAutomationResponse(RequestingSocket, RequestId, true,
@@ -309,7 +323,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
             Result->SetStringField(TEXT("assetPath"), NewAsset->GetPathName());
             if (CreatedAction)
             {
-                Result->SetNumberField(TEXT("valueType"), (int32)CreatedAction->ValueType);
+                Result->SetStringField(TEXT("valueType"), McpInputActionValueTypeToString(CreatedAction->ValueType));
             }
             McpHandlerUtils::AddVerification(Result, NewAsset);
 
@@ -988,7 +1002,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
         if (UInputAction* InputAction = Cast<UInputAction>(Asset))
         {
             Result->SetStringField(TEXT("type"), TEXT("InputAction"));
-            Result->SetStringField(TEXT("valueType"), FString::FromInt((int32)InputAction->ValueType));
+            Result->SetStringField(TEXT("valueType"), McpInputActionValueTypeToString(InputAction->ValueType));
             Result->SetBoolField(TEXT("consumeInput"), InputAction->bConsumeInput);
             // The IA's OWN triggers (class names) — set_input_trigger writes these, but
             // only IMC mappings carried a triggerCount, so the trigger *class* was

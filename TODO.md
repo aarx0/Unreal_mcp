@@ -39,6 +39,43 @@ as they land.
 > HandleAddMaterialTextureSample/AddMaterialExpression/CreateMaterialNodes still save
 > unconditionally (ignore save:false).
 
+> **Dogfood/UX audit (2026-07-02):** 16 agents exercised all 22 tools live as schema-only
+> first-time users — 471 calls, 112 findings, report in
+> [`docs/dogfood-audit-2026-07-02.md`](docs/dogfood-audit-2026-07-02.md). **~80 findings
+> FIXED same day** (silent-success no-op writes incl. the interaction configure_* family and
+> set_anchor; ~20 schema↔handler param drifts; hardcoded destination-folder fallbacks;
+> manage_ai create's silent production-blackboard bind; find_by_tag write-only store;
+> inspect set_property saved:true lie; sanitizer eating error guidance; dead actions
+> implemented — GAS add_ability, BT add_task/decorator/service wrappers, set_niagara_parameter;
+> SoundCue root wiring; TOOL_DISABLED remediation text — root-caused as cross-session
+> manage_tools mutations, NOT a race; Encumberance→Encumbrance with old spellings aliased).
+> Still open from the audit:
+> - **Global response policy:** every mutating handler returns `appliedProperties`/`ignoredParams`
+>   and errors when zero requested changes applied — done in the domains touched above,
+>   not yet a repo-wide convention (overlaps F7 scaffoldOnly markers).
+> - **Schema-from-handler reconciliation test:** diff each McpTool_* declared param set
+>   against the handler's actual payload reads (the audit found ~20 drifts by hand; a test
+>   keeps them at zero).
+> - **Readback depth pass, remaining:** get_gas_info (attributes/modifiers/cost-cooldown),
+>   get_combat_stats values, get_animation_info (BlendSpace/AnimBP), get_character_info
+>   (mesh/ABP/crouch/sprint), get_mesh_info static-mesh asset branch (LODs/collision/Nanite),
+>   per-property replication state in get_networking_info, widget property value readback.
+> - **Per-session tool enablement (design decision):** manage_tools state is global, so one
+>   session's disable probes 503 other sessions mid-flight (the audit's "TOOL_DISABLED race").
+>   Per-session ToolManager keyed off Mcp-Session-Id would isolate it — needs a deliberate call.
+> - **InteractionHandlers dead dispatch (found in passing, 2026-07-02):** Section 6 "runtime
+>   handler dispatch" (~line 2412) is unreachable — the Blueprint-based branches earlier in the
+>   function already match and return those actions; the Section 7 handlers it points at echo
+>   params they never apply (fresh B-1 if ever wired). Delete Section 6+7 in a dead-code sweep.
+> - **AudioAuthoringHandlers dead creates (found in passing, 2026-07-02):** create_sound_class/
+>   create_sound_mix branches are unreachable (not in the AudioAuthoring routing list; the live
+>   handlers are in AudioHandlers.cpp) — same sweep.
+> - **MiscHandlers dead HandleCreatePostProcessVolume (found in passing, 2026-07-02):** declared
+>   in the subsystem header but never registered with any tool route — same sweep.
+> - Flat per-tool param pools still lack per-action docs (manage_combat ~90 params); tool
+>   descriptions for manage_asset (DataTables + material/texture authoring) and manage_effect
+>   (level-mutating vs asset-authoring actions) still undersell/mislead.
+
 ## Roadmap — missing / incomplete capabilities
 
 > Grouped by theme; reliability items cross-reference the **Bugs** section below. Rough
@@ -732,6 +769,37 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 ---
 
 ## Bugs (found while using the bridge — track, fix when convenient)
+
+### [ ] 2026-07-02b — Intermittent spurious `TOOL_DISABLED` on `manage_networking` (fresh-session flake)
+Live repro (2026-07-02, manage_networking audit, fresh `mcp-call.ps1` session per call): after two
+successful `manage_networking` calls, THREE consecutive calls (`set_replication_condition`,
+`create_rpc_function`, then a retry) returned `Error [TOOL_DISABLED]: Tool 'manage_networking' is
+not enabled`. `manage_tools get_status` in the very next session reported 22/22 tools enabled,
+and the identical previously-failing call then succeeded. Nothing disabled the tool in between.
+Suspect the dynamic tool-gate state read racing per-request session setup. Error text also gives
+no remediation (doesn't say to check `manage_tools` or retry).
+
+### [ ] 2026-07-02c — `manage_networking set_default_pawn_class` requires `pawnClass`/`defaultPawnClass`; neither is in the published schema
+Live repro (2026-07-02): schema-guided call with `blueprintPath` + `pawnClassPath` →
+`Error [INVALID_ARGUMENT]: Missing 'pawnClass' or 'defaultPawnClass'.` (error is good; schema isn't —
+no property in the `manage_networking` entry can carry the pawn class). Retry with
+`pawnClass:'/Script/Engine.DefaultPawn'` worked and `get_game_framework_info` confirmed. Check the
+sibling setters (`set_player_controller_class`/`set_game_state_class`/`set_player_state_class`) for
+the same gap. Related doc-scoping bugs found same session: `name`/`path` descriptions say
+"create_input_action / create_input_mapping_context" but `create_game_mode` consumes them too, and
+`configure_local_session_settings` accepts an undocumented `maxPlayers` (sessions/voice/split-screen
+actions document no params at all).
+
+### [ ] 2026-07-02d — `set_replicated_using` sets `RepNotifyFunc` but never creates the OnRep function stub
+Live repro (2026-07-02, scratch `/Game/ZZ_McpAudit/manage_networking/BP_NetAudit`):
+`set_replicated_using propertyName:Ammo repNotifyFunc:OnRep_Ammo` → success, but `manage_blueprint
+get` shows no `OnRep_Ammo` in `functions` and `compile` passes silently (no warnings surfaced), so
+the variable points at a nonexistent notify handler. Editor UI auto-creates the stub when a var is
+made RepNotify — the action should too (or fail loud if the function is missing). Also from the same
+session, readback gaps: `get_networking_info` returns only actor-CDO flags (per-property replicated
+flag/condition/RepNotify and RPC reliable/validation settings are write-only — nothing reads them
+back), and `create_input_action`/`get_input_info` echo `valueType` as the raw enum int (`0`) instead
+of the schema's `Boolean`/`Axis1D` names.
 
 ### [ ] 2026-07-02 — `system_control` advertises 5 actions its dispatch can no longer reach (UNKNOWN_ACTION)
 Found rewriting `docs/handler-mapping.md` (code cross-check, not live repro). `SystemControlCore`

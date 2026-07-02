@@ -46,7 +46,10 @@ function Canonicalize($node) {
     return $ordered
   }
   if ($node -is [System.Collections.IEnumerable] -and $node -isnot [string]) {
-    return @($node | ForEach-Object { Canonicalize $_ })
+    # ',' keeps arrays intact: a plain pipeline return unrolls single-element
+    # arrays (required, one-value enums) into scalars — invalid JSON Schema.
+    $items = @($node | ForEach-Object { ,(Canonicalize $_) })
+    return ,$items
   }
   return $node
 }

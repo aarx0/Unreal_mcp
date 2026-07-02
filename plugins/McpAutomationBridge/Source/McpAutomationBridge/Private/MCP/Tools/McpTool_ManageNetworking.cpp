@@ -13,8 +13,12 @@ public:
 
 	FString GetDescription() const override
 	{
-		return TEXT("Configure multiplayer: property replication, RPCs "
-			"(Server/Client/Multicast), authority, relevancy, and network prediction.");
+		return TEXT("Multiplayer and input setup: property replication (conditions, "
+			"RepNotify, push model, dormancy, relevancy), RPCs (Server/Client/Multicast), "
+			"authority/ownership, network prediction, net driver settings; Enhanced Input "
+			"authoring (InputActions, mapping contexts, triggers, modifiers); game framework "
+			"classes (GameMode/GameState/PlayerController/PlayerState/GameInstance/HUD, match "
+			"and scoring rules); split-screen/local players, LAN host/join, and voice chat.");
 	}
 
 	FString GetCategory() const override { return TEXT("utility"); }

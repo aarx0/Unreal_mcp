@@ -124,6 +124,35 @@
 #endif
 #endif
 
+namespace {
+struct FMcpActiveDebugShape {
+  FString ShapeType;
+  FVector Location = FVector::ZeroVector;
+  double ExpiresAtSeconds = 0.0;
+};
+
+// Shapes drawn through this handler; the engine expires them by duration, so
+// the mirror prunes by the same clock. Game-thread only, like all handlers.
+TArray<FMcpActiveDebugShape> GMcpActiveDebugShapes;
+
+void McpPruneExpiredDebugShapes() {
+  const double Now = FPlatformTime::Seconds();
+  GMcpActiveDebugShapes.RemoveAll([Now](const FMcpActiveDebugShape &Shape) {
+    return Shape.ExpiresAtSeconds <= Now;
+  });
+}
+
+void McpRecordDebugShape(const FString &ShapeType, const FVector &Location,
+                         float Duration) {
+  McpPruneExpiredDebugShapes();
+  FMcpActiveDebugShape Shape;
+  Shape.ShapeType = ShapeType;
+  Shape.Location = Location;
+  Shape.ExpiresAtSeconds = FPlatformTime::Seconds() + Duration;
+  GMcpActiveDebugShapes.Add(Shape);
+}
+} // namespace
+
 bool UMcpAutomationBridgeSubsystem::HandleEffectAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
@@ -274,26 +303,43 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectAction(
                            ErrCode);
   };
 
-  // Discovery: list available debug shape types
+  // Active drawn shapes; the catalog of drawable types rides along under
+  // supportedShapes.
   if (Lower.Equals(TEXT("list_debug_shapes"))) {
-    TArray<TSharedPtr<FJsonValue>> Shapes;
-    Shapes.Add(MakeShared<FJsonValueString>(TEXT("sphere")));
-    Shapes.Add(MakeShared<FJsonValueString>(TEXT("box")));
-    Shapes.Add(MakeShared<FJsonValueString>(TEXT("circle")));
-    Shapes.Add(MakeShared<FJsonValueString>(TEXT("line")));
-    Shapes.Add(MakeShared<FJsonValueString>(TEXT("point")));
-    Shapes.Add(MakeShared<FJsonValueString>(TEXT("coordinate")));
-    Shapes.Add(MakeShared<FJsonValueString>(TEXT("cylinder")));
-    Shapes.Add(MakeShared<FJsonValueString>(TEXT("cone")));
-    Shapes.Add(MakeShared<FJsonValueString>(TEXT("capsule")));
-    Shapes.Add(MakeShared<FJsonValueString>(TEXT("arrow")));
-    Shapes.Add(MakeShared<FJsonValueString>(TEXT("plane")));
+    TArray<TSharedPtr<FJsonValue>> SupportedShapes;
+    SupportedShapes.Add(MakeShared<FJsonValueString>(TEXT("sphere")));
+    SupportedShapes.Add(MakeShared<FJsonValueString>(TEXT("box")));
+    SupportedShapes.Add(MakeShared<FJsonValueString>(TEXT("circle")));
+    SupportedShapes.Add(MakeShared<FJsonValueString>(TEXT("line")));
+    SupportedShapes.Add(MakeShared<FJsonValueString>(TEXT("point")));
+    SupportedShapes.Add(MakeShared<FJsonValueString>(TEXT("coordinate")));
+    SupportedShapes.Add(MakeShared<FJsonValueString>(TEXT("cylinder")));
+    SupportedShapes.Add(MakeShared<FJsonValueString>(TEXT("cone")));
+    SupportedShapes.Add(MakeShared<FJsonValueString>(TEXT("capsule")));
+    SupportedShapes.Add(MakeShared<FJsonValueString>(TEXT("arrow")));
+    SupportedShapes.Add(MakeShared<FJsonValueString>(TEXT("plane")));
+
+    McpPruneExpiredDebugShapes();
+    const double Now = FPlatformTime::Seconds();
+    TArray<TSharedPtr<FJsonValue>> ActiveShapes;
+    for (const FMcpActiveDebugShape &Shape : GMcpActiveDebugShapes) {
+      TSharedPtr<FJsonObject> ShapeObj = MakeShared<FJsonObject>();
+      ShapeObj->SetStringField(TEXT("shapeType"), Shape.ShapeType);
+      ShapeObj->SetStringField(
+          TEXT("location"),
+          FString::Printf(TEXT("%.2f,%.2f,%.2f"), Shape.Location.X,
+                          Shape.Location.Y, Shape.Location.Z));
+      ShapeObj->SetNumberField(TEXT("secondsRemaining"),
+                               Shape.ExpiresAtSeconds - Now);
+      ActiveShapes.Add(MakeShared<FJsonValueObject>(ShapeObj));
+    }
 
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetArrayField(TEXT("shapes"), Shapes);
-    Resp->SetNumberField(TEXT("count"), Shapes.Num());
+    Resp->SetArrayField(TEXT("shapes"), ActiveShapes);
+    Resp->SetNumberField(TEXT("count"), ActiveShapes.Num());
+    Resp->SetArrayField(TEXT("supportedShapes"), SupportedShapes);
     SendAutomationResponse(RequestingSocket, RequestId, true,
-                           TEXT("Available debug shape types"), Resp);
+                           TEXT("Active debug shapes"), Resp);
     return true;
   }
 
@@ -302,6 +348,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectAction(
 #if WITH_EDITOR
     if (GEditor && GEditor->GetEditorWorldContext().World()) {
       FlushPersistentDebugLines(GEditor->GetEditorWorldContext().World());
+      GMcpActiveDebugShapes.Empty();
       TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       Resp->SetBoolField(TEXT("success"), true);
       SendAutomationResponse(RequestingSocket, RequestId, true,
@@ -321,7 +368,11 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectAction(
 #endif
   }
 
-  if (bIsCreateEffect || Lower.Equals(TEXT("create_niagara_system"))) {
+  // set_niagara_parameter is routed here as a top-level action by the
+  // manage_effect re-dispatch above; its implementation lives in this block's
+  // sub-action chain.
+  if (bIsCreateEffect || Lower.Equals(TEXT("create_niagara_system")) ||
+      Lower.Equals(TEXT("set_niagara_parameter"))) {
     FString SubAction;
     LocalPayload->TryGetStringField(TEXT("action"), SubAction);
 
@@ -474,6 +525,8 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectAction(
                                TEXT("UNSUPPORTED_SHAPE"));
         return true;
       }
+
+      McpRecordDebugShape(LowerShapeType, Loc, Duration);
 
       TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       Resp->SetBoolField(TEXT("success"), true);
@@ -843,6 +896,8 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectAction(
                                TEXT("UNSUPPORTED_SHAPE"));
         return true;
       }
+
+      McpRecordDebugShape(LowerShapeType, Loc, Duration);
 
       TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       Resp->SetBoolField(TEXT("success"), true);

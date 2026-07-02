@@ -21,6 +21,13 @@ public:
 	/** Get set of all currently enabled tool names. */
 	TSet<FString> GetEnabledToolNames() const;
 
+	/**
+	 * Last mutating manage_tools action that changed enablement (state is shared
+	 * across all sessions, so any session's toggle explains another session's
+	 * TOOL_DISABLED). Returns false if no mutation has happened yet.
+	 */
+	bool GetLastMutation(FString& OutAction, double& OutSecondsAgo) const;
+
 	/** Dispatch a manage_tools action. Returns JSON result for the response. */
 	TSharedPtr<FJsonObject> HandleAction(const FString& Action,
 		const TSharedPtr<FJsonObject>& Args);
@@ -48,11 +55,18 @@ private:
 	TMap<FString, bool> InitialToolEnabled;
 	TMap<FString, bool> InitialCategoryEnabled;
 
-	/** Protects ToolStates, CategoryStates, InitialToolEnabled, InitialCategoryEnabled. */
+	FString LastMutationAction;
+	double LastMutationTime = 0.0;
+
+	/** Protects ToolStates, CategoryStates, InitialToolEnabled,
+	 *  InitialCategoryEnabled, LastMutationAction, LastMutationTime. */
 	mutable FCriticalSection StateMutex;
 
 	/** Lock-free impl — caller must hold StateMutex. */
 	bool IsToolEnabled_NoLock(const FString& ToolName) const;
+
+	/** Record a state-changing action — caller must hold StateMutex. */
+	void RecordMutation_NoLock(const FString& Action, bool bChanged);
 
 	// Actions
 	TSharedPtr<FJsonObject> ListTools();

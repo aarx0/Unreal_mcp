@@ -81,7 +81,7 @@
 //
 //   - set_replicated_using
 //     Payload:  { blueprintPath, propertyName, repNotifyFunc }
-//     Response: { success, message, assetVerification }
+//     Response: { success, repNotifyFunctionCreated, message, assetVerification }
 //
 //   - configure_push_model
 //     Payload:  { blueprintPath, usePushModel? }
@@ -1385,9 +1385,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
     // ----- set_replicated_using -----
     // Sets a RepNotify function on a Blueprint variable. Enables CPF_Net and
     // CPF_RepNotify flags on the property and assigns the RepNotifyFunc name.
+    // Creates an empty function graph for the notify handler when none exists,
+    // so the variable never references a missing function.
     //
     // Payload:  { blueprintPath: string, propertyName: string, repNotifyFunc: string }
-    // Response: { success: bool, message: string, assetVerification }
+    // Response: { success: bool, repNotifyFunctionCreated: bool, message: string, assetVerification }
     if (SubAction == TEXT("set_replicated_using"))
     {
         FString BlueprintPath = GetStringField(Payload, TEXT("blueprintPath"));
@@ -1407,15 +1409,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
             return true;
         }
 
-        // Find the variable description and set RepNotify function
+        // Verify the variable exists before touching the blueprint
         bool bFound = false;
-        for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+        for (const FBPVariableDescription& VarDesc : Blueprint->NewVariables)
         {
             if (VarDesc.VarName == FName(*PropertyName))
             {
-                // Ensure property is replicated
-                VarDesc.PropertyFlags |= CPF_Net | CPF_RepNotify;
-                VarDesc.RepNotifyFunc = FName(*RepNotifyFunc);
                 bFound = true;
                 break;
             }
@@ -1427,11 +1426,56 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
             return true;
         }
 
+        // Ensure the notify function exists (own graph or inherited); create a stub otherwise
+        const FName RepNotifyFName(*RepNotifyFunc);
+        bool bFunctionExists = Blueprint->GeneratedClass && Blueprint->GeneratedClass->FindFunctionByName(RepNotifyFName) != nullptr;
+        if (!bFunctionExists)
+        {
+            for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+            {
+                if (Graph && Graph->GetFName() == RepNotifyFName)
+                {
+                    bFunctionExists = true;
+                    break;
+                }
+            }
+        }
+
+        bool bCreatedStub = false;
+        if (!bFunctionExists)
+        {
+            UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
+                Blueprint,
+                RepNotifyFName,
+                UEdGraph::StaticClass(),
+                UEdGraphSchema_K2::StaticClass()
+            );
+            if (!NewGraph)
+            {
+                SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Failed to create RepNotify function graph '%s'"), *RepNotifyFunc), TEXT("CREATE_FAILED"));
+                return true;
+            }
+            FBlueprintEditorUtils::AddFunctionGraph<UFunction>(Blueprint, NewGraph, false, static_cast<UFunction*>(nullptr));
+            bCreatedStub = true;
+        }
+
+        // Ensure property is replicated with the notify assigned
+        for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+        {
+            if (VarDesc.VarName == FName(*PropertyName))
+            {
+                VarDesc.PropertyFlags |= CPF_Net | CPF_RepNotify;
+                VarDesc.RepNotifyFunc = RepNotifyFName;
+                break;
+            }
+        }
+
         Blueprint->Modify();
-        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/bCreatedStub, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("ReplicatedUsing set to %s for property %s"), *RepNotifyFunc, *PropertyName));
+        ResultJson->SetBoolField(TEXT("repNotifyFunctionCreated"), bCreatedStub);
+        ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("ReplicatedUsing set to %s for property %s (%s)"), *RepNotifyFunc, *PropertyName, bCreatedStub ? TEXT("function stub created") : TEXT("function already existed")));
         McpHandlerUtils::AddVerification(ResultJson, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("ReplicatedUsing configured"), ResultJson);
         return true;

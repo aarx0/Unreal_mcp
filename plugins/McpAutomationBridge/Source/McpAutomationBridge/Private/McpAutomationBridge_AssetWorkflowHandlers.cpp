@@ -102,6 +102,9 @@
 // Editor-only Includes (Asset Management)
 // -----------------------------------------------------------------------------
 #include "AssetRegistry/AssetRegistryModule.h"
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
+#include "UObject/AssetRegistryTagsContext.h"  // EAssetRegistryTagsCaller (AssetUpdateTags)
+#endif
 #include "AssetToolsModule.h"
 #include "AssetViewUtils.h"
 #include "EditorAssetLibrary.h"
@@ -1716,13 +1719,19 @@ bool UMcpAutomationBridgeSubsystem::HandleDuplicateAsset(
 #if WITH_EDITOR
   FString SourcePath;
   Payload->TryGetStringField(TEXT("sourcePath"), SourcePath);
+  if (SourcePath.IsEmpty())
+    Payload->TryGetStringField(TEXT("assetPath"), SourcePath);
   FString DestinationPath;
   Payload->TryGetStringField(TEXT("destinationPath"), DestinationPath);
+  if (DestinationPath.IsEmpty())
+    Payload->TryGetStringField(TEXT("newName"), DestinationPath);
 
   if (SourcePath.IsEmpty() || DestinationPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
-                           TEXT("sourcePath and destinationPath required"),
-                           nullptr, TEXT("INVALID_ARGUMENT"));
+    SendAutomationResponse(
+        Socket, RequestId, false,
+        TEXT("sourcePath (or assetPath) and destinationPath (or newName) "
+             "required"),
+        nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -1866,13 +1875,19 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameAsset(
 #if WITH_EDITOR
   FString SourcePath;
   Payload->TryGetStringField(TEXT("sourcePath"), SourcePath);
+  if (SourcePath.IsEmpty())
+    Payload->TryGetStringField(TEXT("assetPath"), SourcePath);
   FString DestinationPath;
   Payload->TryGetStringField(TEXT("destinationPath"), DestinationPath);
+  if (DestinationPath.IsEmpty())
+    Payload->TryGetStringField(TEXT("newName"), DestinationPath);
 
   if (SourcePath.IsEmpty() || DestinationPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
-                           TEXT("sourcePath and destinationPath required"),
-                           nullptr, TEXT("INVALID_ARGUMENT"));
+    SendAutomationResponse(
+        Socket, RequestId, false,
+        TEXT("sourcePath (or assetPath) and destinationPath (or newName) "
+             "required"),
+        nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -2805,15 +2820,26 @@ bool UMcpAutomationBridgeSubsystem::HandleSetTags(
     return true;
   }
 
-  // Implement set_tags by mapping them to Package Metadata (Tag=true)
+  // Implement set_tags by mapping them to Package Metadata (Tag=true).
+  // Metadata keys only export to asset-registry tags when globally registered;
+  // without that, find_by_tag's registry query can never see them.
+  TSet<FName> &RegistryMetaTags = UObject::GetMetaDataTagsForAssetRegistry();
   int32 AppliedCount = 0;
   for (const FString &Tag : Tags) {
-    UEditorAssetLibrary::SetMetadataTag(Asset, FName(*Tag), TEXT("true"));
+    const FName TagName(*Tag);
+    RegistryMetaTags.Add(TagName);
+    UEditorAssetLibrary::SetMetadataTag(Asset, TagName, TEXT("true"));
     AppliedCount++;
   }
 
   // Mark dirty so the asset can be saved later
   Asset->MarkPackageDirty();
+
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
+  // The registry's cached tags otherwise refresh only on save.
+  IAssetRegistry::GetChecked().AssetUpdateTags(
+      Asset, EAssetRegistryTagsCaller::FullUpdate);
+#endif
 
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetBoolField(TEXT("success"), true);
@@ -2919,8 +2945,11 @@ bool UMcpAutomationBridgeSubsystem::HandleListAssets(
     (*FilterObj)->TryGetStringField(TEXT("tag"), TagFilter);
     (*FilterObj)->TryGetStringField(TEXT("pathStartsWith"), PathStartsWith);
   } else {
-    // Legacy support for direct path/recursive fields
     Payload->TryGetStringField(TEXT("path"), PathFilter);
+    if (PathFilter.IsEmpty())
+      Payload->TryGetStringField(TEXT("directory"), PathFilter);
+    if (PathFilter.IsEmpty())
+      Payload->TryGetStringField(TEXT("directoryPath"), PathFilter);
   }
 
   // Sanitize PathFilter to remove trailing slash which can break AssetRegistry
@@ -2930,7 +2959,8 @@ bool UMcpAutomationBridgeSubsystem::HandleListAssets(
   }
 
   bool bRecursive = true;
-  Payload->TryGetBoolField(TEXT("recursive"), bRecursive);
+  if (!Payload->TryGetBoolField(TEXT("recursive"), bRecursive))
+    Payload->TryGetBoolField(TEXT("recursivePaths"), bRecursive);
 
   // Parse pagination
   int32 Offset = 0;
@@ -2946,23 +2976,30 @@ bool UMcpAutomationBridgeSubsystem::HandleListAssets(
       FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
   IAssetRegistry &AssetRegistry = AssetRegistryModule.Get();
 
+  // Default to /Game to prevent empty results or massive scan
+  const FString EffectiveDirectory =
+      !PathFilter.IsEmpty()
+          ? PathFilter
+          : (!PathStartsWith.IsEmpty() ? PathStartsWith : TEXT("/Game"));
+
+  if (!AssetRegistry.PathExists(EffectiveDirectory)) {
+    SendAutomationResponse(
+        Socket, RequestId, false,
+        FString::Printf(TEXT("Directory '%s' not found in the asset registry. "
+                             "Pass a mounted content path like /Game/Folder."),
+                        *EffectiveDirectory),
+        nullptr, TEXT("DIRECTORY_NOT_FOUND"));
+    return true;
+  }
+
   FARFilter Filter;
   Filter.bRecursivePaths = bRecursive;
   Filter.bRecursiveClasses = true;
 
-  // Apply path filters
-  if (!PathFilter.IsEmpty()) {
-    Filter.PackagePaths.Add(FName(*PathFilter));
-  } else if (!PathStartsWith.IsEmpty()) {
-    // If we have a path prefix, assume it's a package path
-    // Note: FARFilter doesn't support 'StartsWith' natively for paths in an
-    // efficient way other than adding the path and set bRecursivePaths=true. So
-    // if PathStartsWith is a folder, we use it.
-    Filter.PackagePaths.Add(FName(*PathStartsWith));
-  } else {
-    // Default to /Game to prevent empty results or massive scan
-    Filter.PackagePaths.Add(FName(TEXT("/Game")));
-  }
+  // Note: FARFilter doesn't support 'StartsWith' natively for paths in an
+  // efficient way other than adding the path and set bRecursivePaths=true. So
+  // if PathStartsWith is a folder, we use it.
+  Filter.PackagePaths.Add(FName(*EffectiveDirectory));
 
   // Use cached AssetRegistry data — ScanPathsSynchronous() removed to prevent
   // blocking the GameThread (causes SSE/HTTP transport timeouts).
@@ -3108,6 +3145,8 @@ bool UMcpAutomationBridgeSubsystem::HandleListAssets(
 
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetStringField(TEXT("directory"), EffectiveDirectory);
+  Resp->SetBoolField(TEXT("recursive"), bRecursive);
   Resp->SetArrayField(TEXT("assets"), AssetsArray);
   Resp->SetArrayField(TEXT("folders"), FoldersJson);
   Resp->SetNumberField(TEXT("totalCount"), TotalCount);
@@ -4779,19 +4818,11 @@ bool UMcpAutomationBridgeSubsystem::HandleGetMetadata(
   // 2. Package Metadata information
   UPackage *Package = Asset->GetOutermost();
   if (Package) {
-
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6
-    FMetaData& Meta = Package->GetMetaData();
-    bool bHasMeta = FMetaData::GetMapForObject(Asset) != nullptr;
-    Resp->SetBoolField(TEXT("debug_has_meta"), bHasMeta);
-
     const TMap<FName, FString> *ObjectMeta = FMetaData::GetMapForObject(Asset);
 #else
-    UMetaData* Meta = Package->GetMetaData();
-    bool bHasMeta = Meta->GetMapForObject(Asset) != nullptr;
-    Resp->SetBoolField(TEXT("debug_has_meta"), bHasMeta);
-
-    const TMap<FName, FString> *ObjectMeta = Meta->GetMapForObject(Asset);
+    const TMap<FName, FString> *ObjectMeta =
+        Package->GetMetaData()->GetMapForObject(Asset);
 #endif
     if (ObjectMeta) {
       TSharedPtr<FJsonObject> MetaObj = McpHandlerUtils::CreateResultObject();
@@ -4964,18 +4995,18 @@ bool UMcpAutomationBridgeSubsystem::HandleFindByTag(
     return true;
   }
 
-  // CRITICAL: Validate path parameter for security even if not used for actor search
-  // This prevents false negatives in security testing and follows defense-in-depth
+  // Optional scope for the asset search
+  FString ScopePath = TEXT("/Game");
   FString Path;
   if (Payload->TryGetStringField(TEXT("path"), Path) && !Path.IsEmpty()) {
-    FString SanitizedPath = SanitizeProjectRelativePath(Path);
+    const FString SanitizedPath = SanitizeProjectRelativePath(Path);
     if (SanitizedPath.IsEmpty()) {
       SendAutomationError(Socket, RequestId,
           FString::Printf(TEXT("Invalid path (traversal/security violation): %s"), *Path),
           TEXT("SECURITY_VIOLATION"));
       return true;
     }
-    // Path is valid - could be used for scoping asset search in future
+    ScopePath = SanitizedPath;
   }
 
   FName TagName(*Tag);
@@ -4986,10 +5017,68 @@ bool UMcpAutomationBridgeSubsystem::HandleFindByTag(
 
   bool bSearchActors = true;
   bool bSearchComponents = false;
-  bool bSearchAssets = false;
+  bool bSearchAssets = true;
   Payload->TryGetBoolField(TEXT("searchActors"), bSearchActors);
   Payload->TryGetBoolField(TEXT("searchComponents"), bSearchComponents);
   Payload->TryGetBoolField(TEXT("searchAssets"), bSearchAssets);
+
+  // Search assets: registry tags (e.g. RowStructure) plus the package-metadata
+  // store set_tags writes to (readable here only for already-loaded assets).
+  if (bSearchAssets) {
+    FAssetRegistryModule &AssetRegistryModule =
+        FModuleManager::LoadModuleChecked<FAssetRegistryModule>(
+            TEXT("AssetRegistry"));
+    FARFilter Filter;
+    Filter.PackagePaths.Add(FName(*ScopePath));
+    Filter.bRecursivePaths = true;
+    TArray<FAssetData> AssetDataList;
+    AssetRegistryModule.Get().GetAssets(Filter, AssetDataList);
+
+    for (const FAssetData &Data : AssetDataList) {
+      if (Results.Num() >= MaxResults)
+        break;
+
+      FString TagValue;
+      bool bMatch = Data.GetTagValue(TagName, TagValue);
+      if (!bMatch && Data.IsAssetLoaded()) {
+        if (UObject *LoadedAsset = Data.GetAsset()) {
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6
+          const TMap<FName, FString> *ObjectMeta =
+              FMetaData::GetMapForObject(LoadedAsset);
+#else
+          UPackage *AssetPackage = LoadedAsset->GetOutermost();
+          const TMap<FName, FString> *ObjectMeta =
+              AssetPackage
+                  ? AssetPackage->GetMetaData()->GetMapForObject(LoadedAsset)
+                  : nullptr;
+#endif
+          if (const FString *MetaValue =
+                  ObjectMeta ? ObjectMeta->Find(TagName) : nullptr) {
+            bMatch = true;
+            TagValue = *MetaValue;
+          }
+        }
+      }
+      if (!bMatch)
+        continue;
+
+      TSharedPtr<FJsonObject> ResultObj = McpHandlerUtils::CreateResultObject();
+      ResultObj->SetStringField(TEXT("type"), TEXT("Asset"));
+      ResultObj->SetStringField(TEXT("name"), Data.AssetName.ToString());
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+      ResultObj->SetStringField(TEXT("path"),
+                                Data.GetSoftObjectPath().ToString());
+      ResultObj->SetStringField(TEXT("class"),
+                                Data.AssetClassPath.ToString());
+#else
+      ResultObj->SetStringField(TEXT("path"),
+                                Data.ToSoftObjectPath().ToString());
+      ResultObj->SetStringField(TEXT("class"), Data.AssetClass.ToString());
+#endif
+      ResultObj->SetStringField(TEXT("tagValue"), TagValue);
+      Results.Add(MakeShared<FJsonValueObject>(ResultObj));
+    }
+  }
 
   // Search in world
   if (GEditor && bSearchActors) {
@@ -5044,6 +5133,7 @@ bool UMcpAutomationBridgeSubsystem::HandleFindByTag(
   }
 
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
   Resp->SetStringField(TEXT("tag"), Tag);
   Resp->SetNumberField(TEXT("count"), Results.Num());
   Resp->SetArrayField(TEXT("results"), Results);

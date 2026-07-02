@@ -559,7 +559,13 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
     ResultPayload->SetStringField(TEXT("path"), CreatedNormalizedPath);
     ResultPayload->SetStringField(TEXT("assetPath"),
                                   PreExistingBP->GetPathName());
-    ResultPayload->SetBoolField(TEXT("saved"), true);
+    // Nothing was created or written here; saved reflects the on-disk state.
+    {
+      const UPackage *Pkg = PreExistingBP->GetPackage();
+      ResultPayload->SetBoolField(
+          TEXT("saved"), Pkg && FPackageName::DoesPackageExist(Pkg->GetName()) &&
+                             !Pkg->IsDirty());
+    }
     McpHandlerUtils::AddVerification(ResultPayload, PreExistingBP);
 
     FScopeLock Lock(&GBlueprintCreateMutex);
@@ -724,7 +730,14 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
       ResultPayload->SetStringField(TEXT("path"), CreatedNormalizedPath);
       ResultPayload->SetStringField(TEXT("assetPath"),
                                     ExistingBP->GetPathName());
-      ResultPayload->SetBoolField(TEXT("saved"), true);
+      // Nothing was created or written here; saved reflects the on-disk state.
+      {
+        const UPackage *Pkg = ExistingBP->GetPackage();
+        ResultPayload->SetBoolField(
+            TEXT("saved"),
+            Pkg && FPackageName::DoesPackageExist(Pkg->GetName()) &&
+                !Pkg->IsDirty());
+      }
       McpHandlerUtils::AddVerification(ResultPayload, ExistingBP);
 
       FScopeLock Lock(&GBlueprintCreateMutex);
@@ -784,11 +797,14 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
           TEXT("AssetRegistry"));
   AssetRegistryModule.AssetCreated(CreatedBlueprint);
 
+  // CreateAsset only creates in memory; persist so saved:true means on-disk.
+  const bool bSavedToDisk = SaveLoadedAssetThrottled(CreatedBlueprint);
+
   TSharedPtr<FJsonObject> ResultPayload = McpHandlerUtils::CreateResultObject();
   ResultPayload->SetStringField(TEXT("path"), CreatedNormalizedPath);
   ResultPayload->SetStringField(TEXT("assetPath"),
                                 CreatedBlueprint->GetPathName());
-  ResultPayload->SetBoolField(TEXT("saved"), true);
+  ResultPayload->SetBoolField(TEXT("saved"), bSavedToDisk);
   McpHandlerUtils::AddVerification(ResultPayload, CreatedBlueprint);
 
   FScopeLock Lock(&GBlueprintCreateMutex);
