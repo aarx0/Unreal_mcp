@@ -5,8 +5,6 @@
 
 class FMcpToolRegistry;
 
-DECLARE_DELEGATE(FOnToolsChanged);
-
 /**
  * Manages MCP tool visibility at runtime.
  * Port of src/tools/dynamic-tool-manager.ts.
@@ -26,9 +24,6 @@ public:
 	/** Dispatch a manage_tools action. Returns JSON result for the response. */
 	TSharedPtr<FJsonObject> HandleAction(const FString& Action,
 		const TSharedPtr<FJsonObject>& Args);
-
-	/** Fired after any mutation that changes the enabled tool set. */
-	FOnToolsChanged OnToolsChanged;
 
 private:
 	struct FToolState

@@ -47,7 +47,6 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
-#include "McpBridgeWebSocket.h"
 
 // =============================================================================
 // Helper Macros
@@ -169,7 +168,7 @@ static bool HandleConfigureLocalSessionSettings(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -234,7 +233,7 @@ static bool HandleConfigureSessionInterface(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -274,7 +273,7 @@ static bool HandleConfigureSplitScreen(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -350,7 +349,7 @@ static bool HandleSetSplitScreenType(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -393,7 +392,7 @@ static bool HandleAddLocalPlayer(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -444,7 +443,7 @@ static bool HandleRemoveLocalPlayer(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -503,7 +502,7 @@ static bool HandleConfigureLanPlay(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -537,7 +536,7 @@ static bool HandleHostLanServer(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -621,7 +620,7 @@ static bool HandleJoinLanServer(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -665,7 +664,7 @@ static bool HandleEnableVoiceChat(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -775,7 +774,7 @@ static bool HandleConfigureVoiceSettings(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -827,7 +826,7 @@ static bool HandleSetVoiceChannel(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -864,7 +863,7 @@ static bool HandleMutePlayer(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -1042,7 +1041,7 @@ static bool HandleSetVoiceAttenuation(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -1076,7 +1075,7 @@ static bool HandleConfigurePushToTalk(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -1111,7 +1110,7 @@ static bool HandleGetSessionsInfo(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -1160,7 +1159,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSessionsAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     // Only handle manage_sessions. Without this gate the handler reads the
     // sub-action straight from the payload and "claims" any unrouted action that

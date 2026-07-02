@@ -17,10 +17,20 @@ as they land.
 
 > **Architecture review (2026-07-02):** full structural review in
 > [`docs/architecture-review-2026-07-02.md`](docs/architecture-review-2026-07-02.md) — 9 verified
-> findings (F1–F9) + a 10-step incremental refactoring roadmap. Highest-leverage first steps: loud
-> registration + startup schema/routing drift check (F1/F2), honest persistence for the throttled-save
-> / `AddAssetVerification` / dirty-only `save:true` paths (F3), inline the 10 deferred `AsyncTask`
-> completions (F4), delete the dead `FMcpBridgeWebSocket` parameter currency (F5).
+> findings (F1–F9) + a 10-step incremental refactoring roadmap.
+> **Roadmap steps 1–4 SHIPPED same day** (loud registration + startup routing validation;
+> honest persistence incl. FINALIZE_HOST/Niagara/material-graph saves; deferral inlining +
+> HANDLER_NO_RESPONSE guarantee + HandleAssetAction sub-action dispatch fix; WebSocket/OpenSSL/
+> dead-settings/Pattern-B deletion). Remaining: steps 5–10 (header freeze/extract-on-touch,
+> inline-enum migration, choke-point schema validation + structuredContent + scaffoldOnly,
+> doc sweep + schema snapshot test, drain-one-per-tick + off-thread timeout, module split).
+> Small follow-ups found while shipping: legacy top-level action registrations in
+> InitializeHandlers are unreachable via the 22-tool gate (delete after checking self-tests);
+> manage_audio schema enum is still inline (migrate to a shared list so the startup check
+> covers it); `set_two_sided` lacks PostEditChange (saves but may not recompile);
+> add_landscape_layer's save block computes unused AssetPathStr/DotIndex (leftover);
+> HandleAddMaterialTextureSample/AddMaterialExpression/CreateMaterialNodes save
+> unconditionally (ignore save:false).
 
 ## Roadmap — missing / incomplete capabilities
 

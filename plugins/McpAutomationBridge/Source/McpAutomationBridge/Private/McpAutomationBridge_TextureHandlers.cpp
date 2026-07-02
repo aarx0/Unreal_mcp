@@ -3394,7 +3394,7 @@ Response->SetBoolField(TEXT("success"), true);
 bool UMcpAutomationBridgeSubsystem::HandleManageTextureAction(
     const FString& RequestId, const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Check if this is a texture action
     if (Action != TEXT("manage_texture"))

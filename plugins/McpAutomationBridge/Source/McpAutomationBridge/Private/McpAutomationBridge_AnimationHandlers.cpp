@@ -444,7 +444,7 @@ static void ApplyBlendSpaceConfiguration(UObject *BlendSpaceAsset,
 bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
          TEXT(">>> HandleAnimationPhysicsAction ENTRY: RequestId=%s "
               "RawAction='%s'"),
@@ -4422,7 +4422,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
 bool UMcpAutomationBridgeSubsystem::HandleCreateAnimBlueprint(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("create_animation_blueprint"),
                     ESearchCase::IgnoreCase)) {
@@ -4594,7 +4594,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateAnimBlueprint(
 bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("play_anim_montage"), ESearchCase::IgnoreCase)) {
     return false;
@@ -4783,7 +4783,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
 bool UMcpAutomationBridgeSubsystem::HandleSetupRagdoll(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("setup_ragdoll"), ESearchCase::IgnoreCase)) {
     return false;
@@ -4937,7 +4937,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetupRagdoll(
 bool UMcpAutomationBridgeSubsystem::HandleActivateRagdoll(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("activate_ragdoll"), ESearchCase::IgnoreCase)) {
     return false;

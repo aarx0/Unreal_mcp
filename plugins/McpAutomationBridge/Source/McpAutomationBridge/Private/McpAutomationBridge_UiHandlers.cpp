@@ -107,7 +107,7 @@
 bool UMcpAutomationBridgeSubsystem::HandleUiAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   bool bIsSystemControl =
       LowerAction.Equals(TEXT("system_control"), ESearchCase::IgnoreCase);

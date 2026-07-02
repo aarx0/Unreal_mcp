@@ -41,7 +41,6 @@
 #include "McpVersionCompatibility.h"
 
 #include "McpAutomationBridgeSubsystem.h"
-#include "McpBridgeWebSocket.h"
 #include "McpHandlerUtils.h"
 
 #include "Dom/JsonObject.h"
@@ -352,7 +351,7 @@ FKey ResolveNavKey(const FString &Direction, const FString &Device,
 // =============================================================================
 bool UMcpAutomationBridgeSubsystem::HandleInspectUiFocus(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
 	TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
@@ -374,7 +373,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectUiFocus(
 // =============================================================================
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateNav(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
 	if (!GEditor || !GEditor->PlayWorld)

@@ -2521,7 +2521,7 @@ if (SubAction == TEXT("create_metasound"))
 bool UMcpAutomationBridgeSubsystem::HandleManageAudioAuthoringAction(
     const FString& RequestId, const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Check if this is a manage_audio_authoring request
     FString LowerAction = Action.ToLower();

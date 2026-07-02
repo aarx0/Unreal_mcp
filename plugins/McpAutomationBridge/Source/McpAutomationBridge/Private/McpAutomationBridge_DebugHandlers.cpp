@@ -58,7 +58,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDebugAction(
     const FString& RequestId, 
     const FString& Action, 
     const TSharedPtr<FJsonObject>& Payload, 
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Validate action
     const FString LowerAction = Action.ToLower();

@@ -206,7 +206,7 @@ static void ApplyPropertiesToObject(UObject *TargetObj,
 bool FBlueprintCreationHandlers::HandleBlueprintProbeSubobjectHandle(
     UMcpAutomationBridgeSubsystem *Self, const FString &RequestId,
     const TSharedPtr<FJsonObject> &LocalPayload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   check(Self);
   // Local extraction
   FString ComponentClass;
@@ -457,7 +457,7 @@ bool FBlueprintCreationHandlers::HandleBlueprintProbeSubobjectHandle(
 bool FBlueprintCreationHandlers::HandleBlueprintCreate(
     UMcpAutomationBridgeSubsystem *Self, const FString &RequestId,
     const TSharedPtr<FJsonObject> &LocalPayload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   check(Self);
   UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
          TEXT("HandleBlueprintCreate ENTRY: RequestId=%s"), *RequestId);
@@ -513,7 +513,7 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
     FScopeLock Lock(&GBlueprintCreateMutex);
     if (GBlueprintCreateInflight.Contains(CreateKey)) {
       GBlueprintCreateInflight[CreateKey].Add(
-          TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>(RequestId,
+          TPair<FString, FMcpResponseHandle>(RequestId,
                                                           RequestingSocket));
       UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
              TEXT("HandleBlueprintCreate: Coalescing request %s for %s"),
@@ -522,10 +522,10 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
     }
 
     GBlueprintCreateInflight.Add(
-        CreateKey, TArray<TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>>());
+        CreateKey, TArray<TPair<FString, FMcpResponseHandle>>());
     GBlueprintCreateInflightTs.Add(CreateKey, Now);
     GBlueprintCreateInflight[CreateKey].Add(
-        TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>(RequestId,
+        TPair<FString, FMcpResponseHandle>(RequestId,
                                                         RequestingSocket));
   }
 
@@ -563,9 +563,9 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
     McpHandlerUtils::AddVerification(ResultPayload, PreExistingBP);
 
     FScopeLock Lock(&GBlueprintCreateMutex);
-    if (TArray<TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>> *Subs =
+    if (TArray<TPair<FString, FMcpResponseHandle>> *Subs =
             GBlueprintCreateInflight.Find(CreateKey)) {
-      for (const TPair<FString, TSharedPtr<FMcpBridgeWebSocket>> &Pair :
+      for (const TPair<FString, FMcpResponseHandle> &Pair :
            *Subs) {
         Self->SendAutomationResponse(Pair.Value, Pair.Key, true,
                                      TEXT("Blueprint already exists"),
@@ -728,9 +728,9 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
       McpHandlerUtils::AddVerification(ResultPayload, ExistingBP);
 
       FScopeLock Lock(&GBlueprintCreateMutex);
-      if (TArray<TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>> *Subs =
+      if (TArray<TPair<FString, FMcpResponseHandle>> *Subs =
               GBlueprintCreateInflight.Find(CreateKey)) {
-        for (const TPair<FString, TSharedPtr<FMcpBridgeWebSocket>> &Pair :
+        for (const TPair<FString, FMcpResponseHandle> &Pair :
              *Subs) {
           Self->SendAutomationResponse(Pair.Value, Pair.Key, true,
                                        TEXT("Blueprint already exists"),
@@ -753,9 +753,9 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
 
     {
       FScopeLock Lock(&GBlueprintCreateMutex);
-      if (TArray<TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>> *Subs =
+      if (TArray<TPair<FString, FMcpResponseHandle>> *Subs =
               GBlueprintCreateInflight.Find(CreateKey)) {
-        for (const TPair<FString, TSharedPtr<FMcpBridgeWebSocket>> &Pair :
+        for (const TPair<FString, FMcpResponseHandle> &Pair :
              *Subs) {
           Self->SendAutomationResponse(Pair.Value, Pair.Key, false,
                                        CreationError, nullptr,
@@ -792,9 +792,9 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
   McpHandlerUtils::AddVerification(ResultPayload, CreatedBlueprint);
 
   FScopeLock Lock(&GBlueprintCreateMutex);
-  if (TArray<TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>> *Subs =
+  if (TArray<TPair<FString, FMcpResponseHandle>> *Subs =
           GBlueprintCreateInflight.Find(CreateKey)) {
-    for (const TPair<FString, TSharedPtr<FMcpBridgeWebSocket>> &Pair : *Subs) {
+    for (const TPair<FString, FMcpResponseHandle> &Pair : *Subs) {
       Self->SendAutomationResponse(Pair.Value, Pair.Key, true,
                                    TEXT("Blueprint created"), ResultPayload,
                                    FString());

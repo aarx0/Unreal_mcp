@@ -11,7 +11,7 @@
 void UMcpAutomationBridgeSubsystem::ProcessAutomationRequest(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket,
+    FMcpResponseHandle RequestingSocket,
     ERequestOrigin Origin) {
   // This large implementation was extracted from the original subsystem
   // translation unit to keep the core file smaller and focused. It

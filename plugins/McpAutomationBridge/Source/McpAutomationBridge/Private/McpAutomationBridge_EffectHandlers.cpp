@@ -127,7 +127,7 @@
 bool UMcpAutomationBridgeSubsystem::HandleEffectAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   const bool bIsCreateEffect = Lower.Equals(TEXT("create_effect")) ||
                                Lower.StartsWith(TEXT("create_effect"));
@@ -2807,7 +2807,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectAction(
 // Helper function to create Niagara effects with default systems
 bool UMcpAutomationBridgeSubsystem::CreateNiagaraEffect(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket, const FString &EffectName,
+    FMcpResponseHandle RequestingSocket, const FString &EffectName,
     const FString &DefaultSystemPath) {
 #if WITH_EDITOR
   if (!GEditor) {

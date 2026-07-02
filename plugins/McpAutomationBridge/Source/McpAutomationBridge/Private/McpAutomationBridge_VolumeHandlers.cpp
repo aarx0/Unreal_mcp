@@ -64,7 +64,6 @@
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpHandlerUtils.h"
-#include "McpBridgeWebSocket.h"
 #include "Misc/EngineVersionComparison.h"
 
 #if WITH_EDITOR
@@ -439,7 +438,7 @@ static bool HandleCreateTriggerVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -509,7 +508,7 @@ static bool HandleCreateTriggerBox(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -583,7 +582,7 @@ static bool HandleCreateTriggerSphere(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -655,7 +654,7 @@ static bool HandleCreateTriggerCapsule(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -733,7 +732,7 @@ static bool HandleCreateBlockingVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -796,7 +795,7 @@ static bool HandleCreateKillZVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -859,7 +858,7 @@ static bool HandleCreatePainCausingVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -931,7 +930,7 @@ static bool HandleCreatePhysicsVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -1009,7 +1008,7 @@ static bool HandleCreateAudioVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -1078,7 +1077,7 @@ static bool HandleCreateReverbVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -1160,7 +1159,7 @@ static bool HandleCreatePostProcessVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -1302,7 +1301,7 @@ static bool HandleCreateCullDistanceVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -1389,7 +1388,7 @@ static bool HandleCreatePrecomputedVisibilityVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -1452,7 +1451,7 @@ static bool HandleCreateLightmassImportanceVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -1515,7 +1514,7 @@ static bool HandleCreateNavMeshBoundsVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -1578,7 +1577,7 @@ static bool HandleCreateNavModifierVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -1641,7 +1640,7 @@ static bool HandleCreateCameraBlockingVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -1708,7 +1707,7 @@ static bool HandleSetVolumeExtent(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -1778,7 +1777,7 @@ static bool HandleSetVolumeProperties(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -1908,7 +1907,7 @@ static bool HandleGetVolumesInfo(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -2059,7 +2058,7 @@ static bool HandleRemoveVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -2154,7 +2153,7 @@ static bool HandleAddTriggerVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -2258,7 +2257,7 @@ static bool HandleAddBlockingVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -2359,7 +2358,7 @@ static bool HandleAddKillZVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -2468,7 +2467,7 @@ static bool HandleAddPhysicsVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -2580,7 +2579,7 @@ static bool HandleAddCullDistanceVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -2706,7 +2705,7 @@ static bool HandleAddPostProcessVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -2827,7 +2826,7 @@ static bool HandleSetVolumeBounds(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace VolumeHelpers;
 
@@ -2954,7 +2953,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageVolumesAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     // Only handle manage_volumes; decline anything else so the dispatcher keeps
     // trying other handlers and reaches its UNKNOWN_ACTION fallback. Without this

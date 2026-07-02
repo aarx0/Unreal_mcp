@@ -66,7 +66,7 @@
 bool UMcpAutomationBridgeSubsystem::HandleMaterialGraphAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     if (Action != TEXT("manage_material_graph"))
     {
@@ -832,7 +832,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGraphAction(
 bool UMcpAutomationBridgeSubsystem::HandleAddMaterialTextureSample(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
 
@@ -954,7 +954,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialTextureSample(
 bool UMcpAutomationBridgeSubsystem::HandleAddMaterialExpression(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
 
@@ -1113,7 +1113,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialExpression(
 bool UMcpAutomationBridgeSubsystem::HandleCreateMaterialNodes(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
 

@@ -30,7 +30,6 @@
 
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
-#include "McpBridgeWebSocket.h"
 #include "Dom/JsonObject.h"
 
 #if WITH_EDITOR
@@ -164,7 +163,7 @@ static bool HandleCreatePostProcessVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace MiscHelpers;
 
@@ -272,7 +271,7 @@ static bool HandleCreateCamera(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace MiscHelpers;
 
@@ -331,7 +330,7 @@ static bool HandleSetCameraFOV(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace MiscHelpers;
 
@@ -399,7 +398,7 @@ static bool HandleSetViewportResolution(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace MiscHelpers;
 
@@ -445,7 +444,7 @@ static bool HandleSetGameSpeed(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace MiscHelpers;
 
@@ -508,7 +507,7 @@ static bool HandleCreateBookmark(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace MiscHelpers;
 
@@ -571,7 +570,7 @@ static bool HandleCreateSplineComponent(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace MiscHelpers;
 
@@ -654,7 +653,7 @@ static bool HandleSetReplication(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace MiscHelpers;
 
@@ -711,7 +710,7 @@ static bool HandleCreateReplicatedVariable(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace MiscHelpers;
 
@@ -797,7 +796,7 @@ static bool HandleSetNetUpdateFrequency(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace MiscHelpers;
 
@@ -859,7 +858,7 @@ static bool HandleCreateRPC(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace MiscHelpers;
 
@@ -952,7 +951,7 @@ static bool HandleConfigureNetCullDistance(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace MiscHelpers;
 
@@ -1013,7 +1012,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMiscAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
     FString SubAction = GetJsonStringField(Payload, TEXT("subAction"), TEXT(""));

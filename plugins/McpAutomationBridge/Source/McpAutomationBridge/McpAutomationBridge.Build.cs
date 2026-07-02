@@ -159,15 +159,13 @@ public class McpAutomationBridge : ModuleRules
             PrivateDependencyModuleNames.AddRange(new string[]
             {
                 "ApplicationCore","Slate","SlateCore","Projects","InputCore","DeveloperSettings","Settings","EngineSettings",
-                "Sockets","Networking","EditorSubsystem","EditorScriptingUtilities","BlueprintGraph","SSL",
+                "Sockets","Networking","EditorSubsystem","EditorScriptingUtilities","BlueprintGraph",
                 "Kismet","KismetCompiler","AssetRegistry","AssetTools","SourceControl",
                 "AudioEditor", "AudioMixer",
                 // Native MCP uses raw sockets (Sockets/Networking already listed above)
                 // Optional plugins are handled by AddOptionalDynamicModule() below with delay-load
             });
 
-            // Add OpenSSL for TLS support (requires WITH_SSL)
-            AddEngineThirdPartyPrivateStaticDependencies(Target, "OpenSSL");
 
             PrivateDependencyModuleNames.AddRange(new string[]
             {

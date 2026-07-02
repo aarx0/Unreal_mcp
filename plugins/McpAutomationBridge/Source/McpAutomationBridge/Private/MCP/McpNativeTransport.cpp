@@ -1303,30 +1303,9 @@ void FMcpNativeTransport::HandleToolsCall(
 		SessionId.IsEmpty() ? TEXT("<no-session>") : *SessionId,
 		*PeerDesc);
 
-	// Resolve dispatch action using tool definition metadata.
-	// Pattern A: pass tool name as Action (handler checks Action == "tool_name")
-	// Pattern B: extract sub-action from arguments (handler checks Action.StartsWith("sub_action"))
-	FString DispatchAction = ToolName;
-	FMcpToolDefinition* ToolDef = FMcpToolRegistry::Get().FindTool(ToolName);
-	if (ToolDef && !ToolDef->UsesToolNameDispatch())
-	{
-		// Pattern B: extract action from arguments
-		FString ActionField = ToolDef->GetActionFieldName();
-		FString Extracted;
-		if (Arguments->TryGetStringField(ActionField, Extracted) && !Extracted.IsEmpty())
-		{
-			DispatchAction = Extracted;
-		}
-		else
-		{
-			CompletePendingRequest(
-				RequestId, false,
-				FString::Printf(TEXT("Missing required '%s' field in arguments for tool '%s'"),
-					*ActionField, *ToolName),
-				nullptr, TEXT("INVALID_PARAMS"));
-			return;
-		}
-	}
+	// Every tool dispatches by its own name; the handler reads the sub-action
+	// from the payload (Pattern B tool-definition dispatch was removed unused).
+	const FString DispatchAction = ToolName;
 
 	// Normalize: some handlers read "subAction" instead of "action".
 	// Ensure both fields exist so handlers find the value regardless of field name.

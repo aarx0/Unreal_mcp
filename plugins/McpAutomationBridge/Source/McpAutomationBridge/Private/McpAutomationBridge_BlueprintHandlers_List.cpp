@@ -1,5 +1,4 @@
 #include "McpAutomationBridgeSubsystem.h"
-#include "McpBridgeWebSocket.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "Dom/JsonObject.h"
@@ -17,7 +16,7 @@
 // LIST BLUEPRINTS
 // ============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleListBlueprints(const FString& RequestId, const FString& Action, const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+bool UMcpAutomationBridgeSubsystem::HandleListBlueprints(const FString& RequestId, const FString& Action, const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     // Parse filters

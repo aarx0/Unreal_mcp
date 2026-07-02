@@ -1082,7 +1082,7 @@ static void DiagnosticPatternChecks(const FString &CleanAction,
  */
 UBlueprint *UMcpAutomationBridgeSubsystem::ResolveBlueprintOrError(
     const FString &BlueprintPath, const FString &RequestId,
-    TSharedPtr<FMcpBridgeWebSocket> Socket, const TCHAR *FieldName) {
+    FMcpResponseHandle Socket, const TCHAR *FieldName) {
   if (BlueprintPath.IsEmpty()) {
     SendAutomationError(Socket, RequestId,
                         FString::Printf(TEXT("Missing %s."), FieldName),
@@ -1103,7 +1103,7 @@ UBlueprint *UMcpAutomationBridgeSubsystem::ResolveBlueprintOrError(
 bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   // Canonical graph actions are handled by HandleBlueprintGraphAction before
   // this general Blueprint handler is invoked.
@@ -5733,7 +5733,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 bool UMcpAutomationBridgeSubsystem::HandleSCSAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
     SendAutomationResponse(RequestingSocket, RequestId, false,

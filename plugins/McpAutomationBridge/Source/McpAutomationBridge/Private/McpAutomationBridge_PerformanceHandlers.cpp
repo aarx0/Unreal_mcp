@@ -118,7 +118,7 @@ extern ENGINE_API float GAverageMS;
 bool UMcpAutomationBridgeSubsystem::HandlePerformanceAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString RequestAction = Action.ToLower();
   FString Lower = RequestAction;
   if (RequestAction == TEXT("manage_performance") && Payload.IsValid()) {

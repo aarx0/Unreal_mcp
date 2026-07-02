@@ -33,24 +33,8 @@ public:
 	virtual TSharedPtr<FJsonObject> BuildInputSchema() const = 0;
 
 	/**
-	 * The Action string to pass to ProcessAutomationRequest.
-	 *
-	 * Pattern A (default): Returns the tool name. The handler checks
-	 *   Action == "tool_name" and reads the sub-action from payload internally.
-	 *
-	 * Pattern B: Returns empty string. The transport extracts the sub-action
-	 *   from the arguments field (see GetActionFieldName) and passes that
-	 *   as the Action parameter instead of the tool name.
-	 */
-	virtual FString GetDispatchAction() const { return GetName(); }
-
-	/**
-	 * The field name in arguments that contains the sub-action for Pattern B tools.
-	 * Most tools use "action"; some older tools use "subAction".
-	 * Only consulted when GetDispatchAction() returns empty.
+	 * The schema property that carries this tool's action enum.
+	 * Consulted by startup validation when extracting the published enum.
 	 */
 	virtual FString GetActionFieldName() const { return TEXT("action"); }
-
-	/** True if this tool uses tool-name dispatch (Pattern A). */
-	bool UsesToolNameDispatch() const { return !GetDispatchAction().IsEmpty(); }
 };

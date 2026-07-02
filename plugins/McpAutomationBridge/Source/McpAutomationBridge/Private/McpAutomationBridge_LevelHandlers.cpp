@@ -1132,7 +1132,7 @@ static UWorld* McpSafeNewMap(bool bForceNewMap = true, UMcpAutomationBridgeSubsy
 bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   const bool bIsLevelAction =
       (Lower == TEXT("manage_level") || Lower == TEXT("save_current_level") ||

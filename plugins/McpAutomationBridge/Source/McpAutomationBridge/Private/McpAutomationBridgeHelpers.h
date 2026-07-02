@@ -2701,7 +2701,7 @@ static inline FProperty *McpFindPropertyRecursive(UClass *StartClass,
  */
 static inline void SendStandardSuccessResponse(
     UMcpAutomationBridgeSubsystem *Subsystem,
-    TSharedPtr<FMcpBridgeWebSocket> Socket, const FString &RequestId,
+    FMcpResponseHandle Socket, const FString &RequestId,
     const FString &Message, const TSharedPtr<FJsonObject> &Data,
     const TArray<FString> &Warnings = TArray<FString>()) {
   if (!Subsystem)
@@ -2741,7 +2741,7 @@ static inline void SendStandardSuccessResponse(
  */
 static inline void SendStandardErrorResponse(
     UMcpAutomationBridgeSubsystem *Subsystem,
-    TSharedPtr<FMcpBridgeWebSocket> Socket, const FString &RequestId,
+    FMcpResponseHandle Socket, const FString &RequestId,
     const FString &ErrorCode, const FString &ErrorMessage,
     const TSharedPtr<FJsonObject> &ErrorDetails = nullptr) {
   if (!Subsystem)

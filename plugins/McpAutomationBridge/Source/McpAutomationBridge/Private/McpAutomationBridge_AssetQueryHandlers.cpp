@@ -76,7 +76,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Validate action (case-insensitive)
     if (!Action.ToLower().Equals(TEXT("asset_query"), ESearchCase::IgnoreCase))
@@ -651,7 +651,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSearchAssets(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Build payload with subAction
     TSharedPtr<FJsonObject> RoutedPayload = Payload;

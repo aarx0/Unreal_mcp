@@ -551,7 +551,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     if (Action != TEXT("manage_character"))
     {

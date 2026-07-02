@@ -297,7 +297,7 @@ AActor *UMcpAutomationBridgeSubsystem::FindActorByName(const FString &Target, bo
  */
 bool UMcpAutomationBridgeSubsystem::HandleControlActorSpawn(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   // The tool schema advertises three aliases for the class (classPath,
   // className, actorClass); coalesce them so all three actually work
@@ -568,7 +568,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSpawn(
  */
 bool UMcpAutomationBridgeSubsystem::HandleControlActorSpawnBlueprint(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString BlueprintPath;
   Payload->TryGetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -717,7 +717,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSpawnBlueprint(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorDelete(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   TArray<FString> Targets;
   const TArray<TSharedPtr<FJsonValue>> *NamesArray = nullptr;
@@ -810,7 +810,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorDelete(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorApplyForce(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -911,7 +911,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorApplyForce(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorSetTransform(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -986,7 +986,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetTransform(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorGetTransform(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -1036,7 +1036,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorGetTransform(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorSetVisibility(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -1100,7 +1100,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetVisibility(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorAddComponent(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -1241,7 +1241,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorAddComponent(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorSetComponentProperties(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -1400,7 +1400,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetComponentProperties(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorGetComponents(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -1492,7 +1492,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorGetComponents(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorDuplicate(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -1565,7 +1565,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorDuplicate(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorAttach(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString ChildName;
   Payload->TryGetStringField(TEXT("childActor"), ChildName);
@@ -1637,7 +1637,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorAttach(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorDetach(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -1696,7 +1696,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorDetach(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorFindByTag(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TagValue;
   Payload->TryGetStringField(TEXT("tag"), TagValue);
@@ -1780,7 +1780,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorFindByTag(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorAddTag(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -1823,7 +1823,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorAddTag(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorFindByName(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString Query;
   Payload->TryGetStringField(TEXT("name"), Query);
@@ -1879,7 +1879,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorFindByName(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorDeleteByTag(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TagValue;
   Payload->TryGetStringField(TEXT("tag"), TagValue);
@@ -1927,7 +1927,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorDeleteByTag(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorSetBlueprintVariables(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -1994,7 +1994,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetBlueprintVariables(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorCreateSnapshot(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -2036,7 +2036,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorCreateSnapshot(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorRestoreSnapshot(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -2088,7 +2088,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorRestoreSnapshot(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorExport(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -2123,7 +2123,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorExport(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorGetBoundingBox(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -2214,7 +2214,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorGetBoundingBox(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorGetMetadata(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -2265,7 +2265,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorGetMetadata(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorRemoveTag(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
@@ -2321,7 +2321,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorRemoveTag(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorFindByClass(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString ClassName;
   Payload->TryGetStringField(TEXT("className"), ClassName);
@@ -2424,7 +2424,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorFindByClass(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorRemoveComponent(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString ActorName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
@@ -2483,7 +2483,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorRemoveComponent(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorGetComponentProperty(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString ActorName, ComponentName, PropertyName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
@@ -2546,7 +2546,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorGetComponentProperty(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorSetCollision(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString ActorName;
   bool bCollisionEnabled = true;
@@ -2603,7 +2603,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetCollision(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorCallFunction(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString ActorName, FunctionName, ComponentName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
@@ -2720,7 +2720,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorCallFunction(
 bool UMcpAutomationBridgeSubsystem::HandleControlActorAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("control_actor"), ESearchCase::IgnoreCase) &&
       !Lower.StartsWith(TEXT("control_actor")))
@@ -2852,7 +2852,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorAction(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorPlay(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (GEditor->PlayWorld) {
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
@@ -2893,7 +2893,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorPlay(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorStop(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor->PlayWorld) {
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
@@ -2917,7 +2917,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorStop(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorEject(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor->PlayWorld) {
     TSharedPtr<FJsonObject> ErrorDetails = McpHandlerUtils::CreateResultObject();
@@ -2944,7 +2944,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorEject(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorPossess(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString ActorName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
@@ -2992,7 +2992,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorPossess(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorFocusActor(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString ActorName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
@@ -3032,7 +3032,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorFocusActor(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetCamera(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   // Seed with the current pose so a partial request (only location, or only
   // rotation) preserves the other axis instead of snapping it to zero.
@@ -3087,7 +3087,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetCamera(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetViewMode(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString Mode;
   Payload->TryGetStringField(TEXT("viewMode"), Mode);
@@ -3190,7 +3190,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetViewMode(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetCameraFov(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   double Fov = 90.0;
   Payload->TryGetNumberField(TEXT("fov"), Fov);
@@ -3224,7 +3224,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetCameraFov(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetGameSpeed(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   double Speed = 1.0;
   Payload->TryGetNumberField(TEXT("speed"), Speed);
@@ -3260,7 +3260,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetGameSpeed(
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("control_editor"), ESearchCase::IgnoreCase) &&
       !Lower.StartsWith(TEXT("control_editor")))
@@ -3370,7 +3370,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorAction(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorOpenAsset(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
@@ -3449,7 +3449,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorOpenAsset(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorScreenshot(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -3584,7 +3584,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorScreenshot(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorPause(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -3619,7 +3619,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorPause(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorResume(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -3654,7 +3654,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorResume(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorConsoleCommand(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   return HandleConsoleCommandAction(RequestId, TEXT("console_command"), Payload, Socket);
 #else
@@ -3666,7 +3666,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorConsoleCommand(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorStepFrame(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -3701,7 +3701,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorStepFrame(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorStartRecording(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -3748,7 +3748,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorStartRecording(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorStopRecording(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -3779,7 +3779,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorStopRecording(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorCreateBookmark(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -3818,7 +3818,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorCreateBookmark(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorJumpToBookmark(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -3857,7 +3857,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorJumpToBookmark(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetPreferences(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -3949,7 +3949,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetPreferences(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetViewportRealtime(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -4002,7 +4002,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetViewportRealtime(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateInput(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -4252,7 +4252,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateInput(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorCloseAsset(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
@@ -4310,7 +4310,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorCloseAsset(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorSaveAll(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   TArray<UPackage*> DirtyWorldPackages;
   TArray<UPackage*> DirtyContentPackages;
@@ -4422,7 +4422,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSaveAll(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorUndo(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -4444,7 +4444,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorUndo(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorRedo(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -4466,7 +4466,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorRedo(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetEditorMode(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString Mode;
   Payload->TryGetStringField(TEXT("mode"), Mode);
@@ -4499,7 +4499,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetEditorMode(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorShowStats(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -4531,7 +4531,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorShowStats(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorHideStats(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -4555,7 +4555,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorHideStats(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetGameView(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   bool bEnabled = GetJsonBoolField(Payload, TEXT("enabled"), true);
 
@@ -4583,7 +4583,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetGameView(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetImmersiveMode(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   bool bEnabled = GetJsonBoolField(Payload, TEXT("enabled"), true);
 
@@ -4608,7 +4608,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetImmersiveMode(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetFixedDeltaTime(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   double DeltaTime = 0.01667; // Default ~60fps
   if (Payload->HasField(TEXT("deltaTime"))) {
@@ -4641,7 +4641,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSetFixedDeltaTime(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorOpenLevel(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString LevelPath;
   // Accept multiple parameter names for flexibility
@@ -4814,7 +4814,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorOpenLevel(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorList(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
@@ -4905,7 +4905,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorList(
 
 bool UMcpAutomationBridgeSubsystem::HandleControlActorGet(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);

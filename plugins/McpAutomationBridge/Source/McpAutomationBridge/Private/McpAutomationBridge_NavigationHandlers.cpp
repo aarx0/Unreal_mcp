@@ -70,7 +70,6 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
-#include "McpBridgeWebSocket.h"
 #include "Misc/EngineVersionComparison.h"
 
 // =============================================================================
@@ -272,7 +271,7 @@ static bool HandleConfigureNavMeshSettings(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     // Validate optional blueprintPath parameter
     FString BlueprintPath = GetJsonStringFieldNav(Payload, TEXT("blueprintPath"));
@@ -436,7 +435,7 @@ static bool HandleSetNavAgentProperties(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     // Validate optional blueprintPath parameter
     FString BlueprintPath = GetJsonStringFieldNav(Payload, TEXT("blueprintPath"));
@@ -549,7 +548,7 @@ static bool HandleRebuildNavigation(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     // Validate optional blueprintPath parameter
     FString BlueprintPath = GetJsonStringFieldNav(Payload, TEXT("blueprintPath"));
@@ -626,7 +625,7 @@ static bool HandleCreateNavModifierComponent(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString BlueprintPath = GetJsonStringFieldNav(Payload, TEXT("blueprintPath"));
     FString ComponentName = GetJsonStringFieldNav(Payload, TEXT("componentName"), TEXT("NavModifier"));
@@ -743,7 +742,7 @@ static bool HandleSetNavAreaClass(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldNav(Payload, TEXT("actorName"));
     FString ComponentName = GetJsonStringFieldNav(Payload, TEXT("componentName"));
@@ -872,7 +871,7 @@ static bool HandleConfigureNavAreaCost(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString AreaClassPath = GetJsonStringFieldNav(Payload, TEXT("areaClass"));
     double AreaCost = GetJsonNumberFieldNav(Payload, TEXT("areaCost"), 1.0);
@@ -953,7 +952,7 @@ static bool HandleCreateNavLinkProxy(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldNav(Payload, TEXT("actorName"), TEXT("NavLinkProxy"));
     FVector Location = GetJsonVectorFieldNav(Payload, TEXT("location"));
@@ -1057,7 +1056,7 @@ static bool HandleConfigureNavLink(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldNav(Payload, TEXT("actorName"));
 
@@ -1175,7 +1174,7 @@ static bool HandleSetNavLinkType(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldNav(Payload, TEXT("actorName"));
     FString LinkType = GetJsonStringFieldNav(Payload, TEXT("linkType"), TEXT("simple"));
@@ -1260,7 +1259,7 @@ static bool HandleCreateSmartLink(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldNav(Payload, TEXT("actorName"), TEXT("SmartNavLink"));
     FVector Location = GetJsonVectorFieldNav(Payload, TEXT("location"));
@@ -1362,7 +1361,7 @@ static bool HandleConfigureSmartLinkBehavior(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldNav(Payload, TEXT("actorName"));
 
@@ -1510,7 +1509,7 @@ static bool HandleGetNavigationInfo(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     // Validate optional blueprintPath parameter
     FString BlueprintPath = GetJsonStringFieldNav(Payload, TEXT("blueprintPath"));
@@ -1630,7 +1629,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNavigationAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     // Only handle manage_navigation; decline anything else so the dispatcher keeps
     // trying other handlers and reaches its UNKNOWN_ACTION fallback. Without this

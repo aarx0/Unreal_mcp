@@ -226,7 +226,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpInteractionHandlers, Log, All);
 bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
     const FString& RequestId, const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   // Only handle manage_interaction action
   if (Action != TEXT("manage_interaction")) {
     return false;
@@ -2078,7 +2078,7 @@ if (SubAction == TEXT("configure_trigger_response")) {
 // Create Interaction Component handler implementation
 bool UMcpAutomationBridgeSubsystem::HandleCreateInteractionComponent(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString ActorName;
   if (!Payload->TryGetStringField(TEXT("actorName"), ActorName) ||
@@ -2155,7 +2155,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateInteractionComponent(
 // Configure Interaction Trace handler implementation
 bool UMcpAutomationBridgeSubsystem::HandleConfigureInteractionTrace(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString ActorName;
   if (!Payload->TryGetStringField(TEXT("actorName"), ActorName) ||
@@ -2202,7 +2202,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureInteractionTrace(
 // Configure Interaction Widget handler implementation
 bool UMcpAutomationBridgeSubsystem::HandleConfigureInteractionWidget(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString ActorName;
   if (!Payload->TryGetStringField(TEXT("actorName"), ActorName) ||
@@ -2255,7 +2255,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureInteractionWidget(
 // Create Door Actor handler implementation
 bool UMcpAutomationBridgeSubsystem::HandleCreateDoorActor(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString DoorName;
   if (!Payload->TryGetStringField(TEXT("doorName"), DoorName) ||
@@ -2339,7 +2339,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateDoorActor(
 // Create Switch Actor handler implementation
 bool UMcpAutomationBridgeSubsystem::HandleCreateSwitchActor(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString SwitchName;
   if (!Payload->TryGetStringField(TEXT("switchName"), SwitchName) ||
@@ -2419,7 +2419,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateSwitchActor(
 // Create Chest Actor handler implementation
 bool UMcpAutomationBridgeSubsystem::HandleCreateChestActor(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString ChestName;
   if (!Payload->TryGetStringField(TEXT("chestName"), ChestName) ||

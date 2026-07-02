@@ -176,7 +176,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     FString LowerAction = Action.ToLower();

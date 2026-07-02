@@ -225,7 +225,7 @@ static void FinalizeHost(UMaterial* Material, UMaterialFunction* Function) {
 bool UMcpAutomationBridgeSubsystem::HandleAssetAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   FString Lower = Action.ToLower();
 
   // If the action is the generic "manage_asset" tool, check for a subAction in
@@ -366,7 +366,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetAction(
 bool UMcpAutomationBridgeSubsystem::HandleFixupRedirectors(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("fixup_redirectors"), ESearchCase::IgnoreCase)) {
     // Not our action — allow other handlers to try
@@ -528,7 +528,7 @@ bool UMcpAutomationBridgeSubsystem::HandleFixupRedirectors(
 bool UMcpAutomationBridgeSubsystem::HandleSourceControlCheckout(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("source_control_checkout"), ESearchCase::IgnoreCase) &&
       !Lower.Equals(TEXT("checkout"), ESearchCase::IgnoreCase)) {
@@ -632,7 +632,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlCheckout(
 bool UMcpAutomationBridgeSubsystem::HandleSourceControlSubmit(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("source_control_submit"), ESearchCase::IgnoreCase) &&
       !Lower.Equals(TEXT("submit"), ESearchCase::IgnoreCase)) {
@@ -755,7 +755,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlSubmit(
 bool UMcpAutomationBridgeSubsystem::HandleSourceControlEnable(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("source_control_enable"), ESearchCase::IgnoreCase)) {
     return false;
@@ -816,7 +816,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlEnable(
 bool UMcpAutomationBridgeSubsystem::HandleBulkRenameAssets(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("bulk_rename_assets"), ESearchCase::IgnoreCase) &&
       !Lower.Equals(TEXT("bulk_rename"), ESearchCase::IgnoreCase)) {
@@ -1010,7 +1010,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkRenameAssets(
 bool UMcpAutomationBridgeSubsystem::HandleBulkDeleteAssets(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("bulk_delete_assets"), ESearchCase::IgnoreCase) &&
       !Lower.Equals(TEXT("bulk_delete"), ESearchCase::IgnoreCase)) {
@@ -1201,7 +1201,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkDeleteAssets(
 bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("generate_thumbnail"), ESearchCase::IgnoreCase) &&
       !Lower.Equals(TEXT("create_thumbnail"), ESearchCase::IgnoreCase)) {
@@ -1406,7 +1406,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
  */
 bool UMcpAutomationBridgeSubsystem::HandleImportAsset(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString DestinationPath;
   Payload->TryGetStringField(TEXT("destinationPath"), DestinationPath);
@@ -1566,7 +1566,7 @@ bool UMcpAutomationBridgeSubsystem::HandleImportAsset(
  */
 bool UMcpAutomationBridgeSubsystem::HandleSetMetadata(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
     SendAutomationResponse(Socket, RequestId, false,
@@ -1712,7 +1712,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMetadata(
  */
 bool UMcpAutomationBridgeSubsystem::HandleDuplicateAsset(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString SourcePath;
   Payload->TryGetStringField(TEXT("sourcePath"), SourcePath);
@@ -1862,7 +1862,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDuplicateAsset(
  */
 bool UMcpAutomationBridgeSubsystem::HandleRenameAsset(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString SourcePath;
   Payload->TryGetStringField(TEXT("sourcePath"), SourcePath);
@@ -1961,7 +1961,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameAsset(
 
 bool UMcpAutomationBridgeSubsystem::HandleMoveAsset(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   // Move is essentially rename in Unreal
   return HandleRenameAsset(RequestId, Payload, Socket);
 }
@@ -1977,7 +1977,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMoveAsset(
  */
 bool UMcpAutomationBridgeSubsystem::HandleDeleteAssets(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   // Accept array forms 'paths' / 'assetPaths' and singular forms 'path' /
   // 'assetPath'. The manage_asset schema advertises assetPath/assetPaths, so a
@@ -2117,7 +2117,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDeleteAssets(
  */
 bool UMcpAutomationBridgeSubsystem::HandleCreateFolder(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString Path;
   if (!Payload->TryGetStringField(TEXT("path"), Path) || Path.IsEmpty()) {
@@ -2175,7 +2175,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateFolder(
  */
 bool UMcpAutomationBridgeSubsystem::HandleGetDependencies(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
@@ -2243,7 +2243,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetDependencies(
  */
 bool UMcpAutomationBridgeSubsystem::HandleGetReferencers(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
@@ -2455,7 +2455,7 @@ bool ResolveAssetPropertyPath(UObject *Asset, const FString &PropertyPath,
 
 bool UMcpAutomationBridgeSubsystem::HandleGetAssetProperties(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
@@ -2529,7 +2529,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetAssetProperties(
  */
 bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath, PropertyName;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
@@ -2650,7 +2650,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
  */
 bool UMcpAutomationBridgeSubsystem::HandleGetAssetGraph(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
@@ -2744,7 +2744,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetAssetGraph(
  */
 bool UMcpAutomationBridgeSubsystem::HandleSetTags(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
     SendAutomationResponse(Socket, RequestId, false,
@@ -2839,7 +2839,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetTags(
  */
 bool UMcpAutomationBridgeSubsystem::HandleValidateAsset(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
     SendAutomationResponse(Socket, RequestId, false,
@@ -2904,7 +2904,7 @@ bool UMcpAutomationBridgeSubsystem::HandleValidateAsset(
  */
 bool UMcpAutomationBridgeSubsystem::HandleListAssets(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   // Parse filters
   FString PathFilter;
@@ -3133,7 +3133,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListAssets(
  */
 bool UMcpAutomationBridgeSubsystem::HandleGetAsset(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
     SendAutomationResponse(Socket, RequestId, false,
@@ -3207,7 +3207,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetAsset(
  */
 bool UMcpAutomationBridgeSubsystem::HandleGenerateReport(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
     SendAutomationResponse(Socket, RequestId, false,
@@ -3332,7 +3332,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateReport(
 
 bool UMcpAutomationBridgeSubsystem::HandleCreateMaterial(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString Name;
   Payload->TryGetStringField(TEXT("name"), Name);
@@ -3416,7 +3416,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMaterial(
 
 bool UMcpAutomationBridgeSubsystem::HandleCreateDataTable(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString Name;
   Payload->TryGetStringField(TEXT("name"), Name);
@@ -3564,7 +3564,7 @@ UDataTable *McpLoadDataTableArg(const TSharedPtr<FJsonObject> &Payload,
 bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
     const FString &RequestId, const FString &SubAction,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   const bool bAdd =
       SubAction == TEXT("add_data_table_row") || SubAction == TEXT("add_row");
@@ -3831,7 +3831,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
 
 bool UMcpAutomationBridgeSubsystem::HandleCreateMaterialInstance(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString Name;
   Payload->TryGetStringField(TEXT("name"), Name);
@@ -3999,7 +3999,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMaterialInstance(
 
 bool UMcpAutomationBridgeSubsystem::HandleAddMaterialParameter(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
@@ -4163,7 +4163,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialParameter(
 
 bool UMcpAutomationBridgeSubsystem::HandleListMaterialInstances(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
@@ -4243,7 +4243,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListMaterialInstances(
 
 bool UMcpAutomationBridgeSubsystem::HandleResetInstanceParameters(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
@@ -4295,7 +4295,7 @@ bool UMcpAutomationBridgeSubsystem::HandleResetInstanceParameters(
 
 bool UMcpAutomationBridgeSubsystem::HandleDoesAssetExist(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
@@ -4332,7 +4332,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDoesAssetExist(
 
 bool UMcpAutomationBridgeSubsystem::HandleGetMaterialStats(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
@@ -4460,7 +4460,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetMaterialStats(
 bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("generate_lods"), ESearchCase::IgnoreCase)) {
     return false;
@@ -4724,7 +4724,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
 
 bool UMcpAutomationBridgeSubsystem::HandleGetMetadata(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
     SendAutomationResponse(Socket, RequestId, false,
@@ -4822,7 +4822,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetMetadata(
 bool UMcpAutomationBridgeSubsystem::HandleNaniteRebuildMesh(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("nanite_rebuild_mesh"), ESearchCase::IgnoreCase)) {
     return false;
@@ -4942,7 +4942,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNaniteRebuildMesh(
 bool UMcpAutomationBridgeSubsystem::HandleFindByTag(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("find_by_tag"), ESearchCase::IgnoreCase)) {
     return false;
@@ -5063,7 +5063,7 @@ bool UMcpAutomationBridgeSubsystem::HandleFindByTag(
 bool UMcpAutomationBridgeSubsystem::HandleAddMaterialNode(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("add_material_node"), ESearchCase::IgnoreCase)) {
     return false;
@@ -5253,7 +5253,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialNode(
 bool UMcpAutomationBridgeSubsystem::HandleConnectMaterialPins(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("connect_material_pins"), ESearchCase::IgnoreCase)) {
     return false;
@@ -5472,7 +5472,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConnectMaterialPins(
 bool UMcpAutomationBridgeSubsystem::HandleRemoveMaterialNode(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("remove_material_node"), ESearchCase::IgnoreCase)) {
     return false;
@@ -5627,7 +5627,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRemoveMaterialNode(
 bool UMcpAutomationBridgeSubsystem::HandleBreakMaterialConnections(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("break_material_connections"), ESearchCase::IgnoreCase)) {
     return false;
@@ -5796,7 +5796,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBreakMaterialConnections(
 bool UMcpAutomationBridgeSubsystem::HandleGetMaterialNodeDetails(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("get_material_node_details"), ESearchCase::IgnoreCase)) {
     return false;
@@ -6048,7 +6048,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetMaterialNodeDetails(
 bool UMcpAutomationBridgeSubsystem::HandleGetSourceControlState(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("get_source_control_state"), ESearchCase::IgnoreCase)) {
     return false;
@@ -6219,7 +6219,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetSourceControlState(
 bool UMcpAutomationBridgeSubsystem::HandleAnalyzeGraph(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("analyze_graph"), ESearchCase::IgnoreCase)) {
     return false;
@@ -6402,7 +6402,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnalyzeGraph(
 bool UMcpAutomationBridgeSubsystem::HandleRebuildMaterial(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("rebuild_material"), ESearchCase::IgnoreCase)) {
     return false;

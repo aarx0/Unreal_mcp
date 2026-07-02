@@ -326,7 +326,7 @@ static FRotator ParseRotatorFromJson(const TSharedPtr<FJsonObject>& JsonObj, con
 bool UMcpAutomationBridgeSubsystem::HandleGetSkeletonInfo(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     if (SkeletonPath.IsEmpty())
@@ -377,7 +377,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetSkeletonInfo(
 bool UMcpAutomationBridgeSubsystem::HandleListBones(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     if (SkeletonPath.IsEmpty())
@@ -447,7 +447,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListBones(
 bool UMcpAutomationBridgeSubsystem::HandleListSockets(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     if (SkeletonPath.IsEmpty())
@@ -505,7 +505,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListSockets(
 bool UMcpAutomationBridgeSubsystem::HandleCreateSocket(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     if (SkeletonPath.IsEmpty())
@@ -603,7 +603,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateSocket(
 bool UMcpAutomationBridgeSubsystem::HandleConfigureSocket(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     if (SkeletonPath.IsEmpty())
@@ -702,7 +702,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureSocket(
 bool UMcpAutomationBridgeSubsystem::HandleCreateVirtualBone(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     FString SourceBone = GetJsonStringField(Payload, TEXT("sourceBoneName"));
@@ -786,7 +786,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateVirtualBone(
 bool UMcpAutomationBridgeSubsystem::HandleCreatePhysicsAsset(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     // Also accept skeletonPath for backward compatibility
@@ -868,7 +868,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreatePhysicsAsset(
 bool UMcpAutomationBridgeSubsystem::HandleListPhysicsBodies(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
     if (PhysicsAssetPath.IsEmpty())
@@ -950,7 +950,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListPhysicsBodies(
 bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsBody(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
     FString BoneName = GetJsonStringField(Payload, TEXT("boneName"));
@@ -1113,7 +1113,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsBody(
 bool UMcpAutomationBridgeSubsystem::HandleConfigurePhysicsBody(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
     FString BoneName = GetJsonStringField(Payload, TEXT("boneName"));
@@ -1226,7 +1226,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigurePhysicsBody(
 bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsConstraint(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
     FString BodyA = GetJsonStringField(Payload, TEXT("bodyA"));
@@ -1348,7 +1348,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsConstraint(
 bool UMcpAutomationBridgeSubsystem::HandleConfigureConstraintLimits(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
     FString BodyA = GetJsonStringField(Payload, TEXT("bodyA"));
@@ -1485,7 +1485,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureConstraintLimits(
 bool UMcpAutomationBridgeSubsystem::HandleRenameBone(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     FString BoneName = GetJsonStringField(Payload, TEXT("boneName"));
@@ -1554,7 +1554,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameBone(
 bool UMcpAutomationBridgeSubsystem::HandleSetBoneTransform(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     // Also accept skeletonPath for backward compatibility
@@ -1631,7 +1631,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetBoneTransform(
 bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     FString MorphTargetName = GetJsonStringField(Payload, TEXT("morphTargetName"));
@@ -1802,7 +1802,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
 bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     FString MorphTargetName = GetJsonStringField(Payload, TEXT("morphTargetName"));
@@ -1937,7 +1937,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
 bool UMcpAutomationBridgeSubsystem::HandleImportMorphTargets(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     FString SourceFilePath = GetJsonStringField(Payload, TEXT("morphTargetPath"));
@@ -2003,7 +2003,7 @@ bool UMcpAutomationBridgeSubsystem::HandleImportMorphTargets(
 bool UMcpAutomationBridgeSubsystem::HandleNormalizeWeights(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
 
@@ -2038,7 +2038,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNormalizeWeights(
 bool UMcpAutomationBridgeSubsystem::HandlePruneWeights(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     double Threshold = 0.01;
@@ -2081,7 +2081,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePruneWeights(
 bool UMcpAutomationBridgeSubsystem::HandleBindClothToSkeletalMesh(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     FString ClothAssetName = GetJsonStringField(Payload, TEXT("clothAssetName"));
@@ -2211,7 +2211,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBindClothToSkeletalMesh(
 bool UMcpAutomationBridgeSubsystem::HandleAssignClothAssetToMesh(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
 
@@ -2266,7 +2266,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssignClothAssetToMesh(
 bool UMcpAutomationBridgeSubsystem::HandleSetPhysicsAsset(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
@@ -2330,7 +2330,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetPhysicsAsset(
 bool UMcpAutomationBridgeSubsystem::HandleRemovePhysicsBody(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
@@ -2421,7 +2421,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRemovePhysicsBody(
 bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetValue(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
@@ -2541,7 +2541,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetValue(
 bool UMcpAutomationBridgeSubsystem::HandleDeleteSocket(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
@@ -2643,7 +2643,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDeleteSocket(
 bool UMcpAutomationBridgeSubsystem::HandleListMorphTargets(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
@@ -2701,7 +2701,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListMorphTargets(
 bool UMcpAutomationBridgeSubsystem::HandleDeleteMorphTarget(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
@@ -2770,7 +2770,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDeleteMorphTarget(
 bool UMcpAutomationBridgeSubsystem::HandleGetBoneTransform(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
@@ -2877,7 +2877,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetBoneTransform(
 bool UMcpAutomationBridgeSubsystem::HandleListVirtualBones(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
@@ -2946,7 +2946,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListVirtualBones(
 bool UMcpAutomationBridgeSubsystem::HandleDeleteVirtualBone(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
@@ -3014,7 +3014,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDeleteVirtualBone(
 bool UMcpAutomationBridgeSubsystem::HandleGetPhysicsAssetInfo(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
@@ -3105,7 +3105,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Only handle manage_skeleton action. Return false so the dispatcher keeps
     // trying other handlers — returning true here would CLAIM every unrelated

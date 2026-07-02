@@ -123,7 +123,7 @@
 bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraSystem(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("create_niagara_system"), ESearchCase::IgnoreCase)) {
     return false;
@@ -340,7 +340,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraSystem(
 bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraEmitter(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("create_niagara_emitter"), ESearchCase::IgnoreCase)) {
     return false;
@@ -507,7 +507,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraEmitter(
 bool UMcpAutomationBridgeSubsystem::HandleSpawnNiagaraActor(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("spawn_niagara_actor"), ESearchCase::IgnoreCase)) {
     return false;
@@ -622,7 +622,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSpawnNiagaraActor(
 bool UMcpAutomationBridgeSubsystem::HandleModifyNiagaraParameter(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("modify_niagara_parameter"),
                     ESearchCase::IgnoreCase)) {
@@ -793,7 +793,7 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyNiagaraParameter(
 bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraRibbon(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("create_niagara_ribbon"), ESearchCase::IgnoreCase)) {
     return false;

@@ -188,7 +188,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpLandscapeHandlers, Log, All);
 bool UMcpAutomationBridgeSubsystem::HandleEditLandscape(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   // Dispatch to specific edit operations implemented below
   if (HandleModifyHeightmap(RequestId, Action, Payload, RequestingSocket))
     return true;
@@ -230,7 +230,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEditLandscape(
 bool UMcpAutomationBridgeSubsystem::HandleCreateLandscape(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("create_landscape"), ESearchCase::IgnoreCase)) {
     return false;
@@ -627,7 +627,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscape(
 bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("modify_heightmap"), ESearchCase::IgnoreCase)) {
     return false;
@@ -990,7 +990,7 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
 bool UMcpAutomationBridgeSubsystem::HandleSculptLandscape(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("sculpt_landscape"), ESearchCase::IgnoreCase)) {
     return false;
@@ -1290,7 +1290,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSculptLandscape(
 bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("paint_landscape_layer"), ESearchCase::IgnoreCase)) {
     return false;
@@ -1562,7 +1562,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
 bool UMcpAutomationBridgeSubsystem::HandleSetLandscapeMaterial(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("set_landscape_material"), ESearchCase::IgnoreCase)) {
     return false;
@@ -1725,7 +1725,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetLandscapeMaterial(
 bool UMcpAutomationBridgeSubsystem::HandleCreateLandscapeGrassType(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("create_landscape_grass_type"),
                     ESearchCase::IgnoreCase)) {

@@ -588,7 +588,7 @@ static UEnvQuery* CreateEQSQueryAsset(const FString& Path, const FString& Name, 
 bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
     const FString& RequestId, const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     if (Action != TEXT("manage_ai"))
     {

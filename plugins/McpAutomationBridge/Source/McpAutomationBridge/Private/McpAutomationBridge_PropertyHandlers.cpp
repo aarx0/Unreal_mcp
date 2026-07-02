@@ -119,7 +119,7 @@ namespace
 bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("set_object_property"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("set_object_property")))
@@ -445,7 +445,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
 bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("get_object_property"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("get_object_property")))
@@ -658,7 +658,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
 bool UMcpAutomationBridgeSubsystem::HandleArrayAppend(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("array_append"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("array_append")))
@@ -816,7 +816,7 @@ TSharedPtr<FJsonObject> ResultPayload = McpHandlerUtils::CreateResultObject();
 bool UMcpAutomationBridgeSubsystem::HandleArrayRemove(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("array_remove"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("array_remove")))
@@ -931,7 +931,7 @@ TSharedPtr<FJsonObject> ResultPayload = McpHandlerUtils::CreateResultObject();
 bool UMcpAutomationBridgeSubsystem::HandleArrayClear(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("array_clear"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("array_clear")))
@@ -1029,7 +1029,7 @@ TSharedPtr<FJsonObject> ResultPayload = McpHandlerUtils::CreateResultObject();
 bool UMcpAutomationBridgeSubsystem::HandleArrayInsert(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("array_insert"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("array_insert")))
@@ -1183,7 +1183,7 @@ bool UMcpAutomationBridgeSubsystem::HandleArrayInsert(
 bool UMcpAutomationBridgeSubsystem::HandleArrayGetElement(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("array_get_element"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("array_get")))
@@ -1306,7 +1306,7 @@ bool UMcpAutomationBridgeSubsystem::HandleArrayGetElement(
 bool UMcpAutomationBridgeSubsystem::HandleArraySetElement(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("array_set_element"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("array_set")))
@@ -1459,7 +1459,7 @@ bool UMcpAutomationBridgeSubsystem::HandleArraySetElement(
 bool UMcpAutomationBridgeSubsystem::HandleMapSetValue(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("map_set_value"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("map_set")))
@@ -1643,7 +1643,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMapSetValue(
 bool UMcpAutomationBridgeSubsystem::HandleMapGetValue(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("map_get_value"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("map_get")))
@@ -1780,7 +1780,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMapGetValue(
 bool UMcpAutomationBridgeSubsystem::HandleMapRemoveKey(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("map_remove_key"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("map_remove")))
@@ -1903,7 +1903,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMapRemoveKey(
 bool UMcpAutomationBridgeSubsystem::HandleMapHasKey(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("map_has_key"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("map_has")))
@@ -2015,7 +2015,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMapHasKey(
 bool UMcpAutomationBridgeSubsystem::HandleMapGetKeys(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("map_get_keys"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("map_get_keys")))
@@ -2117,7 +2117,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMapGetKeys(
 bool UMcpAutomationBridgeSubsystem::HandleMapClear(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("map_clear"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("map_clear")))
@@ -2209,7 +2209,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMapClear(
 bool UMcpAutomationBridgeSubsystem::HandleSetAdd(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("set_add"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("set_add")))
@@ -2352,7 +2352,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAdd(
 bool UMcpAutomationBridgeSubsystem::HandleSetRemove(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("set_remove"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("set_remove")))
@@ -2491,7 +2491,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetRemove(
 bool UMcpAutomationBridgeSubsystem::HandleSetContains(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("set_contains"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("set_contains")))
@@ -2623,7 +2623,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetContains(
 bool UMcpAutomationBridgeSubsystem::HandleSetClear(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("set_clear"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("set_clear")))
@@ -2715,7 +2715,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetClear(
 bool UMcpAutomationBridgeSubsystem::HandleGetAssetReferences(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("get_asset_references"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("get_asset_references")))
@@ -2796,7 +2796,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetAssetReferences(
 bool UMcpAutomationBridgeSubsystem::HandleGetAssetDependencies(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString LowerAction = Action.ToLower();
   if (!Action.Equals(TEXT("get_asset_dependencies"), ESearchCase::IgnoreCase) &&
       !LowerAction.Contains(TEXT("get_asset_dependencies")))
@@ -3028,7 +3028,7 @@ UActorComponent* FindCdoComponent(
 bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     if (!Payload.IsValid())
@@ -3402,7 +3402,7 @@ namespace McpDiffAssetDetail
 bool UMcpAutomationBridgeSubsystem::HandleDiffAssetAction(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     using namespace McpDiffAssetDetail;

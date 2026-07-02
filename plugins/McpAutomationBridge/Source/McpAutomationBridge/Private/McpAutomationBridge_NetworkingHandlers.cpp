@@ -140,7 +140,6 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
-#include "McpBridgeWebSocket.h"
 #include "Misc/EngineVersionComparison.h"
 
 // ---- Editor Includes ----
@@ -390,7 +389,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     using namespace NetworkingHelpers;
 

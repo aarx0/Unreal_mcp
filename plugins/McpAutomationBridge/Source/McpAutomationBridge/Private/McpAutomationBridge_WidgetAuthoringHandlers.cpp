@@ -58,7 +58,6 @@
 
 // MCP Core
 #include "McpAutomationBridgeSubsystem.h"
-#include "McpBridgeWebSocket.h"
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeHelpers.h"
 
@@ -916,7 +915,7 @@ namespace
     // -------------------------------------------------------------------------
     UWidget* ConstructWidgetForAdd(
         UMcpAutomationBridgeSubsystem* Self,
-        const TSharedPtr<FMcpBridgeWebSocket>& Socket,
+        const FMcpResponseHandle& Socket,
         const FString& RequestId,
         const TSharedPtr<FJsonObject>& Payload,
         UClass* WidgetClass,
@@ -975,7 +974,7 @@ namespace
     // response. Always returns true (a response or error was sent), so callers `return` it.
     bool AddFinalizeRespondWidget(
         UMcpAutomationBridgeSubsystem* Self,
-        const TSharedPtr<FMcpBridgeWebSocket>& Socket,
+        const FMcpResponseHandle& Socket,
         const FString& RequestId,
         const TSharedPtr<FJsonObject>& Payload,
         UWidgetBlueprint* WidgetBP,
@@ -1028,7 +1027,7 @@ namespace
 // -----------------------------------------------------------------------------
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Lifecycle(
     const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
 {
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
     if (SubAction.Equals(TEXT("create_widget_blueprint"), ESearchCase::IgnoreCase) ||
@@ -1648,7 +1647,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Lifecycle(
 }
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
     const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
 {
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
     if (SubAction.Equals(TEXT("add_canvas_panel"), ESearchCase::IgnoreCase))
@@ -2159,7 +2158,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
 }
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
     const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
 {
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
     if (SubAction.Equals(TEXT("add_text_block"), ESearchCase::IgnoreCase))
@@ -2466,7 +2465,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
 }
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
     const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
 {
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
     if (SubAction.Equals(TEXT("set_anchor"), ESearchCase::IgnoreCase))
@@ -3398,7 +3397,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
 }
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
     const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
 {
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
     if (SubAction.Equals(TEXT("bind_text"), ESearchCase::IgnoreCase) ||
@@ -4259,7 +4258,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
 }
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
     const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
 {
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
     if (SubAction.Equals(TEXT("create_widget_animation"), ESearchCase::IgnoreCase))
@@ -4733,7 +4732,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
 }
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Style(
     const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
 {
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
     if (SubAction.Equals(TEXT("create_widget_style"), ESearchCase::IgnoreCase))
@@ -4946,7 +4945,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Style(
 }
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Tree(
     const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
 {
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
     if (SubAction.Equals(TEXT("add_widget_component"), ESearchCase::IgnoreCase))
@@ -5518,7 +5517,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Tree(
 }
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
     const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
 {
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
     if (SubAction.Equals(TEXT("create_main_menu"), ESearchCase::IgnoreCase))
@@ -7149,7 +7148,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 }
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Misc(
     const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
 {
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
     if (SubAction.Equals(TEXT("get_widget_info"), ESearchCase::IgnoreCase))
@@ -7292,7 +7291,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Only handle manage_widget_authoring action
     if (Action != TEXT("manage_widget_authoring"))

@@ -30,7 +30,6 @@ public:
 	FString GetCategory() const override { return TEXT("core"); }
 
 	// Pattern A: registered as "inspect" in O(1 map
-	// Default GetDispatchAction() returns GetName() — correct
 
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{

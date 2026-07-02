@@ -384,7 +384,7 @@ static TSharedPtr<FJsonObject> McpDescribeRuntimeActor(AActor *Actor, const TArr
 bool UMcpAutomationBridgeSubsystem::HandleBuildEnvironmentAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     const FString Lower = Action.ToLower();
     if (!Lower.Equals(TEXT("build_environment"), ESearchCase::IgnoreCase) &&
@@ -1054,7 +1054,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBuildEnvironmentAction(
 bool UMcpAutomationBridgeSubsystem::HandleControlEnvironmentAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     const FString Lower = Action.ToLower();
     if (!Lower.Equals(TEXT("control_environment"), ESearchCase::IgnoreCase) &&
@@ -1298,7 +1298,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEnvironmentAction(
 bool UMcpAutomationBridgeSubsystem::HandleBakeLightmap(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     const FString Lower = Action.ToLower();
     if (!Lower.Equals(TEXT("bake_lightmap"), ESearchCase::IgnoreCase))
@@ -1355,7 +1355,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBakeLightmap(
 bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     const FString Lower = Action.ToLower();
     if (!Lower.Equals(TEXT("create_procedural_terrain"), ESearchCase::IgnoreCase))
@@ -1641,7 +1641,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
 bool UMcpAutomationBridgeSubsystem::HandleInspectAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     const FString Lower = Action.ToLower();
     if (!Lower.Equals(TEXT("inspect"), ESearchCase::IgnoreCase))

@@ -148,7 +148,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Validate action
     if (Action != TEXT("manage_input"))

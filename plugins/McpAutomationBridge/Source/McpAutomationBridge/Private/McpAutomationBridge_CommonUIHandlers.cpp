@@ -26,7 +26,6 @@
 #include "McpVersionCompatibility.h"
 
 #include "McpAutomationBridgeSubsystem.h"
-#include "McpBridgeWebSocket.h"
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeHelpers.h"               // GetJsonStringField
 #include "McpAutomationBridge_WidgetAuthoringHelpers.h" // LoadWidgetBlueprint, Register/Unregister, SafeAddWidgetToTree
@@ -108,7 +107,7 @@ namespace
 bool UMcpAutomationBridgeSubsystem::HandleCommonUiAction(
 	const FString& RequestId, const FString& Action,
 	const TSharedPtr<FJsonObject>& Payload,
-	TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+	FMcpResponseHandle RequestingSocket)
 {
 #if !MCP_HAS_COMMON_UI
 	(void)Action;

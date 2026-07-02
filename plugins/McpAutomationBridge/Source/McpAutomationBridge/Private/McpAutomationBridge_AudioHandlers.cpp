@@ -558,7 +558,7 @@ static USoundClass *ResolveSoundClass(const FString &ClassPath) {
 bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 
   // -------------------------------------------------------------------------
   // Action Routing
@@ -2459,7 +2459,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioAction(
 // -----------------------------------------------------------------------------
 bool UMcpAutomationBridgeSubsystem::HandleCreateDialogueVoice(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString VoiceName;
   if (!Payload->TryGetStringField(TEXT("voiceName"), VoiceName) ||
@@ -2551,7 +2551,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateDialogueVoice(
 // -----------------------------------------------------------------------------
 bool UMcpAutomationBridgeSubsystem::HandleCreateDialogueWave(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString WaveName;
   if (!Payload->TryGetStringField(TEXT("waveName"), WaveName) ||
@@ -2642,7 +2642,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateDialogueWave(
 // -----------------------------------------------------------------------------
 bool UMcpAutomationBridgeSubsystem::HandleSetDialogueContext(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString WavePath;
   if (!Payload->TryGetStringField(TEXT("wavePath"), WavePath) ||
@@ -2718,7 +2718,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetDialogueContext(
 // -----------------------------------------------------------------------------
 bool UMcpAutomationBridgeSubsystem::HandleCreateReverbEffect(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString EffectName;
   if (!Payload->TryGetStringField(TEXT("effectName"), EffectName) ||
@@ -2809,7 +2809,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateReverbEffect(
 // -----------------------------------------------------------------------------
 bool UMcpAutomationBridgeSubsystem::HandleCreateSourceEffectChain(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString ChainName;
   if (!Payload->TryGetStringField(TEXT("chainName"), ChainName) ||
@@ -2875,7 +2875,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateSourceEffectChain(
 // -----------------------------------------------------------------------------
 bool UMcpAutomationBridgeSubsystem::HandleAddSourceEffect(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString ChainPath;
   if (!Payload->TryGetStringField(TEXT("chainPath"), ChainPath) ||
@@ -2955,7 +2955,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddSourceEffect(
 // -----------------------------------------------------------------------------
 bool UMcpAutomationBridgeSubsystem::HandleCreateSubmixEffect(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString EffectName;
   if (!Payload->TryGetStringField(TEXT("effectName"), EffectName) ||

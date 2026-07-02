@@ -136,37 +136,6 @@ TSharedPtr<FJsonObject> FMcpJsonRpc::BuildToolResult(
 	return Result;
 }
 
-FString FMcpJsonRpc::BuildProgressNotification(
-	const FString& ProgressToken, float Progress, float Total, const FString& Message)
-{
-	auto Params = MakeShared<FJsonObject>();
-	Params->SetStringField(TEXT("progressToken"), ProgressToken);
-	Params->SetNumberField(TEXT("progress"), static_cast<double>(Progress));
-	Params->SetNumberField(TEXT("total"), static_cast<double>(Total));
-	if (!Message.IsEmpty())
-	{
-		Params->SetStringField(TEXT("message"), Message);
-	}
-
-	auto Root = MakeShared<FJsonObject>();
-	Root->SetStringField(TEXT("jsonrpc"), TEXT("2.0"));
-	Root->SetStringField(TEXT("method"), TEXT("notifications/progress"));
-	Root->SetObjectField(TEXT("params"), Params);
-
-	return JsonToString(Root);
-}
-
-FString FMcpJsonRpc::BuildNotification(
-	const FString& Method, const TSharedPtr<FJsonObject>& Params)
-{
-	auto Root = MakeShared<FJsonObject>();
-	Root->SetStringField(TEXT("jsonrpc"), TEXT("2.0"));
-	Root->SetStringField(TEXT("method"), Method);
-	Root->SetObjectField(TEXT("params"),
-		Params.IsValid() ? Params : MakeShared<FJsonObject>());
-	return JsonToString(Root);
-}
-
 FString FMcpJsonRpc::JsonToString(const TSharedPtr<FJsonObject>& Obj)
 {
 	FString Output;

@@ -135,7 +135,6 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
 			FScopeLock Lock(&StateMutex);
 			Result = Reset(bChanged);
 		}
-		if (bChanged) OnToolsChanged.ExecuteIfBound();
 		return Result;
 	}
 
@@ -155,7 +154,6 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
 			FScopeLock Lock(&StateMutex);
 			Result = EnableTools(Names, bChanged);
 		}
-		if (bChanged) OnToolsChanged.ExecuteIfBound();
 		return Result;
 	}
 
@@ -175,7 +173,6 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
 			FScopeLock Lock(&StateMutex);
 			Result = DisableTools(Names, bChanged);
 		}
-		if (bChanged) OnToolsChanged.ExecuteIfBound();
 		return Result;
 	}
 
@@ -187,7 +184,6 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
 			FScopeLock Lock(&StateMutex);
 			Result = EnableCategory(Cat, bChanged);
 		}
-		if (bChanged) OnToolsChanged.ExecuteIfBound();
 		return Result;
 	}
 
@@ -199,7 +195,6 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
 			FScopeLock Lock(&StateMutex);
 			Result = DisableCategory(Cat, bChanged);
 		}
-		if (bChanged) OnToolsChanged.ExecuteIfBound();
 		return Result;
 	}
 

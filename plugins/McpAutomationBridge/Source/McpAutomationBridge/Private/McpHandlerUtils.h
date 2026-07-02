@@ -34,7 +34,7 @@
 
 // Forward declarations
 class UMcpAutomationBridgeSubsystem;
-class FMcpBridgeWebSocket;
+#include "McpAutomationBridgeGlobals.h"
 
 // =============================================================================
 // MCP Namespace for Handler Utilities

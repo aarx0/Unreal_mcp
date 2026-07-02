@@ -19,7 +19,6 @@ public:
 
 	FString GetCategory() const override { return TEXT("world"); }
 
-	// Pattern A: default GetDispatchAction() returns GetName()
 
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{

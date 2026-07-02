@@ -205,7 +205,7 @@ static void FinalizeMaterialHost(UMaterial *Material, UMaterialFunction *Functio
 bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   if (Action != TEXT("manage_material_authoring")) {
     return false;
   }

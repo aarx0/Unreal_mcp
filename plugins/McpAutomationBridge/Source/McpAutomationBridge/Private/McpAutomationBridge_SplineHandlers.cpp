@@ -56,7 +56,6 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
-#include "McpBridgeWebSocket.h"
 #include "Misc/EngineVersionComparison.h"
 
 // =============================================================================
@@ -329,7 +328,7 @@ static bool HandleCreateSplineActor(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"), TEXT("SplineActor"));
     FVector Location = GetJsonVectorFieldSpline(Payload, TEXT("location"));
@@ -432,7 +431,7 @@ static bool HandleAddSplinePoint(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     FVector Position = GetJsonVectorFieldSpline(Payload, TEXT("position"));
@@ -502,7 +501,7 @@ static bool HandleRemoveSplinePoint(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     int32 PointIndex = GetJsonIntFieldSpline(Payload, TEXT("pointIndex"), 0);
@@ -566,7 +565,7 @@ static bool HandleSetSplinePointPosition(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     int32 PointIndex = GetJsonIntFieldSpline(Payload, TEXT("pointIndex"), 0);
@@ -630,7 +629,7 @@ static bool HandleSetSplinePointTangents(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     int32 PointIndex = GetJsonIntFieldSpline(Payload, TEXT("pointIndex"), 0);
@@ -704,7 +703,7 @@ static bool HandleSetSplinePointRotation(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     int32 PointIndex = GetJsonIntFieldSpline(Payload, TEXT("pointIndex"), 0);
@@ -768,7 +767,7 @@ static bool HandleSetSplinePointScale(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     int32 PointIndex = GetJsonIntFieldSpline(Payload, TEXT("pointIndex"), 0);
@@ -832,7 +831,7 @@ static bool HandleSetSplineType(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     FString SplineType = GetJsonStringFieldSpline(Payload, TEXT("splineType"), TEXT("Curve"));
@@ -914,7 +913,7 @@ static bool HandleCreateSplineMeshComponent(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString BlueprintPath = GetJsonStringFieldSpline(Payload, TEXT("blueprintPath"));
     FString ComponentName = GetJsonStringFieldSpline(Payload, TEXT("componentName"), TEXT("SplineMesh"));
@@ -1051,7 +1050,7 @@ static bool HandleSetSplineMeshAsset(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     FString ComponentName = GetJsonStringFieldSpline(Payload, TEXT("componentName"));
@@ -1145,7 +1144,7 @@ static bool HandleConfigureSplineMeshAxis(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     FString ComponentName = GetJsonStringFieldSpline(Payload, TEXT("componentName"));
@@ -1223,7 +1222,7 @@ static bool HandleSetSplineMeshMaterial(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     FString ComponentName = GetJsonStringFieldSpline(Payload, TEXT("componentName"));
@@ -1318,7 +1317,7 @@ static bool HandleCreateSplineMeshActor(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"), TEXT("SplineMeshActor"));
     FString ComponentName = GetJsonStringFieldSpline(Payload, TEXT("componentName"), TEXT("SplineMesh"));
@@ -1439,7 +1438,7 @@ static bool HandleScatterMeshesAlongSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     FString MeshPath = GetJsonStringFieldSpline(Payload, TEXT("meshPath"));
@@ -1603,7 +1602,7 @@ static bool HandleConfigureMeshSpacing(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World)
@@ -1655,7 +1654,7 @@ static bool HandleConfigureMeshRandomization(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World)
@@ -1717,7 +1716,7 @@ static bool HandleCreateTemplateSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket,
+    FMcpResponseHandle Socket,
     const FString& TemplateName,
     const FString& DefaultMeshPath)
 {
@@ -1793,7 +1792,7 @@ static bool HandleCreateRoadSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     return HandleCreateTemplateSpline(Self, RequestId, Payload, Socket, TEXT("Road"), TEXT(""));
 }
@@ -1802,7 +1801,7 @@ static bool HandleCreateRiverSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     return HandleCreateTemplateSpline(Self, RequestId, Payload, Socket, TEXT("River"), TEXT(""));
 }
@@ -1811,7 +1810,7 @@ static bool HandleCreateFenceSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     return HandleCreateTemplateSpline(Self, RequestId, Payload, Socket, TEXT("Fence"), TEXT(""));
 }
@@ -1820,7 +1819,7 @@ static bool HandleCreateWallSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     return HandleCreateTemplateSpline(Self, RequestId, Payload, Socket, TEXT("Wall"), TEXT(""));
 }
@@ -1829,7 +1828,7 @@ static bool HandleCreateCableSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     return HandleCreateTemplateSpline(Self, RequestId, Payload, Socket, TEXT("Cable"), TEXT(""));
 }
@@ -1838,7 +1837,7 @@ static bool HandleCreatePipeSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     return HandleCreateTemplateSpline(Self, RequestId, Payload, Socket, TEXT("Pipe"), TEXT(""));
 }
@@ -1851,7 +1850,7 @@ static bool HandleGetSplinesInfo(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
 
@@ -1955,7 +1954,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSplinesAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     // Only handle manage_splines; decline anything else so the dispatcher keeps
     // trying other handlers and reaches its UNKNOWN_ACTION fallback. Without this

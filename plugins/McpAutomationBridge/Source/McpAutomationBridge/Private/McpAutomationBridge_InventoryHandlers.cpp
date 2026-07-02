@@ -105,7 +105,7 @@ static UPackage* CreateAssetPackage(const FString& Path, const FString& Name) {
 bool UMcpAutomationBridgeSubsystem::HandleManageInventoryAction(
     const FString& RequestId, const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   // Only handle manage_inventory action
   if (Action != TEXT("manage_inventory")) {
     return false;

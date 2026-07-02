@@ -157,7 +157,7 @@
 bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   // Accept either the generic execute_editor_function action or console-command
   // compatibility aliases. Console aliases immediately delegate to the central

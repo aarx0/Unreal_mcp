@@ -176,7 +176,7 @@ static AInstancedFoliageActor* GetOrCreateFoliageActorForWorldSafe(UWorld* World
 bool UMcpAutomationBridgeSubsystem::HandlePaintFoliage(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("paint_foliage"), ESearchCase::IgnoreCase)) {
     return false;
@@ -392,7 +392,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintFoliage(
 bool UMcpAutomationBridgeSubsystem::HandleRemoveFoliage(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("remove_foliage"), ESearchCase::IgnoreCase)) {
     return false;
@@ -509,7 +509,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRemoveFoliage(
 bool UMcpAutomationBridgeSubsystem::HandleGetFoliageInstances(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("get_foliage_instances"), ESearchCase::IgnoreCase)) {
     return false;
@@ -657,7 +657,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetFoliageInstances(
 bool UMcpAutomationBridgeSubsystem::HandleAddFoliageType(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("add_foliage_type"), ESearchCase::IgnoreCase)) {
     return false;
@@ -860,7 +860,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageType(
 bool UMcpAutomationBridgeSubsystem::HandleAddFoliageInstances(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("add_foliage_instances"), ESearchCase::IgnoreCase)) {
     return false;
@@ -1133,7 +1133,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageInstances(
 bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralFoliage(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("create_procedural_foliage"),
                     ESearchCase::IgnoreCase)) {

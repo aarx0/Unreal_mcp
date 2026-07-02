@@ -1,9 +1,7 @@
 #include "McpAutomationBridgeGlobals.h"
 #include "Dom/JsonObject.h"
 
-TMap<FString, TArray<TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>>>
-    GBlueprintExistsInflight;
-TMap<FString, TArray<TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>>>
+TMap<FString, TArray<TPair<FString, FMcpResponseHandle>>>
     GBlueprintCreateInflight;
 TMap<FString, double> GBlueprintCreateInflightTs;
 FCriticalSection GBlueprintCreateMutex;

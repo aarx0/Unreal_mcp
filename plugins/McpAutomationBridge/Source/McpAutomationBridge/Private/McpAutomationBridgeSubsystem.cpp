@@ -189,7 +189,6 @@ private:
 #include "HAL/PlatformTime.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeSettings.h"
-#include "McpBridgeWebSocket.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
@@ -673,7 +672,7 @@ bool UMcpAutomationBridgeSubsystem::Tick(float DeltaTime) {
 void UMcpAutomationBridgeSubsystem::QueueAutomationRequest(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket,
+    FMcpResponseHandle RequestingSocket,
     ERequestOrigin Origin) {
   FPendingAutomationRequest Pending;
   Pending.RequestId = RequestId;
@@ -717,7 +716,7 @@ void UMcpAutomationBridgeSubsystem::QueueAutomationRequest(
  */
 
 void UMcpAutomationBridgeSubsystem::SendAutomationResponse(
-    TSharedPtr<FMcpBridgeWebSocket> TargetSocket, const FString &RequestId,
+    FMcpResponseHandle TargetSocket, const FString &RequestId,
     const bool bSuccess, const FString &Message,
     const TSharedPtr<FJsonObject> &Result, const FString &ErrorCode,
     ERequestOrigin Origin) {
@@ -829,7 +828,7 @@ void UMcpAutomationBridgeSubsystem::SendAutomationResponse(
  * is used if empty.
  */
 void UMcpAutomationBridgeSubsystem::SendAutomationError(
-    TSharedPtr<FMcpBridgeWebSocket> TargetSocket, const FString &RequestId,
+    FMcpResponseHandle TargetSocket, const FString &RequestId,
     const FString &Message, const FString &ErrorCode) {
   const FString ResolvedError =
       ErrorCode.IsEmpty() ? TEXT("AUTOMATION_ERROR") : ErrorCode;
@@ -933,7 +932,7 @@ void UMcpAutomationBridgeSubsystem::RegisterHandler(
   RegisterHandler(TEXT(ActionName), \
                   [this](const FString &R, const FString &A, \
                          const TSharedPtr<FJsonObject> &P, \
-                         TSharedPtr<FMcpBridgeWebSocket> S) { \
+                         FMcpResponseHandle S) { \
                     return HandlerFn(R, A, P, S); \
                   })
 
@@ -1025,7 +1024,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   RegisterHandler(TEXT("build_environment"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
                     const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
                     if (McpConsolidatedActions::IsLightingAction(SubAction)) {
                       return HandleLightingAction(R, TEXT("manage_lighting"), P, S);
@@ -1043,7 +1042,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   RegisterHandler(TEXT("system_control"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
                     const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
                     if (McpConsolidatedActions::IsPerformanceAction(SubAction)) {
                       return HandlePerformanceAction(R, TEXT("manage_performance"), P, S);
@@ -1117,7 +1116,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   RegisterHandler(TEXT("manage_asset"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
                     const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
                     if (McpConsolidatedActions::IsMaterialAuthoringAction(SubAction)) {
                       return HandleManageMaterialAuthoringAction(
@@ -1154,7 +1153,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   RegisterHandler(TEXT("manage_blueprint"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
                     FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
                     // Common UI actions are checked BEFORE widget-authoring so they
                     // route to the deletable CommonUI translation unit and never
@@ -1195,7 +1194,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   RegisterHandler(TEXT("manage_networking"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
                     const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
                     if (McpConsolidatedActions::IsInputAction(SubAction)) {
                       return HandleInputAction(R, TEXT("manage_input"), P, S);
@@ -1220,7 +1219,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   RegisterHandler(TEXT("manage_audio"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
                     const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
                     if (McpConsolidatedActions::IsAudioAuthoringAction(SubAction)) {
                       const TSharedPtr<FJsonObject> RoutedPayload =
@@ -1245,7 +1244,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   RegisterHandler(TEXT("animation_physics"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
                     const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
                     if (McpConsolidatedActions::IsAnimationAuthoringAction(SubAction)) {
                       const TSharedPtr<FJsonObject> RoutedPayload =
@@ -1287,7 +1286,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   RegisterHandler(TEXT("manage_level_structure"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
                     const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
                     if (McpConsolidatedActions::IsVolumeAction(SubAction)) {
                       return HandleManageVolumesAction(R, TEXT("manage_volumes"), P, S);
@@ -1316,7 +1315,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   RegisterHandler(TEXT("check_pie_state"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
 #if WITH_EDITOR
                     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
                     bool bIsInPIE = false;

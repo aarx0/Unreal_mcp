@@ -73,7 +73,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddSequencerKeyframe(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     const FString Lower = Action.ToLower();
     if (!Lower.Equals(TEXT("add_sequencer_keyframe"), ESearchCase::IgnoreCase))
@@ -269,7 +269,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSequencerTrack(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     const FString Lower = Action.ToLower();
     if (!Lower.Equals(TEXT("manage_sequencer_track"), ESearchCase::IgnoreCase))
@@ -420,7 +420,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddCameraTrack(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     const FString Lower = Action.ToLower();
     if (!Lower.Equals(TEXT("add_camera_track"), ESearchCase::IgnoreCase))
@@ -572,7 +572,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddAnimationTrack(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     const FString Lower = Action.ToLower();
     if (!Lower.Equals(TEXT("add_animation_track"), ESearchCase::IgnoreCase))
@@ -705,7 +705,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddTransformTrack(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     const FString Lower = Action.ToLower();
     if (!Lower.Equals(TEXT("add_transform_track"), ESearchCase::IgnoreCase))

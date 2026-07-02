@@ -33,7 +33,7 @@
 bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   // The sub-action is in the payload's "action" field
   FString SubAction;
   if (Payload.IsValid()) {

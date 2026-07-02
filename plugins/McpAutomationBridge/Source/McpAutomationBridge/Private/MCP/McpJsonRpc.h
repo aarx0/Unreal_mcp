@@ -54,15 +54,6 @@ public:
 		const TSharedPtr<FJsonObject>& Data = nullptr,
 		const FString& ErrorCode = FString());
 
-	/** Build a JSON-RPC 2.0 progress notification (no id — it's a notification). */
-	static FString BuildProgressNotification(
-		const FString& ProgressToken, float Progress, float Total,
-		const FString& Message);
-
-	/** Build a generic JSON-RPC 2.0 notification (no id). */
-	static FString BuildNotification(const FString& Method,
-		const TSharedPtr<FJsonObject>& Params = nullptr);
-
 private:
 	/** Serialize a JSON object to a compact string. */
 	static FString JsonToString(const TSharedPtr<FJsonObject>& Obj);

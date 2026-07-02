@@ -4156,7 +4156,7 @@ Retargeter->TargetIKRigAsset = TargetRig;
 bool UMcpAutomationBridgeSubsystem::HandleManageAnimationAuthoringAction(
     const FString& RequestId, const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Check if this is an animation authoring action
     if (Action != TEXT("manage_animation_authoring"))

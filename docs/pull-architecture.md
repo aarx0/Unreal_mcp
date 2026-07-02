@@ -1,6 +1,10 @@
 # Pull Architecture — Transport Simplification & Idempotency
 
-**Status:** plan / in progress on branch `feat/pull-architecture`.
+**Status:** DONE (2026-07-02). All deletion buckets executed: the transport cutover
+shipped earlier; the remaining residue (`FMcpBridgeWebSocket` class + OpenSSL dep,
+WS-era settings, Pattern B dispatch, `OnToolsChanged`, notification builders) was
+deleted in the arch-review F5 sweep. Handler signatures now thread the inert
+`FMcpResponseHandle` alias; responses route by RequestId via the native transport.
 **Supersedes:** the SSE-keepalive + result-cache approach in
 `docs/transport-mid-call-drop-problem.md` and the matching 🔴 roadmap item in `TODO.md`
 ("Per-request SSE keepalive + result cache re-queryable by request id"). Those are **not**
