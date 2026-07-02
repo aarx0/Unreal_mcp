@@ -1,7 +1,7 @@
 # Extending the Bridge — Adding & Fixing Actions
 
 A practical, end-to-end guide to adding or changing an MCP action in the **native**
-plugin (the C++ bridge that serves Streamable HTTP/SSE at `/mcp`).
+plugin (the C++ bridge that serves pull-only Streamable HTTP at `/mcp`; no SSE).
 
 This doc is the "how do I actually change behavior" companion to:
 
@@ -10,7 +10,7 @@ This doc is the "how do I actually change behavior" companion to:
 
 > ⚠️ `editor-plugin-extension.md` describes the **legacy** WebSocket automation bridge
 > (`ws://127.0.0.1:8091`) and a Node server. The native path documented here is different:
-> raw-socket HTTP/SSE, JSON-RPC 2.0, default `POST /mcp` (loopback). Treat that file's
+> raw-socket pull-only HTTP, JSON-RPC 2.0, default `POST /mcp` (loopback). Treat that file's
 > transport/coverage sections as historical, not current.
 
 ---
@@ -58,6 +58,20 @@ dropped *with the rest of the arguments*, and the handler then sees no `action` 
 ## Add a new action (handler-only, the common case)
 
 Most new actions reuse an existing tool + existing parameters. Then you only edit Layer 3.
+
+> **Header freeze (2026-07-02):** do not add new `Handle*` member declarations to
+> `McpAutomationBridgeSubsystem.h` — any edit to that header rebuilds nearly the whole
+> module. New handler logic goes in TU-local `static` functions, or a small static
+> handler class with its own private header when it must be shared (see `FSCSHandlers`
+> / `FBlueprintCreationHandlers` / GeometryHandlers' static free functions for the
+> pattern). When you touch a handler file for other reasons, prefer migrating its
+> declarations out of the subsystem header the same way.
+
+> **Action vocabulary:** the schema enum for every tool comes from the shared lists in
+> `Private/MCP/McpConsolidatedActionRouting.h`, and `McpStartupValidation` cross-checks
+> lists, routing families, and published schemas at editor boot. Add your action name to
+> the right list there — a mismatch shows up as `LogMcpStartupValidation: Error` +
+> ensure at startup, not as a client-side UNKNOWN_ACTION surprise later.
 
 1. **Pick the handler file** for the area (see `handler-mapping.md`). Widget/UMG work →
    `McpAutomationBridge_WidgetAuthoringHandlers.cpp`. Graph nodes →
@@ -119,6 +133,22 @@ Most new actions reuse an existing tool + existing parameters. Then you only edi
 
 Always `return true;` from a handled sub-action (the dispatcher treats `true` as
 "handled"; falling through lets another block or the unknown-action error fire).
+
+A handler that returns `true` **must have sent exactly one response first** — the
+dispatcher now fails a consumed-but-unanswered request with `HANDLER_NO_RESPONSE`
+immediately. If you genuinely must complete after returning (next-tick deferral),
+call `MarkRequestDeferred(RequestId)` before returning; don't re-queue work with
+`AsyncTask(GameThread, …)` from a handler — that pattern was removed (it broke the
+engine-error capture and added client-visible latency).
+
+5. **Verify your action live**: with the editor + bridge up, call it once and check
+   the response *and* the boot log:
+
+   ```powershell
+   pwsh -File scripts/mcp-call.ps1 -Tool manage_blueprint -Arguments @{ action = 'my_action'; ... }
+   # and after an editor restart, confirm the boot log line:
+   #   LogMcpStartupValidation: Action routing validation passed (...)
+   ```
 
 ---
 

@@ -11,7 +11,7 @@ MCP/
 |-- McpDynamicToolManager.cpp/.h  # runtime enable/disable and protected tools
 |-- McpSchemaBuilder.cpp/.h       # JSON schema builder DSL
 |-- McpToolDefinition.h           # base class and dispatch patterns
-`-- Tools/McpTool_*.cpp           # 36 self-registering tool definitions
+`-- Tools/McpTool_*.cpp           # 22 self-registering tool definitions
 ```
 
 ## WHERE TO LOOK
