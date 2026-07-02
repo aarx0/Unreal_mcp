@@ -195,6 +195,18 @@ void FMcpNativeTransport::Shutdown()
 		Thread = nullptr;
 	}
 
+	// Accept thread is joined; single-threaded from here. Destroy the listen
+	// socket exactly once (Stop() only Close()s it to unblock the accept wait).
+	if (ListenSocket)
+	{
+		ListenSocket->Close();
+		if (ISocketSubsystem* SocketSub = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM))
+		{
+			SocketSub->DestroySocket(ListenSocket);
+		}
+		ListenSocket = nullptr;
+	}
+
 	// Wait for in-flight connection handlers and async writes to finish.
 	// IMPORTANT: Shutdown runs on GameThread. HandleToolsCall dispatches
 	// ProcessAutomationRequest → CompletePendingRequest to GameThread via
@@ -266,8 +278,6 @@ void FMcpNativeTransport::Shutdown()
 		FScopeLock Lock(&SessionMutex);
 		ActiveSessions.Empty();
 	}
-
-	ListenSocket = nullptr;
 
 	UE_LOG(LogMcpNativeTransport, Log, TEXT("Native MCP server stopped"));
 }
@@ -442,13 +452,9 @@ uint32 FMcpNativeTransport::Run()
 		}
 	}
 
-	// Cleanup listen socket
-	if (ListenSocket)
-	{
-		ListenSocket->Close();
-		SocketSub->DestroySocket(ListenSocket);
-		ListenSocket = nullptr;
-	}
+	// ListenSocket is destroyed by Shutdown() after this thread is joined.
+	// Destroying it here raced Stop()'s Close() (Thread->Kill re-invokes Stop
+	// from the game thread) — use-after-free on editor exit.
 
 	UE_LOG(LogMcpNativeTransport, Verbose, TEXT("Accept loop exited"));
 	return 0;
