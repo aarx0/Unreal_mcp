@@ -4,7 +4,6 @@
 // Miscellaneous Handlers for MCP Automation Bridge.
 //
 // This file implements the following handlers:
-// - Post Process Volume: create_post_process_volume
 // - Camera: create_camera, set_camera_fov
 // - Viewport: set_viewport_resolution
 // - Game Speed: set_game_speed
@@ -42,8 +41,6 @@
 #include "EngineUtils.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
-#include "Engine/PostProcessVolume.h"
-#include "Components/PostProcessComponent.h"
 #include "LevelEditorViewport.h"
 #include "EditorViewportClient.h"
 #include "Kismet/GameplayStatics.h"
@@ -149,115 +146,6 @@ namespace MiscHelpers
     {
         return ExtractRotatorField(Payload, *FieldName, Default);
     }
-}
-
-// =============================================================================
-// Handler: create_post_process_volume
-// =============================================================================
-// Creates a PostProcessVolume actor with configurable settings
-// Parameters: volumeName, location, extent, unbound, blendRadius, blendWeight,
-//             priority, settings (bloomIntensity, exposureCompensation, etc.)
-// -----------------------------------------------------------------------------
-
-static bool HandleCreatePostProcessVolume(
-    UMcpAutomationBridgeSubsystem* Subsystem,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-    using namespace MiscHelpers;
-
-    FString VolumeName = GetStringField(Payload, TEXT("volumeName"), TEXT("PostProcessVolume"));
-    FVector Location = GetVectorField(Payload, TEXT("location"), FVector::ZeroVector);
-    FVector Extent = GetVectorField(Payload, TEXT("extent"), FVector(1000.0f, 1000.0f, 500.0f));
-    bool bUnbound = GetBoolField(Payload, TEXT("unbound"), false);
-    double BlendRadius = GetNumberField(Payload, TEXT("blendRadius"), 100.0);
-    double BlendWeight = GetNumberField(Payload, TEXT("blendWeight"), 1.0);
-    double Priority = GetNumberField(Payload, TEXT("priority"), 0.0);
-
-    UWorld* World = GetEditorWorld();
-    if (!World)
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("Editor world not available"), nullptr, TEXT("NO_WORLD"));
-        return true;
-    }
-
-    FActorSpawnParameters SpawnParams;
-    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-    APostProcessVolume* Volume = World->SpawnActor<APostProcessVolume>(Location, FRotator::ZeroRotator, SpawnParams);
-    if (!Volume)
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("Failed to spawn PostProcessVolume"), nullptr, TEXT("SPAWN_FAILED"));
-        return true;
-    }
-
-    Volume->SetActorLabel(VolumeName);
-    Volume->bUnbound = bUnbound;
-    Volume->BlendRadius = static_cast<float>(BlendRadius);
-    Volume->BlendWeight = static_cast<float>(BlendWeight);
-    Volume->Priority = static_cast<float>(Priority);
-
-    // Configure post process settings if provided
-    if (Payload->HasField(TEXT("settings")))
-    {
-        const TSharedPtr<FJsonObject>* SettingsPtr = nullptr;
-        if (Payload->TryGetObjectField(TEXT("settings"), SettingsPtr) && SettingsPtr)
-        {
-            FPostProcessSettings& Settings = Volume->Settings;
-
-            double Bloom;
-            if ((*SettingsPtr)->TryGetNumberField(TEXT("bloomIntensity"), Bloom))
-            {
-                Settings.bOverride_BloomIntensity = true;
-                Settings.BloomIntensity = static_cast<float>(Bloom);
-            }
-
-            double Exposure;
-            if ((*SettingsPtr)->TryGetNumberField(TEXT("exposureCompensation"), Exposure))
-            {
-                Settings.bOverride_AutoExposureBias = true;
-                Settings.AutoExposureBias = static_cast<float>(Exposure);
-            }
-
-            double Saturation;
-            if ((*SettingsPtr)->TryGetNumberField(TEXT("saturation"), Saturation))
-            {
-                Settings.bOverride_ColorSaturation = true;
-                Settings.ColorSaturation = FVector4(Saturation, Saturation, Saturation, 1.0f);
-            }
-
-            double Contrast;
-            if ((*SettingsPtr)->TryGetNumberField(TEXT("contrast"), Contrast))
-            {
-                Settings.bOverride_ColorContrast = true;
-                Settings.ColorContrast = FVector4(Contrast, Contrast, Contrast, 1.0f);
-            }
-
-            double VignetteIntensity;
-            if ((*SettingsPtr)->TryGetNumberField(TEXT("vignetteIntensity"), VignetteIntensity))
-            {
-                Settings.bOverride_VignetteIntensity = true;
-                Settings.VignetteIntensity = static_cast<float>(VignetteIntensity);
-            }
-        }
-    }
-
-    World->MarkPackageDirty();
-
-    TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
-    ResponseJson->SetStringField(TEXT("volumeName"), Volume->GetActorLabel());
-    ResponseJson->SetStringField(TEXT("volumePath"), Volume->GetPathName());
-    ResponseJson->SetBoolField(TEXT("unbound"), bUnbound);
-    ResponseJson->SetNumberField(TEXT("blendRadius"), BlendRadius);
-    ResponseJson->SetNumberField(TEXT("priority"), Priority);
-    McpHandlerUtils::AddVerification(ResponseJson, Volume);
-
-    Subsystem->SendAutomationResponse(Socket, RequestId, true,
-        FString::Printf(TEXT("Created PostProcessVolume: %s"), *VolumeName), ResponseJson);
-    return true;
 }
 
 // =============================================================================
@@ -1024,14 +912,6 @@ bool UMcpAutomationBridgeSubsystem::HandleMiscAction(
     }
 
     UE_LOG(LogMcpMiscHandlers, Verbose, TEXT("HandleMiscAction: %s"), *SubAction);
-
-    // -------------------------------------------------------------------------
-    // Post Process Volume
-    // -------------------------------------------------------------------------
-    if (SubAction == TEXT("create_post_process_volume"))
-    {
-        return HandleCreatePostProcessVolume(this, RequestId, Payload, Socket);
-    }
 
     // -------------------------------------------------------------------------
     // Camera Actions

@@ -24,7 +24,7 @@ public:
 		return FMcpSchemaBuilder()
 			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageInteraction(), TEXT("The interaction action to perform."))
 			.String(TEXT("name"), TEXT("Name identifier."))
-			.String(TEXT("folder"), TEXT("Path to a directory."))
+			.String(TEXT("folder"), TEXT("Destination folder for create_* actions ('path'/'savePath' accepted as aliases; default /Game/Interactables)."))
 			.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 			.String(TEXT("actorName"), TEXT("Name of the actor."))
 			.String(TEXT("componentName"), TEXT("Name of the component."))

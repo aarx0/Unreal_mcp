@@ -534,25 +534,6 @@ private:
   HandleCreateSubmixEffect(const FString &RequestId,
                            const TSharedPtr<FJsonObject> &Payload,
                            FMcpResponseHandle RequestingSocket);
-  // Interaction related automation actions
-  bool HandleCreateInteractionComponent(
-      const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool HandleConfigureInteractionTrace(
-      const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool HandleConfigureInteractionWidget(
-      const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool HandleCreateDoorActor(const FString &RequestId,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
-  bool HandleCreateSwitchActor(const FString &RequestId,
-                               const TSharedPtr<FJsonObject> &Payload,
-                               FMcpResponseHandle RequestingSocket);
-  bool HandleCreateChestActor(const FString &RequestId,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle RequestingSocket);
   // Lighting related automation actions
   bool HandleLightingAction(const FString &RequestId, const FString &Action,
                             const TSharedPtr<FJsonObject> &Payload,

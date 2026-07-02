@@ -32,14 +32,6 @@
 // Section 5: Utility
 //   - get_interaction_info               : Query interaction info for BP or actor
 //
-// Section 6: Runtime Handlers (actor-based)
-//   - HandleCreateInteractionComponent   : Create interaction component on spawned actor
-//   - HandleConfigureInteractionTrace    : Configure trace settings on actor
-//   - HandleConfigureInteractionWidget   : Configure widget settings on actor
-//   - HandleCreateDoorActor              : Spawn door actor in world
-//   - HandleCreateSwitchActor            : Spawn switch actor in world
-//   - HandleCreateChestActor             : Spawn chest actor in world
-//
 // PAYLOAD/RESPONSE FORMATS:
 // -------------------------
 // create_interaction_component (Blueprint):
@@ -130,25 +122,6 @@
 //   Response: { "assetType": string, "name"?: string, "variables"?: object,
 //              "variableCount"?: number, "components"?: object[],
 //              "actorName"?: string, "actorClass"?: string }
-//
-// HandleCreateInteractionComponent (runtime):
-//   Payload: { "actorName": string, "interactionDistance"?: number, "requiresLineOfSight"?: bool }
-//   Response: { "actorName": string, "componentName": string, "interactionDistance": number,
-//              "requiresLineOfSight": bool }
-//
-// HandleCreateDoorActor (runtime):
-//   Payload: { "doorName"?: string, "location"?: [x,y,z], "doorType"?: string,
-//              "isLocked"?: bool, "requiredKey"?: string }
-//   Response: { "doorName": string, "doorType": string, "isLocked": bool, "actorPath": string }
-//
-// HandleCreateSwitchActor (runtime):
-//   Payload: { "switchName"?: string, "location"?: [x,y,z], "switchType"?: string, "isToggle"?: bool }
-//   Response: { "switchName": string, "switchType": string, "isToggle": bool, "actorPath": string }
-//
-// HandleCreateChestActor (runtime):
-//   Payload: { "chestName"?: string, "location"?: [x,y,z], "isLocked"?: bool,
-//              "requiredKey"?: string, "maxItems"?: number }
-//   Response: { "chestName": string, "isLocked": bool, "maxItems": number, "actorPath": string }
 //
 // VERSION COMPATIBILITY:
 // ----------------------
@@ -846,7 +819,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
    */
   if (SubAction == TEXT("create_door_actor")) {
     FString Name = GetJsonStringField(Payload, TEXT("name"));
-    FString Folder = GetJsonStringField(Payload, TEXT("folder"), TEXT("/Game/Interactables"));
+    FString Folder = GetJsonStringField(Payload, TEXT("folder"),
+        GetJsonStringField(Payload, TEXT("path"),
+            GetJsonStringField(Payload, TEXT("savePath"), TEXT("/Game/Interactables"))));
     double OpenAngle = GetJsonNumberField(Payload, TEXT("openAngle"), 90.0);
     double OpenTime = GetJsonNumberField(Payload, TEXT("openTime"), 0.5);
     bool AutoClose = GetJsonBoolField(Payload, TEXT("autoClose"), false);
@@ -1164,7 +1139,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
    */
   if (SubAction == TEXT("create_switch_actor")) {
     FString Name = GetJsonStringField(Payload, TEXT("name"));
-    FString Folder = GetJsonStringField(Payload, TEXT("folder"), TEXT("/Game/Interactables"));
+    FString Folder = GetJsonStringField(Payload, TEXT("folder"),
+        GetJsonStringField(Payload, TEXT("path"),
+            GetJsonStringField(Payload, TEXT("savePath"), TEXT("/Game/Interactables"))));
     FString SwitchType = GetJsonStringField(Payload, TEXT("switchType"), TEXT("button"));
 
     if (Name.IsEmpty()) {
@@ -1410,7 +1387,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
    */
   if (SubAction == TEXT("create_chest_actor")) {
     FString Name = GetJsonStringField(Payload, TEXT("name"));
-    FString Folder = GetJsonStringField(Payload, TEXT("folder"), TEXT("/Game/Interactables"));
+    FString Folder = GetJsonStringField(Payload, TEXT("folder"),
+        GetJsonStringField(Payload, TEXT("path"),
+            GetJsonStringField(Payload, TEXT("savePath"), TEXT("/Game/Interactables"))));
     bool Locked = GetJsonBoolField(Payload, TEXT("locked"), false);
 
     if (Name.IsEmpty()) {
@@ -1683,7 +1662,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInteractionAction(
    */
   if (SubAction == TEXT("create_lever_actor")) {
     FString Name = GetJsonStringField(Payload, TEXT("name"));
-    FString Folder = GetJsonStringField(Payload, TEXT("folder"), TEXT("/Game/Interactables"));
+    FString Folder = GetJsonStringField(Payload, TEXT("folder"),
+        GetJsonStringField(Payload, TEXT("path"),
+            GetJsonStringField(Payload, TEXT("savePath"), TEXT("/Game/Interactables"))));
 
     if (Name.IsEmpty()) {
       SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
@@ -2405,462 +2386,5 @@ if (SubAction == TEXT("configure_trigger_response")) {
     return true;
   }
 
-  // ===========================================================================
-  // Section 6: Runtime Handler Dispatch (actor-based)
-  // ===========================================================================
-
-  if (SubAction == TEXT("create_interaction_component")) {
-    return HandleCreateInteractionComponent(RequestId, Payload, RequestingSocket);
-  }
-
-  if (SubAction == TEXT("configure_interaction_trace")) {
-    return HandleConfigureInteractionTrace(RequestId, Payload, RequestingSocket);
-  }
-
-  if (SubAction == TEXT("configure_interaction_widget")) {
-    return HandleConfigureInteractionWidget(RequestId, Payload, RequestingSocket);
-  }
-
-  if (SubAction == TEXT("create_door_actor")) {
-    return HandleCreateDoorActor(RequestId, Payload, RequestingSocket);
-  }
-
-  if (SubAction == TEXT("create_switch_actor")) {
-    return HandleCreateSwitchActor(RequestId, Payload, RequestingSocket);
-  }
-
-  if (SubAction == TEXT("create_chest_actor")) {
-    return HandleCreateChestActor(RequestId, Payload, RequestingSocket);
-  }
-
   return false;
-}
-
-// =============================================================================
-// Section 7: Runtime Handler Implementations (actor-based)
-// =============================================================================
-
-/**
- * HandleCreateInteractionComponent
- * ---------------------------------
- * Creates a SceneComponent-based interaction component on a spawned actor.
- * Actor is found by name/label in the editor world.
- *
- * Payload: { "actorName": string, "interactionDistance"?: number, "requiresLineOfSight"?: bool }
- * Response: { "actorName": string, "componentName": string,
- *            "interactionDistance": number, "requiresLineOfSight": bool }
- */
-// Create Interaction Component handler implementation
-bool UMcpAutomationBridgeSubsystem::HandleCreateInteractionComponent(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
-#if WITH_EDITOR
-  FString ActorName;
-  if (!Payload->TryGetStringField(TEXT("actorName"), ActorName) ||
-      ActorName.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("actorName required"),
-                        TEXT("INVALID_ARGUMENT"));
-    return true;
-  }
-
-  UWorld *World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-  if (!World) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("No editor world"),
-                        TEXT("NO_WORLD"));
-    return true;
-  }
-
-  AActor *Actor = nullptr;
-  for (TActorIterator<AActor> It(World); It; ++It) {
-    if (It->GetActorLabel() == ActorName || It->GetName() == ActorName) {
-      Actor = *It;
-      break;
-    }
-  }
-
-  if (!Actor) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Actor not found"),
-                        TEXT("ACTOR_NOT_FOUND"));
-    return true;
-  }
-
-  // Create interaction component (using SceneComponent as base)
-  USceneComponent *InteractionComp = NewObject<USceneComponent>(Actor, FName(TEXT("InteractionComponent")));
-  if (!InteractionComp) {
-    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("Failed to create interaction component"),
-                        TEXT("CREATE_FAILED"));
-    return true;
-  }
-
-  InteractionComp->RegisterComponent();
-  Actor->AddInstanceComponent(InteractionComp);
-
-  double InteractionDistance = 200.0;
-  Payload->TryGetNumberField(TEXT("interactionDistance"), InteractionDistance);
-
-  bool RequiresLineOfSight = true;
-  Payload->TryGetBoolField(TEXT("requiresLineOfSight"), RequiresLineOfSight);
-
-  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-  Resp->SetStringField(TEXT("actorName"), ActorName);
-  Resp->SetStringField(TEXT("componentName"), InteractionComp->GetName());
-  Resp->SetNumberField(TEXT("interactionDistance"), InteractionDistance);
-  Resp->SetBoolField(TEXT("requiresLineOfSight"), RequiresLineOfSight);
-  SendAutomationResponse(RequestingSocket, RequestId, true,
-                         TEXT("Interaction component created"), Resp);
-  return true;
-#else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"),
-                      TEXT("NOT_SUPPORTED"));
-  return true;
-#endif
-}
-
-/**
- * HandleConfigureInteractionTrace
- * ---------------------------------
- * Configures interaction trace settings (distance, channel, collision) on an actor.
- *
- * Payload: { "actorName": string, "traceDistance"?: number,
- *            "traceChannel"?: string, "useComplexCollision"?: bool }
- * Response: { "actorName": string, "traceDistance": number,
- *            "traceChannel": string, "useComplexCollision": bool }
- */
-// Configure Interaction Trace handler implementation
-bool UMcpAutomationBridgeSubsystem::HandleConfigureInteractionTrace(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
-#if WITH_EDITOR
-  FString ActorName;
-  if (!Payload->TryGetStringField(TEXT("actorName"), ActorName) ||
-      ActorName.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("actorName required"),
-                        TEXT("INVALID_ARGUMENT"));
-    return true;
-  }
-
-  double TraceDistance = 500.0;
-  Payload->TryGetNumberField(TEXT("traceDistance"), TraceDistance);
-
-  FString TraceChannel = TEXT("Visibility");
-  Payload->TryGetStringField(TEXT("traceChannel"), TraceChannel);
-
-  bool UseComplexCollision = false;
-  Payload->TryGetBoolField(TEXT("useComplexCollision"), UseComplexCollision);
-
-  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-  Resp->SetStringField(TEXT("actorName"), ActorName);
-  Resp->SetNumberField(TEXT("traceDistance"), TraceDistance);
-  Resp->SetStringField(TEXT("traceChannel"), TraceChannel);
-  Resp->SetBoolField(TEXT("useComplexCollision"), UseComplexCollision);
-  SendAutomationResponse(RequestingSocket, RequestId, true,
-                         TEXT("Interaction trace configured"), Resp);
-  return true;
-#else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"),
-                      TEXT("NOT_SUPPORTED"));
-  return true;
-#endif
-}
-
-/**
- * HandleConfigureInteractionWidget
- * ----------------------------------
- * Configures interaction widget display settings on an actor.
- *
- * Payload: { "actorName": string, "widgetClass"?: string, "widgetText"?: string,
- *            "showOnHover"?: bool, "offsetZ"?: number }
- * Response: { "actorName": string, "widgetClass": string, "widgetText": string,
- *            "showOnHover": bool, "offsetZ": number }
- */
-// Configure Interaction Widget handler implementation
-bool UMcpAutomationBridgeSubsystem::HandleConfigureInteractionWidget(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
-#if WITH_EDITOR
-  FString ActorName;
-  if (!Payload->TryGetStringField(TEXT("actorName"), ActorName) ||
-      ActorName.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("actorName required"),
-                        TEXT("INVALID_ARGUMENT"));
-    return true;
-  }
-
-  FString WidgetClass;
-  Payload->TryGetStringField(TEXT("widgetClass"), WidgetClass);
-
-  FString WidgetText;
-  if (!Payload->TryGetStringField(TEXT("widgetText"), WidgetText)) {
-    WidgetText = TEXT("Interact");
-  }
-
-  bool ShowOnHover = true;
-  Payload->TryGetBoolField(TEXT("showOnHover"), ShowOnHover);
-
-  double OffsetZ = 100.0;
-  Payload->TryGetNumberField(TEXT("offsetZ"), OffsetZ);
-
-  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-  Resp->SetStringField(TEXT("actorName"), ActorName);
-  Resp->SetStringField(TEXT("widgetClass"), WidgetClass);
-  Resp->SetStringField(TEXT("widgetText"), WidgetText);
-  Resp->SetBoolField(TEXT("showOnHover"), ShowOnHover);
-  Resp->SetNumberField(TEXT("offsetZ"), OffsetZ);
-  SendAutomationResponse(RequestingSocket, RequestId, true,
-                         TEXT("Interaction widget configured"), Resp);
-  return true;
-#else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"),
-                      TEXT("NOT_SUPPORTED"));
-  return true;
-#endif
-}
-
-/**
- * HandleCreateDoorActor
- * ----------------------
- * Spawns a door actor in the editor world with mesh and interaction components.
- *
- * Payload: { "doorName"?: string, "location"?: [x,y,z], "doorType"?: string,
- *            "isLocked"?: bool, "requiredKey"?: string }
- * Response: { "doorName": string, "doorType": string, "isLocked": bool,
- *            "requiredKey": string, "actorPath": string }
- */
-// Create Door Actor handler implementation
-bool UMcpAutomationBridgeSubsystem::HandleCreateDoorActor(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
-#if WITH_EDITOR
-  FString DoorName;
-  if (!Payload->TryGetStringField(TEXT("doorName"), DoorName) ||
-      DoorName.IsEmpty()) {
-    DoorName = TEXT("BP_Door");
-  }
-
-  FVector Location = FVector::ZeroVector;
-  const TArray<TSharedPtr<FJsonValue>> *LocArr;
-  if (Payload->TryGetArrayField(TEXT("location"), LocArr) && LocArr &&
-      LocArr->Num() >= 3) {
-    Location = FVector((*LocArr)[0]->AsNumber(), (*LocArr)[1]->AsNumber(),
-                       (*LocArr)[2]->AsNumber());
-  }
-
-  FString DoorType = TEXT("swing");
-  Payload->TryGetStringField(TEXT("doorType"), DoorType);
-
-  bool IsLocked = false;
-  Payload->TryGetBoolField(TEXT("isLocked"), IsLocked);
-
-  FString RequiredKey;
-  Payload->TryGetStringField(TEXT("requiredKey"), RequiredKey);
-
-  UWorld *World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-  if (!World) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("No editor world"),
-                        TEXT("NO_WORLD"));
-    return true;
-  }
-
-  FActorSpawnParameters SpawnParams;
-  SpawnParams.Name = FName(*DoorName);
-
-  AActor *DoorActor = World->SpawnActor<AActor>(
-      AActor::StaticClass(), Location, FRotator::ZeroRotator, SpawnParams);
-
-  if (!DoorActor) {
-    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("Failed to spawn door actor"),
-                        TEXT("SPAWN_FAILED"));
-    return true;
-  }
-
-  // Create door mesh component
-  UStaticMeshComponent *DoorMesh = NewObject<UStaticMeshComponent>(DoorActor);
-  DoorMesh->RegisterComponent();
-  DoorActor->SetRootComponent(DoorMesh);
-
-  // Add interaction component
-  USceneComponent *InteractionComp = NewObject<USceneComponent>(
-      DoorActor, FName(TEXT("InteractionComponent")));
-  InteractionComp->RegisterComponent();
-
-  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-  Resp->SetStringField(TEXT("doorName"), DoorActor->GetName());
-  Resp->SetStringField(TEXT("doorType"), DoorType);
-  Resp->SetBoolField(TEXT("isLocked"), IsLocked);
-  Resp->SetStringField(TEXT("requiredKey"), RequiredKey);
-  Resp->SetStringField(TEXT("actorPath"), DoorActor->GetPathName());
-  SendAutomationResponse(RequestingSocket, RequestId, true,
-                         TEXT("Door actor created"), Resp);
-  return true;
-#else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"),
-                      TEXT("NOT_SUPPORTED"));
-  return true;
-#endif
-}
-
-/**
- * HandleCreateSwitchActor
- * ------------------------
- * Spawns a switch actor in the editor world with mesh and interaction components.
- *
- * Payload: { "switchName"?: string, "location"?: [x,y,z],
- *            "switchType"?: string, "isToggle"?: bool }
- * Response: { "switchName": string, "switchType": string,
- *            "isToggle": bool, "actorPath": string }
- */
-// Create Switch Actor handler implementation
-bool UMcpAutomationBridgeSubsystem::HandleCreateSwitchActor(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
-#if WITH_EDITOR
-  FString SwitchName;
-  if (!Payload->TryGetStringField(TEXT("switchName"), SwitchName) ||
-      SwitchName.IsEmpty()) {
-    SwitchName = TEXT("BP_Switch");
-  }
-
-  FVector Location = FVector::ZeroVector;
-  const TArray<TSharedPtr<FJsonValue>> *LocArr;
-  if (Payload->TryGetArrayField(TEXT("location"), LocArr) && LocArr &&
-      LocArr->Num() >= 3) {
-    Location = FVector((*LocArr)[0]->AsNumber(), (*LocArr)[1]->AsNumber(),
-                       (*LocArr)[2]->AsNumber());
-  }
-
-  FString SwitchType = TEXT("lever");
-  Payload->TryGetStringField(TEXT("switchType"), SwitchType);
-
-  bool IsToggle = true;
-  Payload->TryGetBoolField(TEXT("isToggle"), IsToggle);
-
-  UWorld *World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-  if (!World) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("No editor world"),
-                        TEXT("NO_WORLD"));
-    return true;
-  }
-
-  FActorSpawnParameters SpawnParams;
-  SpawnParams.Name = FName(*SwitchName);
-
-  AActor *SwitchActor = World->SpawnActor<AActor>(
-      AActor::StaticClass(), Location, FRotator::ZeroRotator, SpawnParams);
-
-  if (!SwitchActor) {
-    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("Failed to spawn switch actor"),
-                        TEXT("SPAWN_FAILED"));
-    return true;
-  }
-
-  // Create switch mesh component
-  UStaticMeshComponent *SwitchMesh = NewObject<UStaticMeshComponent>(SwitchActor);
-  SwitchMesh->RegisterComponent();
-  SwitchActor->SetRootComponent(SwitchMesh);
-
-  // Add interaction component
-  USceneComponent *InteractionComp = NewObject<USceneComponent>(
-      SwitchActor, FName(TEXT("InteractionComponent")));
-  InteractionComp->RegisterComponent();
-
-  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-  Resp->SetStringField(TEXT("switchName"), SwitchActor->GetName());
-  Resp->SetStringField(TEXT("switchType"), SwitchType);
-  Resp->SetBoolField(TEXT("isToggle"), IsToggle);
-  Resp->SetStringField(TEXT("actorPath"), SwitchActor->GetPathName());
-  SendAutomationResponse(RequestingSocket, RequestId, true,
-                         TEXT("Switch actor created"), Resp);
-  return true;
-#else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"),
-                      TEXT("NOT_SUPPORTED"));
-  return true;
-#endif
-}
-
-/**
- * HandleCreateChestActor
- * -----------------------
- * Spawns a chest actor in the editor world with mesh and interaction components.
- *
- * Payload: { "chestName"?: string, "location"?: [x,y,z], "isLocked"?: bool,
- *            "requiredKey"?: string, "maxItems"?: number }
- * Response: { "chestName": string, "isLocked": bool, "requiredKey": string,
- *            "maxItems": number, "actorPath": string }
- */
-// Create Chest Actor handler implementation
-bool UMcpAutomationBridgeSubsystem::HandleCreateChestActor(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
-#if WITH_EDITOR
-  FString ChestName;
-  if (!Payload->TryGetStringField(TEXT("chestName"), ChestName) ||
-      ChestName.IsEmpty()) {
-    ChestName = TEXT("BP_Chest");
-  }
-
-  FVector Location = FVector::ZeroVector;
-  const TArray<TSharedPtr<FJsonValue>> *LocArr;
-  if (Payload->TryGetArrayField(TEXT("location"), LocArr) && LocArr &&
-      LocArr->Num() >= 3) {
-    Location = FVector((*LocArr)[0]->AsNumber(), (*LocArr)[1]->AsNumber(),
-                       (*LocArr)[2]->AsNumber());
-  }
-
-  bool IsLocked = false;
-  Payload->TryGetBoolField(TEXT("isLocked"), IsLocked);
-
-  FString RequiredKey;
-  Payload->TryGetStringField(TEXT("requiredKey"), RequiredKey);
-
-  int32 MaxItems = 10;
-  Payload->TryGetNumberField(TEXT("maxItems"), MaxItems);
-
-  UWorld *World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-  if (!World) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("No editor world"),
-                        TEXT("NO_WORLD"));
-    return true;
-  }
-
-  FActorSpawnParameters SpawnParams;
-  SpawnParams.Name = FName(*ChestName);
-
-  AActor *ChestActor = World->SpawnActor<AActor>(
-      AActor::StaticClass(), Location, FRotator::ZeroRotator, SpawnParams);
-
-  if (!ChestActor) {
-    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("Failed to spawn chest actor"),
-                        TEXT("SPAWN_FAILED"));
-    return true;
-  }
-
-  // Create chest mesh component
-  UStaticMeshComponent *ChestMesh = NewObject<UStaticMeshComponent>(ChestActor);
-  ChestMesh->RegisterComponent();
-  ChestActor->SetRootComponent(ChestMesh);
-
-  // Add interaction component
-  USceneComponent *InteractionComp = NewObject<USceneComponent>(
-      ChestActor, FName(TEXT("InteractionComponent")));
-  InteractionComp->RegisterComponent();
-
-  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-  Resp->SetStringField(TEXT("chestName"), ChestActor->GetName());
-  Resp->SetBoolField(TEXT("isLocked"), IsLocked);
-  Resp->SetStringField(TEXT("requiredKey"), RequiredKey);
-  Resp->SetNumberField(TEXT("maxItems"), MaxItems);
-  Resp->SetStringField(TEXT("actorPath"), ChestActor->GetPathName());
-  SendAutomationResponse(RequestingSocket, RequestId, true,
-                         TEXT("Chest actor created"), Resp);
-  return true;
-#else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"),
-                      TEXT("NOT_SUPPORTED"));
-  return true;
-#endif
 }

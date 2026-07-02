@@ -14,9 +14,7 @@
 //   - add_meta_sound_output        : Add output node
 //   - set_meta_sound_default       : Set default value
 //
-// Section 3: Sound Classes & Mixes
-//   - create_sound_class           : Create USoundClass
-//   - create_sound_mix             : Create USoundMix
+// Section 3: Sound Classes & Mixes (create_sound_class / create_sound_mix route to McpAutomationBridge_AudioHandlers.cpp)
 //   - configure_sound_class         : Set sound class properties
 //
 // Section 4: Attenuation & Spatialization
@@ -74,7 +72,6 @@
 
 // Audio Factories
 #include "Factories/SoundClassFactory.h"
-#include "Factories/SoundMixFactory.h"
 #include "Factories/SoundAttenuationFactory.h"
 
 // Dialogue
@@ -1293,47 +1290,7 @@ if (SubAction == TEXT("create_metasound"))
     }
     
     // ===== 11.3 Sound Classes & Mixes =====
-    
-    if (SubAction == TEXT("create_sound_class"))
-    {
-        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAudioPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Audio/Classes")), false);
-        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
-        
-        if (Name.IsEmpty())
-        {
-            return McpHandlerUtils::BuildErrorResponse(TEXT("MISSING_NAME"), TEXT("Name is required"));
-        }
-        
-        // Create package and asset directly to avoid UI dialogs
-        // AssetToolsModule.CreateAsset() shows "Overwrite Existing Object" dialogs
-        // which cause recursive FlushRenderingCommands and D3D12 crashes
-        FString PackagePath = Path / Name;
-        UPackage* Package = CreatePackage(*PackagePath);
-        if (!Package)
-        {
-            return McpHandlerUtils::BuildErrorResponse(TEXT("PACKAGE_ERROR"), TEXT("Failed to create package"));
-        }
-        
-        USoundClass* NewClass = NewObject<USoundClass>(Package, FName(*Name), RF_Public | RF_Standalone);
-        if (!NewClass)
-        {
-            return McpHandlerUtils::BuildErrorResponse(TEXT("CREATE_FAILED"), TEXT("Failed to create SoundClass"));
-        }
-        
-        // Set initial properties if provided
-        NewClass->Properties.Volume = static_cast<float>(GetJsonNumberField(Params, TEXT("volume"), 1.0));
-        NewClass->Properties.Pitch = static_cast<float>(GetJsonNumberField(Params, TEXT("pitch"), 1.0));
-        
-        SaveAudioAsset(NewClass, bSave);
-        
-        FString FullPath = NewClass->GetPathName();
-        Response->SetStringField(TEXT("assetPath"), FullPath);
-        McpHandlerUtils::AddVerification(Response, NewClass);
-        Response->SetBoolField(TEXT("success"), true);
-        return Response;
-    }
-    
+
     if (SubAction == TEXT("set_class_properties"))
     {
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
@@ -1417,43 +1374,6 @@ if (SubAction == TEXT("create_metasound"))
 	return Response;
 }
 
-	if (SubAction == TEXT("create_sound_mix"))
-    {
-        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAudioPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Audio/Mixes")), false);
-        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
-        
-        if (Name.IsEmpty())
-        {
-            return McpHandlerUtils::BuildErrorResponse(TEXT("MISSING_NAME"), TEXT("Name is required"));
-        }
-        
-        // Create package and asset directly to avoid UI dialogs
-        FString PackagePath = Path / Name;
-        UPackage* Package = CreatePackage(*PackagePath);
-        if (!Package)
-        {
-            return McpHandlerUtils::BuildErrorResponse(TEXT("PACKAGE_ERROR"), TEXT("Failed to create package"));
-        }
-        
-        USoundMixFactory* Factory = NewObject<USoundMixFactory>();
-        USoundMix* NewMix = Cast<USoundMix>(
-            Factory->FactoryCreateNew(USoundMix::StaticClass(), Package,
-                                      FName(*Name), RF_Public | RF_Standalone,
-                                      nullptr, GWarn));
-        if (!NewMix)
-        {
-            return McpHandlerUtils::BuildErrorResponse(TEXT("CREATE_FAILED"), TEXT("Failed to create SoundMix"));
-        }
-        
-        SaveAudioAsset(NewMix, bSave);
-        
-        FString FullPath = NewMix->GetPathName();
-        Response->SetStringField(TEXT("assetPath"), FullPath);
-        McpHandlerUtils::AddVerification(Response, NewMix);
-        return Response;
-    }
-    
     if (SubAction == TEXT("add_mix_modifier"))
     {
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));

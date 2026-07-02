@@ -5344,7 +5344,7 @@
           "type": "string"
         },
         "folder": {
-          "description": "Path to a directory.",
+          "description": "Destination folder for create_* actions ('path'/'savePath' accepted as aliases; default /Game/Interactables).",
           "type": "string"
         },
         "locked": {

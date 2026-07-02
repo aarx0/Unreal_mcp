@@ -53,9 +53,21 @@ as they land.
 > - **Global response policy:** every mutating handler returns `appliedProperties`/`ignoredParams`
 >   and errors when zero requested changes applied — done in the domains touched above,
 >   not yet a repo-wide convention (overlaps F7 scaffoldOnly markers).
-> - **Schema-from-handler reconciliation test:** diff each McpTool_* declared param set
->   against the handler's actual payload reads (the audit found ~20 drifts by hand; a test
->   keeps them at zero).
+> - ~~Schema-from-handler reconciliation test~~ SHIPPED 2026-07-02:
+>   `tests/schema/param-reconciliation-test.ps1` (offline static, both directions, ~3s;
+>   `-UpdateAllowlist` re-pins). It immediately found **~40 more dead schema params**
+>   (declared, never read by any handler) beyond the audit's hand-found 20 — pinned in
+>   `tests/schema/param-reconciliation-allowlist.txt` and listed there; densest: manage_ai
+>   perception/EQS surface (autoSuccessRange, detectionByAffiliation, searchCenter…, 10),
+>   manage_geometry tuning knobs (weldDistance, hardEdgeAngle, hullCount…, 11), manage_gas
+>   (period, clampMode, setByCallerTag…, 5), and `timeoutMs` declared in 4 tools but read
+>   nowhere. Each needs implement-or-remove triage. The 552 read-but-undeclared pins are the
+>   known undiscoverability backlog (extending-the-bridge gotcha #1), densest in
+>   WidgetAuthoring/Sessions/GameFramework/Skeleton/Texture handlers.
+> - **HandleMiscAction is entirely dead (found 2026-07-02 during the sweep):** declared in
+>   the subsystem header and defined in MiscHandlers.cpp but registered/called nowhere —
+>   the PPV chain inside it was deleted; the remaining function + its branches are
+>   unreachable too. Delete the whole thing next sweep.
 > - **Readback depth pass, remaining:** get_gas_info (attributes/modifiers/cost-cooldown),
 >   get_combat_stats values, get_animation_info (BlendSpace/AnimBP), get_character_info
 >   (mesh/ABP/crouch/sprint), get_mesh_info static-mesh asset branch (LODs/collision/Nanite),
