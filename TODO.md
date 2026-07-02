@@ -18,18 +18,25 @@ as they land.
 > **Architecture review (2026-07-02):** full structural review in
 > [`docs/architecture-review-2026-07-02.md`](docs/architecture-review-2026-07-02.md) — 9 verified
 > findings (F1–F9) + a 10-step incremental refactoring roadmap.
-> **Roadmap steps 1–4 SHIPPED same day** (loud registration + startup routing validation;
-> honest persistence incl. FINALIZE_HOST/Niagara/material-graph saves; deferral inlining +
-> HANDLER_NO_RESPONSE guarantee + HandleAssetAction sub-action dispatch fix; WebSocket/OpenSSL/
-> dead-settings/Pattern-B deletion). Remaining: steps 5–10 (header freeze/extract-on-touch,
-> inline-enum migration, choke-point schema validation + structuredContent + scaffoldOnly,
-> doc sweep + schema snapshot test, drain-one-per-tick + off-thread timeout, module split).
-> Small follow-ups found while shipping: legacy top-level action registrations in
-> InitializeHandlers are unreachable via the 22-tool gate (delete after checking self-tests);
-> manage_audio schema enum is still inline (migrate to a shared list so the startup check
-> covers it); `set_two_sided` lacks PostEditChange (saves but may not recompile);
-> add_landscape_layer's save block computes unused AssetPathStr/DotIndex (leftover);
-> HandleAddMaterialTextureSample/AddMaterialExpression/CreateMaterialNodes save
+> **Roadmap steps 1–9 SHIPPED same day** (2026-07-02, ~17 commits): loud registration +
+> boot routing validation covering all 22 tools on shared lists; honest persistence
+> (FINALIZE_HOST/Niagara/material-graph saves, observed verification); deferral inlining +
+> HANDLER_NO_RESPONSE guarantee; WebSocket/OpenSSL/dead-settings/Pattern-B/105-legacy-
+> registration deletion; helpers-header de-inversion; warn-first schema validation of
+> tools/call args (promote to INVALID_PARAMS rejection once the warnings prove quiet);
+> schema snapshot test (`tests/schema/`); drain-one-per-tick; slow-request Warning;
+> accept-thread stale-request reaper + 64-park cap; widget bind transaction
+> Cancel-on-error; honest gameplay tool descriptions; handler-mapping.md regenerated.
+> Newly found + fixed along the way: manage_asset's gated sub-handlers received the wrong
+> action string (fixup_redirectors/bulk_*/source-control/find_by_tag never worked via the
+> native gate); system_control's screenshot/create_widget/add_widget_child/
+> get_project_settings/set_project_setting were schema-advertised but unroutable.
+> Still open from the review: structuredContent emission + error-code constants header +
+> alias freeze (F7); per-action scaffoldOnly response markers; widget recipe
+> swap-on-success + broader transaction coverage (F8); replace ~14 blind
+> FPlatformProcess::Sleep stability delays; serialize responses on the write thread;
+> shutdown drain hard cap; module split (step 10, deferred by design); and
+> HandleAddMaterialTextureSample/AddMaterialExpression/CreateMaterialNodes still save
 > unconditionally (ignore save:false).
 
 ## Roadmap — missing / incomplete capabilities
