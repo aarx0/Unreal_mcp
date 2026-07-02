@@ -22,6 +22,9 @@ public:
 	/** Get the singleton instance (Meyer's singleton). */
 	static FMcpToolRegistry& Get();
 
+	/** The allowlist of tool names Register() accepts. Startup validation checks all are present. */
+	static const TSet<FString>& GetCanonicalToolNames();
+
 	/** Register a tool definition. Called at static init time by FMcpToolAutoRegistrar. */
 	void Register(FMcpToolDefinition* Tool);
 

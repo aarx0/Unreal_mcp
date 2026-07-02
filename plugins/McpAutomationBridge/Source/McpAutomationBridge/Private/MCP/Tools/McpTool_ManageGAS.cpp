@@ -1,4 +1,4 @@
-// McpTool_ManageGAS.cpp — manage_gas tool definition (27 actions)
+// McpTool_ManageGAS.cpp — manage_gas tool definition
 
 #include "McpVersionCompatibility.h"
 #include "MCP/McpToolDefinition.h"
@@ -49,7 +49,10 @@ public:
 				TEXT("set_cue_effects"),
 				TEXT("add_tag_to_asset"),
 				TEXT("get_gas_info"),
-				TEXT("get_attribute")
+				TEXT("get_attribute"),
+				TEXT("create_ability_set"),
+				TEXT("add_ability"),
+				TEXT("create_execution_calculation")
 			}, TEXT("GAS action to perform."))
 			.String(TEXT("name"), TEXT("Name of the asset to create."))
 			.String(TEXT("actorName"), TEXT("get_attribute: live PIE actor to read (object name or label; defaults to the player pawn)."))
@@ -190,6 +193,10 @@ public:
 			.String(TEXT("cameraShakePath"), TEXT("Path to camera shake asset."))
 			.String(TEXT("decalPath"), TEXT("Path to decal material."))
 			.String(TEXT("tagName"), TEXT("Name of the tag."))
+			.String(TEXT("setPath"), TEXT("create_ability_set/add_ability: path of the ability-set data asset. "
+				"Note: create_ability_set scaffolds a PrimaryDataAsset blueprint with GrantedAbilities/"
+				"GrantedEffects/GrantedTags variables; it is not an engine ability-set type."))
+			.String(TEXT("setName"), TEXT("create_ability_set: display name stored on the set."))
 			.Required({TEXT("action")})
 			.Build();
 	}

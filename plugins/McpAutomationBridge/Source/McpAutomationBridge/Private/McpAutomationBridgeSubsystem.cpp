@@ -7,6 +7,7 @@
 #include "McpAutomationBridgeSubsystem.h"
 #include "MCP/McpNativeTransport.h"
 #include "MCP/McpConsolidatedActionRouting.h"
+#include "MCP/McpStartupValidation.h"
 #include "HAL/PlatformTLS.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/AutomationTest.h" // OnTestEndEvent unbind in Deinitialize (TDD runner)
@@ -880,18 +881,32 @@ void UMcpAutomationBridgeSubsystem::RecordAutomationTelemetry(
 /**
  * @brief Registers an automation action handler for the given action string.
  *
- * If a non-empty handler is provided, stores it under Action (replacing any
- * existing handler for the same key). If Handler is null/invalid, the call is a
- * no-op.
+ * Null handlers and duplicate action keys are programmer errors: both are
+ * logged as errors and ensure, so a bad registration is visible at editor boot
+ * instead of surfacing as UNKNOWN_ACTION (or the wrong handler) at request
+ * time. A duplicate key keeps the first registration.
  *
  * @param Action The action identifier string used to look up the handler.
  * @param Handler Callable invoked when the specified action is requested.
  */
 void UMcpAutomationBridgeSubsystem::RegisterHandler(
     const FString &Action, FAutomationHandler Handler) {
-  if (Handler) {
-    AutomationHandlers.Add(Action, Handler);
+  if (!Handler) {
+    UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
+           TEXT("RegisterHandler: null handler for action '%s' ignored."),
+           *Action);
+    ensureMsgf(false, TEXT("Null automation handler for '%s'"), *Action);
+    return;
   }
+  if (AutomationHandlers.Contains(Action)) {
+    UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
+           TEXT("RegisterHandler: action '%s' registered twice; keeping the "
+                "first handler."),
+           *Action);
+    ensureMsgf(false, TEXT("Duplicate automation handler for '%s'"), *Action);
+    return;
+  }
+  AutomationHandlers.Add(Action, Handler);
 }
 
 /**
@@ -1151,21 +1166,7 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                       return HandleManageWidgetAuthoringAction(
                           R, TEXT("manage_widget_authoring"), P, S);
                     }
-                    static const TSet<FString> GraphSubActions = {
-                        TEXT("create_node"),       TEXT("delete_node"),
-                        TEXT("connect_pins"),      TEXT("break_pin_links"),
-                        TEXT("set_node_property"), TEXT("create_reroute_node"),
-                        TEXT("get_node_details"),  TEXT("get_graph_details"),
-                        TEXT("get_pin_details"),   TEXT("list_node_types"),
-                        TEXT("set_pin_default_value"), TEXT("arrange_graph"),
-                        // Wave 6B Path-a AnimBP graph discovery actions —
-                        // implemented in HandleBlueprintGraphAction (early
-                        // dispatch L691/831) but were missing from this routing
-                        // set, so manage_blueprint requests fell through to
-                        // HandleBlueprintAction and returned UNKNOWN_ACTION.
-                        TEXT("list_animbp_graphs"),
-                        TEXT("get_transition_rule_graph")};
-                    if (GraphSubActions.Contains(SubAction)) {
+                    if (McpConsolidatedActions::IsBlueprintGraphAction(SubAction)) {
                       return HandleBlueprintGraphAction(R, A, P, S);
                     }
                     return HandleBlueprintAction(R, A, P, S);
@@ -1344,6 +1345,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                   });
 
 #undef MCP_REGISTER_HANDLER
+
+  McpStartupValidation::ValidateActionRouting();
 }
 
 // Drain and process any automation requests that were enqueued while the

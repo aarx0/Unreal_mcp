@@ -1202,12 +1202,51 @@ void FMcpNativeTransport::HandleToolsCall(
 		bool bActionSuccess = false;
 		if (Result.IsValid()) { Result->TryGetBoolField(TEXT("success"), bActionSuccess); }
 		FString ActionMessage = TEXT("OK");
-		if (!bActionSuccess && Result.IsValid())
+		if (Result.IsValid())
 		{
-			Result->TryGetStringField(TEXT("error"), ActionMessage);
+			if (!bActionSuccess)
+			{
+				Result->TryGetStringField(TEXT("error"), ActionMessage);
+			}
+			else
+			{
+				// Partial outcomes (unknown names, protected tools) must be visible in
+				// the summary line, not just buried in the payload.
+				auto AppendNames = [&Result, &ActionMessage](const TCHAR* Field, const TCHAR* Label)
+				{
+					const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+					if (Result->TryGetArrayField(Field, Arr) && Arr && Arr->Num() > 0)
+					{
+						TArray<FString> Names;
+						for (const TSharedPtr<FJsonValue>& V : *Arr)
+						{
+							FString S;
+							if (V->TryGetString(S)) { Names.Add(S); }
+						}
+						ActionMessage += FString::Printf(TEXT(" %s: %s."), Label, *FString::Join(Names, TEXT(", ")));
+					}
+				};
+				AppendNames(TEXT("notFound"), TEXT("Not found"));
+				AppendNames(TEXT("protected"), TEXT("Protected (unchanged)"));
+			}
 		}
 		TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
 			bActionSuccess, ActionMessage, Result);
+		FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
+		SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
+		ClientSocket->Close();
+		if (SocketSub) SocketSub->DestroySocket(ClientSocket);
+		return;
+	}
+
+	// Unknown names get UNKNOWN_TOOL, not TOOL_DISABLED: a manage_tools enable
+	// cannot fix a typo, and steering a client toward one masks the real error.
+	if (!FMcpToolRegistry::Get().FindTool(ToolName))
+	{
+		TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
+			false,
+			FString::Printf(TEXT("Unknown tool '%s'. Use tools/list to see available tools."), *ToolName),
+			nullptr, TEXT("UNKNOWN_TOOL"));
 		FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
 		SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
 		ClientSocket->Close();

@@ -4,9 +4,9 @@
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpToolDefinition.h"
 
-namespace
-{
-bool IsCanonicalMcpToolName(const FString& Name)
+DEFINE_LOG_CATEGORY_STATIC(LogMcpToolRegistry, Log, All);
+
+const TSet<FString>& FMcpToolRegistry::GetCanonicalToolNames()
 {
 	static const TSet<FString> CanonicalToolNames = {
 		TEXT("manage_tools"),
@@ -33,8 +33,7 @@ bool IsCanonicalMcpToolName(const FString& Name)
 		TEXT("manage_level_structure")
 	};
 
-	return CanonicalToolNames.Contains(Name);
-}
+	return CanonicalToolNames;
 }
 
 FMcpToolRegistry& FMcpToolRegistry::Get()
@@ -45,21 +44,35 @@ FMcpToolRegistry& FMcpToolRegistry::Get()
 
 void FMcpToolRegistry::Register(FMcpToolDefinition* Tool)
 {
-	if (!Tool)
+	if (!ensureMsgf(Tool, TEXT("McpToolRegistry: Register called with null tool")))
 	{
 		return;
 	}
 
 	FScopeLock Lock(&CacheMutex);
 	const FString Name = Tool->GetName();
-	if (!IsCanonicalMcpToolName(Name))
+	if (!GetCanonicalToolNames().Contains(Name))
 	{
+		UE_LOG(LogMcpToolRegistry, Error,
+			TEXT("Tool '%s' rejected: not in the canonical tool-name allowlist. "
+				"Add it to FMcpToolRegistry::GetCanonicalToolNames or it will never appear in tools/list."),
+			*Name);
+		ensureMsgf(false, TEXT("Non-canonical MCP tool name '%s'"), *Name);
 		return;
 	}
 
-	if (ToolsByName.Contains(Name))
+	if (FMcpToolDefinition* const* Existing = ToolsByName.Find(Name))
 	{
-		return; // Already registered (possible with unity builds reloading)
+		// Re-registration of the same static instance is benign (unity builds reloading);
+		// a different instance under the same name means two tool .cpps collide.
+		if (*Existing != Tool)
+		{
+			UE_LOG(LogMcpToolRegistry, Error,
+				TEXT("Tool name '%s' registered by two different tool definitions; keeping the first."),
+				*Name);
+			ensureMsgf(false, TEXT("Duplicate MCP tool name '%s'"), *Name);
+		}
+		return;
 	}
 
 	Tools.Add(Tool);

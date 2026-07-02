@@ -50,6 +50,10 @@ inline bool ContainsAction(const TArray<FString>& Actions, const FString& Action
 	return Actions.Contains(Action);
 }
 
+// Core lists name the actions owned by the tool's fallthrough handler. They must
+// stay disjoint from the routed family lists below: the registration lambdas test
+// families first, so a name in both silently shadows the core implementation.
+// Startup validation (McpStartupValidation.cpp) enforces this at editor boot.
 inline const TArray<FString>& ManageAssetCore()
 {
 	static const TArray<FString> Actions = {
@@ -62,7 +66,6 @@ inline const TArray<FString>& ManageAssetCore()
 		TEXT("get_asset_graph"), TEXT("create_thumbnail"), TEXT("set_tags"),
 		TEXT("get_metadata"), TEXT("set_metadata"), TEXT("validate"),
 		TEXT("fixup_redirectors"), TEXT("find_by_tag"), TEXT("generate_report"),
-		TEXT("create_material"), TEXT("create_material_instance"),
 		TEXT("create_data_table"), TEXT("add_data_table_row"),
 		TEXT("edit_data_table_row"), TEXT("remove_data_table_row"),
 		TEXT("get_data_table_rows"), TEXT("import_data_table"),
@@ -71,10 +74,7 @@ inline const TArray<FString>& ManageAssetCore()
 		TEXT("reset_instance_parameters"), TEXT("exists"),
 		TEXT("get_material_stats"), TEXT("nanite_rebuild_mesh"),
 		TEXT("bulk_rename"), TEXT("bulk_delete"),
-		TEXT("source_control_checkout"), TEXT("source_control_submit"),
-		TEXT("add_material_node"), TEXT("connect_material_pins"),
-		TEXT("remove_material_node"), TEXT("break_material_connections"),
-		TEXT("get_material_node_details"), TEXT("rebuild_material")
+		TEXT("source_control_checkout"), TEXT("source_control_submit")
 	};
 	return Actions;
 }
@@ -155,12 +155,22 @@ inline const TArray<FString>& ManageBlueprintCore()
 		TEXT("remove_function"),
 		TEXT("add_event"), TEXT("remove_event"),
 		TEXT("add_construction_script"), TEXT("set_variable_metadata"),
-		TEXT("set_metadata"), TEXT("create_node"), TEXT("add_node"),
-		TEXT("delete_node"), TEXT("connect_pins"), TEXT("break_pin_links"),
+		TEXT("set_metadata"), TEXT("add_node")
+	};
+	return Actions;
+}
+
+// Routed to HandleBlueprintGraphAction by the manage_blueprint registration lambda.
+inline const TArray<FString>& BlueprintGraph()
+{
+	static const TArray<FString> Actions = {
+		TEXT("create_node"), TEXT("delete_node"),
+		TEXT("connect_pins"), TEXT("break_pin_links"),
 		TEXT("set_node_property"), TEXT("create_reroute_node"),
 		TEXT("get_node_details"), TEXT("get_graph_details"),
 		TEXT("get_pin_details"), TEXT("list_node_types"),
-		TEXT("set_pin_default_value"), TEXT("arrange_graph")
+		TEXT("set_pin_default_value"), TEXT("arrange_graph"),
+		TEXT("list_animbp_graphs"), TEXT("get_transition_rule_graph")
 	};
 	return Actions;
 }
@@ -236,6 +246,7 @@ inline const TArray<FString>& CommonUi()
 inline TArray<FString> ManageBlueprint()
 {
 	TArray<FString> Actions = ManageBlueprintCore();
+	AppendUniqueActions(Actions, BlueprintGraph());
 	AppendUniqueActions(Actions, WidgetAuthoring());
 	AppendUniqueActions(Actions, CommonUi());
 	return Actions;
@@ -306,29 +317,14 @@ inline TArray<FString> BuildEnvironment()
 inline const TArray<FString>& AnimationPhysicsCore()
 {
 	static const TArray<FString> Actions = {
-		TEXT("create_animation_blueprint"), TEXT("create_animation_bp"),
-		TEXT("create_anim_blueprint"), TEXT("create_blend_space"),
-		TEXT("create_blend_space_1d"), TEXT("create_blend_space_2d"),
-		TEXT("create_blend_tree"), TEXT("create_procedural_anim"),
-		TEXT("create_aim_offset"), TEXT("add_aim_offset_sample"),
-		TEXT("create_state_machine"), TEXT("add_state_machine"),
-		TEXT("add_state"), TEXT("add_transition"),
-		TEXT("set_transition_rules"), TEXT("add_blend_node"),
-		TEXT("add_cached_pose"), TEXT("add_slot_node"),
-		TEXT("create_control_rig"), TEXT("create_ik_rig"),
+		TEXT("create_blend_space"), TEXT("create_blend_tree"),
+		TEXT("create_procedural_anim"), TEXT("create_state_machine"),
 		TEXT("setup_ik"), TEXT("create_pose_library"),
-		TEXT("create_animation_asset"), TEXT("create_animation_sequence"),
-		TEXT("set_sequence_length"), TEXT("add_bone_track"),
-		TEXT("set_bone_key"), TEXT("set_curve_key"), TEXT("create_montage"),
-		TEXT("add_montage_section"), TEXT("add_montage_slot"),
-		TEXT("set_section_timing"), TEXT("add_montage_notify"),
-		TEXT("set_blend_in"), TEXT("set_blend_out"), TEXT("link_sections"),
-		TEXT("add_notify"), TEXT("play_montage"),
+		TEXT("create_animation_asset"), TEXT("play_montage"),
 		TEXT("play_anim_montage"), TEXT("setup_ragdoll"),
 		TEXT("activate_ragdoll"), TEXT("configure_vehicle"),
-		TEXT("setup_physics_simulation"), TEXT("add_blend_sample"),
-		TEXT("set_axis_settings"), TEXT("set_interpolation_settings"),
-		TEXT("setup_retargeting"), TEXT("cleanup")
+		TEXT("setup_physics_simulation"), TEXT("setup_retargeting"),
+		TEXT("cleanup")
 	};
 	return Actions;
 }
@@ -422,7 +418,6 @@ inline const TArray<FString>& SystemControlCore()
 	// subscribe/unsubscribe/spawn_category/lumen_update_scene are now routed
 	// in the system_control registry lambda (McpAutomationBridgeSubsystem.cpp).
 	static const TArray<FString> Actions = {
-		TEXT("show_fps"),
 		TEXT("screenshot"),
 		TEXT("execute_command"), TEXT("console_command"), TEXT("run_ubt"),
 		TEXT("run_tests"), TEXT("list_tests"), TEXT("get_test_results"),
@@ -660,6 +655,7 @@ inline TArray<FString> ManageAI()
 
 inline bool IsMaterialAuthoringAction(const FString& Action) { return ContainsAction(MaterialAuthoring(), Action); }
 inline bool IsTextureAction(const FString& Action) { return ContainsAction(Texture(), Action); }
+inline bool IsBlueprintGraphAction(const FString& Action) { return ContainsAction(BlueprintGraph(), Action); }
 inline bool IsWidgetAuthoringAction(const FString& Action) { return ContainsAction(WidgetAuthoring(), Action); }
 inline bool IsCommonUiAction(const FString& Action) { return ContainsAction(CommonUi(), Action); }
 inline bool IsAnimationAuthoringAction(const FString& Action) { return ContainsAction(AnimationAuthoring(), Action); }
@@ -674,4 +670,59 @@ inline bool IsSessionAction(const FString& Action) { return ContainsAction(Sessi
 inline bool IsVolumeAction(const FString& Action) { return ContainsAction(Volumes(), Action); }
 inline bool IsBehaviorTreeAction(const FString& Action) { return ContainsAction(BehaviorTree(), Action); }
 inline bool IsNavigationAction(const FString& Action) { return ContainsAction(Navigation(), Action); }
+
+// ─── Routing introspection ───────────────────────────────────────────────────
+// Mirrors what each tool's registration lambda tests, in test order, so startup
+// validation can prove: no action is claimed by two routed families, no routed
+// family shadows the core (fallthrough) list, and shared schema enums match the
+// published schema. When a registration lambda in InitializeHandlers gains or
+// loses a family test, this table must change with it.
+
+struct FMcpRoutedFamily
+{
+	const TCHAR* Name;
+	const TArray<FString>& (*List)();
+};
+
+struct FMcpToolRouting
+{
+	const TCHAR* ToolName;
+	TArray<FMcpRoutedFamily> RoutedFamilies;   // membership tests, in lambda order
+	const TArray<FString>& (*CoreActions)();   // fallthrough handler's actions (null = not listed)
+	TArray<FString> (*SchemaUnion)();          // shared schema enum (null = facade declares inline)
+};
+
+inline const TArray<FMcpToolRouting>& GetToolRoutingTable()
+{
+	static const TArray<FMcpToolRouting> Table = {
+		{ TEXT("manage_asset"),
+		  { { TEXT("MaterialAuthoring"), &MaterialAuthoring }, { TEXT("Texture"), &Texture } },
+		  &ManageAssetCore, &ManageAsset },
+		{ TEXT("manage_blueprint"),
+		  { { TEXT("CommonUi"), &CommonUi }, { TEXT("WidgetAuthoring"), &WidgetAuthoring },
+		    { TEXT("BlueprintGraph"), &BlueprintGraph } },
+		  &ManageBlueprintCore, &ManageBlueprint },
+		{ TEXT("build_environment"),
+		  { { TEXT("Lighting"), &Lighting }, { TEXT("Splines"), &Splines } },
+		  &BuildEnvironmentCore, &BuildEnvironment },
+		{ TEXT("animation_physics"),
+		  { { TEXT("AnimationAuthoring"), &AnimationAuthoring }, { TEXT("Skeleton"), &Skeleton } },
+		  &AnimationPhysicsCore, &AnimationPhysics },
+		{ TEXT("system_control"),
+		  { { TEXT("Performance"), &Performance } },
+		  &SystemControlCore, &SystemControl },
+		{ TEXT("manage_networking"),
+		  { { TEXT("Input"), &Input }, { TEXT("GameFramework"), &GameFramework },
+		    { TEXT("Sessions"), &Sessions } },
+		  &ManageNetworkingCore, &ManageNetworking },
+		{ TEXT("manage_level_structure"),
+		  { { TEXT("Volumes"), &Volumes } },
+		  &ManageLevelStructureCore, &ManageLevelStructure },
+		{ TEXT("manage_ai"), {}, &ManageAICore, &ManageAI },
+		{ TEXT("manage_audio"),
+		  { { TEXT("AudioAuthoring"), &AudioAuthoring } },
+		  nullptr, nullptr },
+	};
+	return Table;
+}
 }
