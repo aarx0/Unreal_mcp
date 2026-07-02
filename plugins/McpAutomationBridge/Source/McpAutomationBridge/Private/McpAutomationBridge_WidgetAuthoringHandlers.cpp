@@ -3469,8 +3469,10 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
             return true;
         }
 
-        // Group all graph mutations (event node + wiring + compile) as one undo unit.
-        const FScopedTransaction Transaction(FText::FromString(
+        // Group all graph mutations (event node + wiring + compile) as one undo
+        // unit. Non-const so error paths can Cancel() and roll back partial
+        // mutations instead of committing them to the undo stack.
+        FScopedTransaction Transaction(FText::FromString(
             bHoveredVariant ? TEXT("Bind On Hovered") : TEXT("Bind On Clicked")));
         const UEdGraphSchema_K2* K2 = GetDefault<UEdGraphSchema_K2>();
 
@@ -3478,6 +3480,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
         bool bMadeVariable = false;
         if (!Widget->bIsVariable)
         {
+            Widget->Modify();
             Widget->bIsVariable = true;
             bMadeVariable = true;
             FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
@@ -3488,6 +3491,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
             FindFProperty<FMulticastDelegateProperty>(Widget->GetClass(), FName(*DelegateName));
         if (!DelegateProp)
         {
+            Transaction.Cancel();
             SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Delegate '%s' not found on widget '%s' (class %s)"),
                     *DelegateName, *SlotName, *Widget->GetClass()->GetName()),
@@ -3512,6 +3516,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
         }
         if (!WidgetVarProp)
         {
+            Transaction.Cancel();
             SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Could not resolve widget variable property for '%s'"), *SlotName),
                 TEXT("WIDGET_VAR_NOT_FOUND"));
@@ -3520,6 +3525,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
 
         if (WidgetBP->UbergraphPages.Num() == 0)
         {
+            Transaction.Cancel();
             SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no event graph"), TEXT("NO_EVENT_GRAPH"));
             return true;
         }
@@ -3673,14 +3679,16 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
             }
         }
 
-        // Group all graph mutations (event node + live-update chain + compile) as one undo unit.
-        const FScopedTransaction Transaction(FText::FromString(TEXT("Bind On Value Changed")));
+        // Group all graph mutations (event node + live-update chain + compile)
+        // as one undo unit. Non-const so error paths can Cancel() and roll back
+        // partial mutations instead of committing them to the undo stack.
+        FScopedTransaction Transaction(FText::FromString(TEXT("Bind On Value Changed")));
         const UEdGraphSchema_K2* K2 = GetDefault<UEdGraphSchema_K2>();
 
         // Any widget referenced by a graph node must be a variable.
         bool bMadeVariable = false;
-        if (!Widget->bIsVariable) { Widget->bIsVariable = true; bMadeVariable = true; }
-        if (TextWidget && !TextWidget->bIsVariable) { TextWidget->bIsVariable = true; bMadeVariable = true; }
+        if (!Widget->bIsVariable) { Widget->Modify(); Widget->bIsVariable = true; bMadeVariable = true; }
+        if (TextWidget && !TextWidget->bIsVariable) { TextWidget->Modify(); TextWidget->bIsVariable = true; bMadeVariable = true; }
         if (bMadeVariable) FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
 
         // The value-changed multicast delegate lives on the widget's own class.
@@ -3688,6 +3696,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
             FindFProperty<FMulticastDelegateProperty>(Widget->GetClass(), FName(*DelegateName));
         if (!DelegateProp)
         {
+            Transaction.Cancel();
             SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Delegate '%s' not found on widget '%s' (class %s)"),
                     *DelegateName, *SlotName, *Widget->GetClass()->GetName()),
@@ -3713,6 +3722,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
         }
         if (!SliderVarProp)
         {
+            Transaction.Cancel();
             SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Could not resolve widget variable property for '%s'"), *SlotName),
                 TEXT("WIDGET_VAR_NOT_FOUND"));
@@ -3720,6 +3730,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
         }
         if (TextWidget && !TextVarProp)
         {
+            Transaction.Cancel();
             SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Could not resolve widget variable property for targetText '%s'"), *TargetText),
                 TEXT("WIDGET_VAR_NOT_FOUND"));
@@ -3728,6 +3739,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
 
         if (WidgetBP->UbergraphPages.Num() == 0)
         {
+            Transaction.Cancel();
             SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no event graph"), TEXT("NO_EVENT_GRAPH"));
             return true;
         }
