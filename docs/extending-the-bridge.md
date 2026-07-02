@@ -153,6 +153,16 @@ engine-error capture and added client-visible latency).
    #   LogMcpStartupValidation: Action routing validation passed (...)
    ```
 
+6. **Run the schema tests.** `tests/schema/schema-snapshot-test.ps1` diffs the live
+   `tools/list` against a checked-in golden (needs the bridge up; `-UpdateGolden`
+   re-pins). `tests/schema/param-reconciliation-test.ps1` is offline: it parses the
+   `McpTool_*.cpp` schema builders and the handler sources and fails on params
+   declared but never read, or read off the request payload but never declared —
+   both directions of the drift the 2026-07-02 dogfood audit found. Matching is
+   repo-global by name (v1); pre-existing exceptions live in
+   `tests/schema/param-reconciliation-allowlist.txt` (`-UpdateAllowlist` re-pins).
+   Prefer fixing the schema over growing the allowlist.
+
 ---
 
 ## Gotchas (learned the hard way)
