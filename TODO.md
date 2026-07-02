@@ -72,6 +72,13 @@ as they land.
 >   handlers are in AudioHandlers.cpp) — same sweep.
 > - **MiscHandlers dead HandleCreatePostProcessVolume (found in passing, 2026-07-02):** declared
 >   in the subsystem header but never registered with any tool route — same sweep.
+> - **UNKNOWN_ACTION echoes the tool name, not the sub-action (found 2026-07-02):**
+>   `manage_asset {action:'save_all'}` → "Unknown automation action: manage_asset" — the
+>   consolidated lambda falls through with the dispatch (tool) name; the message should name
+>   the unrecognized sub-action. Repro: any unlisted action on a consolidated tool.
+> - **No save-all / per-asset save action (found 2026-07-02):** shutting down with dirty
+>   scratch packages requires per-domain workarounds (delete in-memory assets, compile+save
+>   BPs); a `manage_asset save` (assetPath) + `save_all` would close the gap.
 > - Flat per-tool param pools still lack per-action docs (manage_combat ~90 params); tool
 >   descriptions for manage_asset (DataTables + material/texture authoring) and manage_effect
 >   (level-mutating vs asset-authoring actions) still undersell/mislead.
