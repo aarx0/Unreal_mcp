@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Architecture-review hardening (2026-07-02, review in `docs/architecture-review-2026-07-02.md`)
+
+- **Boot-time action-routing validation** (`McpStartupValidation`) — every canonical tool must register; shared list duplicates, routed-family overlaps, family/core shadowing, and schema/union drift all fail loudly at editor start. All 22 tool schemas now come from shared lists in `McpConsolidatedActionRouting.h`.
+- **Loud registration + honest tool errors** — silently-dropped tool/handler registrations now error+ensure; unknown tool names return `UNKNOWN_TOOL` instead of `TOOL_DISABLED`; `manage_tools` summaries surface `notFound`/`protected`.
+- **Honest persistence** — a throttled save can no longer report success while leaving a dirty package unsaved; material graph edits (FINALIZE_HOST + 12 legacy sites + 6 manage_material_graph sites) and all 32 Niagara `save:true` sites now write to disk; `AddAssetVerification` reports observed `existsOnDisk`/`unsavedChanges`; failed saves escalate to `ENGINE_ERROR` via the log capture.
+- **Exactly-one-response guarantee** — the 10 `AsyncTask(GameThread)` re-queue completions were inlined; a consuming handler that neither responds nor calls `MarkRequestDeferred` gets an immediate `HANDLER_NO_RESPONSE` instead of the 300s reaper; `ERequestOrigin::WebSocket` renamed `Unspecified`; unroutable responses log at Error.
+- **manage_asset sub-action dispatch fixed** — `fixup_redirectors`, `bulk_rename`/`bulk_delete`, source-control actions, `find_by_tag`, `analyze_graph`, `nanite_rebuild_mesh` had never worked through the native tool gate (gated sub-handlers received the raw tool name and declined); previously-unadvertised implemented actions added to schemas (`manage_gas` create_ability_set/add_ability/create_execution_calculation; `manage_blueprint` list_animbp_graphs/get_transition_rule_graph).
+- **Dead WebSocket transport deleted** — `FMcpBridgeWebSocket` (~2,100 lines) + OpenSSL/SSL deps, 19 dead WS-era settings, Pattern B dispatch, `OnToolsChanged`, notification builders, phantom PCH, and the two game-thread-sleeping protocol self-tests are gone; handler signatures thread the inert `FMcpResponseHandle` alias; `docs/pull-architecture.md` is DONE.
+- **Build-graph de-inversion** — `McpAutomationBridgeHelpers.h` no longer includes the subsystem header (envelope senders moved to `McpResponseHelpers.h`; `FMcpResponseHandle` + log category live in `McpAutomationBridgeGlobals.h`); extension guide documents the subsystem-header freeze.
+- **Operational polish** — warn-first schema validation of tools/call arguments (missing required fields, out-of-enum values); one queued request drained per tick instead of the whole queue; slow handlers (>1s) log a Warning; the screenshot handler restores `bThrottleCPUWhenNotForeground`; the log-capture ring only attaches when the bridge is enabled.
+- **Schema snapshot test** — `tests/schema/schema-snapshot-test.ps1` pins the published tools/list contract against a checked-in golden (`-UpdateGolden` to re-pin intentionally).
+
 ### Added
 
 - **`manage_behavior_tree.add_subnode` action** — authors decorators and services as subnodes attached to root/composite/task graph nodes (rather than as standalone graph nodes). Supports `parentNodeId="root"` sentinel for top-level decorators that populate `UBehaviorTree::RootDecorators` after editor compile. Validates subnode UClass against `UBTDecorator` / `UBTService` and rejects Services on the root graph node (`INVALID_PARENT_FOR_SUBNODE`).
