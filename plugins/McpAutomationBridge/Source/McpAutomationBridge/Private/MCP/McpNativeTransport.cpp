@@ -372,8 +372,34 @@ uint32 FMcpNativeTransport::Run()
 	UE_LOG(LogMcpNativeTransport, Verbose,
 		TEXT("Accept loop started on port %d"), ListenPort);
 
+	double LastAcceptThreadSweepSeconds = 0.0;
 	while (!bStopping.load())
 	{
+		// Timed wait instead of a blocking Accept so this thread can also run
+		// the stale-request sweep. The game-thread sweep (Tick) starves during
+		// blocking modals and long synchronous handlers — exactly when parked
+		// requests need to time out — so this thread is the reliable reaper.
+		bool bHasPendingConnection = false;
+		if (!ListenSocket->WaitForPendingConnection(bHasPendingConnection, FTimespan::FromSeconds(1.0)))
+		{
+			if (bStopping.load())
+			{
+				break;
+			}
+			FPlatformProcess::Sleep(0.25f);
+		}
+
+		if (FPlatformTime::Seconds() - LastAcceptThreadSweepSeconds > 5.0)
+		{
+			LastAcceptThreadSweepSeconds = FPlatformTime::Seconds();
+			CleanupStaleRequests();
+		}
+
+		if (!bHasPendingConnection)
+		{
+			continue;
+		}
+
 		FSocket* ClientSocket = ListenSocket->Accept(TEXT("McpNativeHTTPClient"));
 
 		if (bStopping.load() || !ListenSocket)
@@ -1349,6 +1375,21 @@ void FMcpNativeTransport::HandleToolsCall(
 
 	{
 		FScopeLock Lock(&PendingConnectionsMutex);
+		// One local client sending serial requests should never approach this;
+		// a runaway or misbehaving client must not grow the map unboundedly
+		// while the game thread is stalled.
+		constexpr int32 MaxParkedRequests = 64;
+		if (PendingConnections.Num() >= MaxParkedRequests)
+		{
+			FString ErrorBody = FMcpJsonRpc::BuildError(
+				Id, FMcpJsonRpc::ErrorInternalError,
+				FString::Printf(TEXT("Too many requests in flight (%d parked); retry later"),
+					PendingConnections.Num()));
+			SendHttpResponse(ClientSocket, 503, TEXT("application/json"), ErrorBody, {}, CorsOrigin);
+			ClientSocket->Close();
+			if (SocketSub) SocketSub->DestroySocket(ClientSocket);
+			return;
+		}
 		TSharedPtr<FPendingConnection> Conn = MakeShared<FPendingConnection>();
 		Conn->Socket = ClientSocket;
 		Conn->JsonRpcId = Id;
@@ -1428,10 +1469,6 @@ bool FMcpNativeTransport::CompletePendingRequest(
 		return true;  // Already cleaned up
 	}
 
-	// Signal any snapshot holders (e.g. BroadcastToolsListChanged) that
-	// this connection is being torn down — prevents them from attempting writes.
-	Conn->bMarkedForRemoval.store(true);
-
 	// Build final JSON-RPC result (cheap, no I/O)
 	TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
 		bSuccess, Message, Result, ErrorCode);
@@ -1501,24 +1538,30 @@ void FMcpNativeTransport::CleanupStaleRequests()
 		FScopeLock Lock(&PendingConnectionsMutex);
 		for (const auto& [RequestId, Conn] : PendingConnections)
 		{
-			if (Conn.IsValid() && (Now - Conn->StartTime > RequestTimeoutSeconds
-				|| Conn->bMarkedForRemoval.load()))
+			if (Conn.IsValid() && Now - Conn->StartTime > RequestTimeoutSeconds)
 			{
 				Expired.Add(RequestId);
 			}
 		}
 	}
 
+	// Slate introspection is game-thread-only; the accept-thread sweep (which
+	// fires exactly when the game thread is stalled) reports that instead.
+	const bool bGameThread = IsInGameThread();
 	const bool bAnyExpired = Expired.Num() > 0;
-	const FString ActiveModal = bAnyExpired ? McpDescribeActiveModalWindow() : FString();
-	const bool bSlateAppActive = FSlateApplication::IsInitialized() && FSlateApplication::Get().IsActive();
+	const FString ActiveModal =
+		!bAnyExpired ? FString()
+		: bGameThread ? McpDescribeActiveModalWindow()
+		              : TEXT("<unknown: game thread stalled; swept from accept thread>");
+	const bool bSlateAppActive = bGameThread && FSlateApplication::IsInitialized() &&
+		FSlateApplication::Get().IsActive();
 	for (const FString& RequestId : Expired)
 	{
 		UE_LOG(LogMcpNativeTransport, Warning,
 			TEXT("Parked request %s timed out after %.0f seconds "
 			     "(activeModal: %s, slateAppActive: %s)"),
 			*RequestId, RequestTimeoutSeconds, *ActiveModal,
-			bSlateAppActive ? TEXT("true") : TEXT("false"));
+			bGameThread ? (bSlateAppActive ? TEXT("true") : TEXT("false")) : TEXT("n/a"));
 		CompletePendingRequest(RequestId, false, TEXT("Request timed out"),
 			nullptr, TEXT("TIMEOUT"));
 	}

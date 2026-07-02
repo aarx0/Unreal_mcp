@@ -88,7 +88,6 @@ private:
 		FString SessionId;   // for touching ActiveSessions
 		FString CorsOrigin;  // preserved from the request for the response headers
 		FCriticalSection WriteMutex;  // protects the socket write
-		std::atomic<bool> bMarkedForRemoval{false};  // set by failed writes / shutdown
 	};
 
 	enum class ESessionValidationResult
