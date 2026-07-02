@@ -80,7 +80,9 @@ DECLARE_LOG_CATEGORY_EXTERN(LogMcpAutomationBridgeSubsystem, Log, All);
 
 enum class ERequestOrigin : uint8
 {
-	WebSocket,
+	// Handler-facing default meaning "not specified by the caller"; response
+	// routing resolves it via CurrentRequestOrigin / the pending-request map.
+	Unspecified,
 	NativeHTTP
 };
 
@@ -126,7 +128,7 @@ public:
                               bool bSuccess, const FString &Message,
                               const TSharedPtr<FJsonObject> &Result = nullptr,
                               const FString &ErrorCode = FString(),
-                              ERequestOrigin Origin = ERequestOrigin::WebSocket);
+                              ERequestOrigin Origin = ERequestOrigin::Unspecified);
   void SendAutomationError(TSharedPtr<FMcpBridgeWebSocket> TargetSocket,
                             const FString &RequestId, const FString &Message,
                             const FString &ErrorCode);
@@ -151,7 +153,7 @@ public:
    */
   void SendProgressUpdate(const FString &RequestId, float Percent = -1.0f, 
                           const FString &Message = TEXT(""), bool bStillWorking = true,
-                          ERequestOrigin Origin = ERequestOrigin::WebSocket);
+                          ERequestOrigin Origin = ERequestOrigin::Unspecified);
 
   bool ExecuteEditorCommands(const TArray<FString> &Commands,
                              FString &OutErrorMessage);
@@ -266,7 +268,7 @@ public:
   void QueueAutomationRequest(const FString &RequestId, const FString &Action,
                               const TSharedPtr<FJsonObject> &Payload,
                               TSharedPtr<FMcpBridgeWebSocket> RequestingSocket,
-                              ERequestOrigin Origin = ERequestOrigin::WebSocket);
+                              ERequestOrigin Origin = ERequestOrigin::Unspecified);
 
   // WebSocket ConnectionManager removed (pull-only / native HTTP).
 
@@ -327,7 +329,7 @@ public:
     FString Action;
     TSharedPtr<FJsonObject> Payload;
     TSharedPtr<FMcpBridgeWebSocket> RequestingSocket;
-    ERequestOrigin Origin = ERequestOrigin::WebSocket;
+    ERequestOrigin Origin = ERequestOrigin::Unspecified;
   };
   TArray<FPendingAutomationRequest> PendingAutomationRequests;
   FCriticalSection PendingAutomationRequestsMutex;
@@ -336,7 +338,14 @@ public:
   // Origin of the currently-processing request — used by SendAutomationResponse
   // and SendAutomationError as fallback when handlers don't pass Origin explicitly.
   // Set at the start of ProcessAutomationRequest, cleared on exit.
-  ERequestOrigin CurrentRequestOrigin = ERequestOrigin::WebSocket;
+  ERequestOrigin CurrentRequestOrigin = ERequestOrigin::Unspecified;
+
+  // A handler that intentionally completes a request after returning true
+  // (e.g. import's next-tick deferral) must call MarkRequestDeferred first;
+  // otherwise the dispatcher treats a still-parked request as a bug and fails
+  // it with HANDLER_NO_RESPONSE. Marks are consumed by the post-dispatch check.
+  void MarkRequestDeferred(const FString &RequestId) { DeferredRequestIds.Add(RequestId); }
+  TSet<FString> DeferredRequestIds;
 
   void RecordAutomationTelemetry(const FString &RequestId, bool bSuccess,
                                  const FString &Message,
@@ -1513,7 +1522,7 @@ private:
   ProcessAutomationRequest(const FString &RequestId, const FString &Action,
                            const TSharedPtr<FJsonObject> &Payload,
                            TSharedPtr<FMcpBridgeWebSocket> RequestingSocket,
-                           ERequestOrigin Origin = ERequestOrigin::WebSocket);
+                           ERequestOrigin Origin = ERequestOrigin::Unspecified);
 
   friend class FMcpNativeTransport;
 };

@@ -311,49 +311,49 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetAction(
   
   // Search (CRITICAL: search_assets must be dispatched - was missing causing timeouts)
   if (Lower == TEXT("search_assets"))
-    return HandleSearchAssets(RequestId, Action, Payload, RequestingSocket);
+    return HandleSearchAssets(RequestId, Lower, Payload, RequestingSocket);
 
   // Bulk Operations
   if (Lower == TEXT("fixup_redirectors"))
-    return HandleFixupRedirectors(RequestId, Action, Payload, RequestingSocket);
+    return HandleFixupRedirectors(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("bulk_rename"))
-    return HandleBulkRenameAssets(RequestId, Action, Payload, RequestingSocket);
+    return HandleBulkRenameAssets(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("bulk_delete"))
-    return HandleBulkDeleteAssets(RequestId, Action, Payload, RequestingSocket);
+    return HandleBulkDeleteAssets(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("generate_lods"))
     return HandleGenerateLODs(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("nanite_rebuild_mesh"))
-    return HandleNaniteRebuildMesh(RequestId, Action, Payload, RequestingSocket);
+    return HandleNaniteRebuildMesh(RequestId, Lower, Payload, RequestingSocket);
 
   // Source Control
   if (Lower == TEXT("source_control_checkout"))
-    return HandleSourceControlCheckout(RequestId, Action, Payload, RequestingSocket);
+    return HandleSourceControlCheckout(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("source_control_submit"))
-    return HandleSourceControlSubmit(RequestId, Action, Payload, RequestingSocket);
+    return HandleSourceControlSubmit(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("get_source_control_state"))
-    return HandleGetSourceControlState(RequestId, Action, Payload, RequestingSocket);
+    return HandleGetSourceControlState(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("source_control_enable"))
-    return HandleSourceControlEnable(RequestId, Action, Payload, RequestingSocket);
+    return HandleSourceControlEnable(RequestId, Lower, Payload, RequestingSocket);
 
   // Graph & Analysis
   if (Lower == TEXT("analyze_graph"))
-    return HandleAnalyzeGraph(RequestId, Action, Payload, RequestingSocket);
+    return HandleAnalyzeGraph(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("find_by_tag"))
-    return HandleFindByTag(RequestId, Action, Payload, RequestingSocket);
+    return HandleFindByTag(RequestId, Lower, Payload, RequestingSocket);
 
   // Material Authoring
   if (Lower == TEXT("add_material_node"))
-    return HandleAddMaterialNode(RequestId, Action, Payload, RequestingSocket);
+    return HandleAddMaterialNode(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("connect_material_pins"))
-    return HandleConnectMaterialPins(RequestId, Action, Payload, RequestingSocket);
+    return HandleConnectMaterialPins(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("remove_material_node"))
-    return HandleRemoveMaterialNode(RequestId, Action, Payload, RequestingSocket);
+    return HandleRemoveMaterialNode(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("break_material_connections"))
-    return HandleBreakMaterialConnections(RequestId, Action, Payload, RequestingSocket);
+    return HandleBreakMaterialConnections(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("get_material_node_details"))
-    return HandleGetMaterialNodeDetails(RequestId, Action, Payload, RequestingSocket);
+    return HandleGetMaterialNodeDetails(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("rebuild_material"))
-    return HandleRebuildMaterial(RequestId, Action, Payload, RequestingSocket);
+    return HandleRebuildMaterial(RequestId, Lower, Payload, RequestingSocket);
 
   return false;
 }
@@ -417,110 +417,101 @@ bool UMcpAutomationBridgeSubsystem::HandleFixupRedirectors(
     NormalizedPath = FString::Printf(TEXT("/Game%s"), *NormalizedPath.RightChop(8));
   }
 
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakThis(this);
-  AsyncTask(ENamedThreads::GameThread, [WeakThis, RequestId, NormalizedPath,
-                                        bCheckoutFiles, RequestingSocket]() {
-    UMcpAutomationBridgeSubsystem *StrongThis = WeakThis.Get();
-    if (!StrongThis) {
-      return;
-    }
-    // CRITICAL FIX: Use DoesAssetDirectoryExistOnDisk for strict validation
-    // UEditorAssetLibrary::DoesDirectoryExist() uses AssetRegistry cache which may
-    // contain stale entries. We need to check if the directory ACTUALLY exists on disk.
-    if (!DoesAssetDirectoryExistOnDisk(NormalizedPath)) {
-      StrongThis->SendAutomationError(RequestingSocket, RequestId,
-                          FString::Printf(TEXT("Directory not found: %s"), *NormalizedPath),
-                          TEXT("PATH_NOT_FOUND"));
-      return;
-    }
+  // CRITICAL FIX: Use DoesAssetDirectoryExistOnDisk for strict validation
+  // UEditorAssetLibrary::DoesDirectoryExist() uses AssetRegistry cache which may
+  // contain stale entries. We need to check if the directory ACTUALLY exists on disk.
+  if (!DoesAssetDirectoryExistOnDisk(NormalizedPath)) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        FString::Printf(TEXT("Directory not found: %s"), *NormalizedPath),
+                        TEXT("PATH_NOT_FOUND"));
+    return true;
+  }
 
-    FAssetRegistryModule &AssetRegistryModule =
-        FModuleManager::LoadModuleChecked<FAssetRegistryModule>(
-            TEXT("AssetRegistry"));
-    IAssetRegistry &AssetRegistry = AssetRegistryModule.Get();
+  FAssetRegistryModule &AssetRegistryModule =
+      FModuleManager::LoadModuleChecked<FAssetRegistryModule>(
+          TEXT("AssetRegistry"));
+  IAssetRegistry &AssetRegistry = AssetRegistryModule.Get();
 
-    // Find all redirectors
-    FARFilter Filter;
+  // Find all redirectors
+  FARFilter Filter;
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
-    Filter.ClassPaths.Add(FTopLevelAssetPath(TEXT("/Script/CoreUObject"),
-                                             TEXT("ObjectRedirector")));
+  Filter.ClassPaths.Add(FTopLevelAssetPath(TEXT("/Script/CoreUObject"),
+                                           TEXT("ObjectRedirector")));
 #else
-    Filter.ClassNames.Add(FName(TEXT("ObjectRedirector")));
+  Filter.ClassNames.Add(FName(TEXT("ObjectRedirector")));
 #endif
 
-    Filter.PackagePaths.Add(FName(*NormalizedPath));
-    Filter.bRecursivePaths = true;
+  Filter.PackagePaths.Add(FName(*NormalizedPath));
+  Filter.bRecursivePaths = true;
 
-    TArray<FAssetData> RedirectorAssets;
-    AssetRegistry.GetAssets(Filter, RedirectorAssets);
+  TArray<FAssetData> RedirectorAssets;
+  AssetRegistry.GetAssets(Filter, RedirectorAssets);
 
-    if (RedirectorAssets.Num() == 0) {
-      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-      Result->SetBoolField(TEXT("success"), true);
-      Result->SetNumberField(TEXT("redirectorsFound"), 0);
-      Result->SetNumberField(TEXT("redirectorsFixed"), 0);
-      StrongThis->SendAutomationResponse(RequestingSocket, RequestId, true,
-                             TEXT("No redirectors found"), Result, FString());
-      return;
-    }
-
-    // Convert to string paths for AssetTools
-    TArray<FString> RedirectorPaths;
-    for (const FAssetData &Asset : RedirectorAssets) {
-      RedirectorPaths.Add(Asset.ToSoftObjectPath().ToString());
-    }
-
-    // Checkout files if source control is enabled
-    if (bCheckoutFiles && ISourceControlModule::Get().IsEnabled()) {
-      TArray<FString> PackageNames;
-      for (const FAssetData &Asset : RedirectorAssets) {
-        PackageNames.Add(Asset.PackageName.ToString());
-      }
-      SourceControlHelpers::CheckOutFiles(PackageNames, true);
-    }
-
-    // Convert FAssetData to UObjectRedirector* for AssetTools
-    TArray<UObjectRedirector *> Redirectors;
-    for (const FAssetData &Asset : RedirectorAssets) {
-      if (UObjectRedirector *Redirector =
-              Cast<UObjectRedirector>(Asset.GetAsset())) {
-        Redirectors.Add(Redirector);
-      }
-    }
-
-    // Fixup redirectors using AssetTools
-    if (Redirectors.Num() > 0) {
-      IAssetTools &AssetTools =
-          FModuleManager::LoadModuleChecked<FAssetToolsModule>(
-              TEXT("AssetTools"))
-              .Get();
-      AssetTools.FixupReferencers(Redirectors);
-    }
-
-    // Delete the now-unused redirectors
-    int32 DeletedCount = 0;
-    TArray<UObject *> ObjectsToDelete;
-    for (const FAssetData &Asset : RedirectorAssets) {
-      if (UObject *Obj = Asset.GetAsset()) {
-        ObjectsToDelete.Add(Obj);
-      }
-    }
-
-    if (ObjectsToDelete.Num() > 0) {
-      DeletedCount = ObjectTools::DeleteObjects(ObjectsToDelete, false);
-    }
-
+  if (RedirectorAssets.Num() == 0) {
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("success"), true);
-    Result->SetNumberField(TEXT("redirectorsFound"), RedirectorAssets.Num());
-    Result->SetNumberField(TEXT("redirectorsFixed"), DeletedCount);
+    Result->SetNumberField(TEXT("redirectorsFound"), 0);
+    Result->SetNumberField(TEXT("redirectorsFixed"), 0);
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           TEXT("No redirectors found"), Result, FString());
+    return true;
+  }
 
-    StrongThis->SendAutomationResponse(
-        RequestingSocket, RequestId, true,
-        FString::Printf(TEXT("Fixed %d redirectors"), DeletedCount), Result,
-        FString());
-  });
+  // Convert to string paths for AssetTools
+  TArray<FString> RedirectorPaths;
+  for (const FAssetData &Asset : RedirectorAssets) {
+    RedirectorPaths.Add(Asset.ToSoftObjectPath().ToString());
+  }
 
+  // Checkout files if source control is enabled
+  if (bCheckoutFiles && ISourceControlModule::Get().IsEnabled()) {
+    TArray<FString> PackageNames;
+    for (const FAssetData &Asset : RedirectorAssets) {
+      PackageNames.Add(Asset.PackageName.ToString());
+    }
+    SourceControlHelpers::CheckOutFiles(PackageNames, true);
+  }
+
+  // Convert FAssetData to UObjectRedirector* for AssetTools
+  TArray<UObjectRedirector *> Redirectors;
+  for (const FAssetData &Asset : RedirectorAssets) {
+    if (UObjectRedirector *Redirector =
+            Cast<UObjectRedirector>(Asset.GetAsset())) {
+      Redirectors.Add(Redirector);
+    }
+  }
+
+  // Fixup redirectors using AssetTools
+  if (Redirectors.Num() > 0) {
+    IAssetTools &AssetTools =
+        FModuleManager::LoadModuleChecked<FAssetToolsModule>(
+            TEXT("AssetTools"))
+            .Get();
+    AssetTools.FixupReferencers(Redirectors);
+  }
+
+  // Delete the now-unused redirectors
+  int32 DeletedCount = 0;
+  TArray<UObject *> ObjectsToDelete;
+  for (const FAssetData &Asset : RedirectorAssets) {
+    if (UObject *Obj = Asset.GetAsset()) {
+      ObjectsToDelete.Add(Obj);
+    }
+  }
+
+  if (ObjectsToDelete.Num() > 0) {
+    DeletedCount = ObjectTools::DeleteObjects(ObjectsToDelete, false);
+  }
+
+  TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+  Result->SetBoolField(TEXT("success"), true);
+  Result->SetNumberField(TEXT("redirectorsFound"), RedirectorAssets.Num());
+  Result->SetNumberField(TEXT("redirectorsFixed"), DeletedCount);
+
+  SendAutomationResponse(
+      RequestingSocket, RequestId, true,
+      FString::Printf(TEXT("Fixed %d redirectors"), DeletedCount), Result,
+      FString());
   return true;
 #else
   SendAutomationResponse(RequestingSocket, RequestId, false,
@@ -1474,6 +1465,7 @@ bool UMcpAutomationBridgeSubsystem::HandleImportAsset(
   // We use SetTimerForNextTick to ensure we're completely outside of any
   // TaskGraph callback chain before invoking the import.
   if (GEditor) {
+    MarkRequestDeferred(RequestId);
     TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakThis(this);
     GEditor->GetTimerManager()->SetTimerForNextTick(
         [WeakThis, RequestId, ResolvedSourcePath, DestPath, DestName, Socket]() {
@@ -2787,58 +2779,49 @@ bool UMcpAutomationBridgeSubsystem::HandleSetTags(
     return true;
   }
 
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakThis(this);
-  AsyncTask(ENamedThreads::GameThread, [WeakThis, RequestId, Socket, SafeAssetPath,
-                                         Tags]() {
-    UMcpAutomationBridgeSubsystem *StrongThis = WeakThis.Get();
-    if (!StrongThis) {
-      return;
-    }
-    // Edge-case: empty or missing tags array should be treated as a no-op
-    // success.
-    if (Tags.Num() == 0) {
-      TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-      Resp->SetBoolField(TEXT("success"), true);
-      Resp->SetStringField(TEXT("assetPath"), SafeAssetPath);
-      Resp->SetNumberField(TEXT("appliedTags"), 0);
-      StrongThis->SendAutomationResponse(Socket, RequestId, true,
-                             TEXT("No tags provided; no-op"), Resp, FString());
-      return;
-    }
-
-    if (!UEditorAssetLibrary::DoesAssetExist(SafeAssetPath)) {
-      StrongThis->SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
-                             nullptr, TEXT("ASSET_NOT_FOUND"));
-      return;
-    }
-
-    UObject *Asset = UEditorAssetLibrary::LoadAsset(SafeAssetPath);
-    if (!Asset) {
-      StrongThis->SendAutomationResponse(Socket, RequestId, false,
-                             TEXT("Failed to load asset"), nullptr,
-                             TEXT("LOAD_FAILED"));
-      return;
-    }
-
-    // Implement set_tags by mapping them to Package Metadata (Tag=true)
-    int32 AppliedCount = 0;
-    for (const FString &Tag : Tags) {
-      UEditorAssetLibrary::SetMetadataTag(Asset, FName(*Tag), TEXT("true"));
-      AppliedCount++;
-    }
-
-    // Mark dirty so the asset can be saved later
-    Asset->MarkPackageDirty();
-
+  // Edge-case: empty or missing tags array should be treated as a no-op
+  // success.
+  if (Tags.Num() == 0) {
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), true);
-    Resp->SetBoolField(TEXT("markedDirty"), true);
     Resp->SetStringField(TEXT("assetPath"), SafeAssetPath);
-    Resp->SetNumberField(TEXT("appliedTags"), AppliedCount);
-    StrongThis->SendAutomationResponse(Socket, RequestId, true,
-                           TEXT("Tags applied as metadata"), Resp, FString());
-  });
+    Resp->SetNumberField(TEXT("appliedTags"), 0);
+    SendAutomationResponse(Socket, RequestId, true,
+                           TEXT("No tags provided; no-op"), Resp, FString());
+    return true;
+  }
 
+  if (!UEditorAssetLibrary::DoesAssetExist(SafeAssetPath)) {
+    SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
+                           nullptr, TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
+
+  UObject *Asset = UEditorAssetLibrary::LoadAsset(SafeAssetPath);
+  if (!Asset) {
+    SendAutomationResponse(Socket, RequestId, false,
+                           TEXT("Failed to load asset"), nullptr,
+                           TEXT("LOAD_FAILED"));
+    return true;
+  }
+
+  // Implement set_tags by mapping them to Package Metadata (Tag=true)
+  int32 AppliedCount = 0;
+  for (const FString &Tag : Tags) {
+    UEditorAssetLibrary::SetMetadataTag(Asset, FName(*Tag), TEXT("true"));
+    AppliedCount++;
+  }
+
+  // Mark dirty so the asset can be saved later
+  Asset->MarkPackageDirty();
+
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetBoolField(TEXT("markedDirty"), true);
+  Resp->SetStringField(TEXT("assetPath"), SafeAssetPath);
+  Resp->SetNumberField(TEXT("appliedTags"), AppliedCount);
+  SendAutomationResponse(Socket, RequestId, true,
+                         TEXT("Tags applied as metadata"), Resp, FString());
   return true;
 #else
   SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
@@ -2881,35 +2864,28 @@ bool UMcpAutomationBridgeSubsystem::HandleValidateAsset(
     return true;
   }
 
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakThis(this);
-  AsyncTask(ENamedThreads::GameThread, [WeakThis, RequestId, Socket, SafeAssetPath]() {
-    UMcpAutomationBridgeSubsystem *StrongThis = WeakThis.Get();
-    if (!StrongThis) {
-      return;
-    }
-    if (!UEditorAssetLibrary::DoesAssetExist(SafeAssetPath)) {
-      StrongThis->SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
-                             nullptr, TEXT("ASSET_NOT_FOUND"));
-      return;
-    }
+  if (!UEditorAssetLibrary::DoesAssetExist(SafeAssetPath)) {
+    SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
+                           nullptr, TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
 
-    UObject *Asset = UEditorAssetLibrary::LoadAsset(SafeAssetPath);
-    if (!Asset) {
-      StrongThis->SendAutomationResponse(Socket, RequestId, false,
-                             TEXT("Failed to load asset"), nullptr,
-                             TEXT("LOAD_FAILED"));
-      return;
-    }
+  UObject *Asset = UEditorAssetLibrary::LoadAsset(SafeAssetPath);
+  if (!Asset) {
+    SendAutomationResponse(Socket, RequestId, false,
+                           TEXT("Failed to load asset"), nullptr,
+                           TEXT("LOAD_FAILED"));
+    return true;
+  }
 
-    bool bIsValid = true;
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetBoolField(TEXT("success"), bIsValid);
-    Resp->SetStringField(TEXT("assetPath"), SafeAssetPath);
-    Resp->SetBoolField(TEXT("isValid"), bIsValid);
+  bool bIsValid = true;
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), bIsValid);
+  Resp->SetStringField(TEXT("assetPath"), SafeAssetPath);
+  Resp->SetBoolField(TEXT("isValid"), bIsValid);
 
-    StrongThis->SendAutomationResponse(Socket, RequestId, true, TEXT("Asset validated"),
-                           Resp, FString());
-  });
+  SendAutomationResponse(Socket, RequestId, true, TEXT("Asset validated"),
+                         Resp, FString());
   return true;
 #else
   SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
@@ -3260,97 +3236,89 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateReport(
   FString OutputPath;
   Payload->TryGetStringField(TEXT("outputPath"), OutputPath);
 
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakThis(this);
-  AsyncTask(ENamedThreads::GameThread, [WeakThis, RequestId, Socket, Directory,
-                                        ReportType, OutputPath]() {
-    UMcpAutomationBridgeSubsystem *StrongThis = WeakThis.Get();
-    if (!StrongThis) {
-      return;
-    }
-    FAssetRegistryModule &AssetRegistryModule =
-        FModuleManager::LoadModuleChecked<FAssetRegistryModule>(
-            TEXT("AssetRegistry"));
-    FARFilter Filter;
-    Filter.bRecursivePaths = true;
-    if (!Directory.IsEmpty()) {
-      Filter.PackagePaths.Add(FName(*Directory));
-    }
+  FAssetRegistryModule &AssetRegistryModule =
+      FModuleManager::LoadModuleChecked<FAssetRegistryModule>(
+          TEXT("AssetRegistry"));
+  FARFilter Filter;
+  Filter.bRecursivePaths = true;
+  if (!Directory.IsEmpty()) {
+    Filter.PackagePaths.Add(FName(*Directory));
+  }
 
-    // NOTE: ScanPathsSynchronous() was removed to prevent GameThread blocking.
-    // Asset listing uses cached AssetRegistry data exclusively.
-    // LIMITATION: Assets not yet indexed by the editor's background scanner
-    // will NOT appear. Use Content Browser "Rescan" or rescan_content_directory.
-    TArray<FAssetData> AssetList;
-    AssetRegistryModule.Get().GetAssets(Filter, AssetList);
+  // NOTE: ScanPathsSynchronous() was removed to prevent GameThread blocking.
+  // Asset listing uses cached AssetRegistry data exclusively.
+  // LIMITATION: Assets not yet indexed by the editor's background scanner
+  // will NOT appear. Use Content Browser "Rescan" or rescan_content_directory.
+  TArray<FAssetData> AssetList;
+  AssetRegistryModule.Get().GetAssets(Filter, AssetList);
 
-    TArray<TSharedPtr<FJsonValue>> AssetsArray;
-    for (const FAssetData &Asset : AssetList) {
-      TSharedPtr<FJsonObject> AssetObj = McpHandlerUtils::CreateResultObject();
-      AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
-      AssetObj->SetStringField(TEXT("path"),
+  TArray<TSharedPtr<FJsonValue>> AssetsArray;
+  for (const FAssetData &Asset : AssetList) {
+    TSharedPtr<FJsonObject> AssetObj = McpHandlerUtils::CreateResultObject();
+    AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
+    AssetObj->SetStringField(TEXT("path"),
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
-                               Asset.GetSoftObjectPath().ToString());
-      AssetObj->SetStringField(TEXT("class"), Asset.AssetClassPath.ToString());
+                             Asset.GetSoftObjectPath().ToString());
+    AssetObj->SetStringField(TEXT("class"), Asset.AssetClassPath.ToString());
 #else
-                               Asset.ToSoftObjectPath().ToString());
-      AssetObj->SetStringField(TEXT("class"), Asset.AssetClass.ToString());
+                             Asset.ToSoftObjectPath().ToString());
+    AssetObj->SetStringField(TEXT("class"), Asset.AssetClass.ToString());
 #endif
-      AssetsArray.Add(MakeShared<FJsonValueObject>(AssetObj));
+    AssetsArray.Add(MakeShared<FJsonValueObject>(AssetObj));
+  }
+
+  bool bFileWritten = false;
+  if (!OutputPath.IsEmpty()) {
+    // SECURITY: Sanitize and validate the output path to prevent path traversal
+    FString SafeOutputPath = SanitizeProjectFilePath(OutputPath);
+    if (SafeOutputPath.IsEmpty()) {
+      SendAutomationError(Socket, RequestId,
+                          FString::Printf(TEXT("Invalid or unsafe output path: %s"), *OutputPath),
+                          TEXT("SECURITY_VIOLATION"));
+      return true;
     }
 
-    bool bFileWritten = false;
-    if (!OutputPath.IsEmpty()) {
-      // SECURITY: Sanitize and validate the output path to prevent path traversal
-      FString SafeOutputPath = SanitizeProjectFilePath(OutputPath);
-      if (SafeOutputPath.IsEmpty()) {
-        StrongThis->SendAutomationError(Socket, RequestId,
-                            FString::Printf(TEXT("Invalid or unsafe output path: %s"), *OutputPath),
-                            TEXT("SECURITY_VIOLATION"));
-        return;
-      }
-      
-      FString AbsoluteOutput = FPaths::ProjectDir() / SafeOutputPath;
-      AbsoluteOutput = FPaths::ConvertRelativePathToFull(AbsoluteOutput);
-      FPaths::NormalizeFilename(AbsoluteOutput);
-      
-      FString NormalizedProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
-      FPaths::NormalizeDirectoryName(NormalizedProjectDir);
-      if (!NormalizedProjectDir.EndsWith(TEXT("/"))) {
-        NormalizedProjectDir += TEXT("/");
-      }
-      
-      if (!AbsoluteOutput.StartsWith(NormalizedProjectDir, ESearchCase::IgnoreCase)) {
-        StrongThis->SendAutomationError(Socket, RequestId,
-                            FString::Printf(TEXT("Output path escapes project directory: %s"), *OutputPath),
-                            TEXT("SECURITY_VIOLATION"));
-        return;
-      }
+    FString AbsoluteOutput = FPaths::ProjectDir() / SafeOutputPath;
+    AbsoluteOutput = FPaths::ConvertRelativePathToFull(AbsoluteOutput);
+    FPaths::NormalizeFilename(AbsoluteOutput);
 
-      const FString DirPath = FPaths::GetPath(AbsoluteOutput);
-      IPlatformFile &PlatformFile =
-          FPlatformFileManager::Get().GetPlatformFile();
-      PlatformFile.CreateDirectoryTree(*DirPath);
-
-      const FString FileContents = TEXT(
-          "{\"report\":\"Asset report generated by MCP Automation Bridge\"}");
-      bFileWritten =
-          FFileHelper::SaveStringToFile(FileContents, *AbsoluteOutput);
+    FString NormalizedProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+    FPaths::NormalizeDirectoryName(NormalizedProjectDir);
+    if (!NormalizedProjectDir.EndsWith(TEXT("/"))) {
+      NormalizedProjectDir += TEXT("/");
     }
 
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetBoolField(TEXT("success"), true);
-    Resp->SetStringField(TEXT("directory"), Directory);
-    Resp->SetStringField(TEXT("reportType"), ReportType);
-    Resp->SetNumberField(TEXT("assetCount"), AssetList.Num());
-    Resp->SetArrayField(TEXT("assets"), AssetsArray);
-    if (!OutputPath.IsEmpty()) {
-      Resp->SetStringField(TEXT("outputPath"), OutputPath);
-      Resp->SetBoolField(TEXT("fileWritten"), bFileWritten);
+    if (!AbsoluteOutput.StartsWith(NormalizedProjectDir, ESearchCase::IgnoreCase)) {
+      SendAutomationError(Socket, RequestId,
+                          FString::Printf(TEXT("Output path escapes project directory: %s"), *OutputPath),
+                          TEXT("SECURITY_VIOLATION"));
+      return true;
     }
 
-    StrongThis->SendAutomationResponse(Socket, RequestId, true,
-                           TEXT("Asset report generated"), Resp, FString());
-  });
+    const FString DirPath = FPaths::GetPath(AbsoluteOutput);
+    IPlatformFile &PlatformFile =
+        FPlatformFileManager::Get().GetPlatformFile();
+    PlatformFile.CreateDirectoryTree(*DirPath);
+
+    const FString FileContents = TEXT(
+        "{\"report\":\"Asset report generated by MCP Automation Bridge\"}");
+    bFileWritten =
+        FFileHelper::SaveStringToFile(FileContents, *AbsoluteOutput);
+  }
+
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetStringField(TEXT("directory"), Directory);
+  Resp->SetStringField(TEXT("reportType"), ReportType);
+  Resp->SetNumberField(TEXT("assetCount"), AssetList.Num());
+  Resp->SetArrayField(TEXT("assets"), AssetsArray);
+  if (!OutputPath.IsEmpty()) {
+    Resp->SetStringField(TEXT("outputPath"), OutputPath);
+    Resp->SetBoolField(TEXT("fileWritten"), bFileWritten);
+  }
+
+  SendAutomationResponse(Socket, RequestId, true,
+                         TEXT("Asset report generated"), Resp, FString());
   return true;
 #else
   SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));

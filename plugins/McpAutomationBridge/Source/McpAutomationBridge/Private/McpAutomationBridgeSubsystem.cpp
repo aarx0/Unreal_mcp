@@ -788,14 +788,12 @@ void UMcpAutomationBridgeSubsystem::SendAutomationResponse(
     EffectiveMessage = SanitizeEngineErrorForResponse(EffectiveMessage);
   }
 
-  // When handlers omit Origin (default WebSocket), use the stored
-  // CurrentRequestOrigin from the active ProcessAutomationRequest call.
-  ERequestOrigin EffectiveOrigin = (Origin == ERequestOrigin::WebSocket)
+  // When handlers omit Origin (default Unspecified), use the stored
+  // CurrentRequestOrigin from the active ProcessAutomationRequest call. A live
+  // native pending request is authoritative when even that is stale.
+  ERequestOrigin EffectiveOrigin = (Origin == ERequestOrigin::Unspecified)
       ? CurrentRequestOrigin : Origin;
-  // Some handlers complete later via AsyncTask(GameThread) after the request
-  // scope has already reset CurrentRequestOrigin. A live native pending request
-  // is authoritative in that case and must receive the response over SSE.
-  if (Origin == ERequestOrigin::WebSocket && NativeTransport &&
+  if (Origin == ERequestOrigin::Unspecified && NativeTransport &&
       NativeTransport->HasPendingRequest(RequestId))
   {
     EffectiveOrigin = ERequestOrigin::NativeHTTP;
@@ -810,8 +808,10 @@ void UMcpAutomationBridgeSubsystem::SendAutomationResponse(
     }
     return;
   }
-  // WebSocket transport removed; native HTTP responses were sent above via
-  // CompletePendingRequest.
+  UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
+    TEXT("Response for %s has no route (origin unresolved, no pending native "
+         "request) and was dropped."),
+    *RequestId);
 }
 
 /**

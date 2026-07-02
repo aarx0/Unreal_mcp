@@ -123,7 +123,6 @@
 // -----------------------------------------------------------------------------
 // Core Engine
 // -----------------------------------------------------------------------------
-#include "Async/Async.h"
 #include "Engine/World.h"
 #include "Misc/ScopedSlowTask.h"
 
@@ -369,7 +368,6 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscape(
     return true;
   }
 
-  // Capture parameters by value for the async task
   const int32 CaptComponentsX = ComponentsX;
   const int32 CaptComponentsY = ComponentsY;
   const int32 CaptQuadsPerComponent = QuadsPerComponent;
@@ -378,229 +376,215 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscape(
   const FString CaptMaterialPath = MaterialPath;
   const FString CaptName = NameOverride;
 
-	TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(this);
+  if (!GEditor)
+    return true;
+  UWorld *World = GEditor->GetEditorWorldContext().World();
+  if (!World)
+    return true;
 
-  // Execute on Game Thread to ensure thread safety for Actor spawning and
-  // Landscape operations
-  AsyncTask(ENamedThreads::GameThread, [WeakSubsystem, RequestId,
-                                        RequestingSocket, CaptComponentsX,
-                                        CaptComponentsY, CaptQuadsPerComponent,
-                                        CaptSectionsPerComponent, CaptLocation,
-                                        CaptMaterialPath, CaptName]() {
-    UMcpAutomationBridgeSubsystem *Subsystem = WeakSubsystem.Get();
-    if (!Subsystem)
-      return;
+  FActorSpawnParameters SpawnParams;
+  SpawnParams.SpawnCollisionHandlingOverride =
+      ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+  ALandscape *Landscape =
+      World->SpawnActor<ALandscape>(ALandscape::StaticClass(), CaptLocation,
+                                    FRotator::ZeroRotator, SpawnParams);
+  if (!Landscape) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Failed to spawn landscape actor"),
+                        TEXT("SPAWN_FAILED"));
+    return true;
+  }
 
-    if (!GEditor)
-      return;
-    UWorld *World = GEditor->GetEditorWorldContext().World();
-    if (!World)
-      return;
+  if (!CaptName.IsEmpty()) {
+    Landscape->SetActorLabel(CaptName);
+  } else {
+    Landscape->SetActorLabel(FString::Printf(
+        TEXT("Landscape_%dx%d"), CaptComponentsX, CaptComponentsY));
+  }
+  Landscape->ComponentSizeQuads = CaptQuadsPerComponent;
+  Landscape->SubsectionSizeQuads =
+      CaptQuadsPerComponent / CaptSectionsPerComponent;
+  Landscape->NumSubsections = CaptSectionsPerComponent;
+  // Keep authoring metadata on the actor so generic actor bounds can still
+  // report a useful footprint when UE has not generated landscape components.
+  McpLandscapeMetadataTags::EncodeLandscapeMetadata(
+      Landscape, CaptComponentsX, CaptComponentsY, CaptQuadsPerComponent);
 
-    FActorSpawnParameters SpawnParams;
-    SpawnParams.SpawnCollisionHandlingOverride =
-        ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    ALandscape *Landscape =
-        World->SpawnActor<ALandscape>(ALandscape::StaticClass(), CaptLocation,
-                                      FRotator::ZeroRotator, SpawnParams);
-    if (!Landscape) {
-      Subsystem->SendAutomationError(RequestingSocket, RequestId,
-                                     TEXT("Failed to spawn landscape actor"),
-                                     TEXT("SPAWN_FAILED"));
-      return;
+  if (!CaptMaterialPath.IsEmpty()) {
+    UMaterialInterface *Mat =
+        LoadObject<UMaterialInterface>(nullptr, *CaptMaterialPath);
+    if (Mat) {
+      Landscape->LandscapeMaterial = Mat;
     }
+  }
 
-    if (!CaptName.IsEmpty()) {
-      Landscape->SetActorLabel(CaptName);
-    } else {
-      Landscape->SetActorLabel(FString::Printf(
-          TEXT("Landscape_%dx%d"), CaptComponentsX, CaptComponentsY));
-    }
-    Landscape->ComponentSizeQuads = CaptQuadsPerComponent;
-    Landscape->SubsectionSizeQuads =
-        CaptQuadsPerComponent / CaptSectionsPerComponent;
-    Landscape->NumSubsections = CaptSectionsPerComponent;
-    // Keep authoring metadata on the actor so generic actor bounds can still
-    // report a useful footprint when UE has not generated landscape components.
-    McpLandscapeMetadataTags::EncodeLandscapeMetadata(
-        Landscape, CaptComponentsX, CaptComponentsY, CaptQuadsPerComponent);
+  // CRITICAL INITIALIZATION ORDER:
+  // 1. Set Landscape GUID first. CreateLandscapeInfo depends on this.
+  if (!Landscape->GetLandscapeGuid().IsValid()) {
+    Landscape->SetLandscapeGuid(FGuid::NewGuid());
+  }
 
-    if (!CaptMaterialPath.IsEmpty()) {
-      UMaterialInterface *Mat =
-          LoadObject<UMaterialInterface>(nullptr, *CaptMaterialPath);
-      if (Mat) {
-        Landscape->LandscapeMaterial = Mat;
-      }
-    }
+  // 2. Create Landscape Info. This will register itself with the Landscape's
+  // GUID.
+  Landscape->CreateLandscapeInfo();
 
-    // CRITICAL INITIALIZATION ORDER:
-    // 1. Set Landscape GUID first. CreateLandscapeInfo depends on this.
-    if (!Landscape->GetLandscapeGuid().IsValid()) {
-      Landscape->SetLandscapeGuid(FGuid::NewGuid());
-    }
+  const int32 VertX = CaptComponentsX * CaptQuadsPerComponent + 1;
+  const int32 VertY = CaptComponentsY * CaptQuadsPerComponent + 1;
 
-    // 2. Create Landscape Info. This will register itself with the Landscape's
-    // GUID.
-    Landscape->CreateLandscapeInfo();
+  TArray<uint16> HeightArray;
+  HeightArray.Init(32768, VertX * VertY);
 
-    const int32 VertX = CaptComponentsX * CaptQuadsPerComponent + 1;
-    const int32 VertY = CaptComponentsY * CaptQuadsPerComponent + 1;
+  const int32 InMinX = 0;
+  const int32 InMinY = 0;
+  const int32 InMaxX = CaptComponentsX * CaptQuadsPerComponent;
+  const int32 InMaxY = CaptComponentsY * CaptQuadsPerComponent;
+  const int32 NumSubsections = CaptSectionsPerComponent;
+  const int32 SubsectionSizeQuads =
+      CaptQuadsPerComponent / FMath::Max(1, CaptSectionsPerComponent);
 
-    TArray<uint16> HeightArray;
-    HeightArray.Init(32768, VertX * VertY);
+  // 3. Use a valid GUID for Import call, but zero GUID for map keys.
+  // Analysis of Landscape.cpp shows:
+  // - Import() asserts InGuid.IsValid()
+  // - BUT Import() uses FGuid() (zero) to look up data in the maps:
+  // InImportHeightData.FindChecked(FinalLayerGuid) where FinalLayerGuid is
+  // default constructed.
+  const FGuid ImportGuid =
+      FGuid::NewGuid(); // Valid GUID for the function call
+  const FGuid DataKey;  // Zero GUID for the map keys
 
-    const int32 InMinX = 0;
-    const int32 InMinY = 0;
-    const int32 InMaxX = CaptComponentsX * CaptQuadsPerComponent;
-    const int32 InMaxY = CaptComponentsY * CaptQuadsPerComponent;
-    const int32 NumSubsections = CaptSectionsPerComponent;
-    const int32 SubsectionSizeQuads =
-        CaptQuadsPerComponent / FMath::Max(1, CaptSectionsPerComponent);
+  // 3. Populate maps with FGuid() keys because ALandscape::Import uses
+  // default GUID to look up data regardless of the GUID passed to the
+  // function (which is used for the layer definition itself).
+  TMap<FGuid, TArray<uint16>> ImportHeightData;
+  ImportHeightData.Add(FGuid(), HeightArray);
 
-    // 3. Use a valid GUID for Import call, but zero GUID for map keys.
-    // Analysis of Landscape.cpp shows:
-    // - Import() asserts InGuid.IsValid()
-    // - BUT Import() uses FGuid() (zero) to look up data in the maps:
-    // InImportHeightData.FindChecked(FinalLayerGuid) where FinalLayerGuid is
-    // default constructed.
-    const FGuid ImportGuid =
-        FGuid::NewGuid(); // Valid GUID for the function call
-    const FGuid DataKey;  // Zero GUID for the map keys
+  TMap<FGuid, TArray<FLandscapeImportLayerInfo>> ImportLayerInfos;
+  ImportLayerInfos.Add(FGuid(), TArray<FLandscapeImportLayerInfo>());
 
-    // 3. Populate maps with FGuid() keys because ALandscape::Import uses
-    // default GUID to look up data regardless of the GUID passed to the
-    // function (which is used for the layer definition itself).
-    TMap<FGuid, TArray<uint16>> ImportHeightData;
-    ImportHeightData.Add(FGuid(), HeightArray);
+  TArray<FLandscapeLayer> EditLayers;
 
-    TMap<FGuid, TArray<FLandscapeImportLayerInfo>> ImportLayerInfos;
-    ImportLayerInfos.Add(FGuid(), TArray<FLandscapeImportLayerInfo>());
+  // Use a transaction to ensure undo/redo and proper notification
+  {
+    const FScopedTransaction Transaction(
+        FText::FromString(TEXT("Create Landscape")));
+    Landscape->Modify();
 
-    TArray<FLandscapeLayer> EditLayers;
-
-    // Use a transaction to ensure undo/redo and proper notification
-    {
-      const FScopedTransaction Transaction(
-          FText::FromString(TEXT("Create Landscape")));
-      Landscape->Modify();
-
-      // -----------------------------------------------------------------------
-      // Version-specific landscape initialization
-      // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // Version-specific landscape initialization
+    // -----------------------------------------------------------------------
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
-      // UE 5.7+: The Import() function has a known issue with fresh landscapes.
-      // Use CreateDefaultLayer instead to initialize a valid landscape
-      // structure. Note: bCanHaveLayersContent is deprecated/removed in 5.7 as
-      // all landscapes use edit layers.
+    // UE 5.7+: The Import() function has a known issue with fresh landscapes.
+    // Use CreateDefaultLayer instead to initialize a valid landscape
+    // structure. Note: bCanHaveLayersContent is deprecated/removed in 5.7 as
+    // all landscapes use edit layers.
 
-      // Create default edit layer to enable modification
-      if (Landscape->GetLayersConst().Num() == 0) {
-        Landscape->CreateDefaultLayer();
+    // Create default edit layer to enable modification
+    if (Landscape->GetLayersConst().Num() == 0) {
+      Landscape->CreateDefaultLayer();
+    }
+
+    // Explicitly request layer initialization to ensure components are ready
+    // Landscape->RequestLayersInitialization(true, true); // Removed to
+    // prevent crash: LandscapeEditLayers.cpp confirms this resets init state
+    // which is unstable here
+
+    // UE 5.7 Safe Height Application:
+    // Instead of using Import() which crashes, we apply height data via
+    // FLandscapeEditDataInterface after landscape creation. This bypasses
+    // the problematic Import codepath while still allowing heightmap data.
+    ULandscapeInfo* LandscapeInfo = Landscape->GetLandscapeInfo();
+    if (LandscapeInfo && HeightArray.Num() > 0) {
+      // Register components first to ensure landscape is fully initialized
+      if (Landscape->GetRootComponent() &&
+          !Landscape->GetRootComponent()->IsRegistered()) {
+        Landscape->RegisterAllComponents();
       }
 
-      // Explicitly request layer initialization to ensure components are ready
-      // Landscape->RequestLayersInitialization(true, true); // Removed to
-      // prevent crash: LandscapeEditLayers.cpp confirms this resets init state
-      // which is unstable here
-
-      // UE 5.7 Safe Height Application:
-      // Instead of using Import() which crashes, we apply height data via
-      // FLandscapeEditDataInterface after landscape creation. This bypasses
-      // the problematic Import codepath while still allowing heightmap data.
-      ULandscapeInfo* LandscapeInfo = Landscape->GetLandscapeInfo();
-      if (LandscapeInfo && HeightArray.Num() > 0) {
-        // Register components first to ensure landscape is fully initialized
-        if (Landscape->GetRootComponent() &&
-            !Landscape->GetRootComponent()->IsRegistered()) {
-          Landscape->RegisterAllComponents();
-        }
-
-        // Use FLandscapeEditDataInterface for safe height modification
-        FLandscapeEditDataInterface LandscapeEdit(LandscapeInfo);
-        LandscapeEdit.SetHeightData(
-            InMinX, InMinY,  // Min X, Y
-            InMaxX, InMaxY,  // Max X, Y
-            HeightArray.GetData(),
-            0,     // Stride (0 = use default)
-            true   // Calc normals
-        );
-		LandscapeEdit.Flush();
-	}
+      // Use FLandscapeEditDataInterface for safe height modification
+      FLandscapeEditDataInterface LandscapeEdit(LandscapeInfo);
+      LandscapeEdit.SetHeightData(
+          InMinX, InMinY,  // Min X, Y
+          InMaxX, InMaxY,  // Max X, Y
+          HeightArray.GetData(),
+          0,     // Stride (0 = use default)
+          true   // Calc normals
+      );
+      LandscapeEdit.Flush();
+    }
 
 #elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5
-      // UE 5.5-5.6: Use FLandscapeEditDataInterface to avoid deprecated Import() warning
-      ULandscapeInfo* LandscapeInfo = Landscape->GetLandscapeInfo();
-      if (LandscapeInfo && HeightArray.Num() > 0) {
-        if (Landscape->GetRootComponent() &&
-            !Landscape->GetRootComponent()->IsRegistered()) {
-          Landscape->RegisterAllComponents();
-        }
-        FLandscapeEditDataInterface LandscapeEdit(LandscapeInfo);
-        LandscapeEdit.SetHeightData(
-            InMinX, InMinY,
-            InMaxX, InMaxY,
-            HeightArray.GetData(),
-            0,
-            true
-        );
-        LandscapeEdit.Flush();
+    // UE 5.5-5.6: Use FLandscapeEditDataInterface to avoid deprecated Import() warning
+    ULandscapeInfo* LandscapeInfo = Landscape->GetLandscapeInfo();
+    if (LandscapeInfo && HeightArray.Num() > 0) {
+      if (Landscape->GetRootComponent() &&
+          !Landscape->GetRootComponent()->IsRegistered()) {
+        Landscape->RegisterAllComponents();
       }
-      Landscape->CreateDefaultLayer();
+      FLandscapeEditDataInterface LandscapeEdit(LandscapeInfo);
+      LandscapeEdit.SetHeightData(
+          InMinX, InMinY,
+          InMaxX, InMaxY,
+          HeightArray.GetData(),
+          0,
+          true
+      );
+      LandscapeEdit.Flush();
+    }
+    Landscape->CreateDefaultLayer();
 #else
-      // UE 5.0-5.4: Use standard Import() workflow
-      PRAGMA_DISABLE_DEPRECATION_WARNINGS
-      Landscape->Import(FGuid::NewGuid(), 0, 0, CaptComponentsX - 1, CaptComponentsY - 1, CaptSectionsPerComponent, CaptQuadsPerComponent, ImportHeightData, nullptr, ImportLayerInfos, ELandscapeImportAlphamapType::Layered, EditLayers.Num() > 0 ? &EditLayers : nullptr);
-      PRAGMA_ENABLE_DEPRECATION_WARNINGS
-      Landscape->CreateDefaultLayer();
+    // UE 5.0-5.4: Use standard Import() workflow
+    PRAGMA_DISABLE_DEPRECATION_WARNINGS
+    Landscape->Import(FGuid::NewGuid(), 0, 0, CaptComponentsX - 1, CaptComponentsY - 1, CaptSectionsPerComponent, CaptQuadsPerComponent, ImportHeightData, nullptr, ImportLayerInfos, ELandscapeImportAlphamapType::Layered, EditLayers.Num() > 0 ? &EditLayers : nullptr);
+    PRAGMA_ENABLE_DEPRECATION_WARNINGS
+    Landscape->CreateDefaultLayer();
 #endif
-    }
+  }
 
-    // Initialize properties AFTER import to avoid conflicts during component
-    // creation
-    if (CaptName.IsEmpty()) {
-      Landscape->SetActorLabel(FString::Printf(
-          TEXT("Landscape_%dx%d"), CaptComponentsX, CaptComponentsY));
-	} else {
-		Landscape->SetActorLabel(CaptName);
-	}
+  // Initialize properties AFTER import to avoid conflicts during component
+  // creation
+  if (CaptName.IsEmpty()) {
+    Landscape->SetActorLabel(FString::Printf(
+        TEXT("Landscape_%dx%d"), CaptComponentsX, CaptComponentsY));
+  } else {
+    Landscape->SetActorLabel(CaptName);
+  }
 
-    if (!CaptMaterialPath.IsEmpty()) {
-      UMaterialInterface *Mat =
-          LoadObject<UMaterialInterface>(nullptr, *CaptMaterialPath);
-      if (Mat) {
-        Landscape->LandscapeMaterial = Mat;
-        // Re-assign material effectively
-        Landscape->PostEditChange();
-      }
-    }
-
-    // Register components if Import didn't do it (it usually does re-register)
-    if (Landscape->GetRootComponent() &&
-        !Landscape->GetRootComponent()->IsRegistered()) {
-      Landscape->RegisterAllComponents();
-    }
-
-    // Only call PostEditChange if the landscape is still valid and not pending
-    // kill
-    if (IsValid(Landscape)) {
+  if (!CaptMaterialPath.IsEmpty()) {
+    UMaterialInterface *Mat =
+        LoadObject<UMaterialInterface>(nullptr, *CaptMaterialPath);
+    if (Mat) {
+      Landscape->LandscapeMaterial = Mat;
+      // Re-assign material effectively
       Landscape->PostEditChange();
     }
+  }
 
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetBoolField(TEXT("success"), true);
-    Resp->SetStringField(TEXT("landscapePath"), Landscape->GetPackage()->GetPathName());
-    Resp->SetStringField(TEXT("actorLabel"), Landscape->GetActorLabel());
-    Resp->SetStringField(TEXT("landscapeName"), Landscape->GetActorLabel());
-    Resp->SetNumberField(TEXT("componentsX"), CaptComponentsX);
-    Resp->SetNumberField(TEXT("componentsY"), CaptComponentsY);
-    Resp->SetNumberField(TEXT("quadsPerComponent"), CaptQuadsPerComponent);
-    Resp->SetNumberField(TEXT("extentX"), CaptComponentsX * CaptQuadsPerComponent * Landscape->GetActorScale3D().X * 0.5);
-    Resp->SetNumberField(TEXT("extentY"), CaptComponentsY * CaptQuadsPerComponent * Landscape->GetActorScale3D().Y * 0.5);
+  // Register components if Import didn't do it (it usually does re-register)
+  if (Landscape->GetRootComponent() &&
+      !Landscape->GetRootComponent()->IsRegistered()) {
+    Landscape->RegisterAllComponents();
+  }
 
-    Subsystem->SendAutomationResponse(RequestingSocket, RequestId, true,
-                                      TEXT("Landscape created successfully"),
-                                      Resp, FString());
-  });
+  // Only call PostEditChange if the landscape is still valid and not pending
+  // kill
+  if (IsValid(Landscape)) {
+    Landscape->PostEditChange();
+  }
+
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetStringField(TEXT("landscapePath"), Landscape->GetPackage()->GetPathName());
+  Resp->SetStringField(TEXT("actorLabel"), Landscape->GetActorLabel());
+  Resp->SetStringField(TEXT("landscapeName"), Landscape->GetActorLabel());
+  Resp->SetNumberField(TEXT("componentsX"), CaptComponentsX);
+  Resp->SetNumberField(TEXT("componentsY"), CaptComponentsY);
+  Resp->SetNumberField(TEXT("quadsPerComponent"), CaptQuadsPerComponent);
+  Resp->SetNumberField(TEXT("extentX"), CaptComponentsX * CaptQuadsPerComponent * Landscape->GetActorScale3D().X * 0.5);
+  Resp->SetNumberField(TEXT("extentY"), CaptComponentsY * CaptQuadsPerComponent * Landscape->GetActorScale3D().Y * 0.5);
+
+  SendAutomationResponse(RequestingSocket, RequestId, true,
+                         TEXT("Landscape created successfully"),
+                         Resp, FString());
 
   return true;
 #else
@@ -720,7 +704,7 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
   bool bUpdateNormals = false;
   Payload->TryGetBoolField(TEXT("updateNormals"), bUpdateNormals);
 
-  // Copy height data for async task
+  // Copy height data
   TArray<uint16> HeightValues;
   if (bHasHeightData) {
     for (const TSharedPtr<FJsonValue> &Val : *HeightDataArray) {
@@ -731,258 +715,244 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
     }
   }
 
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(this);
+  // PRIORITY 1: Find landscape in current world by name (works for transient actors)
+  ALandscape *Landscape = nullptr;
+  if (GEditor) {
+    if (UEditorActorSubsystem *ActorSS =
+            GEditor->GetEditorSubsystem<UEditorActorSubsystem>()) {
+      TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
 
-  // Dispatch to Game Thread
-  AsyncTask(ENamedThreads::GameThread, [WeakSubsystem, RequestId,
-                                        RequestingSocket, LandscapePath,
-                                        LandscapeName, Operation,
-                                        RegionMinX, RegionMinY, RegionMaxX, RegionMaxY,
-                                        HeightValues =
-                                            MoveTemp(HeightValues), bSkipFlush, bUpdateNormals]() {
-    UMcpAutomationBridgeSubsystem *Subsystem = WeakSubsystem.Get();
-    if (!Subsystem)
-      return;
-
-    // PRIORITY 1: Find landscape in current world by name (works for transient actors)
-    ALandscape *Landscape = nullptr;
-    if (GEditor) {
-      if (UEditorActorSubsystem *ActorSS =
-              GEditor->GetEditorSubsystem<UEditorActorSubsystem>()) {
-        TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
-
-        for (AActor *A : AllActors) {
-          if (ALandscape *L = Cast<ALandscape>(A)) {
-            // Match by landscapeName if provided (actor label)
-            if (!LandscapeName.IsEmpty() &&
-                L->GetActorLabel().Equals(LandscapeName,
-                                          ESearchCase::IgnoreCase)) {
+      for (AActor *A : AllActors) {
+        if (ALandscape *L = Cast<ALandscape>(A)) {
+          // Match by landscapeName if provided (actor label)
+          if (!LandscapeName.IsEmpty() &&
+              L->GetActorLabel().Equals(LandscapeName,
+                                        ESearchCase::IgnoreCase)) {
+            Landscape = L;
+            break;
+          }
+          // Match by path: compare asset path from the landscape's package
+          if (!LandscapePath.IsEmpty()) {
+            FString ActorAssetPath = L->GetPackage()->GetPathName();
+            // Normalize both paths for comparison
+            FString NormalizedRequest = LandscapePath;
+            FString NormalizedActor = ActorAssetPath;
+            NormalizedRequest.ReplaceInline(TEXT("\\"), TEXT("/"));
+            NormalizedActor.ReplaceInline(TEXT("\\"), TEXT("/"));
+            // Remove .uasset extension if present
+            if (NormalizedActor.EndsWith(TEXT(".uasset"))) {
+              NormalizedActor = NormalizedActor.LeftChop(7);
+            }
+            if (NormalizedActor.Equals(NormalizedRequest, ESearchCase::IgnoreCase)) {
               Landscape = L;
               break;
             }
-            // Match by path: compare asset path from the landscape's package
-            if (!LandscapePath.IsEmpty()) {
-              FString ActorAssetPath = L->GetPackage()->GetPathName();
-              // Normalize both paths for comparison
-              FString NormalizedRequest = LandscapePath;
-              FString NormalizedActor = ActorAssetPath;
-              NormalizedRequest.ReplaceInline(TEXT("\\"), TEXT("/"));
-              NormalizedActor.ReplaceInline(TEXT("\\"), TEXT("/"));
-              // Remove .uasset extension if present
-              if (NormalizedActor.EndsWith(TEXT(".uasset"))) {
-                NormalizedActor = NormalizedActor.LeftChop(7);
-              }
-              if (NormalizedActor.Equals(NormalizedRequest, ESearchCase::IgnoreCase)) {
-                Landscape = L;
-                break;
-              }
-            }
           }
         }
-
-        // NOTE: Removed silent fallback - if specific landscape requested but not found, fail
-      }
-    }
-
-    // PRIORITY 2: Try to load from disk (for saved landscape assets)
-    if (!Landscape && !LandscapePath.IsEmpty()) {
-      Landscape = Cast<ALandscape>(
-          StaticLoadObject(ALandscape::StaticClass(), nullptr, *LandscapePath));
-    }
-    if (!Landscape) {
-      FString ErrorMessage = LandscapeName.IsEmpty() 
-          ? FString::Printf(TEXT("Landscape not found at path: %s"), *LandscapePath)
-          : FString::Printf(TEXT("Landscape '%s' not found (path: %s)"), *LandscapeName, *LandscapePath);
-      Subsystem->SendAutomationError(RequestingSocket, RequestId,
-                                     *ErrorMessage,
-                                     TEXT("LANDSCAPE_NOT_FOUND"));
-      return;
-    }
-
-    ULandscapeInfo *LandscapeInfo = Landscape->GetLandscapeInfo();
-    if (!LandscapeInfo) {
-      Subsystem->SendAutomationError(RequestingSocket, RequestId,
-                                     TEXT("Landscape has no info"),
-                                     TEXT("INVALID_LANDSCAPE"));
-      return;
-    }
-
-    if (FParse::Param(FCommandLine::Get(), TEXT("NullRHI"))) {
-      const int32 RequestedSizeX =
-          (RegionMinX >= 0 && RegionMaxX >= RegionMinX) ? (RegionMaxX - RegionMinX + 1) : 1;
-      const int32 RequestedSizeY =
-          (RegionMinY >= 0 && RegionMaxY >= RegionMinY) ? (RegionMaxY - RegionMinY + 1) : 1;
-      const int32 RequestedRegionSize = RequestedSizeX * RequestedSizeY;
-
-      TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-      Resp->SetBoolField(TEXT("success"), true);
-      Resp->SetStringField(TEXT("landscapePath"), Landscape->GetPackage()->GetPathName());
-      Resp->SetStringField(TEXT("landscapeName"), Landscape->GetActorLabel());
-      Resp->SetStringField(TEXT("operation"), Operation);
-      Resp->SetNumberField(TEXT("modifiedVertices"), RequestedRegionSize);
-      Resp->SetNumberField(TEXT("regionSizeX"), RequestedSizeX);
-      Resp->SetNumberField(TEXT("regionSizeY"), RequestedSizeY);
-      Resp->SetBoolField(TEXT("flushSkipped"), true);
-      Resp->SetBoolField(TEXT("headlessSafe"), true);
-      Resp->SetBoolField(TEXT("heightmapEditSkipped"), true);
-      Resp->SetStringField(
-          TEXT("skipReason"),
-          TEXT("Landscape heightmap extent/edit operations are unsafe under NullRHI; landscape identity was validated."));
-      McpHandlerUtils::AddVerification(Resp, Landscape);
-
-      Subsystem->SendAutomationResponse(
-          RequestingSocket, RequestId, true,
-          TEXT("Heightmap edit validated; landscape write skipped under NullRHI"),
-          Resp, FString());
-      return;
-    }
-
-    // Note: Do NOT call MakeDialog() - it blocks indefinitely in headless environments
-    FScopedSlowTask SlowTask(2.0f,
-                             FText::FromString(TEXT("Modifying heightmap...")));
-
-    // Get full landscape extent first
-    int32 FullMinX, FullMinY, FullMaxX, FullMaxY;
-    if (!LandscapeInfo->GetLandscapeExtent(FullMinX, FullMinY, FullMaxX, FullMaxY)) {
-      Subsystem->SendAutomationError(RequestingSocket, RequestId,
-                                     TEXT("Failed to get landscape extent"),
-                                     TEXT("INVALID_LANDSCAPE"));
-      return;
-    }
-
-    // Determine region to modify
-    int32 MinX = (RegionMinX >= 0) ? RegionMinX : FullMinX;
-    int32 MinY = (RegionMinY >= 0) ? RegionMinY : FullMinY;
-    int32 MaxX = (RegionMaxX >= 0) ? RegionMaxX : FullMaxX;
-    int32 MaxY = (RegionMaxY >= 0) ? RegionMaxY : FullMaxY;
-
-    // Clamp to landscape bounds
-    MinX = FMath::Clamp(MinX, FullMinX, FullMaxX);
-    MinY = FMath::Clamp(MinY, FullMinY, FullMaxY);
-    MaxX = FMath::Clamp(MaxX, FullMinX, FullMaxX);
-    MaxY = FMath::Clamp(MaxY, FullMinY, FullMaxY);
-
-    const int32 SizeX = (MaxX - MinX + 1);
-    const int32 SizeY = (MaxY - MinY + 1);
-    const int32 RegionSize = SizeX * SizeY;
-
-    if (FParse::Param(FCommandLine::Get(), TEXT("NullRHI"))) {
-      TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-      Resp->SetBoolField(TEXT("success"), true);
-      Resp->SetStringField(TEXT("landscapePath"), Landscape->GetPackage()->GetPathName());
-      Resp->SetStringField(TEXT("landscapeName"), Landscape->GetActorLabel());
-      Resp->SetStringField(TEXT("operation"), Operation);
-      Resp->SetNumberField(TEXT("modifiedVertices"), RegionSize);
-      Resp->SetNumberField(TEXT("regionSizeX"), SizeX);
-      Resp->SetNumberField(TEXT("regionSizeY"), SizeY);
-      Resp->SetBoolField(TEXT("flushSkipped"), true);
-      Resp->SetBoolField(TEXT("headlessSafe"), true);
-      Resp->SetBoolField(TEXT("heightmapEditSkipped"), true);
-      Resp->SetStringField(
-          TEXT("skipReason"),
-          TEXT("Landscape heightmap texture upload is unsafe under NullRHI; landscape and edit region were validated."));
-      McpHandlerUtils::AddVerification(Resp, Landscape);
-
-      Subsystem->SendAutomationResponse(
-          RequestingSocket, RequestId, true,
-          TEXT("Heightmap edit validated; texture write skipped under NullRHI"),
-          Resp, FString());
-      return;
-    }
-
-    SlowTask.EnterProgressFrame(
-        1.0f, FText::FromString(TEXT("Reading current heightmap data")));
-
-    // Read current height data for the region
-    // Pass false for bInUploadTextureChangesToGPU to prevent GPU sync hang on Intel GPUs
-    TArray<uint16> CurrentHeights;
-    CurrentHeights.SetNumZeroed(RegionSize);
-    FLandscapeEditDataInterface LandscapeEditRead(LandscapeInfo, false);
-    LandscapeEditRead.GetHeightData(MinX, MinY, MaxX, MaxY, CurrentHeights.GetData(), 0);
-
-    // Prepare output height data
-    TArray<uint16> OutputHeights;
-    OutputHeights.SetNumUninitialized(RegionSize);
-
-    // Get single value for operations (default: 32768 = mid-height)
-    const uint16 SingleValue = HeightValues.Num() > 0 ? HeightValues[0] : 32768;
-    const int16 Delta = static_cast<int16>(SingleValue) - 32768; // Convert to signed delta for raise/lower
-
-    // Apply operation
-    int32 ModifiedCount = 0;
-    for (int32 i = 0; i < RegionSize; ++i) {
-      uint16 NewHeight = CurrentHeights[i];
-
-      if (Operation.Equals(TEXT("raise"), ESearchCase::IgnoreCase)) {
-        // Raise by delta (positive values raise, negative lower)
-        // Use int32 to avoid overflow for heights > 32767
-        NewHeight = FMath::Clamp(static_cast<int32>(CurrentHeights[i]) + FMath::Abs(Delta) / 10, 0, 65535);
-        ModifiedCount++;
-      } else if (Operation.Equals(TEXT("lower"), ESearchCase::IgnoreCase)) {
-        // Lower by delta
-        // Use int32 to avoid overflow for heights > 32767
-        NewHeight = FMath::Clamp(static_cast<int32>(CurrentHeights[i]) - FMath::Abs(Delta) / 10, 0, 65535);
-        ModifiedCount++;
-      } else if (Operation.Equals(TEXT("flatten"), ESearchCase::IgnoreCase)) {
-        // Flatten to target height
-        NewHeight = SingleValue;
-        ModifiedCount++;
-      } else {
-        // "set" operation - use heightData if provided and matches size, otherwise use single value
-        if (HeightValues.Num() == RegionSize) {
-          NewHeight = HeightValues[i];
-        } else {
-          NewHeight = SingleValue;
-        }
-        ModifiedCount++;
       }
 
-      OutputHeights[i] = NewHeight;
+      // NOTE: Removed silent fallback - if specific landscape requested but not found, fail
     }
+  }
 
-    SlowTask.EnterProgressFrame(
-        1.0f, FText::FromString(TEXT("Writing heightmap data")));
+  // PRIORITY 2: Try to load from disk (for saved landscape assets)
+  if (!Landscape && !LandscapePath.IsEmpty()) {
+    Landscape = Cast<ALandscape>(
+        StaticLoadObject(ALandscape::StaticClass(), nullptr, *LandscapePath));
+  }
+  if (!Landscape) {
+    FString ErrorMessage = LandscapeName.IsEmpty()
+        ? FString::Printf(TEXT("Landscape not found at path: %s"), *LandscapePath)
+        : FString::Printf(TEXT("Landscape '%s' not found (path: %s)"), *LandscapeName, *LandscapePath);
+    SendAutomationError(RequestingSocket, RequestId,
+                        *ErrorMessage,
+                        TEXT("LANDSCAPE_NOT_FOUND"));
+    return true;
+  }
 
-    // Write the modified height data
-    // Pass false for bInUploadTextureChangesToGPU to prevent GPU sync hang on Intel GPUs
-    // Use bForce=false in SetHeightData to avoid blocking GPU synchronization
-    // This prevents 60+ second hangs on large landscapes
-    FLandscapeEditDataInterface LandscapeEditWrite(LandscapeInfo, false);
-    LandscapeEditWrite.SetHeightData(MinX, MinY, MaxX, MaxY, OutputHeights.GetData(),
-                                     SizeX, bUpdateNormals);
+  ULandscapeInfo *LandscapeInfo = Landscape->GetLandscapeInfo();
+  if (!LandscapeInfo) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Landscape has no info"),
+                        TEXT("INVALID_LANDSCAPE"));
+    return true;
+  }
 
-    // Flush is expensive - it forces render thread synchronization
-    // Skip if requested for batch operations, but note that changes
-    // won't be visible until the next flush or edit operation
-    if (!bSkipFlush) {
-      SlowTask.EnterProgressFrame(
-          1.0f, FText::FromString(TEXT("Flushing changes to GPU")));
-      LandscapeEditWrite.Flush();
-    }
-    
-    // Use MarkPackageDirty instead of PostEditChange to avoid full landscape rebuild
-    // PostEditChange triggers collision rebuild, shader recompilation, and nav mesh update
-    // which can take 60+ seconds for large landscapes
-    Landscape->MarkPackageDirty();
+  if (FParse::Param(FCommandLine::Get(), TEXT("NullRHI"))) {
+    const int32 RequestedSizeX =
+        (RegionMinX >= 0 && RegionMaxX >= RegionMinX) ? (RegionMaxX - RegionMinX + 1) : 1;
+    const int32 RequestedSizeY =
+        (RegionMinY >= 0 && RegionMaxY >= RegionMinY) ? (RegionMaxY - RegionMinY + 1) : 1;
+    const int32 RequestedRegionSize = RequestedSizeX * RequestedSizeY;
 
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetStringField(TEXT("landscapePath"), Landscape->GetPackage()->GetPathName());
     Resp->SetStringField(TEXT("landscapeName"), Landscape->GetActorLabel());
     Resp->SetStringField(TEXT("operation"), Operation);
-    Resp->SetNumberField(TEXT("modifiedVertices"), ModifiedCount);
-    Resp->SetNumberField(TEXT("regionSizeX"), SizeX);
-    Resp->SetNumberField(TEXT("regionSizeY"), SizeY);
-    Resp->SetBoolField(TEXT("flushSkipped"), bSkipFlush);
-    Resp->SetBoolField(TEXT("updateNormals"), bUpdateNormals);
-    
-    // Add verification data
+    Resp->SetNumberField(TEXT("modifiedVertices"), RequestedRegionSize);
+    Resp->SetNumberField(TEXT("regionSizeX"), RequestedSizeX);
+    Resp->SetNumberField(TEXT("regionSizeY"), RequestedSizeY);
+    Resp->SetBoolField(TEXT("flushSkipped"), true);
+    Resp->SetBoolField(TEXT("headlessSafe"), true);
+    Resp->SetBoolField(TEXT("heightmapEditSkipped"), true);
+    Resp->SetStringField(
+        TEXT("skipReason"),
+        TEXT("Landscape heightmap extent/edit operations are unsafe under NullRHI; landscape identity was validated."));
     McpHandlerUtils::AddVerification(Resp, Landscape);
 
-    Subsystem->SendAutomationResponse(RequestingSocket, RequestId, true,
-                                      TEXT("Heightmap modified successfully"),
-                                      Resp, FString());
-  });
+    SendAutomationResponse(
+        RequestingSocket, RequestId, true,
+        TEXT("Heightmap edit validated; landscape write skipped under NullRHI"),
+        Resp, FString());
+    return true;
+  }
+
+  // Note: Do NOT call MakeDialog() - it blocks indefinitely in headless environments
+  FScopedSlowTask SlowTask(2.0f,
+                           FText::FromString(TEXT("Modifying heightmap...")));
+
+  // Get full landscape extent first
+  int32 FullMinX, FullMinY, FullMaxX, FullMaxY;
+  if (!LandscapeInfo->GetLandscapeExtent(FullMinX, FullMinY, FullMaxX, FullMaxY)) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Failed to get landscape extent"),
+                        TEXT("INVALID_LANDSCAPE"));
+    return true;
+  }
+
+  // Determine region to modify
+  int32 MinX = (RegionMinX >= 0) ? RegionMinX : FullMinX;
+  int32 MinY = (RegionMinY >= 0) ? RegionMinY : FullMinY;
+  int32 MaxX = (RegionMaxX >= 0) ? RegionMaxX : FullMaxX;
+  int32 MaxY = (RegionMaxY >= 0) ? RegionMaxY : FullMaxY;
+
+  // Clamp to landscape bounds
+  MinX = FMath::Clamp(MinX, FullMinX, FullMaxX);
+  MinY = FMath::Clamp(MinY, FullMinY, FullMaxY);
+  MaxX = FMath::Clamp(MaxX, FullMinX, FullMaxX);
+  MaxY = FMath::Clamp(MaxY, FullMinY, FullMaxY);
+
+  const int32 SizeX = (MaxX - MinX + 1);
+  const int32 SizeY = (MaxY - MinY + 1);
+  const int32 RegionSize = SizeX * SizeY;
+
+  if (FParse::Param(FCommandLine::Get(), TEXT("NullRHI"))) {
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetBoolField(TEXT("success"), true);
+    Resp->SetStringField(TEXT("landscapePath"), Landscape->GetPackage()->GetPathName());
+    Resp->SetStringField(TEXT("landscapeName"), Landscape->GetActorLabel());
+    Resp->SetStringField(TEXT("operation"), Operation);
+    Resp->SetNumberField(TEXT("modifiedVertices"), RegionSize);
+    Resp->SetNumberField(TEXT("regionSizeX"), SizeX);
+    Resp->SetNumberField(TEXT("regionSizeY"), SizeY);
+    Resp->SetBoolField(TEXT("flushSkipped"), true);
+    Resp->SetBoolField(TEXT("headlessSafe"), true);
+    Resp->SetBoolField(TEXT("heightmapEditSkipped"), true);
+    Resp->SetStringField(
+        TEXT("skipReason"),
+        TEXT("Landscape heightmap texture upload is unsafe under NullRHI; landscape and edit region were validated."));
+    McpHandlerUtils::AddVerification(Resp, Landscape);
+
+    SendAutomationResponse(
+        RequestingSocket, RequestId, true,
+        TEXT("Heightmap edit validated; texture write skipped under NullRHI"),
+        Resp, FString());
+    return true;
+  }
+
+  SlowTask.EnterProgressFrame(
+      1.0f, FText::FromString(TEXT("Reading current heightmap data")));
+
+  // Read current height data for the region
+  // Pass false for bInUploadTextureChangesToGPU to prevent GPU sync hang on Intel GPUs
+  TArray<uint16> CurrentHeights;
+  CurrentHeights.SetNumZeroed(RegionSize);
+  FLandscapeEditDataInterface LandscapeEditRead(LandscapeInfo, false);
+  LandscapeEditRead.GetHeightData(MinX, MinY, MaxX, MaxY, CurrentHeights.GetData(), 0);
+
+  // Prepare output height data
+  TArray<uint16> OutputHeights;
+  OutputHeights.SetNumUninitialized(RegionSize);
+
+  // Get single value for operations (default: 32768 = mid-height)
+  const uint16 SingleValue = HeightValues.Num() > 0 ? HeightValues[0] : 32768;
+  const int16 Delta = static_cast<int16>(SingleValue) - 32768; // Convert to signed delta for raise/lower
+
+  // Apply operation
+  int32 ModifiedCount = 0;
+  for (int32 i = 0; i < RegionSize; ++i) {
+    uint16 NewHeight = CurrentHeights[i];
+
+    if (Operation.Equals(TEXT("raise"), ESearchCase::IgnoreCase)) {
+      // Raise by delta (positive values raise, negative lower)
+      // Use int32 to avoid overflow for heights > 32767
+      NewHeight = FMath::Clamp(static_cast<int32>(CurrentHeights[i]) + FMath::Abs(Delta) / 10, 0, 65535);
+      ModifiedCount++;
+    } else if (Operation.Equals(TEXT("lower"), ESearchCase::IgnoreCase)) {
+      // Lower by delta
+      // Use int32 to avoid overflow for heights > 32767
+      NewHeight = FMath::Clamp(static_cast<int32>(CurrentHeights[i]) - FMath::Abs(Delta) / 10, 0, 65535);
+      ModifiedCount++;
+    } else if (Operation.Equals(TEXT("flatten"), ESearchCase::IgnoreCase)) {
+      // Flatten to target height
+      NewHeight = SingleValue;
+      ModifiedCount++;
+    } else {
+      // "set" operation - use heightData if provided and matches size, otherwise use single value
+      if (HeightValues.Num() == RegionSize) {
+        NewHeight = HeightValues[i];
+      } else {
+        NewHeight = SingleValue;
+      }
+      ModifiedCount++;
+    }
+
+    OutputHeights[i] = NewHeight;
+  }
+
+  SlowTask.EnterProgressFrame(
+      1.0f, FText::FromString(TEXT("Writing heightmap data")));
+
+  // Write the modified height data
+  // Pass false for bInUploadTextureChangesToGPU to prevent GPU sync hang on Intel GPUs
+  // Use bForce=false in SetHeightData to avoid blocking GPU synchronization
+  // This prevents 60+ second hangs on large landscapes
+  FLandscapeEditDataInterface LandscapeEditWrite(LandscapeInfo, false);
+  LandscapeEditWrite.SetHeightData(MinX, MinY, MaxX, MaxY, OutputHeights.GetData(),
+                                   SizeX, bUpdateNormals);
+
+  // Flush is expensive - it forces render thread synchronization
+  // Skip if requested for batch operations, but note that changes
+  // won't be visible until the next flush or edit operation
+  if (!bSkipFlush) {
+    SlowTask.EnterProgressFrame(
+        1.0f, FText::FromString(TEXT("Flushing changes to GPU")));
+    LandscapeEditWrite.Flush();
+  }
+
+  // Use MarkPackageDirty instead of PostEditChange to avoid full landscape rebuild
+  // PostEditChange triggers collision rebuild, shader recompilation, and nav mesh update
+  // which can take 60+ seconds for large landscapes
+  Landscape->MarkPackageDirty();
+
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetStringField(TEXT("landscapePath"), Landscape->GetPackage()->GetPathName());
+  Resp->SetStringField(TEXT("landscapeName"), Landscape->GetActorLabel());
+  Resp->SetStringField(TEXT("operation"), Operation);
+  Resp->SetNumberField(TEXT("modifiedVertices"), ModifiedCount);
+  Resp->SetNumberField(TEXT("regionSizeX"), SizeX);
+  Resp->SetNumberField(TEXT("regionSizeY"), SizeY);
+  Resp->SetBoolField(TEXT("flushSkipped"), bSkipFlush);
+  Resp->SetBoolField(TEXT("updateNormals"), bUpdateNormals);
+
+  // Add verification data
+  McpHandlerUtils::AddVerification(Resp, Landscape);
+
+  SendAutomationResponse(RequestingSocket, RequestId, true,
+                         TEXT("Heightmap modified successfully"),
+                         Resp, FString());
 
   return true;
 #else
@@ -1098,206 +1068,195 @@ bool UMcpAutomationBridgeSubsystem::HandleSculptLandscape(
   bool bSkipFlush = false;
   Payload->TryGetBoolField(TEXT("skipFlush"), bSkipFlush);
 
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(this);
+  // PRIORITY 1: Find landscape in current world by name (works for transient actors)
+  ALandscape *Landscape = nullptr;
+  if (GEditor) {
+    if (UEditorActorSubsystem *ActorSS =
+            GEditor->GetEditorSubsystem<UEditorActorSubsystem>()) {
+      TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
 
-  AsyncTask(ENamedThreads::GameThread, [WeakSubsystem, RequestId,
-                                        RequestingSocket, LandscapePath,
-                                        LandscapeName, TargetLocation, ToolMode,
-                                        BrushRadius, BrushFalloff, Strength, bSkipFlush]() {
-    UMcpAutomationBridgeSubsystem *Subsystem = WeakSubsystem.Get();
-    if (!Subsystem)
-      return;
-
-    // PRIORITY 1: Find landscape in current world by name (works for transient actors)
-    ALandscape *Landscape = nullptr;
-    if (GEditor) {
-      if (UEditorActorSubsystem *ActorSS =
-              GEditor->GetEditorSubsystem<UEditorActorSubsystem>()) {
-        TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
-
-        for (AActor *A : AllActors) {
-          if (ALandscape *L = Cast<ALandscape>(A)) {
-            // Match by landscapeName if provided (actor label)
-            if (!LandscapeName.IsEmpty() &&
-                L->GetActorLabel().Equals(LandscapeName,
-                                          ESearchCase::IgnoreCase)) {
+      for (AActor *A : AllActors) {
+        if (ALandscape *L = Cast<ALandscape>(A)) {
+          // Match by landscapeName if provided (actor label)
+          if (!LandscapeName.IsEmpty() &&
+              L->GetActorLabel().Equals(LandscapeName,
+                                        ESearchCase::IgnoreCase)) {
+            Landscape = L;
+            break;
+          }
+          // Match by path: compare asset path from the landscape's package
+          if (!LandscapePath.IsEmpty()) {
+            FString ActorAssetPath = L->GetPackage()->GetPathName();
+            // Normalize both paths for comparison
+            FString NormalizedRequest = LandscapePath;
+            FString NormalizedActor = ActorAssetPath;
+            NormalizedRequest.ReplaceInline(TEXT("\\"), TEXT("/"));
+            NormalizedActor.ReplaceInline(TEXT("\\"), TEXT("/"));
+            // Remove .uasset extension if present
+            if (NormalizedActor.EndsWith(TEXT(".uasset"))) {
+              NormalizedActor = NormalizedActor.LeftChop(7);
+            }
+            if (NormalizedActor.Equals(NormalizedRequest, ESearchCase::IgnoreCase)) {
               Landscape = L;
               break;
             }
-            // Match by path: compare asset path from the landscape's package
-            if (!LandscapePath.IsEmpty()) {
-              FString ActorAssetPath = L->GetPackage()->GetPathName();
-              // Normalize both paths for comparison
-              FString NormalizedRequest = LandscapePath;
-              FString NormalizedActor = ActorAssetPath;
-              NormalizedRequest.ReplaceInline(TEXT("\\"), TEXT("/"));
-              NormalizedActor.ReplaceInline(TEXT("\\"), TEXT("/"));
-              // Remove .uasset extension if present
-              if (NormalizedActor.EndsWith(TEXT(".uasset"))) {
-                NormalizedActor = NormalizedActor.LeftChop(7);
-              }
-              if (NormalizedActor.Equals(NormalizedRequest, ESearchCase::IgnoreCase)) {
-                Landscape = L;
-                break;
-              }
-            }
           }
         }
-
-        // NOTE: Removed silent fallback - if specific landscape requested but not found, fail
-      }
-    }
-
-    // PRIORITY 2: Try to load from disk (for saved landscape assets)
-    if (!Landscape && !LandscapePath.IsEmpty()) {
-      Landscape = Cast<ALandscape>(
-          StaticLoadObject(ALandscape::StaticClass(), nullptr, *LandscapePath));
-    }
-    if (!Landscape) {
-      FString ErrorMessage = LandscapeName.IsEmpty() 
-          ? FString::Printf(TEXT("Landscape not found at path: %s"), *LandscapePath)
-          : FString::Printf(TEXT("Landscape '%s' not found (path: %s)"), *LandscapeName, *LandscapePath);
-      Subsystem->SendAutomationError(RequestingSocket, RequestId,
-                                     *ErrorMessage,
-                                     TEXT("LANDSCAPE_NOT_FOUND"));
-      return;
-    }
-
-    ULandscapeInfo *LandscapeInfo = Landscape->GetLandscapeInfo();
-    if (!LandscapeInfo) {
-      Subsystem->SendAutomationError(RequestingSocket, RequestId,
-                                     TEXT("Landscape has no info"),
-                                     TEXT("INVALID_LANDSCAPE"));
-      return;
-    }
-
-    // Convert World Location to Landscape Local Space
-    FVector LocalPos =
-        Landscape->GetActorTransform().InverseTransformPosition(TargetLocation);
-    int32 CenterX = FMath::RoundToInt(LocalPos.X);
-    int32 CenterY = FMath::RoundToInt(LocalPos.Y);
-
-    // Convert Brush Radius to Vertex Units (assuming uniform scale for
-    // simplicity, or use X)
-    const FVector LandscapeScale = Landscape->GetActorScale3D();
-    const float ScaleX = LandscapeScale.X;
-    const float ScaleZ = LandscapeScale.Z;
-    
-    // Guard against zero scale which would cause division by zero
-    if (FMath::IsNearlyZero(ScaleX) || FMath::IsNearlyZero(ScaleZ))
-    {
-      Subsystem->SendAutomationError(RequestingSocket, RequestId,
-                                     TEXT("Landscape has zero scale. Cannot perform brush operation."),
-                                     TEXT("INVALID_SCALE"));
-      return;
-    }
-    
-    int32 RadiusVerts = FMath::Max(1, FMath::RoundToInt(BrushRadius / ScaleX));
-    int32 FalloffVerts = FMath::RoundToInt(RadiusVerts * BrushFalloff);
-
-    int32 MinX = CenterX - RadiusVerts;
-    int32 MaxX = CenterX + RadiusVerts;
-    int32 MinY = CenterY - RadiusVerts;
-    int32 MaxY = CenterY + RadiusVerts;
-
-    // Clamp to landscape extents
-    int32 LMinX, LMinY, LMaxX, LMaxY;
-    if (LandscapeInfo->GetLandscapeExtent(LMinX, LMinY, LMaxX, LMaxY)) {
-      MinX = FMath::Max(MinX, LMinX);
-      MinY = FMath::Max(MinY, LMinY);
-      MaxX = FMath::Min(MaxX, LMaxX);
-      MaxY = FMath::Min(MaxY, LMaxY);
-    }
-
-    if (MinX > MaxX || MinY > MaxY) {
-      Subsystem->SendAutomationResponse(RequestingSocket, RequestId, false,
-                                        TEXT("Brush outside landscape bounds"),
-                                        nullptr, TEXT("OUT_OF_BOUNDS"));
-      return;
-    }
-
-    int32 SizeX = MaxX - MinX + 1;
-    int32 SizeY = MaxY - MinY + 1;
-    TArray<uint16> HeightData;
-    HeightData.SetNumZeroed(SizeX * SizeY);
-
-    // Pass false for bInUploadTextureChangesToGPU to prevent GPU sync hang on Intel GPUs
-    FLandscapeEditDataInterface LandscapeEdit(LandscapeInfo, false);
-    LandscapeEdit.GetHeightData(MinX, MinY, MaxX, MaxY, HeightData.GetData(),
-                                0);
-
-    bool bModified = false;
-    for (int32 Y = MinY; Y <= MaxY; ++Y) {
-      for (int32 X = MinX; X <= MaxX; ++X) {
-        float Dist = FMath::Sqrt(FMath::Square((float)(X - CenterX)) +
-                                 FMath::Square((float)(Y - CenterY)));
-        if (Dist > RadiusVerts)
-          continue;
-
-        float Alpha = 1.0f;
-        if (Dist > (RadiusVerts - FalloffVerts)) {
-          Alpha = 1.0f -
-                  ((Dist - (RadiusVerts - FalloffVerts)) / (float)FalloffVerts);
-        }
-        Alpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
-
-        int32 Index = (Y - MinY) * SizeX + (X - MinX);
-        if (Index < 0 || Index >= HeightData.Num())
-          continue;
-
-        uint16 CurrentHeight = HeightData[Index];
-
-        float HeightScale =
-            128.0f / ScaleZ; // Conversion factor from World Z to uint16
-
-        float Delta = 0.0f;
-        if (ToolMode.Equals(TEXT("Raise"), ESearchCase::IgnoreCase)) {
-          Delta = Strength * Alpha * 100.0f *
-                  HeightScale; // Arbitrary strength multiplier
-        } else if (ToolMode.Equals(TEXT("Lower"), ESearchCase::IgnoreCase)) {
-          Delta = -Strength * Alpha * 100.0f * HeightScale;
-        } else if (ToolMode.Equals(TEXT("Flatten"), ESearchCase::IgnoreCase)) {
-          float CurrentVal = (float)CurrentHeight;
-          float Target = (TargetLocation.Z - Landscape->GetActorLocation().Z) /
-                             ScaleZ * 128.0f +
-                         32768.0f;
-          Delta = (Target - CurrentVal) * Strength * Alpha;
-        }
-
-        int32 NewHeight =
-            FMath::Clamp((int32)(CurrentHeight + Delta), 0, 65535);
-        if (NewHeight != CurrentHeight) {
-          HeightData[Index] = (uint16)NewHeight;
-          bModified = true;
-        }
-      }
-    }
-
-    if (bModified) {
-      LandscapeEdit.SetHeightData(MinX, MinY, MaxX, MaxY, HeightData.GetData(),
-                                  0, true);
-
-      // Flush is expensive - it forces render thread synchronization
-      // Skip if requested for batch operations
-      if (!bSkipFlush) {
-        LandscapeEdit.Flush();
       }
 
-      // Use MarkPackageDirty instead of PostEditChange to avoid full landscape rebuild
-      // PostEditChange triggers collision rebuild, shader recompilation, and nav mesh update
-      Landscape->MarkPackageDirty();
+      // NOTE: Removed silent fallback - if specific landscape requested but not found, fail
+    }
+  }
+
+  // PRIORITY 2: Try to load from disk (for saved landscape assets)
+  if (!Landscape && !LandscapePath.IsEmpty()) {
+    Landscape = Cast<ALandscape>(
+        StaticLoadObject(ALandscape::StaticClass(), nullptr, *LandscapePath));
+  }
+  if (!Landscape) {
+    FString ErrorMessage = LandscapeName.IsEmpty()
+        ? FString::Printf(TEXT("Landscape not found at path: %s"), *LandscapePath)
+        : FString::Printf(TEXT("Landscape '%s' not found (path: %s)"), *LandscapeName, *LandscapePath);
+    SendAutomationError(RequestingSocket, RequestId,
+                        *ErrorMessage,
+                        TEXT("LANDSCAPE_NOT_FOUND"));
+    return true;
+  }
+
+  ULandscapeInfo *LandscapeInfo = Landscape->GetLandscapeInfo();
+  if (!LandscapeInfo) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Landscape has no info"),
+                        TEXT("INVALID_LANDSCAPE"));
+    return true;
+  }
+
+  // Convert World Location to Landscape Local Space
+  FVector LocalPos =
+      Landscape->GetActorTransform().InverseTransformPosition(TargetLocation);
+  int32 CenterX = FMath::RoundToInt(LocalPos.X);
+  int32 CenterY = FMath::RoundToInt(LocalPos.Y);
+
+  // Convert Brush Radius to Vertex Units (assuming uniform scale for
+  // simplicity, or use X)
+  const FVector LandscapeScale = Landscape->GetActorScale3D();
+  const float ScaleX = LandscapeScale.X;
+  const float ScaleZ = LandscapeScale.Z;
+
+  // Guard against zero scale which would cause division by zero
+  if (FMath::IsNearlyZero(ScaleX) || FMath::IsNearlyZero(ScaleZ))
+  {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Landscape has zero scale. Cannot perform brush operation."),
+                        TEXT("INVALID_SCALE"));
+    return true;
+  }
+
+  int32 RadiusVerts = FMath::Max(1, FMath::RoundToInt(BrushRadius / ScaleX));
+  int32 FalloffVerts = FMath::RoundToInt(RadiusVerts * BrushFalloff);
+
+  int32 MinX = CenterX - RadiusVerts;
+  int32 MaxX = CenterX + RadiusVerts;
+  int32 MinY = CenterY - RadiusVerts;
+  int32 MaxY = CenterY + RadiusVerts;
+
+  // Clamp to landscape extents
+  int32 LMinX, LMinY, LMaxX, LMaxY;
+  if (LandscapeInfo->GetLandscapeExtent(LMinX, LMinY, LMaxX, LMaxY)) {
+    MinX = FMath::Max(MinX, LMinX);
+    MinY = FMath::Max(MinY, LMinY);
+    MaxX = FMath::Min(MaxX, LMaxX);
+    MaxY = FMath::Min(MaxY, LMaxY);
+  }
+
+  if (MinX > MaxX || MinY > MaxY) {
+    SendAutomationResponse(RequestingSocket, RequestId, false,
+                           TEXT("Brush outside landscape bounds"),
+                           nullptr, TEXT("OUT_OF_BOUNDS"));
+    return true;
+  }
+
+  int32 SizeX = MaxX - MinX + 1;
+  int32 SizeY = MaxY - MinY + 1;
+  TArray<uint16> HeightData;
+  HeightData.SetNumZeroed(SizeX * SizeY);
+
+  // Pass false for bInUploadTextureChangesToGPU to prevent GPU sync hang on Intel GPUs
+  FLandscapeEditDataInterface LandscapeEdit(LandscapeInfo, false);
+  LandscapeEdit.GetHeightData(MinX, MinY, MaxX, MaxY, HeightData.GetData(),
+                              0);
+
+  bool bModified = false;
+  for (int32 Y = MinY; Y <= MaxY; ++Y) {
+    for (int32 X = MinX; X <= MaxX; ++X) {
+      float Dist = FMath::Sqrt(FMath::Square((float)(X - CenterX)) +
+                               FMath::Square((float)(Y - CenterY)));
+      if (Dist > RadiusVerts)
+        continue;
+
+      float Alpha = 1.0f;
+      if (Dist > (RadiusVerts - FalloffVerts)) {
+        Alpha = 1.0f -
+                ((Dist - (RadiusVerts - FalloffVerts)) / (float)FalloffVerts);
+      }
+      Alpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+
+      int32 Index = (Y - MinY) * SizeX + (X - MinX);
+      if (Index < 0 || Index >= HeightData.Num())
+        continue;
+
+      uint16 CurrentHeight = HeightData[Index];
+
+      float HeightScale =
+          128.0f / ScaleZ; // Conversion factor from World Z to uint16
+
+      float Delta = 0.0f;
+      if (ToolMode.Equals(TEXT("Raise"), ESearchCase::IgnoreCase)) {
+        Delta = Strength * Alpha * 100.0f *
+                HeightScale; // Arbitrary strength multiplier
+      } else if (ToolMode.Equals(TEXT("Lower"), ESearchCase::IgnoreCase)) {
+        Delta = -Strength * Alpha * 100.0f * HeightScale;
+      } else if (ToolMode.Equals(TEXT("Flatten"), ESearchCase::IgnoreCase)) {
+        float CurrentVal = (float)CurrentHeight;
+        float Target = (TargetLocation.Z - Landscape->GetActorLocation().Z) /
+                           ScaleZ * 128.0f +
+                       32768.0f;
+        Delta = (Target - CurrentVal) * Strength * Alpha;
+      }
+
+      int32 NewHeight =
+          FMath::Clamp((int32)(CurrentHeight + Delta), 0, 65535);
+      if (NewHeight != CurrentHeight) {
+        HeightData[Index] = (uint16)NewHeight;
+        bModified = true;
+      }
+    }
+  }
+
+  if (bModified) {
+    LandscapeEdit.SetHeightData(MinX, MinY, MaxX, MaxY, HeightData.GetData(),
+                                0, true);
+
+    // Flush is expensive - it forces render thread synchronization
+    // Skip if requested for batch operations
+    if (!bSkipFlush) {
+      LandscapeEdit.Flush();
     }
 
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetBoolField(TEXT("success"), true);
-    Resp->SetStringField(TEXT("toolMode"), ToolMode);
-    Resp->SetNumberField(TEXT("modifiedVertices"),
-                         bModified ? HeightData.Num() : 0);
+    // Use MarkPackageDirty instead of PostEditChange to avoid full landscape rebuild
+    // PostEditChange triggers collision rebuild, shader recompilation, and nav mesh update
+    Landscape->MarkPackageDirty();
+  }
 
-    Subsystem->SendAutomationResponse(RequestingSocket, RequestId, true,
-                                      TEXT("Landscape sculpted"), Resp,
-                                      FString());
-  });
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetStringField(TEXT("toolMode"), ToolMode);
+  Resp->SetNumberField(TEXT("modifiedVertices"),
+                       bModified ? HeightData.Num() : 0);
+
+  SendAutomationResponse(RequestingSocket, RequestId, true,
+                         TEXT("Landscape sculpted"), Resp,
+                         FString());
 
   return true;
 #else
@@ -1393,198 +1352,187 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
   bool bSkipFlush = false;
   Payload->TryGetBoolField(TEXT("skipFlush"), bSkipFlush);
 
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(this);
+  // PRIORITY 1: Find landscape in current world by name (works for transient actors)
+  ALandscape *Landscape = nullptr;
+  if (GEditor) {
+    if (UEditorActorSubsystem *ActorSS =
+            GEditor->GetEditorSubsystem<UEditorActorSubsystem>()) {
+      TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
 
-  AsyncTask(ENamedThreads::GameThread, [WeakSubsystem, RequestId,
-                                        RequestingSocket, LandscapePath,
-                                        LandscapeName, LayerName, MinX, MinY,
-                                        MaxX, MaxY, Strength, bSkipFlush]() {
-    UMcpAutomationBridgeSubsystem *Subsystem = WeakSubsystem.Get();
-    if (!Subsystem)
-      return;
-
-    // PRIORITY 1: Find landscape in current world by name (works for transient actors)
-    ALandscape *Landscape = nullptr;
-    if (GEditor) {
-      if (UEditorActorSubsystem *ActorSS =
-              GEditor->GetEditorSubsystem<UEditorActorSubsystem>()) {
-        TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
-
-        for (AActor *A : AllActors) {
-          if (ALandscape *L = Cast<ALandscape>(A)) {
-            // Match by landscapeName if provided (actor label)
-            if (!LandscapeName.IsEmpty() &&
-                L->GetActorLabel().Equals(LandscapeName,
-                                          ESearchCase::IgnoreCase)) {
+      for (AActor *A : AllActors) {
+        if (ALandscape *L = Cast<ALandscape>(A)) {
+          // Match by landscapeName if provided (actor label)
+          if (!LandscapeName.IsEmpty() &&
+              L->GetActorLabel().Equals(LandscapeName,
+                                        ESearchCase::IgnoreCase)) {
+            Landscape = L;
+            break;
+          }
+          // Match by path: compare asset path from the landscape's package
+          if (!LandscapePath.IsEmpty()) {
+            FString ActorAssetPath = L->GetPackage()->GetPathName();
+            // Normalize both paths for comparison
+            FString NormalizedRequest = LandscapePath;
+            FString NormalizedActor = ActorAssetPath;
+            NormalizedRequest.ReplaceInline(TEXT("\\"), TEXT("/"));
+            NormalizedActor.ReplaceInline(TEXT("\\"), TEXT("/"));
+            // Remove .uasset extension if present
+            if (NormalizedActor.EndsWith(TEXT(".uasset"))) {
+              NormalizedActor = NormalizedActor.LeftChop(7);
+            }
+            if (NormalizedActor.Equals(NormalizedRequest, ESearchCase::IgnoreCase)) {
               Landscape = L;
               break;
             }
-            // Match by path: compare asset path from the landscape's package
-            if (!LandscapePath.IsEmpty()) {
-              FString ActorAssetPath = L->GetPackage()->GetPathName();
-              // Normalize both paths for comparison
-              FString NormalizedRequest = LandscapePath;
-              FString NormalizedActor = ActorAssetPath;
-              NormalizedRequest.ReplaceInline(TEXT("\\"), TEXT("/"));
-              NormalizedActor.ReplaceInline(TEXT("\\"), TEXT("/"));
-              // Remove .uasset extension if present
-              if (NormalizedActor.EndsWith(TEXT(".uasset"))) {
-                NormalizedActor = NormalizedActor.LeftChop(7);
-              }
-              if (NormalizedActor.Equals(NormalizedRequest, ESearchCase::IgnoreCase)) {
-                Landscape = L;
-                break;
-              }
-            }
           }
         }
-
-        // NOTE: Removed silent fallback to single landscape - this was causing false positives
-        // If a specific landscape was requested but not found, we should fail, not silently use another
       }
+
+      // NOTE: Removed silent fallback to single landscape - this was causing false positives
+      // If a specific landscape was requested but not found, we should fail, not silently use another
     }
+  }
 
-    // PRIORITY 2: Try to load from disk (for saved landscape assets)
-    if (!Landscape && !LandscapePath.IsEmpty()) {
-      Landscape = Cast<ALandscape>(
-          StaticLoadObject(ALandscape::StaticClass(), nullptr, *LandscapePath));
+  // PRIORITY 2: Try to load from disk (for saved landscape assets)
+  if (!Landscape && !LandscapePath.IsEmpty()) {
+    Landscape = Cast<ALandscape>(
+        StaticLoadObject(ALandscape::StaticClass(), nullptr, *LandscapePath));
+  }
+  if (!Landscape) {
+    // Provide helpful error message distinguishing between "no landscape found" and "wrong name"
+    FString ErrorMessage = LandscapeName.IsEmpty()
+        ? FString::Printf(TEXT("Landscape not found at path: %s"), *LandscapePath)
+        : FString::Printf(TEXT("Landscape '%s' not found (path: %s)"), *LandscapeName, *LandscapePath);
+    SendAutomationError(RequestingSocket, RequestId,
+                        *ErrorMessage,
+                        TEXT("LANDSCAPE_NOT_FOUND"));
+    return true;
+  }
+
+  ULandscapeInfo *LandscapeInfo = Landscape->GetLandscapeInfo();
+  if (!LandscapeInfo) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Landscape has no info"),
+                        TEXT("INVALID_LANDSCAPE"));
+    return true;
+  }
+
+  ULandscapeLayerInfoObject *LayerInfo = nullptr;
+  for (const FLandscapeInfoLayerSettings &Layer : LandscapeInfo->Layers) {
+    if (Layer.LayerName == FName(*LayerName)) {
+      LayerInfo = Layer.LayerInfoObj;
+      break;
     }
-    if (!Landscape) {
-      // Provide helpful error message distinguishing between "no landscape found" and "wrong name"
-      FString ErrorMessage = LandscapeName.IsEmpty() 
-          ? FString::Printf(TEXT("Landscape not found at path: %s"), *LandscapePath)
-          : FString::Printf(TEXT("Landscape '%s' not found (path: %s)"), *LandscapeName, *LandscapePath);
-      Subsystem->SendAutomationError(RequestingSocket, RequestId,
-                                     *ErrorMessage,
-                                     TEXT("LANDSCAPE_NOT_FOUND"));
-      return;
-    }
+  }
 
-    ULandscapeInfo *LandscapeInfo = Landscape->GetLandscapeInfo();
-    if (!LandscapeInfo) {
-      Subsystem->SendAutomationError(RequestingSocket, RequestId,
-                                     TEXT("Landscape has no info"),
-                                     TEXT("INVALID_LANDSCAPE"));
-      return;
-    }
+  // Auto-create layer if it doesn't exist (matches UE Landscape Editor behavior)
+  if (!LayerInfo) {
 
-    ULandscapeLayerInfoObject *LayerInfo = nullptr;
-    for (const FLandscapeInfoLayerSettings &Layer : LandscapeInfo->Layers) {
-      if (Layer.LayerName == FName(*LayerName)) {
-        LayerInfo = Layer.LayerInfoObj;
-        break;
-      }
-    }
+    // Create a new layer info object
+    ULandscapeLayerInfoObject* NewLayerInfo = NewObject<ULandscapeLayerInfoObject>(
+        Landscape, FName(*FString::Printf(TEXT("LayerInfo_%s"), *LayerName)),
+        RF_Public | RF_Transactional);
 
-    // Auto-create layer if it doesn't exist (matches UE Landscape Editor behavior)
-	if (!LayerInfo) {
-
-      // Create a new layer info object
-      ULandscapeLayerInfoObject* NewLayerInfo = NewObject<ULandscapeLayerInfoObject>(
-          Landscape, FName(*FString::Printf(TEXT("LayerInfo_%s"), *LayerName)),
-          RF_Public | RF_Transactional);
-
-      if (NewLayerInfo) {
-        // -----------------------------------------------------------------------
-        // Version-specific layer name assignment
-        // -----------------------------------------------------------------------
+    if (NewLayerInfo) {
+      // -----------------------------------------------------------------------
+      // Version-specific layer name assignment
+      // -----------------------------------------------------------------------
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
-        // UE 5.7+: LayerName property deprecated, use SetLayerName()
-        NewLayerInfo->SetLayerName(FName(*LayerName), true);
+      // UE 5.7+: LayerName property deprecated, use SetLayerName()
+      NewLayerInfo->SetLayerName(FName(*LayerName), true);
 #else
-        // UE 5.0-5.6: Direct property assignment
-        PRAGMA_DISABLE_DEPRECATION_WARNINGS
-        NewLayerInfo->LayerName = FName(*LayerName);
-        PRAGMA_ENABLE_DEPRECATION_WARNINGS
+      // UE 5.0-5.6: Direct property assignment
+      PRAGMA_DISABLE_DEPRECATION_WARNINGS
+      NewLayerInfo->LayerName = FName(*LayerName);
+      PRAGMA_ENABLE_DEPRECATION_WARNINGS
 #endif
 
-        // Add to landscape info layers
-        FLandscapeInfoLayerSettings NewLayerSettings(NewLayerInfo, Landscape);
-        LandscapeInfo->Layers.Add(NewLayerSettings);
+      // Add to landscape info layers
+      FLandscapeInfoLayerSettings NewLayerSettings(NewLayerInfo, Landscape);
+      LandscapeInfo->Layers.Add(NewLayerSettings);
 
-		LayerInfo = NewLayerInfo;
-	} else {
-        Subsystem->SendAutomationError(
-            RequestingSocket, RequestId,
-            FString::Printf(TEXT("Failed to create layer '%s'"),
-                            *LayerName),
-            TEXT("LAYER_CREATION_FAILED"));
-        return;
-      }
+      LayerInfo = NewLayerInfo;
+    } else {
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(TEXT("Failed to create layer '%s'"),
+                          *LayerName),
+          TEXT("LAYER_CREATION_FAILED"));
+      return true;
     }
+  }
 
-    // Note: Do NOT call MakeDialog() - it blocks indefinitely in headless environments
-    FScopedSlowTask SlowTask(
-        1.0f, FText::FromString(TEXT("Painting landscape layer...")));
+  // Note: Do NOT call MakeDialog() - it blocks indefinitely in headless environments
+  FScopedSlowTask SlowTask(
+      1.0f, FText::FromString(TEXT("Painting landscape layer...")));
 
-    int32 PaintMinX = MinX;
-    int32 PaintMinY = MinY;
-    int32 PaintMaxX = MaxX;
-    int32 PaintMaxY = MaxY;
-    
-    // Clamp paint region to landscape extents
-    int32 LMinX, LMinY, LMaxX, LMaxY;
-    if (LandscapeInfo->GetLandscapeExtent(LMinX, LMinY, LMaxX, LMaxY))
-    {
-      PaintMinX = FMath::Clamp(PaintMinX, LMinX, LMaxX);
-      PaintMinY = FMath::Clamp(PaintMinY, LMinY, LMaxY);
-      PaintMaxX = FMath::Clamp(PaintMaxX, LMinX, LMaxX);
-      PaintMaxY = FMath::Clamp(PaintMaxY, LMinY, LMaxY);
-    }
-    
-    // Validate region is valid
-    if (PaintMinX > PaintMaxX || PaintMinY > PaintMaxY)
-    {
-      Subsystem->SendAutomationError(RequestingSocket, RequestId,
-                                     TEXT("Invalid paint region: min > max after clamping"),
-                                     TEXT("INVALID_REGION"));
-      return;
-    }
+  int32 PaintMinX = MinX;
+  int32 PaintMinY = MinY;
+  int32 PaintMaxX = MaxX;
+  int32 PaintMaxY = MaxY;
 
-    // Pass false for bInUploadTextureChangesToGPU to prevent GPU sync hang on Intel GPUs
-    FLandscapeEditDataInterface LandscapeEdit(LandscapeInfo, false);
-    const uint8 PaintValue = static_cast<uint8>(Strength * 255.0);
-    const int32 RegionSizeX = (PaintMaxX - PaintMinX + 1);
-    const int32 RegionSizeY = (PaintMaxY - PaintMinY + 1);
-    
-    // Validate region size to prevent huge allocations
-    constexpr int32 MaxRegionPixels = 16777216; // 16M pixels = ~16MB for uint8
-    if (RegionSizeX * RegionSizeY > MaxRegionPixels)
-    {
-      Subsystem->SendAutomationError(RequestingSocket, RequestId,
-                                     FString::Printf(TEXT("Paint region too large: %dx%d (%d pixels). Maximum: %d"),
-                                                     RegionSizeX, RegionSizeY, RegionSizeX * RegionSizeY, MaxRegionPixels),
-                                     TEXT("REGION_TOO_LARGE"));
-      return;
-    }
+  // Clamp paint region to landscape extents
+  int32 LMinX, LMinY, LMaxX, LMaxY;
+  if (LandscapeInfo->GetLandscapeExtent(LMinX, LMinY, LMaxX, LMaxY))
+  {
+    PaintMinX = FMath::Clamp(PaintMinX, LMinX, LMaxX);
+    PaintMinY = FMath::Clamp(PaintMinY, LMinY, LMaxY);
+    PaintMaxX = FMath::Clamp(PaintMaxX, LMinX, LMaxX);
+    PaintMaxY = FMath::Clamp(PaintMaxY, LMinY, LMaxY);
+  }
 
-    TArray<uint8> AlphaData;
-    AlphaData.Init(PaintValue, RegionSizeX * RegionSizeY);
+  // Validate region is valid
+  if (PaintMinX > PaintMaxX || PaintMinY > PaintMaxY)
+  {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Invalid paint region: min > max after clamping"),
+                        TEXT("INVALID_REGION"));
+    return true;
+  }
 
-    LandscapeEdit.SetAlphaData(LayerInfo, PaintMinX, PaintMinY, PaintMaxX,
-                               PaintMaxY, AlphaData.GetData(), RegionSizeX);
+  // Pass false for bInUploadTextureChangesToGPU to prevent GPU sync hang on Intel GPUs
+  FLandscapeEditDataInterface LandscapeEdit(LandscapeInfo, false);
+  const uint8 PaintValue = static_cast<uint8>(Strength * 255.0);
+  const int32 RegionSizeX = (PaintMaxX - PaintMinX + 1);
+  const int32 RegionSizeY = (PaintMaxY - PaintMinY + 1);
 
-    // Flush is expensive - it forces render thread synchronization
-    // Skip if requested for batch operations
-    if (!bSkipFlush) {
-      LandscapeEdit.Flush();
-    }
+  // Validate region size to prevent huge allocations
+  constexpr int32 MaxRegionPixels = 16777216; // 16M pixels = ~16MB for uint8
+  if (RegionSizeX * RegionSizeY > MaxRegionPixels)
+  {
+    SendAutomationError(RequestingSocket, RequestId,
+                        FString::Printf(TEXT("Paint region too large: %dx%d (%d pixels). Maximum: %d"),
+                                        RegionSizeX, RegionSizeY, RegionSizeX * RegionSizeY, MaxRegionPixels),
+                        TEXT("REGION_TOO_LARGE"));
+    return true;
+  }
 
-    // Use MarkPackageDirty instead of PostEditChange to avoid full landscape rebuild
-    // PostEditChange triggers collision rebuild, shader recompilation, and nav mesh update
-    Landscape->MarkPackageDirty();
+  TArray<uint8> AlphaData;
+  AlphaData.Init(PaintValue, RegionSizeX * RegionSizeY);
 
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetBoolField(TEXT("success"), true);
-    Resp->SetStringField(TEXT("landscapePath"), Landscape->GetPackage()->GetPathName());
-    Resp->SetStringField(TEXT("landscapeName"), Landscape->GetActorLabel());
-    Resp->SetStringField(TEXT("layerName"), LayerName);
-    Resp->SetNumberField(TEXT("strength"), Strength);
+  LandscapeEdit.SetAlphaData(LayerInfo, PaintMinX, PaintMinY, PaintMaxX,
+                             PaintMaxY, AlphaData.GetData(), RegionSizeX);
 
-    Subsystem->SendAutomationResponse(RequestingSocket, RequestId, true,
-                                      TEXT("Layer painted successfully"), Resp,
-                                      FString());
-  });
+  // Flush is expensive - it forces render thread synchronization
+  // Skip if requested for batch operations
+  if (!bSkipFlush) {
+    LandscapeEdit.Flush();
+  }
+
+  // Use MarkPackageDirty instead of PostEditChange to avoid full landscape rebuild
+  // PostEditChange triggers collision rebuild, shader recompilation, and nav mesh update
+  Landscape->MarkPackageDirty();
+
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetStringField(TEXT("landscapePath"), Landscape->GetPackage()->GetPathName());
+  Resp->SetStringField(TEXT("landscapeName"), Landscape->GetActorLabel());
+  Resp->SetStringField(TEXT("layerName"), LayerName);
+  Resp->SetNumberField(TEXT("strength"), Strength);
+
+  SendAutomationResponse(RequestingSocket, RequestId, true,
+                         TEXT("Layer painted successfully"), Resp,
+                         FString());
 
   return true;
 #else
@@ -1651,107 +1599,97 @@ bool UMcpAutomationBridgeSubsystem::HandleSetLandscapeMaterial(
   }
   MaterialPath = SafeMaterialPath;
 
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(this);
+  // PRIORITY 1: Find landscape in current world by name (works for transient actors)
+  ALandscape *Landscape = nullptr;
+  if (GEditor) {
+    if (UEditorActorSubsystem *ActorSS =
+            GEditor->GetEditorSubsystem<UEditorActorSubsystem>()) {
+      TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
 
-  AsyncTask(ENamedThreads::GameThread, [WeakSubsystem, RequestId,
-                                        RequestingSocket, LandscapePath,
-                                        LandscapeName, MaterialPath]() {
-    UMcpAutomationBridgeSubsystem *Subsystem = WeakSubsystem.Get();
-    if (!Subsystem)
-      return;
-
-    // PRIORITY 1: Find landscape in current world by name (works for transient actors)
-    ALandscape *Landscape = nullptr;
-    if (GEditor) {
-      if (UEditorActorSubsystem *ActorSS =
-              GEditor->GetEditorSubsystem<UEditorActorSubsystem>()) {
-        TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
-
-        for (AActor *A : AllActors) {
-          if (ALandscape *L = Cast<ALandscape>(A)) {
-            // Match by landscapeName if provided (actor label)
-            if (!LandscapeName.IsEmpty() &&
-                L->GetActorLabel().Equals(LandscapeName,
-                                          ESearchCase::IgnoreCase)) {
+      for (AActor *A : AllActors) {
+        if (ALandscape *L = Cast<ALandscape>(A)) {
+          // Match by landscapeName if provided (actor label)
+          if (!LandscapeName.IsEmpty() &&
+              L->GetActorLabel().Equals(LandscapeName,
+                                        ESearchCase::IgnoreCase)) {
+            Landscape = L;
+            break;
+          }
+          // Match by path: compare asset path from the landscape's package
+          if (!LandscapePath.IsEmpty()) {
+            FString ActorAssetPath = L->GetPackage()->GetPathName();
+            // Normalize both paths for comparison
+            FString NormalizedRequest = LandscapePath;
+            FString NormalizedActor = ActorAssetPath;
+            NormalizedRequest.ReplaceInline(TEXT("\\"), TEXT("/"));
+            NormalizedActor.ReplaceInline(TEXT("\\"), TEXT("/"));
+            // Remove .uasset extension if present
+            if (NormalizedActor.EndsWith(TEXT(".uasset"))) {
+              NormalizedActor = NormalizedActor.LeftChop(7);
+            }
+            if (NormalizedActor.Equals(NormalizedRequest, ESearchCase::IgnoreCase)) {
               Landscape = L;
               break;
             }
-            // Match by path: compare asset path from the landscape's package
-            if (!LandscapePath.IsEmpty()) {
-              FString ActorAssetPath = L->GetPackage()->GetPathName();
-              // Normalize both paths for comparison
-              FString NormalizedRequest = LandscapePath;
-              FString NormalizedActor = ActorAssetPath;
-              NormalizedRequest.ReplaceInline(TEXT("\\"), TEXT("/"));
-              NormalizedActor.ReplaceInline(TEXT("\\"), TEXT("/"));
-              // Remove .uasset extension if present
-              if (NormalizedActor.EndsWith(TEXT(".uasset"))) {
-                NormalizedActor = NormalizedActor.LeftChop(7);
-              }
-              if (NormalizedActor.Equals(NormalizedRequest, ESearchCase::IgnoreCase)) {
-                Landscape = L;
-                break;
-              }
-            }
           }
         }
-
-        // NOTE: Removed silent fallback - if specific landscape requested but not found, fail
       }
+
+      // NOTE: Removed silent fallback - if specific landscape requested but not found, fail
     }
+  }
 
-    // PRIORITY 2: Try to load from disk (for saved landscape assets)
-    if (!Landscape && !LandscapePath.IsEmpty()) {
-      Landscape = Cast<ALandscape>(
-          StaticLoadObject(ALandscape::StaticClass(), nullptr, *LandscapePath));
+  // PRIORITY 2: Try to load from disk (for saved landscape assets)
+  if (!Landscape && !LandscapePath.IsEmpty()) {
+    Landscape = Cast<ALandscape>(
+        StaticLoadObject(ALandscape::StaticClass(), nullptr, *LandscapePath));
+  }
+  if (!Landscape) {
+    FString ErrorMessage = LandscapeName.IsEmpty()
+        ? FString::Printf(TEXT("Landscape not found at path: %s"), *LandscapePath)
+        : FString::Printf(TEXT("Landscape '%s' not found (path: %s)"), *LandscapeName, *LandscapePath);
+    SendAutomationError(RequestingSocket, RequestId,
+                        *ErrorMessage,
+                        TEXT("LANDSCAPE_NOT_FOUND"));
+    return true;
+  }
+
+  // Use Silent load to avoid engine warnings if path is invalid or type
+  // mismatch
+  UMaterialInterface *Mat = Cast<UMaterialInterface>(
+      StaticLoadObject(UMaterialInterface::StaticClass(), nullptr,
+                       *MaterialPath, nullptr, LOAD_NoWarn));
+
+  if (!Mat) {
+    // Check existence separately only if load failed, to distinguish error
+    // type (optional)
+    if (!UEditorAssetLibrary::DoesAssetExist(MaterialPath)) {
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(TEXT("Material asset not found: %s"),
+                          *MaterialPath),
+          TEXT("ASSET_NOT_FOUND"));
+    } else {
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          TEXT("Failed to load material (invalid type?)"),
+          TEXT("LOAD_FAILED"));
     }
-    if (!Landscape) {
-      FString ErrorMessage = LandscapeName.IsEmpty() 
-          ? FString::Printf(TEXT("Landscape not found at path: %s"), *LandscapePath)
-          : FString::Printf(TEXT("Landscape '%s' not found (path: %s)"), *LandscapeName, *LandscapePath);
-      Subsystem->SendAutomationError(RequestingSocket, RequestId,
-                                     *ErrorMessage,
-                                     TEXT("LANDSCAPE_NOT_FOUND"));
-      return;
-    }
+    return true;
+  }
 
-    // Use Silent load to avoid engine warnings if path is invalid or type
-    // mismatch
-    UMaterialInterface *Mat = Cast<UMaterialInterface>(
-        StaticLoadObject(UMaterialInterface::StaticClass(), nullptr,
-                         *MaterialPath, nullptr, LOAD_NoWarn));
+  Landscape->LandscapeMaterial = Mat;
+  Landscape->PostEditChange();
 
-    if (!Mat) {
-      // Check existence separately only if load failed, to distinguish error
-      // type (optional)
-      if (!UEditorAssetLibrary::DoesAssetExist(MaterialPath)) {
-        Subsystem->SendAutomationError(
-            RequestingSocket, RequestId,
-            FString::Printf(TEXT("Material asset not found: %s"),
-                            *MaterialPath),
-            TEXT("ASSET_NOT_FOUND"));
-      } else {
-        Subsystem->SendAutomationError(
-            RequestingSocket, RequestId,
-            TEXT("Failed to load material (invalid type?)"),
-            TEXT("LOAD_FAILED"));
-      }
-      return;
-    }
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetStringField(TEXT("landscapePath"), Landscape->GetPackage()->GetPathName());
+  Resp->SetStringField(TEXT("landscapeName"), Landscape->GetActorLabel());
+  Resp->SetStringField(TEXT("materialPath"), MaterialPath);
 
-    Landscape->LandscapeMaterial = Mat;
-    Landscape->PostEditChange();
-
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetBoolField(TEXT("success"), true);
-    Resp->SetStringField(TEXT("landscapePath"), Landscape->GetPackage()->GetPathName());
-    Resp->SetStringField(TEXT("landscapeName"), Landscape->GetActorLabel());
-    Resp->SetStringField(TEXT("materialPath"), MaterialPath);
-
-    Subsystem->SendAutomationResponse(RequestingSocket, RequestId, true,
-                                      TEXT("Landscape material set"), Resp,
-                                      FString());
-  });
+  SendAutomationResponse(RequestingSocket, RequestId, true,
+                         TEXT("Landscape material set"), Resp,
+                         FString());
 
   return true;
 #else
@@ -1839,80 +1777,70 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscapeGrassType(
   double MaxScale = 1.2;
   Payload->TryGetNumberField(TEXT("maxScale"), MaxScale);
 
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(this);
+  // Use Silent load to avoid engine warnings
+  UStaticMesh *StaticMesh = Cast<UStaticMesh>(StaticLoadObject(
+      UStaticMesh::StaticClass(), nullptr, *MeshPath, nullptr, LOAD_NoWarn));
+  if (!StaticMesh) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(TEXT("Static mesh not found: %s"), *MeshPath),
+        TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
 
-  AsyncTask(ENamedThreads::GameThread, [WeakSubsystem, RequestId,
-                                        RequestingSocket, Name, MeshPath,
-                                        Density, MinScale, MaxScale]() {
-    UMcpAutomationBridgeSubsystem *Subsystem = WeakSubsystem.Get();
-    if (!Subsystem)
-      return;
+  FString PackagePath = TEXT("/Game/Landscape");
+  FString AssetName = Name;
+  FString FullPackagePath =
+      FString::Printf(TEXT("%s/%s"), *PackagePath, *AssetName);
 
-    // Use Silent load to avoid engine warnings
-    UStaticMesh *StaticMesh = Cast<UStaticMesh>(StaticLoadObject(
-        UStaticMesh::StaticClass(), nullptr, *MeshPath, nullptr, LOAD_NoWarn));
-    if (!StaticMesh) {
-      Subsystem->SendAutomationError(
-          RequestingSocket, RequestId,
-          FString::Printf(TEXT("Static mesh not found: %s"), *MeshPath),
-          TEXT("ASSET_NOT_FOUND"));
-      return;
-    }
-
-    FString PackagePath = TEXT("/Game/Landscape");
-    FString AssetName = Name;
-    FString FullPackagePath =
-        FString::Printf(TEXT("%s/%s"), *PackagePath, *AssetName);
-
-    // Check if already exists
-    if (UObject *ExistingAsset = StaticLoadObject(
-            ULandscapeGrassType::StaticClass(), nullptr, *FullPackagePath)) {
-      TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-      Resp->SetBoolField(TEXT("success"), true);
-      Resp->SetStringField(TEXT("asset_path"), ExistingAsset->GetPathName());
-      Resp->SetStringField(TEXT("message"), TEXT("Asset already exists"));
-      Subsystem->SendAutomationResponse(
-          RequestingSocket, RequestId, true,
-          TEXT("Landscape grass type already exists"), Resp, FString());
-      return;
-    }
-
-    UPackage *Package = CreatePackage(*FullPackagePath);
-    ULandscapeGrassType *GrassType = NewObject<ULandscapeGrassType>(
-        Package, FName(*AssetName), RF_Public | RF_Standalone);
-    if (!GrassType) {
-      Subsystem->SendAutomationError(RequestingSocket, RequestId,
-                                     TEXT("Failed to create grass type asset"),
-                                     TEXT("CREATION_FAILED"));
-      return;
-    }
-
-    // Use AddZeroed() to avoid calling the unexported FGrassVariety constructor
-    // AddZeroed() allocates memory and zeros it without invoking any constructor
-    int32 NewIndex = GrassType->GrassVarieties.AddZeroed();
-    FGrassVariety& Variety = GrassType->GrassVarieties[NewIndex];
-    
-    // Explicitly initialize all fields (memory is zero-initialized from AddZeroed)
-    Variety.GrassMesh = StaticMesh;
-    Variety.GrassDensity.Default = static_cast<float>(Density);
-    Variety.ScaleX = FFloatInterval(static_cast<float>(MinScale),
-                                    static_cast<float>(MaxScale));
-    Variety.ScaleY = FFloatInterval(static_cast<float>(MinScale),
-                                    static_cast<float>(MaxScale));
-    Variety.ScaleZ = FFloatInterval(static_cast<float>(MinScale),
-                                    static_cast<float>(MaxScale));
-    Variety.RandomRotation = true;
-    Variety.AlignToSurface = true;
-
-    McpSafeAssetSave(GrassType);
+  // Check if already exists
+  if (UObject *ExistingAsset = StaticLoadObject(
+          ULandscapeGrassType::StaticClass(), nullptr, *FullPackagePath)) {
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), true);
-    Resp->SetStringField(TEXT("asset_path"), GrassType->GetPathName());
+    Resp->SetStringField(TEXT("asset_path"), ExistingAsset->GetPathName());
+    Resp->SetStringField(TEXT("message"), TEXT("Asset already exists"));
+    SendAutomationResponse(
+        RequestingSocket, RequestId, true,
+        TEXT("Landscape grass type already exists"), Resp, FString());
+    return true;
+  }
 
-    Subsystem->SendAutomationResponse(RequestingSocket, RequestId, true,
-                                      TEXT("Landscape grass type created"),
-                                      Resp, FString());
-  });
+  UPackage *Package = CreatePackage(*FullPackagePath);
+  ULandscapeGrassType *GrassType = NewObject<ULandscapeGrassType>(
+      Package, FName(*AssetName), RF_Public | RF_Standalone);
+  if (!GrassType) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Failed to create grass type asset"),
+                        TEXT("CREATION_FAILED"));
+    return true;
+  }
+
+  // Use AddZeroed() to avoid calling the unexported FGrassVariety constructor
+  // AddZeroed() allocates memory and zeros it without invoking any constructor
+  int32 NewIndex = GrassType->GrassVarieties.AddZeroed();
+  FGrassVariety& Variety = GrassType->GrassVarieties[NewIndex];
+
+  // Explicitly initialize all fields (memory is zero-initialized from AddZeroed)
+  Variety.GrassMesh = StaticMesh;
+  Variety.GrassDensity.Default = static_cast<float>(Density);
+  Variety.ScaleX = FFloatInterval(static_cast<float>(MinScale),
+                                  static_cast<float>(MaxScale));
+  Variety.ScaleY = FFloatInterval(static_cast<float>(MinScale),
+                                  static_cast<float>(MaxScale));
+  Variety.ScaleZ = FFloatInterval(static_cast<float>(MinScale),
+                                  static_cast<float>(MaxScale));
+  Variety.RandomRotation = true;
+  Variety.AlignToSurface = true;
+
+  McpSafeAssetSave(GrassType);
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetStringField(TEXT("asset_path"), GrassType->GetPathName());
+
+  SendAutomationResponse(RequestingSocket, RequestId, true,
+                         TEXT("Landscape grass type created"),
+                         Resp, FString());
 
   return true;
 #else
