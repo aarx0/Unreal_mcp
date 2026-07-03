@@ -1843,13 +1843,66 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         double SightRadius = GetJsonNumberField(Payload, TEXT("sightRadius"), 3000.0);
         double LoseSightRadius = GetJsonNumberField(Payload, TEXT("loseSightRadius"), SightRadius + 500.0);
         double PeripheralAngle = GetJsonNumberField(Payload, TEXT("peripheralVisionAngle"), 90.0);
-        double MaxAge = 5.0;
+        double MaxAge = GetJsonNumberField(Payload, TEXT("maxAge"), 5.0);
         TOptional<float> AutoSuccessRange;
         TOptional<float> PovBackwardOffset;
         TOptional<float> NearClippingRadius;
         bool bDetectEnemies = true;
         bool bDetectNeutrals = true;
         bool bDetectFriendlies = false;
+
+        // These params are declared top-level in the schema and also accepted
+        // under sightConfig; the nested value wins when both are given.
+        auto ReadSightParams = [&](const TSharedPtr<FJsonObject>& Src) -> bool
+        {
+            double NumberValue = 0.0;
+            if (Src->TryGetNumberField(TEXT("autoSuccessRange"), NumberValue))
+            {
+                if (NumberValue < 0.0 && NumberValue != -1.0)
+                {
+                    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("autoSuccessRange must be >= 0, or -1 to disable"), TEXT("INVALID_ARGUMENT"));
+                    return false;
+                }
+                AutoSuccessRange = static_cast<float>(NumberValue);
+            }
+            if (Src->TryGetNumberField(TEXT("pointOfViewBackwardOffset"), NumberValue))
+            {
+                if (NumberValue < 0.0)
+                {
+                    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("pointOfViewBackwardOffset must be >= 0"), TEXT("INVALID_ARGUMENT"));
+                    return false;
+                }
+                PovBackwardOffset = static_cast<float>(NumberValue);
+            }
+            if (Src->TryGetNumberField(TEXT("nearClippingRadius"), NumberValue))
+            {
+                if (NumberValue < 0.0)
+                {
+                    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("nearClippingRadius must be >= 0"), TEXT("INVALID_ARGUMENT"));
+                    return false;
+                }
+                NearClippingRadius = static_cast<float>(NumberValue);
+            }
+            bDetectEnemies = GetJsonBoolField(Src, TEXT("enemies"), bDetectEnemies);
+            bDetectNeutrals = GetJsonBoolField(Src, TEXT("neutrals"), bDetectNeutrals);
+            bDetectFriendlies = GetJsonBoolField(Src, TEXT("friendlies"), bDetectFriendlies);
+            const TSharedPtr<FJsonObject>* AffiliationObj = nullptr;
+            if (Src->TryGetObjectField(TEXT("detectionByAffiliation"), AffiliationObj) && AffiliationObj->IsValid())
+            {
+                bDetectEnemies = GetJsonBoolField(*AffiliationObj, TEXT("enemies"), bDetectEnemies);
+                bDetectNeutrals = GetJsonBoolField(*AffiliationObj, TEXT("neutrals"), bDetectNeutrals);
+                bDetectFriendlies = GetJsonBoolField(*AffiliationObj, TEXT("friendlies"), bDetectFriendlies);
+            }
+            return true;
+        };
+
+        if (!ReadSightParams(Payload))
+        {
+            return true;
+        }
         const TSharedPtr<FJsonObject>* SightConfigObj = nullptr;
         if (Payload->TryGetObjectField(TEXT("sightConfig"), SightConfigObj) && SightConfigObj->IsValid())
         {
@@ -1857,50 +1910,16 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             LoseSightRadius = GetJsonNumberField(*SightConfigObj, TEXT("loseSightRadius"), LoseSightRadius);
             PeripheralAngle = GetJsonNumberField(*SightConfigObj, TEXT("peripheralVisionAngle"), PeripheralAngle);
             MaxAge = GetJsonNumberField(*SightConfigObj, TEXT("maxAge"), MaxAge);
-            if (MaxAge < 0.0)
+            if (!ReadSightParams(*SightConfigObj))
             {
-                SendAutomationError(RequestingSocket, RequestId,
-                    TEXT("sightConfig.maxAge must be >= 0 (0 = never expires)"), TEXT("INVALID_ARGUMENT"));
                 return true;
             }
-            double NumberValue = 0.0;
-            if ((*SightConfigObj)->TryGetNumberField(TEXT("autoSuccessRange"), NumberValue))
-            {
-                if (NumberValue < 0.0 && NumberValue != -1.0)
-                {
-                    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("sightConfig.autoSuccessRange must be >= 0, or -1 to disable"), TEXT("INVALID_ARGUMENT"));
-                    return true;
-                }
-                AutoSuccessRange = static_cast<float>(NumberValue);
-            }
-            if ((*SightConfigObj)->TryGetNumberField(TEXT("pointOfViewBackwardOffset"), NumberValue))
-            {
-                if (NumberValue < 0.0)
-                {
-                    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("sightConfig.pointOfViewBackwardOffset must be >= 0"), TEXT("INVALID_ARGUMENT"));
-                    return true;
-                }
-                PovBackwardOffset = static_cast<float>(NumberValue);
-            }
-            if ((*SightConfigObj)->TryGetNumberField(TEXT("nearClippingRadius"), NumberValue))
-            {
-                if (NumberValue < 0.0)
-                {
-                    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("sightConfig.nearClippingRadius must be >= 0"), TEXT("INVALID_ARGUMENT"));
-                    return true;
-                }
-                NearClippingRadius = static_cast<float>(NumberValue);
-            }
-            const TSharedPtr<FJsonObject>* AffiliationObj = nullptr;
-            if ((*SightConfigObj)->TryGetObjectField(TEXT("detectionByAffiliation"), AffiliationObj) && AffiliationObj->IsValid())
-            {
-                bDetectEnemies = GetJsonBoolField(*AffiliationObj, TEXT("enemies"), bDetectEnemies);
-                bDetectNeutrals = GetJsonBoolField(*AffiliationObj, TEXT("neutrals"), bDetectNeutrals);
-                bDetectFriendlies = GetJsonBoolField(*AffiliationObj, TEXT("friendlies"), bDetectFriendlies);
-            }
+        }
+        if (MaxAge < 0.0)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("maxAge must be >= 0 (0 = never expires)"), TEXT("INVALID_ARGUMENT"));
+            return true;
         }
 
         if (!Blueprint->SimpleConstructionScript)
@@ -1945,16 +1964,46 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
         SightConfig->SightRadius = SightRadius;
         SightConfig->LoseSightRadius = LoseSightRadius;
         SightConfig->PeripheralVisionAngleDegrees = PeripheralAngle;
-        SightConfig->DetectionByAffiliation.bDetectEnemies = true;
-        SightConfig->DetectionByAffiliation.bDetectNeutrals = true;
-        SightConfig->DetectionByAffiliation.bDetectFriendlies = false;
-        SightConfig->SetMaxAge(5.0f);
+        SightConfig->DetectionByAffiliation.bDetectEnemies = bDetectEnemies;
+        SightConfig->DetectionByAffiliation.bDetectNeutrals = bDetectNeutrals;
+        SightConfig->DetectionByAffiliation.bDetectFriendlies = bDetectFriendlies;
+        SightConfig->SetMaxAge(static_cast<float>(MaxAge));
+        if (AutoSuccessRange.IsSet())
+        {
+            SightConfig->AutoSuccessRangeFromLastSeenLocation = AutoSuccessRange.GetValue();
+        }
+        if (PovBackwardOffset.IsSet())
+        {
+            SightConfig->PointOfViewBackwardOffset = PovBackwardOffset.GetValue();
+        }
+        if (NearClippingRadius.IsSet())
+        {
+            SightConfig->NearClippingRadius = NearClippingRadius.GetValue();
+        }
         PerceptionComp->ConfigureSense(*SightConfig);
 
         McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
         Result->SetNumberField(TEXT("sightRadius"), SightRadius);
         Result->SetNumberField(TEXT("loseSightRadius"), LoseSightRadius);
         Result->SetNumberField(TEXT("peripheralVisionAngle"), PeripheralAngle);
+        Result->SetNumberField(TEXT("maxAge"), MaxAge);
+        TSharedPtr<FJsonObject> AffiliationOut = MakeShared<FJsonObject>();
+        AffiliationOut->SetBoolField(TEXT("enemies"), bDetectEnemies);
+        AffiliationOut->SetBoolField(TEXT("neutrals"), bDetectNeutrals);
+        AffiliationOut->SetBoolField(TEXT("friendlies"), bDetectFriendlies);
+        Result->SetObjectField(TEXT("detectionByAffiliation"), AffiliationOut);
+        if (AutoSuccessRange.IsSet())
+        {
+            Result->SetNumberField(TEXT("autoSuccessRange"), AutoSuccessRange.GetValue());
+        }
+        if (PovBackwardOffset.IsSet())
+        {
+            Result->SetNumberField(TEXT("pointOfViewBackwardOffset"), PovBackwardOffset.GetValue());
+        }
+        if (NearClippingRadius.IsSet())
+        {
+            Result->SetNumberField(TEXT("nearClippingRadius"), NearClippingRadius.GetValue());
+        }
         Result->SetStringField(TEXT("message"), TEXT("Sight sense configured"));
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Sight config set"), Result);
