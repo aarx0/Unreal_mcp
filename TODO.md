@@ -74,36 +74,28 @@ as they land.
 >   SetByCaller magnitudeType previously silently wrote a ScalableFloat), EQS searchCenter;
 >   removed maxVerticesPerHull (no 5.7 slot), targetAttribute, loSHearingRange
 >   (UE_DEPRECATED 5.2). Dead pins now 6, all documented regex-invisible indirect reads.
-> - **set_effect_tags writes the 5.3-deprecated tag container (found 2026-07-02, readback
->   wave):** it writes InheritableOwnedTagsContainer/InheritableGameplayEffectTags, but on
->   modular (5.3+) GEs the engine's ConvertTargetTagsComponent overwrites those FROM
->   UTargetTagsGameplayEffectComponent after compile — tag writes on fresh 5.7 effects are
->   likely lost before reaching the runtime cache. get_gas_info now reports BOTH
->   grantedTags (effective cache) and authoredGrantedTags (legacy container), so the
->   divergence is visible in one call. Fix = write the GE component on 5.3+. Untestable
->   end-to-end here until the project registers gameplay tags (unregistered tags are
->   rejected since the fix wave).
-> - **add_effect_modifier never sets FGameplayModifierInfo::Attribute (found 2026-07-02,
->   wave 2):** a modifier without a target attribute is inert — the action needs an
->   'attribute' param (resolve against the effect's attribute sets) to be useful at all.
-> - **generate_collision collisionType enum drift (found 2026-07-02, wave 2):** schema
->   enum says Default/Simple/Complex/... but the handler accepts
->   box/sphere/capsule/convex/convex_decomposition; generate_complex_collision parses
->   maxHullVerts without using it — reconcile both.
->   The 552 read-but-undeclared pins are the
->   known undiscoverability backlog (extending-the-bridge gotcha #1), densest in
->   WidgetAuthoring/Sessions/GameFramework/Skeleton/Texture handlers.
-> - **HandleMiscAction is entirely dead (found 2026-07-02 during the sweep):** declared in
->   the subsystem header and defined in MiscHandlers.cpp but registered/called nowhere —
->   the PPV chain inside it was deleted; the remaining function + its branches are
->   unreachable too. Delete the whole thing next sweep.
+> - ~~set_effect_tags deprecated-container writes~~ FIXED 2026-07-03 (280f703c): all four
+>   tag families write the modular GE components on 5.3+ (TargetTags / TargetTagRequirements
+>   / Immunity queries); live-verified with a temp-registered tag surviving a full compile
+>   into the effective GetGrantedTags() cache.
+> - ~~add_effect_modifier attribute~~ FIXED 2026-07-03 (280f703c): 'attribute' is REQUIRED
+>   and resolves bare / Set.Attr / path-qualified forms (path form loads unloaded sets).
+> - ~~generate_collision enum drift + maxHullVerts~~ FIXED 2026-07-03 (280f703c): enum now
+>   box/sphere/capsule/convex/convex_decomposition; hullPrecision drives
+>   ConvexDecompositionSearchFactor; dead maxHullVerts parse deleted.
+> - ~~552 read-but-undeclared backlog~~ CLEARED 2026-07-03 (99c7ae44): 637 params declared
+>   across all 22 schemas (Sonnet sweep, reviewed, reconciliation-gated); remaining 128
+>   pins are deliberate skips (cross-tool routing, dead code, internal keys).
+> - ~~HandleMiscAction dead chain~~ DELETED 2026-07-03 (280f703c): whole MiscHandlers.cpp
+>   TU removed (every function was file-local to the dead dispatch).
 > - **Readback depth pass, remaining:** get_gas_info (attributes/modifiers/cost-cooldown),
 >   get_combat_stats values, get_animation_info (BlendSpace/AnimBP), get_character_info
 >   (mesh/ABP/crouch/sprint), get_mesh_info static-mesh asset branch (LODs/collision/Nanite),
 >   per-property replication state in get_networking_info, widget property value readback.
-> - **Per-session tool enablement (design decision):** manage_tools state is global, so one
->   session's disable probes 503 other sessions mid-flight (the audit's "TOOL_DISABLED race").
->   Per-session ToolManager keyed off Mcp-Session-Id would isolate it — needs a deliberate call.
+> - **Per-session tool enablement — APPROVED by Aaron 2026-07-03** ("per-session seems
+>   good"; note nobody disables tools in real use, only the audit did): key enable/disable
+>   state off Mcp-Session-Id (global registry stays the default template). Next bridge
+>   session's headline item.
 > - **InteractionHandlers dead dispatch (found in passing, 2026-07-02):** Section 6 "runtime
 >   handler dispatch" (~line 2412) is unreachable — the Blueprint-based branches earlier in the
 >   function already match and return those actions; the Section 7 handlers it points at echo
@@ -111,8 +103,7 @@ as they land.
 > - **AudioAuthoringHandlers dead creates (found in passing, 2026-07-02):** create_sound_class/
 >   create_sound_mix branches are unreachable (not in the AudioAuthoring routing list; the live
 >   handlers are in AudioHandlers.cpp) — same sweep.
-> - **MiscHandlers dead HandleCreatePostProcessVolume (found in passing, 2026-07-02):** declared
->   in the subsystem header but never registered with any tool route — same sweep.
+> - ~~MiscHandlers dead HandleCreatePostProcessVolume~~ gone with the whole TU (280f703c).
 > - **UNKNOWN_ACTION echoes the tool name, not the sub-action (found 2026-07-02):**
 >   `manage_asset {action:'save_all'}` → "Unknown automation action: manage_asset" — the
 >   consolidated lambda falls through with the dispatch (tool) name; the message should name
