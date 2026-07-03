@@ -25,7 +25,8 @@
 // 19.7  UI Templates        - create_main_menu, create_pause_menu, create_hud,
 //                            create_inventory_ui, create_dialogue_system, create_health_bar,
 //                            create_minimap, create_loading_screen
-// 19.8  Utility Actions     - get_widget_info, get_widget_tree, find_widget_by_name,
+// 19.8  Utility Actions     - get_widget_info (tree + per-widget property
+//                            values via widgetName/propertyNames),
 //                            preview_widget, validate_widget
 // 19.9  Advanced Widgets    - add_retainer_box, add_circular_throbber, add_expandable_area,
 //                            add_menu_anchor, add_viewport_stats
@@ -7285,6 +7286,82 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Misc(
             };
 
             WidgetInfo->SetObjectField(TEXT("tree"), BuildNode(WidgetBP->WidgetTree->RootWidget));
+        }
+
+        // Per-widget property value readback — closes the create→configure→
+        // verify gap (authored values like TextBlock text were unreadable
+        // without hand-built inspect subobject paths). propertyNames[] filters;
+        // otherwise every exportable reflected property is returned.
+        const FString WidgetName = GetJsonStringField(Payload, TEXT("widgetName"));
+        if (!WidgetName.IsEmpty())
+        {
+            UWidget* TargetWidget = WidgetBP->WidgetTree->FindWidget(FName(*WidgetName));
+            if (!TargetWidget)
+            {
+                TArray<FString> Names;
+                WidgetBP->WidgetTree->ForEachWidget([&Names](UWidget* W) { Names.Add(W->GetName()); });
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Widget '%s' not found. Widgets present: %s"),
+                        *WidgetName, *FString::Join(Names, TEXT(", "))),
+                    TEXT("NOT_FOUND"));
+                return true;
+            }
+
+            TSharedPtr<FJsonObject> WidgetObj = McpHandlerUtils::CreateResultObject();
+            WidgetObj->SetStringField(TEXT("name"), TargetWidget->GetName());
+            WidgetObj->SetStringField(TEXT("class"), TargetWidget->GetClass()->GetName());
+            // Exact subobject path for inspect get_property/set_property follow-ups.
+            WidgetObj->SetStringField(TEXT("objectPath"), TargetWidget->GetPathName());
+            if (TargetWidget->Slot)
+            {
+                WidgetObj->SetStringField(TEXT("slotClass"), TargetWidget->Slot->GetClass()->GetName());
+            }
+
+            TSharedPtr<FJsonObject> Props = MakeShared<FJsonObject>();
+            const TArray<TSharedPtr<FJsonValue>>* PropertyNames = nullptr;
+            Payload->TryGetArrayField(TEXT("propertyNames"), PropertyNames);
+            if (PropertyNames && PropertyNames->Num() > 0)
+            {
+                for (const TSharedPtr<FJsonValue>& NameVal : *PropertyNames)
+                {
+                    FString PropName;
+                    if (!NameVal.IsValid() || !NameVal->TryGetString(PropName) || PropName.IsEmpty())
+                    {
+                        continue;
+                    }
+                    FProperty* Prop = TargetWidget->GetClass()->FindPropertyByName(FName(*PropName));
+                    if (!Prop)
+                    {
+                        // Explicitly requested and missing — null, not omitted.
+                        Props->SetField(PropName, MakeShared<FJsonValueNull>());
+                        continue;
+                    }
+                    TSharedPtr<FJsonValue> Exported =
+                        McpPropertyReflection::ExportPropertyToJsonValue(TargetWidget, Prop);
+                    Props->SetField(PropName, Exported.IsValid() ? Exported : MakeShared<FJsonValueNull>());
+                }
+            }
+            else
+            {
+                for (TFieldIterator<FProperty> It(TargetWidget->GetClass()); It; ++It)
+                {
+                    FProperty* Prop = *It;
+                    if (Prop->HasAnyPropertyFlags(CPF_Transient | CPF_Deprecated))
+                    {
+                        continue;
+                    }
+                    TSharedPtr<FJsonValue> Exported =
+                        McpPropertyReflection::ExportPropertyToJsonValue(TargetWidget, Prop);
+                    // Unexportable kinds (delegates etc.) are omitted in the
+                    // full dump; ask by name to get an explicit null instead.
+                    if (Exported.IsValid())
+                    {
+                        Props->SetField(Prop->GetName(), Exported);
+                    }
+                }
+            }
+            WidgetObj->SetObjectField(TEXT("properties"), Props);
+            WidgetInfo->SetObjectField(TEXT("widget"), WidgetObj);
         }
 
         // Collect animations

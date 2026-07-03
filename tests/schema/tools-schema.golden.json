@@ -5130,6 +5130,13 @@
           "description": "Name of the property.",
           "type": "string"
         },
+        "propertyNames": {
+          "description": "get_widget_info + widgetName: only these properties (explicit null when missing); omit for all exportable properties.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "requestedPath": {
           "description": "Explicit blueprint path override, checked before name/blueprintPath/blueprintCandidates (most blueprint_* actions).",
           "type": "string"
@@ -5395,7 +5402,7 @@
           "type": "string"
         },
         "widgetName": {
-          "description": "Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget).",
+          "description": "Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget; get_widget_info: return this widget's property values + objectPath).",
           "type": "string"
         },
         "widgetPath": {

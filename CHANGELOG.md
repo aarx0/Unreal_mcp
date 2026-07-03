@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Widget property value readback (2026-07-03)
+
+- **`get_widget_info` + `widgetName` returns property values** — the last hole in the readback-depth list: authored widget values (TextBlock text, fill percent, visibility, font) were unverifiable without hand-building `inspect` subobject paths. The response carries the widget's reflected properties (every exportable one, or just `propertyNames[]` — explicitly null when a named property doesn't exist on that class), its exact `objectPath` for `inspect get_property`/`set_property` follow-ups, and `slotClass`. Unknown `widgetName` errors with the tree's actual widget names. Verified live: `add_text_block` text + fontSize round-trip on a scratch widget, sub-widget-class null semantics, and WBP_HUD bar reads.
+
 ### AnimBP graph readback (2026-07-03)
 
 - **`list_animbp_graphs` and `get_transition_rule_graph` implemented** — both were schema-advertised on `manage_blueprint` with no handler behind them (fell through to `INVALID_SUBACTION`). The list walks every graph in the blueprint (anim subgraphs included) with type classification (StateMachine / State / TransitionRule / Conduit / CustomTransitionBlend / AnimGraph / EventGraph / Function / Macro), node counts, parent hierarchy, and a `transition: "From -> To"` label on rule graphs — whose generated names collide (`AnimationTransitionGraph_0` ×4 in one state machine) and are otherwise indistinguishable.

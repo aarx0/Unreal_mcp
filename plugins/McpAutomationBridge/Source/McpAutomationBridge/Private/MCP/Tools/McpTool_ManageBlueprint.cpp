@@ -118,7 +118,8 @@ public:
 			// schema-validating client can discover/pass them (per-widget value props still
 			// go through the generic `value`/`properties` fields).
 			.String(TEXT("widgetPath"), TEXT("Widget Blueprint asset path (widget-authoring actions)."))
-			.String(TEXT("widgetName"), TEXT("Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget)."))
+			.String(TEXT("widgetName"), TEXT("Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget; get_widget_info: return this widget's property values + objectPath)."))
+			.Array(TEXT("propertyNames"), TEXT("get_widget_info + widgetName: only these properties (explicit null when missing); omit for all exportable properties."))
 			.String(TEXT("slotName"), TEXT("Name for the widget being added / the slot to target."))
 			.String(TEXT("parentSlot"), TEXT("Name of the parent panel widget to add the new widget under."))
 			.String(TEXT("widgetClass"), TEXT("Widget class for create_widget_blueprint / set_widget_parent_class."))

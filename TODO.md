@@ -96,7 +96,12 @@ as they land.
 > - ~~Readback depth pass~~ SHIPPED 2026-07-03 (ec140342): get_gas_info, get_combat_stats,
 >   get_animation_info (BlendSpace/AnimBP), get_character_info, get_mesh_info asset branch,
 >   get_networking_info per-property replication — all read real CDO/asset state now.
->   Remaining from that list: **widget property value readback** only.
+>   ~~widget property value readback~~ SHIPPED 2026-07-03: `get_widget_info` +
+>   `widgetName` returns that widget's reflected property values (all exportable,
+>   or `propertyNames[]` with explicit nulls for misses) + `objectPath` for inspect
+>   follow-ups + `slotClass`; not-found lists the tree's widget names. Verified live:
+>   add_text_block text/fontSize round-trip, sub-widget class nulls, WBP_HUD reads.
+>   Readback-depth list fully CLOSED.
 > - ~~Per-session tool enablement~~ SHIPPED 2026-07-03 (6d0dc1be): manage_tools mutations
 >   write a per-session overlay keyed by Mcp-Session-Id; registry defaults are the
 >   immutable template; tools/list session-filtered; TOOL_DISABLED self-attributes;
