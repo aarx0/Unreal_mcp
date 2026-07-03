@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Small-bug batch (2026-07-03)
+
+- **`add_montage_notify` PlayMontageNotify NAME_None** — all three notify-creation sites now set the notify *object's* `NotifyName` (reflection; the montage On-Notify delegates broadcast the object member, not the event's). The routed `add_montage_notify` branch was a third creation site the first fix pass missed — caught by the live repro reading back `None`.
+- **`delete_asset` false ENGINE_ERROR** — `[SourceControl] … paths from the index` status chatter is now classified benign in the post-op guard.
+- **`get_graph_details` on pose-dataflow graphs** — graphs with no exec pins (AnimGraph, state-machine inner graphs) skip exec-liveness instead of flagging every node dead; response carries a `livenessNote`. Exec graphs unaffected (verified both ways).
+- **`inspect_class` `/Script/` resolution** — verified already fixed (StaticLoadClass path branch); TODO entry closed with live evidence.
+
 ### Build visibility + latency (2026-07-03)
 
 - **`run_ubt` is fire-and-poll** — launches UBT detached (default `-NoUBA -WaitMutex`; `noUBA:false` opts into faster UBA builds when no Live Coding patching follows) with output redirected to `Saved/McpBuilds/<buildId>.log`, returning a `buildId` in milliseconds. The previous implementation pumped a pipe **on the game thread for up to 300 seconds**, freezing the editor and every queued bridge call for the whole build. A third, unreachable `run_ubt` copy went with the dead `McpAutomationBridge_PipelineHandlers.cpp` TU (zero call sites).

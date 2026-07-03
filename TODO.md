@@ -899,7 +899,12 @@ pin re-specializes to `BP_Telegraph_C`, and the `TransformScaleMethod` pin (whos
 assert) is present. Gotcha for callers: Blueprint classes need the `.<Name>_C` generated-class suffix in
 `targetClass` (a bare asset path returns `CLASS_NOT_FOUND` — by design, fails loud).
 
-### [ ] 2026-06-22b — Anim state-machine reads via `get_graph_details`: works, two gaps
+### [ ] 2026-06-22b — Anim state-machine reads via `get_graph_details`: works, ONE gap left (transition rules)
+**Gap 1 FIXED 2026-07-03:** graphs with zero exec pins anywhere (AnimGraph, state-machine
+inner graphs) skip exec-liveness — `execReachable:true` for all, `deadNodeCount:0`, plus
+`livenessNote:"dataflow graph (no exec pins) — exec-liveness not applicable"`. Verified on
+ABP_FireGolem AnimGraph (22 nodes, 0 false deads) AND that a normal EventGraph still gets
+real analysis (no note). Gap 2 (transition rule graphs not surfaced) remains open below.
 Live-verified 2026-06-22 against `ABP_Robo_MainStates`. `get_graph_details` reads anim graphs cleanly:
 `AnimGraph` returns the root + state-machine nodes + cached-pose nodes; a state-machine graph addressed
 by its title (`Main States`, `Ground Locomotion`) returns its states + transition nodes (titles like
@@ -940,7 +945,14 @@ is left. Clicking `Skip Restore` immediately freed the game thread and the bridg
 Potential hardening: extend the `GIsRunningUnattendedScript` auto-dismiss guard (added for save modals) to
 the startup package-restore prompt so a force-killed editor self-recovers instead of wedging.
 
-### [ ] 2026-06-23 — `add_montage_notify` w/ `notifyClass` never sets the Notify object's NotifyName → PlayMontageNotify broadcasts NAME_None
+### [x] 2026-06-23 — `add_montage_notify` w/ `notifyClass` never sets the Notify object's NotifyName → PlayMontageNotify broadcasts NAME_None
+**FIXED 2026-07-03.** All THREE notify-creation sites (the TODO's "confirm which handler
+dispatches" found a third: `add_montage_notify`'s own branch ~1758, which is the routed one —
+the first fix pass landed only on `add_notify`/`add_notify_state` and the live repro still
+read `None`) now set the notify OBJECT's `NotifyName` via reflection
+(`FindFProperty<FNameProperty>` — covers PlayMontageNotify, the Window state variant, and any
+custom notify with that member, no hard include). Verified live on a scratch montage:
+post-fix notify reads back object `NotifyName:"TestHit2"` (pre-fix one still `None`).
 FOUND (source-inferred, not live-repro'd) 2026-06-23, wiring a MiliBot dummy's montage→SpawnAoE. The
 authoring handler (`McpAutomationBridge_AnimationAuthoringHandlers.cpp` ~1688-1709) builds the
 `FAnimNotifyEvent`, sets `NotifyEvent.NotifyName` (the EVENT's name) and `NotifyEvent.Notify =
@@ -1010,7 +1022,12 @@ source timestamp, dirty flag, and Live Coding session state; `run_ubt` should re
 pass/fail + parsed error list. Related: `get_log` (editor/UBT log tail with filters) implemented
 2026-06-12 in `HandleSystemControlAction` + `SystemControlCore()` — pending live verification.
 
-### [ ] `inspect_class` / Python can't resolve native `/Script/<Module>.<Class>` classes
+### [x] `inspect_class` / Python can't resolve native `/Script/<Module>.<Class>` classes
+**CLOSED 2026-07-03 — already fixed since filing** (the resolver gained a `StaticLoadClass`
+branch for dotted/slashed paths + BP GeneratedClass + `/Script/Engine.` short-name fallback).
+Verified live: `inspect_class classPath=/Script/RhyaTowerOfWishes.AttributeComponent`
+resolves with parentClass ActorComponent. The Python half (game classes missing from
+`unreal.*` attrs) is engine behavior, not bridge — use `inspect_class` instead.
 **FOUND 2026-06-01** (HandPanicVR). `inspect_class classPath=/Script/HandPanicVR.FingerGunComponent`
 → `CLASS_NOT_FOUND`; Python `unreal.FingerGunComponent` missing and `unreal.load_object(None,
 "/Script/...")` → None (game-module classes aren't exposed as Python attrs). Net effect: no
@@ -2095,7 +2112,12 @@ no stale GUID survives; (b) treat the `SeenVariableNames` ensure as benign in th
 compile-path save not gate on the dirty flag when `save:true` was explicitly requested (or fall
 back to a direct package save) so structural deletes always persist.
 
-### [ ] `delete_asset` post-op guard mis-reports a benign SourceControl line as `ENGINE_ERROR`
+### [x] `delete_asset` post-op guard mis-reports a benign SourceControl line as `ENGINE_ERROR`
+**FIXED 2026-07-03.** `IsKnownBenignMcpCompilerWarning` now treats `[SourceControl] …
+paths from the index` lines as benign (informational git-status chatter). The original
+trigger is intermittent (depends on the SC provider's index refresh timing), so the retest
+is a clean delete under source control + the narrow classifier — reopen if a different
+`[SourceControl]` string ever promotes.
 Found 2026-06-28 deleting an orphaned material (`M_TelegraphCircle`, 0 referencers). The handler
 reported success and the `.uasset` was actually removed from disk, but the call returned
 `Error [ENGINE_ERROR]: Handler reported success but Unreal logged errors: [SourceControl] Updated 0

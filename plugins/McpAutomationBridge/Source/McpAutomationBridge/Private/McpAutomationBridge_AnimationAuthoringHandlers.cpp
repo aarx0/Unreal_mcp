@@ -1113,6 +1113,19 @@ if (SubAction == TEXT("add_notify"))
             );
         }
         NotifyEvent.Notify = NewNotify;
+
+        // The montage "On Notify Begin/End" delegates broadcast the notify
+        // OBJECT's own NotifyName (AnimNotify_PlayMontageNotify keys off its
+        // member, not the event's) — without this a bridge-created
+        // PlayMontageNotify fires with NAME_None and BP name-matching no-ops.
+        if (!NotifyName.IsEmpty())
+        {
+            if (FNameProperty* ObjNameProp =
+                    FindFProperty<FNameProperty>(ResolvedNotifyClass, TEXT("NotifyName")))
+            {
+                ObjNameProp->SetPropertyValue_InContainer(NewNotify, FName(*NotifyName));
+            }
+        }
     }
 
         AnimAsset->RefreshCacheData();
@@ -1223,6 +1236,18 @@ if (SubAction == TEXT("add_notify_state"))
             );
         }
         NotifyEvent.NotifyStateClass = NewNotifyState;
+
+        // Same as the point-notify path: window variants (e.g.
+        // AnimNotifyState_PlayMontageNotifyWindow) broadcast their own
+        // NotifyName member.
+        if (!NotifyName.IsEmpty())
+        {
+            if (FNameProperty* ObjNameProp =
+                    FindFProperty<FNameProperty>(ResolvedNotifyStateClass, TEXT("NotifyName")))
+            {
+                ObjNameProp->SetPropertyValue_InContainer(NewNotifyState, FName(*NotifyName));
+            }
+        }
     }
 
         AnimAsset->RefreshCacheData();
@@ -1742,6 +1767,19 @@ if (SubAction == TEXT("add_montage_notify"))
             );
         }
         NotifyEvent.Notify = NewNotify;
+
+        // The montage "On Notify Begin/End" delegates broadcast the notify
+        // OBJECT's own NotifyName (AnimNotify_PlayMontageNotify keys off its
+        // member, not the event's) — without this a bridge-created
+        // PlayMontageNotify fires with NAME_None and BP name-matching no-ops.
+        if (!NotifyName.IsEmpty())
+        {
+            if (FNameProperty* ObjNameProp =
+                    FindFProperty<FNameProperty>(ResolvedNotifyClass, TEXT("NotifyName")))
+            {
+                ObjNameProp->SetPropertyValue_InContainer(NewNotify, FName(*NotifyName));
+            }
+        }
     }
 
         Montage->RefreshCacheData();

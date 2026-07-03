@@ -1945,6 +1945,25 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     TSet<const UEdGraphNode *> LiveNodes;
     ComputeGraphLiveness(TargetGraph, ExecReachable, LiveNodes);
 
+    // Pose-dataflow graphs (AnimGraph and state-machine inner graphs) have no
+    // exec pins anywhere, so exec-reachability is meaningless — it used to
+    // flag every anim node as dead. Detect and skip liveness for those.
+    bool bGraphHasExecPins = false;
+    for (const UEdGraphNode *N : TargetGraph->Nodes) {
+      if (!N) {
+        continue;
+      }
+      for (const UEdGraphPin *P : N->Pins) {
+        if (ArrangePinIsExec(P)) {
+          bGraphHasExecPins = true;
+          break;
+        }
+      }
+      if (bGraphHasExecPins) {
+        break;
+      }
+    }
+
     TArray<TSharedPtr<FJsonValue>> Nodes;
     for (UEdGraphNode *Node : TargetGraph->Nodes) {
       if (!Node) {
@@ -1995,7 +2014,9 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
                             Node->Pins.Num() > 0 && LinkCount == 0);
       // execReachable: exec node reachable from an entry along exec wires, or a
       // pure node feeding one. False = the node never runs (see deadNodes).
-      NodeObj->SetBoolField(TEXT("execReachable"), LiveNodes.Contains(Node));
+      // Dataflow graphs evaluate on demand — everything counts as reachable.
+      NodeObj->SetBoolField(TEXT("execReachable"),
+                            !bGraphHasExecPins || LiveNodes.Contains(Node));
 
       Nodes.Add(MakeShared<FJsonValueObject>(NodeObj));
     }
@@ -2003,9 +2024,15 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
     // Actionable dead-node summary: pin-bearing nodes that never run. Comments
     // and other pinless nodes are connected by placement, not exec, so skip.
+    if (!bGraphHasExecPins) {
+      Result->SetStringField(
+          TEXT("livenessNote"),
+          TEXT("dataflow graph (no exec pins) — exec-liveness not applicable"));
+    }
     TArray<TSharedPtr<FJsonValue>> DeadNodes;
     for (UEdGraphNode *Node : TargetGraph->Nodes) {
-      if (!Node || Node->Pins.Num() == 0 || LiveNodes.Contains(Node)) {
+      if (!bGraphHasExecPins || !Node || Node->Pins.Num() == 0 ||
+          LiveNodes.Contains(Node)) {
         continue;
       }
       TSharedPtr<FJsonObject> DeadObj = McpHandlerUtils::CreateResultObject();

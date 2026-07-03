@@ -51,6 +51,15 @@ static bool IsKnownBenignMcpCompilerWarning(const FString& Message)
     {
         return true;
     }
+    // Git source-control status chatter logged at Error severity during asset
+    // ops (e.g. "[SourceControl] Updated 0 paths from the index" on a clean
+    // delete_asset). Informational, not a failure — the delete itself already
+    // succeeded when this promotes.
+    if (Message.StartsWith(TEXT("[SourceControl]")) &&
+        Message.Contains(TEXT("paths from the index"), ESearchCase::IgnoreCase))
+    {
+        return true;
+    }
     return false;
 }
 
