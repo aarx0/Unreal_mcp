@@ -61,27 +61,33 @@ Confirmed facts driving scope:
    keepalive loop inside `CleanupStaleRequests`.
 3. **`tools/list_changed` push** — `OnToolsListChanged`, `BroadcastToolsListChanged`, the
    `ToolManager.OnToolsChanged` bind; set `tools.listChanged = false` in `initialize`.
-4. **Progress** — `SendSSEProgressUpdate`, `BuildProgressNotification`, the native branch of
-   `SendProgressUpdate`, and the ~20 handler call sites (make the helper a no-op, then prune sites).
+4. **Progress** — `SendSSEProgressUpdate`, `BuildProgressNotification`, and the native branch of
+   `SendProgressUpdate` (deleted). Deviation from the plan: the handler call sites were kept,
+   calling a permanent no-op `SendProgressUpdate` (see its doc comment) so a future streaming
+   channel has one wiring point — they were not pruned.
 5. **The SSE `tools/call` machinery (full de-stream)** — `FSSEConnection`, `SSEConnections` map +
    mutex, `CompletePendingRequest`, `HasPendingRequest`, `WriteSSEEvent`, `SendSSEHeaders`,
    `PendingAsyncWrites`, and the async-write dispatch. Replace with the synchronous design below.
 6. **Dead code** — `FMcpBridgeWebSocket::SendHeartbeatPing` (no caller), `TouchPendingRequest`
    (no caller).
 
-**De-stream design (the `tools/call` rewrite):** the worker thread owns its socket end-to-end —
-read request → enqueue the work onto `PendingAutomationRequests` along with a per-request
-**completion signal** (a `TPromise`/`FEvent` keyed by request id) → **block on it** → the GameThread
-drains the queue, runs the handler, and fulfills the signal with the result → the worker writes a
-single plain HTTP response (`Connection: close`) and closes. This holds one bounded pool thread per
-in-flight request (cap already 16) and eliminates the parked-socket map, the async cross-thread
-write, the write mutexes/atomics, and all SSE framing. The socket is held until the result is ready
-in *both* the old and new designs — de-streaming only removes machinery, not the wait.
+**De-stream design (as shipped — differs from the blocking-promise sketch first drafted here):**
+the worker parks the connection (socket + JSON-RPC id) in `PendingConnections` keyed by RequestId
+and returns to the pool immediately — no per-request blocking signal. `QueueAutomationRequest`
+enqueues the work for the GameThread; when the handler finishes, `CompletePendingRequest` looks the
+connection back up, builds the JSON-RPC response, and offloads the single plain-HTTP write + close
+to `Async(EAsyncExecution::ThreadPool, …)`, tracked by the `PendingAsyncWrites` atomic and guarded
+by `FPendingConnection::WriteMutex`. So the parked-connection map, the async cross-thread write, and
+the write mutex/atomic all remain — what de-streaming deleted is the SSE framing, multi-write
+dispatch, and keepalives. One request still yields exactly one plain HTTP response.
 
 What stays in `CleanupStaleRequests`: only the **session-expiry** sweep (if sessions are kept).
 Sessions (`ActiveSessions` + `ValidateSession` + `Mcp-Session-Id`) are independent of the notification
-stream and can stay for spec compliance; their activity-touching logic exists to keep long streams
-alive and can be trimmed.
+stream. They are no longer pure spec-compliance residue: the per-session `manage_tools` enablement
+overlay (`FMcpDynamicToolManager`) is keyed by SessionId, and both expiry paths
+(`CleanupStaleRequests` sweep, `ValidateSession` eviction) clear it via `DropSession()` — so the
+activity-touching logic now defines per-session tool-enablement lifetime and can't be trimmed
+casually.
 
 ### ADD — idempotency (10 unsafe action families)
 

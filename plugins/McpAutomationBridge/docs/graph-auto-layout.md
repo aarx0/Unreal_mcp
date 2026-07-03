@@ -9,16 +9,17 @@ a fresh implementer should need only this file + the bridge source.
 The bridge (native UE 5.7 C++ plugin, `McpAutomationBridge`) authors Blueprint graph
 nodes programmatically — e.g. `bind_on_clicked`, `bind_on_value_changed` in
 `Source/McpAutomationBridge/Private/McpAutomationBridge_WidgetAuthoringHandlers.cpp`.
-Today those handlers place every node at **hardcoded coordinates** (event at `(0,0)`,
-conv at `(280,…)`, setText at `(560,0)`, …). So when a graph gets several generated
-chains they all land on the same pixels and overlap ("smooshed"). We want clean layout.
+Each chain uses hardcoded **relative** offsets (event at `(0,0)`, conv at `(280,…)`,
+setText at `(560,0)`, …). Originally every chain also *started* at the same origin, so
+multiple generated chains landed on the same pixels and overlapped ("smooshed") — fixed
+by Phase 1 below, which is now shipped.
 
 This is a **throwaway bridge** (delete when Epic ships official UE MCP) — favor small,
 deletable, dependency-free solutions over a real layout engine.
 
 ## Two separate problems — do them in this order
 
-### Phase 1 — Generator self-layout (cheap, do first, high ROI)
+### Phase 1 — Generator self-layout (SHIPPED)
 The handlers *know the exact shape they create*, so they don't need a layout algorithm —
 just emit **non-overlapping relative coordinates**. Before placing a new event chain,
 offset the whole chain vertically so it sits below previously-generated chains.
@@ -106,39 +107,36 @@ minimization, accept "fine."
 ## Bridge integration points
 
 - **Setting node position already works**: `manage_blueprint set_node_property` accepts
-  `propertyName` `X`/`NodePosX` and `Y`/`NodePosY` (see
-  `McpAutomationBridge_BlueprintGraphHandlers.cpp` ~line 1470). Nodes report `x`/`y` in
+  `propertyName` `X`/`NodePosX` and `Y`/`NodePosY` (see the `set_node_property` branch in
+  `McpAutomationBridge_BlueprintGraphHandlers.cpp`). Nodes report `x`/`y` in
   `get_graph_details` / `get_node_details`. So no new primitive is needed to move nodes.
-- **Generators to fix (Phase 1)**: `bind_on_clicked`, `bind_on_value_changed` in
-  `McpAutomationBridge_WidgetAuthoringHandlers.cpp` (they set `NodePosX/NodePosY` directly
-  on the `UK2Node*`s right after `FGraphNodeCreator::Finalize`).
+- **Generators (Phase 1 — SHIPPED)**: `bind_on_clicked`, `bind_on_value_changed` in
+  `McpAutomationBridge_WidgetAuthoringHandlers.cpp` offset each new chain by
+  `BaseY = ExistingEventChains * McpWidgetChainRowGapY` (300px) before setting
+  `NodePosX/NodePosY`, so generated chains stack instead of overlapping.
 - **`arrange_graph` (Phase 2) — IMPLEMENTED** in `HandleBlueprintGraphAction`
-  (`McpAutomationBridge_BlueprintGraphHandlers.cpp`): a self-contained anonymous-namespace
-  layout pass (`ArrangeBlueprintGraph`) classifies each `UEdGraphNode` (exec pins via
-  `UEdGraphSchema_K2::PC_Exec`; pure = no exec pins), computes the layout above, writes
-  `NodePosX/NodePosY`, then `MarkBlueprintAsModified` + save. **Routing has two parts, and
-  the dispatch one is the part the original spec missed:**
-  1. **Dispatch gate (required to reach the handler):** add the action to the hard-coded
-     `GraphSubActions` `TSet` in `McpAutomationBridgeSubsystem.cpp` (the `manage_blueprint`
-     `RegisterHandler` lambda). Only subactions in that set are routed to
-     `HandleBlueprintGraphAction`; everything else falls through to `HandleBlueprintAction`
-     and returns `UNKNOWN_ACTION`. (This set — not `McpConsolidatedActionRouting.h` — is
-     the real router; `get_nodes` is unreachable for exactly this reason.)
-  2. **Schema advertisement:** add the action to `ManageBlueprintCore()` in
-     `MCP/McpConsolidatedActionRouting.h`. That list is what `McpTool_ManageBlueprint.cpp`
-     turns into the client `action` enum via `McpConsolidatedActions::ManageBlueprint()` —
-     it's derived, so you do **not** hand-edit an enum in `McpTool_ManageBlueprint.cpp`.
-  Header touch ⇒ full rebuild (editors closed); the handler/dispatch `.cpp` edits could
-  Live-Code. See `docs/extending-the-bridge.md`.
+  (`McpAutomationBridge_BlueprintGraphHandlers.cpp`): `ArrangeBlueprintGraph` classifies each
+  `UEdGraphNode` (exec pins via `UEdGraphSchema_K2::PC_Exec`; pure = no exec pins) and
+  translates the graph into `McpGraphLayout::FLayoutNode/FLayoutEdge`; the column/row
+  placement algorithm lives in the shared, UE-agnostic `McpGraphLayoutUtils.cpp` (reused by
+  the Material-graph `arrange_graph` in `McpAutomationBridge_MaterialAuthoringHandlers.cpp`).
+  The adapter writes the returned `NodePosX/NodePosY` back, then `MarkBlueprintAsModified` +
+  save. **Routing is one list, not two:** add the action to `BlueprintGraph()` in
+  `MCP/McpConsolidatedActionRouting.h`. That single array both gates dispatch (the
+  `manage_blueprint` lambda routes via `McpConsolidatedActions::IsBlueprintGraphAction`;
+  anything not listed falls through to `HandleBlueprintAction` and returns `UNKNOWN_ACTION`)
+  and supplies the schema (`McpTool_ManageBlueprint.cpp` builds the client `action` enum from
+  `McpConsolidatedActions::ManageBlueprint()`, which unions it in — no hand-edited enum).
+  `get_nodes` has a handler but is absent from `BlueprintGraph()`, so it's still unreachable.
+  Header touch ⇒ full rebuild (editors closed). See `docs/extending-the-bridge.md`.
 - Node sizes vary; approximate with a fixed column `GAP` (~320px) and row height from pin
   count, or call the node's estimated size. Pixel-perfect isn't required.
 
-## Suggested scope
+## Status
 
-1. **Phase 1** — generator self-layout for the two existing binders. Ships with the next
-   bridge commit. ~20 lines total. (This alone fixes the reported problem.)
-2. **Phase 2** — `arrange_graph` with exec-X + cursor-Y, linear + branch support, no
-   crossing-minimization. Build only on demand.
+1. **Phase 1** — SHIPPED: generator self-layout for the two existing binders.
+2. **Phase 2** — SHIPPED: `arrange_graph` (Blueprint + Material graphs, shared
+   `McpGraphLayoutUtils` core).
 
-Branch convention: land bridge changes on the fork's default branch `dev`. Build/Live-
+Branch convention: land bridge changes on the fork's default branch `main`. Build/Live-
 Coding workflow in `docs/extending-the-bridge.md`.

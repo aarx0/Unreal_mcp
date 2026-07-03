@@ -1,8 +1,8 @@
 # MCP Automation Bridge — Unreal Engine (native)
 
 A Model Context Protocol (MCP) server built **directly into a C++ Unreal Engine editor plugin**.
-AI clients (Claude Code, Cursor, VS Code) connect over HTTP/SSE straight to the running editor —
-there is no Node/TypeScript bridge process.
+AI clients (Claude Code, Cursor, VS Code) connect over plain HTTP straight to the running editor —
+there is no Node/TypeScript bridge process and no SSE (pure request → response).
 
 > **Native-only fork.** The upstream TypeScript MCP server (`src/`, Node tooling, tests, CI) has been
 > removed; the C++ plugin in [`plugins/McpAutomationBridge/`](plugins/McpAutomationBridge/) is the whole
@@ -12,7 +12,7 @@ there is no Node/TypeScript bridge process.
 ## How it works
 
 ```
-AI client ──HTTP POST /mcp (JSON-RPC 2.0 + SSE)──► McpAutomationBridge plugin (in the editor)
+AI client ──HTTP POST /mcp (JSON-RPC 2.0)──► McpAutomationBridge plugin (in the editor)
 ```
 
 The plugin runs a raw-socket HTTP server inside the editor that speaks MCP (2025-03-26):
@@ -36,7 +36,9 @@ For another project, clone this repo into the project's `Plugins/` directory (or
 
 ## Enable & connect
 
-1. **Enable native MCP** in plugin settings (`Saved/Config/<Platform>/Game.ini`):
+1. **Enable native MCP** in the project's `Config/DefaultGame.ini` (the settings class is
+   `defaultconfig`; do **not** edit `Saved/Config/<Platform>/Game.ini` — the editor prunes it on
+   restart and the bridge silently goes dark):
    ```ini
    [/Script/McpAutomationBridge.McpAutomationBridgeSettings]
    bEnableNativeMCP=True
@@ -55,7 +57,8 @@ reaches the client only on a fresh MCP handshake — restart the client after a 
 ## Build / iterate
 
 - **Full rebuild** (headers, new files, `Build.cs`): close the editor, then
-  `Engine/Build/BatchFiles/Build.bat <Project>Editor Win64 Development -Project=<uproject> -WaitMutex`.
+  `Engine/Build/BatchFiles/Build.bat <Project>Editor Win64 Development -Project=<uproject> -WaitMutex -NoUBA`
+  (`-NoUBA` matters: a UBA-built binary breaks the next bullet's Live Coding hot-patching with `.voltbl` errors).
 - **`.cpp`-only** changes can hot-patch a running editor via `system_control` → `live_coding_compile`.
 - **Package** the plugin standalone with [`scripts/package-plugin.bat`](scripts/package-plugin.bat) /
   [`scripts/package-plugin.sh`](scripts/package-plugin.sh) (RunUAT `BuildPlugin`).

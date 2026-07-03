@@ -1,6 +1,6 @@
 # Common UI Integration Plan — McpAutomationBridge (aarx0 fork)
 
-> **Status:** Proposed plan, ready for review. No code written yet.
+> **Status:** SHIPPED. Phases 0–2 (build wiring, helper extraction, typed `add_common_*`/`set_common_*` handlers) landed 2026-05-29 (121c0f25, d755e459) — see `McpAutomationBridge_CommonUIHandlers.cpp`. Phase 3 (runtime activatable-stack push/pop) deliberately unbuilt (PIE test-tooling only; TODO.md). Kept for the design rationale/citations, not as an open proposal. The TS-sync sections below are moot — the TypeScript bridge was deleted outright 2026-06-03 (b1f52dba).
 > **Author/driver:** aarx0 fork; solo. This is a *bridge* tool until Epic ships an official UE 5.8 MCP, so the design optimizes for **clean, well-factored, deletable-later** over breadth.
 > **Method:** Produced by an 8-agent codebase/domain investigation + a 3-lens adversarial review. Load-bearing claims were re-verified against engine + plugin source (citations below). The raw synthesis had **one compile-blocker and one dual-sync blocker**; both are corrected here.
 
@@ -164,6 +164,10 @@ If pursued (R3): add `FTextProperty` (read+write) and a validating `FClassProper
 
 ## 7. Dual-component sync — the real model
 
+> **Moot as of 2026-06-03 (b1f52dba):** the TypeScript/Node bridge was deleted outright, so the
+> bridge is native-HTTP-only and there is no second component to keep in sync. Kept for historical
+> context on why the C++-side routing was designed the way it was.
+
 > **Review correction (blocker).** Neither transport hard-rejects an unknown action via an allow-list. The TS `StringEnum`/native `StringEnum` are **advisory schema**, not runtime gates. The failure modes for an unsynced action are *silent mis-routes*, so syncing is mandatory:
 
 **To make a new action reach `HandleCommonUiAction`, edit all of:**
@@ -249,7 +253,7 @@ Optional independent verifier: a separate `claude` CLI (the MCP is registered at
 
 ## 11. Open questions (need your call)
 
-1. **Transport:** Claude Code stdio bridge, or native HTTP `/mcp`? Decides whether the TS edits in Phase 2 are **mandatory** (stdio) or cosmetic (native HTTP). *(Current Claude Code MCP entry uses native HTTP `127.0.0.1:3123/mcp` → TS would be optional.)*
+1. ~~**Transport:** Claude Code stdio bridge, or native HTTP `/mcp`?~~ **Moot:** the TypeScript bridge was deleted 2026-06-03 (b1f52dba); native HTTP `/mcp` is the only transport.
 2. **Scope:** just leaf authoring (button/text/border + styles on `WBP_MainMenu_CUI`), or also runtime activatable-stack push? The former is fully covered by Phases 0-2; the latter (Phase 3) is runtime-only and has no consuming asset yet.
 3. **Style contract:** should `set_common_button_style` require you to pass the style class path (`/Game/UI/Styles/BS_MenuButton`), auto-create a default, or leave null (CommonUI project-settings templates)? A button with no style is effectively invisible.
 4. ~~Does `RhyaTowerOfWishes.uproject` enable CommonUI?~~ **Resolved:** yes — `{"Name":"CommonUI","Enabled":true}` is in the committed `.uproject` ([RhyaTowerOfWishes.uproject:38](../../RhyaTowerOfWishes.uproject#L38)). The delay-load DLL will be present at runtime, so Phase 0 is verifiable in this project.

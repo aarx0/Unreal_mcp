@@ -12,6 +12,16 @@ Self-contained: read this + `Private/McpSafeOperations.h` and you have the full 
 
 Both live in `McpSafeOperations.h`. **Never** call raw `UPackage::SavePackage` / `UEditorAssetLibrary::SaveLoadedAsset` directly from a handler.
 
+## Modal-freeze guard
+
+`McpSafeAssetSave` and `McpSafeLevelSave` wrap their editor-save calls
+(`SavePackagesForObjects` / `PromptForCheckoutAndSave` / `FEditorFileUtils::SaveLevel`) in
+`GIsRunningUnattendedScript = true`, restored on every exit path (see `McpSafeOperations.h`).
+Without the guard, a save failure pops the editor's Cancel/Retry/Continue modal, whose nested
+Slate loop runs on the bridge's game thread and starves every subsequent MCP call until a human
+clicks a button. With it, `FMessageDialog::Open` returns its default answer and a real failure
+surfaces as `false` plus a logged warning.
+
 ## Background — two real crashes
 
 The editor's "nice" save paths run extra pipelines *around* the actual disk write, and
@@ -90,5 +100,8 @@ reporting a successful set with `saved: false`.
 
 ## See also
 - `Private/McpSafeOperations.h` — `McpSafeAssetSave`, `McpDirectPackageSave`, `McpSafeLevelSave`
-- `Private/McpAutomationBridge_AssetWorkflowHandlers.cpp` — `HandleSetAssetProperty` (reference caller)
+- `Private/McpAutomationBridge_AssetWorkflowHandlers.cpp` — `HandleSetAssetProperty`
+  (`McpDirectPackageSave` reference caller); `HandleSaveAssetStatic` (`McpSafeAssetSave` reference
+  caller — backs `manage_asset` `save`/`save_asset`, never force-loads an unloaded package);
+  `manage_asset` `save_all` reuses `control_editor`'s save-all handler
 - AGENTS.md → **UE SAFETY**

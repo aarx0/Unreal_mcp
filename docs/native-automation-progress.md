@@ -52,9 +52,9 @@ This document tracks ongoing work to replace stubbed or registry-based fallbacks
 
 | Action | Current State | Needed Work |
 | --- | --- | --- |
-| `manage_asset` (render target) | Implemented (`create_render_target`). | Implement `nanite_rebuild_mesh`. |
+| `manage_asset` (render target) | Implemented (`create_render_target`, `nanite_rebuild_mesh`). | ✅ Done |
 | `system_control` (lumen) | Implemented (`lumen_update_scene`). | |
-| `system_control` (pipeline) | Implemented (`run_ubt`). | ✅ Done (Streamed via Node) |
+| `system_control` (pipeline) | Implemented (`run_ubt` launches UBT non-blocking, returns `processStarted`). | Structured pass/fail results + `get_build_status` (TODO.md). |
 | `system_control` (tests) | Implemented (`run_tests`). | Add result streaming. |
 | `system_control` (settings) | Implemented (`set_project_setting`). | ✅ Done |
 | `manage_blueprint` (events) | Implemented (`add_event` for Custom/Standard). | ✅ Done |
@@ -84,7 +84,7 @@ This document tracks ongoing work to replace stubbed or registry-based fallbacks
 | **Symlink Resolution** | ✅ Implemented | `execute_python` file path validation resolves symlinks and re-validates against project directory to prevent escape attacks. |
 | **Code Size Limits** | ✅ Implemented | `execute_python` enforces 1 MB maximum on inline code payloads. |
 | **Capability Token Auth** | ✅ Implemented | Native MCP transport validates `X-MCP-Capability-Token` header when `bRequireCapabilityToken` is enabled. |
-| **Request Origin Tracking** | ✅ Implemented | `ERequestOrigin` enum routes HTTP vs WebSocket responses explicitly — no `TargetSocket==nullptr` inference. |
+| **Request Origin Tracking** | ✅ Implemented | `ERequestOrigin` enum (`Unspecified`/`NativeHTTP`) tags each request's origin — no `TargetSocket==nullptr` inference. (The WebSocket variant went with the WebSocket transport.) |
 | **Pointer Safety** | ✅ Verified | Robust `nullptr` checks and weak pointers in C++ handlers. |
 | **Concurrency** | ✅ Verified | Thread-safe queue and GameThread dispatching for all automation requests. |
 | **Tool Registry Thread Safety** | ✅ Implemented | `CacheMutex` protects `Tools`, `ToolsByName`, `CachedToolSchemas`, `bCacheValid`. `GetAllTools()` returns copy. |

@@ -8,11 +8,6 @@ This doc is the "how do I actually change behavior" companion to:
 - [`Private/MCP/AGENTS.md`](../plugins/McpAutomationBridge/Source/McpAutomationBridge/Private/MCP/AGENTS.md) — native transport + tool-registration internals.
 - [`handler-mapping.md`](./handler-mapping.md) — the action → handler-file/function lookup table.
 
-> ⚠️ `editor-plugin-extension.md` describes the **legacy** WebSocket automation bridge
-> (`ws://127.0.0.1:8091`) and a Node server. The native path documented here is different:
-> raw-socket pull-only HTTP, JSON-RPC 2.0, default `POST /mcp` (loopback). Treat that file's
-> transport/coverage sections as historical, not current.
-
 ---
 
 ## The three layers an action passes through

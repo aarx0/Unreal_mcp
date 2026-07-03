@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Repo + docs pass (2026-07-03)
+
+- **`main` is the default branch** — `dev` was merged into `main` (74a237db) and GitHub's default flipped; the two are identical and future work lands on `main`. The fork had inherited upstream's `dev`-as-default convention while `main` sat frozen at April upstream.
+- **Docs staleness audit** — every living doc verified claim-by-claim against the code (12 auditors, 60 findings, all fixed): root README's enable instructions pointed at the pruned `Saved/Config` file and still claimed SSE; the plugin-level README/AGENTS.md/CHANGELOG still documented the deleted WebSocket/TypeScript bridge (README rewritten native-only, AGENTS.md contracts corrected, CHANGELOG pointerized to this file); `pull-architecture.md` now describes the shipped parked-connection design and the per-session role of sessions; `Roadmap.md`/`native-automation-progress.md` dropped TS-era claims and mark the five already-implemented Phase-28 actions; CommonUI as-builts' status headers now say SHIPPED/RESOLVED instead of "no code written"; `tests/schema/` gained the README the other batteries had; `Engine-API-Reference.md` retargeted 5.6→5.7.
+
 ### Post-audit follow-ups (2026-07-03)
 
 - **Per-session tool enablement** — `manage_tools` mutations now scope to the calling session (overlay keyed by `Mcp-Session-Id`; registry defaults are the shared immutable template). One client trimming its tool set no longer disables tools under concurrent sessions; `tools/list` is session-filtered; `TOOL_DISABLED` self-attributes the session's own last change; overlays drop on `reset`, session expiry, and `DELETE /mcp`.

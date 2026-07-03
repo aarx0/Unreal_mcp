@@ -2,9 +2,16 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.0--5.8-orange)](https://www.unrealengine.com/)
-[![GitHub](https://img.shields.io/badge/GitHub-ChiR24/Unreal__mcp-blueviolet?logo=github)](https://github.com/ChiR24/Unreal_mcp)
+[![GitHub](https://img.shields.io/badge/GitHub-aarx0/Unreal__mcp-blueviolet?logo=github)](https://github.com/aarx0/Unreal_mcp)
 
-An Unreal Engine editor plugin that enables AI assistants (Claude, Cursor, Windsurf, etc.) to control Unreal Engine through the Model Context Protocol (MCP).
+An Unreal Engine editor plugin that lets AI assistants (Claude Code, Cursor, VS Code, etc.)
+control Unreal Engine through the Model Context Protocol (MCP). The plugin **is** the MCP
+server — a native, pull-only Streamable HTTP endpoint inside the editor. No Node.js, no
+external bridge process.
+
+> This is the native-only [aarx0 fork](https://github.com/aarx0/Unreal_mcp). The upstream
+> project ([ChiR24/Unreal_mcp](https://github.com/ChiR24/Unreal_mcp)) pairs the plugin with a
+> TypeScript server; this fork deleted that layer entirely.
 
 ---
 
@@ -12,26 +19,27 @@ An Unreal Engine editor plugin that enables AI assistants (Claude, Cursor, Winds
 
 | Category | Capabilities |
 |----------|-------------|
-| **Asset Management** | Browse, import, duplicate, rename, delete assets; create materials |
+| **Asset Management** | Browse, import, duplicate, rename, delete, save assets; create materials |
 | **Actor Control** | Spawn, delete, transform, physics, tags, components |
 | **Editor Control** | PIE sessions, camera, viewport, screenshots, bookmarks |
 | **Level Management** | Load/save levels, streaming, lighting |
-| **Animation & Physics** | Animation BPs, state machines, ragdolls, vehicles, constraints |
+| **Animation & Physics** | Animation BPs, state machines, montages, ragdolls, vehicles, constraints |
 | **Visual Effects** | Niagara particles, GPU simulations, procedural effects |
 | **Sequencer** | Cinematics, timeline control, camera animations |
-| **Graph Editing** | Blueprint, Niagara, Material, Behavior Tree graphs |
+| **Graph Editing** | Blueprint, Niagara, Material, Behavior Tree graphs (+ auto-layout `arrange_graph`) |
 | **Audio** | Sound cues, audio components, MetaSounds |
-| **System** | Console commands, UBT, tests, logs, project settings, Python execution |
+| **UI** | Widget Blueprints, Common UI authoring, focus/nav introspection & drive |
+| **System** | Console commands, UBT, Live Coding, tests, logs, project settings, Python execution |
 
-**200+ automation actions** across 22 MCP tools.
+**200+ automation actions** across 22 canonical MCP tools. `manage_tools` can enable/disable
+tools at runtime, scoped to your MCP session — other connected clients are unaffected.
 
 ---
 
 ## Requirements
 
-- **Unreal Engine**: 5.0 - 5.8 (5.8 preview validated)
+- **Unreal Engine**: 5.0 - 5.8 (5.8 preview validated; developed against 5.7)
 - **Platforms**: Win64, Mac, Linux
-- **Node.js**: 18+ (only for TypeScript bridge transport — not needed for Native MCP)
 
 ---
 
@@ -99,19 +107,20 @@ An Unreal Engine editor plugin that enables AI assistants (Claude, Cursor, Winds
 
 ## Quick Start
 
-### Option A: Native MCP Transport (no Node.js needed)
-
-The plugin includes a built-in MCP Streamable HTTP server. AI clients connect directly — no TypeScript bridge required.
-
-1. Enable in **Edit → Project Settings → Plugins → MCP Automation Bridge**:
-   - Check **Enable Native MCP**
-   - Set port (default: `3000`)
-2. Restart the editor
-3. Configure your AI client for Streamable HTTP at `http://localhost:3000/mcp`
+1. Enable the server in the project's `Config/DefaultGame.ini` (or via
+   **Edit → Project Settings → Plugins → MCP Automation Bridge** — the settings class is
+   `defaultconfig`, so values persist there, not in `Saved/Config/`):
+   ```ini
+   [/Script/McpAutomationBridge.McpAutomationBridgeSettings]
+   bEnableNativeMCP=True
+   NativeMCPPort=3000
+   ```
+2. Restart the editor. The status bar shows the endpoint when it's live.
+3. Point your AI client at Streamable HTTP `http://127.0.0.1:3000/mcp`.
 
 **Claude Code:**
 ```bash
-claude mcp add unreal-engine --transport http http://localhost:3000/mcp
+claude mcp add unreal-engine --transport http http://127.0.0.1:3000/mcp
 ```
 
 **Cursor** (`.cursor/mcp.json`):
@@ -119,47 +128,11 @@ claude mcp add unreal-engine --transport http http://localhost:3000/mcp
 {
   "mcpServers": {
     "unreal-engine": {
-      "url": "http://localhost:3000/mcp"
+      "url": "http://127.0.0.1:3000/mcp"
     }
   }
 }
 ```
-
-### Option B: TypeScript Bridge (classic setup)
-
-### Step 1: Install MCP Server
-
-```bash
-# Using npx (recommended)
-npx unreal-engine-mcp-server
-
-# Or install globally
-npm install -g unreal-engine-mcp-server
-```
-
-### Step 2: Configure AI Client
-
-Add to your Claude Desktop config (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "unreal-engine": {
-      "command": "npx",
-      "args": ["unreal-engine-mcp-server"],
-      "env": {
-        "UE_PROJECT_PATH": "C:/Path/To/YourProject"
-      }
-    }
-  }
-}
-```
-
-### Step 3: Start Automating
-
-1. Open your Unreal project
-2. Start your AI client (Claude Desktop, Cursor, etc.)
-3. The MCP server will automatically connect to the Automation Bridge
 
 Example prompts:
 - "List all assets in /Game/Characters"
@@ -167,42 +140,30 @@ Example prompts:
 - "Create a new material called M_Glow"
 - "Take a screenshot of the current viewport"
 
+Tools only work while the editor is open with the plugin running. A tool-schema change reaches
+the client only on a fresh MCP handshake — restart the client after rebuilding the plugin.
+
 ---
 
-## Configuration
+## Plugin Settings
 
-### Environment Variables
+Configure in **Edit → Project Settings → Plugins → MCP Automation Bridge** (stored in
+`Config/DefaultGame.ini`):
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `UE_PROJECT_PATH` | - | Path to your `.uproject` file |
-| `MCP_AUTOMATION_HOST` | `127.0.0.1` | Bridge host address |
-| `MCP_AUTOMATION_PORT` | `8091` | Bridge WebSocket port |
-| `LOG_LEVEL` | `info` | Logging level (debug/info/warn/error) |
-
-### Plugin Settings
-
-Configure in **Edit → Project Settings → Plugins → MCP Automation Bridge**:
-
-- **Listen Ports**: WebSocket ports (default: 8090, 8091)
-- **Enable TLS**: Enable secure WebSocket connections
-- **Allow Non-Loopback**: Enable LAN access (security consideration)
-- **Enable Native MCP**: Enable built-in HTTP/SSE MCP server (default: off)
-- **Native MCP Port**: HTTP port for native MCP transport (default: 3000)
-- **Listen Host**: Bind address (default: 127.0.0.1)
-- **Load All Tools on Start**: Load all 22 canonical tools at startup (default: on)
-- **Native MCP Instructions**: Custom instructions for AI clients
-- **Require Capability Token**: Enforce token authentication on WS and HTTP transports
+- **Enable Native MCP**: turn the server on (default: off)
+- **Native MCP Port**: HTTP port (default: 3000)
+- **Listen Host**: bind address (default: 127.0.0.1)
+- **Allow Non-Loopback**: enable LAN access (security consideration)
+- **Require Capability Token**: enforce `X-MCP-Capability-Token` authentication
+- **Load All Tools on Start**: all 22 canonical tools at startup vs. the core set (default: on)
+- **Native MCP Instructions**: custom instructions served to AI clients
 
 ---
 
 ## Security
 
 - **Loopback-only binding** by default (127.0.0.1)
-- **Capability token authentication** — enforce token on both WebSocket and Native MCP transports (enable in Project Settings)
-- **TLS/SSL support** for secure connections
-- **Rate limiting** support (disabled by default; configurable via Project Settings)
-- **Handshake required** before automation requests
+- **Capability token authentication** on the native transport (enable in Project Settings)
 - **Command validation** blocks dangerous console commands
 - **Path sanitization** — blocks directory traversal in file operations
 - **Python execution security** — 1 MB code limit, symlink resolution, temp file scope guard cleanup
@@ -223,8 +184,9 @@ This is a known UE behavior when plugins are rebuilt on first load.
 ### Connection Refused
 
 1. Verify the plugin is enabled in **Edit → Plugins**
-2. Check port 8091 is not blocked by firewall
-3. Ensure MCP server is running: `npx unreal-engine-mcp-server`
+2. Verify `bEnableNativeMCP=True` is in `Config/DefaultGame.ini` (values written to
+   `Saved/Config/.../Game.ini` are pruned by the editor and silently disable the bridge)
+3. Check the configured port is not blocked by firewall
 
 ### Build Errors
 
@@ -238,28 +200,14 @@ The plugin uses `PCHUsageMode.NoPCHs` to prevent memory issues during compilatio
 
 ## Documentation
 
-- **Full Documentation**: [GitHub README](https://github.com/ChiR24/Unreal_mcp#readme)
-- **Handler Mapping**: [docs/handler-mapping.md](https://github.com/ChiR24/Unreal_mcp/blob/main/docs/handler-mapping.md)
-
----
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/ChiR24/Unreal_mcp/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/ChiR24/Unreal_mcp/discussions)
-- **Roadmap**: [Project Board](https://github.com/users/ChiR24/projects/3)
+- **Repo overview**: [root README](../../README.md)
+- **Add or fix an action**: [docs/extending-the-bridge.md](../../docs/extending-the-bridge.md)
+- **Action → handler lookup**: [docs/handler-mapping.md](../../docs/handler-mapping.md)
+- **Safe asset saving**: [docs/safe-asset-saving.md](docs/safe-asset-saving.md)
+- **Changelog**: [root CHANGELOG.md](../../CHANGELOG.md)
 
 ---
 
 ## License
 
 MIT License - See [LICENSE](LICENSE) for details.
-
----
-
-## Contributing
-
-Contributions are welcome! Please:
-- Include reproduction steps for bugs
-- Keep PRs focused and small
-- Follow existing code style

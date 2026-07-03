@@ -6,86 +6,10 @@ All notable changes to the MCP Automation Bridge plugin will be documented in th
 
 ## [Unreleased]
 
-### Security
-- **Capability token enforcement** on native MCP transport — validates `X-MCP-Capability-Token` header when `bRequireCapabilityToken` is enabled (mirrors WebSocket bridge logic)
-- **Symlink escape prevention** in `execute_python` file path validation — resolves symlinks and re-validates against project directory
-- **Code size limit** in `execute_python` — enforces 1 MB maximum for inline code payloads
-- **Explicit request origin tracking** (`ERequestOrigin`) — routes HTTP vs WebSocket responses by explicit origin instead of inferring from `TargetSocket==nullptr`
-- **Tool registry thread safety** — `Register()` now holds `CacheMutex` for entire body, `GetAllTools()` returns copy to prevent external mutation
-- **Dynamic tool manager protection** — `EnableCategory("all")` now respects protected categories and initial state instead of blindly enabling everything
-
-### Added — Native MCP Streamable HTTP Transport
-- **Native MCP endpoint** (`POST /mcp`) directly inside the C++ plugin — AI clients connect without the TypeScript bridge
-- **SSE streaming** for `tools/call` — progress notifications arrive in real-time, followed by final JSON-RPC result
-- **Raw socket HTTP server** (`FRunnable` + `FSocket`) replacing `FHttpServerModule` — no external dependencies
-- **JSON-RPC 2.0** protocol (MCP 2025-03-26) with `initialize`, `tools/list`, `tools/call` methods
-- **Multiple concurrent sessions** — Cursor, Claude Code, and other clients can connect simultaneously
-- **Session management** with `Mcp-Session-Id` header, 1-hour inactivity timeout, `DELETE /mcp` termination
-- **Dynamic tool manager** — enable/disable tools and categories at runtime via `manage_tools`
-- **Native tool schemas** generated from self-describing C++ tool classes with full `inputSchema` and categories (core, world, authoring, gameplay, utility); the TypeScript bridge exposes 22 canonical parent MCP tools.
-- **`listChanged` notifications** — broadcast `notifications/tools/list_changed` to all active SSE connections when tool state changes
-- **Load All Tools on Start** project setting — toggle between the core set and all available native tool schemas at startup
-- **Status bar indicator** — `● MCP :3000 (2)` in UE editor status bar, click to open settings
-- **Server identity config** — `server-info.json` for name/version/instructions, plus `NativeMCPInstructions` project setting for custom instructions
-- **Client info logging** — log connecting client name and version from `initialize` request
-- **`execute_python` action** in `system_control` — execute Python code with stdout/stderr capture, supports inline `code` and `file` path, execution time tracking
-- **Shared `ListenHost` setting** — native MCP respects `AllowNonLoopback` for network access control
-- **Plugin-packaging scripts** for Win/Mac/Linux — build and package the plugin via RunUAT BuildPlugin, with smart arg parsing
-- **`manage_asset` actions** `get_referencers`, `get_asset_properties`, `set_asset_property` — read referencers / bulk-read / write a single reflected property on any asset
-- **`manage_asset` action `create_data_table`** — create a new `UDataTable` asset with a given row struct. Params: `name`, `path`, `rowStruct` (full object path like `/Script/CommonUI.CommonInputActionDataBase` or `/Game/.../UserStruct`, or a bare struct name resolved via `TryFindTypeSlow`), optional `save` (default true). Validates the resolved `UScriptStruct` derives from `FTableRowBase` and rejects otherwise; persists via `McpDirectPackageSave` (not the editor save path) and registers the asset with the registry. Verified live: created tables with `/Script/CommonUI.CommonInputActionDataBase` (full path) and `CommonInputActionDataBase` (bare name), confirmed the persisted `RowStruct`, and confirmed `Vector` (not a row struct) and an unknown name are both rejected with `INVALID_ARGUMENT`. Unblocks `set_common_button_input_action`.
-- **`manage_blueprint` action `set_common_button_input_action`** (Common UI) — bind a `UCommonButtonBase`'s `TriggeringInputAction` (`FDataTableRowHandle`) on a button widget inside a Widget Blueprint. Params: `widgetPath`, `widgetName`, `dataTable`, `rowName`. Validates the target is a `UCommonButtonBase` and the DataTable's `RowStruct->IsChildOf(FCommonInputActionDataBase)` (`/Script/CommonUI.CommonInputActionDataBase`). Writes the handle **directly via reflection** (`FindFProperty<FStructProperty>` → `ContainerPtrToValuePtr`) rather than `UCommonButtonBase::SetTriggeringInputAction()` — that runtime setter calls `BindTriggeringInputActionToClick()` when `!IsDesignTime()`, which is true for a programmatically-loaded WidgetTree template, i.e. it would perform runtime input binding on an archetype with no owning player; the direct write is exactly what the details panel persists, with no runtime side effects. Reports `rowFound` (non-blocking, so a handle can be bound before its row is imported). Routed via `McpConsolidatedActions::CommonUi()` (which also feeds the `manage_blueprint` tool schema enum). Verified live on a fabricated `WBP_MenuButton` instance + a `CommonInputActionDataBase` table: set then independent read-back of `TriggeringInputAction` returned the exact `{DataTable, RowName}`, and the wrong-widget-type / wrong-row-struct / missing-DataTable / missing-widget guards all reject cleanly.
-- **`McpDirectPackageSave`** in `McpSafeOperations.h` — raw `UPackage::Save` that bypasses the editor's validate-on-save and source-control checkout pipelines (both have crashed the editor on unattended saves). Detects read-only targets (e.g. Perforce-locked files) and reports an actionable error instead of failing silently. See `docs/safe-asset-saving.md`
-- **Deep struct & object-reference array reflection** (`McpPropertyReflection` + the `McpAutomationBridgeHelpers` twin) — `TArray<FStruct>` and object-reference arrays now export as structured JSON (a nested object per element, object refs as path strings, `FKey` as `{KeyName}`, enums by name) and import back via `FJsonObjectConverter::JsonObjectToUStruct`, instead of collapsing to one opaque `ExportText` blob. Recurses nested structs (depth-capped at 6) and skips transient/deprecated child fields to match `ExportObjectToJson`. The single-struct property branch and the previously primitive-only `ApplyJsonValueToProperty`/`ImportJsonToArray` import path were extended the same way. Verified live on `IMC_GameCommands.DefaultKeyMappings.Mappings`.
-- **Deep-export of *Instanced* subobjects** (`McpPropertyReflection`) — `CPF_InstancedReference` object values (Enhanced Input `Triggers`/`Modifiers`, montage `AnimNotify`s, instanced components) now export as a nested JSON object carrying the concrete class under `__class` plus the subobject's own properties, instead of an opaque subobject path that dropped all of its config. Plain asset references still export as a path; depth-capped, transient/deprecated children skipped. Verified live on `AM_AttackMontage1.Notifies` (struct-nested `AnimNotify_PlaySound` → `{__class, Sound, …}`) and `IA_Mute.Triggers` (top-level array → `InputTriggerPressed` with `ActuationThreshold`). Mirrored into the `McpAutomationBridgeHelpers.h` twin (direct top-level instanced properties; array/struct-nested cases already deep-export via the `McpPropertyReflection` delegation).
-- **Round-trip (import) of *Instanced* subobject arrays** (`McpPropertyReflection`) — `set_asset_property` can now WRITE an instanced `TArray<TObjectPtr<…>>` from the `{ "__class", … }` form export emits. An owning-`UObject` is threaded through `ApplyJsonValueToProperty`/`ImportJsonToArray` (defaulted, so other callers are unaffected) and used as the `NewObject` Outer, so re-instanced subobjects (input triggers/modifiers, …) serialize into the asset; the new subobject is validated `IsChildOf` the property class and its own fields applied best-effort. Array import also tolerates a JSON string that encodes the array (the typeless `value` param leads some clients to stringify it). Verified live: on a duplicate of `IA_Mute`, writing `Triggers = [{__class: InputTriggerHold, HoldTimeThreshold: 0.75, …}]` re-instanced Pressed→Hold and a fresh read confirmed the persisted `InputTriggerHold`.
-- **Round-trip of *struct-nested* Instanced subobjects** (`McpPropertyReflection`) — instanced subobjects inside a struct (canonically a montage `FAnimNotifyEvent.Notify`) now round-trip too. The struct import branch strips `CPF_InstancedReference` fields before `FJsonObjectConverter::JsonObjectToUStruct` (which can't convert the `{"__class", …}` form and would fail the whole struct), lets the engine convert the rest, then re-instances the stripped fields through the owner-aware importer. Verified live: on a duplicate of `AM_AttackMontage1`, writing `Notifies = [{ NotifyName, Notify: {__class: AnimNotify_PlaySound, Sound, VolumeMultiplier: 0.42} }]` re-instanced the `Notify` and a fresh read confirmed it persisted.
-- **`TMap` / `TSet` property import** (`McpPropertyReflection`) — `ApplyJsonValueToProperty` could export maps/sets but not import them; writing a map/set property fell through to the string fallback and failed. Maps now import from a JSON object `{ "<key>": <value> }` (keys from field names, keys+values routed through the importer so struct/object/instanced values work), sets from a JSON array — both also tolerate a stringified form. Verified live on `IMC_GameCommands.MappingProfileOverrides` (`{"ProfileA":{}, "ProfileB":{}}` round-tripped). `TSet` mirrors the same path (no set-property fixture in this project to runtime-test — compile-verified).
-- **`FText` property export** (`McpPropertyReflection`) — `ExportPropertyToJsonValue` had no `FTextProperty` branch, so text properties were silently dropped from reads. Now emits the display string (`.ToString()`); import already restores `FText` via the generic `ImportText` string fallback. Verified live by round-tripping an `FText` Blueprint variable through its CDO path (`<bp>.Default__<Class>_C`) — which is itself a handy way to fabricate reflection fixtures: a created Blueprint's variables are fully reachable by `get`/`set_asset_property` via that path.
-- **`add_variable` container variables** (`McpAutomationBridge_BlueprintHandlers`) — `add_variable` now accepts `Set<Inner>` / `Array<Inner>` / `Map<Key,Value>` (T-prefixes ok), not just scalar types; sets `PinType.ContainerType` (+ `PinValueType` for maps). Verified by creating `Set<Name>`/`Map<Name,Int>`/`Array<Int>` variables and round-tripping their values via the CDO path. (Float/double terminals initially produced int — fixed below, together with a pre-existing scalar float/double bug.)
-- **Fix: `TMap` value import** (`McpPropertyReflection`) — the `TMap` import (`da29c05`) double-offset the value via the property's `*_InContainer` accessors (it passed `GetValuePtr`, already pair+valueOffset), so every primitive value was dropped to default (the original empty-struct IMC fixture masked it). Now passes `GetPairPtr` as the container base for both key and value. Verified: `Map<Name,Int>` round-trips `{"apple":5,"banana":7}`. (`TSet` import is now runtime-verified too, via a fabricated `Set<Name>` variable.)
-- **Fix: float/double Blueprint variables created as int** (`McpAutomationBridge_BlueprintHandlers`, `c0bff6a`) — `add_variable` mapped `float`/`double` to the legacy `PC_Float` *category*, which UE5 does not honor as a real type, so the BP compiler produced an **int** property and float/double variables truncated fractional values (`1.5 -> 1`) in scalar AND container positions (pre-existing for scalars; surfaced by the container work). Now uses `PC_Real` + a float/double `PinSubCategory` at every position. Verified: scalar `float`/`double` and `Array<Float>`/`Set<Float>`/`Map<Name,Float>`/`Map<Name,Double>` round-trip fractional values.
-- **Fix: map/set export dropped non-trivial value/element types** (`McpPropertyReflection` + the `McpAutomationBridgeHelpers` twin, `40c3bf9`) — map-value and set-element export only handled str/int/float/bool and fell back to an `ExportText` **string** for everything else, so double/int64/byte/enum/object/struct values in maps/sets exported as strings; non-str/name/int map keys became a positional `"key_%d"` (losing the key). Both twins now delegate the value/element to `ExportPropertyToJsonValue` (full type coverage, like the array export), keys preserved via `ExportText`. Verified across both read paths: `Map<Name,Double>`/`Set<Double>`/`Map<Name,Int64>` export as proper JSON numbers.
-- **`FText` reflection parity in the `McpAutomationBridgeHelpers` twin (R3)** — the helpers twin (used by `inspect get_property`/`set_property` and `set_object_property`) lagged the asset twin (`get`/`set_asset_property`) on `FText`: its `ExportPropertyToJsonValue` had no `FTextProperty` branch (text fell through to `nullptr` → silently dropped from reads), and its `ApplyJsonValueToProperty` ended in a hard "unsupported" error with no string fallback (so `FText` — and any other text-importable type — could not be written). Added the `FTextProperty` export branch (display string) and the same generic `ImportText_Direct` string fallback the asset twin already had, so the two reflection twins now read/write the same set of types. Verified live on a fabricated BP CDO fixture: an `FText` variable round-trips through *both* twins to the identical value, including embedded quotes/commas/em-dash/apostrophe (`Say "hi" to all, friend — don't stop`). `FClassProperty` was already covered (it derives from `FObjectProperty`: export → class path, import → `LoadObject`) and was re-verified round-tripping a class path (`/Script/Engine.PointLight`) through the helpers twin.
-
-### Changed
-- Tool categories now use four groups: `core`, `world`, `gameplay`, and `utility`. The singleton `authoring` category was removed, and `manage_blueprint` moved into `core`.
-- `manage_blueprint` schema: `location`, `rotation`, `scale` changed from flat number arrays to structured objects with named sub-fields (`x`/`y`/`z` or `pitch`/`yaw`/`roll`) — matches TypeScript schema
-- `system_control` schema: removed `export_asset` action (not in TypeScript schema) and `additionalArgs` parameter (C++-only, never used by TS clients)
-- `control_editor` schema: added `set_editor_mode` action (was missing from C++, present in TS)
-- Screenshot handler: now returns `async: true` with `expectedDelay` field and timing guidance for polling
-- `ScanPathsSynchronous` removed from asset query/workflow handlers to prevent GameThread blocking — documented limitation: newly-added assets may not appear until editor rescan
-- Temp file cleanup in `execute_python` uses RAII scope guard for guaranteed cleanup on all exit paths
-
-### Fixed
-- **`create_widget_blueprint` ignored `savePath`** — the handler read `path`/`folder` but not `savePath` (the `manage_blueprint` schema's documented param), so callers passing `savePath` silently got the `/Game/UI` default. Now accepts `savePath` as an alias (precedence `path` → `savePath` → `folder` → `/Game/UI`). Verified: `savePath:/Game/McpTmp` creates under `/Game/McpTmp`.
-- **`delete` / `delete_asset` ignored `assetPath` / `assetPaths`** — `HandleDeleteAssets` read only `path`/`paths`, so `delete_asset { assetPath: … }` (the param the `manage_asset` schema advertises) failed with "No paths provided". Now also accepts the singular `assetPath` and array `assetPaths`. Verified: `delete_asset { assetPath: … }` deletes the asset.
-- **`set_asset_property` wrote to the wrong memory address (corruption / crash)** — the handler passed `ContainerPtrToValuePtr(Asset)` (an already-offset value pointer) to `ApplyJsonValueToProperty`/`ExportPropertyToJsonValue`, which themselves use the `*_InContainer` accessors and add the offset again. Every write landed at `Asset + 2×offset`: silent no-op corruption for POD properties (the matching export read the same wrong address and falsely echoed success) and an `FString::operator=` access-violation crash for string/name properties. Now passes the object base. Was masking the write as "working" in earlier testing
-- **`set_asset_property` editor crash on save** — the save routed through editor pipelines that faulted in two different subsystems (`DataValidation` via validate-on-save, `GitSourceControl` via checkout-on-save). Now uses `McpDirectPackageSave` (raw package write), avoiding both. Read-only/locked targets now return `ASSET_SAVE_FAILED` with a checkout hint instead of crashing or silently no-op'ing
-- **`ResolveObjectFromPath`** returned the `UPackage` instead of the asset for asset paths — broke `get_property`/`export`/`set_asset_property` on assets; now normalizes to `Package.Object` and `StaticLoadObject`s the asset
-- **`execute_python` failures** now fold the captured Python traceback into the error message instead of a generic failure string
-- `reset` action now restores initial state from `Initialize()` instead of enabling all tools unconditionally
-- UE 5.6 compatibility: `TSharedPtr` for incomplete types, `Headers.Add` instead of `SetHeader`, `TryGetField` return value
-- Package script arg parsing — flags no longer eaten as output directory, extra args correctly forwarded to RunUAT
-
-### Technical Details
-- Response routing via explicit `ERequestOrigin` enum (`NativeHTTP` vs `WebSocket`) — no more `TargetSocket==nullptr` inference
-- Thread-safe SSE writes: per-connection `WriteMutex`, snapshot pattern for broadcast
-- Thread-safe tool registry: `CacheMutex` protects `Tools`, `ToolsByName`, `CachedToolSchemas`, `bCacheValid`
-- Opt-in via `bEnableNativeMCP` project setting (default: off)
-- Capability token validation mirrors WebSocket bridge (`McpConnectionManager.cpp`)
-
-### New Files
-
-| File | Purpose |
-|------|---------|
-| `Private/MCP/McpNativeTransport.h/cpp` | Raw-socket HTTP+SSE server, session management, JSON-RPC dispatch |
-| `Private/MCP/McpJsonRpc.h/cpp` | JSON-RPC 2.0 helpers (parse, response, error, notification, progress) |
-| `Private/MCP/McpToolRegistry.h/cpp` | Singleton registry for self-describing C++ tool definitions |
-| `Private/MCP/McpSchemaBuilder.h/cpp` | Fluent builder for MCP tool inputSchema JSON |
-| `Private/MCP/McpDynamicToolManager.h/cpp` | Runtime tool enable/disable, protected tools, initial state reset |
-| `Private/MCP/Tools/McpTool_*.cpp` | Native self-describing tool definition classes with schema + dispatch |
-| `Private/UI/SMcpStatusBarWidget.h/cpp` | Editor status bar MCP indicator |
-| `Resources/MCP/server-info.json` | Server name, version, default instructions |
+Fork development is tracked in the repo-root [CHANGELOG.md](../../CHANGELOG.md) — this file no
+longer duplicates it. That includes the native Streamable HTTP transport, the WebSocket- and
+TypeScript-bridge deletions, per-session tool enablement, and the 2026-07 hardening waves.
+The dated releases below are the upstream plugin's history from before the fork went native-only.
 
 ---
 
@@ -235,4 +159,6 @@ All notable changes to the MCP Automation Bridge plugin will be documented in th
 
 ---
 
-For full MCP server changelog, see: https://github.com/ChiR24/Unreal_mcp/blob/main/CHANGELOG.md
+For this fork's full changelog, see the repo-root [CHANGELOG.md](../../CHANGELOG.md). (Upstream's
+TypeScript-bridge changelog at https://github.com/ChiR24/Unreal_mcp/blob/main/CHANGELOG.md
+describes a different codebase — this fork deleted that bridge.)

@@ -114,15 +114,13 @@ gamepad focus." **Two independent causes**, both confirmed; two earlier beliefs 
    (Original recommendation, superseded: expose `GetFocusWidget()` on `URhyaVolumeSlider` +
    override `BP_GetDesiredFocusTarget` on the pause screen.)
 
-## Next: nav-assertion regression layer (Aaron's #1)
-Persist the observe/drive loop into replayable golden-path tests — the "automate what I don't want to
-babysit" payoff. Shape (per Aaron): a declarative step+expectation list run in PIE, returning pass/fail:
-`{ open menu (call TogglePause / push screen) → expect activatableStack contains X → expect
-desiredFocusTarget == Y → simulate_nav Down ×N → expect focusedWidget == Z (NOT SViewport) → expect
-stack depth == N }`, run across variants (KBM vs gamepad; a couple of resolutions). Recorded as data so
-it replays forever; wire into `system_control run_tests` / CI later. Fast-follow (#2): authoring
-scaffolding — style-asset variants, activatable boilerplate with the focus target wired, BindWidget
-reconcile (lower-stakes grind reduction).
+## Nav-assertion regression layer (Aaron's #1) — BUILT 2026-06-07→09
+Shipped as `scripts/ui-nav-test.ps1` + `tests/ui-nav/{pause_menu,pause_menu_kbm,main_menu,options_roundtrip}.json`
+(all green ×3; see `tests/ui-nav/README.md`) — declarative step+expectation specs run in PIE,
+composing exactly the two actions this doc describes (`inspect ui_focus` + `control_editor
+simulate_nav`). Still open: wiring the runner into `system_control run_tests` / CI, and fast-follow
+#2 (authoring scaffolding — style-asset variants, activatable boilerplate with the focus target
+wired, BindWidget reconcile).
 
 ## The problem
 CommonUI's hardest-to-eyeball state is **not** the widget tree (a screenshot or

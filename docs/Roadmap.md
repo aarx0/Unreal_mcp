@@ -8,9 +8,9 @@ This roadmap outlines the comprehensive development plan for expanding the Unrea
 
 ## Phase 1: Architecture & Foundation (Completed)
 
-- [x] **Native C++ Bridge**: Replace Python-based bridge with native C++ WebSocket plugin.
+- [x] **Native C++ Bridge**: Replace Python-based bridge with a native C++ editor plugin; now a pull-only Streamable HTTP transport (`McpNativeTransport.cpp`, `POST /mcp`) — the original WebSocket transport was removed entirely.
 - [x] **Consolidated Tools**: Unify disparate tools into cohesive domains (`manage_asset`, `control_actor`, etc.).
-- [x] **Modular Server**: Refactor monolithic `index.ts` into specialized subsystems (`ServerSetup`, `HealthMonitor`, `ResourceHandler`).
+- [x] **Native-Only Migration (2026-06-03, b1f52dba)**: Deleted the entire TypeScript/Node MCP server (`src/`, npm, Docker, CI); the C++ plugin is the sole implementation. TS-era references in later phases are historical.
 - [x] **Performance Optimization**: Pure TypeScript implementation for all math/JSON operations (WASM removed - FFI overhead made it 4-33x slower).
 - [x] **Offline Capabilities**: Implement file-based fallback for project settings (`DefaultEngine.ini`).
 
@@ -199,7 +199,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `animation_physics`
 
-**Status**: All 29 actions fully implemented in TypeScript and C++.
+**Status**: All 29 actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 7.1 Skeleton Creation
 - [x] `get_skeleton_info`, `list_bones`, `list_sockets` (query operations)
@@ -243,7 +243,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_asset`
 
-**Status**: All 39 actions fully implemented in TypeScript and C++.
+**Status**: All 39 actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 8.1 Material Creation
 - [x] `create_material` (surface, deferred_decal, light_function, post_process, UI, volume)
@@ -292,7 +292,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_asset`
 
-**Status**: All 21 actions fully implemented in TypeScript and C++.
+**Status**: All 21 actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 9.1 Procedural Generation
 - [x] `create_noise_texture` (perlin, simplex, worley, voronoi)
@@ -327,7 +327,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `animation_physics`
 
-**Status**: All listed actions fully implemented in TypeScript and C++.
+**Status**: All listed actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 10.1 Animation Sequences
 - [x] `create_animation_sequence`
@@ -438,7 +438,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_effect`
 
-**Status**: All listed actions fully implemented in TypeScript and C++.
+**Status**: All listed actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 12.1 Systems & Emitters
 - [x] `create_niagara_system`
@@ -532,7 +532,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_character`
 
-**Status**: All 19 actions fully implemented in TypeScript and C++.
+**Status**: All 19 actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 14.1 Character Creation
 - [x] `create_character_blueprint`
@@ -573,7 +573,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_combat`
 
-**Status**: All 31 actions fully implemented in TypeScript and C++.
+**Status**: All 31 actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 15.1 Weapon Base
 - [x] `create_weapon_blueprint`
@@ -629,7 +629,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_ai`
 
-**Status**: All listed actions fully implemented in TypeScript and C++.
+**Status**: All listed actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 16.1 AI Controller
 - [x] `create_ai_controller`
@@ -690,7 +690,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_inventory`
 
-**Status**: All 33 actions fully implemented in TypeScript and C++.
+**Status**: All 33 actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 17.1 Data Assets
 - [x] `create_item_data_asset`
@@ -749,7 +749,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_interaction`
 
-**Status**: All 22 actions fully implemented in TypeScript and C++.
+**Status**: All 22 actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 18.1 Interaction Component
 - [x] `create_interaction_component`
@@ -793,7 +793,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_blueprint`
 
-**Status**: All 65 actions fully implemented in TypeScript and C++.
+**Status**: All 65 actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 19.1 Widget Creation
 - [x] `create_widget_blueprint`
@@ -858,7 +858,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_networking`
 
-**Status**: All 27 actions fully implemented in TypeScript and C++.
+**Status**: All 27 actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 20.1 Replication
 - [x] `set_property_replicated`
@@ -911,7 +911,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_networking`
 
-**Status**: All 20 actions fully implemented in TypeScript and C++.
+**Status**: All 20 actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 21.1 Core Classes
 - [x] `create_game_mode`
@@ -987,7 +987,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_level_structure`
 
-**Status**: All 17 actions fully implemented in TypeScript and C++.
+**Status**: All 17 actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 23.1 Levels
 - [x] `create_level`, `create_sublevel`
@@ -1023,7 +1023,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_level_structure`
 
-**Status**: All 18 actions fully implemented in TypeScript and C++.
+**Status**: All 18 actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 24.1 Trigger Volumes
 - [x] `create_trigger_volume`
@@ -1084,7 +1084,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `build_environment`
 
-**Status**: All 21 actions fully implemented in TypeScript and C++.
+**Status**: All 21 actions fully implemented natively in C++ (`plugins/McpAutomationBridge`).
 
 ### 26.1 Spline Creation
 - [x] `create_spline_actor`
@@ -1163,16 +1163,16 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Complete environment (sky, weather, water).
 
-**Tool**: `manage_environment`
+**Tool**: `build_environment` (Expanded — these actions route there, not to a separate `manage_environment`)
 
 ### 28.1 Landscape (Expanded)
-- [ ] `create_landscape`
+- [x] `create_landscape`
 - [ ] `import_heightmap`, `export_heightmap`
-- [ ] `sculpt_landscape` (raise, lower, smooth, flatten, erosion)
-- [ ] `paint_landscape_layer`
+- [x] `sculpt_landscape` (raise, lower, smooth, flatten, erosion)
+- [x] `paint_landscape_layer`
 - [ ] `create_landscape_layer_info`
 - [ ] `configure_landscape_material`
-- [ ] `create_landscape_grass_type`
+- [x] `create_landscape_grass_type`
 - [ ] `configure_landscape_splines`
 - [ ] `configure_landscape_lod`
 - [ ] `create_landscape_streaming_proxy`
@@ -1190,7 +1190,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 - [ ] `configure_directional_light_atmosphere`
 - [ ] `configure_exponential_height_fog`
 - [ ] `configure_volumetric_cloud`
-- [ ] `create_sky_sphere`
+- [x] `create_sky_sphere`
 
 ### 28.4 Weather
 - [ ] `create_weather_system`
@@ -2218,10 +2218,10 @@ With ~2,855 actions covering all Unreal Engine systems and major plugins:
 
 ## Contributing
 
-This roadmap represents a massive undertaking. Contributions are welcome for any phase. See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
+This roadmap represents a massive undertaking. Contributions are welcome for any phase.
 
-Each new action requires:
-1. TypeScript handler in `src/tools/handlers/`
-2. Tool definition in `src/tools/consolidated-tool-definitions.ts`
-3. C++ handler in `plugins/McpAutomationBridge/Source/.../Private/`
-4. Integration test
+Each new action requires (see [extending-the-bridge.md](./extending-the-bridge.md)):
+1. Schema declaration in the tool's `McpTool_*.cpp` (`Private/MCP/Tools/`)
+2. Action added to the routing list in `Private/MCP/McpConsolidatedActionRouting.h`
+3. C++ handler in `Private/McpAutomationBridge_*Handlers.cpp`
+4. Test coverage (`tests/`)

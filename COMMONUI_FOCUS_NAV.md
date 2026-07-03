@@ -1,7 +1,10 @@
 # Common UI — Gamepad Focus / Navigation (design stub)
 
-**Status:** parked for a future deep-dive design pass. Not yet built. Captures the
-2026-06-07 scoping so we don't re-derive it. Pairs with `COMMONUI_INTEGRATION_PLAN.md`.
+**Status:** RESOLVED 2026-06-07, applied to the real menus 2026-06-09. No new bridge action or
+base class was needed — `manage_blueprint set_default` on `DesiredFocusWidget.WidgetName` is
+sufficient (see the RESOLVED section below; as-shipped fix on WBP_PauseScreen/WBP_OptionsScreen
+in `COMMONUI_FOCUS_INPUT.md`'s 2026-06-09 RCA). Original scoping kept below. Pairs with
+`COMMONUI_INTEGRATION_PLAN.md`.
 
 ## Why
 The active UI goal is migrating menus (Pause, Options) to Common UI **with controller

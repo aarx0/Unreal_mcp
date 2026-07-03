@@ -1,4 +1,4 @@
-# Unreal Engine 5.6 API Reference for MCP Implementation
+# Unreal Engine 5.7 API Reference for MCP Implementation
 
 This document provides key engine API information to guide implementation of the MCP roadmap phases.
 
@@ -7,7 +7,7 @@ This document provides key engine API information to guide implementation of the
 ## Phase 6: Geometry & Mesh Creation
 
 ### Plugin Location
-`X:/Unreal_Engine/UE_5.6/Engine/Plugins/Runtime/GeometryScripting/`
+`X:/Unreal_Engine/UE_5.7/Engine/Plugins/Runtime/GeometryScripting/`
 
 ### Key Headers
 | File | Purpose |
@@ -325,7 +325,7 @@ Concurrency->Concurrency.ResolutionRule = EMaxConcurrentResolutionRule::StopLowe
 ## Phase 12: Complete Niagara VFX System
 
 ### Plugin Location
-`X:/Unreal_Engine/UE_5.6/Engine/Plugins/FX/Niagara/`
+`X:/Unreal_Engine/UE_5.7/Engine/Plugins/FX/Niagara/`
 
 ### Key Headers
 | File | Purpose |
@@ -374,7 +374,7 @@ NiagaraComp->SetVariableObject(FName("Mesh"), StaticMesh);
 ## Phase 13: Gameplay Ability System (GAS)
 
 ### Plugin Location
-`X:/Unreal_Engine/UE_5.6/Engine/Plugins/Runtime/GameplayAbilities/`
+`X:/Unreal_Engine/UE_5.7/Engine/Plugins/Runtime/GameplayAbilities/`
 
 ### Key Headers
 | File | Purpose |
@@ -1073,7 +1073,7 @@ SplineMesh->SetEndScale(FVector2D(1.5f, 1.5f));
 ## Phase 27: PCG Framework
 
 ### Plugin Location
-`X:/Unreal_Engine/UE_5.6/Engine/Plugins/PCG/`
+`X:/Unreal_Engine/UE_5.7/Engine/Plugins/PCG/`
 
 ### Key Headers
 | File | Purpose |
@@ -2246,4 +2246,4 @@ if (!IsValid(Object))
 
 ---
 
-*Document generated from UE 5.6 source analysis for MCP implementation guidance.*
+*Document generated from UE 5.7 source analysis for MCP implementation guidance.*

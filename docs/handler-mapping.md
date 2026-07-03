@@ -55,16 +55,11 @@ the fallthrough: `console_command`/`execute_command`/`set_cvar` →
 `HandleConsoleCommandAction` @ ConsoleCommandHandlers.cpp;
 `subscribe`/`unsubscribe`/`get_log`/`tail_log`/`clear_log` → `HandleLogAction` @
 LogHandlers.cpp; `spawn_category` → `HandleDebugAction` @ DebugHandlers.cpp;
-`lumen_update_scene` → `HandleRenderAction` @ RenderHandlers.cpp. These are
-per-action tests in the lambda, not routed families, so `GetToolRoutingTable()`
-does not list them.
-
-Known drift (as of 2026-07-02): `SystemControlCore` still advertises `screenshot`,
-`create_widget`, `add_widget_child`, `get_project_settings`, `set_project_setting`,
-whose implementations live in `HandleUiAction` @ UiHandlers.cpp (registered only
-under the internal `manage_ui` name). `HandleSystemControlAction` declines them and
-nothing re-dispatches, so via `system_control` they return `UNKNOWN_ACTION`. The
-lambda comment about a "linear chain" fallthrough to `HandleUiAction` is stale.
+`lumen_update_scene` → `HandleRenderAction` @ RenderHandlers.cpp;
+`screenshot`/`create_widget`/`add_widget_child`/`get_project_settings`/`set_project_setting`
+→ `HandleUiAction` @ UiHandlers.cpp (schema-advertised on `system_control`, implemented
+in the otherwise-unreachable UI handler). These are per-action tests in the lambda,
+not routed families, so `GetToolRoutingTable()` does not list them.
 
 ## Shared action lists → owning handler
 
@@ -128,9 +123,12 @@ enums only — they own no actions.
 3. Grep that file for the sub-action string to land on the implementing branch:
    `grep -n '"set_blend_mode"' plugins/McpAutomationBridge/Source/McpAutomationBridge/Private/McpAutomationBridge_MaterialAuthoringHandlers.cpp`
 4. Not in the routing header at all? Then it is not reachable from a canonical
-   tool. `InitializeHandlers` registers extra internal/legacy names
-   (`manage_ui`, `manage_misc`, `asset_query`, `manage_lighting`, …) that
-   `tools/call` never dispatches to directly.
+   tool. `InitializeHandlers` registers only the 22 canonical tool names — the
+   legacy Node-server-era per-action registrations (`manage_ui`, `manage_misc`,
+   `asset_query`, ~100 others) were deleted 2026-07-02 as unreachable. Their
+   handler functions survive where a consolidated lambda calls them directly
+   (e.g. `HandleUiAction`, `HandleLightingAction`); `HandleMiscAction` had no
+   caller and was deleted with `McpAutomationBridge_MiscHandlers.cpp`.
 
 Within one tool an action belongs to exactly one routed family (boot validation
 enforces disjointness, including against the core list). The same action name may
