@@ -84,7 +84,6 @@ public:
 			.Number(TEXT("tileSize"), TEXT(""))
 			.String(TEXT("quality"), TEXT(""))
 			.String(TEXT("staticMesh"), TEXT("Mesh asset path."))
-			.Number(TEXT("timeoutMs"), TEXT(""))
 			.String(TEXT("path"), TEXT("Path to a directory."))
 			.String(TEXT("filename"), TEXT(""))
 			.Array(TEXT("assetPaths"), TEXT(""))

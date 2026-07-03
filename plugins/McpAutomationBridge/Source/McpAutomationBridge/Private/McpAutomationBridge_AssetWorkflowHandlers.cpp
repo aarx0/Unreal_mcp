@@ -4531,6 +4531,105 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
   Payload->TryGetNumberField(TEXT("numLODs"), NumLODs);
   NumLODs = FMath::Clamp(NumLODs, 1, 50);
 
+  // FMeshReductionSettings overrides applied to every generated LOD; percent
+  // fields replace the progressive 50%/25%/... defaults.
+  TOptional<float> OverridePercentTriangles;
+  TOptional<float> OverridePercentVertices;
+  TOptional<float> OverrideMaxDeviation;
+  TOptional<float> OverridePixelError;
+  TOptional<float> OverrideWeldingThreshold;
+  TOptional<float> OverrideHardAngleThreshold;
+  TOptional<int32> OverrideBaseLODModel;
+  TOptional<bool> OverrideRecalculateNormals;
+  const TSharedPtr<FJsonObject> *ReductionOverrides = nullptr;
+  const TSharedPtr<FJsonValue> ReductionValue =
+      Payload->TryGetField(TEXT("reductionSettings"));
+  if (ReductionValue.IsValid() && ReductionValue->Type != EJson::Null) {
+    if (!ReductionValue->TryGetObject(ReductionOverrides)) {
+      SendAutomationError(RequestingSocket, RequestId,
+                          TEXT("reductionSettings must be a JSON object"),
+                          TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+    for (const TPair<FString, TSharedPtr<FJsonValue>> &Field :
+         (*ReductionOverrides)->Values) {
+      double Number = 0.0;
+      const bool bIsNumber =
+          Field.Value.IsValid() && Field.Value->TryGetNumber(Number);
+      if (Field.Key == TEXT("percentTriangles") ||
+          Field.Key == TEXT("percentVertices")) {
+        if (!bIsNumber || Number < 0.0 || Number > 1.0) {
+          SendAutomationError(
+              RequestingSocket, RequestId,
+              FString::Printf(
+                  TEXT("reductionSettings.%s must be a number in [0, 1]"),
+                  *Field.Key),
+              TEXT("INVALID_ARGUMENT"));
+          return true;
+        }
+        if (Field.Key == TEXT("percentTriangles")) {
+          OverridePercentTriangles = static_cast<float>(Number);
+        } else {
+          OverridePercentVertices = static_cast<float>(Number);
+        }
+      } else if (Field.Key == TEXT("maxDeviation") ||
+                 Field.Key == TEXT("pixelError") ||
+                 Field.Key == TEXT("weldingThreshold") ||
+                 Field.Key == TEXT("hardAngleThreshold")) {
+        if (!bIsNumber || Number < 0.0) {
+          SendAutomationError(
+              RequestingSocket, RequestId,
+              FString::Printf(
+                  TEXT("reductionSettings.%s must be a non-negative number"),
+                  *Field.Key),
+              TEXT("INVALID_ARGUMENT"));
+          return true;
+        }
+        const float Value = static_cast<float>(Number);
+        if (Field.Key == TEXT("maxDeviation")) {
+          OverrideMaxDeviation = Value;
+        } else if (Field.Key == TEXT("pixelError")) {
+          OverridePixelError = Value;
+        } else if (Field.Key == TEXT("weldingThreshold")) {
+          OverrideWeldingThreshold = Value;
+        } else {
+          OverrideHardAngleThreshold = Value;
+        }
+      } else if (Field.Key == TEXT("baseLODModel")) {
+        if (!bIsNumber || Number < 0.0 ||
+            Number != FMath::FloorToDouble(Number)) {
+          SendAutomationError(RequestingSocket, RequestId,
+                              TEXT("reductionSettings.baseLODModel must be a "
+                                   "non-negative integer"),
+                              TEXT("INVALID_ARGUMENT"));
+          return true;
+        }
+        OverrideBaseLODModel = static_cast<int32>(Number);
+      } else if (Field.Key == TEXT("recalculateNormals")) {
+        bool bRecalculate = false;
+        if (!Field.Value.IsValid() || !Field.Value->TryGetBool(bRecalculate)) {
+          SendAutomationError(
+              RequestingSocket, RequestId,
+              TEXT("reductionSettings.recalculateNormals must be a boolean"),
+              TEXT("INVALID_ARGUMENT"));
+          return true;
+        }
+        OverrideRecalculateNormals = bRecalculate;
+      } else {
+        SendAutomationError(
+            RequestingSocket, RequestId,
+            FString::Printf(
+                TEXT("reductionSettings.%s is not supported; supported keys: "
+                     "percentTriangles, percentVertices, maxDeviation, "
+                     "pixelError, weldingThreshold, hardAngleThreshold, "
+                     "baseLODModel, recalculateNormals"),
+                *Field.Key),
+            TEXT("INVALID_ARGUMENT"));
+        return true;
+      }
+    }
+  }
+
   // Build list of paths to process
   TArray<FString> Paths;
   
@@ -4614,6 +4713,9 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
     Resp->SetNumberField(TEXT("verified"), VerifiedCount);
     Resp->SetNumberField(TEXT("requested"), Paths.Num());
     Resp->SetNumberField(TEXT("lodCount"), NumLODs);
+    if (ReductionOverrides) {
+      Resp->SetObjectField(TEXT("reductionSettings"), *ReductionOverrides);
+    }
     Resp->SetArrayField(TEXT("meshes"), MeshDetails);
 
     if (NotFoundPaths.Num() > 0) {
@@ -4678,8 +4780,31 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
           // Progressive reduction: 50%, 25%, 12.5%...
           float ReductionPercent =
               1.0f / FMath::Pow(2.0f, static_cast<float>(LODIndex));
-          ReductionSettings.PercentTriangles = ReductionPercent;
-          ReductionSettings.PercentVertices = ReductionPercent;
+          ReductionSettings.PercentTriangles =
+              OverridePercentTriangles.Get(ReductionPercent);
+          ReductionSettings.PercentVertices =
+              OverridePercentVertices.Get(ReductionPercent);
+          if (OverrideMaxDeviation.IsSet()) {
+            ReductionSettings.MaxDeviation = OverrideMaxDeviation.GetValue();
+          }
+          if (OverridePixelError.IsSet()) {
+            ReductionSettings.PixelError = OverridePixelError.GetValue();
+          }
+          if (OverrideWeldingThreshold.IsSet()) {
+            ReductionSettings.WeldingThreshold =
+                OverrideWeldingThreshold.GetValue();
+          }
+          if (OverrideHardAngleThreshold.IsSet()) {
+            ReductionSettings.HardAngleThreshold =
+                OverrideHardAngleThreshold.GetValue();
+          }
+          if (OverrideBaseLODModel.IsSet()) {
+            ReductionSettings.BaseLODModel = OverrideBaseLODModel.GetValue();
+          }
+          if (OverrideRecalculateNormals.IsSet()) {
+            ReductionSettings.bRecalculateNormals =
+                OverrideRecalculateNormals.GetValue();
+          }
 
           // Enable reduction for this LOD level
           SourceModel.BuildSettings.bRecomputeNormals = false;
@@ -4708,7 +4833,10 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
     Resp->SetNumberField(TEXT("processed"), SuccessCount);
     Resp->SetNumberField(TEXT("requested"), Paths.Num());
     Resp->SetNumberField(TEXT("lodCount"), NumLODs);
-    
+    if (ReductionOverrides) {
+      Resp->SetObjectField(TEXT("reductionSettings"), *ReductionOverrides);
+    }
+
     // Add details about failures
     if (NotFoundPaths.Num() > 0) {
       TArray<TSharedPtr<FJsonValue>> NotFoundArray;

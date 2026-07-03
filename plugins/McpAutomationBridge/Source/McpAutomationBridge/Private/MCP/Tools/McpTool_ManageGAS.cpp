@@ -36,28 +36,9 @@ public:
 			}, TEXT("ASC replication mode."))
 			.String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
 			.String(TEXT("attributeName"), TEXT("Name of the attribute."))
-			.StringEnum(TEXT("attributeType"), {
-				TEXT("Health"),
-				TEXT("MaxHealth"),
-				TEXT("Mana"),
-				TEXT("MaxMana"),
-				TEXT("Stamina"),
-				TEXT("MaxStamina"),
-				TEXT("Damage"),
-				TEXT("Armor"),
-				TEXT("AttackPower"),
-				TEXT("MoveSpeed"),
-				TEXT("Custom")
-			}, TEXT("Predefined attribute type or Custom."))
 			.Number(TEXT("baseValue"), TEXT("Base value for attribute."))
 			.Number(TEXT("minValue"), TEXT("Minimum value for clamping."))
 			.Number(TEXT("maxValue"), TEXT("Maximum value for clamping."))
-			.StringEnum(TEXT("clampMode"), {
-				TEXT("None"),
-				TEXT("Min"),
-				TEXT("Max"),
-				TEXT("MinMax")
-			}, TEXT("Attribute clamping mode."))
 			.String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
 			.Array(TEXT("abilityTags"), TEXT("Gameplay tags for this ability."))
 			.Array(TEXT("cancelAbilitiesWithTag"), TEXT("Tags of abilities to cancel when this activates."))

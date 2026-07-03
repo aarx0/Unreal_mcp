@@ -61,7 +61,15 @@ as they land.
 >   perception/EQS surface (autoSuccessRange, detectionByAffiliation, searchCenter…, 10),
 >   manage_geometry tuning knobs (weldDistance, hardEdgeAngle, hullCount…, 11), manage_gas
 >   (period, clampMode, setByCallerTag…, 5), and `timeoutMs` declared in 4 tools but read
->   nowhere. Each needs implement-or-remove triage. The 552 read-but-undeclared pins are the
+>   nowhere. Each needs implement-or-remove triage. **Triage PARTIAL 2026-07-02:**
+>   manage_asset + audio + 6 small tools done (reductionSettings IMPLEMENTED on
+>   generate_lods — full FMeshReductionSettings passthrough, live-verified; 23 params
+>   REMOVED incl. timeoutMs×4 and the response-key mistakes). **Remaining 22 dead pins =
+>   gas (period, clampMode, setByCallerTag, attributeType, targetAttribute), ai (10
+>   perception/EQS params), geometry (11 tuning knobs)** — those triage agents died on the
+>   session budget cap; geometry knobs lean IMPLEMENT (real GeometryScript slots), ai
+>   perception implement-only-if-a-perception-setup-action-exists.
+>   The 552 read-but-undeclared pins are the
 >   known undiscoverability backlog (extending-the-bridge gotcha #1), densest in
 >   WidgetAuthoring/Sessions/GameFramework/Skeleton/Texture handlers.
 > - **HandleMiscAction is entirely dead (found 2026-07-02 during the sweep):** declared in

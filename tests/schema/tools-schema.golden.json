@@ -592,9 +592,6 @@
         "time": {
           "type": "number"
         },
-        "timeoutMs": {
-          "type": "number"
-        },
         "tool": {
           "type": "string"
         },
@@ -912,9 +909,6 @@
           "description": "Asset path (e.g., /Game/Path/Asset).",
           "type": "string"
         },
-        "bookmarkName": {
-          "type": "string"
-        },
         "button": {
           "description": "Mouse button for simulate_input.",
           "type": "string"
@@ -1031,9 +1025,6 @@
         "stabilizeFocus": {
           "description": "simulate_nav: default true — before the nav, focus the PIE game viewport if focus isn't already inside it, so the faithful drive routes through CommonUI deterministically (never steals focus from an already-focused in-game widget). Set false to drive from whatever currently has focus.",
           "type": "boolean"
-        },
-        "stat": {
-          "type": "string"
         },
         "steps": {
           "type": "integer"
@@ -2159,9 +2150,6 @@
         "defaultValue": {
           "description": "Generic value (any type)."
         },
-        "desc": {
-          "type": "string"
-        },
         "description": {
           "type": "string"
         },
@@ -2216,10 +2204,6 @@
         },
         "inputName": {
           "description": "Name of the pin.",
-          "type": "string"
-        },
-        "inputPin": {
-          "description": "Name of the target pin.",
           "type": "string"
         },
         "inputs": {
@@ -2281,10 +2265,6 @@
         },
         "offset": {
           "type": "number"
-        },
-        "outputPin": {
-          "description": "Name of the source pin.",
-          "type": "string"
         },
         "overwrite": {
           "description": "Overwrite if the asset/file already exists.",
@@ -2353,7 +2333,9 @@
         "recursivePaths": {
           "type": "boolean"
         },
-        "reductionSettings": {},
+        "reductionSettings": {
+          "description": "generate_lods: FMeshReductionSettings overrides applied to every generated LOD — percentTriangles/percentVertices (0-1, replace the progressive 50%/25%/... defaults), maxDeviation, pixelError, weldingThreshold, hardAngleThreshold, baseLODModel, recalculateNormals."
+        },
         "replaceText": {
           "type": "string"
         },
@@ -2390,10 +2372,6 @@
         "showConfirmation": {
           "type": "boolean"
         },
-        "sourceNode": {
-          "description": "ID of the source node.",
-          "type": "string"
-        },
         "sourceNodeId": {
           "description": "ID of the source node.",
           "type": "string"
@@ -2418,10 +2396,6 @@
             "type": "string"
           },
           "type": "array"
-        },
-        "targetNode": {
-          "description": "ID of the target node.",
-          "type": "string"
         },
         "targetNodeId": {
           "description": "ID of the target node.",
@@ -2740,10 +2714,6 @@
           "description": "Sound asset path.",
           "type": "string"
         },
-        "sourceNode": {
-          "description": "Source node name.",
-          "type": "string"
-        },
         "sourceNodeId": {
           "description": "ID of the consuming (parent) node; pass 'Root' in connect_cue_nodes to wire the cue output.",
           "type": "string"
@@ -2777,10 +2747,6 @@
         },
         "targetInputName": {
           "description": "Target MetaSound input name.",
-          "type": "string"
-        },
-        "targetNode": {
-          "description": "Target node name.",
           "type": "string"
         },
         "targetNodeId": {
@@ -2993,9 +2959,6 @@
           "description": "set_anchor: anchor minimum Y (0..1).",
           "type": "number"
         },
-        "applyAndSave": {
-          "type": "boolean"
-        },
         "attachTo": {
           "type": "string"
         },
@@ -3064,9 +3027,6 @@
         },
         "isReplicated": {
           "type": "boolean"
-        },
-        "linkedTo": {
-          "type": "string"
         },
         "location": {
           "description": "3D location (x, y, z).",
@@ -3256,9 +3216,6 @@
         "targetPinName": {
           "description": "Name of the target pin.",
           "type": "string"
-        },
-        "timeoutMs": {
-          "type": "number"
         },
         "value": {
           "description": "Generic value (any type)."
@@ -4420,10 +4377,6 @@
           "description": "Simulation step count.",
           "type": "integer"
         },
-        "system": {
-          "description": "Niagara system asset path alias.",
-          "type": "string"
-        },
         "systemName": {
           "description": "Niagara actor/system label.",
           "type": "string"
@@ -4431,10 +4384,6 @@
         "systemPath": {
           "description": "Niagara system asset path.",
           "type": "string"
-        },
-        "timeoutMs": {
-          "description": "Client-side request timeout in milliseconds.",
-          "type": "number"
         },
         "uniformSize": {
           "type": "number"
@@ -4576,23 +4525,6 @@
           "description": "Path to Attribute Set asset (alias for blueprintPath).",
           "type": "string"
         },
-        "attributeType": {
-          "description": "Predefined attribute type or Custom.",
-          "enum": [
-            "Health",
-            "MaxHealth",
-            "Mana",
-            "MaxMana",
-            "Stamina",
-            "MaxStamina",
-            "Damage",
-            "Armor",
-            "AttackPower",
-            "MoveSpeed",
-            "Custom"
-          ],
-          "type": "string"
-        },
         "baseValue": {
           "description": "Base value for attribute.",
           "type": "number"
@@ -4622,16 +4554,6 @@
             "type": "string"
           },
           "type": "array"
-        },
-        "clampMode": {
-          "description": "Attribute clamping mode.",
-          "enum": [
-            "None",
-            "Min",
-            "Max",
-            "MinMax"
-          ],
-          "type": "string"
         },
         "cooldownEffectPath": {
           "description": "Path to cooldown Gameplay Effect.",
@@ -5798,12 +5720,6 @@
           "description": "Level asset path.",
           "type": "string"
         },
-        "levelPaths": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
         "lightType": {
           "description": "Light type. Accepts short names (Point), class names (PointLight), or lowercase (point).",
           "enum": [
@@ -5901,9 +5817,6 @@
           "description": "Source path for import/move/copy.",
           "type": "string"
         },
-        "streaming": {
-          "type": "boolean"
-        },
         "streamingMethod": {
           "type": "string"
         },
@@ -5914,12 +5827,6 @@
         "targetPath": {
           "description": "Path to a directory.",
           "type": "string"
-        },
-        "template": {
-          "type": "string"
-        },
-        "timeoutMs": {
-          "type": "number"
         },
         "useWorldPartition": {
           "type": "boolean"
@@ -6732,9 +6639,6 @@
         "locked": {
           "type": "boolean"
         },
-        "loopMode": {
-          "type": "string"
-        },
         "metadata": {},
         "muted": {
           "type": "boolean"
@@ -6765,9 +6669,6 @@
           "type": "string"
         },
         "solo": {
-          "type": "boolean"
-        },
-        "spawnable": {
           "type": "boolean"
         },
         "speed": {
@@ -6919,9 +6820,6 @@
         "command": {
           "type": "string"
         },
-        "configName": {
-          "type": "string"
-        },
         "configuration": {
           "type": "string"
         },
@@ -6971,9 +6869,6 @@
           "type": "string"
         },
         "platform": {
-          "type": "string"
-        },
-        "profileType": {
           "type": "string"
         },
         "resolution": {

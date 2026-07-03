@@ -24,7 +24,6 @@ public:
 			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageLevel(), TEXT("Action"))
 			.String(TEXT("levelPath"), TEXT("Level asset path."))
 			.String(TEXT("assetPath"), TEXT("Asset path for metadata or validation aliases."))
-			.Array(TEXT("levelPaths"), TEXT(""))
 			.String(TEXT("levelName"), TEXT(""))
 			.String(TEXT("name"), TEXT("Name alias used by light and utility actions."))
 			.String(TEXT("path"), TEXT("Directory path for asset creation."))
@@ -41,7 +40,6 @@ public:
 			.String(TEXT("parentLevel"), TEXT("Parent level path."))
 			.String(TEXT("parentPath"), TEXT("Path to a directory."))
 			.String(TEXT("streamingMethod"), TEXT(""))
-			.Bool(TEXT("streaming"), TEXT(""))
 			.Bool(TEXT("shouldBeLoaded"), TEXT(""))
 			.Bool(TEXT("shouldBeVisible"), TEXT(""))
 			.StringEnum(TEXT("lightType"), {
@@ -71,10 +69,8 @@ public:
 				[](FMcpSchemaBuilder& S) {
 				S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
 			})
-			.String(TEXT("template"), TEXT(""))
 			.Bool(TEXT("useWorldPartition"), TEXT(""))
 			.FreeformObject(TEXT("metadata"), TEXT("Metadata key/value object."))
-			.Number(TEXT("timeoutMs"), TEXT(""))
 			.Required({TEXT("action")})
 			.Build();
 	}

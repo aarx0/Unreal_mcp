@@ -4,54 +4,26 @@
 # key or a real schema<->handler drift that should be fixed, not re-pinned.
 
 # -- declared in a tool schema, no handler read found --
-applyAndSave
 attributeSetPath
-attributeType
-autoSuccessRange
-bookmarkName
-clampMode
 computeWeightedNormals
-configName
 cuePath
 decoratorType
-desc
 detectFriendly
-detectionByAffiliation
 effectPath
-enemies
-friendlies
 hardEdgeAngle
 hullCount
-inputPin
-levelPaths
-linkedTo
-loopMode
 loSHearingRange
 maxVerticesPerHull
-nearClippingRadius
-neutrals
 numRings
 numSides
-outputPin
 period
-pointOfViewBackwardOffset
-profileType
 radialSegments
 reductionPercent
-reductionSettings
 searchCenter
 serviceType
 setByCallerTag
-sourceNode
-spawnable
-stat
-streaming
-system
 targetAttribute
 targetEdgeLength
-targetNode
-template
-timeoutMs
 uvOffset
 weldDistance
 

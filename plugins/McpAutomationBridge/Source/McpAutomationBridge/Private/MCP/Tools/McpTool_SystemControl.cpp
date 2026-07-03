@@ -24,7 +24,6 @@ public:
 		return FMcpSchemaBuilder()
 				.StringEnum(TEXT("action"), McpConsolidatedActions::SystemControl(),
 					TEXT("Action"))
-			.String(TEXT("profileType"), TEXT(""))
 			.String(TEXT("category"), TEXT(""))
 			.Number(TEXT("level"), TEXT(""))
 			.Bool(TEXT("enabled"), TEXT("Whether the item/feature is enabled."))
@@ -51,7 +50,6 @@ public:
 			.String(TEXT("section"), TEXT(""))
 			.String(TEXT("key"), TEXT(""))
 			.String(TEXT("value"), TEXT(""))
-			.String(TEXT("configName"), TEXT(""))
 			.Number(TEXT("count"), TEXT("get_log/tail_log: max lines to return (default 100, max 2000)."))
 			.Number(TEXT("sinceSeq"), TEXT("get_log/tail_log: return only lines with seq > this (incremental polling; response carries nextSeq + dropped)."))
 			.String(TEXT("verbosity"), TEXT("get_log/tail_log: minimum severity to include — Fatal|Error|Warning|Display|Log|Verbose|VeryVerbose (default Verbose = all)."))
