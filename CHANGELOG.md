@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Post-audit follow-ups (2026-07-03)
+
+- **Per-session tool enablement** — `manage_tools` mutations now scope to the calling session (overlay keyed by `Mcp-Session-Id`; registry defaults are the shared immutable template). One client trimming its tool set no longer disables tools under concurrent sessions; `tools/list` is session-filtered; `TOOL_DISABLED` self-attributes the session's own last change; overlays drop on `reset`, session expiry, and `DELETE /mcp`.
+- **GAS correctness:** tag writes target the modular 5.3+ GE components (granted/requirements/immunity) so they survive `PostCDOCompiled` — previously lost on compile for fresh 5.7 effects; `add_effect_modifier` requires and resolves an `attribute` (bare / `Set.Attr` / path-qualified, loading unloaded sets); all 13 mutating GAS actions now save (were dirty-only — writes vanished on editor restart).
+- **Readback depth:** `get_gas_info` (duration/period/modifiers/dual tag view), `get_combat_stats` (CDO values), `get_animation_info` (BlendSpace axes/samples, AnimBP state machines), `get_character_info` (mesh/ABP/CMC), `get_mesh_info` (static-mesh asset branch: per-LOD counts, collision, Nanite), `get_networking_info` (per-property replication, RPCs).
+- **Discoverability:** 637 undeclared-but-working params declared across all 22 schemas (Sonnet sweep, reviewed, reconciliation-gated); `manage_asset` gains per-asset `save` and routes `save_all` to the existing `control_editor` implementation; `UNKNOWN_ACTION` errors name the sub-action, not the tool.
+- Geometry: `hullPrecision` drives `ConvexDecompositionSearchFactor`; `collisionType` enum matches the handler. Dead `MiscHandlers.cpp` TU deleted (980 lines, zero call sites).
+
 ### Dogfood audit + fix waves (2026-07-02, consolidated record in `docs/hardening-2026-07-02.md`)
 
 - **Live audit of all 22 tools** (471 calls, 112 findings, report in `docs/dogfood-audit-2026-07-02.md`); ~95 findings fixed same day, every fix re-verified by re-running the audit's exact failing repro against the rebuilt editor.

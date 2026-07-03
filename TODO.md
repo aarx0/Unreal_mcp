@@ -92,10 +92,10 @@ as they land.
 >   get_combat_stats values, get_animation_info (BlendSpace/AnimBP), get_character_info
 >   (mesh/ABP/crouch/sprint), get_mesh_info static-mesh asset branch (LODs/collision/Nanite),
 >   per-property replication state in get_networking_info, widget property value readback.
-> - **Per-session tool enablement — APPROVED by Aaron 2026-07-03** ("per-session seems
->   good"; note nobody disables tools in real use, only the audit did): key enable/disable
->   state off Mcp-Session-Id (global registry stays the default template). Next bridge
->   session's headline item.
+> - ~~Per-session tool enablement~~ SHIPPED 2026-07-03 (6d0dc1be): manage_tools mutations
+>   write a per-session overlay keyed by Mcp-Session-Id; registry defaults are the
+>   immutable template; tools/list session-filtered; TOOL_DISABLED self-attributes;
+>   overlays dropped on reset/expiry/DELETE. Two-session isolation live-verified.
 > - **InteractionHandlers dead dispatch (found in passing, 2026-07-02):** Section 6 "runtime
 >   handler dispatch" (~line 2412) is unreachable — the Blueprint-based branches earlier in the
 >   function already match and return those actions; the Section 7 handlers it points at echo
