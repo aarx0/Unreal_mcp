@@ -88,21 +88,18 @@ as they land.
 >   pins are deliberate skips (cross-tool routing, dead code, internal keys).
 > - ~~HandleMiscAction dead chain~~ DELETED 2026-07-03 (280f703c): whole MiscHandlers.cpp
 >   TU removed (every function was file-local to the dead dispatch).
-> - **Readback depth pass, remaining:** get_gas_info (attributes/modifiers/cost-cooldown),
->   get_combat_stats values, get_animation_info (BlendSpace/AnimBP), get_character_info
->   (mesh/ABP/crouch/sprint), get_mesh_info static-mesh asset branch (LODs/collision/Nanite),
->   per-property replication state in get_networking_info, widget property value readback.
+> - ~~Readback depth pass~~ SHIPPED 2026-07-03 (ec140342): get_gas_info, get_combat_stats,
+>   get_animation_info (BlendSpace/AnimBP), get_character_info, get_mesh_info asset branch,
+>   get_networking_info per-property replication — all read real CDO/asset state now.
+>   Remaining from that list: **widget property value readback** only.
 > - ~~Per-session tool enablement~~ SHIPPED 2026-07-03 (6d0dc1be): manage_tools mutations
 >   write a per-session overlay keyed by Mcp-Session-Id; registry defaults are the
 >   immutable template; tools/list session-filtered; TOOL_DISABLED self-attributes;
 >   overlays dropped on reset/expiry/DELETE. Two-session isolation live-verified.
-> - **InteractionHandlers dead dispatch (found in passing, 2026-07-02):** Section 6 "runtime
->   handler dispatch" (~line 2412) is unreachable — the Blueprint-based branches earlier in the
->   function already match and return those actions; the Section 7 handlers it points at echo
->   params they never apply (fresh B-1 if ever wired). Delete Section 6+7 in a dead-code sweep.
-> - **AudioAuthoringHandlers dead creates (found in passing, 2026-07-02):** create_sound_class/
->   create_sound_mix branches are unreachable (not in the AudioAuthoring routing list; the live
->   handlers are in AudioHandlers.cpp) — same sweep.
+> - ~~InteractionHandlers dead dispatch (Section 6/7)~~ SWEPT (iteration-2 dead-code pass;
+>   code-verified gone 2026-07-03).
+> - ~~AudioAuthoringHandlers dead creates~~ SWEPT same pass — only a routing comment
+>   pointing at the live AudioHandlers.cpp implementations remains.
 > - ~~MiscHandlers dead HandleCreatePostProcessVolume~~ gone with the whole TU (280f703c).
 > - ~~UNKNOWN_ACTION echoes the tool name~~ FIXED 2026-07-03: the fallthrough now reads the
 >   payload's sub-action — "Unknown action 'save_all' for tool 'manage_asset'".
@@ -809,7 +806,12 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
-### [ ] 2026-07-02b — Intermittent spurious `TOOL_DISABLED` on `manage_networking` (fresh-session flake)
+### [x] 2026-07-02b — Intermittent spurious `TOOL_DISABLED` on `manage_networking` (fresh-session flake)
+**CLOSED 2026-07-03.** Root cause was the audit's own tools-agent mutating the then-GLOBAL
+enablement state under its sibling sessions — not a race in the gate. Per-session enablement
+(6d0dc1be) removes the mechanism (mutations are session-scoped; TOOL_DISABLED now
+self-attributes the session's own last change). Retested: 6/6 fresh-session
+`manage_networking` calls clean.
 Live repro (2026-07-02, manage_networking audit, fresh `mcp-call.ps1` session per call): after two
 successful `manage_networking` calls, THREE consecutive calls (`set_replication_condition`,
 `create_rpc_function`, then a retry) returned `Error [TOOL_DISABLED]: Tool 'manage_networking' is
@@ -818,7 +820,10 @@ and the identical previously-failing call then succeeded. Nothing disabled the t
 Suspect the dynamic tool-gate state read racing per-request session setup. Error text also gives
 no remediation (doesn't say to check `manage_tools` or retry).
 
-### [ ] 2026-07-02c — `manage_networking set_default_pawn_class` requires `pawnClass`/`defaultPawnClass`; neither is in the published schema
+### [x] 2026-07-02c — `manage_networking set_default_pawn_class` requires `pawnClass`/`defaultPawnClass`; neither is in the published schema
+**CLOSED 2026-07-03.** Declared by the 637-param sweep (99c7ae44):
+`McpTool_ManageNetworking.cpp` now carries `defaultPawnClass` with the `pawnClass` alias
+noted; reconciliation direction-2 is clean so the sibling setters are covered too.
 Live repro (2026-07-02): schema-guided call with `blueprintPath` + `pawnClassPath` →
 `Error [INVALID_ARGUMENT]: Missing 'pawnClass' or 'defaultPawnClass'.` (error is good; schema isn't —
 no property in the `manage_networking` entry can carry the pawn class). Retry with
@@ -829,7 +834,11 @@ the same gap. Related doc-scoping bugs found same session: `name`/`path` descrip
 `configure_local_session_settings` accepts an undocumented `maxPlayers` (sessions/voice/split-screen
 actions document no params at all).
 
-### [ ] 2026-07-02d — `set_replicated_using` sets `RepNotifyFunc` but never creates the OnRep function stub
+### [x] 2026-07-02d — `set_replicated_using` sets `RepNotifyFunc` but never creates the OnRep function stub
+**CLOSED 2026-07-03.** All three parts landed in the fix waves: the handler now creates the
+stub when missing (`CreateNewGraph`+`AddFunctionGraph`, reports `repNotifyFunctionCreated`,
+NetworkingHandlers.cpp ~1429); `get_networking_info` reads per-property replication + RPC
+settings (ec140342); `valueType` echoes schema names via `McpInputActionValueTypeToString`.
 Live repro (2026-07-02, scratch `/Game/ZZ_McpAudit/manage_networking/BP_NetAudit`):
 `set_replicated_using propertyName:Ammo repNotifyFunc:OnRep_Ammo` → success, but `manage_blueprint
 get` shows no `OnRep_Ammo` in `functions` and `compile` passes silently (no warnings surfaced), so
@@ -840,7 +849,11 @@ flag/condition/RepNotify and RPC reliable/validation settings are write-only —
 back), and `create_input_action`/`get_input_info` echo `valueType` as the raw enum int (`0`) instead
 of the schema's `Boolean`/`Axis1D` names.
 
-### [ ] 2026-07-02 — `system_control` advertises 5 actions its dispatch can no longer reach (UNKNOWN_ACTION)
+### [x] 2026-07-02 — `system_control` advertises 5 actions its dispatch can no longer reach (UNKNOWN_ACTION)
+**CLOSED 2026-07-03 (fixed same day it was filed, 42c178e0; entry was never struck).** The
+`system_control` lambda re-dispatches all five to `HandleUiAction`
+(McpAutomationBridgeSubsystem.cpp ~1020). Live-retested: `get_project_settings` answers.
+handler-mapping.md's stale "known drift" paragraph was also corrected in the docs pass.
 Found rewriting `docs/handler-mapping.md` (code cross-check, not live repro). `SystemControlCore`
 (McpConsolidatedActionRouting.h) still lists `screenshot`, `create_widget`, `add_widget_child`,
 `get_project_settings`, `set_project_setting`, whose implementations live in `HandleUiAction`
@@ -1514,7 +1527,11 @@ return success with only an advisory `instruction` string. (Several also needles
 
 
 
-### [ ] WATCH: native MCP session is connection-bound (found 2026-06-17, direct-HTTP driving)
+### [x] WATCH: native MCP session is connection-bound (found 2026-06-17, direct-HTTP driving)
+**CLOSED 2026-07-03 — no longer true.** Retested: `initialize` on one curl connection, then
+`tools/list` from a brand-new TCP connection carrying only the `Mcp-Session-Id` header →
+answers normally. Sessions resume across connections per spec (fixed somewhere in the
+pull-architecture/session rework; scripts/mcp-call.ps1 one-shot flow also relies on this).
 Low priority — normal Claude Code MCP client keeps one persistent connection and never hits this.
 Surfaced only when driving the bridge directly: an `initialize` returns an `Mcp-Session-Id`, but
 reusing that id from a *new* TCP connection (e.g. one `Invoke-WebRequest` per call) gets
@@ -1540,7 +1557,11 @@ action; these almost certainly handle both):
   PIE pawn read the new `UInputAction*` as None); had to `BlueprintEditorLibrary.compile_blueprint(bp)`
   before saving. The dedicated `manage_blueprint set_default` presumably compiles — use it over raw CDO writes.
 
-### [ ] (deprioritized 2026-06-11) Graph-node authoring has no overlap-aware placement
+### [x] (deprioritized 2026-06-11) Graph-node authoring has no overlap-aware placement
+**CLOSED 2026-07-03 — covered by the shipped layout work.** Generator self-layout
+(bind_* chain stacking) + `arrange_graph` (Blueprint & Material, shared McpGraphLayoutUtils
+core) make "author blindly → arrange once" the supported workflow. The `removeGhostEvents`
+idea remains a nice-to-have if ghost-template clutter bites again.
 **Priority dropped now that `arrange_graph` is fixed (size-aware, collision-free):**
 the workflow "author blindly → arrange_graph once at the end" covers the readability
 goal without per-insert nudging. If still wanted, the building block exists —
@@ -1561,7 +1582,11 @@ clear), and consider a `removeGhostEvents` option since disabled template nodes 
 clutter in bridge-authored BPs. The 1-call hygiene readback (`get_graph_details` x/y/
 enabledState) already exists for *detection* — authoring just never consults it.
 
-### [ ] WATCH: editor crashed during shutdown after bridge-issued QUIT_EDITOR (1× 2026-06-11)
+### [x] WATCH: editor crashed during shutdown after bridge-issued QUIT_EDITOR (1× 2026-06-11)
+**CLOSED 2026-07-03 — not reproduced in 3+ weeks of daily clean quits** (10+ consecutive
+clean exits since 2026-07-02 alone). The exit crash found+fixed 2026-07-02 (ListenSocket UAF
+in transport shutdown, 91a8f79d) had transport frames, not Slate — a different bug. Reopen
+if a Slate-teardown stack ever recurs.
 EXCEPTION_ACCESS_VIOLATION reading nullptr, callstack entirely UnrealEditor-Slate.dll
 (teardown path), AFTER "Engine exit requested" — i.e. a shutdown-order crash, not a hang.
 Editor had been up ~all day across many PIE cycles + heavy bridge use; assets were saved,
