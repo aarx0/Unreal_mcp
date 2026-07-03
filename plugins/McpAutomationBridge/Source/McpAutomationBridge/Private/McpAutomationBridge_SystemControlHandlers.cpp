@@ -23,6 +23,9 @@
 #include "Materials/MaterialInstanceConstant.h"
 #include "Exporters/Exporter.h"
 #include "Misc/FileHelper.h"
+#include "Misc/OutputDevice.h"           // live_coding_compile: LogLiveCoding capture
+#include "Misc/ScopeLock.h"
+#include "Internationalization/Regex.h"  // get_build_status: [N/M] progress lines
 #include "Interfaces/IPluginManager.h"  // generate_test_stub: resolve the plugin Source dir
 #if WITH_LIVE_CODING
 #include "ILiveCodingModule.h"           // live_coding_compile: trigger a Live Coding patch
@@ -44,6 +47,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
   
   // Check if this handler should process this sub-action
   if (!Lower.StartsWith(TEXT("run_ubt")) &&
+      Lower != TEXT("get_build_status") &&
       !Lower.StartsWith(TEXT("run_tests")) &&
       Lower != TEXT("list_tests") &&
       Lower != TEXT("get_test_results") &&
@@ -239,9 +243,30 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
     }
 
     // Blocking compile so the response reflects the real outcome; the patch is
-    // applied to the running process before this returns.
+    // applied to the running process before this returns. Live Coding runs the
+    // build out-of-process and streams its output through LogLiveCoding — scrape
+    // that for the duration of the call so Failure carries the actual compiler
+    // errors instead of a bare enum.
+    class FMcpLiveCodingCapture final : public FOutputDevice {
+    public:
+      virtual void Serialize(const TCHAR* V, ELogVerbosity::Type Verbosity,
+                             const FName& Category) override {
+        if (Category == LiveCodingCategory) {
+          FScopeLock Lock(&Mutex);
+          if (Lines.Num() < 400) {
+            Lines.Add(FString(V));
+          }
+        }
+      }
+      const FName LiveCodingCategory = FName(TEXT("LogLiveCoding"));
+      FCriticalSection Mutex;
+      TArray<FString> Lines;
+    } Capture;
+
+    GLog->AddOutputDevice(&Capture);
     ELiveCodingCompileResult CompileResult = ELiveCodingCompileResult::NotStarted;
     LiveCoding->Compile(ELiveCodingCompileFlags::WaitForCompletion, &CompileResult);
+    GLog->RemoveOutputDevice(&Capture);
 
     FString ResultStr;
     switch (CompileResult) {
@@ -257,11 +282,69 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
     const bool bOk = (CompileResult == ELiveCodingCompileResult::Success ||
                       CompileResult == ELiveCodingCompileResult::NoChanges);
 
+    TArray<TSharedPtr<FJsonValue>> LcLogJson, ErrorsJson;
+    {
+      FScopeLock Lock(&Capture.Mutex);
+      for (const FString& Line : Capture.Lines) {
+        if (LcLogJson.Num() < 100) {
+          LcLogJson.Add(MakeShared<FJsonValueString>(Line));
+        }
+        if (ErrorsJson.Num() < 25 &&
+            (Line.Contains(TEXT(": error")) || Line.Contains(TEXT("): error")) ||
+             Line.Contains(TEXT(": fatal error")))) {
+          ErrorsJson.Add(MakeShared<FJsonValueString>(Line.TrimStartAndEnd()));
+        }
+      }
+    }
+
+    // On Failure the compiler output stays in the LiveCoding console process —
+    // the editor log only gets "please see Live console". The underlying UBT
+    // run writes the real errors to its own log; scrape that as the fallback.
+    FString UbtLogPath;
+    if (CompileResult == ELiveCodingCompileResult::Failure && ErrorsJson.Num() == 0) {
+      UbtLogPath = FPaths::Combine(FPlatformProcess::UserSettingsDir(),
+                                   TEXT("UnrealBuildTool"), TEXT("Log.txt"));
+      FString UbtLog;
+      if (FFileHelper::LoadFileToString(UbtLog, *UbtLogPath, FFileHelper::EHashOptions::None,
+                                        FILEREAD_AllowWrite)) {
+        TArray<FString> UbtLines;
+        UbtLog.ParseIntoArrayLines(UbtLines);
+        for (const FString& Line : UbtLines) {
+          if (ErrorsJson.Num() < 25 &&
+              (Line.Contains(TEXT(": error")) || Line.Contains(TEXT("): error")) ||
+               Line.Contains(TEXT(": fatal error")))) {
+            ErrorsJson.Add(MakeShared<FJsonValueString>(Line.TrimStartAndEnd()));
+          }
+        }
+      }
+    }
+
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
     Result->SetBoolField(TEXT("success"), bOk);
     Result->SetStringField(TEXT("compileResult"), ResultStr);
+    Result->SetArrayField(TEXT("errors"), ErrorsJson);
+    Result->SetArrayField(TEXT("log"), LcLogJson);
+    if (!UbtLogPath.IsEmpty()) {
+      Result->SetStringField(TEXT("ubtLogPath"), UbtLogPath);
+    }
+    if (CompileResult == ELiveCodingCompileResult::NoChanges) {
+      Result->SetStringField(TEXT("reason"),
+          TEXT("The build found no outstanding compile actions — no tracked source file is newer "
+               "than its module binary. External (on-disk) edits are detected by timestamp, so if "
+               "you just wrote a file: confirm the write flushed, and that the file's module is "
+               "loaded in this editor and enabled for Live Coding. Header/Build.cs changes need a "
+               "full rebuild, not a Live Coding patch."));
+    }
+    // Completion states ride a SUCCESSFUL response: the transport's error shape
+    // carries only the message string and drops the details object — which is
+    // where the compiler diagnostics live. The body's success/compileResult/
+    // errors fields carry the real outcome (same contract as get_build_status
+    // reporting a failed build). A failed compile also logs LogLiveCoding
+    // errors, which would trip the post-op ENGINE_ERROR guard and replace this
+    // response — clear them: the failure is fully reported here, structured.
+    ClearCapturedErrors();
     SendAutomationResponse(
-        RequestingSocket, RequestId, bOk,
+        RequestingSocket, RequestId, true,
         FString::Printf(TEXT("Live Coding compile: %s"), *ResultStr), Result);
     return true;
 #else
@@ -409,93 +492,202 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
       Arguments += AdditionalArgs;
     }
 
-    // Use FMonitoredProcess for non-blocking execution with output capture
-    // For simplicity, we'll use a synchronous approach with timeout
-    int32 ReturnCode = -1;
-    FString StdOut;
-    FString StdErr;
-    
-    // Note: FPlatformProcess::ExecProcess is simpler but blocks
-    // Using CreateProc with pipes for better control
-    void* ReadPipe = nullptr;
-    void* WritePipe = nullptr;
-    FPlatformProcess::CreatePipe(ReadPipe, WritePipe);
-    
+    // Fire-and-poll: UBT runs detached with output redirected to a log file
+    // and this call returns immediately with a buildId for get_build_status.
+    // (The old implementation pumped a pipe on the game thread for up to 300s,
+    // freezing the editor AND every queued bridge call for the whole build.)
+
+    // -NoUBA unless explicitly disabled: a UBA-built binary can't be Live
+    // Coding-patched afterwards (.voltbl mismatch), and LC iteration is the
+    // main reason to build from the bridge. -WaitMutex so a concurrent UBT
+    // queues instead of failing on the mutex.
+    bool bNoUBA = true;
+    Payload->TryGetBoolField(TEXT("noUBA"), bNoUBA);
+    if (bNoUBA && !Arguments.Contains(TEXT("-NoUBA"))) {
+      Arguments += TEXT(" -NoUBA");
+    }
+    if (!Arguments.Contains(TEXT("-WaitMutex"))) {
+      Arguments += TEXT(" -WaitMutex");
+    }
+
+    const FString BuildId = FString::Printf(
+        TEXT("build_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(12));
+    const FString LogDir =
+        FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("McpBuilds"));
+    IFileManager::Get().MakeDirectory(*LogDir, true);
+    const FString BuildLogPath = LogDir / (BuildId + TEXT(".log"));
+
+    // Redirection needs a shell; the > path is handler-built (not caller input,
+    // which McpIsSafeUbtArgumentList already screened for shell metacharacters).
+#if PLATFORM_WINDOWS
+    const FString ShellExe = TEXT("cmd.exe");
+    const FString ShellParams = FString::Printf(
+        TEXT("/d /s /c \"\"%s\" %s > \"%s\" 2>&1\""), *UBTPath, *Arguments, *BuildLogPath);
+#else
+    const FString ShellExe = TEXT("/bin/sh");
+    const FString ShellParams = FString::Printf(
+        TEXT("-c '\"%s\" %s > \"%s\" 2>&1'"), *UBTPath, *Arguments, *BuildLogPath);
+#endif
+
+    uint32 ProcessId = 0;
     FProcHandle ProcessHandle = FPlatformProcess::CreateProc(
-        *UBTPath,
-        *Arguments,
-        false,  // bLaunchDetached
-        true,   // bLaunchHidden
-        true,   // bLaunchReallyHidden
-        nullptr, // OutProcessID
-        0,      // PriorityModifier
-        nullptr, // OptionalWorkingDirectory
-        WritePipe // PipeWriteChild
-    );
+        *ShellExe, *ShellParams,
+        true,       // bLaunchDetached
+        true,       // bLaunchHidden
+        true,       // bLaunchReallyHidden
+        &ProcessId,
+        0, nullptr, nullptr);
 
     if (!ProcessHandle.IsValid()) {
-      FPlatformProcess::ClosePipe(ReadPipe, WritePipe);
       SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Failed to launch UBT process"),
                           TEXT("PROCESS_LAUNCH_FAILED"));
       return true;
     }
 
-    // Read output with timeout (30 seconds max wait, but check periodically)
-    const double TimeoutSeconds = 300.0; // 5 minute timeout for builds
-    const double StartTime = FPlatformTime::Seconds();
-    
-    while (FPlatformProcess::IsProcRunning(ProcessHandle)) {
-      // Read available output
-      FString NewOutput = FPlatformProcess::ReadPipe(ReadPipe);
-      if (!NewOutput.IsEmpty()) {
-        StdOut += NewOutput;
+    // Track the job; cap history so process handles don't accumulate.
+    if (UbtBuildJobs.Num() >= 8) {
+      FString OldestId;
+      double OldestStart = TNumericLimits<double>::Max();
+      for (auto& Pair : UbtBuildJobs) {
+        const bool bStillRunning =
+            !Pair.Value.bFinished && FPlatformProcess::IsProcRunning(Pair.Value.ProcHandle);
+        if (!bStillRunning && Pair.Value.StartTime < OldestStart) {
+          OldestStart = Pair.Value.StartTime;
+          OldestId = Pair.Key;
+        }
       }
-      
-      // Check timeout
-      if (FPlatformTime::Seconds() - StartTime > TimeoutSeconds) {
-        FPlatformProcess::TerminateProc(ProcessHandle, true);
-        FPlatformProcess::ClosePipe(ReadPipe, WritePipe);
-        
-        TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-        Result->SetStringField(TEXT("output"), StdOut);
-        Result->SetBoolField(TEXT("timedOut"), true);
-        
-        SendAutomationResponse(RequestingSocket, RequestId, false,
-                               TEXT("UBT process timed out"), Result,
-                               TEXT("TIMEOUT"));
-        return true;
+      if (!OldestId.IsEmpty()) {
+        FPlatformProcess::CloseProc(UbtBuildJobs[OldestId].ProcHandle);
+        UbtBuildJobs.Remove(OldestId);
       }
-      
-      // Small sleep to avoid busy waiting
-      FPlatformProcess::Sleep(0.1f);
     }
 
-    // Read any remaining output
-    FString FinalOutput = FPlatformProcess::ReadPipe(ReadPipe);
-    if (!FinalOutput.IsEmpty()) {
-      StdOut += FinalOutput;
-    }
-
-    // Get return code
-    FPlatformProcess::GetProcReturnCode(ProcessHandle, &ReturnCode);
-    FPlatformProcess::CloseProc(ProcessHandle);
-    FPlatformProcess::ClosePipe(ReadPipe, WritePipe);
+    FMcpUbtBuildJob Job;
+    Job.BuildId = BuildId;
+    Job.Target = Target;
+    Job.Platform = Platform;
+    Job.Configuration = Configuration;
+    Job.LogPath = BuildLogPath;
+    Job.CommandLine = FString::Printf(TEXT("\"%s\" %s"), *UBTPath, *Arguments);
+    Job.ProcHandle = ProcessHandle;
+    Job.ProcessId = ProcessId;
+    Job.StartTime = FPlatformTime::Seconds();
+    UbtBuildJobs.Add(BuildId, MoveTemp(Job));
+    LastUbtBuildId = BuildId;
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-    Result->SetStringField(TEXT("output"), StdOut);
-    Result->SetNumberField(TEXT("returnCode"), ReturnCode);
-    Result->SetStringField(TEXT("ubtPath"), UBTPath);
-    Result->SetStringField(TEXT("arguments"), Arguments);
+    Result->SetStringField(TEXT("buildId"), BuildId);
+    Result->SetStringField(TEXT("logPath"), BuildLogPath);
+    Result->SetNumberField(TEXT("processId"), ProcessId);
+    Result->SetStringField(TEXT("target"), Target);
+    Result->SetStringField(TEXT("platform"), Platform);
+    Result->SetStringField(TEXT("configuration"), Configuration);
+    Result->SetBoolField(TEXT("noUBA"), bNoUBA);
+    SendAutomationResponse(
+        RequestingSocket, RequestId, true,
+        TEXT("UBT started; poll { action:\"get_build_status\" } for progress and results."),
+        Result);
+    return true;
+  }
 
-    if (ReturnCode == 0) {
-      SendAutomationResponse(RequestingSocket, RequestId, true,
-                             TEXT("UBT completed successfully"), Result);
-    } else {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             FString::Printf(TEXT("UBT failed with code %d"), ReturnCode),
-                             Result, TEXT("UBT_FAILED"));
+  if (Lower == TEXT("get_build_status")) {
+    FString BuildId;
+    Payload->TryGetStringField(TEXT("buildId"), BuildId);
+    if (BuildId.IsEmpty()) {
+      BuildId = LastUbtBuildId;
     }
+
+    if (BuildId.IsEmpty()) {
+      TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+      Result->SetStringField(TEXT("status"), TEXT("no_builds"));
+      SendAutomationResponse(RequestingSocket, RequestId, true,
+                             TEXT("No run_ubt build has been started this session."), Result);
+      return true;
+    }
+    if (!UbtBuildJobs.Contains(BuildId)) {
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(TEXT("Unknown buildId '%s' (builds are tracked per editor session)."), *BuildId),
+          TEXT("BUILD_NOT_FOUND"));
+      return true;
+    }
+
+    FMcpUbtBuildJob& BuildJob = UbtBuildJobs[BuildId];
+    if (!BuildJob.bFinished && !FPlatformProcess::IsProcRunning(BuildJob.ProcHandle)) {
+      BuildJob.bFinished = true;
+      BuildJob.EndTime = FPlatformTime::Seconds();
+      int32 Code = -1;
+      if (FPlatformProcess::GetProcReturnCode(BuildJob.ProcHandle, &Code)) {
+        BuildJob.ReturnCode = Code;
+      }
+    }
+    const bool bRunning = !BuildJob.bFinished;
+
+    // Parse the log for errors, warnings, the latest [N/M] progress step and
+    // the final result line. FILEREAD_AllowWrite: the shell still holds the
+    // file open for writing while the build runs.
+    FString LogText;
+    const bool bLogRead = FFileHelper::LoadFileToString(
+        LogText, *BuildJob.LogPath, FFileHelper::EHashOptions::None, FILEREAD_AllowWrite);
+    TArray<TSharedPtr<FJsonValue>> ErrorsJson;
+    int32 WarningCount = 0;
+    FString Progress, ResultLine;
+    TArray<FString> Lines;
+    if (bLogRead && !LogText.IsEmpty()) {
+      LogText.ParseIntoArrayLines(Lines);
+      const FRegexPattern ProgressPattern(TEXT("^\\[\\d+/\\d+\\]"));
+      for (const FString& Line : Lines) {
+        if (ErrorsJson.Num() < 25 &&
+            (Line.Contains(TEXT(": error")) || Line.Contains(TEXT("): error")) ||
+             Line.Contains(TEXT("ERROR:")) || Line.Contains(TEXT(": fatal error")))) {
+          ErrorsJson.Add(MakeShared<FJsonValueString>(Line.TrimStartAndEnd()));
+        }
+        if (Line.Contains(TEXT(": warning"))) {
+          ++WarningCount;
+        }
+        if (FRegexMatcher(ProgressPattern, Line).FindNext()) {
+          Progress = Line.TrimStartAndEnd();
+        }
+        if (Line.StartsWith(TEXT("Result:")) || Line.Contains(TEXT("BUILD FAILED")) ||
+            Line.Contains(TEXT("BUILD SUCCESSFUL"))) {
+          ResultLine = Line.TrimStartAndEnd();
+        }
+      }
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetStringField(TEXT("buildId"), BuildId);
+    const FString Status = bRunning ? TEXT("running")
+                          : (BuildJob.ReturnCode == 0 ? TEXT("succeeded") : TEXT("failed"));
+    Result->SetStringField(TEXT("status"), Status);
+    Result->SetStringField(TEXT("target"), BuildJob.Target);
+    Result->SetStringField(TEXT("platform"), BuildJob.Platform);
+    Result->SetStringField(TEXT("configuration"), BuildJob.Configuration);
+    Result->SetNumberField(TEXT("elapsedSec"),
+        (bRunning ? FPlatformTime::Seconds() : BuildJob.EndTime) - BuildJob.StartTime);
+    if (!bRunning) {
+      Result->SetNumberField(TEXT("returnCode"), BuildJob.ReturnCode);
+    }
+    if (!Progress.IsEmpty()) {
+      Result->SetStringField(TEXT("progress"), Progress);
+    }
+    if (!ResultLine.IsEmpty()) {
+      Result->SetStringField(TEXT("resultLine"), ResultLine);
+    }
+    Result->SetNumberField(TEXT("warningCount"), WarningCount);
+    Result->SetArrayField(TEXT("errors"), ErrorsJson);
+    Result->SetBoolField(TEXT("logReadable"), bLogRead);
+    Result->SetStringField(TEXT("logPath"), BuildJob.LogPath);
+    {
+      TArray<TSharedPtr<FJsonValue>> TailJson;
+      for (int32 i = FMath::Max(0, Lines.Num() - 5); i < Lines.Num(); ++i) {
+        TailJson.Add(MakeShared<FJsonValueString>(Lines[i].TrimStartAndEnd()));
+      }
+      Result->SetArrayField(TEXT("logTail"), TailJson);
+    }
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           FString::Printf(TEXT("Build %s: %s"), *BuildId, *Status), Result);
     return true;
   } else if (Lower == TEXT("list_tests")) {
     // Enumerate registered automation tests (optionally substring-filtered).

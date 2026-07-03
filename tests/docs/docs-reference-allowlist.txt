@@ -5,3 +5,7 @@ COMMONUI_INTEGRATION_PLAN.md|path|consolidated-tool-definitions.ts
 COMMONUI_INTEGRATION_PLAN.md|path|widget-authoring-handlers.ts
 # Checked-off Phase-1 history from the TS era; dated record inside an otherwise-living doc.
 docs/Roadmap.md|path|tool-definition-utils.ts
+# The docs test's own README documents the tripwire phrases it checks for.
+tests/docs/README.md|tripwire|`src/tools/
+tests/docs/README.md|tripwire|TypeScript and C\+\+
+tests/docs/README.md|tripwire|Saved/Config

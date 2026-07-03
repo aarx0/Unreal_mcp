@@ -447,6 +447,7 @@ inline const TArray<FString>& SystemControlCore()
 	static const TArray<FString> Actions = {
 		TEXT("screenshot"),
 		TEXT("execute_command"), TEXT("console_command"), TEXT("run_ubt"),
+		TEXT("get_build_status"),
 		TEXT("run_tests"), TEXT("list_tests"), TEXT("get_test_results"),
 		TEXT("generate_test_stub"),
 		TEXT("subscribe"), TEXT("unsubscribe"),

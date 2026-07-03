@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Build visibility + latency (2026-07-03)
+
+- **`run_ubt` is fire-and-poll** — launches UBT detached (default `-NoUBA -WaitMutex`; `noUBA:false` opts into faster UBA builds when no Live Coding patching follows) with output redirected to `Saved/McpBuilds/<buildId>.log`, returning a `buildId` in milliseconds. The previous implementation pumped a pipe **on the game thread for up to 300 seconds**, freezing the editor and every queued bridge call for the whole build. A third, unreachable `run_ubt` copy went with the dead `McpAutomationBridge_PipelineHandlers.cpp` TU (zero call sites).
+- **New `system_control get_build_status`** — polls a build (default: the session's latest): `running|succeeded|failed`, returnCode, `[N/M]` progress, parsed compiler-error lines, warningCount, the `Result:` line, logTail, logPath. Verified live on a clean build and a bogus-target failure.
+- **`live_coding_compile` returns real diagnostics** — captured LogLiveCoding output, parsed compiler `errors` (on Failure they only exist in the LiveCoding console and UBT's `Log.txt`; the handler scrapes the latter and echoes `ubtLogPath`), and a `reason` explaining NoChanges. Completion states now ride a *successful* response with the outcome in the body (`success`/`compileResult`) — the transport's error shape drops the details object, and a failed compile's logged errors previously tripped the post-op ENGINE_ERROR guard, which replaced the diagnostic response outright (`ClearCapturedErrors()` before responding).
+- **Background-throttle latency tax removed** — the bridge disables `bThrottleCPUWhenNotForeground` (live value only, never saved) when the native server starts: every call is serviced on the game-thread tick, and a backgrounded editor throttled that to a steady ~332ms per call vs ~156ms unthrottled (measured; floor ~20ms when the game thread is idle). The client's window is almost always the foreground one, so this taxed *every* round-trip.
+
 ### Repo + docs pass (2026-07-03)
 
 - **`main` is the default branch** — `dev` was merged into `main` (74a237db) and GitHub's default flipped; the two are identical and future work lands on `main`. The fork had inherited upstream's `dev`-as-default convention while `main` sat frozen at April upstream.

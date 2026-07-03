@@ -969,7 +969,19 @@ for the same footgun on engines where their binaries don't load. (Same-symptom b
 `GameplayInsights/RewindDebuggerRuntime` also fails to load on this fork — engine-side; disabled
 per-project in HandPanicVR.uproject.)
 
-### [ ] `live_coding_compile` reports `NoChanges` for sources edited outside the editor + returns zero diagnostics
+### [x] `live_coding_compile` reports `NoChanges` for sources edited outside the editor + returns zero diagnostics
+**CLOSED 2026-07-03 — (b) SHIPPED, (a) not reproducible here.** The response now carries a
+LogLiveCoding capture (`log`), parsed compiler `errors` (Failure leaves them only in the
+LiveCoding console + UBT's own Log.txt — the handler scrapes the latter, `ubtLogPath`
+echoed), and a `reason` on NoChanges. Verified live all three ways (NoChanges/reason,
+external `static_assert` → Failure with file:line error, clean edit → Success with patch
+log). Two response-layer traps found en route: the transport's error shape DROPS the
+details object, and a failed compile trips the post-op ENGINE_ERROR guard which REPLACES
+the response — so completion states now ride a successful response (body
+`success`/`compileResult` carry the outcome) after `ClearCapturedErrors()`. (a): external
+mtime-only edits were detected reliably in every test on this engine — the HandPanicVR
+repro likely involved that fork's module setup; the new `reason`/diagnostics will say why
+if it recurs.
 **FOUND 2026-06-01** (HandPanicVR FingerGun work). Files edited on disk (not via the editor's
 own watcher) → `live_coding_compile` returned `{"success":true,"compileResult":"NoChanges"}`
 while the edits sat uncompiled; cost a multi-step diagnosis (DLL-timestamp archaeology). Two
@@ -978,7 +990,18 @@ param; (b) the response carries only the result enum — on Failure there are no
 errors/warnings, no patched-module list. Should return structured diagnostics (file:line errors)
 and, on NoChanges, the *reason* (no dirty files seen vs. session inactive).
 
-### [ ] No build/state visibility: `get_build_status` action wanted (+ structured `run_ubt` results)
+### [x] No build/state visibility: `get_build_status` action wanted (+ structured `run_ubt` results)
+**SHIPPED 2026-07-03.** `run_ubt` is now fire-and-poll: launches UBT detached (default
+`-NoUBA -WaitMutex`, `noUBA:false` opts out) with output redirected to
+`Saved/McpBuilds/<buildId>.log`, returns a `buildId` in milliseconds — the old
+implementation BLOCKED THE GAME THREAD pumping a pipe for up to 300s (froze the editor +
+every queued bridge call for the build's duration). New `get_build_status` (buildId
+optional, defaults to the session's latest) polls the process and parses the log:
+`running|succeeded|failed`, returnCode, `[N/M]` progress, parsed error lines,
+warningCount, resultLine, logTail. Verified live: up-to-date build → succeeded with
+"Result: Succeeded"; bogus target → failed, returnCode 8, "Result: Failed (RulesError)"
+in resultLine/tail. Dead twin deleted: `McpAutomationBridge_PipelineHandlers.cpp`
+(HandlePipelineAction, zero call sites) had a THIRD run_ubt implementation.
 **FOUND 2026-06-01** (same session). There's no way to ask the bridge "is the loaded module
 stale vs. its sources?" — had to resort to PowerShell timestamp diffs to learn the editor was
 serving a months-old DLL (which also produced a confusing `NOT_IMPLEMENTED` for a freshly-added

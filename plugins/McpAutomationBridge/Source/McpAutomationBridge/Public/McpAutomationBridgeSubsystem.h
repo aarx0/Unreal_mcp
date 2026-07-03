@@ -377,6 +377,26 @@ public:
   bool bLogCaptureEnabled = true;      // unsubscribe flips this off (device early-outs)
   FCriticalSection LogRingMutex;       // Serialize() runs on arbitrary threads
 
+  // ---- UBT build jobs (run_ubt fire-and-poll) ----------------------------
+  // run_ubt launches UBT detached with stdout redirected to a log file and
+  // returns immediately; get_build_status polls the process and parses the
+  // log. Game-thread only (both actions dispatch there) — no mutex needed.
+  struct FMcpUbtBuildJob
+  {
+    FString BuildId;
+    FString Target, Platform, Configuration;
+    FString LogPath;
+    FString CommandLine;
+    FProcHandle ProcHandle;
+    uint32 ProcessId = 0;
+    double StartTime = 0.0;   // FPlatformTime::Seconds() at launch
+    bool bFinished = false;
+    int32 ReturnCode = -1;
+    double EndTime = 0.0;
+  };
+  TMap<FString, FMcpUbtBuildJob> UbtBuildJobs;
+  FString LastUbtBuildId;
+
 private:
   TMap<FString, FAutomationHandler> AutomationHandlers;
   void InitializeHandlers();
@@ -1064,9 +1084,6 @@ private:
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);
   // 2. Execution & Build / Test Pipeline
-  bool HandlePipelineAction(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
   bool HandleTestAction(const FString &RequestId, const FString &Action,
                         const TSharedPtr<FJsonObject> &Payload,
                         FMcpResponseHandle RequestingSocket);

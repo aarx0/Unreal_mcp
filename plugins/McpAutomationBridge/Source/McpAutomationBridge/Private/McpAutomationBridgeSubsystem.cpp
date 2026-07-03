@@ -189,6 +189,7 @@ private:
 #include "HAL/PlatformTime.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeSettings.h"
+#include "Editor/EditorPerformanceSettings.h"  // bridge uncaps background tick throttling
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
@@ -473,6 +474,22 @@ void UMcpAutomationBridgeSubsystem::Initialize(
         UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
                TEXT("Failed to start Native MCP server on port %d"), Settings->NativeMCPPort);
         NativeTransport.Reset();
+      }
+      else
+      {
+        // Every bridge call is serviced on the game-thread tick; a backgrounded
+        // editor throttles that tick to a crawl, taxing ALL bridge round-trips
+        // (the client's window is usually the foreground one). Live value only —
+        // never written to the user's saved editor settings.
+        if (UEditorPerformanceSettings* Perf = GetMutableDefault<UEditorPerformanceSettings>())
+        {
+          if (Perf->bThrottleCPUWhenNotForeground)
+          {
+            Perf->bThrottleCPUWhenNotForeground = false;
+            UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
+                   TEXT("Native MCP: disabled Use-Less-CPU-in-Background for this session (bridge latency)"));
+          }
+        }
       }
     }
   }

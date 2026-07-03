@@ -252,7 +252,18 @@ Handler-only changes (Layer 3) take effect immediately after Live Coding — no 
 the headless / MCP-driven equivalent of `Ctrl+Alt+F11`, so an agent can apply `.cpp`-body
 bridge changes without a close/rebuild/relaunch cycle. Same limits as the shortcut:
 `.h` / `*.Build.cs` / `*.uplugin` changes still need a full rebuild, and Live Coding must be
-enabled for the session.
+enabled for the session. The response carries the outcome structured: `compileResult`,
+captured `log` lines, parsed compiler `errors` (scraped from the UBT log on Failure — the
+LiveCoding console keeps them off the editor log), and a `reason` on NoChanges. All
+completion states arrive as a *successful* MCP response; read the body's `success`/
+`compileResult`, not `isError`.
+
+**Full builds from the bridge:** `system_control run_ubt` is fire-and-poll — it launches
+UBT detached (default `-NoUBA -WaitMutex`; a UBA-built binary can't be Live Coding-patched
+afterwards) with output redirected to `Saved/McpBuilds/<buildId>.log` and returns a
+`buildId` immediately. Poll `system_control get_build_status` for `running|succeeded|failed`,
+`[N/M]` progress, parsed errors, and the final result line. It never blocks the game thread
+(the pre-2026-07-03 implementation pumped a pipe on the game thread for the whole build).
 
 > "Live Coding active" blocking a full rebuild is an **engine-install-wide** lock: close
 > every editor using that engine, not just this project.

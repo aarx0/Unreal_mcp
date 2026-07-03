@@ -56,7 +56,6 @@ encumberanceSystem
 encumberanceThreshold
 endBone
 endTime
-extraArgs
 factor
 failsafeToDefaultNavmesh
 fixedAreaEnteringCost

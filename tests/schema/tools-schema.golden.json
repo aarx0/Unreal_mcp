@@ -9846,6 +9846,7 @@
             "execute_command",
             "console_command",
             "run_ubt",
+            "get_build_status",
             "run_tests",
             "list_tests",
             "get_test_results",
@@ -9912,6 +9913,10 @@
         "boostPlayerLocation": {
           "description": "configure_texture_streaming: boost streaming around the active camera location.",
           "type": "boolean"
+        },
+        "buildId": {
+          "description": "get_build_status: buildId from run_ubt (default: most recent build this session). Returns status running|succeeded|failed, [N/M] progress, parsed errors, warningCount, resultLine, logPath.",
+          "type": "string"
         },
         "category": {
           "type": "string"
@@ -10022,6 +10027,10 @@
           "description": "optimize_shaders: changed (default) | material | global.",
           "type": "string"
         },
+        "noUBA": {
+          "description": "run_ubt: pass -NoUBA (default true — UBA-built binaries break later Live Coding patches). Set false for faster UBA builds when no LC patching will follow.",
+          "type": "boolean"
+        },
         "outputPath": {
           "description": "generate_test_stub: .cpp path to write (default: the bridge plugin's GeneratedTests dir).",
           "type": "string"
@@ -10088,6 +10097,7 @@
           "type": "number"
         },
         "target": {
+          "description": "run_ubt: build target (e.g. MyProjectEditor). Non-blocking: returns a buildId immediately; poll get_build_status.",
           "type": "string"
         },
         "test": {

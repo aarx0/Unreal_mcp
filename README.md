@@ -59,7 +59,10 @@ reaches the client only on a fresh MCP handshake — restart the client after a 
 - **Full rebuild** (headers, new files, `Build.cs`): close the editor, then
   `Engine/Build/BatchFiles/Build.bat <Project>Editor Win64 Development -Project=<uproject> -WaitMutex -NoUBA`
   (`-NoUBA` matters: a UBA-built binary breaks the next bullet's Live Coding hot-patching with `.voltbl` errors).
-- **`.cpp`-only** changes can hot-patch a running editor via `system_control` → `live_coding_compile`.
+- **`.cpp`-only** changes can hot-patch a running editor via `system_control` → `live_coding_compile`
+  (returns structured compiler errors on failure).
+- **Builds from the bridge**: `system_control run_ubt` fires UBT detached and returns a `buildId`;
+  poll `get_build_status` for progress, parsed errors, and the result.
 - **Package** the plugin standalone with [`scripts/package-plugin.bat`](scripts/package-plugin.bat) /
   [`scripts/package-plugin.sh`](scripts/package-plugin.sh) (RunUAT `BuildPlugin`).
 
