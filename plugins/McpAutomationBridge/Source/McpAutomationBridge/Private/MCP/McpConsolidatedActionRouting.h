@@ -74,7 +74,8 @@ inline const TArray<FString>& ManageAssetCore()
 		TEXT("reset_instance_parameters"), TEXT("exists"),
 		TEXT("get_material_stats"), TEXT("nanite_rebuild_mesh"),
 		TEXT("bulk_rename"), TEXT("bulk_delete"),
-		TEXT("source_control_checkout"), TEXT("source_control_submit")
+		TEXT("source_control_checkout"), TEXT("source_control_submit"),
+		TEXT("save"), TEXT("save_asset"), TEXT("save_all")
 	};
 	return Actions;
 }

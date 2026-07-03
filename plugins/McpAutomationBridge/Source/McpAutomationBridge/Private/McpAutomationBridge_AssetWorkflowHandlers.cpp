@@ -221,6 +221,82 @@ static void FinalizeHost(UMaterial* Material, UMaterialFunction* Function) {
   else if (Function) { Function->PostEditChange(); Function->MarkPackageDirty(); }
 }
 
+// Saves one asset's package to disk if dirty. Never force-loads: an unloaded
+// package cannot be dirty, so there is nothing to save.
+static bool HandleSaveAssetStatic(UMcpAutomationBridgeSubsystem* Self,
+                                  const FString& RequestId,
+                                  const TSharedPtr<FJsonObject>& Payload,
+                                  FMcpResponseHandle Socket) {
+#if WITH_EDITOR
+  FString AssetPath;
+  Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
+  if (AssetPath.IsEmpty()) {
+    Self->SendAutomationResponse(Socket, RequestId, false,
+                                 TEXT("assetPath required"), nullptr,
+                                 TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+  AssetPath = SanitizeProjectRelativePath(AssetPath);
+  if (AssetPath.IsEmpty()) {
+    Self->SendAutomationResponse(Socket, RequestId, false,
+                                 TEXT("Invalid assetPath"), nullptr,
+                                 TEXT("SECURITY_VIOLATION"));
+    return true;
+  }
+
+  FString PackageName = AssetPath;
+  int32 DotIndex;
+  if (PackageName.FindChar(TEXT('.'), DotIndex)) {
+    PackageName.LeftInline(DotIndex);
+  }
+
+  TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+  Result->SetStringField(TEXT("assetPath"), AssetPath);
+
+  UPackage* Package = FindPackage(nullptr, *PackageName);
+  if (!Package) {
+    if (!FPackageName::DoesPackageExist(PackageName)) {
+      Self->SendAutomationResponse(Socket, RequestId, false,
+                                   FString::Printf(TEXT("Asset not found: %s"), *PackageName),
+                                   nullptr, TEXT("ASSET_NOT_FOUND"));
+      return true;
+    }
+    Result->SetBoolField(TEXT("saved"), false);
+    Result->SetBoolField(TEXT("wasDirty"), false);
+    Result->SetBoolField(TEXT("existsOnDisk"), true);
+    Self->SendAutomationResponse(Socket, RequestId, true,
+                                 TEXT("Package not loaded; nothing dirty to save"), Result);
+    return true;
+  }
+
+  const bool bWasDirty = Package->IsDirty();
+  UObject* Asset = Package->FindAssetInPackage();
+  if (!Asset) {
+    Self->SendAutomationResponse(Socket, RequestId, false,
+                                 FString::Printf(TEXT("No asset found in package %s"), *PackageName),
+                                 nullptr, TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
+
+  const bool bSaved = bWasDirty ? McpSafeAssetSave(Asset) : true;
+  Result->SetBoolField(TEXT("saved"), bWasDirty && bSaved);
+  Result->SetBoolField(TEXT("wasDirty"), bWasDirty);
+  McpHandlerUtils::AddVerification(Result, Asset);
+  if (bWasDirty && !bSaved) {
+    Self->SendAutomationResponse(Socket, RequestId, false,
+                                 FString::Printf(TEXT("Failed to save %s"), *PackageName),
+                                 Result, TEXT("SAVE_FAILED"));
+    return true;
+  }
+  Self->SendAutomationResponse(
+      Socket, RequestId, true,
+      bWasDirty ? TEXT("Asset saved") : TEXT("Asset already clean; no save needed"), Result);
+  return true;
+#else
+  return false;
+#endif
+}
+
 // =============================================================================
 // ASSET ACTION DISPATCHER
 // =============================================================================
@@ -259,6 +335,10 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetAction(
     return HandleMoveAsset(RequestId, Payload, RequestingSocket);
   if (Lower == TEXT("delete") || Lower == TEXT("delete_asset") || Lower == TEXT("delete_assets"))
     return HandleDeleteAssets(RequestId, Payload, RequestingSocket);
+  if (Lower == TEXT("save") || Lower == TEXT("save_asset"))
+    return HandleSaveAssetStatic(this, RequestId, Payload, RequestingSocket);
+  if (Lower == TEXT("save_all"))
+    return HandleControlEditorSaveAll(RequestId, Payload, RequestingSocket);
   if (Lower == TEXT("create_folder"))
     return HandleCreateFolder(RequestId, Payload, RequestingSocket);
   if (Lower == TEXT("create_material"))

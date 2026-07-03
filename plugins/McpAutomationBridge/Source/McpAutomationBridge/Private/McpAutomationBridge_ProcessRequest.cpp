@@ -190,12 +190,20 @@ void UMcpAutomationBridgeSubsystem::ProcessAutomationRequest(
         }
       }
 
-      // Unhandled action
+      // Unhandled action. For consolidated tools the dispatch Action is the
+      // tool name; the sub-action the caller actually sent lives in the payload.
       bDispatchHandled = true;
       ConsumedHandlerLabel = TEXT("SendAutomationError (unknown action)");
+      FString UnknownSubAction;
+      if (Payload.IsValid()) {
+        Payload->TryGetStringField(TEXT("action"), UnknownSubAction);
+      }
       SendAutomationError(
           RequestingSocket, RequestId,
-          FString::Printf(TEXT("Unknown automation action: %s"), *Action),
+          (!UnknownSubAction.IsEmpty() && UnknownSubAction != Action)
+              ? FString::Printf(TEXT("Unknown action '%s' for tool '%s'"),
+                                *UnknownSubAction, *Action)
+              : FString::Printf(TEXT("Unknown automation action: %s"), *Action),
           TEXT("UNKNOWN_ACTION"));
     } catch (const std::exception &E) {
       UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
