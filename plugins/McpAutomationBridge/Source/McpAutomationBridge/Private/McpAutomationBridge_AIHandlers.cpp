@@ -1451,10 +1451,29 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
 
         if (NewGenerator)
         {
+            UClass* SearchCenterContext = nullptr;
             const TSharedPtr<FJsonObject>* GeneratorSettings = nullptr;
             if (Payload->TryGetObjectField(TEXT("generatorSettings"), GeneratorSettings) && GeneratorSettings && GeneratorSettings->IsValid())
             {
+                FString SearchCenterName;
+                if ((*GeneratorSettings)->TryGetStringField(TEXT("searchCenter"), SearchCenterName) && !SearchCenterName.IsEmpty())
+                {
+                    SearchCenterContext = ResolveClassByName(SearchCenterName);
+                    if (!SearchCenterContext && !SearchCenterName.Contains(TEXT("/")) && !SearchCenterName.Contains(TEXT(".")))
+                    {
+                        SearchCenterContext = ResolveClassByName(FString::Printf(TEXT("EnvQueryContext_%s"), *SearchCenterName));
+                    }
+                    if (!SearchCenterContext || !SearchCenterContext->IsChildOf(UEnvQueryContext::StaticClass()))
+                    {
+                        SendAutomationError(RequestingSocket, RequestId,
+                            FString::Printf(TEXT("searchCenter is not an EnvQueryContext class: %s"), *SearchCenterName),
+                            TEXT("INVALID_ARGUMENT"));
+                        return true;
+                    }
+                }
+
                 double NumberValue = 0.0;
+                bool bSearchCenterApplied = false;
                 if (UEnvQueryGenerator_ActorsOfClass* ActorsGenerator = Cast<UEnvQueryGenerator_ActorsOfClass>(NewGenerator))
                 {
                     if ((*GeneratorSettings)->TryGetNumberField(TEXT("searchRadius"), NumberValue))
@@ -1473,6 +1492,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
                             }
                         }
                     }
+                    if (SearchCenterContext)
+                    {
+                        ActorsGenerator->SearchCenter = SearchCenterContext;
+                        bSearchCenterApplied = true;
+                    }
                 }
                 else if (UEnvQueryGenerator_SimpleGrid* GridGenerator = Cast<UEnvQueryGenerator_SimpleGrid>(NewGenerator))
                 {
@@ -1483,6 +1507,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
                     if ((*GeneratorSettings)->TryGetNumberField(TEXT("spacesBetween"), NumberValue))
                     {
                         GridGenerator->SpaceBetween.DefaultValue = static_cast<float>(NumberValue);
+                    }
+                    if (SearchCenterContext)
+                    {
+                        GridGenerator->GenerateAround = SearchCenterContext;
+                        bSearchCenterApplied = true;
                     }
                 }
                 else if (UEnvQueryGenerator_OnCircle* CircleGenerator = Cast<UEnvQueryGenerator_OnCircle>(NewGenerator))
@@ -1496,6 +1525,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
                     {
                         CircleGenerator->SpaceBetween.DefaultValue = static_cast<float>(NumberValue);
                     }
+                    if (SearchCenterContext)
+                    {
+                        CircleGenerator->CircleCenter = SearchCenterContext;
+                        bSearchCenterApplied = true;
+                    }
+                }
+                if (SearchCenterContext && !bSearchCenterApplied)
+                {
+                    SendAutomationError(RequestingSocket, RequestId,
+                        FString::Printf(TEXT("searchCenter is not supported for generator type: %s"), *GeneratorType),
+                        TEXT("INVALID_ARGUMENT"));
+                    return true;
                 }
             }
 
@@ -1514,6 +1555,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAIAction(
             McpSafeAssetSave(Query);
             Result->SetNumberField(TEXT("optionIndex"), OptionIndex);
             Result->SetStringField(TEXT("generatorType"), GeneratorType);
+            if (SearchCenterContext)
+            {
+                Result->SetStringField(TEXT("searchCenter"), SearchCenterContext->GetPathName());
+            }
             Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added %s generator"), *GeneratorType));
             McpHandlerUtils::AddVerification(Result, Query);
             SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Generator added"), Result);

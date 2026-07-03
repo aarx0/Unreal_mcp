@@ -5,27 +5,11 @@
 
 # -- declared in a tool schema, no handler read found --
 attributeSetPath
-computeWeightedNormals
 cuePath
 decoratorType
 detectFriendly
 effectPath
-hardEdgeAngle
-hullCount
-loSHearingRange
-maxVerticesPerHull
-numRings
-numSides
-period
-radialSegments
-reductionPercent
-searchCenter
 serviceType
-setByCallerTag
-targetAttribute
-targetEdgeLength
-uvOffset
-weldDistance
 
 # -- read from the request payload, not declared in any tool schema --
 abilityClass

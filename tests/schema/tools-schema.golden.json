@@ -1561,9 +1561,6 @@
             "hearingRange": {
               "type": "number"
             },
-            "loSHearingRange": {
-              "type": "number"
-            },
             "maxAge": {
               "type": "number"
             }
@@ -4668,7 +4665,7 @@
           "type": "string"
         },
         "period": {
-          "description": "Period for periodic effects.",
+          "description": "set_effect_duration: execution period in seconds (> 0) for periodic effects; requires durationType HasDuration or Infinite.",
           "type": "number"
         },
         "removalTags": {
@@ -4688,7 +4685,7 @@
           "type": "string"
         },
         "setByCallerTag": {
-          "description": "Tag for SetByCaller magnitude.",
+          "description": "add_effect_modifier/set_modifier_magnitude: registered gameplay tag for a SetByCaller modifier magnitude; mutually exclusive with a numeric magnitude.",
           "type": "string"
         },
         "setName": {
@@ -4747,10 +4744,6 @@
         },
         "tagName": {
           "description": "Alias for 'tag'.",
-          "type": "string"
-        },
-        "targetAttribute": {
-          "description": "Target attribute for modifier.",
           "type": "string"
         },
         "targetingMode": {
@@ -4926,7 +4919,7 @@
           "type": "string"
         },
         "computeWeightedNormals": {
-          "description": "Use area-weighted normals.",
+          "description": "Use area-weighted normals for recalculate_normals.",
           "type": "boolean"
         },
         "curveAngle": {
@@ -4961,7 +4954,7 @@
           "type": "number"
         },
         "hardEdgeAngle": {
-          "description": "Angle threshold for hard edges (degrees).",
+          "description": "Opening angle in degrees above which recalculate_normals splits hard edges.",
           "type": "number"
         },
         "height": {
@@ -4977,7 +4970,7 @@
           "type": "number"
         },
         "hullCount": {
-          "description": "Number of convex hulls for decomposition.",
+          "description": "Max convex hulls for generate_collision (convex/convex_decomposition only).",
           "type": "number"
         },
         "hullPrecision": {
@@ -5023,10 +5016,6 @@
           "description": "Specific LOD index to configure.",
           "type": "number"
         },
-        "maxVerticesPerHull": {
-          "description": "Maximum vertices per convex hull.",
-          "type": "number"
-        },
         "midpoint": {
           "description": "Texture luminance midpoint for displacement.",
           "type": "number"
@@ -5036,11 +5025,11 @@
           "type": "string"
         },
         "numRings": {
-          "description": "Number of rings for sphere, torus.",
+          "description": "Ring count: sphere latitude rings (switches to lat-long topology) or torus major segments.",
           "type": "number"
         },
         "numSides": {
-          "description": "Number of sides for cylinder, cone, etc.",
+          "description": "Radial side count for cylinder and cone (alias of segments).",
           "type": "number"
         },
         "numSteps": {
@@ -5056,7 +5045,7 @@
           "type": "string"
         },
         "radialSegments": {
-          "description": "Radial segments for circular shapes.",
+          "description": "Radial segments: sphere longitude steps (switches to lat-long topology) or torus minor segments.",
           "type": "number"
         },
         "radius": {
@@ -5064,7 +5053,7 @@
           "type": "number"
         },
         "reductionPercent": {
-          "description": "Percent of triangles to reduce per LOD.",
+          "description": "Percent of triangles to remove for simplify_mesh (mutually exclusive with targetTriangleCount/targetPercentage).",
           "type": "number"
         },
         "rotation": {
@@ -5129,7 +5118,7 @@
           "type": "string"
         },
         "targetEdgeLength": {
-          "description": "Target edge length for remeshing.",
+          "description": "Target edge length for remesh_uniform (mutually exclusive with targetTriangleCount).",
           "type": "number"
         },
         "targetPercentage": {
@@ -5181,7 +5170,7 @@
           "type": "number"
         },
         "weldDistance": {
-          "description": "Distance threshold for vertex welding.",
+          "description": "Distance threshold for weld_vertices (alias of tolerance).",
           "type": "number"
         },
         "width": {

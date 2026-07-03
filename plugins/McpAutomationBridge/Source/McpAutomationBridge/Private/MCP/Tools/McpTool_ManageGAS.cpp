@@ -86,7 +86,7 @@ public:
 				TEXT("HasDuration")
 			}, TEXT("Effect duration type."))
 			.Number(TEXT("duration"), TEXT("Duration in seconds."))
-			.Number(TEXT("period"), TEXT("Period for periodic effects."))
+			.Number(TEXT("period"), TEXT("set_effect_duration: execution period in seconds (> 0) for periodic effects; requires durationType HasDuration or Infinite."))
 			.StringEnum(TEXT("modifierOperation"), {
 				TEXT("Add"),
 				TEXT("Multiply"),
@@ -100,8 +100,8 @@ public:
 				TEXT("SetByCaller"),
 				TEXT("CustomCalculationClass")
 			}, TEXT("How magnitude is calculated."))
-			.String(TEXT("setByCallerTag"), TEXT("Tag for SetByCaller magnitude."))
-			.String(TEXT("targetAttribute"), TEXT("Target attribute for modifier."))
+			.String(TEXT("setByCallerTag"), TEXT("add_effect_modifier/set_modifier_magnitude: registered gameplay tag for a "
+				"SetByCaller modifier magnitude; mutually exclusive with a numeric magnitude."))
 			.String(TEXT("calculationClass"), TEXT("UGameplayEffectExecutionCalculation class path."))
 			.String(TEXT("cueTag"), TEXT("Gameplay Cue tag (e.g., GameplayCue.Damage.Fire)."))
 			.String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))

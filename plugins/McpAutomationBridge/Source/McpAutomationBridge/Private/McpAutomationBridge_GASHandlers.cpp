@@ -1739,25 +1739,48 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         const FString DurationTypeToken = NormalizeGASToken(DurationType);
         float Duration = static_cast<float>(GetJsonNumberField(Payload, TEXT("duration"), 0.0));
 
+        // Resolve the target policy before mutating so validation failures leave the CDO untouched.
+        EGameplayEffectDurationType NewPolicy = EffectCDO->DurationPolicy;
         if (DurationTypeToken == TEXT("instant"))
         {
-            EffectCDO->DurationPolicy = EGameplayEffectDurationType::Instant;
+            NewPolicy = EGameplayEffectDurationType::Instant;
         }
         else if (DurationTypeToken == TEXT("infinite"))
         {
-            EffectCDO->DurationPolicy = EGameplayEffectDurationType::Infinite;
+            NewPolicy = EGameplayEffectDurationType::Infinite;
         }
         else if (DurationTypeToken == TEXT("hasduration"))
         {
-            EffectCDO->DurationPolicy = EGameplayEffectDurationType::HasDuration;
-            // Note: SetValue doesn't exist in UE 5.6, FScalableFloat constructor used in 5.7+
-            // Use assignment with FGameplayEffectModifierMagnitude constructor
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
+            NewPolicy = EGameplayEffectDurationType::HasDuration;
+        }
+
+        double PeriodValue = 0.0;
+        const bool bHasPeriod = Payload->TryGetNumberField(TEXT("period"), PeriodValue);
+        if (bHasPeriod)
+        {
+            if (PeriodValue <= 0.0)
+            {
+                SendAutomationError(RequestingSocket, RequestId, TEXT("'period' must be > 0."), TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            if (NewPolicy == EGameplayEffectDurationType::Instant)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("'period' requires durationType HasDuration or Infinite; Instant effects cannot be periodic."),
+                    TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+        }
+
+        EffectCDO->DurationPolicy = NewPolicy;
+        if (NewPolicy == EGameplayEffectDurationType::HasDuration)
+        {
+            // Note: SetValue doesn't exist in UE 5.6. Use FScalableFloat constructor.
             EffectCDO->DurationMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Duration));
-#else
-            // UE 5.6: Assign FScalableFloat directly to the magnitude
-            EffectCDO->DurationMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Duration));
-#endif
+        }
+        if (bHasPeriod)
+        {
+            EffectCDO->Period = FScalableFloat(static_cast<float>(PeriodValue));
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
@@ -1766,6 +1789,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("durationType"), DurationType);
         Result->SetNumberField(TEXT("duration"), Duration);
+        if (bHasPeriod)
+        {
+            Result->SetNumberField(TEXT("period"), PeriodValue);
+        }
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Duration set"), Result);
         return true;
     }
@@ -1817,8 +1844,32 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             Modifier.ModifierOp = EGameplayModOp::Override;
         }
 
-        // Note: SetValue doesn't exist in UE 5.6. Use FScalableFloat constructor.
-        Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Magnitude));
+        const FString SetByCallerTagString = GetJsonStringField(Payload, TEXT("setByCallerTag"));
+        if (!SetByCallerTagString.IsEmpty())
+        {
+            if (Payload->HasField(TEXT("magnitude")) || Payload->HasField(TEXT("modifierMagnitude")))
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("'setByCallerTag' and a numeric magnitude are mutually exclusive."), TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            const FGameplayTag DataTag = GetOrRequestTag(SetByCallerTagString);
+            if (!DataTag.IsValid())
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("setByCallerTag not registered: %s"), *SetByCallerTagString),
+                    TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            FSetByCallerFloat SetByCaller;
+            SetByCaller.DataTag = DataTag;
+            Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(SetByCaller);
+        }
+        else
+        {
+            // Note: SetValue doesn't exist in UE 5.6. Use FScalableFloat constructor.
+            Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Magnitude));
+        }
         EffectCDO->Modifiers.Add(Modifier);
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
@@ -1826,7 +1877,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("operation"), Operation);
-        Result->SetNumberField(TEXT("magnitude"), Magnitude);
+        if (!SetByCallerTagString.IsEmpty())
+        {
+            Result->SetStringField(TEXT("setByCallerTag"), SetByCallerTagString);
+        }
+        else
+        {
+            Result->SetNumberField(TEXT("magnitude"), Magnitude);
+        }
         Result->SetNumberField(TEXT("modifierCount"), EffectCDO->Modifiers.Num());
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Modifier added"), Result);
         return true;
@@ -1866,8 +1924,45 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        // Note: SetValue doesn't exist in UE 5.6. Use FScalableFloat constructor.
-        EffectCDO->Modifiers[ModifierIndex].ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Value));
+        const FString MagnitudeTypeToken = NormalizeGASToken(MagnitudeType);
+        const FString SetByCallerTagString = GetJsonStringField(Payload, TEXT("setByCallerTag"));
+        if (MagnitudeTypeToken == TEXT("setbycaller") || !SetByCallerTagString.IsEmpty())
+        {
+            if (MagnitudeTypeToken != TEXT("setbycaller"))
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("'setByCallerTag' requires magnitudeType 'SetByCaller'."), TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            if (SetByCallerTagString.IsEmpty())
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("magnitudeType 'SetByCaller' requires 'setByCallerTag'."), TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            if (Payload->HasField(TEXT("value")) || Payload->HasField(TEXT("modifierMagnitude")))
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("'setByCallerTag' and a numeric magnitude are mutually exclusive."), TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            const FGameplayTag DataTag = GetOrRequestTag(SetByCallerTagString);
+            if (!DataTag.IsValid())
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("setByCallerTag not registered: %s"), *SetByCallerTagString),
+                    TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            FSetByCallerFloat SetByCaller;
+            SetByCaller.DataTag = DataTag;
+            EffectCDO->Modifiers[ModifierIndex].ModifierMagnitude = FGameplayEffectModifierMagnitude(SetByCaller);
+        }
+        else
+        {
+            // Note: SetValue doesn't exist in UE 5.6. Use FScalableFloat constructor.
+            EffectCDO->Modifiers[ModifierIndex].ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Value));
+        }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 
@@ -1875,7 +1970,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetNumberField(TEXT("modifierIndex"), ModifierIndex);
         Result->SetStringField(TEXT("magnitudeType"), MagnitudeType);
-        Result->SetNumberField(TEXT("value"), Value);
+        if (!SetByCallerTagString.IsEmpty())
+        {
+            Result->SetStringField(TEXT("setByCallerTag"), SetByCallerTagString);
+        }
+        else
+        {
+            Result->SetNumberField(TEXT("value"), Value);
+        }
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Magnitude set"), Result);
         return true;
     }

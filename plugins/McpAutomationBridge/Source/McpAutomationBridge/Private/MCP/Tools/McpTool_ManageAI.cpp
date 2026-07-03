@@ -167,7 +167,6 @@ public:
 			.Object(TEXT("hearingConfig"), TEXT("AI hearing sense configuration."),
 				[](FMcpSchemaBuilder& S) {
 				S.Number(TEXT("hearingRange"))
-				 .Number(TEXT("loSHearingRange"))
 				 .Bool(TEXT("detectFriendly"), TEXT(""))
 				 .Number(TEXT("maxAge"));
 			})

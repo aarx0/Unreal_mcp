@@ -40,9 +40,9 @@ public:
 			.Number(TEXT("radius"), TEXT("Radius value."))
 			.Number(TEXT("innerRadius"), TEXT("Inner radius for torus."))
 			.Number(TEXT("numSides"),
-				TEXT("Number of sides for cylinder, cone, etc."))
+				TEXT("Radial side count for cylinder and cone (alias of segments)."))
 			.Number(TEXT("numRings"),
-				TEXT("Number of rings for sphere, torus."))
+				TEXT("Ring count: sphere latitude rings (switches to lat-long topology) or torus major segments."))
 			.Number(TEXT("numSteps"), TEXT("Number of steps for stairs."))
 			.Number(TEXT("stepWidth"), TEXT("Width of each stair step."))
 			.Number(TEXT("stepHeight"), TEXT("Height of each stair step."))
@@ -53,7 +53,7 @@ public:
 			.Number(TEXT("heightSegments"), TEXT("Segments along height."))
 			.Number(TEXT("depthSegments"), TEXT("Segments along depth."))
 			.Number(TEXT("radialSegments"),
-				TEXT("Radial segments for circular shapes."))
+				TEXT("Radial segments: sphere longitude steps (switches to lat-long topology) or torus minor segments."))
 			.Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 				[](FMcpSchemaBuilder& S) {
 				S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
@@ -90,9 +90,9 @@ public:
 			.Number(TEXT("targetPercentage"),
 				TEXT("Percent of triangles to keep for simplify_mesh when targetTriangleCount is absent (default 50)."))
 			.Number(TEXT("targetEdgeLength"),
-				TEXT("Target edge length for remeshing."))
+				TEXT("Target edge length for remesh_uniform (mutually exclusive with targetTriangleCount)."))
 			.Number(TEXT("weldDistance"),
-				TEXT("Distance threshold for vertex welding."))
+				TEXT("Distance threshold for weld_vertices (alias of tolerance)."))
 			.Number(TEXT("uvChannel"), TEXT("UV channel index (0-7)."))
 			.Object(TEXT("uvScale"), TEXT("UV scale."),
 				[](FMcpSchemaBuilder& S) {
@@ -103,9 +103,9 @@ public:
 				S.Number(TEXT("u")).Number(TEXT("v"));
 			})
 			.Number(TEXT("hardEdgeAngle"),
-				TEXT("Angle threshold for hard edges (degrees)."))
+				TEXT("Opening angle in degrees above which recalculate_normals splits hard edges."))
 			.Bool(TEXT("computeWeightedNormals"),
-				TEXT("Use area-weighted normals."))
+				TEXT("Use area-weighted normals for recalculate_normals."))
 			.StringEnum(TEXT("collisionType"), {
 				TEXT("Default"),
 				TEXT("Simple"),
@@ -114,17 +114,15 @@ public:
 				TEXT("UseSimpleAsComplex")
 			}, TEXT("Collision complexity type."))
 			.Number(TEXT("hullCount"),
-				TEXT("Number of convex hulls for decomposition."))
+				TEXT("Max convex hulls for generate_collision (convex/convex_decomposition only)."))
 			.Number(TEXT("hullPrecision"),
 				TEXT("Precision for convex hull generation (0-1)."))
-			.Number(TEXT("maxVerticesPerHull"),
-				TEXT("Maximum vertices per convex hull."))
 			.Number(TEXT("lodCount"),
 				TEXT("Number of LOD levels to generate."))
 			.Number(TEXT("lodIndex"),
 				TEXT("Specific LOD index to configure."))
 			.Number(TEXT("reductionPercent"),
-				TEXT("Percent of triangles to reduce per LOD."))
+				TEXT("Percent of triangles to remove for simplify_mesh (mutually exclusive with targetTriangleCount/targetPercentage)."))
 			.Array(TEXT("screenSizes"),
 				TEXT("Array of screen sizes for each LOD."), TEXT("number"))
 			.Required({TEXT("action")})
