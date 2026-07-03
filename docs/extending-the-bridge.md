@@ -158,6 +158,11 @@ engine-error capture and added client-visible latency).
    `tests/schema/param-reconciliation-allowlist.txt` (`-UpdateAllowlist` re-pins).
    Prefer fixing the schema over growing the allowlist.
 
+7. **Update the docs in the same commit.** If the change renames/deletes a file or
+   symbol, grep `*.md` for it; if it ships something a design doc proposed, flip that
+   doc's Status header. `tests/docs/docs-reference-test.ps1` (offline) fails on doc
+   references to files/symbols that no longer exist and on known-rot tripwire phrases.
+
 ---
 
 ## Gotchas (learned the hard way)

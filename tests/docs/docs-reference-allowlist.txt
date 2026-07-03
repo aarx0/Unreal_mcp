@@ -1,0 +1,7 @@
+# docs-reference-test allowlist — deliberate references to deleted/historical things.
+# Format: <doc-relpath>|<kind>|<token>. Each pin should be re-justified when its doc is edited.
+# COMMONUI plan §7 is explicitly marked moot (TS bridge deleted); items kept as design history.
+COMMONUI_INTEGRATION_PLAN.md|path|consolidated-tool-definitions.ts
+COMMONUI_INTEGRATION_PLAN.md|path|widget-authoring-handlers.ts
+# Checked-off Phase-1 history from the TS era; dated record inside an otherwise-living doc.
+docs/Roadmap.md|path|tool-definition-utils.ts

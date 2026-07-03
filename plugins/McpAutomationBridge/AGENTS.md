@@ -39,6 +39,7 @@ McpAutomationBridge/
 - Defer work while Unreal is saving packages, garbage collecting, or async loading; do not add bypasses around unsafe-state checks.
 - Build configuration is intentionally version-aware: keep `Build.cs` feature probes and optional dependency guards when adding engine modules.
 - Optional plugin features should fail gracefully when the UE module/plugin is unavailable.
+- Docs ride in the same commit as the change that outdates them. Renaming/deleting a file or symbol? Grep `*.md` for it. Shipping something a design doc proposed? Flip its **Status** header (Proposed → SHIPPED / PARKED / MOOT) in that commit — status lines are where docs rot first, and `tests/docs/docs-reference-test.ps1` can only catch dangling references, not a lying status.
 
 ## UE SAFETY
 - Use `McpSafeAssetSave`, `McpSafeLevelSave`, and `McpSafeLoadMap` from `McpSafeOperations.h` instead of raw package save/load calls.
