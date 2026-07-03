@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Dogfood audit + fix waves (2026-07-02, consolidated record in `docs/hardening-2026-07-02.md`)
+
+- **Live audit of all 22 tools** (471 calls, 112 findings, report in `docs/dogfood-audit-2026-07-02.md`); ~95 findings fixed same day, every fix re-verified by re-running the audit's exact failing repro against the rebuilt editor.
+- **Silent-success class eliminated** — interaction `configure_*` persists (values reach `FBPVariableDescription::DefaultValue` + compiled CDO, read-modify-write partial configures), `set_anchor` writes and reads back, GAS tag setters error on unregistered tags, `inspect set_property` `saved:true` means on-disk, character scaffolds seed defaults, brush volumes get real geometry (`UActorFactory::CreateBrushForVolumeActor` — creates/resize/readback verified; previously null-`UModel`, extent 0,0,0 forever).
+- **Destination paths honored everywhere** — audio/animation/geometry/AI/interaction creates accept `path`/`savePath` aliases and no longer spray hardcoded folders; `manage_ai create` honors `blackboardPath` instead of silently binding the first (production) blackboard found.
+- **Dead advertised actions now real** — GAS `add_ability`, BT `add_task_node`/`add_decorator`/`add_service` (enum-name wrappers over graph authoring), `set_niagara_parameter` (existed, was unroutable), SoundCue root wiring via `Root` pseudo-node, `create_behavior_tree` produces graph-authorable BTs.
+- **Dead-param triage** — `param-reconciliation-test.ps1` found ~40 declared-but-never-read params beyond the audit's 20; 15 implemented for real (geometry: `weldDistance`/`hardEdgeAngle`/`computeWeightedNormals`/`targetEdgeLength`/`uvOffset`/`numSides`/`numRings`/`radialSegments`/`hullCount`/`reductionPercent`; `reductionSettings` on `generate_lods`; GAS `period` + `setByCallerTag`; sight-perception params; EQS `searchCenter`), ~28 removed as speculative or response-keys-declared-as-inputs (incl. `timeoutMs`×4, deprecated `loSHearingRange`).
+- **Editor-exit crash fixed** — listen-socket use-after-free in transport shutdown (two-owner teardown race); `Stop()` now only closes, `Shutdown()` destroys once after thread join.
+- **Sanitizer no longer redacts error guidance** — handler-authored error text keeps its paths/action names; the Unix-path matcher requires real path shapes even in engine-captured text.
+- **`TOOL_DISABLED` demystified** — not a race: `manage_tools` state is global across sessions; errors now cite the last mutation + age and state the shared-across-sessions behavior.
+- **Dead code deleted** — Interaction §6 dispatch + 6 unreachable §7 handlers, AudioAuthoring duplicate creates, MiscHandlers PPV chain; `Encumberance`→`Encumbrance` (old wire spellings still accepted).
+- **New test:** `tests/schema/param-reconciliation-test.ps1` — offline static check that schema-declared params are read and payload-read params are declared (`-UpdateAllowlist` re-pins; dead pins currently 6, all documented indirect reads).
+
 ### Architecture-review hardening (2026-07-02, review in `docs/architecture-review-2026-07-02.md`)
 
 - **Boot-time action-routing validation** (`McpStartupValidation`) — every canonical tool must register; shared list duplicates, routed-family overlaps, family/core shadowing, and schema/union drift all fail loudly at editor start. All 22 tool schemas now come from shared lists in `McpConsolidatedActionRouting.h`.

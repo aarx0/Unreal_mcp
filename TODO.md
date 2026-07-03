@@ -67,11 +67,20 @@ as they land.
 >   REMOVED incl. timeoutMs×4, attributeType and the response-key mistakes; sight-perception
 >   params IMPLEMENTED on configure_sight_config — autoSuccessRange /
 >   pointOfViewBackwardOffset / nearClippingRadius / maxAge / detectionByAffiliation
->   (enemies/neutrals/friendlies), top-level and nested, live-verified). **Remaining dead
->   pins = gas (period, clampMode, setByCallerTag, targetAttribute), ai (loSHearingRange →
->   configure_hearing_config, searchCenter → EQS), geometry (11 tuning knobs)** — those
->   triage agents died on the session budget cap; geometry knobs lean IMPLEMENT (real
->   GeometryScript slots).
+>   (enemies/neutrals/friendlies), top-level and nested, live-verified). **Wave 2 DONE
+>   (dfbc4e99): 14 implemented / 4 removed** — geometry knobs all wired (weldDistance,
+>   hardEdgeAngle, computeWeightedNormals, targetEdgeLength, uvOffset, numSides, numRings,
+>   radialSegments, hullCount, reductionPercent), GAS period + setByCallerTag (the
+>   SetByCaller magnitudeType previously silently wrote a ScalableFloat), EQS searchCenter;
+>   removed maxVerticesPerHull (no 5.7 slot), targetAttribute, loSHearingRange
+>   (UE_DEPRECATED 5.2). Dead pins now 6, all documented regex-invisible indirect reads.
+> - **add_effect_modifier never sets FGameplayModifierInfo::Attribute (found 2026-07-02,
+>   wave 2):** a modifier without a target attribute is inert — the action needs an
+>   'attribute' param (resolve against the effect's attribute sets) to be useful at all.
+> - **generate_collision collisionType enum drift (found 2026-07-02, wave 2):** schema
+>   enum says Default/Simple/Complex/... but the handler accepts
+>   box/sphere/capsule/convex/convex_decomposition; generate_complex_collision parses
+>   maxHullVerts without using it — reconcile both.
 >   The 552 read-but-undeclared pins are the
 >   known undiscoverability backlog (extending-the-bridge gotcha #1), densest in
 >   WidgetAuthoring/Sessions/GameFramework/Skeleton/Texture handlers.
