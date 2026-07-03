@@ -71,6 +71,7 @@ public:
 			.Number(TEXT("rotationRate"), TEXT(""))
 			.String(TEXT("modeName"), TEXT("Name for custom movement mode."))
 			.Number(TEXT("modeId"), TEXT("Custom movement mode ID."))
+			.Number(TEXT("customSpeed"), TEXT("add_custom_movement_mode: speed stored as the {modeName}Speed variable default and MaxCustomMovementSpeed."))
 			.Number(TEXT("navAgentRadius"), TEXT(""))
 			.Number(TEXT("navAgentHeight"), TEXT(""))
 			.Bool(TEXT("avoidanceEnabled"), TEXT("Enable AI avoidance."))
@@ -107,6 +108,11 @@ public:
 				TEXT("Custom")
 			}, TEXT("Physical surface type."))
 			.String(TEXT("soundPath"), TEXT("Sound asset path (SoundBase) mapped to surfaceType by map_surface_to_sound."))
+			.Number(TEXT("volumeMultiplier"), TEXT("configure_footstep_fx: footstep sound volume multiplier (default 1.0)."))
+			.Number(TEXT("particleScale"), TEXT("configure_footstep_fx: footstep particle scale (default 1.0)."))
+			.Number(TEXT("brakingDeceleration"), TEXT("set_braking_deceleration: BrakingDecelerationWalking on CharacterMovement."))
+			.Number(TEXT("crouchedHalfHeight"), TEXT("configure_crouch: capsule half-height while crouched (default 44)."))
+			.Bool(TEXT("canCrouch"), TEXT("configure_crouch: whether the character can crouch (default true)."))
 			.Required({TEXT("action")})
 			.Build();
 	}

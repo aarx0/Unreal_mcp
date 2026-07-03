@@ -102,57 +102,287 @@
           "description": "Name of the actor.",
           "type": "string"
         },
+        "additiveAnimType": {
+          "description": "set_additive_settings: additive type (default NoAdditive).",
+          "type": "string"
+        },
+        "angularDamping": {
+          "description": "configure_physics_body: angular damping.",
+          "type": "number"
+        },
+        "animationPath": {
+          "description": "add_montage_slot/add_blend_sample/add_aim_offset_sample: animation sequence asset path.",
+          "type": "string"
+        },
         "artifacts": {
           "items": {
             "type": "string"
           },
           "type": "array"
         },
+        "assetLodIndex": {
+          "description": "bind_cloth_to_skeletal_mesh: cloth asset LOD index.",
+          "type": "number"
+        },
         "assetPath": {
           "description": "Existing asset to modify (e.g. the montage for add_montage_section).",
+          "type": "string"
+        },
+        "assets": {
+          "description": "setup_retargeting: source animation sequence paths to duplicate onto targetSkeleton ('retargetAssets' accepted as fallback).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "assetType": {
+          "description": "create_animation_asset: 'sequence' (default) or 'montage'.",
           "type": "string"
         },
         "assignToMesh": {
           "description": "Assign the created physics asset to the skeletal mesh.",
           "type": "boolean"
         },
+        "attachBoneName": {
+          "description": "create_socket/configure_socket: bone the socket attaches to ('boneName' accepted as fallback).",
+          "type": "string"
+        },
+        "automaticRule": {
+          "description": "set_transition_rules: auto-trigger when the source sequence player finishes (default false).",
+          "type": "boolean"
+        },
+        "axis": {
+          "description": "mirror_weights: mirror axis X/Y/Z (default X); set_axis_settings: Horizontal/Vertical (default Horizontal).",
+          "type": "string"
+        },
+        "axisMax": {
+          "description": "create_blend_space_1d: axis maximum (default 600).",
+          "type": "number"
+        },
+        "axisMin": {
+          "description": "create_blend_space_1d: axis minimum (default 0).",
+          "type": "number"
+        },
         "axisName": {
           "type": "string"
+        },
+        "basePoseAnimation": {
+          "description": "set_additive_settings: base pose animation asset path.",
+          "type": "string"
+        },
+        "basePoseFrame": {
+          "description": "set_additive_settings: base pose frame index.",
+          "type": "number"
+        },
+        "basePoseType": {
+          "description": "set_additive_settings: base pose type (default RefPose).",
+          "type": "string"
+        },
+        "bidirectional": {
+          "description": "set_transition_rules: also allow the reverse transition (default false).",
+          "type": "boolean"
         },
         "blendOption": {
           "description": "set_blend_in/set_blend_out: Linear, Cubic, or Sinusoidal.",
           "type": "string"
         },
+        "blendParameters": {
+          "description": "create_blend_tree: blend axis configs ({name, min, max}).",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
         "blendTime": {
           "description": "set_blend_in/set_blend_out: blend duration in seconds ('time' accepted as alias).",
           "type": "number"
         },
+        "blendType": {
+          "description": "add_blend_node: node type, e.g. TwoWayBlend (default).",
+          "type": "string"
+        },
         "blueprintPath": {
           "description": "Anim Blueprint asset path (bind_anim_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions).",
+          "type": "string"
+        },
+        "bodyA": {
+          "description": "add_physics_constraint/configure_constraint_limits: first body's bone name.",
+          "type": "string"
+        },
+        "bodyB": {
+          "description": "add_physics_constraint/configure_constraint_limits: second body's bone name.",
+          "type": "string"
+        },
+        "bodyType": {
+          "description": "add_physics_body: Sphere, Box, or Capsule/Sphyl (default Capsule).",
           "type": "string"
         },
         "boneName": {
           "description": "Name of the bone.",
           "type": "string"
         },
+        "boneTracks": {
+          "description": "create_procedural_anim: per-bone keyframe tracks ({boneName, frames:[{frame, location, rotation}]}).",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "cacheName": {
+          "description": "add_cached_pose: cached-pose node name.",
+          "type": "string"
+        },
+        "center": {
+          "description": "add_physics_body: primitive center offset (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "children": {
+          "description": "create_blend_tree: child samples ({animationPath, blendWeight}).",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "clothAssetName": {
+          "description": "bind_cloth_to_skeletal_mesh: cloth asset to bind (omit to list available cloth assets).",
+          "type": "string"
+        },
+        "collisionEnabled": {
+          "description": "configure_physics_body: enable query+physics collision (default true).",
+          "type": "boolean"
+        },
+        "compileReferencers": {
+          "description": "force_rebuild_blend_space: recompile AnimBlueprints referencing this blend space (default true).",
+          "type": "boolean"
+        },
+        "constraintName": {
+          "description": "add_physics_constraint: joint name for the new constraint.",
+          "type": "string"
+        },
+        "createIfMissing": {
+          "description": "set_curve_key: create the curve if it doesn't exist yet (default true).",
+          "type": "boolean"
+        },
+        "crossfadeDuration": {
+          "description": "add_transition/set_transition_rules: crossfade time in seconds.",
+          "type": "number"
+        },
         "curveName": {
+          "type": "string"
+        },
+        "deltas": {
+          "description": "create_morph_target/set_morph_target_deltas: vertex deltas ({vertexIndex, positionDelta, tangentDelta}).",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "depth": {
+          "description": "add_physics_body: box depth.",
+          "type": "number"
+        },
+        "dimensions": {
+          "description": "create_blend_space: 1 or 2 (default 1).",
+          "type": "number"
+        },
+        "directory": {
+          "description": "Alias of savePath for create_pose_library.",
           "type": "string"
         },
         "dragCoefficient": {
           "type": "number"
         },
+        "enableRootMotion": {
+          "description": "set_root_motion_settings: enable root motion (default true).",
+          "type": "boolean"
+        },
+        "endFrame": {
+          "description": "add_notify_state: end frame.",
+          "type": "number"
+        },
+        "engine": {
+          "description": "configure_vehicle: engine settings (maxRPM, maxTorque, gears).",
+          "type": "object"
+        },
+        "forceRootLock": {
+          "description": "set_root_motion_settings: force root lock even when not additive (default false).",
+          "type": "boolean"
+        },
         "frame": {
           "type": "number"
+        },
+        "frameRate": {
+          "description": "create_animation_sequence/set_sequence_length/create_procedural_anim: sample rate in fps (default 30).",
+          "type": "number"
+        },
+        "fromSection": {
+          "description": "link_sections: section to link from.",
+          "type": "string"
+        },
+        "fromState": {
+          "description": "add_transition/set_transition_rules: source state name.",
+          "type": "string"
         },
         "functionName": {
           "description": "bind_anim_notify: BlueprintCallable function to call when the notify fires.",
           "type": "string"
+        },
+        "gridDivisions": {
+          "description": "set_axis_settings: axis grid divisions.",
+          "type": "number"
+        },
+        "gridX": {
+          "description": "create_blend_space: axis-0 grid divisions (default 3).",
+          "type": "number"
+        },
+        "gridY": {
+          "description": "create_blend_space: axis-1 grid divisions when dimensions=2 (default 3).",
+          "type": "number"
+        },
+        "groupName": {
+          "description": "add_slot_node: slot group name (default DefaultGroup).",
+          "type": "string"
+        },
+        "height": {
+          "description": "add_physics_body: box height.",
+          "type": "number"
+        },
+        "horizontalAxisName": {
+          "description": "create_blend_space_2d: horizontal axis name (default Direction).",
+          "type": "string"
+        },
+        "horizontalMax": {
+          "description": "create_blend_space_2d: horizontal axis maximum (default 180).",
+          "type": "number"
+        },
+        "horizontalMin": {
+          "description": "create_blend_space_2d: horizontal axis minimum (default -180).",
+          "type": "number"
         },
         "interpolationType": {
           "type": "string"
         },
         "length": {
           "description": "Length in seconds (create_animation_sequence, set_sequence_length, create_montage).",
+          "type": "number"
+        },
+        "limits": {
+          "description": "add_physics_constraint/configure_constraint_limits: angular limits (swing1LimitAngle, swing2LimitAngle, twistLimitAngle, swing1Motion, swing2Motion, twistMotion); falls back to the flat swing/twist fields below when omitted.",
+          "type": "object"
+        },
+        "linearDamping": {
+          "description": "configure_physics_body: linear damping.",
           "type": "number"
         },
         "location": {
@@ -170,25 +400,121 @@
           },
           "type": "object"
         },
+        "lodIndex": {
+          "description": "set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0).",
+          "type": "number"
+        },
         "machineName": {
           "description": "Alias of stateMachineName.",
+          "type": "string"
+        },
+        "markerName": {
+          "description": "add_sync_marker: marker name.",
           "type": "string"
         },
         "mass": {
           "type": "number"
         },
+        "maxValue": {
+          "description": "set_axis_settings: axis maximum.",
+          "type": "number"
+        },
+        "maxX": {
+          "description": "create_blend_space: axis-0 maximum (default 1).",
+          "type": "number"
+        },
+        "maxY": {
+          "description": "create_blend_space: axis-1 maximum when dimensions=2 (default 1).",
+          "type": "number"
+        },
+        "meshLodIndex": {
+          "description": "bind_cloth_to_skeletal_mesh: skeletal mesh LOD index.",
+          "type": "number"
+        },
+        "minValue": {
+          "description": "set_axis_settings: axis minimum.",
+          "type": "number"
+        },
+        "minX": {
+          "description": "create_blend_space: axis-0 minimum (default 0).",
+          "type": "number"
+        },
+        "minY": {
+          "description": "create_blend_space: axis-1 minimum when dimensions=2 (default 0).",
+          "type": "number"
+        },
+        "modularRig": {
+          "description": "create_control_rig: create as a modular rig (default false).",
+          "type": "boolean"
+        },
+        "montagePath": {
+          "description": "play_anim_montage: montage to play; add_montage_section: montage to edit ('assetPath'/'name' accepted as fallback).",
+          "type": "string"
+        },
+        "morphTargetName": {
+          "description": "create_morph_target/set_morph_target_deltas: morph target name.",
+          "type": "string"
+        },
+        "morphTargetPath": {
+          "description": "import_morph_targets: source FBX file path.",
+          "type": "string"
+        },
         "name": {
           "description": "Name identifier.",
+          "type": "string"
+        },
+        "newBoneName": {
+          "description": "rename_bone: new name for the (virtual) bone.",
+          "type": "string"
+        },
+        "newParentBone": {
+          "description": "Alias of parentBone for set_bone_parent.",
+          "type": "string"
+        },
+        "nodeName": {
+          "description": "add_blend_node/set_anim_graph_node_value: AnimGraph node name/comment.",
+          "type": "string"
+        },
+        "notifyClass": {
+          "description": "add_notify/add_notify_state/add_montage_notify: AnimNotify(State) class name (e.g. PlaySound; 'AnimNotify_' prefix optional).",
           "type": "string"
         },
         "notifyName": {
           "type": "string"
         },
+        "numFrames": {
+          "description": "create_animation_sequence/set_sequence_length/create_procedural_anim: explicit frame count (overrides length*frameRate).",
+          "type": "number"
+        },
+        "outputPath": {
+          "description": "create_physics_asset: output asset path (default: <mesh>_PhysicsAsset next to the mesh).",
+          "type": "string"
+        },
+        "overwrite": {
+          "description": "setup_retargeting: overwrite an existing retarget destination asset (default false).",
+          "type": "boolean"
+        },
+        "parentBone": {
+          "description": "add_bone: parent bone name; set_bone_parent: new parent bone (empty unparents to root; 'parentBoneName'/'newParentBone' accepted as fallback).",
+          "type": "string"
+        },
+        "parentBoneName": {
+          "description": "Alias of parentBone for add_bone.",
+          "type": "string"
+        },
         "parentClass": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Legacy alias of savePath (create_procedural_anim, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_anim_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton).",
           "type": "string"
         },
         "physicsAssetName": {
           "description": "Physics asset name for setup_physics_simulation.",
+          "type": "string"
+        },
+        "physicsAssetPath": {
+          "description": "Existing physics asset path (list_physics_bodies, add_physics_body, configure_physics_body, add_physics_constraint, configure_constraint_limits).",
           "type": "string"
         },
         "playRate": {
@@ -199,6 +525,83 @@
         },
         "positionY": {
           "type": "number"
+        },
+        "priorityOrder": {
+          "description": "set_transition_rules: transition priority order.",
+          "type": "number"
+        },
+        "profileName": {
+          "description": "set_vertex_weights/copy_weights/mirror_weights: skin weight profile name.",
+          "type": "string"
+        },
+        "propertyName": {
+          "description": "set_anim_graph_node_value: node property to set (dot-notation for nested structs).",
+          "type": "string"
+        },
+        "radius": {
+          "description": "add_physics_body: sphere/capsule radius.",
+          "type": "number"
+        },
+        "rebuildBlendParameters": {
+          "description": "force_rebuild_blend_space: also revalidate BlendParameters (default false).",
+          "type": "boolean"
+        },
+        "relativeLocation": {
+          "description": "create_socket/configure_socket: socket location relative to its bone (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "relativeRotation": {
+          "description": "create_socket/configure_socket: socket rotation relative to its bone (pitch, yaw, roll).",
+          "properties": {
+            "pitch": {
+              "type": "number"
+            },
+            "roll": {
+              "type": "number"
+            },
+            "yaw": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "relativeScale": {
+          "description": "create_socket/configure_socket: socket scale relative to its bone (x, y, z; default 1,1,1).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "removeChildren": {
+          "description": "remove_bone: also remove child bones (default false).",
+          "type": "boolean"
+        },
+        "rootBoneName": {
+          "description": "create_skeleton: name for the initial root bone (default 'Root').",
+          "type": "string"
+        },
+        "rootMotionRootLock": {
+          "description": "set_root_motion_settings: root lock mode (default RefPose).",
+          "type": "string"
         },
         "rotation": {
           "description": "3D rotation (pitch, yaw, roll).",
@@ -214,6 +617,13 @@
             }
           },
           "type": "object"
+        },
+        "sampleValue": {
+          "description": "add_blend_sample: sample coordinate — a number for 1D blend spaces or {x, y} for 2D."
+        },
+        "save": {
+          "description": "Persist the created/modified asset to disk (default true; most authoring actions).",
+          "type": "boolean"
         },
         "savePath": {
           "description": "Path to save the asset.",
@@ -234,8 +644,16 @@
           },
           "type": "object"
         },
+        "sectionIndex": {
+          "description": "bind_cloth_to_skeletal_mesh: mesh section index to bind.",
+          "type": "number"
+        },
         "sectionName": {
           "type": "string"
+        },
+        "simulatePhysics": {
+          "description": "configure_physics_body: enable physics simulation on this body (default true).",
+          "type": "boolean"
         },
         "skeletalMeshPath": {
           "description": "Skeletal mesh path.",
@@ -248,13 +666,37 @@
         "slotName": {
           "type": "string"
         },
+        "socketName": {
+          "description": "create_socket/configure_socket: socket name.",
+          "type": "string"
+        },
+        "sourceBoneName": {
+          "description": "create_virtual_bone: source bone.",
+          "type": "string"
+        },
+        "sourceChain": {
+          "description": "set_retarget_chain_mapping: source IK Rig chain name.",
+          "type": "string"
+        },
         "sourceIKRigPath": {
           "description": "Source IK Rig asset path for create_ik_retargeter.",
+          "type": "string"
+        },
+        "sourceMeshPath": {
+          "description": "copy_weights: source skeletal mesh path.",
+          "type": "string"
+        },
+        "sourcePath": {
+          "description": "Alias of morphTargetPath for import_morph_targets.",
           "type": "string"
         },
         "sourceSkeleton": {
           "description": "Asset path (e.g., /Game/Path/Asset).",
           "type": "string"
+        },
+        "startFrame": {
+          "description": "add_notify_state: start frame.",
+          "type": "number"
         },
         "startTime": {
           "description": "Section start time in seconds (alias of 'time').",
@@ -267,6 +709,33 @@
         "stateName": {
           "type": "string"
         },
+        "states": {
+          "description": "create_state_machine: states to add ({name}).",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "suffix": {
+          "description": "setup_retargeting: filename suffix for duplicated assets (default '_Retargeted').",
+          "type": "string"
+        },
+        "swing1LimitAngle": {
+          "description": "configure_constraint_limits: swing1 angle when 'limits' is omitted.",
+          "type": "number"
+        },
+        "swing2LimitAngle": {
+          "description": "configure_constraint_limits: swing2 angle when 'limits' is omitted.",
+          "type": "number"
+        },
+        "targetBoneName": {
+          "description": "create_virtual_bone: target bone.",
+          "type": "string"
+        },
+        "targetChain": {
+          "description": "set_retarget_chain_mapping: target IK Rig chain name.",
+          "type": "string"
+        },
         "targetClass": {
           "description": "bind_anim_notify: class to cast the owner to (e.g. /Game/.../BP_CPP_Character or a /Script class).",
           "type": "string"
@@ -275,18 +744,91 @@
           "description": "Target IK Rig asset path for create_ik_retargeter.",
           "type": "string"
         },
+        "targetMeshPath": {
+          "description": "copy_weights: target skeletal mesh path.",
+          "type": "string"
+        },
         "targetSkeleton": {
           "description": "Asset path (e.g., /Game/Path/Asset).",
           "type": "string"
         },
+        "targetWeightInterpolationSpeed": {
+          "description": "set_interpolation_settings: blend weight interpolation speed per second (default 5).",
+          "type": "number"
+        },
         "time": {
+          "type": "number"
+        },
+        "toSection": {
+          "description": "link_sections: section to link to.",
+          "type": "string"
+        },
+        "toState": {
+          "description": "add_transition/set_transition_rules: target state name.",
+          "type": "string"
+        },
+        "trackIndex": {
+          "description": "add_notify/add_notify_state/add_montage_notify: notify track index (default 0).",
+          "type": "number"
+        },
+        "transitions": {
+          "description": "create_state_machine: transitions to add ({sourceState, targetState, crossfadeDuration}).",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "transmission": {
+          "description": "configure_vehicle: transmission settings (finalDrive/finalDriveRatio, gearRatios array).",
+          "type": "object"
+        },
+        "treeName": {
+          "description": "create_blend_tree: name for the new blend tree node.",
+          "type": "string"
+        },
+        "twistLimitAngle": {
+          "description": "configure_constraint_limits: twist angle when 'limits' is omitted.",
           "type": "number"
         },
         "value": {
           "description": "Generic value (any type)."
         },
+        "vehicleName": {
+          "description": "Legacy alias of actorName for configure_vehicle.",
+          "type": "string"
+        },
         "vehicleType": {
           "type": "string"
+        },
+        "verticalAxisName": {
+          "description": "create_blend_space_2d: vertical axis name (default Speed).",
+          "type": "string"
+        },
+        "verticalMax": {
+          "description": "create_blend_space_2d: vertical axis maximum (default 600).",
+          "type": "number"
+        },
+        "verticalMin": {
+          "description": "create_blend_space_2d: vertical axis minimum (default 0).",
+          "type": "number"
+        },
+        "weights": {
+          "description": "set_vertex_weights: per-vertex influences ({vertexIndex, influences:[{boneIndex, weight}]}).",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "wheels": {
+          "description": "configure_vehicle: per-wheel configs ({boneName, offset, radius, width, friction}).",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "width": {
+          "description": "add_physics_body: box width.",
+          "type": "number"
         }
       },
       "required": [
@@ -374,6 +916,25 @@
         "alignToNormal": {
           "type": "boolean"
         },
+        "alignToSpline": {
+          "description": "scatter_meshes_along_spline: orient meshes to the spline tangent.",
+          "type": "boolean"
+        },
+        "arriveTangent": {
+          "description": "set_spline_point_tangents: incoming tangent (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
         "assetPaths": {
           "items": {
             "type": "string"
@@ -386,7 +947,27 @@
           },
           "type": "array"
         },
+        "bClosedLoop": {
+          "description": "create_spline_actor: close the spline into a loop.",
+          "type": "boolean"
+        },
+        "blueprintPath": {
+          "description": "create_spline_mesh_component: Blueprint asset path.",
+          "type": "string"
+        },
         "bounds": {},
+        "brushFalloff": {
+          "description": "sculpt_landscape: brush falloff (alias: falloff).",
+          "type": "number"
+        },
+        "brushRadius": {
+          "description": "sculpt_landscape: brush radius (alias: radius).",
+          "type": "number"
+        },
+        "compensationValue": {
+          "description": "set_exposure: auto-exposure bias/compensation.",
+          "type": "number"
+        },
         "componentCount": {
           "description": "2D vector.",
           "properties": {
@@ -399,14 +980,34 @@
           },
           "type": "object"
         },
+        "componentName": {
+          "description": "Spline actions: name of the spline/spline-mesh component.",
+          "type": "string"
+        },
+        "componentsX": {
+          "description": "create_landscape: number of components along X (alternative to componentCount).",
+          "type": "integer"
+        },
+        "componentsY": {
+          "description": "create_landscape: number of components along Y (alternative to componentCount).",
+          "type": "integer"
+        },
         "count": {
           "type": "number"
+        },
+        "cubemapPath": {
+          "description": "spawn_sky_light/create_sky_light: cubemap asset path when sourceType is SpecifiedCubemap.",
+          "type": "string"
         },
         "cullDistance": {
           "type": "number"
         },
         "density": {
           "type": "number"
+        },
+        "enabled": {
+          "description": "set_ambient_occlusion: enable/disable ambient occlusion.",
+          "type": "boolean"
         },
         "falloff": {
           "type": "number"
@@ -427,6 +1028,15 @@
           },
           "type": "array"
         },
+        "forwardAxis": {
+          "description": "create_spline_mesh_component/configure_spline_mesh_axis: spline mesh forward axis.",
+          "enum": [
+            "X",
+            "Y",
+            "Z"
+          ],
+          "type": "string"
+        },
         "heightData": {
           "items": {
             "type": "number"
@@ -439,13 +1049,58 @@
         "hour": {
           "type": "number"
         },
+        "index": {
+          "description": "add_spline_point: insertion index (-1/omitted appends at the end).",
+          "type": "integer"
+        },
+        "initialPoints": {
+          "description": "create_spline_actor: alias of 'points'.",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
         "intensity": {
           "type": "number"
         },
         "landscapeName": {
           "type": "string"
         },
+        "landscapePath": {
+          "description": "sculpt_landscape/modify_heightmap/paint_landscape_layer/set_landscape_material: landscape asset/actor path (alternative to landscapeName).",
+          "type": "string"
+        },
         "layerName": {
+          "type": "string"
+        },
+        "leaveTangent": {
+          "description": "set_spline_point_tangents: outgoing tangent (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "lightClass": {
+          "description": "spawn_light/create_light/create_dynamic_light: light actor class (e.g. PointLight); alias of lightType/type.",
+          "type": "string"
+        },
+        "lightType": {
+          "description": "spawn_light/create_light/create_dynamic_light: light type shorthand.",
+          "enum": [
+            "point",
+            "directional",
+            "spot",
+            "rect",
+            "sky"
+          ],
           "type": "string"
         },
         "location": {
@@ -473,9 +1128,17 @@
           "description": "Material asset path.",
           "type": "string"
         },
+        "materialIndex": {
+          "description": "set_spline_mesh_material: material slot index.",
+          "type": "integer"
+        },
         "materialPath": {
           "description": "Material asset path.",
           "type": "string"
+        },
+        "maxBrightness": {
+          "description": "set_exposure: auto-exposure maximum brightness.",
+          "type": "number"
         },
         "maxScale": {
           "type": "number"
@@ -489,6 +1152,21 @@
         "meshPath": {
           "description": "Mesh asset path.",
           "type": "string"
+        },
+        "method": {
+          "description": "setup_global_illumination: global illumination method.",
+          "enum": [
+            "LumenGI",
+            "ScreenSpace",
+            "None",
+            "RayTraced",
+            "Lightmass"
+          ],
+          "type": "string"
+        },
+        "minBrightness": {
+          "description": "set_exposure: auto-exposure minimum brightness.",
+          "type": "number"
         },
         "minScale": {
           "type": "number"
@@ -512,8 +1190,70 @@
         "numLODs": {
           "type": "number"
         },
+        "operation": {
+          "description": "modify_heightmap: how to apply heightData/strength (default: set). 'add' is accepted as an alias of 'raise'.",
+          "enum": [
+            "raise",
+            "lower",
+            "flatten",
+            "set"
+          ],
+          "type": "string"
+        },
         "path": {
           "description": "Path to a directory.",
+          "type": "string"
+        },
+        "pointIndex": {
+          "description": "remove_spline_point/set_spline_point_position/set_spline_point_tangents/set_spline_point_rotation/set_spline_point_scale/set_spline_type: index of the point to modify.",
+          "type": "integer"
+        },
+        "pointRotation": {
+          "description": "set_spline_point_rotation: point rotation (pitch, yaw, roll).",
+          "properties": {
+            "pitch": {
+              "type": "number"
+            },
+            "roll": {
+              "type": "number"
+            },
+            "yaw": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "points": {
+          "description": "create_spline_actor: initial points, each with a 'location' (x, y, z).",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "pointScale": {
+          "description": "set_spline_point_scale: point scale (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "pointType": {
+          "description": "add_spline_point: spline point interpolation type.",
+          "enum": [
+            "Curve",
+            "Linear",
+            "Constant",
+            "CurveClamped",
+            "CurveCustomTangent"
+          ],
           "type": "string"
         },
         "position": {
@@ -531,6 +1271,13 @@
           },
           "type": "object"
         },
+        "properties": {
+          "description": "spawn_light: light component overrides (intensity, color, castShadows, useAsAtmosphereSunLight, attenuationRadius, innerConeAngle, outerConeAngle, sourceWidth, sourceHeight)."
+        },
+        "quadsPerComponent": {
+          "description": "create_landscape: quads per component (alias: quadsPerSection/sectionSize).",
+          "type": "integer"
+        },
         "quadsPerSection": {
           "type": "number"
         },
@@ -540,7 +1287,49 @@
         "radius": {
           "type": "number"
         },
+        "randomizeRotation": {
+          "description": "scatter_meshes_along_spline/configure_mesh_randomization: randomize instance yaw.",
+          "type": "boolean"
+        },
+        "randomizeScale": {
+          "description": "scatter_meshes_along_spline/configure_mesh_randomization: randomize instance scale between minScale/maxScale.",
+          "type": "boolean"
+        },
+        "randomOffsetRange": {
+          "description": "scatter_meshes_along_spline/configure_mesh_spacing: max random offset distance.",
+          "type": "number"
+        },
         "randomYaw": {
+          "type": "boolean"
+        },
+        "rayTracedShadows": {
+          "description": "configure_shadows: alias of virtualShadowMaps.",
+          "type": "boolean"
+        },
+        "recapture": {
+          "description": "spawn_sky_light/create_sky_light/ensure_single_sky_light: recapture the scene into the sky light.",
+          "type": "boolean"
+        },
+        "region": {
+          "description": "modify_heightmap/paint_landscape_layer: sub-region to affect (minX, minY, maxX, maxY); defaults to top-level minX/minY/maxX/maxY.",
+          "properties": {
+            "maxX": {
+              "type": "number"
+            },
+            "maxY": {
+              "type": "number"
+            },
+            "minX": {
+              "type": "number"
+            },
+            "minY": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "removeAll": {
+          "description": "remove_foliage: remove all foliage instances of every type.",
           "type": "boolean"
         },
         "rotation": {
@@ -558,6 +1347,14 @@
           },
           "type": "object"
         },
+        "rotationRange": {
+          "description": "scatter_meshes_along_spline/configure_mesh_randomization: max random yaw offset in degrees.",
+          "type": "number"
+        },
+        "save": {
+          "description": "create_spline_mesh_component: save the Blueprint after the operation.",
+          "type": "boolean"
+        },
         "sectionSize": {
           "type": "number"
         },
@@ -567,14 +1364,52 @@
         "seed": {
           "type": "number"
         },
+        "size": {
+          "description": "create_lightmass_volume: volume size (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
         "sizeX": {
           "type": "number"
         },
         "sizeY": {
           "type": "number"
         },
+        "skipFlush": {
+          "description": "modify_heightmap/sculpt_landscape/paint_landscape_layer: skip the GPU flush for batched edits.",
+          "type": "boolean"
+        },
+        "sourceType": {
+          "description": "spawn_sky_light/create_sky_light: sky light capture source.",
+          "enum": [
+            "SpecifiedCubemap",
+            "CapturedScene"
+          ],
+          "type": "string"
+        },
         "spacing": {
           "type": "number"
+        },
+        "splineType": {
+          "description": "create_spline_actor: default point type. set_spline_type: type to apply (all points, or just pointIndex if given).",
+          "enum": [
+            "Curve",
+            "Linear",
+            "Constant",
+            "CurveClamped",
+            "CurveCustomTangent"
+          ],
+          "type": "string"
         },
         "staticMesh": {
           "description": "Mesh asset path.",
@@ -595,17 +1430,46 @@
         "tool": {
           "type": "string"
         },
+        "toolMode": {
+          "description": "sculpt_landscape: sculpt tool (default: Raise). Alias of 'tool'.",
+          "enum": [
+            "Raise",
+            "Lower",
+            "Flatten"
+          ],
+          "type": "string"
+        },
         "transforms": {
           "items": {
             "type": "object"
           },
           "type": "array"
         },
+        "type": {
+          "description": "spawn_light/create_light/create_dynamic_light: alias of lightType.",
+          "type": "string"
+        },
         "updateNormals": {
+          "type": "boolean"
+        },
+        "useRandomOffset": {
+          "description": "scatter_meshes_along_spline/configure_mesh_spacing: randomize mesh spacing along the spline.",
+          "type": "boolean"
+        },
+        "viewDistance": {
+          "description": "setup_volumetric_fog: volumetric fog view distance.",
+          "type": "number"
+        },
+        "virtualShadowMaps": {
+          "description": "configure_shadows: enable Virtual Shadow Maps.",
           "type": "boolean"
         },
         "volumeName": {
           "type": "string"
+        },
+        "width": {
+          "description": "create_road_spline/create_river_spline/create_fence_spline/create_wall_spline/create_cable_spline/create_pipe_spline: template width.",
+          "type": "number"
         }
       },
       "required": [
@@ -759,6 +1623,10 @@
             }
           },
           "type": "object"
+        },
+        "matchType": {
+          "description": "find_by_tag/find_actors_by_tag: match mode, 'exact' (default) or 'contains'.",
+          "type": "string"
         },
         "meshPath": {
           "description": "Mesh asset path.",
@@ -1291,6 +2159,13 @@
           ],
           "type": "string"
         },
+        "activityTags": {
+          "description": "configure_slot_behavior: gameplay tags describing slot activity.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "actorName": {
           "description": "Name of the actor.",
           "type": "string"
@@ -1323,12 +2198,20 @@
           "description": "Asset path (e.g., /Game/Path/Asset).",
           "type": "string"
         },
+        "baseObjectClass": {
+          "description": "add_blackboard_key: base class for Object/Class key types (default 'Actor').",
+          "type": "string"
+        },
         "bCreateBoxObstacle": {
           "description": "Add box obstacle during nav generation.",
           "type": "boolean"
         },
         "behaviorTreePath": {
           "description": "Path to behavior tree asset.",
+          "type": "string"
+        },
+        "behaviorType": {
+          "description": "configure_slot_behavior: behavior definition type for the slot.",
           "type": "string"
         },
         "blackboardPath": {
@@ -1703,6 +2586,10 @@
           },
           "type": "object"
         },
+        "parentConfigPath": {
+          "description": "configure_mass_entity: optional parent config to inherit from.",
+          "type": "string"
+        },
         "parentNodeId": {
           "description": "Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it.",
           "type": "string"
@@ -1747,6 +2634,14 @@
         },
         "savePath": {
           "description": "Path to save the asset.",
+          "type": "string"
+        },
+        "schemaType": {
+          "description": "create_state_tree: schema type (default 'Component').",
+          "type": "string"
+        },
+        "selectionBehavior": {
+          "description": "configure_state_tree_task: state selection behavior.",
           "type": "string"
         },
         "serviceType": {
@@ -1844,6 +2739,10 @@
         },
         "subnodeType": {
           "description": "Behavior Tree graph subnode type.",
+          "type": "string"
+        },
+        "targetActor": {
+          "description": "set_focus: alias for focusActorName (checked as fallback).",
           "type": "string"
         },
         "taskType": {
@@ -2103,6 +3002,22 @@
           },
           "type": "array"
         },
+        "algorithm": {
+          "description": "create_normal_from_height: Sobel (default) or finite-difference gradient method.",
+          "type": "string"
+        },
+        "alphaTexture": {
+          "description": "channel_pack: source texture for the output alpha channel.",
+          "type": "string"
+        },
+        "amount": {
+          "description": "desaturate: blend amount 0-1 (default 1). sharpen: unsharp-mask amount 0-5 (default 1).",
+          "type": "number"
+        },
+        "angle": {
+          "description": "create_gradient_texture: Linear gradient direction in degrees (default 0).",
+          "type": "number"
+        },
         "assetPath": {
           "description": "Asset path (e.g., /Game/Path/Asset).",
           "type": "string"
@@ -2113,9 +3028,56 @@
           },
           "type": "array"
         },
+        "assets": {
+          "description": "generate_lods: alias for assetPaths.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "b": {
           "description": "set_node_value: blue/Z channel.",
           "type": "number"
+        },
+        "baseTexture": {
+          "description": "combine_textures: base texture path.",
+          "type": "string"
+        },
+        "bias": {
+          "description": "create_ao_from_mesh: AO bias (default 0.01).",
+          "type": "number"
+        },
+        "blendMode": {
+          "description": "create_material/set_blend_mode: Opaque|Masked|Translucent|Additive|Modulate|AlphaComposite|AlphaHoldout. combine_textures: Normal|Multiply|Screen|Overlay|Add.",
+          "type": "string"
+        },
+        "blendTexture": {
+          "description": "combine_textures: alias for overlayTexture.",
+          "type": "string"
+        },
+        "blueTexture": {
+          "description": "channel_pack: source texture for the output blue channel.",
+          "type": "string"
+        },
+        "brickRatio": {
+          "description": "create_pattern_texture: Brick length-to-height ratio (default 2).",
+          "type": "number"
+        },
+        "centerX": {
+          "description": "create_gradient_texture: Radial/Angular center U 0-1 (default 0.5).",
+          "type": "number"
+        },
+        "centerY": {
+          "description": "create_gradient_texture: Radial/Angular center V 0-1 (default 0.5).",
+          "type": "number"
+        },
+        "channel": {
+          "description": "invert: All (default)|Red|Green|Blue|Alpha. channel_extract: R (default)|G|B|A.",
+          "type": "string"
+        },
+        "channelMode": {
+          "description": "create_normal_from_height: height source channel — luminance (default)|red|green|blue|alpha|average.",
+          "type": "string"
         },
         "checkoutFiles": {
           "type": "boolean"
@@ -2130,7 +3092,15 @@
           },
           "type": "array"
         },
+        "code": {
+          "description": "add_custom_expression/update_custom_expression: HLSL source code body.",
+          "type": "string"
+        },
         "comment": {
+          "type": "string"
+        },
+        "compressionSettings": {
+          "description": "set_compression_settings: TC_Default|TC_Normalmap|TC_Masks|TC_Grayscale|TC_Displacementmap|TC_VectorDisplacementmap|TC_HDR|TC_EditorIcon|TC_Alpha|TC_DistanceFieldFont|TC_HDR_Compressed|TC_BC7.",
           "type": "string"
         },
         "constA": {
@@ -2141,17 +3111,37 @@
           "description": "set_node_value: ConstB default of an arithmetic node when input B is unconnected.",
           "type": "number"
         },
+        "content": {
+          "description": "import_data_table: alias for sourceText.",
+          "type": "string"
+        },
         "coordinateIndex": {
           "type": "number"
         },
+        "csv": {
+          "description": "import_data_table: alias for sourceText (CSV).",
+          "type": "string"
+        },
+        "dataTablePath": {
+          "description": "DataTable row CRUD: alias for assetPath (the DataTable).",
+          "type": "string"
+        },
         "defaultValue": {
           "description": "Generic value (any type)."
+        },
+        "depth": {
+          "description": "list: recursion depth filter relative to the queried path. get_node_connections: BFS hop limit (default 1; -1 unlimited).",
+          "type": "number"
         },
         "description": {
           "type": "string"
         },
         "destinationPath": {
           "description": "Destination path for move/copy.",
+          "type": "string"
+        },
+        "direction": {
+          "description": "get_node_connections: inputs|outputs|both (default both).",
           "type": "string"
         },
         "directory": {
@@ -2162,9 +3152,32 @@
           "description": "Path to a directory.",
           "type": "string"
         },
+        "downstream": {
+          "description": "get_node_connections: walk forward to all consumers (overrides direction/depth).",
+          "type": "boolean"
+        },
+        "enableNanite": {
+          "description": "nanite_rebuild_mesh: enable Nanite virtualized geometry (default true).",
+          "type": "boolean"
+        },
+        "endColor": {
+          "description": "create_gradient_texture: {r,g,b,a} end color (default white)."
+        },
+        "endNodeId": {
+          "description": "get_node_chain: node ID (or \"Main\") to trace the signal path to.",
+          "type": "string"
+        },
+        "endPin": {
+          "description": "get_node_chain: named material main-pin to trace to, e.g. 'BaseColor' (alternative to endNodeId).",
+          "type": "string"
+        },
         "eventName": {
           "description": "Name of the event.",
           "type": "string"
+        },
+        "exposeToLibrary": {
+          "description": "create_material_function: show in the Material Function Library picker (default true).",
+          "type": "boolean"
         },
         "expressionClass": {
           "type": "string"
@@ -2173,7 +3186,23 @@
           "description": "ID of the node.",
           "type": "string"
         },
+        "fallbackPercent": {
+          "description": "nanite_rebuild_mesh: Nanite fallback relative error percent 0-100 (default 0).",
+          "type": "number"
+        },
+        "filter": {
+          "description": "get_material_info: what to include — 'parameters'|'expressions'|'connections'|'all' (default all).",
+          "type": "string"
+        },
+        "filterMethod": {
+          "description": "resize_texture: nearest|bilinear (default)|bicubic|lanczos.",
+          "type": "string"
+        },
         "fixupRedirectors": {
+          "type": "boolean"
+        },
+        "flipY": {
+          "description": "create_normal_from_height: flip the green channel (DirectX vs OpenGL normal convention).",
           "type": "boolean"
         },
         "folderPath": {
@@ -2184,24 +3213,88 @@
           "description": "import_data_table: 'csv' or 'json' (inferred from sourceText if omitted).",
           "type": "string"
         },
+        "functionPath": {
+          "description": "use_material_function: material function asset path to call.",
+          "type": "string"
+        },
         "g": {
           "description": "set_node_value: green/Y channel.",
           "type": "number"
+        },
+        "gamma": {
+          "description": "adjust_levels: gamma correction (default 1).",
+          "type": "number"
+        },
+        "gradientType": {
+          "description": "create_gradient_texture: Linear (default)|Radial|Angular.",
+          "type": "string"
         },
         "graphName": {
           "description": "Name of the graph.",
           "type": "string"
         },
+        "greenTexture": {
+          "description": "channel_pack: source texture for the output green channel.",
+          "type": "string"
+        },
+        "group": {
+          "description": "add_scalar_parameter/add_vector_parameter/add_static_switch_parameter: UI group name.",
+          "type": "string"
+        },
+        "hardness": {
+          "description": "add_landscape_layer: layer info hardness 0-1 (default 0.5).",
+          "type": "number"
+        },
+        "hdr": {
+          "description": "create_noise_texture/create_gradient_texture: create a float/HDR texture (default false).",
+          "type": "boolean"
+        },
         "height": {
+          "type": "number"
+        },
+        "inBlack": {
+          "description": "adjust_levels: input black point 0-1 (default 0).",
           "type": "number"
         },
         "includeTransient": {
           "description": "get_asset_properties: also dump transient (non-serialized) properties (default false).",
           "type": "boolean"
         },
+        "inPlace": {
+          "description": "invert/desaturate/adjust_curves: modify the source texture instead of writing a new one (default true).",
+          "type": "boolean"
+        },
+        "input": {
+          "description": "adjust_curves: master curve input control points 0-1 (paired with output).",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "inputB": {
+          "description": "adjust_curves: blue-channel curve input control points.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "inputG": {
+          "description": "adjust_curves: green-channel curve input control points.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
         "inputName": {
           "description": "Name of the pin.",
           "type": "string"
+        },
+        "inputR": {
+          "description": "adjust_curves: red-channel curve input control points.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
         },
         "inputs": {
           "description": "add_custom_expression/update_custom_expression: named HLSL input pins, e.g. [{\"name\":\"UV\"}]. Each name becomes a connect_nodes inputName.",
@@ -2210,11 +3303,61 @@
           },
           "type": "array"
         },
+        "inputType": {
+          "description": "add_function_input/add_function_output: Float1|Float2|Float3|Float4|Texture2D|TextureCube|Bool|MaterialAttributes.",
+          "type": "string"
+        },
+        "invertAlpha": {
+          "description": "invert: also invert the alpha channel (default false).",
+          "type": "boolean"
+        },
+        "inWhite": {
+          "description": "adjust_levels: input white point 0-1 (default 1).",
+          "type": "number"
+        },
+        "json": {
+          "description": "import_data_table: alias for sourceText (JSON).",
+          "type": "string"
+        },
+        "lacunarity": {
+          "description": "create_noise_texture: FBM frequency growth per octave (default 2).",
+          "type": "number"
+        },
+        "landscapePath": {
+          "description": "generate_lods: landscape asset path (alternative to assetPath/assetPaths).",
+          "type": "string"
+        },
+        "layerName": {
+          "description": "add_landscape_layer: landscape layer name.",
+          "type": "string"
+        },
+        "layers": {
+          "description": "configure_layer_blend: layers to add, e.g. [{\"name\":\"Rock\",\"blendType\":\"...\"}].",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
         "limit": {
+          "type": "number"
+        },
+        "lineWidth": {
+          "description": "create_pattern_texture: Grid/Brick line thickness 0-1 (default 0.02).",
+          "type": "number"
+        },
+        "lodBias": {
+          "description": "set_lod_bias: additional texture LOD bias (default 0).",
           "type": "number"
         },
         "lodCount": {
           "type": "number"
+        },
+        "luminanceFactors": {
+          "description": "add_desaturation: optional {r,g,b} luminance weights (default 0.3/0.59/0.11)."
+        },
+        "materialDomain": {
+          "description": "create_material/set_material_domain: Surface|DeferredDecal|LightFunction|Volume|PostProcess|UI.",
+          "type": "string"
         },
         "materialPath": {
           "description": "Material asset path.",
@@ -2239,13 +3382,32 @@
           "description": "Name identifier.",
           "type": "string"
         },
+        "neverStream": {
+          "description": "set_streaming_priority: disable mip streaming for this texture (default false).",
+          "type": "boolean"
+        },
+        "newHeight": {
+          "description": "resize_texture: output height in pixels (default 512).",
+          "type": "number"
+        },
         "newName": {
           "description": "rename/duplicate/move: new asset name, resolved into the source asset's folder (alternative to destinationPath).",
           "type": "string"
         },
+        "newWidth": {
+          "description": "resize_texture: output width in pixels (default 512).",
+          "type": "number"
+        },
         "nodeId": {
           "description": "ID of the node.",
           "type": "string"
+        },
+        "nodeIds": {
+          "description": "delete_node: batch-delete multiple node IDs (alternative to nodeId).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "nodeName": {
           "description": "Name identifier.",
@@ -2260,8 +3422,84 @@
         "nodeType": {
           "type": "string"
         },
+        "noiseType": {
+          "description": "create_noise_texture: Perlin (default) — FBM noise type.",
+          "type": "string"
+        },
+        "noWeightBlend": {
+          "description": "add_landscape_layer: disable weight-blending for this layer (default false).",
+          "type": "boolean"
+        },
+        "numLODs": {
+          "description": "generate_lods: alias for lodCount.",
+          "type": "number"
+        },
+        "octaves": {
+          "description": "create_noise_texture: FBM octave count (default 4).",
+          "type": "number"
+        },
         "offset": {
           "type": "number"
+        },
+        "opacity": {
+          "description": "combine_textures: overlay blend opacity 0-1 (default 1).",
+          "type": "number"
+        },
+        "operation": {
+          "description": "add_math_node: Add|Subtract|Multiply|Divide|Lerp|Clamp|Power|Frac|OneMinus|Append.",
+          "type": "string"
+        },
+        "orphansOnly": {
+          "description": "get_connected_subgraph: return all nodes not connected to any output, ignoring nodeId.",
+          "type": "boolean"
+        },
+        "outBlack": {
+          "description": "adjust_levels: output black point 0-1 (default 0).",
+          "type": "number"
+        },
+        "output": {
+          "description": "adjust_curves: master curve output control points 0-1 (paired with input).",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "outputB": {
+          "description": "adjust_curves: blue-channel curve output control points.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "outputG": {
+          "description": "adjust_curves: green-channel curve output control points.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "outputPath": {
+          "description": "create_thumbnail/generate_report: file path (relative to project dir) to write output to. channel_extract: destination texture path.",
+          "type": "string"
+        },
+        "outputR": {
+          "description": "adjust_curves: red-channel curve output control points.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "outputType": {
+          "description": "add_custom_expression/update_custom_expression: Float1|Float2|Float3|Float4|MaterialAttributes (default Float1).",
+          "type": "string"
+        },
+        "outWhite": {
+          "description": "adjust_levels: output white point 0-1 (default 1).",
+          "type": "number"
+        },
+        "overlayTexture": {
+          "description": "combine_textures: overlay texture path (alias blendTexture).",
+          "type": "string"
         },
         "overwrite": {
           "description": "Overwrite if the asset/file already exists.",
@@ -2299,6 +3537,22 @@
           },
           "type": "array"
         },
+        "pattern": {
+          "description": "bulk_delete: substring filter applied to matching asset names when deleting by folderPath.",
+          "type": "string"
+        },
+        "patternType": {
+          "description": "create_pattern_texture: Checker (default)|Grid|Brick|Stripes|Dots.",
+          "type": "string"
+        },
+        "persistence": {
+          "description": "create_noise_texture: FBM amplitude falloff per octave (default 0.5).",
+          "type": "number"
+        },
+        "physicalMaterialPath": {
+          "description": "add_landscape_layer: optional physical material asset path.",
+          "type": "string"
+        },
         "pinName": {
           "description": "Name of the pin.",
           "type": "string"
@@ -2312,12 +3566,27 @@
         "prefix": {
           "type": "string"
         },
+        "preserveArea": {
+          "description": "nanite_rebuild_mesh: preserve surface area during Nanite fallback mesh reduction (default true).",
+          "type": "boolean"
+        },
+        "primaryColor": {
+          "description": "create_pattern_texture: {r,g,b,a} foreground color (default white)."
+        },
         "propertyName": {
           "description": "set_asset_property: name of the reflected UPROPERTY to write.",
           "type": "string"
         },
         "r": {
           "description": "set_node_value: red/X channel of a Constant2/3/4Vector or VectorParameter default.",
+          "type": "number"
+        },
+        "radius": {
+          "description": "create_gradient_texture: Radial falloff radius (default 0.5). blur: box-blur pixel radius 1-10 (default 2).",
+          "type": "number"
+        },
+        "rayDistance": {
+          "description": "create_ao_from_mesh: occlusion ray distance (default 100).",
           "type": "number"
         },
         "recursive": {
@@ -2330,10 +3599,22 @@
         "recursivePaths": {
           "type": "boolean"
         },
+        "redTexture": {
+          "description": "channel_pack: source texture for the output red channel.",
+          "type": "string"
+        },
         "reductionSettings": {
           "description": "generate_lods: FMeshReductionSettings overrides applied to every generated LOD — percentTriangles/percentVertices (0-1, replace the progressive 50%/25%/... defaults), maxDeviation, pixelError, weldingThreshold, hardAngleThreshold, baseLODModel, recalculateNormals."
         },
+        "renderTargetPath": {
+          "description": "create_render_target: full asset path (alternative to name+path).",
+          "type": "string"
+        },
         "replaceText": {
+          "type": "string"
+        },
+        "reportType": {
+          "description": "generate_report: report kind, e.g. 'Summary' (default).",
           "type": "string"
         },
         "rowData": {
@@ -2347,8 +3628,28 @@
           "description": "create_data_table (required): row struct deriving from FTableRowBase — full path ('/Script/Module.Struct' or '/Game/.../UserStruct') or bare struct name.",
           "type": "string"
         },
+        "rowStructPath": {
+          "description": "create_data_table: alias for rowStruct.",
+          "type": "string"
+        },
+        "sampleCount": {
+          "description": "create_ao_from_mesh: vertex samples per pixel (default 64).",
+          "type": "number"
+        },
+        "samplerType": {
+          "description": "add_texture_sample: Color|LinearColor|Normal|Masks|Alpha (default Color).",
+          "type": "string"
+        },
         "save": {
           "description": "Save the asset(s) after the operation.",
+          "type": "boolean"
+        },
+        "scale": {
+          "description": "create_noise_texture: noise frequency scale (default 1).",
+          "type": "number"
+        },
+        "seamless": {
+          "description": "create_noise_texture: tile seamlessly (default false).",
           "type": "boolean"
         },
         "searchActors": {
@@ -2366,6 +3667,17 @@
         "searchText": {
           "type": "string"
         },
+        "secondaryColor": {
+          "description": "create_pattern_texture: {r,g,b,a} background color (default black)."
+        },
+        "seed": {
+          "description": "create_noise_texture: noise seed (default 0).",
+          "type": "number"
+        },
+        "shadingModel": {
+          "description": "create_material/set_shading_model: Unlit|DefaultLit|Subsurface|SubsurfaceProfile|PreintegratedSkin|ClearCoat|Hair|Cloth|Eye|TwoSidedFoliage|ThinTranslucent.",
+          "type": "string"
+        },
         "showConfirmation": {
           "type": "boolean"
         },
@@ -2377,11 +3689,34 @@
           "description": "Source path for import/duplicate/rename/move (assetPath also accepted).",
           "type": "string"
         },
+        "sourcePin": {
+          "description": "connect_nodes: named output pin on the source node (e.g. an MF call output); defaults to output 0.",
+          "type": "string"
+        },
         "sourceText": {
           "description": "import_data_table: the CSV or JSON text to import (replaces all rows).",
           "type": "string"
         },
+        "sourceTexture": {
+          "description": "create_normal_from_height: source height-map texture path.",
+          "type": "string"
+        },
+        "startColor": {
+          "description": "create_gradient_texture: {r,g,b,a} start color (default black)."
+        },
+        "startNodeId": {
+          "description": "get_node_chain: node ID to trace the signal path from.",
+          "type": "string"
+        },
+        "strength": {
+          "description": "create_normal_from_height: normal map intensity (default 1).",
+          "type": "number"
+        },
         "suffix": {
+          "type": "string"
+        },
+        "tablePath": {
+          "description": "DataTable row CRUD: alias for assetPath (the DataTable).",
           "type": "string"
         },
         "tag": {
@@ -2398,15 +3733,63 @@
           "description": "ID of the target node.",
           "type": "string"
         },
+        "textureGroup": {
+          "description": "set_texture_group: e.g. World (default)|Character|Weapon|Vehicle|Cinematic|Effects|Skybox|UI|Lightmap|RenderTarget|Bokeh|Pixels2D.",
+          "type": "string"
+        },
         "texturePath": {
           "description": "Texture asset path.",
           "type": "string"
         },
+        "tileBorderSize": {
+          "description": "configure_virtual_texture: VT tile border size (default 4).",
+          "type": "number"
+        },
+        "tileSize": {
+          "description": "configure_virtual_texture: VT tile size (default 128).",
+          "type": "number"
+        },
+        "tilesX": {
+          "description": "create_pattern_texture: horizontal tile count (default 8).",
+          "type": "number"
+        },
+        "tilesY": {
+          "description": "create_pattern_texture: vertical tile count (default 8).",
+          "type": "number"
+        },
+        "trianglePercent": {
+          "description": "nanite_rebuild_mesh: Nanite fallback mesh triangle percent 0-100 (default 100).",
+          "type": "number"
+        },
+        "twoSided": {
+          "description": "create_material/set_two_sided: render both polygon faces.",
+          "type": "boolean"
+        },
         "type": {
           "type": "string"
         },
+        "upstream": {
+          "description": "get_node_connections: walk backward to all sources (overrides direction/depth).",
+          "type": "boolean"
+        },
+        "uTiling": {
+          "description": "add_texture_coordinate: horizontal tiling (default 1).",
+          "type": "number"
+        },
+        "uvChannel": {
+          "description": "create_ao_from_mesh: source UV channel index (default 0).",
+          "type": "number"
+        },
         "value": {
           "description": "Generic value (any type)."
+        },
+        "virtualTextureStreaming": {
+          "description": "configure_virtual_texture: enable VT streaming (default false).",
+          "type": "boolean"
+        },
+        "vTiling": {
+          "description": "add_texture_coordinate: vertical tiling (default 1).",
+          "type": "number"
         },
         "waitForShaders": {
           "description": "compile_material: block on the async shader workers so backend (not just translation) errors are reported. Slower; off by default.",
@@ -2498,12 +3881,24 @@
           "description": "Audio analysis type.",
           "type": "string"
         },
+        "applyEQ": {
+          "description": "configure_mix_eq: enable the mix's EQ effect.",
+          "type": "boolean"
+        },
+        "applyToChildren": {
+          "description": "set_sound_mix_class_override/add_mix_modifier: apply the override to child sound classes.",
+          "type": "boolean"
+        },
         "assetPath": {
           "description": "Asset path (e.g., /Game/Path/Asset).",
           "type": "string"
         },
         "attachPointName": {
           "description": "Name of the socket.",
+          "type": "string"
+        },
+        "attachTo": {
+          "description": "create_audio_component: actor to attach the component to (alias of actorName).",
           "type": "string"
         },
         "attenuationPath": {
@@ -2513,9 +3908,38 @@
         "attenuationShape": {
           "type": "string"
         },
+        "boolValue": {
+          "description": "set_metasound_default: bool literal value.",
+          "type": "boolean"
+        },
+        "bypass": {
+          "description": "add_source_effect: bypass the effect entry.",
+          "type": "boolean"
+        },
         "childIndex": {
           "description": "Input pin index on the source node for connect_cue_nodes.",
           "type": "number"
+        },
+        "classAdjusters": {
+          "description": "create_sound_mix: per-class volume/pitch adjusters.",
+          "items": {
+            "properties": {
+              "pitchAdjuster": {
+                "description": "Pitch multiplier.",
+                "type": "number"
+              },
+              "soundClass": {
+                "description": "Sound class asset path.",
+                "type": "string"
+              },
+              "volumeAdjuster": {
+                "description": "Volume multiplier.",
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
         },
         "componentName": {
           "description": "Name of the component.",
@@ -2525,10 +3949,38 @@
           "description": "Asset path (e.g., /Game/Path/Asset).",
           "type": "string"
         },
+        "decayHFRatio": {
+          "description": "create_reverb_effect: high-frequency decay ratio.",
+          "type": "number"
+        },
+        "decayTime": {
+          "description": "create_reverb_effect: decay time in seconds.",
+          "type": "number"
+        },
         "defaultValue": {},
+        "delay": {
+          "description": "add_cue_node (delay node): delay in seconds.",
+          "type": "number"
+        },
+        "density": {
+          "description": "create_reverb_effect: reverb density.",
+          "type": "number"
+        },
+        "diffusion": {
+          "description": "create_reverb_effect: reverb diffusion.",
+          "type": "number"
+        },
+        "distanceAlgorithm": {
+          "description": "configure_distance_attenuation: linear|logarithmic|inverse|naturalsound.",
+          "type": "string"
+        },
         "dopplerIntensity": {
           "description": "Doppler intensity.",
           "type": "number"
+        },
+        "effectPresetPath": {
+          "description": "add_source_effect: existing effect preset asset path.",
+          "type": "string"
         },
         "effectType": {
           "description": "Effect type.",
@@ -2542,9 +3994,59 @@
           "description": "Whether the item/feature is enabled.",
           "type": "boolean"
         },
+        "enableOcclusion": {
+          "description": "configure_occlusion: enable occlusion.",
+          "type": "boolean"
+        },
         "enableReverbSend": {
           "description": "Whether reverb send is enabled.",
           "type": "boolean"
+        },
+        "eqPriority": {
+          "description": "configure_mix_eq: EQ effect priority.",
+          "type": "number"
+        },
+        "eqSettings": {
+          "description": "configure_mix_eq: 4-band EQ (frequencyCenter0-3, gain0-3, bandwidth0-3).",
+          "properties": {
+            "bandwidth0": {
+              "type": "number"
+            },
+            "bandwidth1": {
+              "type": "number"
+            },
+            "bandwidth2": {
+              "type": "number"
+            },
+            "bandwidth3": {
+              "type": "number"
+            },
+            "frequencyCenter0": {
+              "type": "number"
+            },
+            "frequencyCenter1": {
+              "type": "number"
+            },
+            "frequencyCenter2": {
+              "type": "number"
+            },
+            "frequencyCenter3": {
+              "type": "number"
+            },
+            "gain0": {
+              "type": "number"
+            },
+            "gain1": {
+              "type": "number"
+            },
+            "gain2": {
+              "type": "number"
+            },
+            "gain3": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "fadeInTime": {
           "type": "number"
@@ -2564,6 +4066,42 @@
         "falloffMode": {
           "type": "string"
         },
+        "floatValue": {
+          "description": "set_metasound_default: float literal value.",
+          "type": "number"
+        },
+        "gain": {
+          "description": "create_reverb_effect: overall gain.",
+          "type": "number"
+        },
+        "gainHF": {
+          "description": "create_reverb_effect: high-frequency gain.",
+          "type": "number"
+        },
+        "gender": {
+          "description": "create_dialogue_voice: Masculine|Feminine|Neuter.",
+          "type": "string"
+        },
+        "highFrequency": {
+          "description": "configure_mix_eq: flat alias for eqSettings band-3 frequency.",
+          "type": "number"
+        },
+        "highGain": {
+          "description": "configure_mix_eq: flat alias for eqSettings band-3 gain.",
+          "type": "number"
+        },
+        "highMidFrequency": {
+          "description": "configure_mix_eq: flat alias for eqSettings band-2 frequency.",
+          "type": "number"
+        },
+        "highMidGain": {
+          "description": "configure_mix_eq: flat alias for eqSettings band-2 gain.",
+          "type": "number"
+        },
+        "indefinite": {
+          "description": "add_cue_node (looping node): loop indefinitely.",
+          "type": "boolean"
+        },
         "innerRadius": {
           "type": "number"
         },
@@ -2572,6 +4110,18 @@
           "type": "string"
         },
         "inputType": {
+          "type": "string"
+        },
+        "intValue": {
+          "description": "set_metasound_default: int literal value.",
+          "type": "integer"
+        },
+        "lfeBleed": {
+          "description": "set_class_properties: LFE channel bleed amount.",
+          "type": "number"
+        },
+        "localizationKeyFormat": {
+          "description": "set_dialogue_context: localization key format string.",
           "type": "string"
         },
         "location": {
@@ -2589,18 +4139,46 @@
           },
           "type": "object"
         },
+        "loopCount": {
+          "description": "add_cue_node (looping node): fixed loop count when not indefinite.",
+          "type": "number"
+        },
         "looping": {
           "description": "Whether to loop.",
           "type": "boolean"
         },
+        "lowFrequency": {
+          "description": "configure_mix_eq: flat alias for eqSettings band-0 frequency.",
+          "type": "number"
+        },
+        "lowGain": {
+          "description": "configure_mix_eq: flat alias for eqSettings band-0 gain.",
+          "type": "number"
+        },
         "lowPassFilterFrequency": {
           "type": "number"
+        },
+        "midFrequency": {
+          "description": "configure_mix_eq: flat alias for eqSettings band-1 frequency.",
+          "type": "number"
+        },
+        "midGain": {
+          "description": "configure_mix_eq: flat alias for eqSettings band-1 gain.",
+          "type": "number"
+        },
+        "mix": {
+          "description": "Alias of mixName (set_sound_mix_class_override/clear_sound_mix_class_override/set_base_sound_mix).",
+          "type": "string"
         },
         "mixName": {
           "type": "string"
         },
         "name": {
           "description": "Name identifier.",
+          "type": "string"
+        },
+        "nodeClassName": {
+          "description": "add_metasound_node: explicit 3-part MetaSound class name (Namespace.Name.Variant).",
           "type": "string"
         },
         "nodeType": {
@@ -2612,6 +4190,14 @@
         },
         "occlusionInterpolationTime": {
           "description": "Occlusion interpolation time.",
+          "type": "number"
+        },
+        "occlusionLowPassFilterFrequency": {
+          "description": "configure_occlusion: low-pass filter frequency in Hz.",
+          "type": "number"
+        },
+        "occlusionVolumeAttenuation": {
+          "description": "configure_occlusion: volume attenuation.",
           "type": "number"
         },
         "occlusionVolumeScale": {
@@ -2632,6 +4218,10 @@
         "parentClass": {
           "type": "string"
         },
+        "parentPath": {
+          "description": "set_class_parent: parent SoundClass asset path.",
+          "type": "string"
+        },
         "path": {
           "description": "Directory path for asset creation.",
           "type": "string"
@@ -2639,7 +4229,19 @@
         "pitch": {
           "type": "number"
         },
+        "pitchAdjuster": {
+          "description": "add_mix_modifier: pitch multiplier.",
+          "type": "number"
+        },
+        "plurality": {
+          "description": "create_dialogue_voice: Singular|Plural.",
+          "type": "string"
+        },
         "properties": {},
+        "replace": {
+          "description": "set_dialogue_context: replace an existing mapping for the same speaker.",
+          "type": "boolean"
+        },
         "reverbDistanceMax": {
           "description": "Maximum reverb send distance.",
           "type": "number"
@@ -2697,6 +4299,10 @@
           },
           "type": "object"
         },
+        "soundClass": {
+          "description": "Alias of soundClassName (set_sound_mix_class_override/clear_sound_mix_class_override).",
+          "type": "string"
+        },
         "soundClassName": {
           "type": "string"
         },
@@ -2709,6 +4315,10 @@
         },
         "soundPath": {
           "description": "Sound asset path.",
+          "type": "string"
+        },
+        "soundWavePath": {
+          "description": "set_dialogue_context: SoundWave asset path for the context mapping.",
           "type": "string"
         },
         "sourceNodeId": {
@@ -2739,8 +4349,16 @@
           "description": "Dialogue speaker path.",
           "type": "string"
         },
+        "spokenText": {
+          "description": "create_dialogue_wave: the line's spoken text.",
+          "type": "string"
+        },
         "startTime": {
           "type": "number"
+        },
+        "stringValue": {
+          "description": "set_metasound_default: string literal value.",
+          "type": "string"
         },
         "targetInputName": {
           "description": "Target MetaSound input name.",
@@ -2754,11 +4372,22 @@
           "description": "Name of the target pin.",
           "type": "string"
         },
+        "targetVoices": {
+          "description": "set_dialogue_context: target DialogueVoice asset paths.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "targetVolume": {
           "type": "number"
         },
         "velocityScale": {
           "description": "Velocity scale.",
+          "type": "number"
+        },
+        "voiceCenterChannelVolume": {
+          "description": "set_class_properties: center-channel volume for dialogue.",
           "type": "number"
         },
         "volume": {
@@ -2940,6 +4569,42 @@
           ],
           "type": "string"
         },
+        "alignment": {
+          "description": "set_alignment: pivot (alternative to alignmentX/alignmentY).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "alignmentX": {
+          "description": "set_alignment: pivot X (0..1).",
+          "type": "number"
+        },
+        "alignmentY": {
+          "description": "set_alignment: pivot Y (0..1).",
+          "type": "number"
+        },
+        "alwaysShowScrollbar": {
+          "description": "add_scroll_box: force the scrollbar visible.",
+          "type": "boolean"
+        },
+        "anchorMax": {
+          "description": "set_anchor: maximum anchor (alternative to anchorMaxX/anchorMaxY).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
         "anchorMaxX": {
           "description": "set_anchor: anchor maximum X (0..1).",
           "type": "number"
@@ -2947,6 +4612,18 @@
         "anchorMaxY": {
           "description": "set_anchor: anchor maximum Y (0..1).",
           "type": "number"
+        },
+        "anchorMin": {
+          "description": "set_anchor: minimum anchor (alternative to anchorMinX/anchorMinY).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "anchorMinX": {
           "description": "set_anchor: anchor minimum X (0..1).",
@@ -2956,12 +4633,35 @@
           "description": "set_anchor: anchor minimum Y (0..1).",
           "type": "number"
         },
+        "angle": {
+          "description": "set_render_transform: rotation angle in degrees.",
+          "type": "number"
+        },
+        "animationName": {
+          "description": "Widget animation name (create_widget_animation default NewAnimation; add_animation_track/get_animation_info/delete_animation/etc.).",
+          "type": "string"
+        },
+        "assetPath": {
+          "description": "Blueprint asset path for graph actions (create_node/connect_pins/etc.); alias of blueprintPath.",
+          "type": "string"
+        },
         "attachTo": {
           "type": "string"
         },
         "autoConnect": {
           "description": "add_node: auto-wire the new node's exec-in to an open event chain (default false).",
           "type": "boolean"
+        },
+        "autoWrap": {
+          "description": "add_text_block: enable auto text wrapping.",
+          "type": "boolean"
+        },
+        "blueprintCandidates": {
+          "description": "Ordered list of candidate blueprint paths to try when blueprintPath/name is absent.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "blueprintPath": {
           "description": "Blueprint asset path.",
@@ -2971,8 +4671,38 @@
           "description": "Path or name of the parent class.",
           "type": "string"
         },
+        "bottom": {
+          "description": "set_margin: bottom margin.",
+          "type": "number"
+        },
+        "buttonClass": {
+          "description": "add_common_button: concrete UCommonButtonBase subclass path.",
+          "type": "string"
+        },
         "category": {
           "type": "string"
+        },
+        "clipping": {
+          "description": "set_clipping: Inherit, ClipToBounds, ClipToBoundsWithoutIntersecting, ClipToBoundsAlways, or OnDemand.",
+          "type": "string"
+        },
+        "colorAndOpacity": {
+          "description": "Widget tint color, 0-1 components (add_text_block, add_image, add_button).",
+          "properties": {
+            "a": {
+              "type": "number"
+            },
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "compile": {
           "description": "Compile the blueprint(s) after the operation.",
@@ -2988,12 +4718,32 @@
         "componentType": {
           "type": "string"
         },
+        "createIfMissing": {
+          "description": "ensure_exists: create the blueprint if it doesn't exist (default true).",
+          "type": "boolean"
+        },
         "customEventName": {
           "description": "Name of the event.",
           "type": "string"
         },
+        "dataTable": {
+          "description": "set_common_button_input_action: DataTable asset path (CommonInputActionDataBase row struct).",
+          "type": "string"
+        },
         "defaultValue": {
           "description": "Generic value (any type)."
+        },
+        "delegateName": {
+          "description": "Multicast delegate name (bind_on_clicked/bind_on_hovered default OnClicked/OnHovered; bind_on_value_changed default OnValueChanged; bind_event_to_delegate).",
+          "type": "string"
+        },
+        "delta": {
+          "description": "add_spin_box: increment/decrement step.",
+          "type": "number"
+        },
+        "duration": {
+          "description": "create_widget_animation: length in seconds (default 1.0).",
+          "type": "number"
         },
         "eventName": {
           "description": "Name of the event.",
@@ -3002,6 +4752,44 @@
         "eventType": {
           "type": "string"
         },
+        "fill": {
+          "description": "set_size: stretch a HBox/VBox child to fill (vs Automatic).",
+          "type": "boolean"
+        },
+        "fillColorAndOpacity": {
+          "description": "add_progress_bar: fill bar color, 0-1 components.",
+          "properties": {
+            "a": {
+              "type": "number"
+            },
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "fillWeight": {
+          "description": "set_size: fill weight when fill is true.",
+          "type": "number"
+        },
+        "folder": {
+          "description": "Destination folder fallback after path/savePath.",
+          "type": "string"
+        },
+        "font": {
+          "description": "set_font: font asset path.",
+          "type": "string"
+        },
+        "fontSize": {
+          "description": "Font size (add_text_block, set_font).",
+          "type": "number"
+        },
         "functionName": {
           "description": "Name of the function.",
           "type": "string"
@@ -3009,6 +4797,42 @@
         "graphName": {
           "description": "Name of the graph.",
           "type": "string"
+        },
+        "handlerEventName": {
+          "description": "bind_event_to_delegate: name for the generated handler custom event (default On_<delegateName>).",
+          "type": "string"
+        },
+        "handlerFunction": {
+          "description": "bind_event_to_delegate: optional function the handler calls.",
+          "type": "string"
+        },
+        "handlerTargetWidget": {
+          "description": "bind_event_to_delegate: optional widget the handler acts on.",
+          "type": "string"
+        },
+        "height": {
+          "description": "add_health_bar: bar height in pixels.",
+          "type": "number"
+        },
+        "heightOverride": {
+          "description": "add_size_box: fixed height override.",
+          "type": "number"
+        },
+        "hintText": {
+          "description": "add_text_input: placeholder hint text.",
+          "type": "string"
+        },
+        "innerSlotPadding": {
+          "description": "add_wrap_box: inner slot padding.",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "inputAxisName": {
           "type": "string"
@@ -3019,11 +4843,31 @@
           },
           "type": "array"
         },
+        "isChecked": {
+          "description": "add_check_box: initial checked state.",
+          "type": "boolean"
+        },
+        "isEnabled": {
+          "description": "add_button: initial enabled state.",
+          "type": "boolean"
+        },
+        "isMarquee": {
+          "description": "add_progress_bar: indeterminate marquee mode.",
+          "type": "boolean"
+        },
         "isPublic": {
           "type": "boolean"
         },
         "isReplicated": {
           "type": "boolean"
+        },
+        "key": {
+          "description": "set_localization_key: localization key.",
+          "type": "string"
+        },
+        "left": {
+          "description": "set_margin: left margin.",
+          "type": "number"
         },
         "location": {
           "description": "3D location (x, y, z).",
@@ -3052,6 +4896,18 @@
           "description": "Material asset path.",
           "type": "string"
         },
+        "maxDesiredHeight": {
+          "description": "add_size_box: maximum desired height.",
+          "type": "number"
+        },
+        "maxDesiredWidth": {
+          "description": "add_size_box: maximum desired width.",
+          "type": "number"
+        },
+        "maxValue": {
+          "description": "add_slider/add_spin_box: maximum value.",
+          "type": "number"
+        },
         "memberClass": {
           "type": "string"
         },
@@ -3062,9 +4918,41 @@
           "description": "Mesh asset path.",
           "type": "string"
         },
+        "message": {
+          "description": "show_widget: notification text when widgetId is \"notification\".",
+          "type": "string"
+        },
         "metadata": {},
+        "minDesiredHeight": {
+          "description": "add_size_box: minimum desired height.",
+          "type": "number"
+        },
+        "minDesiredSlotHeight": {
+          "description": "add_uniform_grid: minimum slot height.",
+          "type": "number"
+        },
+        "minDesiredSlotWidth": {
+          "description": "add_uniform_grid: minimum slot width.",
+          "type": "number"
+        },
+        "minDesiredWidth": {
+          "description": "add_size_box: minimum desired width.",
+          "type": "number"
+        },
+        "minValue": {
+          "description": "add_slider/add_spin_box: minimum value.",
+          "type": "number"
+        },
+        "multiLine": {
+          "description": "add_text_input: use a multi-line editable text box.",
+          "type": "boolean"
+        },
         "name": {
           "description": "Name identifier.",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "set_localization_key: localization namespace (default \"Game\").",
           "type": "string"
         },
         "newName": {
@@ -3074,8 +4962,16 @@
         "newParent": {
           "type": "string"
         },
+        "newWidgetClass": {
+          "description": "replace_widget_class: class to swap the named widget to.",
+          "type": "string"
+        },
         "nodeId": {
           "description": "ID of the node.",
+          "type": "string"
+        },
+        "nodeName": {
+          "description": "add_node: name for a CustomEvent node (nodeType=CustomEvent).",
           "type": "string"
         },
         "nodeType": {
@@ -3090,11 +4986,72 @@
           },
           "type": "array"
         },
+        "options": {
+          "description": "add_combo_box: option strings to populate.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "orientation": {
+          "description": "add_scroll_box: \"Vertical\" (default) or \"Horizontal\".",
+          "type": "string"
+        },
         "outputs": {
           "items": {
             "type": "object"
           },
           "type": "array"
+        },
+        "override": {
+          "description": "add_function: implement an inherited BlueprintImplementableEvent/BlueprintNativeEvent instead of creating a new function.",
+          "type": "boolean"
+        },
+        "ownerPin": {
+          "description": "bind_event_to_delegate: output pin on the source event exposing the delegate's owner object.",
+          "type": "string"
+        },
+        "pad": {
+          "description": "set_padding: uniform padding on all sides.",
+          "type": "number"
+        },
+        "padBottom": {
+          "description": "set_padding: bottom padding.",
+          "type": "number"
+        },
+        "padding": {
+          "description": "set_padding: padding (alternative to pad/padLeft/padTop/padRight/padBottom).",
+          "properties": {
+            "bottom": {
+              "type": "number"
+            },
+            "left": {
+              "type": "number"
+            },
+            "right": {
+              "type": "number"
+            },
+            "top": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "padLeft": {
+          "description": "set_padding: left padding.",
+          "type": "number"
+        },
+        "padRight": {
+          "description": "set_padding: right padding.",
+          "type": "number"
+        },
+        "padTop": {
+          "description": "set_padding: top padding.",
+          "type": "number"
+        },
+        "panelType": {
+          "description": "wrap_root: new root panel class (Overlay, VerticalBox, HorizontalBox, CanvasPanel).",
+          "type": "string"
         },
         "parameters": {
           "items": {
@@ -3109,13 +5066,37 @@
         "parentComponent": {
           "type": "string"
         },
+        "parentName": {
+          "description": "Name of an existing panel widget to attach into (add_widget_component, add_health_bar/add_crosshair/add_minimap/etc.).",
+          "type": "string"
+        },
         "parentSlot": {
           "description": "Name of the parent panel widget to add the new widget under.",
           "type": "string"
         },
+        "path": {
+          "description": "Destination folder for a created asset (create_widget_blueprint, create_common_button_style/create_common_text_style, create_*_menu, etc.); falls back to savePath, then folder.",
+          "type": "string"
+        },
+        "percent": {
+          "description": "add_progress_bar: initial fill percent (0-1).",
+          "type": "number"
+        },
         "pinName": {
           "description": "Name of the pin.",
           "type": "string"
+        },
+        "position": {
+          "description": "set_position: Canvas slot position (alternative to posX/posY).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "posX": {
           "description": "Node X position (graph units).",
@@ -3130,9 +5111,21 @@
           "type": "string"
         },
         "properties": {},
+        "property": {
+          "description": "set_widget_binding: property name to bind (NOT_IMPLEMENTED — validated only).",
+          "type": "string"
+        },
         "propertyName": {
           "description": "Name of the property.",
           "type": "string"
+        },
+        "requestedPath": {
+          "description": "Explicit blueprint path override, checked before name/blueprintPath/blueprintCandidates (most blueprint_* actions).",
+          "type": "string"
+        },
+        "right": {
+          "description": "set_margin: right margin.",
+          "type": "number"
         },
         "rotation": {
           "description": "3D rotation (pitch, yaw, roll).",
@@ -3156,6 +5149,10 @@
             "roll"
           ],
           "type": "object"
+        },
+        "rowName": {
+          "description": "set_common_button_input_action: row name within dataTable.",
+          "type": "string"
         },
         "save": {
           "description": "Save the asset(s) after the operation.",
@@ -3191,9 +5188,58 @@
           ],
           "type": "object"
         },
+        "scrollBarVisibility": {
+          "description": "add_scroll_box: Visible, Collapsed, or Hidden.",
+          "type": "string"
+        },
+        "selectedOption": {
+          "description": "add_combo_box: initially selected option.",
+          "type": "string"
+        },
+        "shear": {
+          "description": "set_render_transform: 2D shear.",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "size": {
+          "description": "Either a number (add_crosshair/add_minimap/add_ammo_counter: icon size) or an {x,y} object (set_size: canvas slot pixel size)."
+        },
+        "sizeX": {
+          "description": "add_spacer/add_widget_component: width in pixels.",
+          "type": "number"
+        },
+        "sizeY": {
+          "description": "add_spacer/add_widget_component: height in pixels.",
+          "type": "number"
+        },
         "slotName": {
           "description": "Name for the widget being added / the slot to target.",
           "type": "string"
+        },
+        "slotPadding": {
+          "description": "add_uniform_grid: per-slot padding.",
+          "properties": {
+            "bottom": {
+              "type": "number"
+            },
+            "left": {
+              "type": "number"
+            },
+            "right": {
+              "type": "number"
+            },
+            "top": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "sourceNodeId": {
           "description": "ID of the source node.",
@@ -3203,7 +5249,47 @@
           "description": "Name of the source pin.",
           "type": "string"
         },
+        "stepSize": {
+          "description": "add_slider: step increment.",
+          "type": "number"
+        },
+        "stretch": {
+          "description": "add_scale_box: stretch mode (None, Fill, ScaleToFit, ScaleToFitX, ScaleToFitY, ScaleToFill, UserSpecified).",
+          "type": "string"
+        },
+        "stretchDirection": {
+          "description": "add_scale_box: Both, DownOnly, or UpOnly.",
+          "type": "string"
+        },
+        "stringKey": {
+          "description": "bind_localized_text: key within the string table.",
+          "type": "string"
+        },
+        "stringTableId": {
+          "description": "bind_localized_text: string table asset path.",
+          "type": "string"
+        },
+        "style": {
+          "description": "set_style: legacy value alias for propertyName=\"Style\" when propertyName is omitted.",
+          "type": "string"
+        },
+        "styleClass": {
+          "description": "Common UI style class (add_common_button/add_common_text/add_common_border/set_common_button_style/set_common_text_style).",
+          "type": "string"
+        },
+        "styleName": {
+          "description": "create_widget_style/apply_style_to_widget: style variable name.",
+          "type": "string"
+        },
+        "styleType": {
+          "description": "create_widget_style: style category (default \"Text\").",
+          "type": "string"
+        },
         "targetClass": {
+          "type": "string"
+        },
+        "targetFunction": {
+          "description": "bind_on_clicked/bind_on_hovered: self UFUNCTION to call (alias functionName).",
           "type": "string"
         },
         "targetNodeId": {
@@ -3213,6 +5299,46 @@
         "targetPinName": {
           "description": "Name of the target pin.",
           "type": "string"
+        },
+        "targetText": {
+          "description": "bind_on_value_changed: text widget to live-update with the new value.",
+          "type": "string"
+        },
+        "targetWidget": {
+          "description": "set_widget_binding: name of the widget to bind (NOT_IMPLEMENTED — validated only).",
+          "type": "string"
+        },
+        "text": {
+          "description": "Initial text (add_common_text, add_text_block, add_rich_text_block, add_interaction_prompt, add_widget_component).",
+          "type": "string"
+        },
+        "texturePath": {
+          "description": "add_image: texture asset path for the brush.",
+          "type": "string"
+        },
+        "title": {
+          "description": "create_main_menu: title text (default \"Main Menu\").",
+          "type": "string"
+        },
+        "top": {
+          "description": "set_margin: top margin.",
+          "type": "number"
+        },
+        "translation": {
+          "description": "set_render_transform: 2D translation.",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "userSpecifiedScale": {
+          "description": "add_scale_box: scale used when stretch is UserSpecified.",
+          "type": "number"
         },
         "value": {
           "description": "Generic value (any type)."
@@ -3225,8 +5351,20 @@
           "description": "Variable type (e.g., Boolean, Float, Integer, Vector, String, Object)",
           "type": "string"
         },
+        "visibility": {
+          "description": "set_visibility: Visible, Hidden, Collapsed, HitTestInvisible, or SelfHitTestInvisible.",
+          "type": "string"
+        },
+        "waitForCompletion": {
+          "description": "create/create_blueprint: wait for a coalesced concurrent creation to finish before responding.",
+          "type": "boolean"
+        },
         "widgetClass": {
           "description": "Widget class for create_widget_blueprint / set_widget_parent_class.",
+          "type": "string"
+        },
+        "widgetId": {
+          "description": "show_widget: special id (\"notification\") or target identifier.",
           "type": "string"
         },
         "widgetName": {
@@ -3237,10 +5375,26 @@
           "description": "Widget Blueprint asset path (widget-authoring actions).",
           "type": "string"
         },
+        "width": {
+          "description": "add_health_bar: bar width in pixels.",
+          "type": "number"
+        },
+        "widthOverride": {
+          "description": "add_size_box: fixed width override.",
+          "type": "number"
+        },
+        "wrapSize": {
+          "description": "add_wrap_box: explicit wrap size (UE 5.1+).",
+          "type": "number"
+        },
         "x": {
           "type": "number"
         },
         "y": {
+          "type": "number"
+        },
+        "zOrder": {
+          "description": "set_z_order: Canvas slot Z-order.",
           "type": "number"
         }
       },
@@ -3307,8 +5461,16 @@
           "description": "Blueprint asset path.",
           "type": "string"
         },
+        "brakingDeceleration": {
+          "description": "set_braking_deceleration: BrakingDecelerationWalking on CharacterMovement.",
+          "type": "number"
+        },
         "cameraUsePawnControlRotation": {
           "description": "Camera follows controller rotation.",
+          "type": "boolean"
+        },
+        "canCrouch": {
+          "description": "configure_crouch: whether the character can crouch (default true).",
           "type": "boolean"
         },
         "capsuleHalfHeight": {
@@ -3324,7 +5486,15 @@
         "climbSpeed": {
           "type": "number"
         },
+        "crouchedHalfHeight": {
+          "description": "configure_crouch: capsule half-height while crouched (default 44).",
+          "type": "number"
+        },
         "crouchSpeed": {
+          "type": "number"
+        },
+        "customSpeed": {
+          "description": "add_custom_movement_mode: speed stored as the {modeName}Speed variable default and MaxCustomMovementSpeed.",
           "type": "number"
         },
         "deceleration": {
@@ -3452,6 +5622,10 @@
           ],
           "type": "string"
         },
+        "particleScale": {
+          "description": "configure_footstep_fx: footstep particle scale (default 1.0).",
+          "type": "number"
+        },
         "path": {
           "description": "Directory path for asset creation.",
           "type": "string"
@@ -3533,6 +5707,10 @@
         },
         "vaultHeight": {
           "description": "Maximum vault obstacle height.",
+          "type": "number"
+        },
+        "volumeMultiplier": {
+          "description": "configure_footstep_fx: footstep sound volume multiplier (default 1.0).",
           "type": "number"
         },
         "walkSpeed": {
@@ -4118,6 +6296,10 @@
           "description": "Sprite alignment mode.",
           "type": "string"
         },
+        "angle": {
+          "description": "particle: cone shape angle in degrees.",
+          "type": "number"
+        },
         "assetPath": {
           "description": "Asset path (e.g., /Game/Path/Asset.Asset).",
           "type": "string"
@@ -4129,6 +6311,17 @@
         "autoConnect": {
           "description": "Automatically connect a compatible Niagara graph pin pair.",
           "type": "boolean"
+        },
+        "autoDestroy": {
+          "description": "particle/spawn_niagara: destroy the spawned actor once its effect finishes.",
+          "type": "boolean"
+        },
+        "boxSize": {
+          "description": "particle: box shape dimensions [x, y, z].",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
         },
         "burstCount": {
           "type": "number"
@@ -4164,6 +6357,21 @@
         "dieOnCollision": {
           "type": "boolean"
         },
+        "direction": {
+          "description": "particle: cone shape direction (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
         "duration": {
           "type": "number"
         },
@@ -4181,6 +6389,21 @@
         },
         "emitterProperties": {
           "description": "Emitter properties to update."
+        },
+        "endLocation": {
+          "description": "debug_shape/particle: end point for line/cylinder/arrow shapes (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "eventName": {
           "description": "Name of the event.",
@@ -4247,14 +6470,26 @@
         "friction": {
           "type": "number"
         },
+        "halfHeight": {
+          "description": "particle: capsule shape half-height.",
+          "type": "number"
+        },
         "intensity": {
           "type": "number"
         },
         "killCondition": {
           "type": "string"
         },
+        "length": {
+          "description": "particle: cone shape length.",
+          "type": "number"
+        },
         "lifetime": {
           "type": "number"
+        },
+        "lightName": {
+          "description": "create_dynamic_light: actor label for the spawned light.",
+          "type": "string"
         },
         "lightRadius": {
           "type": "number"
@@ -4318,6 +6553,18 @@
           "description": "Particle preset or asset path.",
           "type": "string"
         },
+        "pulse": {
+          "description": "create_dynamic_light: pulsing light tag (enabled, frequency).",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "frequency": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
         "radius": {
           "type": "number"
         },
@@ -4335,6 +6582,10 @@
           "description": "Path to save the asset.",
           "type": "string"
         },
+        "scale": {
+          "description": "particle/spawn_niagara: uniform scale (also accepts an array).",
+          "type": "number"
+        },
         "scattering": {
           "type": "number"
         },
@@ -4348,11 +6599,23 @@
         "shapeType": {
           "type": "string"
         },
+        "size": {
+          "description": "debug_shape/particle: shape size (fallback for radius).",
+          "type": "number"
+        },
         "sizeMode": {
+          "type": "string"
+        },
+        "skeletalMeshPath": {
+          "description": "add_skeletal_mesh_data_interface: skeletal mesh asset path.",
           "type": "string"
         },
         "sourceBinding": {
           "description": "Niagara source binding, e.g. Emitter.Age.",
+          "type": "string"
+        },
+        "sourcePinName": {
+          "description": "connect_niagara_pins: name of the source (output) pin.",
           "type": "string"
         },
         "spawnOnEvent": {
@@ -4370,6 +6633,10 @@
         "stageName": {
           "type": "string"
         },
+        "staticMeshPath": {
+          "description": "add_static_mesh_data_interface: static mesh asset path.",
+          "type": "string"
+        },
         "steps": {
           "description": "Simulation step count.",
           "type": "integer"
@@ -4381,6 +6648,14 @@
         "systemPath": {
           "description": "Niagara system asset path.",
           "type": "string"
+        },
+        "targetPinName": {
+          "description": "connect_niagara_pins: name of the target (input) pin.",
+          "type": "string"
+        },
+        "thickness": {
+          "description": "debug_shape/particle: line/box drawing thickness.",
+          "type": "number"
         },
         "uniformSize": {
           "type": "number"
@@ -4419,6 +6694,10 @@
     "description": "Create Gameplay Abilities, Effects, Attribute Sets, and Gameplay Cues for ability systems.",
     "inputSchema": {
       "properties": {
+        "abilityClass": {
+          "description": "add_ability: alias for abilityPath.",
+          "type": "string"
+        },
         "abilityPath": {
           "description": "Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath.",
           "type": "string"
@@ -4511,7 +6790,7 @@
           "type": "string"
         },
         "attribute": {
-          "description": "get_attribute: attribute to read at runtime (e.g. 'Health').",
+          "description": "get_attribute: attribute to read at runtime (e.g. 'Health'). add_effect_modifier: REQUIRED target attribute for the modifier - 'AttributeName' or 'SetClassName.AttributeName' (must be unambiguous across loaded AttributeSets).",
           "type": "string"
         },
         "attributeName": {
@@ -4533,12 +6812,23 @@
           },
           "type": "array"
         },
+        "blockAbilitiesWithTags": {
+          "description": "set_ability_tags: alias for blockAbilitiesWithTag (checked first).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "blueprintPath": {
           "description": "Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases.",
           "type": "string"
         },
         "calculationClass": {
           "description": "UGameplayEffectExecutionCalculation class path.",
+          "type": "string"
+        },
+        "cameraShake": {
+          "description": "set_cue_effects: alias for cameraShakePath (checked first).",
           "type": "string"
         },
         "cameraShakePath": {
@@ -4551,6 +6841,17 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "cancelAbilitiesWithTags": {
+          "description": "set_ability_tags: alias for cancelAbilitiesWithTag (checked first).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "componentName": {
+          "description": "add_ability_system_component/configure_asc: SCS component name (default 'AbilitySystemComponent').",
+          "type": "string"
         },
         "cooldownEffectPath": {
           "description": "Path to cooldown Gameplay Effect.",
@@ -4579,6 +6880,10 @@
         "decalPath": {
           "description": "Path to decal material.",
           "type": "string"
+        },
+        "defaultValue": {
+          "description": "add_attribute: alias for baseValue.",
+          "type": "number"
         },
         "duration": {
           "description": "Duration in seconds.",
@@ -4620,6 +6925,10 @@
           ],
           "type": "string"
         },
+        "magnitude": {
+          "description": "add_effect_modifier: alias for modifierMagnitude (checked first).",
+          "type": "number"
+        },
         "magnitudeCalculationType": {
           "description": "How magnitude is calculated.",
           "enum": [
@@ -4630,12 +6939,20 @@
           ],
           "type": "string"
         },
+        "magnitudeType": {
+          "description": "set_modifier_magnitude: alias for magnitudeCalculationType (checked first).",
+          "type": "string"
+        },
         "maxValue": {
           "description": "Maximum value for clamping.",
           "type": "number"
         },
         "minValue": {
           "description": "Minimum value for clamping.",
+          "type": "number"
+        },
+        "modifierIndex": {
+          "description": "set_modifier_magnitude: index into the effect's Modifiers array (0-based).",
           "type": "number"
         },
         "modifierMagnitude": {
@@ -4656,6 +6973,14 @@
           "description": "Name of the asset to create.",
           "type": "string"
         },
+        "operation": {
+          "description": "add_effect_modifier: alias for modifierOperation (checked first).",
+          "type": "string"
+        },
+        "particleSystem": {
+          "description": "set_cue_effects: alias for particleSystemPath (checked first).",
+          "type": "string"
+        },
         "particleSystemPath": {
           "description": "Path to particle system.",
           "type": "string"
@@ -4667,6 +6992,10 @@
         "period": {
           "description": "set_effect_duration: execution period in seconds (> 0) for periodic effects; requires durationType HasDuration or Infinite.",
           "type": "number"
+        },
+        "policy": {
+          "description": "set_activation_policy/set_instancing_policy: generic alias for activationPolicy/instancingPolicy (checked first).",
+          "type": "string"
         },
         "removalTags": {
           "description": "Tags that cause effect removal.",
@@ -4684,6 +7013,10 @@
           ],
           "type": "string"
         },
+        "requiresLineOfSight": {
+          "description": "set_ability_targeting: whether targeting requires line of sight (default false).",
+          "type": "boolean"
+        },
         "setByCallerTag": {
           "description": "add_effect_modifier/set_modifier_magnitude: registered gameplay tag for a SetByCaller modifier magnitude; mutually exclusive with a numeric magnitude.",
           "type": "string"
@@ -4694,6 +7027,10 @@
         },
         "setPath": {
           "description": "create_ability_set/add_ability: path of the ability-set data asset. Note: create_ability_set scaffolds a PrimaryDataAsset blueprint with GrantedAbilities/GrantedEffects/GrantedTags variables; it is not an engine ability-set type.",
+          "type": "string"
+        },
+        "sound": {
+          "description": "set_cue_effects: alias for soundPath (checked first).",
           "type": "string"
         },
         "soundPath": {
@@ -4726,6 +7063,10 @@
           ],
           "type": "string"
         },
+        "stackLimit": {
+          "description": "set_effect_stacking: alias for stackLimitCount (checked first).",
+          "type": "number"
+        },
         "stackLimitCount": {
           "description": "Maximum stack count.",
           "type": "number"
@@ -4746,6 +7087,10 @@
           "description": "Alias for 'tag'.",
           "type": "string"
         },
+        "targetingAngle": {
+          "description": "set_ability_targeting: cone angle in degrees for cone-based targeting (default 360).",
+          "type": "number"
+        },
         "targetingMode": {
           "description": "Targeting mode for ability.",
           "enum": [
@@ -4758,9 +7103,21 @@
           ],
           "type": "string"
         },
+        "targetingRange": {
+          "description": "set_ability_targeting: alias for targetRange (checked first).",
+          "type": "number"
+        },
+        "targetingType": {
+          "description": "set_ability_targeting: alias for targetingMode (checked first).",
+          "type": "string"
+        },
         "targetRange": {
           "description": "Maximum targeting range.",
           "type": "number"
+        },
+        "taskClassName": {
+          "description": "add_ability_task: optional soft class name recorded for the task (informational).",
+          "type": "string"
         },
         "taskType": {
           "description": "Type of ability task to add.",
@@ -4786,6 +7143,10 @@
             "OnRemove"
           ],
           "type": "string"
+        },
+        "value": {
+          "description": "set_modifier_magnitude: alias for modifierMagnitude (checked first).",
+          "type": "number"
         }
       },
       "required": [
@@ -4886,6 +7247,14 @@
           "description": "Name of the actor to operate on (also sets the label for create_* actions).",
           "type": "string"
         },
+        "alignToSpline": {
+          "description": "duplicate_along_spline: orient copies to the spline tangent.",
+          "type": "boolean"
+        },
+        "alpha": {
+          "description": "smooth: per-iteration smoothing factor.",
+          "type": "number"
+        },
         "amount": {
           "description": "Generic amount for operations (bevel size, inset distance, etc.).",
           "type": "number"
@@ -4907,20 +7276,40 @@
           ],
           "type": "string"
         },
+        "baseRadius": {
+          "description": "create_cone: radius at the base.",
+          "type": "number"
+        },
+        "cap": {
+          "description": "loft/sweep/extrude_along_spline: cap the open ends.",
+          "type": "boolean"
+        },
+        "capped": {
+          "description": "revolve: cap the ends of the revolved profile.",
+          "type": "boolean"
+        },
         "collisionType": {
-          "description": "Collision complexity type.",
+          "description": "generate_collision: shape/method to generate.",
           "enum": [
-            "Default",
-            "Simple",
-            "Complex",
-            "UseComplexAsSimple",
-            "UseSimpleAsComplex"
+            "box",
+            "sphere",
+            "capsule",
+            "convex",
+            "convex_decomposition"
           ],
           "type": "string"
+        },
+        "compact": {
+          "description": "merge_vertices: compact the mesh buffers after merging.",
+          "type": "boolean"
         },
         "computeWeightedNormals": {
           "description": "Use area-weighted normals for recalculate_normals.",
           "type": "boolean"
+        },
+        "count": {
+          "description": "array_linear/array_radial/duplicate_along_spline: number of copies.",
+          "type": "integer"
         },
         "curveAngle": {
           "description": "Total sweep angle in degrees for create_spiral_stairs (mutually exclusive with numTurns; default 90).",
@@ -4933,6 +7322,10 @@
         "depthSegments": {
           "description": "Segments along depth.",
           "type": "number"
+        },
+        "depthSubdivisions": {
+          "description": "create_plane: subdivision count along depth.",
+          "type": "integer"
         },
         "dimensions": {
           "description": "Box dimensions (width, height, depth).",
@@ -4953,6 +7346,53 @@
           "description": "Distance value.",
           "type": "number"
         },
+        "edgeGroupA": {
+          "description": "bridge: first polygroup edge to bridge from.",
+          "type": "integer"
+        },
+        "edgeGroupB": {
+          "description": "bridge: second polygroup edge to bridge to.",
+          "type": "integer"
+        },
+        "edgeIndex": {
+          "description": "edge_split: single edge index to split (alternative to edges).",
+          "type": "integer"
+        },
+        "edges": {
+          "description": "edge_split: edge indices to split.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "extent": {
+          "description": "bend/twist: warp extent along the axis.",
+          "type": "number"
+        },
+        "featureAngleThreshold": {
+          "description": "quadrangulate: angle in degrees above which an edge is treated as a feature.",
+          "type": "number"
+        },
+        "fillHoles": {
+          "description": "self_union/remesh_voxel: fill holes left by the operation.",
+          "type": "boolean"
+        },
+        "flareX": {
+          "description": "taper: flare percentage along X.",
+          "type": "number"
+        },
+        "flareY": {
+          "description": "taper: flare percentage along Y.",
+          "type": "number"
+        },
+        "floating": {
+          "description": "create_stairs/create_spiral_stairs: omit the support structure beneath the steps.",
+          "type": "boolean"
+        },
+        "frequency": {
+          "description": "noise_deform: noise frequency.",
+          "type": "number"
+        },
         "hardEdgeAngle": {
           "description": "Opening angle in degrees above which recalculate_normals splits hard edges.",
           "type": "number"
@@ -4969,12 +7409,20 @@
           "description": "Segments along height.",
           "type": "number"
         },
+        "heightSteps": {
+          "description": "create_pipe: height step count.",
+          "type": "integer"
+        },
+        "hemisphereSteps": {
+          "description": "create_capsule: hemisphere cap subdivision count.",
+          "type": "integer"
+        },
         "hullCount": {
           "description": "Max convex hulls for generate_collision (convex/convex_decomposition only).",
           "type": "number"
         },
         "hullPrecision": {
-          "description": "Precision for convex hull generation (0-1).",
+          "description": "generate_complex_collision: convex decomposition search factor in [0,1] (default 0.5; higher searches harder).",
           "type": "number"
         },
         "innerRadius": {
@@ -4985,12 +7433,20 @@
           "description": "Number of iterations for smooth, remesh.",
           "type": "number"
         },
+        "keepInside": {
+          "description": "boolean_trim: keep the portion inside the trim surface.",
+          "type": "boolean"
+        },
         "keepTool": {
           "description": "Keep the tool actor after a boolean operation (default true).",
           "type": "boolean"
         },
         "latticeResolution": {
           "description": "Control lattice resolution for lattice deformation.",
+          "type": "number"
+        },
+        "length": {
+          "description": "create_capsule/create_ramp: cylinder/ramp length.",
           "type": "number"
         },
         "location": {
@@ -5016,13 +7472,49 @@
           "description": "Specific LOD index to configure.",
           "type": "number"
         },
+        "magnitude": {
+          "description": "noise_deform: displacement magnitude.",
+          "type": "number"
+        },
+        "majorRadius": {
+          "description": "create_torus/create_arch: major (ring) radius.",
+          "type": "number"
+        },
+        "majorSegments": {
+          "description": "create_torus: major ring segment count (alias of numRings).",
+          "type": "integer"
+        },
+        "majorSteps": {
+          "description": "create_arch: major ring step count.",
+          "type": "integer"
+        },
+        "maxHullCount": {
+          "description": "generate_complex_collision: max convex hulls to generate.",
+          "type": "integer"
+        },
         "midpoint": {
           "description": "Texture luminance midpoint for displacement.",
           "type": "number"
         },
+        "minorRadius": {
+          "description": "create_torus/create_arch: minor (tube) radius.",
+          "type": "number"
+        },
+        "minorSegments": {
+          "description": "create_torus: minor tube segment count (alias of radialSegments).",
+          "type": "integer"
+        },
+        "minorSteps": {
+          "description": "create_arch: minor tube step count.",
+          "type": "integer"
+        },
         "name": {
           "description": "Alias of actorName for create_* actions.",
           "type": "string"
+        },
+        "numCuts": {
+          "description": "loop_cut: number of cuts to insert.",
+          "type": "integer"
         },
         "numRings": {
           "description": "Ring count: sphere latitude rings (switches to lat-long topology) or torus major segments.",
@@ -5040,17 +7532,82 @@
           "description": "Number of full revolutions for create_spiral_stairs (mutually exclusive with curveAngle).",
           "type": "number"
         },
+        "offset": {
+          "description": "offset_faces/loop_cut: offset distance.",
+          "type": "number"
+        },
+        "outerRadius": {
+          "description": "create_ring/create_pipe: outer radius.",
+          "type": "number"
+        },
         "outputPath": {
           "description": "Alias of assetPath.",
+          "type": "string"
+        },
+        "position": {
+          "description": "lattice_deform: deformation center (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "preserveFeatures": {
+          "description": "quadrangulate: preserve sharp features.",
+          "type": "boolean"
+        },
+        "profile": {
+          "description": "revolve: 2D profile points to revolve, each {x, y}.",
+          "items": {
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "profileActors": {
+          "description": "loft: actor names providing the cross-section profiles.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "projectionType": {
+          "description": "project_uv: projection mode (e.g. box, planar, cylindrical).",
           "type": "string"
         },
         "radialSegments": {
           "description": "Radial segments: sphere longitude steps (switches to lat-long topology) or torus minor segments.",
           "type": "number"
         },
+        "radialSteps": {
+          "description": "create_pipe: radial step count.",
+          "type": "integer"
+        },
         "radius": {
           "description": "Radius value.",
           "type": "number"
+        },
+        "recomputeNormals": {
+          "description": "set_lod_settings: recompute normals for this LOD.",
+          "type": "boolean"
+        },
+        "recomputeTangents": {
+          "description": "set_lod_settings: recompute tangents for this LOD.",
+          "type": "boolean"
         },
         "reductionPercent": {
           "description": "Percent of triangles to remove for simplify_mesh (mutually exclusive with targetTriangleCount/targetPercentage).",
@@ -5086,6 +7643,26 @@
           },
           "type": "object"
         },
+        "scaleEnd": {
+          "description": "sweep/extrude_along_spline: cross-section scale at the path end.",
+          "type": "number"
+        },
+        "scaleStart": {
+          "description": "sweep/extrude_along_spline: cross-section scale at the path start.",
+          "type": "number"
+        },
+        "scaleU": {
+          "description": "transform_uvs: U-axis scale.",
+          "type": "number"
+        },
+        "scaleV": {
+          "description": "transform_uvs: V-axis scale.",
+          "type": "number"
+        },
+        "scaleVariation": {
+          "description": "duplicate_along_spline: random per-copy scale variation.",
+          "type": "number"
+        },
         "screenSizes": {
           "description": "Array of screen sizes for each LOD.",
           "items": {
@@ -5097,6 +7674,22 @@
           "description": "Number of segments for bevel, subdivide.",
           "type": "number"
         },
+        "simplificationFactor": {
+          "description": "simplify_collision: simplification strength in [0,1].",
+          "type": "number"
+        },
+        "smooth": {
+          "description": "loft: smooth the interpolated cross-sections.",
+          "type": "boolean"
+        },
+        "splineActorName": {
+          "description": "sweep/duplicate_along_spline/extrude_along_spline: spline actor to follow.",
+          "type": "string"
+        },
+        "splitFactor": {
+          "description": "edge_split: split position along the edge in [0,1].",
+          "type": "number"
+        },
         "stepDepth": {
           "description": "Depth of each stair step.",
           "type": "number"
@@ -5105,12 +7698,24 @@
           "description": "Height of each stair step.",
           "type": "number"
         },
+        "steps": {
+          "description": "revolve/sweep/chamfer: step count (distinct from numSteps, which is stairs-specific).",
+          "type": "integer"
+        },
         "stepWidth": {
           "description": "Width of each stair step.",
           "type": "number"
         },
         "strength": {
           "description": "Strength or weight.",
+          "type": "number"
+        },
+        "subdivisions": {
+          "description": "create_sphere: icosphere subdivision count (default topology; alternative to numRings/radialSegments).",
+          "type": "integer"
+        },
+        "surfaceDistance": {
+          "description": "remesh_voxel: surface extraction distance/offset.",
           "type": "number"
         },
         "targetActor": {
@@ -5121,8 +7726,16 @@
           "description": "Target edge length for remesh_uniform (mutually exclusive with targetTriangleCount).",
           "type": "number"
         },
+        "targetHullCount": {
+          "description": "simplify_collision: target convex hull count.",
+          "type": "integer"
+        },
         "targetPercentage": {
           "description": "Percent of triangles to keep for simplify_mesh when targetTriangleCount is absent (default 50).",
+          "type": "number"
+        },
+        "targetQuadSize": {
+          "description": "quadrangulate: target quad edge length.",
           "type": "number"
         },
         "targetTriangleCount": {
@@ -5133,9 +7746,45 @@
           "description": "Texture asset path for displacement.",
           "type": "string"
         },
+        "textureResolution": {
+          "description": "pack_uv_islands: target texture resolution.",
+          "type": "integer"
+        },
+        "thickness": {
+          "description": "shell: wall thickness.",
+          "type": "number"
+        },
+        "tolerance": {
+          "description": "weld_vertices/merge_vertices: distance threshold for merging coincident vertices.",
+          "type": "number"
+        },
         "toolActor": {
           "description": "Actor used as the cutting/combining tool in a boolean operation.",
           "type": "string"
+        },
+        "topRadius": {
+          "description": "create_cone: radius at the top (0 for a point).",
+          "type": "number"
+        },
+        "translateU": {
+          "description": "transform_uvs: U-axis translation.",
+          "type": "number"
+        },
+        "translateV": {
+          "description": "transform_uvs: V-axis translation.",
+          "type": "number"
+        },
+        "trianglePercent": {
+          "description": "set_lod_settings: percent of triangles to keep at this LOD.",
+          "type": "number"
+        },
+        "trimActorName": {
+          "description": "boolean_trim: actor used as the trimming surface.",
+          "type": "string"
+        },
+        "twist": {
+          "description": "sweep/extrude_along_spline: twist in degrees along the path.",
+          "type": "number"
         },
         "uvChannel": {
           "description": "UV channel index (0-7).",
@@ -5165,13 +7814,29 @@
           },
           "type": "object"
         },
+        "voxelSize": {
+          "description": "remesh_voxel: voxel grid cell size.",
+          "type": "number"
+        },
         "weight": {
           "description": "Weight for lattice deformation.",
           "type": "number"
         },
+        "weld": {
+          "description": "mirror: weld vertices along the mirror plane.",
+          "type": "boolean"
+        },
         "weldDistance": {
           "description": "Distance threshold for weld_vertices (alias of tolerance).",
           "type": "number"
+        },
+        "weldTolerance": {
+          "description": "edge_split: distance tolerance for post-split welding.",
+          "type": "number"
+        },
+        "weldVertices": {
+          "description": "edge_split: weld coincident vertices after splitting.",
+          "type": "boolean"
         },
         "width": {
           "description": "Width value.",
@@ -5180,6 +7845,10 @@
         "widthSegments": {
           "description": "Segments along width.",
           "type": "number"
+        },
+        "widthSubdivisions": {
+          "description": "create_plane: subdivision count along width.",
+          "type": "integer"
         }
       },
       "required": [
@@ -5792,6 +8461,10 @@
           },
           "type": "object"
         },
+        "saveDirtyPackages": {
+          "description": "load/load_level: save dirty world/content packages before loading (required in headless/unattended mode).",
+          "type": "boolean"
+        },
         "savePath": {
           "description": "Path to save the asset.",
           "type": "string"
@@ -5896,12 +8569,20 @@
           "description": "Auto-calculate bounds from content.",
           "type": "boolean"
         },
+        "bBlockOnSlowStreaming": {
+          "description": "configure_grid_size: block on slow streaming for this grid.",
+          "type": "boolean"
+        },
         "bCreateWorldPartition": {
           "description": "Create with World Partition enabled.",
           "type": "boolean"
         },
         "bDisableDistanceStreaming": {
           "description": "Disable distance-based streaming.",
+          "type": "boolean"
+        },
+        "bEnabled": {
+          "description": "create_audio_volume/create_reverb_volume/set_volume_properties: enable the volume's effect.",
           "type": "boolean"
         },
         "bEnableWorldPartition": {
@@ -5916,9 +8597,21 @@
           "description": "Data layer initially visible.",
           "type": "boolean"
         },
+        "bIsPrivate": {
+          "description": "create_data_layer: mark the data layer private.",
+          "type": "boolean"
+        },
         "bIsSpatiallyLoaded": {
           "description": "HLOD is spatially loaded.",
           "type": "boolean"
+        },
+        "blendRadius": {
+          "description": "create_post_process_volume/add_post_process_volume: blend radius.",
+          "type": "number"
+        },
+        "blendWeight": {
+          "description": "create_post_process_volume/add_post_process_volume: blend weight.",
+          "type": "number"
         },
         "bounds": {
           "description": "Volume bounds as [minX, minY, minZ, maxX, maxY, maxZ]; set_volume_bounds alternative to volumeLocation + volumeExtent.",
@@ -5965,6 +8658,10 @@
           "description": "Include static meshes in packed level.",
           "type": "boolean"
         },
+        "bPainCausing": {
+          "description": "create_pain_causing_volume/set_volume_properties: enable damage-over-time.",
+          "type": "boolean"
+        },
         "bShouldBeVisible": {
           "description": "Level should be visible when loaded.",
           "type": "boolean"
@@ -5973,17 +8670,48 @@
           "description": "Block game until level is loaded.",
           "type": "boolean"
         },
+        "bUnbound": {
+          "description": "create_post_process_volume/add_post_process_volume: affect the whole level regardless of extent.",
+          "type": "boolean"
+        },
         "bUseExternalActors": {
           "description": "Enable One File Per Actor (OFPA/External Actors) for Data Layer compatibility. Automatically enabled when bCreateWorldPartition is true.",
           "type": "boolean"
+        },
+        "bWaterVolume": {
+          "description": "create_physics_volume/add_physics_volume/set_volume_properties: treat as water.",
+          "type": "boolean"
+        },
+        "capsuleHalfHeight": {
+          "description": "create_trigger_capsule: capsule half height.",
+          "type": "number"
+        },
+        "capsuleRadius": {
+          "description": "create_trigger_capsule: capsule radius.",
+          "type": "number"
         },
         "cellSize": {
           "description": "HLOD cell size.",
           "type": "number"
         },
+        "createIfMissing": {
+          "description": "configure_grid_size: create the named grid if it doesn't exist (default: true).",
+          "type": "boolean"
+        },
         "createVolume": {
           "description": "Create a streaming volume (true) or just report existing volumes (false). Default: true.",
           "type": "boolean"
+        },
+        "cullDistances": {
+          "description": "create_cull_distance_volume/add_cull_distance_volume: size/cullDistance pairs, e.g. [{\"size\": 100, \"cullDistance\": 5000}].",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "damagePerSec": {
+          "description": "create_pain_causing_volume/set_volume_properties: damage per second.",
+          "type": "number"
         },
         "dataLayerName": {
           "description": "Name of the data layer.",
@@ -5997,9 +8725,29 @@
           ],
           "type": "string"
         },
+        "enabled": {
+          "description": "create_post_process_volume/add_post_process_volume: whether the volume is enabled.",
+          "type": "boolean"
+        },
+        "fadeTime": {
+          "description": "create_reverb_volume/set_volume_properties: reverb fade time in seconds.",
+          "type": "number"
+        },
+        "filter": {
+          "description": "get_volumes_info: filter volumes by actor label substring.",
+          "type": "string"
+        },
+        "fluidFriction": {
+          "description": "create_physics_volume/add_physics_volume/set_volume_properties: fluid friction.",
+          "type": "number"
+        },
         "gridCellSize": {
           "description": "World Partition grid cell size.",
           "type": "number"
+        },
+        "gridName": {
+          "description": "configure_grid_size: name of the World Partition runtime grid (default grid if omitted).",
+          "type": "string"
         },
         "hlodLayerName": {
           "description": "Name of the HLOD layer.",
@@ -6054,6 +8802,20 @@
           },
           "type": "object"
         },
+        "killZHeight": {
+          "description": "add_kill_z_volume: Z height for the kill volume.",
+          "type": "number"
+        },
+        "layerType": {
+          "description": "configure_hlod_layer: HLOD generation method (default: MeshMerge). Legacy aliases SimplifiedMesh/ApproximatedMesh are also accepted.",
+          "enum": [
+            "MeshMerge",
+            "Instancing",
+            "MeshSimplify",
+            "MeshApproximate"
+          ],
+          "type": "string"
+        },
         "levelAssetPath": {
           "description": "Path to the level asset for instancing.",
           "type": "string"
@@ -6068,6 +8830,10 @@
         "levelPath": {
           "description": "Level asset path.",
           "type": "string"
+        },
+        "loadAfterCreate": {
+          "description": "create_level: open the new level in the editor after creation.",
+          "type": "boolean"
         },
         "loadingDistance": {
           "description": "HLOD loading distance.",
@@ -6105,6 +8871,32 @@
           "description": "Parent level path.",
           "type": "string"
         },
+        "postProcessSettings": {
+          "description": "create_post_process_volume: post-process override key/values (bloomEnabled, exposureBias, vignetteIntensity, saturation, contrast, gamma)."
+        },
+        "priority": {
+          "description": "configure_grid_size: grid priority. Also create_physics_volume/set_volume_properties (physics volume priority) and create_post_process_volume/add_post_process_volume (blend priority).",
+          "type": "number"
+        },
+        "reverbVolume": {
+          "description": "create_reverb_volume/set_volume_properties: reverb wet level (0-1).",
+          "type": "number"
+        },
+        "rotation": {
+          "description": "3D rotation (pitch, yaw, roll); create_*_volume actions.",
+          "properties": {
+            "pitch": {
+              "type": "number"
+            },
+            "roll": {
+              "type": "number"
+            },
+            "yaw": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
         "save": {
           "description": "Save the asset(s) after the operation.",
           "type": "boolean"
@@ -6116,6 +8908,10 @@
         "sourcePinName": {
           "description": "Name of the source pin.",
           "type": "string"
+        },
+        "sphereRadius": {
+          "description": "create_trigger_sphere: sphere radius.",
+          "type": "number"
         },
         "streamingDistance": {
           "description": "Distance/radius for streaming volume (creates ALevelStreamingVolume).",
@@ -6157,6 +8953,10 @@
           "description": "Name of the target pin.",
           "type": "string"
         },
+        "terminalVelocity": {
+          "description": "create_physics_volume/add_physics_volume/set_volume_properties: terminal velocity.",
+          "type": "number"
+        },
         "volumeExtent": {
           "description": "Extent of the volume.",
           "properties": {
@@ -6189,6 +8989,10 @@
         },
         "volumeName": {
           "description": "Name of the volume.",
+          "type": "string"
+        },
+        "volumeType": {
+          "description": "get_volumes_info: filter volumes by class name substring.",
           "type": "string"
         }
       },
@@ -6299,8 +9103,66 @@
           "description": "Input asset to read (get_input_info).",
           "type": "string"
         },
+        "attenuationFalloff": {
+          "description": "set_voice_attenuation: falloff curve exponent, 0.1-10.0 (default 1.0).",
+          "type": "number"
+        },
+        "attenuationRadius": {
+          "description": "set_voice_attenuation: distance at which voice starts attenuating (default 2000).",
+          "type": "number"
+        },
+        "autoBalance": {
+          "description": "configure_team_system: auto-balance team sizes.",
+          "type": "boolean"
+        },
+        "bAllowInvites": {
+          "description": "configure_local_session_settings: allow session invites.",
+          "type": "boolean"
+        },
+        "bAllowJoinInProgress": {
+          "description": "configure_local_session_settings: allow players to join after start.",
+          "type": "boolean"
+        },
+        "bDelayedStart": {
+          "description": "configure_game_rules: sets AGameMode::bDelayedStart when the property exists on the class.",
+          "type": "boolean"
+        },
+        "bIsLANMatch": {
+          "description": "configure_local_session_settings: mark the session as a LAN match.",
+          "type": "boolean"
+        },
         "blueprintPath": {
           "description": "Blueprint asset path.",
+          "type": "string"
+        },
+        "bShouldAdvertise": {
+          "description": "configure_local_session_settings: advertise the session publicly.",
+          "type": "boolean"
+        },
+        "bUseLobbiesIfAvailable": {
+          "description": "configure_local_session_settings: prefer lobbies when supported.",
+          "type": "boolean"
+        },
+        "bUsesPresence": {
+          "description": "configure_local_session_settings: advertise via presence.",
+          "type": "boolean"
+        },
+        "canRespawn": {
+          "description": "configure_spawn_system: whether respawning is allowed.",
+          "type": "boolean"
+        },
+        "channelName": {
+          "description": "set_voice_channel: voice channel name.",
+          "type": "string"
+        },
+        "channelType": {
+          "description": "set_voice_channel: channel type (default Global).",
+          "enum": [
+            "Team",
+            "Global",
+            "Proximity",
+            "Party"
+          ],
           "type": "string"
         },
         "condition": {
@@ -6328,6 +9190,10 @@
           "description": "InputMappingContext asset path (add_mapping / remove_mapping).",
           "type": "string"
         },
+        "controllerId": {
+          "description": "add_local_player: controller id for the new local player.",
+          "type": "number"
+        },
         "correctionThreshold": {
           "description": "Server correction threshold.",
           "type": "number"
@@ -6346,6 +9212,10 @@
           ],
           "type": "string"
         },
+        "defaultPawnClass": {
+          "description": "create_game_mode: default pawn class path. Alias: pawnClass (set_default_pawn_class).",
+          "type": "string"
+        },
         "dormancy": {
           "description": "Net dormancy mode.",
           "enum": [
@@ -6357,13 +9227,54 @@
           ],
           "type": "string"
         },
+        "enabled": {
+          "description": "configure_split_screen / configure_lan_play: enable flag for the feature being configured.",
+          "type": "boolean"
+        },
         "enablePrediction": {
           "description": "Enable client-side prediction.",
+          "type": "boolean"
+        },
+        "executeTravel": {
+          "description": "host_lan_server: actually perform ServerTravel instead of just building the URL (default false).",
+          "type": "boolean"
+        },
+        "forceRespawn": {
+          "description": "set_respawn_rules: whether respawn is forced rather than optional.",
+          "type": "boolean"
+        },
+        "friendlyFire": {
+          "description": "configure_team_system: allow damage to teammates.",
           "type": "boolean"
         },
         "functionName": {
           "description": "Name of the function.",
           "type": "string"
+        },
+        "gameModeBlueprint": {
+          "description": "Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info).",
+          "type": "string"
+        },
+        "gameStateClass": {
+          "description": "create_game_mode / set_game_state_class: GameState class path.",
+          "type": "string"
+        },
+        "hudClass": {
+          "description": "create_game_mode: HUD class path.",
+          "type": "string"
+        },
+        "interfaceType": {
+          "description": "configure_session_interface: online subsystem interface to use.",
+          "enum": [
+            "Default",
+            "LAN",
+            "Null"
+          ],
+          "type": "string"
+        },
+        "intermissionTime": {
+          "description": "configure_round_system: seconds between rounds.",
+          "type": "number"
         },
         "isAutonomousProxy": {
           "description": "Configure as autonomous proxy.",
@@ -6371,6 +9282,14 @@
         },
         "key": {
           "description": "Key id for a mapping (e.g. SpaceBar, Gamepad_FaceButton_Bottom).",
+          "type": "string"
+        },
+        "localPlayerNum": {
+          "description": "mute_player: local player index applying the mute.",
+          "type": "number"
+        },
+        "mapName": {
+          "description": "host_lan_server: map to travel to when hosting.",
           "type": "string"
         },
         "maxClientRate": {
@@ -6381,6 +9300,14 @@
           "description": "Max internet client rate.",
           "type": "number"
         },
+        "maxPlayers": {
+          "description": "configure_local_session_settings / host_lan_server: max player count (default 4).",
+          "type": "number"
+        },
+        "maxRespawns": {
+          "description": "configure_spawn_system: maximum respawns per player (-1 = unlimited).",
+          "type": "number"
+        },
         "minNetUpdateFrequency": {
           "description": "Minimum update frequency when idle (Hz, default 2).",
           "type": "number"
@@ -6388,6 +9315,10 @@
         "modifierType": {
           "description": "Input modifier class (set_input_modifier, e.g. Negate, SwizzleAxis).",
           "type": "string"
+        },
+        "muted": {
+          "description": "mute_player: mute (true) or unmute (false), default true.",
+          "type": "boolean"
         },
         "name": {
           "description": "Asset name (create_input_action / create_input_mapping_context).",
@@ -6430,6 +9361,14 @@
           ],
           "type": "string"
         },
+        "numRounds": {
+          "description": "configure_round_system: total rounds in the match.",
+          "type": "number"
+        },
+        "numTeams": {
+          "description": "configure_team_system: number of teams (default 2).",
+          "type": "number"
+        },
         "onlyRelevantToOwner": {
           "description": "Only relevant to owner.",
           "type": "boolean"
@@ -6438,16 +9377,56 @@
           "description": "Name of owner actor (null to clear).",
           "type": "string"
         },
+        "parentClass": {
+          "description": "create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class: parent class path (defaults to the native base class).",
+          "type": "string"
+        },
         "path": {
           "description": "Destination folder for a created input asset.",
+          "type": "string"
+        },
+        "playerControllerClass": {
+          "description": "create_game_mode / set_player_controller_class: PlayerController class path.",
+          "type": "string"
+        },
+        "playerIndex": {
+          "description": "remove_local_player: local player index to remove (cannot be 0).",
+          "type": "number"
+        },
+        "playerName": {
+          "description": "mute_player: player name to mute/unmute (or use targetPlayerId).",
+          "type": "string"
+        },
+        "playerStartName": {
+          "description": "configure_player_start: specific PlayerStart actor to configure (falls back to actorName).",
+          "type": "string"
+        },
+        "playerStartTag": {
+          "description": "configure_player_start: PlayerStartTag to assign (default derived from teamIndex).",
+          "type": "string"
+        },
+        "playerStateClass": {
+          "description": "create_game_mode / set_player_state_class: PlayerState class path.",
           "type": "string"
         },
         "predictionThreshold": {
           "description": "Prediction threshold for client prediction.",
           "type": "number"
         },
+        "priority": {
+          "description": "enable_input_mapping: mapping context priority (default 0).",
+          "type": "number"
+        },
         "propertyName": {
           "description": "Name of the property.",
+          "type": "string"
+        },
+        "pushToTalkEnabled": {
+          "description": "configure_push_to_talk: enable push-to-talk.",
+          "type": "boolean"
+        },
+        "pushToTalkKey": {
+          "description": "configure_push_to_talk: key bound to push-to-talk (default V).",
           "type": "string"
         },
         "reliable": {
@@ -6474,6 +9453,18 @@
           "description": "RepNotify function name.",
           "type": "string"
         },
+        "respawnDelay": {
+          "description": "configure_spawn_system / set_respawn_rules: seconds before a player respawns (default 5).",
+          "type": "number"
+        },
+        "respawnLives": {
+          "description": "set_respawn_rules: lives per player (-1 = unlimited).",
+          "type": "number"
+        },
+        "respawnLocation": {
+          "description": "set_respawn_rules: named respawn location strategy (default PlayerStart).",
+          "type": "string"
+        },
         "role": {
           "description": "Net role.",
           "enum": [
@@ -6484,6 +9475,10 @@
           ],
           "type": "string"
         },
+        "roundTime": {
+          "description": "configure_round_system: seconds per round.",
+          "type": "number"
+        },
         "rpcType": {
           "description": "Type of RPC.",
           "enum": [
@@ -6491,6 +9486,46 @@
             "Client",
             "NetMulticast"
           ],
+          "type": "string"
+        },
+        "save": {
+          "description": "Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false).",
+          "type": "boolean"
+        },
+        "scorePerAssist": {
+          "description": "configure_scoring_system: points awarded per assist.",
+          "type": "number"
+        },
+        "scorePerDeath": {
+          "description": "configure_scoring_system: score penalty for dying.",
+          "type": "number"
+        },
+        "scorePerKill": {
+          "description": "configure_scoring_system: points awarded per kill.",
+          "type": "number"
+        },
+        "scorePerObjective": {
+          "description": "configure_scoring_system: points awarded per objective completion.",
+          "type": "number"
+        },
+        "serverAddress": {
+          "description": "join_lan_server: address of the LAN server to connect to.",
+          "type": "string"
+        },
+        "serverName": {
+          "description": "host_lan_server: display name for the hosted server.",
+          "type": "string"
+        },
+        "serverPassword": {
+          "description": "configure_lan_play / join_lan_server: LAN server password.",
+          "type": "string"
+        },
+        "serverPort": {
+          "description": "configure_lan_play / join_lan_server: port number (default 7777).",
+          "type": "number"
+        },
+        "sessionName": {
+          "description": "configure_local_session_settings: session name (default DefaultSession).",
           "type": "string"
         },
         "smoothingRate": {
@@ -6501,8 +9536,55 @@
           "description": "Spatially loaded for replication graph.",
           "type": "boolean"
         },
+        "spawnSelectionMethod": {
+          "description": "configure_spawn_system: how spawn points are chosen (default Random).",
+          "type": "string"
+        },
+        "spectatorClass": {
+          "description": "configure_spectating: SpectatorPawn class path.",
+          "type": "string"
+        },
+        "splitScreenType": {
+          "description": "configure_split_screen / set_split_screen_type: split-screen layout.",
+          "enum": [
+            "None",
+            "TwoPlayer_Horizontal",
+            "TwoPlayer_Vertical",
+            "ThreePlayer_FavorTop",
+            "ThreePlayer_FavorBottom",
+            "FourPlayer_Grid"
+          ],
+          "type": "string"
+        },
+        "states": {
+          "description": "setup_match_states: match state names to record on the Blueprint.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "structName": {
           "description": "Name of struct for custom serialization.",
+          "type": "string"
+        },
+        "systemWide": {
+          "description": "mute_player: apply the mute system-wide rather than just locally.",
+          "type": "boolean"
+        },
+        "targetPlayerId": {
+          "description": "mute_player: player id to mute/unmute (or use playerName).",
+          "type": "string"
+        },
+        "teamIndex": {
+          "description": "configure_player_start: team index used to build the default PlayerStartTag.",
+          "type": "number"
+        },
+        "teamSize": {
+          "description": "configure_team_system: maximum players per team.",
+          "type": "number"
+        },
+        "travelOptions": {
+          "description": "host_lan_server / join_lan_server: extra URL options appended to the travel string.",
           "type": "string"
         },
         "triggerType": {
@@ -6523,6 +9605,10 @@
           "description": "Use owner relevancy.",
           "type": "boolean"
         },
+        "usePlayerStarts": {
+          "description": "configure_spawn_system: spawn at PlayerStart actors.",
+          "type": "boolean"
+        },
         "usePushModel": {
           "description": "Use push-model replication.",
           "type": "boolean"
@@ -6536,6 +9622,22 @@
             "Axis3D"
           ],
           "type": "string"
+        },
+        "variableName": {
+          "description": "add_network_prediction_data: name for the created replicated variable (default PredictionData_<dataType>).",
+          "type": "string"
+        },
+        "voiceEnabled": {
+          "description": "enable_voice_chat: enable or disable voice chat.",
+          "type": "boolean"
+        },
+        "voiceSettings": {
+          "description": "configure_voice_settings: nested settings object ({volume, noiseGateThreshold, noiseSuppression, echoCancellation, sampleRate}).",
+          "type": "object"
+        },
+        "winScore": {
+          "description": "configure_scoring_system: score required to win the match.",
+          "type": "number"
         },
         "withValidation": {
           "description": "Enable RPC validation.",
@@ -6602,6 +9704,10 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "bindingId": {
+          "description": "add_keyframe: sequence binding GUID (alternative to actorName).",
+          "type": "string"
         },
         "className": {
           "type": "string"
@@ -6782,6 +9888,17 @@
           ],
           "type": "string"
         },
+        "actors": {
+          "description": "merge_actors: actor names/labels/paths to merge (at least 2).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "additionalArgs": {
+          "description": "run_ubt: extra UBT command-line arguments (alias: arguments).",
+          "type": "string"
+        },
         "allowModalApis": {
           "description": "execute_python: opt out of the modal-API guard (reload_packages / *_with_dialog / EditorDialog are blocked by default — a modal dialog permanently freezes a headless editor). Only pass true when the exact call cannot prompt.",
           "type": "boolean"
@@ -6789,8 +9906,20 @@
         "arguments": {
           "type": "string"
         },
+        "boostPlayerLocation": {
+          "description": "configure_texture_streaming: boost streaming around the active camera location.",
+          "type": "boolean"
+        },
         "category": {
           "type": "string"
+        },
+        "categoryName": {
+          "description": "spawn_category: gameplay debugger category name (falls back to 'category' if absent).",
+          "type": "string"
+        },
+        "cellSize": {
+          "description": "configure_world_partition: wp.Runtime.RuntimeCellSize.",
+          "type": "number"
         },
         "channels": {
           "type": "string"
@@ -6820,12 +9949,24 @@
           "description": "get_log/tail_log: max lines to return (default 100, max 2000).",
           "type": "number"
         },
+        "detailed": {
+          "description": "generate_memory_report: emit the full/verbose report (memreport -full) instead of the summary.",
+          "type": "boolean"
+        },
+        "duration": {
+          "description": "run_benchmark: seconds to run before completing (default 60).",
+          "type": "number"
+        },
         "enabled": {
           "description": "Whether the item/feature is enabled.",
           "type": "boolean"
         },
         "file": {
           "description": "Path to .py file to execute",
+          "type": "string"
+        },
+        "filename": {
+          "description": "screenshot: output PNG filename (sanitized; default a timestamp).",
           "type": "string"
         },
         "filter": {
@@ -6836,15 +9977,47 @@
           "description": "generate_test_stub: override the EAutomationTestFlags expression (default EditorContext | EngineFilter).",
           "type": "string"
         },
+        "forceLOD": {
+          "description": "configure_lod: r.ForceLOD index (-1 = auto).",
+          "type": "number"
+        },
+        "forceRecompile": {
+          "description": "optimize_shaders: recompile all shaders regardless of mode.",
+          "type": "boolean"
+        },
+        "instancing": {
+          "description": "optimize_draw_calls: enable dynamic mesh draw command instancing.",
+          "type": "boolean"
+        },
         "key": {
           "type": "string"
         },
         "level": {
           "type": "number"
         },
+        "loadingRange": {
+          "description": "configure_world_partition: wp.Runtime.RuntimeStreamingRange.",
+          "type": "number"
+        },
+        "lodBias": {
+          "description": "configure_lod: r.MipMapLODBias.",
+          "type": "number"
+        },
+        "maxFPS": {
+          "description": "set_frame_rate_limit: maximum frame rate.",
+          "type": "number"
+        },
         "maxTests": {
           "description": "Max tests to queue for run_tests (1-500, default 50).",
           "type": "number"
+        },
+        "minScreenRadius": {
+          "description": "configure_occlusion_culling: r.OcclusionCullMinScreenRadius.",
+          "type": "number"
+        },
+        "mode": {
+          "description": "optimize_shaders: changed (default) | material | global.",
+          "type": "string"
         },
         "outputPath": {
           "description": "generate_test_stub: .cpp path to write (default: the bridge plugin's GeneratedTests dir).",
@@ -6854,25 +10027,61 @@
           "description": "generate_test_stub: replace the file if it already exists (default false).",
           "type": "boolean"
         },
+        "packageName": {
+          "description": "merge_actors: destination package path for the merged static mesh (alias: outputPath).",
+          "type": "string"
+        },
         "parentName": {
+          "type": "string"
+        },
+        "path": {
+          "description": "screenshot: output directory, relative to the project (must not escape it); default Saved/Screenshots/WindowsEditor.",
           "type": "string"
         },
         "platform": {
           "type": "string"
         },
+        "poolSize": {
+          "description": "configure_texture_streaming: r.Streaming.PoolSize in MB.",
+          "type": "number"
+        },
+        "profile": {
+          "description": "apply_baseline_settings: performance | quality | balanced (default balanced).",
+          "type": "string"
+        },
+        "replaceSourceActors": {
+          "description": "merge_actors: destroy the source actors once the merge succeeds (default false).",
+          "type": "boolean"
+        },
         "resolution": {
           "description": "Resolution setting (e.g., 1024x1024).",
           "type": "string"
         },
+        "returnBase64": {
+          "description": "screenshot: include the base64-encoded PNG in the response (default true).",
+          "type": "boolean"
+        },
         "runId": {
           "description": "Run identifier returned by run_tests; pass to get_test_results.",
           "type": "string"
+        },
+        "savePath": {
+          "description": "create_widget: destination folder for the new widget blueprint (default /Game/UI/Widgets).",
+          "type": "string"
+        },
+        "scale": {
+          "description": "set_resolution_scale: r.ScreenPercentage value (e.g. 100 = native).",
+          "type": "number"
         },
         "section": {
           "type": "string"
         },
         "sinceSeq": {
           "description": "get_log/tail_log: return only lines with seq > this (incremental polling; response carries nextSeq + dropped).",
+          "type": "number"
+        },
+        "slop": {
+          "description": "configure_occlusion_culling: r.OcclusionSlop.",
           "type": "number"
         },
         "target": {
@@ -6890,6 +10099,10 @@
           "description": "generate_test_stub: simple (default) | complex (parameterized) | latent (multi-frame).",
           "type": "string"
         },
+        "type": {
+          "description": "run_benchmark: benchmark type — all (default) | gpu.",
+          "type": "string"
+        },
         "value": {
           "type": "string"
         },
@@ -6899,6 +10112,10 @@
         },
         "widgetPath": {
           "description": "Widget blueprint path.",
+          "type": "string"
+        },
+        "widgetType": {
+          "description": "create_widget: informational widget-type tag echoed back in the response.",
           "type": "string"
         }
       },

@@ -64,6 +64,8 @@ public:
 			.String(TEXT("name"),
 				TEXT("find_by_name query; alias of actorName for spawn actions."))
 			.String(TEXT("tag"), TEXT("Name of the tag."))
+			.String(TEXT("matchType"), TEXT("find_by_tag/find_actors_by_tag: match mode, "
+				"'exact' (default) or 'contains'."))
 			.FreeformObject(TEXT("variables"), TEXT(""))
 			.String(TEXT("snapshotName"), TEXT(""))
 			.Integer(TEXT("limit"), TEXT("Maximum number of actors to return."))

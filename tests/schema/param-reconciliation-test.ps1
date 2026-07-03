@@ -39,7 +39,7 @@ $declRegex = [regex]'\.\s*(?:String|StringEnum|Number|Bool|Integer|Object|Array|
 # free helpers plus their per-file shadows/suffix variants (GetStringField,
 # GetJsonNumberFieldNav, ...), and the GetPayload* aliases. The [^";] gap spans
 # a receiver/first argument without escaping the statement.
-$readFn           = '(?:[A-Za-z0-9_]*(?:TryGet|Get|Has)[A-Za-z0-9_]*Field[A-Za-z0-9_]*|GetPayload[A-Za-z0-9_]+)'
+$readFn           = '(?:[A-Za-z0-9_]*(?:TryGet|Get|Has)[A-Za-z0-9_]*Field[A-Za-z0-9_]*|GetPayload[A-Za-z0-9_]+|Parse[A-Za-z0-9_]*FromJson)'
 $anyReadRegex     = [regex]('\b' + $readFn + '(?:<[^<>]*>)?\s*\(\s*[^";]{0,120}?TEXT\("([^"]+)"\)')
 # Get*FieldWithFallback(Payload, primaryKey, fallbackKey, ...) reads two keys.
 $fallbackKeyRegex = [regex]'WithFallback\s*\(\s*[^";]{0,80}?TEXT\("[^"]+"\)\s*,\s*TEXT\("([^"]+)"\)'

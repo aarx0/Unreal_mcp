@@ -44,6 +44,7 @@ public:
 				TEXT("String")
             }, TEXT("Blackboard key data type."))
             .Bool(TEXT("isInstanceSynced"), TEXT("Sync key across instances."))
+            .String(TEXT("baseObjectClass"), TEXT("add_blackboard_key: base class for Object/Class key types (default 'Actor')."))
             .StringEnum(TEXT("compositeType"), {
 				TEXT("Selector"),
 				TEXT("Sequence"),
@@ -184,11 +185,16 @@ public:
 			}, TEXT("Dominant sense for perception prioritization."))
 			.String(TEXT("stateTreePath"), TEXT("Path to State Tree asset."))
             .String(TEXT("stateName"), TEXT("Name of the state."))
+            .String(TEXT("schemaType"), TEXT("create_state_tree: schema type (default 'Component')."))
+            .String(TEXT("selectionBehavior"), TEXT("configure_state_tree_task: state selection behavior."))
             .String(TEXT("fromState"), TEXT("Source state name."))
             .String(TEXT("toState"), TEXT("Target state name."))
             .String(TEXT("definitionPath"), TEXT("Path to definition asset."))
             .Number(TEXT("slotIndex"), TEXT("Index of slot to configure."))
+            .String(TEXT("behaviorType"), TEXT("configure_slot_behavior: behavior definition type for the slot."))
+            .Array(TEXT("activityTags"), TEXT("configure_slot_behavior: gameplay tags describing slot activity."))
             .String(TEXT("configPath"), TEXT("Path to config asset."))
+            .String(TEXT("parentConfigPath"), TEXT("configure_mass_entity: optional parent config to inherit from."))
             .String(TEXT("actorName"), TEXT("Name of the actor."))
             .Number(TEXT("agentRadius"), TEXT("Navigation agent radius (default: 35)."))
 			.Number(TEXT("agentHeight"), TEXT("Navigation agent height (default: 144)."))
@@ -264,6 +270,7 @@ public:
 			.Bool(TEXT("enableSight"), TEXT("Enable sight sense."))
 			.Bool(TEXT("enabled"), TEXT("Generic enabled flag."))
 			.String(TEXT("focusActorName"), TEXT("Actor name to focus."))
+			.String(TEXT("targetActor"), TEXT("set_focus: alias for focusActorName (checked as fallback)."))
 			.Number(TEXT("hearingRange"), TEXT("AI hearing range."))
 			.Number(TEXT("loseSightRadius"), TEXT("AI sight lose radius."))
 			.Object(TEXT("offset"), TEXT("Generic offset vector."),

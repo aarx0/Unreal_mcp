@@ -39,6 +39,8 @@ public:
 				[](FMcpSchemaBuilder& S) {
 				S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
 			})
+			.Number(TEXT("scale"), TEXT("particle/spawn_niagara: uniform scale (also accepts an array)."))
+			.Bool(TEXT("autoDestroy"), TEXT("particle/spawn_niagara: destroy the spawned actor once its effect finishes."))
 			.String(TEXT("actorName"), TEXT("Name of the actor."))
 			.String(TEXT("attachToActor"), TEXT("Actor label to attach spawned Niagara actor to."))
 			.Bool(TEXT("reset"), TEXT(""))
@@ -51,8 +53,27 @@ public:
 			.Number(TEXT("radius"), TEXT(""))
 			.Array(TEXT("color"), TEXT(""), TEXT("number"))
 			.Number(TEXT("duration"), TEXT(""))
+			.Number(TEXT("thickness"), TEXT("debug_shape/particle: line/box drawing thickness."))
+			.Number(TEXT("size"), TEXT("debug_shape/particle: shape size (fallback for radius)."))
+			.Object(TEXT("endLocation"), TEXT("debug_shape/particle: end point for line/cylinder/arrow shapes (x, y, z)."),
+				[](FMcpSchemaBuilder& S) {
+				S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			})
+			.Array(TEXT("boxSize"), TEXT("particle: box shape dimensions [x, y, z]."), TEXT("number"))
+			.Object(TEXT("direction"), TEXT("particle: cone shape direction (x, y, z)."),
+				[](FMcpSchemaBuilder& S) {
+				S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			})
+			.Number(TEXT("length"), TEXT("particle: cone shape length."))
+			.Number(TEXT("angle"), TEXT("particle: cone shape angle in degrees."))
+			.Number(TEXT("halfHeight"), TEXT("particle: capsule shape half-height."))
+			.String(TEXT("lightName"), TEXT("create_dynamic_light: actor label for the spawned light."))
 			.String(TEXT("lightType"), TEXT(""))
 			.Number(TEXT("intensity"), TEXT(""))
+			.Object(TEXT("pulse"), TEXT("create_dynamic_light: pulsing light tag (enabled, frequency)."),
+				[](FMcpSchemaBuilder& S) {
+				S.Bool(TEXT("enabled")).Number(TEXT("frequency"));
+			})
 			.Number(TEXT("density"), TEXT(""))
 			.Number(TEXT("scattering"), TEXT(""))
 			.Number(TEXT("extinction"), TEXT(""))
@@ -60,6 +81,8 @@ public:
 			.String(TEXT("scriptType"), TEXT("Niagara script target, e.g. Spawn or Update."))
 			.Bool(TEXT("autoConnect"), TEXT("Automatically connect a compatible Niagara graph pin pair."))
 			.String(TEXT("nodeId"), TEXT("ID of the node."))
+			.String(TEXT("sourcePinName"), TEXT("connect_niagara_pins: name of the source (output) pin."))
+			.String(TEXT("targetPinName"), TEXT("connect_niagara_pins: name of the target (input) pin."))
 			.String(TEXT("parameterName"), TEXT("Name of the parameter."))
 			.String(TEXT("parameterType"), TEXT(""))
 			.FreeformObject(TEXT("parameterValue"), TEXT("Generic parameter value (any type)."))
@@ -93,6 +116,8 @@ public:
 			.String(TEXT("alignment"), TEXT("Sprite alignment mode."))
 			.String(TEXT("facingMode"), TEXT("Sprite facing mode."))
 			.String(TEXT("meshPath"), TEXT("Mesh asset path."))
+			.String(TEXT("skeletalMeshPath"), TEXT("add_skeletal_mesh_data_interface: skeletal mesh asset path."))
+			.String(TEXT("staticMeshPath"), TEXT("add_static_mesh_data_interface: static mesh asset path."))
 			.Number(TEXT("lightRadius"), TEXT(""))
 			.String(TEXT("collisionMode"), TEXT(""))
 			.Number(TEXT("restitution"), TEXT(""))

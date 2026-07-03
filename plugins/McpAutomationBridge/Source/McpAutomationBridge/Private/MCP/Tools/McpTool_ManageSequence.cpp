@@ -27,6 +27,7 @@ public:
 			.String(TEXT("path"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 			.String(TEXT("actorName"), TEXT("Name of the actor."))
 			.Array(TEXT("actorNames"), TEXT(""))
+			.String(TEXT("bindingId"), TEXT("add_keyframe: sequence binding GUID (alternative to actorName)."))
 			.Number(TEXT("frame"), TEXT(""))
 			.FreeformObject(TEXT("value"), TEXT(""))
 			.String(TEXT("property"), TEXT("Name of the property."))
