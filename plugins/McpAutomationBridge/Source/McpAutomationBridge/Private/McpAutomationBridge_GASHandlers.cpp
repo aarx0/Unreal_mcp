@@ -112,6 +112,17 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpGASHandlers, Log, All);
 #include "GameplayCueNotify_Static.h"
 #include "GameplayCueNotify_Actor.h"
 #include "GameplayEffectExecutionCalculation.h"
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
+// Modular GE components: on 5.3+ the engine's PostCDOCompiled overwrites the
+// legacy Inheritable*/TagRequirements fields FROM these components, so tag
+// writes must target the components to survive a compile.
+#include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
+#include "GameplayEffectComponents/TargetTagRequirementsGameplayEffectComponent.h"
+#include "GameplayEffectComponents/ImmunityGameplayEffectComponent.h"
+#define MCP_HAS_MODULAR_GE_COMPONENTS 1
+#else
+#define MCP_HAS_MODULAR_GE_COMPONENTS 0
+#endif
 #else
 #define MCP_HAS_GAS 0
 #endif
@@ -126,6 +137,103 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpGASHandlers, Log, All);
 static FGameplayTag GetOrRequestTag(const FString& TagString)
 {
     return FGameplayTag::RequestGameplayTag(FName(*TagString), false);
+}
+
+// Resolves "AttributeName" or "SetClassName.AttributeName" against loaded
+// UAttributeSet classes. Bare names must be unambiguous across sets.
+static FGameplayAttribute McpResolveGameplayAttribute(const FString& AttributeSpec, FString& OutError)
+{
+    FString ClassPart;
+    FString AttrPart = AttributeSpec;
+    AttributeSpec.Split(TEXT("."), &ClassPart, &AttrPart, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+
+    // Path-qualified specs ('/Game/X/AS_Foo.AttrName') load the attribute-set
+    // Blueprint themselves; bare/short names can only match already-loaded classes.
+    if (ClassPart.StartsWith(TEXT("/")))
+    {
+        const FString ShortName = FPackageName::GetShortName(ClassPart);
+        UClass* SetClass = StaticLoadClass(UAttributeSet::StaticClass(), nullptr,
+            *(ClassPart + TEXT(".") + ShortName + TEXT("_C")), nullptr, LOAD_NoWarn | LOAD_Quiet);
+        if (!SetClass)
+        {
+            if (UBlueprint* SetBP = LoadObject<UBlueprint>(nullptr, *ClassPart, nullptr, LOAD_NoWarn | LOAD_Quiet, nullptr))
+            {
+                SetClass = SetBP->GeneratedClass;
+            }
+        }
+        if (!SetClass || !SetClass->IsChildOf(UAttributeSet::StaticClass()))
+        {
+            OutError = FString::Printf(TEXT("'%s' did not resolve to an AttributeSet class."), *ClassPart);
+            return FGameplayAttribute();
+        }
+        FProperty* Prop = FindFProperty<FProperty>(SetClass, *AttrPart);
+        if (Prop && (FGameplayAttribute::IsGameplayAttributeDataProperty(Prop) || Prop->IsA<FFloatProperty>()))
+        {
+            return FGameplayAttribute(Prop);
+        }
+        OutError = FString::Printf(TEXT("Attribute '%s' not found on %s."), *AttrPart, *SetClass->GetName());
+        return FGameplayAttribute();
+    }
+
+    TArray<UClass*> SetClasses;
+    GetDerivedClasses(UAttributeSet::StaticClass(), SetClasses, true);
+
+    TArray<FProperty*> Matches;
+    TArray<FString> MatchOwners;
+    for (UClass* SetClass : SetClasses)
+    {
+        if (!ClassPart.IsEmpty()
+            && SetClass->GetName() != ClassPart
+            && SetClass->GetPathName() != ClassPart)
+        {
+            continue;
+        }
+        if (FProperty* Prop = FindFProperty<FProperty>(SetClass, *AttrPart))
+        {
+            if (FGameplayAttribute::IsGameplayAttributeDataProperty(Prop) || Prop->IsA<FFloatProperty>())
+            {
+                // Parent-class properties surface once per derived class; dedupe by property.
+                if (!Matches.Contains(Prop))
+                {
+                    Matches.Add(Prop);
+                    MatchOwners.Add(SetClass->GetName());
+                }
+            }
+        }
+    }
+
+    if (Matches.Num() == 0)
+    {
+        OutError = FString::Printf(
+            TEXT("Attribute '%s' not found on any loaded AttributeSet class. Pass 'AttributeName', 'SetClassName.AttributeName', or a path-qualified '/Game/...AttrSet.AttributeName' (loads the set)."),
+            *AttributeSpec);
+        return FGameplayAttribute();
+    }
+    if (Matches.Num() > 1)
+    {
+        OutError = FString::Printf(
+            TEXT("Attribute '%s' is ambiguous (found on: %s). Qualify it as 'SetClassName.AttributeName'."),
+            *AttributeSpec, *FString::Join(MatchOwners, TEXT(", ")));
+        return FGameplayAttribute();
+    }
+    return FGameplayAttribute(Matches[0]);
+}
+
+// Adds a granted (target-owned) tag so it survives a compile: on modular (5.3+)
+// GEs the engine overwrites the legacy container FROM the component in
+// PostCDOCompiled, so the component is the only durable write target.
+static void McpAddGrantedTagToEffect(UGameplayEffect* EffectCDO, const FGameplayTag& Tag)
+{
+#if MCP_HAS_MODULAR_GE_COMPONENTS
+    UTargetTagsGameplayEffectComponent& TagsComp = EffectCDO->FindOrAddComponent<UTargetTagsGameplayEffectComponent>();
+    FInheritedTagContainer TagChanges = TagsComp.GetConfiguredTargetTagChanges();
+    TagChanges.AddTag(Tag);
+    TagsComp.SetAndApplyTargetTagChanges(TagChanges);
+#else
+    PRAGMA_DISABLE_DEPRECATION_WARNINGS
+    EffectCDO->InheritableOwnedTagsContainer.AddTag(Tag);
+    PRAGMA_ENABLE_DEPRECATION_WARNINGS
+#endif
 }
 
 static FString NormalizeGASToken(FString Value)
@@ -1832,7 +1940,24 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         const FString OperationToken = NormalizeGASToken(Operation);
         float Magnitude = static_cast<float>(GetGASNumberFieldWithFallback(Payload, TEXT("magnitude"), TEXT("modifierMagnitude"), 0.0));
 
+        const FString AttributeSpec = GetJsonStringField(Payload, TEXT("attribute"));
+        if (AttributeSpec.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("Missing 'attribute' - a modifier must target a gameplay attribute (pass 'AttributeName' or 'SetClassName.AttributeName')."),
+                TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+        FString AttrResolveError;
+        const FGameplayAttribute ResolvedAttribute = McpResolveGameplayAttribute(AttributeSpec, AttrResolveError);
+        if (!ResolvedAttribute.IsValid())
+        {
+            SendAutomationError(RequestingSocket, RequestId, AttrResolveError, TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+
         FGameplayModifierInfo Modifier;
+        Modifier.Attribute = ResolvedAttribute;
         
         if (OperationToken == TEXT("additive") || OperationToken == TEXT("add"))
         {
@@ -1885,6 +2010,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("operation"), Operation);
+        Result->SetStringField(TEXT("attribute"), ResolvedAttribute.GetName());
         if (!SetByCallerTagString.IsEmpty())
         {
             Result->SetStringField(TEXT("setByCallerTag"), SetByCallerTagString);
@@ -2258,11 +2384,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                 FGameplayTag Tag = GetOrRequestTag(TagStr);
                 if (Tag.IsValid())
                 {
-                    // InheritableOwnedTagsContainer is deprecated in UE 5.5+. Suppress warning unconditionally.
-                    // For future: Use UTargetTagsGameplayEffectComponent instead.
-                    PRAGMA_DISABLE_DEPRECATION_WARNINGS
-                    EffectCDO->InheritableOwnedTagsContainer.AddTag(Tag);
-                    PRAGMA_ENABLE_DEPRECATION_WARNINGS
+                    McpAddGrantedTagToEffect(EffectCDO, Tag);
                     TagsAdded.Add(TagStr);
                 }
                 else
@@ -2282,9 +2404,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                 FGameplayTag Tag = GetOrRequestTag(TagStr);
                 if (Tag.IsValid())
                 {
+#if MCP_HAS_MODULAR_GE_COMPONENTS
+                    UTargetTagRequirementsGameplayEffectComponent& ReqComp =
+                        EffectCDO->FindOrAddComponent<UTargetTagRequirementsGameplayEffectComponent>();
+                    ReqComp.ApplicationTagRequirements.RequireTags.AddTag(Tag);
+#else
                     PRAGMA_DISABLE_DEPRECATION_WARNINGS
                     EffectCDO->ApplicationTagRequirements.RequireTags.AddTag(Tag);
                     PRAGMA_ENABLE_DEPRECATION_WARNINGS
+#endif
                     TagsAdded.Add(TagStr);
                 }
                 else
@@ -2304,9 +2432,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                 FGameplayTag Tag = GetOrRequestTag(TagStr);
                 if (Tag.IsValid())
                 {
+#if MCP_HAS_MODULAR_GE_COMPONENTS
+                    UTargetTagRequirementsGameplayEffectComponent& ReqComp =
+                        EffectCDO->FindOrAddComponent<UTargetTagRequirementsGameplayEffectComponent>();
+                    ReqComp.RemovalTagRequirements.RequireTags.AddTag(Tag);
+#else
                     PRAGMA_DISABLE_DEPRECATION_WARNINGS
                     EffectCDO->RemovalTagRequirements.RequireTags.AddTag(Tag);
                     PRAGMA_ENABLE_DEPRECATION_WARNINGS
+#endif
                     TagsAdded.Add(TagStr);
                 }
                 else
@@ -2326,9 +2460,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                 FGameplayTag Tag = GetOrRequestTag(TagStr);
                 if (Tag.IsValid())
                 {
+#if MCP_HAS_MODULAR_GE_COMPONENTS
+                    // Modular immunity is query-based; match-any-owning-tags mirrors the
+                    // engine's own legacy-to-component upgrade conversion.
+                    UImmunityGameplayEffectComponent& ImmunityComp =
+                        EffectCDO->FindOrAddComponent<UImmunityGameplayEffectComponent>();
+                    ImmunityComp.ImmunityQueries.Add(
+                        FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tag)));
+#else
                     PRAGMA_DISABLE_DEPRECATION_WARNINGS
                     EffectCDO->GrantedApplicationImmunityTags.RequireTags.AddTag(Tag);
                     PRAGMA_ENABLE_DEPRECATION_WARNINGS
+#endif
                     TagsAdded.Add(TagStr);
                 }
                 else
@@ -2753,10 +2896,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             {
                 if (bTagIsRegistered)
                 {
-                    // InheritableOwnedTagsContainer is deprecated, suppress warning unconditionally
-                    PRAGMA_DISABLE_DEPRECATION_WARNINGS
-                    EffectCDO->InheritableOwnedTagsContainer.AddTag(Tag);
-                    PRAGMA_ENABLE_DEPRECATION_WARNINGS
+                    McpAddGrantedTagToEffect(EffectCDO, Tag);
                 }
                 else
                 {

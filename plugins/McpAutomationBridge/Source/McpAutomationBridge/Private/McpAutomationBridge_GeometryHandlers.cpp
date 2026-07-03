@@ -7259,12 +7259,17 @@ static bool HandleGenerateComplexCollision(UMcpAutomationBridgeSubsystem* Self, 
 {
     FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
     int32 MaxHullCount = GetJsonIntField(Payload, TEXT("maxHullCount"), 8);
-    int32 MaxHullVerts = GetJsonIntField(Payload, TEXT("maxHullVerts"), 32);
-    double HullPrecision = GetJsonNumberField(Payload, TEXT("hullPrecision"), 100.0);
+    double HullPrecision = GetJsonNumberField(Payload, TEXT("hullPrecision"), 0.5);
 
     if (ActorName.IsEmpty())
     {
         Self->SendAutomationError(Socket, RequestId, TEXT("actorName required"), TEXT("INVALID_ARGUMENT"));
+        return true;
+    }
+    if (HullPrecision < 0.0 || HullPrecision > 1.0)
+    {
+        Self->SendAutomationError(Socket, RequestId,
+            TEXT("hullPrecision must be in [0,1] (convex decomposition search factor)"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -7299,6 +7304,7 @@ static bool HandleGenerateComplexCollision(UMcpAutomationBridgeSubsystem* Self, 
     FGeometryScriptCollisionFromMeshOptions CollisionOptions;
     CollisionOptions.Method = EGeometryScriptCollisionGenerationMethod::ConvexHulls;
     CollisionOptions.MaxConvexHullsPerMesh = FMath::Clamp(MaxHullCount, 1, 64);
+    CollisionOptions.ConvexDecompositionSearchFactor = static_cast<float>(HullPrecision);
     CollisionOptions.bEmitTransaction = false;
     
     // Generate collision from mesh
@@ -7315,6 +7321,7 @@ static bool HandleGenerateComplexCollision(UMcpAutomationBridgeSubsystem* Self, 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("actorName"), ActorName);
     Result->SetNumberField(TEXT("hullCount"), MaxHullCount);
+    Result->SetNumberField(TEXT("hullPrecision"), HullPrecision);
     Result->SetNumberField(TEXT("shapeCount"), ShapeCount);
     Result->SetStringField(TEXT("collisionType"), TEXT("convex_decomposition"));
     
