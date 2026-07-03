@@ -116,7 +116,7 @@ private:
 	// JSON-RPC method handlers (return response body string)
 	FString HandleInitialize(const TSharedPtr<FJsonObject>& Params,
 		const TSharedPtr<FJsonValue>& Id, FString& OutSessionId);
-	FString HandleToolsList(const TSharedPtr<FJsonValue>& Id);
+	FString HandleToolsList(const TSharedPtr<FJsonValue>& Id, const FString& SessionId);
 	void HandleToolsCall(const TSharedPtr<FJsonObject>& Params,
 		const TSharedPtr<FJsonValue>& Id, FSocket* ClientSocket,
 		const FString& SessionId, const FString& CorsOrigin);

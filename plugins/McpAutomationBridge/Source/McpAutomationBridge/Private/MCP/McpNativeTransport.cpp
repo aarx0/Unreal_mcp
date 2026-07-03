@@ -553,7 +553,7 @@ void FMcpNativeTransport::HandleConnection(FSocket* ClientSocket)
 						*HttpReq.SessionId, ActiveSessions.Num());
 				}
 			}
-
+			ToolManager.DropSession(HttpReq.SessionId);
 		}
 		SendHttpResponse(ClientSocket, 200, TEXT("text/plain"), FString(), {}, HttpReq.Origin);
 		ClientSocket->Close();
@@ -655,7 +655,7 @@ void FMcpNativeTransport::HandleConnection(FSocket* ClientSocket)
 
 	if (Rpc.Method == TEXT("tools/list"))
 	{
-		FString ResponseBody = HandleToolsList(Rpc.Id);
+		FString ResponseBody = HandleToolsList(Rpc.Id, HttpReq.SessionId);
 		SendHttpResponse(ClientSocket, 200, TEXT("application/json"), ResponseBody, {}, HttpReq.Origin);
 		ClientSocket->Close();
 		SocketSub->DestroySocket(ClientSocket);
@@ -1155,9 +1155,9 @@ FString FMcpNativeTransport::HandleInitialize(
 
 // ─── Tools List ─────────────────────────────────────────────────────────────
 
-FString FMcpNativeTransport::HandleToolsList(const TSharedPtr<FJsonValue>& Id)
+FString FMcpNativeTransport::HandleToolsList(const TSharedPtr<FJsonValue>& Id, const FString& SessionId)
 {
-	TSet<FString> EnabledTools = ToolManager.GetEnabledToolNames();
+	TSet<FString> EnabledTools = ToolManager.GetEnabledToolNames(SessionId);
 	TSharedPtr<FJsonObject> ToolsList = FMcpToolRegistry::Get().GetFilteredToolsResponse(EnabledTools);
 
 	if (ToolsList.IsValid())
@@ -1233,7 +1233,7 @@ void FMcpNativeTransport::HandleToolsCall(
 	{
 		FString Action;
 		Arguments->TryGetStringField(TEXT("action"), Action);
-		TSharedPtr<FJsonObject> Result = ToolManager.HandleAction(Action, Arguments);
+		TSharedPtr<FJsonObject> Result = ToolManager.HandleAction(Action, Arguments, SessionId);
 		bool bActionSuccess = false;
 		if (Result.IsValid()) { Result->TryGetBoolField(TEXT("success"), bActionSuccess); }
 		FString ActionMessage = TEXT("OK");
@@ -1267,9 +1267,9 @@ void FMcpNativeTransport::HandleToolsCall(
 					Action == TEXT("enable_category") || Action == TEXT("disable_category") ||
 					Action == TEXT("reset"))
 				{
-					ActionMessage += TEXT(" Changes apply to tools/call immediately for ALL "
-						"connected sessions; no list_changed notification is sent, so clients "
-						"that cache tools/list must re-list (typically reconnect) to see them.");
+					ActionMessage += TEXT(" Changes apply to THIS session only, effective "
+						"immediately for tools/call; other sessions are unaffected. Clients "
+						"that cache tools/list must re-list to see them.");
 				}
 			}
 		}
@@ -1372,22 +1372,21 @@ void FMcpNativeTransport::HandleToolsCall(
 	}
 
 	// Enforce tool enabled check — tools/list filters, tools/call must also enforce.
-	// Enablement is one global state shared by every session, so a concurrent
-	// session's manage_tools disable lands here as a transient — the error must
-	// offer remediation, not read as permanent server configuration.
-	if (!ToolManager.IsToolEnabled(ToolName))
+	// Enablement is per-session: a disabled tool here can only be this
+	// session's own earlier manage_tools call (or server defaults) — never a
+	// concurrent session's doing.
+	if (!ToolManager.IsToolEnabled(ToolName, SessionId))
 	{
 		FString Message = FString::Printf(
-			TEXT("Tool '%s' is not enabled. Enable it with manage_tools "
-			     "{action:'enable_tools', tools:['%s']} and retry. Tool availability "
-			     "is shared across all sessions, so a concurrent manage_tools call "
-			     "may have just disabled it"),
+			TEXT("Tool '%s' is not enabled for this session. Enable it with manage_tools "
+			     "{action:'enable_tools', tools:['%s']} (or {action:'reset'} to restore "
+			     "server defaults) and retry"),
 			*ToolName, *ToolName);
 		FString LastMutationAction;
 		double LastMutationSecondsAgo = 0.0;
-		if (ToolManager.GetLastMutation(LastMutationAction, LastMutationSecondsAgo))
+		if (ToolManager.GetLastMutation(SessionId, LastMutationAction, LastMutationSecondsAgo))
 		{
-			Message += FString::Printf(TEXT(" (last manage_tools change: '%s' %.0fs ago)"),
+			Message += FString::Printf(TEXT(" (this session's last manage_tools change: '%s' %.0fs ago)"),
 				*LastMutationAction, LastMutationSecondsAgo);
 		}
 		Message += TEXT(".");
@@ -1607,21 +1606,27 @@ void FMcpNativeTransport::CleanupStaleRequests()
 
 	// Clean up inactive sessions
 	{
-		FScopeLock Lock(&SessionMutex);
 		TArray<FString> ExpiredSessions;
-		for (const auto& [SessionId, LastActivity] : ActiveSessions)
 		{
-			if (Now - LastActivity > SessionTimeoutSeconds)
+			FScopeLock Lock(&SessionMutex);
+			for (const auto& [SessionId, LastActivity] : ActiveSessions)
 			{
-				ExpiredSessions.Add(SessionId);
+				if (Now - LastActivity > SessionTimeoutSeconds)
+				{
+					ExpiredSessions.Add(SessionId);
+				}
+			}
+			for (const FString& SessionId : ExpiredSessions)
+			{
+				ActiveSessions.Remove(SessionId);
+				UE_LOG(LogMcpNativeTransport, Log,
+					TEXT("Session %s expired after %.0f min inactivity (remaining: %d)"),
+					*SessionId, SessionTimeoutSeconds / 60.0, ActiveSessions.Num());
 			}
 		}
 		for (const FString& SessionId : ExpiredSessions)
 		{
-			ActiveSessions.Remove(SessionId);
-			UE_LOG(LogMcpNativeTransport, Log,
-				TEXT("Session %s expired after %.0f min inactivity (remaining: %d)"),
-				*SessionId, SessionTimeoutSeconds / 60.0, ActiveSessions.Num());
+			ToolManager.DropSession(SessionId);
 		}
 	}
 
@@ -1651,6 +1656,7 @@ FMcpNativeTransport::ESessionValidationResult FMcpNativeTransport::ValidateSessi
 	if (Now - *LastActivity > SessionTimeoutSeconds)
 	{
 		ActiveSessions.Remove(SessionId);
+		ToolManager.DropSession(SessionId);
 		OutError = TEXT("Invalid or expired session ID");
 		return ESessionValidationResult::Invalid;
 	}

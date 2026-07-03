@@ -24,6 +24,7 @@ void FMcpDynamicToolManager::Initialize(const FMcpToolRegistry& Registry, bool b
 	FScopeLock Lock(&StateMutex);
 	ToolStates.Empty();
 	CategoryStates.Empty();
+	SessionOverrides.Empty();
 
 	for (const FString& ToolName : Registry.GetToolNames())
 	{
@@ -42,22 +43,8 @@ void FMcpDynamicToolManager::Initialize(const FMcpToolRegistry& Registry, bool b
 			CS.Name = Category;
 			CS.bEnabled = bEnabled;
 			CS.ToolCount = 0;
-			CS.EnabledCount = 0;
 		}
 		CS.ToolCount++;
-		if (bEnabled) CS.EnabledCount++;
-	}
-
-	// Snapshot initial state for Reset()
-	InitialToolEnabled.Empty();
-	InitialCategoryEnabled.Empty();
-	for (const auto& Pair : ToolStates)
-	{
-		InitialToolEnabled.Add(Pair.Key, Pair.Value.bEnabled);
-	}
-	for (const auto& Pair : CategoryStates)
-	{
-		InitialCategoryEnabled.Add(Pair.Key, Pair.Value.bEnabled);
 	}
 
 	UE_LOG(LogMcpToolManager, Log, TEXT("Initialized from registry with %d tools across %d categories"),
@@ -66,28 +53,57 @@ void FMcpDynamicToolManager::Initialize(const FMcpToolRegistry& Registry, bool b
 
 // ─── Query ──────────────────────────────────────────────────────────────────
 
-bool FMcpDynamicToolManager::IsToolEnabled_NoLock(const FString& ToolName) const
+const FMcpDynamicToolManager::FSessionOverrides* FMcpDynamicToolManager::FindSession_NoLock(
+	const FString& SessionId) const
+{
+	return SessionId.IsEmpty() ? nullptr : SessionOverrides.Find(SessionId);
+}
+
+bool FMcpDynamicToolManager::IsCategoryEnabled_NoLock(
+	const FString& Category, const FSessionOverrides* Session) const
+{
+	if (Session)
+	{
+		if (const bool* Override = Session->Categories.Find(Category))
+		{
+			return *Override;
+		}
+	}
+	const FCategoryState* CS = CategoryStates.Find(Category);
+	return !CS || CS->bEnabled;
+}
+
+bool FMcpDynamicToolManager::IsToolEnabled_NoLock(
+	const FString& ToolName, const FSessionOverrides* Session) const
 {
 	const FToolState* TS = ToolStates.Find(ToolName);
 	if (!TS) return false;
 
-	const FCategoryState* CS = CategoryStates.Find(TS->Category);
-	return TS->bEnabled && (!CS || CS->bEnabled);
+	bool bToolEnabled = TS->bEnabled;
+	if (Session)
+	{
+		if (const bool* Override = Session->Tools.Find(ToolName))
+		{
+			bToolEnabled = *Override;
+		}
+	}
+	return bToolEnabled && IsCategoryEnabled_NoLock(TS->Category, Session);
 }
 
-bool FMcpDynamicToolManager::IsToolEnabled(const FString& ToolName) const
+bool FMcpDynamicToolManager::IsToolEnabled(const FString& ToolName, const FString& SessionId) const
 {
 	FScopeLock Lock(&StateMutex);
-	return IsToolEnabled_NoLock(ToolName);
+	return IsToolEnabled_NoLock(ToolName, FindSession_NoLock(SessionId));
 }
 
-TSet<FString> FMcpDynamicToolManager::GetEnabledToolNames() const
+TSet<FString> FMcpDynamicToolManager::GetEnabledToolNames(const FString& SessionId) const
 {
 	FScopeLock Lock(&StateMutex);
+	const FSessionOverrides* Session = FindSession_NoLock(SessionId);
 	TSet<FString> Result;
 	for (const auto& Pair : ToolStates)
 	{
-		if (IsToolEnabled_NoLock(Pair.Key))
+		if (IsToolEnabled_NoLock(Pair.Key, Session))
 		{
 			Result.Add(Pair.Key);
 		}
@@ -95,55 +111,86 @@ TSet<FString> FMcpDynamicToolManager::GetEnabledToolNames() const
 	return Result;
 }
 
-bool FMcpDynamicToolManager::GetLastMutation(FString& OutAction, double& OutSecondsAgo) const
+bool FMcpDynamicToolManager::GetLastMutation(
+	const FString& SessionId, FString& OutAction, double& OutSecondsAgo) const
 {
 	FScopeLock Lock(&StateMutex);
-	if (LastMutationTime == 0.0)
+	const FSessionOverrides* Session = FindSession_NoLock(SessionId);
+	if (!Session || Session->LastMutationTime == 0.0)
 	{
 		return false;
 	}
-	OutAction = LastMutationAction;
-	OutSecondsAgo = FPlatformTime::Seconds() - LastMutationTime;
+	OutAction = Session->LastMutationAction;
+	OutSecondsAgo = FPlatformTime::Seconds() - Session->LastMutationTime;
 	return true;
 }
 
-void FMcpDynamicToolManager::RecordMutation_NoLock(const FString& Action, bool bChanged)
+void FMcpDynamicToolManager::RecordMutation_NoLock(
+	FSessionOverrides& Session, const FString& Action, bool bChanged)
 {
 	if (bChanged)
 	{
-		LastMutationAction = Action;
-		LastMutationTime = FPlatformTime::Seconds();
+		Session.LastMutationAction = Action;
+		Session.LastMutationTime = FPlatformTime::Seconds();
+	}
+}
+
+void FMcpDynamicToolManager::DropSession(const FString& SessionId)
+{
+	if (SessionId.IsEmpty())
+	{
+		return;
+	}
+	FScopeLock Lock(&StateMutex);
+	if (SessionOverrides.Remove(SessionId) > 0)
+	{
+		UE_LOG(LogMcpToolManager, Verbose, TEXT("Dropped tool overrides for expired session %s"), *SessionId);
 	}
 }
 
 // ─── Action dispatch ────────────────────────────────────────────────────────
 
 TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
-	const FString& Action, const TSharedPtr<FJsonObject>& Args)
+	const FString& Action, const TSharedPtr<FJsonObject>& Args, const FString& SessionId)
 {
-	// Read-only actions — lock, dispatch, return
+	// Read-only actions
 	if (Action == TEXT("list_tools"))
 	{
 		FScopeLock Lock(&StateMutex);
-		return ListTools();
+		return ListTools(FindSession_NoLock(SessionId));
 	}
 	if (Action == TEXT("list_categories"))
 	{
 		FScopeLock Lock(&StateMutex);
-		return ListCategories();
+		return ListCategories(FindSession_NoLock(SessionId));
 	}
 	if (Action == TEXT("get_status"))
 	{
 		FScopeLock Lock(&StateMutex);
-		return GetStatus();
+		return GetStatus(FindSession_NoLock(SessionId));
 	}
 
-	// Mutating actions — parse args outside lock, mutate under lock, fire delegate after unlock
+	// Mutating actions write this session's overlay only.
+	if (SessionId.IsEmpty())
+	{
+		auto Err = MakeShared<FJsonObject>();
+		Err->SetBoolField(TEXT("success"), false);
+		Err->SetStringField(TEXT("error"),
+			FString::Printf(TEXT("Action '%s' requires a session (enablement is per-session)"), *Action));
+		return Err;
+	}
+
 	bool bChanged = false;
 	TSharedPtr<FJsonObject> Result;
 
-	// reset doesn't need args; everything below does
-	if (Action != TEXT("reset") && !Args.IsValid())
+	if (Action == TEXT("reset"))
+	{
+		FScopeLock Lock(&StateMutex);
+		return Reset(SessionId, bChanged);
+	}
+
+	// Everything below requires arguments.
+	if (!Args.IsValid())
 	{
 		auto Err = MakeShared<FJsonObject>();
 		Err->SetBoolField(TEXT("success"), false);
@@ -151,17 +198,7 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
 		return Err;
 	}
 
-	if (Action == TEXT("reset"))
-	{
-		{
-			FScopeLock Lock(&StateMutex);
-			Result = Reset(bChanged);
-			RecordMutation_NoLock(Action, bChanged);
-		}
-		return Result;
-	}
-
-	if (Action == TEXT("enable_tools"))
+	if (Action == TEXT("enable_tools") || Action == TEXT("disable_tools"))
 	{
 		TArray<FString> Names;
 		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
@@ -173,59 +210,28 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
 				if (V->TryGetString(S)) Names.Add(S);
 			}
 		}
-		{
-			FScopeLock Lock(&StateMutex);
-			Result = EnableTools(Names, bChanged);
-			RecordMutation_NoLock(Action, bChanged);
-		}
+		FScopeLock Lock(&StateMutex);
+		FSessionOverrides& Session = SessionOverrides.FindOrAdd(SessionId);
+		Result = (Action == TEXT("enable_tools"))
+			? EnableTools(Session, Names, bChanged)
+			: DisableTools(Session, Names, bChanged);
+		RecordMutation_NoLock(Session, Action, bChanged);
 		return Result;
 	}
 
-	if (Action == TEXT("disable_tools"))
-	{
-		TArray<FString> Names;
-		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
-		if (Args->TryGetArrayField(TEXT("tools"), Arr) && Arr)
-		{
-			for (const auto& V : *Arr)
-			{
-				FString S;
-				if (V->TryGetString(S)) Names.Add(S);
-			}
-		}
-		{
-			FScopeLock Lock(&StateMutex);
-			Result = DisableTools(Names, bChanged);
-			RecordMutation_NoLock(Action, bChanged);
-		}
-		return Result;
-	}
-
-	if (Action == TEXT("enable_category"))
+	if (Action == TEXT("enable_category") || Action == TEXT("disable_category"))
 	{
 		FString Cat;
 		Args->TryGetStringField(TEXT("category"), Cat);
-		{
-			FScopeLock Lock(&StateMutex);
-			Result = EnableCategory(Cat, bChanged);
-			RecordMutation_NoLock(Action, bChanged);
-		}
+		FScopeLock Lock(&StateMutex);
+		FSessionOverrides& Session = SessionOverrides.FindOrAdd(SessionId);
+		Result = (Action == TEXT("enable_category"))
+			? EnableCategory(Session, Cat, bChanged)
+			: DisableCategory(Session, Cat, bChanged);
+		RecordMutation_NoLock(Session, Action, bChanged);
 		return Result;
 	}
 
-	if (Action == TEXT("disable_category"))
-	{
-		FString Cat;
-		Args->TryGetStringField(TEXT("category"), Cat);
-		{
-			FScopeLock Lock(&StateMutex);
-			Result = DisableCategory(Cat, bChanged);
-			RecordMutation_NoLock(Action, bChanged);
-		}
-		return Result;
-	}
-
-	// Unknown action — no lock needed
 	auto Err = MakeShared<FJsonObject>();
 	Err->SetBoolField(TEXT("success"), false);
 	Err->SetStringField(TEXT("error"),
@@ -233,17 +239,18 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::HandleAction(
 	return Err;
 }
 
-// ─── List Tools ─────────────────────────────────────────────────────────────
+// ─── Views ──────────────────────────────────────────────────────────────────
 
-TSharedPtr<FJsonObject> FMcpDynamicToolManager::ListTools()
+TSharedPtr<FJsonObject> FMcpDynamicToolManager::ListTools(const FSessionOverrides* Session) const
 {
 	TArray<TSharedPtr<FJsonValue>> ToolsArr;
 	for (const auto& Pair : ToolStates)
 	{
 		auto Obj = MakeShared<FJsonObject>();
 		Obj->SetStringField(TEXT("name"), Pair.Value.Name);
-		Obj->SetBoolField(TEXT("enabled"), IsToolEnabled_NoLock(Pair.Key));
+		Obj->SetBoolField(TEXT("enabled"), IsToolEnabled_NoLock(Pair.Key, Session));
 		Obj->SetStringField(TEXT("category"), Pair.Value.Category);
+		Obj->SetBoolField(TEXT("protected"), IsProtectedTool(Pair.Key));
 		ToolsArr.Add(MakeShared<FJsonValueObject>(Obj));
 	}
 
@@ -251,59 +258,106 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::ListTools()
 	Result->SetBoolField(TEXT("success"), true);
 	Result->SetArrayField(TEXT("tools"), ToolsArr);
 	Result->SetNumberField(TEXT("totalTools"), ToolStates.Num());
+	Result->SetStringField(TEXT("scope"), TEXT("session"));
 	return Result;
 }
 
-// ─── List Categories ────────────────────────────────────────────────────────
-
-TSharedPtr<FJsonObject> FMcpDynamicToolManager::ListCategories()
+TSharedPtr<FJsonObject> FMcpDynamicToolManager::ListCategories(const FSessionOverrides* Session) const
 {
 	TArray<TSharedPtr<FJsonValue>> CatsArr;
 	for (const auto& Pair : CategoryStates)
 	{
+		int32 EnabledCount = 0;
+		for (const auto& ToolPair : ToolStates)
+		{
+			if (ToolPair.Value.Category == Pair.Key && IsToolEnabled_NoLock(ToolPair.Key, Session))
+			{
+				EnabledCount++;
+			}
+		}
 		auto Obj = MakeShared<FJsonObject>();
 		Obj->SetStringField(TEXT("name"), Pair.Value.Name);
-		Obj->SetBoolField(TEXT("enabled"), Pair.Value.bEnabled);
+		Obj->SetBoolField(TEXT("enabled"), IsCategoryEnabled_NoLock(Pair.Key, Session));
 		Obj->SetNumberField(TEXT("toolCount"), Pair.Value.ToolCount);
-		Obj->SetNumberField(TEXT("enabledCount"), Pair.Value.EnabledCount);
+		Obj->SetNumberField(TEXT("enabledCount"), EnabledCount);
 		CatsArr.Add(MakeShared<FJsonValueObject>(Obj));
 	}
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), true);
 	Result->SetArrayField(TEXT("categories"), CatsArr);
+	Result->SetStringField(TEXT("scope"), TEXT("session"));
 	return Result;
 }
 
-// ─── Enable Tools ───────────────────────────────────────────────────────────
+TSharedPtr<FJsonObject> FMcpDynamicToolManager::GetStatus(const FSessionOverrides* Session) const
+{
+	int32 EnabledCount = 0;
+	for (const auto& Pair : ToolStates)
+	{
+		if (IsToolEnabled_NoLock(Pair.Key, Session)) EnabledCount++;
+	}
 
-TSharedPtr<FJsonObject> FMcpDynamicToolManager::EnableTools(const TArray<FString>& ToolNames, bool& bOutChanged)
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetNumberField(TEXT("totalTools"), ToolStates.Num());
+	Result->SetNumberField(TEXT("enabledTools"), EnabledCount);
+	Result->SetNumberField(TEXT("disabledTools"), ToolStates.Num() - EnabledCount);
+	Result->SetStringField(TEXT("scope"), TEXT("session"));
+	Result->SetNumberField(TEXT("sessionOverrideCount"),
+		Session ? Session->Tools.Num() + Session->Categories.Num() : 0);
+
+	TArray<TSharedPtr<FJsonValue>> CatsArr;
+	for (const auto& Pair : CategoryStates)
+	{
+		int32 CatEnabled = 0;
+		for (const auto& ToolPair : ToolStates)
+		{
+			if (ToolPair.Value.Category == Pair.Key && IsToolEnabled_NoLock(ToolPair.Key, Session))
+			{
+				CatEnabled++;
+			}
+		}
+		auto Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), Pair.Value.Name);
+		Obj->SetBoolField(TEXT("enabled"), IsCategoryEnabled_NoLock(Pair.Key, Session));
+		Obj->SetNumberField(TEXT("toolCount"), Pair.Value.ToolCount);
+		Obj->SetNumberField(TEXT("enabledCount"), CatEnabled);
+		CatsArr.Add(MakeShared<FJsonValueObject>(Obj));
+	}
+	Result->SetArrayField(TEXT("categories"), CatsArr);
+	return Result;
+}
+
+// ─── Mutations (per-session overlay) ────────────────────────────────────────
+
+TSharedPtr<FJsonObject> FMcpDynamicToolManager::EnableTools(
+	FSessionOverrides& Session, const TArray<FString>& ToolNames, bool& bOutChanged)
 {
 	TArray<TSharedPtr<FJsonValue>> Enabled;
 	TArray<TSharedPtr<FJsonValue>> NotFound;
-	bool bAnyActualChange = false;
+	bOutChanged = false;
 
 	for (const FString& Name : ToolNames)
 	{
-		FToolState* TS = ToolStates.Find(Name);
-		if (TS)
-		{
-			if (!TS->bEnabled)
-			{
-				TS->bEnabled = true;
-				FCategoryState* CS = CategoryStates.Find(TS->Category);
-				if (CS) CS->EnabledCount++;
-				bAnyActualChange = true;
-			}
-			Enabled.Add(MakeShared<FJsonValueString>(Name));
-		}
-		else
+		if (!ToolStates.Contains(Name))
 		{
 			NotFound.Add(MakeShared<FJsonValueString>(Name));
+			continue;
 		}
+		if (!IsToolEnabled_NoLock(Name, &Session))
+		{
+			bOutChanged = true;
+		}
+		Session.Tools.Add(Name, true);
+		// A tool-level enable must not stay masked by a session category disable.
+		const FString& Category = ToolStates[Name].Category;
+		if (!IsCategoryEnabled_NoLock(Category, &Session))
+		{
+			Session.Categories.Add(Category, true);
+		}
+		Enabled.Add(MakeShared<FJsonValueString>(Name));
 	}
-
-	bOutChanged = bAnyActualChange;
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), true);
@@ -312,14 +366,13 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::EnableTools(const TArray<FString
 	return Result;
 }
 
-// ─── Disable Tools ──────────────────────────────────────────────────────────
-
-TSharedPtr<FJsonObject> FMcpDynamicToolManager::DisableTools(const TArray<FString>& ToolNames, bool& bOutChanged)
+TSharedPtr<FJsonObject> FMcpDynamicToolManager::DisableTools(
+	FSessionOverrides& Session, const TArray<FString>& ToolNames, bool& bOutChanged)
 {
 	TArray<TSharedPtr<FJsonValue>> Disabled;
 	TArray<TSharedPtr<FJsonValue>> NotFound;
 	TArray<TSharedPtr<FJsonValue>> Protected;
-	bool bAnyActualChange = false;
+	bOutChanged = false;
 
 	for (const FString& Name : ToolNames)
 	{
@@ -328,26 +381,18 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::DisableTools(const TArray<FStrin
 			Protected.Add(MakeShared<FJsonValueString>(Name));
 			continue;
 		}
-
-		FToolState* TS = ToolStates.Find(Name);
-		if (TS)
-		{
-			if (TS->bEnabled)
-			{
-				TS->bEnabled = false;
-				FCategoryState* CS = CategoryStates.Find(TS->Category);
-				if (CS && CS->EnabledCount > 0) CS->EnabledCount--;
-				bAnyActualChange = true;
-			}
-			Disabled.Add(MakeShared<FJsonValueString>(Name));
-		}
-		else
+		if (!ToolStates.Contains(Name))
 		{
 			NotFound.Add(MakeShared<FJsonValueString>(Name));
+			continue;
 		}
+		if (IsToolEnabled_NoLock(Name, &Session))
+		{
+			bOutChanged = true;
+		}
+		Session.Tools.Add(Name, false);
+		Disabled.Add(MakeShared<FJsonValueString>(Name));
 	}
-
-	bOutChanged = bAnyActualChange;
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), true);
@@ -357,90 +402,46 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::DisableTools(const TArray<FStrin
 	return Result;
 }
 
-// ─── Enable Category ────────────────────────────────────────────────────────
-
-TSharedPtr<FJsonObject> FMcpDynamicToolManager::EnableCategory(const FString& Category, bool& bOutChanged)
+TSharedPtr<FJsonObject> FMcpDynamicToolManager::EnableCategory(
+	FSessionOverrides& Session, const FString& Category, bool& bOutChanged)
 {
 	TArray<TSharedPtr<FJsonValue>> Enabled;
+	bOutChanged = false;
 
-	bool bAnyCategoryToggled = false;
-
-	if (Category == TEXT("all"))
+	if (Category != TEXT("all") && !CategoryStates.Contains(Category))
 	{
-		for (auto& Pair : CategoryStates)
-		{
-			if (IsProtectedCategory(Pair.Key))
-			{
-				const bool* Initial = InitialCategoryEnabled.Find(Pair.Key);
-				bool bTarget = Initial ? *Initial : true;
-				if (!Pair.Value.bEnabled && bTarget) bAnyCategoryToggled = true;
-				Pair.Value.bEnabled = bTarget;
-			}
-			else
-			{
-				if (!Pair.Value.bEnabled) bAnyCategoryToggled = true;
-				Pair.Value.bEnabled = true;
-			}
-		}
-		for (auto& Pair : ToolStates)
-		{
-			FCategoryState* CS = CategoryStates.Find(Pair.Value.Category);
-			bool bCategoryEnabled = CS ? CS->bEnabled : true;
-
-			if (IsProtectedTool(Pair.Key))
-			{
-				const bool* InitialTool = InitialToolEnabled.Find(Pair.Key);
-				bool bToolTarget = (InitialTool ? *InitialTool : true) && bCategoryEnabled;
-				if (!Pair.Value.bEnabled && bToolTarget)
-				{
-					Pair.Value.bEnabled = true;
-					Enabled.Add(MakeShared<FJsonValueString>(Pair.Key));
-				}
-			}
-			else if (bCategoryEnabled && !Pair.Value.bEnabled)
-			{
-				Pair.Value.bEnabled = true;
-				Enabled.Add(MakeShared<FJsonValueString>(Pair.Key));
-			}
-		}
-		for (auto& CatPair : CategoryStates)
-		{
-			CatPair.Value.EnabledCount = 0;
-			for (const auto& ToolPair : ToolStates)
-			{
-				if (ToolPair.Value.Category == CatPair.Key && ToolPair.Value.bEnabled)
-				{
-					CatPair.Value.EnabledCount++;
-				}
-			}
-		}
-	}
-	else
-	{
-		FCategoryState* CS = CategoryStates.Find(Category);
-		if (!CS)
-		{
-			auto Err = MakeShared<FJsonObject>();
-			Err->SetBoolField(TEXT("success"), false);
-			Err->SetStringField(TEXT("error"),
-				FString::Printf(TEXT("Category '%s' not found"), *Category));
-			return Err;
-		}
-
-		if (!CS->bEnabled) bAnyCategoryToggled = true;
-		CS->bEnabled = true;
-		for (auto& Pair : ToolStates)
-		{
-			if (Pair.Value.Category == Category && !Pair.Value.bEnabled)
-			{
-				Pair.Value.bEnabled = true;
-				Enabled.Add(MakeShared<FJsonValueString>(Pair.Key));
-			}
-		}
-		CS->EnabledCount = CS->ToolCount;
+		auto Err = MakeShared<FJsonObject>();
+		Err->SetBoolField(TEXT("success"), false);
+		Err->SetStringField(TEXT("error"),
+			FString::Printf(TEXT("Category '%s' not found"), *Category));
+		return Err;
 	}
 
-	bOutChanged = (Enabled.Num() > 0) || bAnyCategoryToggled;
+	for (const auto& CatPair : CategoryStates)
+	{
+		if (Category != TEXT("all") && CatPair.Key != Category)
+		{
+			continue;
+		}
+		if (!IsCategoryEnabled_NoLock(CatPair.Key, &Session))
+		{
+			bOutChanged = true;
+		}
+		Session.Categories.Add(CatPair.Key, true);
+	}
+	for (const auto& ToolPair : ToolStates)
+	{
+		if (Category != TEXT("all") && ToolPair.Value.Category != Category)
+		{
+			continue;
+		}
+		if (!IsToolEnabled_NoLock(ToolPair.Key, &Session))
+		{
+			bOutChanged = true;
+			Enabled.Add(MakeShared<FJsonValueString>(ToolPair.Key));
+		}
+		Session.Tools.Add(ToolPair.Key, true);
+	}
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), true);
@@ -449,61 +450,16 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::EnableCategory(const FString& Ca
 	return Result;
 }
 
-// ─── Disable Category ───────────────────────────────────────────────────────
-
-TSharedPtr<FJsonObject> FMcpDynamicToolManager::DisableCategory(const FString& Category, bool& bOutChanged)
+TSharedPtr<FJsonObject> FMcpDynamicToolManager::DisableCategory(
+	FSessionOverrides& Session, const FString& Category, bool& bOutChanged)
 {
 	TArray<TSharedPtr<FJsonValue>> Disabled;
 	TArray<TSharedPtr<FJsonValue>> Protected;
-	bool bAnyCategoryToggled = false;
+	bOutChanged = false;
 
-	if (Category == TEXT("all"))
+	if (Category != TEXT("all"))
 	{
-		for (auto& CatPair : CategoryStates)
-		{
-			if (IsProtectedCategory(CatPair.Key))
-			{
-				CatPair.Value.bEnabled = true;
-			}
-			else
-			{
-				if (CatPair.Value.bEnabled) bAnyCategoryToggled = true;
-				CatPair.Value.bEnabled = false;
-				CatPair.Value.EnabledCount = 0;
-			}
-		}
-		for (auto& Pair : ToolStates)
-		{
-			if (IsProtectedTool(Pair.Key) || IsProtectedCategory(Pair.Value.Category))
-			{
-				Protected.Add(MakeShared<FJsonValueString>(Pair.Key));
-			}
-			else if (Pair.Value.bEnabled)
-			{
-				Pair.Value.bEnabled = false;
-				Disabled.Add(MakeShared<FJsonValueString>(Pair.Key));
-			}
-		}
-		// Recalculate EnabledCount for protected categories
-		for (auto& CatPair : CategoryStates)
-		{
-			if (IsProtectedCategory(CatPair.Key))
-			{
-				CatPair.Value.EnabledCount = 0;
-				for (const auto& ToolPair : ToolStates)
-				{
-					if (ToolPair.Value.Category == CatPair.Key && ToolPair.Value.bEnabled)
-					{
-						CatPair.Value.EnabledCount++;
-					}
-				}
-			}
-		}
-	}
-	else
-	{
-		FCategoryState* CS = CategoryStates.Find(Category);
-		if (!CS)
+		if (!CategoryStates.Contains(Category))
 		{
 			auto Err = MakeShared<FJsonObject>();
 			Err->SetBoolField(TEXT("success"), false);
@@ -511,7 +467,6 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::DisableCategory(const FString& C
 				FString::Printf(TEXT("Category '%s' not found"), *Category));
 			return Err;
 		}
-
 		if (IsProtectedCategory(Category))
 		{
 			auto Err = MakeShared<FJsonObject>();
@@ -520,38 +475,42 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::DisableCategory(const FString& C
 				FString::Printf(TEXT("Category '%s' is protected and cannot be disabled"), *Category));
 			return Err;
 		}
-
-		if (CS->bEnabled) bAnyCategoryToggled = true;
-		CS->bEnabled = false;
-
-		for (auto& Pair : ToolStates)
-		{
-			if (Pair.Value.Category == Category)
-			{
-				if (IsProtectedTool(Pair.Key))
-				{
-					Protected.Add(MakeShared<FJsonValueString>(Pair.Key));
-				}
-				else if (Pair.Value.bEnabled)
-				{
-					Pair.Value.bEnabled = false;
-					Disabled.Add(MakeShared<FJsonValueString>(Pair.Key));
-				}
-			}
-		}
-
-		// Recount
-		CS->EnabledCount = 0;
-		for (const auto& Pair : ToolStates)
-		{
-			if (Pair.Value.Category == Category && Pair.Value.bEnabled)
-			{
-				CS->EnabledCount++;
-			}
-		}
 	}
 
-	bOutChanged = (Disabled.Num() > 0) || bAnyCategoryToggled;
+	for (const auto& CatPair : CategoryStates)
+	{
+		if (Category != TEXT("all") && CatPair.Key != Category)
+		{
+			continue;
+		}
+		if (IsProtectedCategory(CatPair.Key))
+		{
+			continue;
+		}
+		if (IsCategoryEnabled_NoLock(CatPair.Key, &Session))
+		{
+			bOutChanged = true;
+		}
+		Session.Categories.Add(CatPair.Key, false);
+	}
+	for (const auto& ToolPair : ToolStates)
+	{
+		if (Category != TEXT("all") && ToolPair.Value.Category != Category)
+		{
+			continue;
+		}
+		if (IsProtectedTool(ToolPair.Key) || IsProtectedCategory(ToolPair.Value.Category))
+		{
+			Protected.Add(MakeShared<FJsonValueString>(ToolPair.Key));
+			continue;
+		}
+		if (IsToolEnabled_NoLock(ToolPair.Key, &Session))
+		{
+			bOutChanged = true;
+			Disabled.Add(MakeShared<FJsonValueString>(ToolPair.Key));
+		}
+		Session.Tools.Add(ToolPair.Key, false);
+	}
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), true);
@@ -561,79 +520,16 @@ TSharedPtr<FJsonObject> FMcpDynamicToolManager::DisableCategory(const FString& C
 	return Result;
 }
 
-// ─── Get Status ─────────────────────────────────────────────────────────────
-
-TSharedPtr<FJsonObject> FMcpDynamicToolManager::GetStatus()
+TSharedPtr<FJsonObject> FMcpDynamicToolManager::Reset(const FString& SessionId, bool& bOutChanged)
 {
-	int32 EnabledCount = 0;
-	for (const auto& Pair : ToolStates)
-	{
-		if (IsToolEnabled_NoLock(Pair.Key)) EnabledCount++;
-	}
+	const FSessionOverrides* Session = SessionOverrides.Find(SessionId);
+	const int32 OverrideCount = Session ? Session->Tools.Num() + Session->Categories.Num() : 0;
+	bOutChanged = SessionOverrides.Remove(SessionId) > 0 && OverrideCount > 0;
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), true);
-	Result->SetNumberField(TEXT("totalTools"), ToolStates.Num());
-	Result->SetNumberField(TEXT("enabledTools"), EnabledCount);
-	Result->SetNumberField(TEXT("disabledTools"), ToolStates.Num() - EnabledCount);
-
-	// Include categories
-	TArray<TSharedPtr<FJsonValue>> CatsArr;
-	for (const auto& Pair : CategoryStates)
-	{
-		auto Obj = MakeShared<FJsonObject>();
-		Obj->SetStringField(TEXT("name"), Pair.Value.Name);
-		Obj->SetBoolField(TEXT("enabled"), Pair.Value.bEnabled);
-		Obj->SetNumberField(TEXT("toolCount"), Pair.Value.ToolCount);
-		Obj->SetNumberField(TEXT("enabledCount"), Pair.Value.EnabledCount);
-		CatsArr.Add(MakeShared<FJsonValueObject>(Obj));
-	}
-	Result->SetArrayField(TEXT("categories"), CatsArr);
-	return Result;
-}
-
-// ─── Reset ──────────────────────────────────────────────────────────────────
-
-TSharedPtr<FJsonObject> FMcpDynamicToolManager::Reset(bool& bOutChanged)
-{
-	int32 Changed = 0;
-
-	// Restore tool states to initial
-	for (auto& Pair : ToolStates)
-	{
-		const bool* Initial = InitialToolEnabled.Find(Pair.Key);
-		bool bTarget = Initial ? *Initial : true;
-		if (Pair.Value.bEnabled != bTarget)
-		{
-			Pair.Value.bEnabled = bTarget;
-			Changed++;
-		}
-	}
-
-	// Restore category states and recount
-	for (auto& Pair : CategoryStates)
-	{
-		const bool* Initial = InitialCategoryEnabled.Find(Pair.Key);
-		bool bTarget = Initial ? *Initial : true;
-		if (Pair.Value.bEnabled != bTarget)
-		{
-			Pair.Value.bEnabled = bTarget;
-			Changed++;
-		}
-		Pair.Value.EnabledCount = 0;
-	}
-	for (const auto& Pair : ToolStates)
-	{
-		FCategoryState* CS = CategoryStates.Find(Pair.Value.Category);
-		if (CS && Pair.Value.bEnabled) CS->EnabledCount++;
-	}
-
-	bOutChanged = (Changed > 0);
-
-	auto Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("success"), true);
-	Result->SetNumberField(TEXT("changed"), Changed);
+	Result->SetNumberField(TEXT("changed"), OverrideCount);
 	Result->SetStringField(TEXT("message"),
-		FString::Printf(TEXT("Reset to initial state. %d tools changed."), Changed));
+		FString::Printf(TEXT("Session overrides cleared (%d dropped); back to server defaults."), OverrideCount));
 	return Result;
 }

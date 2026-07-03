@@ -14,7 +14,9 @@ public:
 
 	FString GetDescription() const override
 	{
-		return TEXT("Dynamic MCP tool management. Enable/disable tools and categories at runtime. "
+		return TEXT("Dynamic MCP tool management, scoped to YOUR session: enable/disable "
+			"tools and categories at runtime without affecting other connected sessions "
+			"(reset or reconnect restores server defaults). "
 			"Actions: list_tools, list_categories, enable_tools, disable_tools, "
 			"enable_category, disable_category, get_status, reset.");
 	}

@@ -7,30 +7,39 @@ class FMcpToolRegistry;
 
 /**
  * Manages MCP tool visibility at runtime.
- * Port of src/tools/dynamic-tool-manager.ts.
+ *
+ * Enablement is PER-SESSION: Initialize() builds the immutable default state
+ * (the template every session starts from); manage_tools mutations write a
+ * per-session overlay keyed by Mcp-Session-Id, so one client trimming its
+ * tool set can no longer disable tools under concurrent sessions. reset (or
+ * reconnecting) drops the session's overlay.
  */
 class FMcpDynamicToolManager
 {
 public:
-	/** Initialize from tool registry (self-describing C++ tool classes). */
+	/** Initialize the default state from the tool registry. */
 	void Initialize(const FMcpToolRegistry& Registry, bool bLoadAllTools = false);
 
-	/** Check if a tool is enabled (tool AND category must be enabled). */
-	bool IsToolEnabled(const FString& ToolName) const;
+	/** Effective enablement for a session (tool AND category must be enabled).
+	 *  An empty SessionId queries the defaults. */
+	bool IsToolEnabled(const FString& ToolName, const FString& SessionId = FString()) const;
 
-	/** Get set of all currently enabled tool names. */
-	TSet<FString> GetEnabledToolNames() const;
+	/** Effective enabled tool names for a session (empty = defaults). */
+	TSet<FString> GetEnabledToolNames(const FString& SessionId = FString()) const;
 
 	/**
-	 * Last mutating manage_tools action that changed enablement (state is shared
-	 * across all sessions, so any session's toggle explains another session's
-	 * TOOL_DISABLED). Returns false if no mutation has happened yet.
+	 * Last mutating manage_tools action THIS session performed — a disabled
+	 * tool can only be the same session's earlier doing. Returns false if the
+	 * session never mutated its overlay.
 	 */
-	bool GetLastMutation(FString& OutAction, double& OutSecondsAgo) const;
+	bool GetLastMutation(const FString& SessionId, FString& OutAction, double& OutSecondsAgo) const;
 
-	/** Dispatch a manage_tools action. Returns JSON result for the response. */
+	/** Dispatch a manage_tools action against the session's overlay. */
 	TSharedPtr<FJsonObject> HandleAction(const FString& Action,
-		const TSharedPtr<FJsonObject>& Args);
+		const TSharedPtr<FJsonObject>& Args, const FString& SessionId);
+
+	/** Discard a session's overlay (session expired or DELETE /mcp). */
+	void DropSession(const FString& SessionId);
 
 private:
 	struct FToolState
@@ -45,38 +54,41 @@ private:
 		FString Name;
 		bool bEnabled = true;
 		int32 ToolCount = 0;
-		int32 EnabledCount = 0;
 	};
 
+	/** Per-session enablement overrides; absent keys fall back to defaults. */
+	struct FSessionOverrides
+	{
+		TMap<FString, bool> Tools;
+		TMap<FString, bool> Categories;
+		FString LastMutationAction;
+		double LastMutationTime = 0.0;
+	};
+
+	/** Defaults — written only by Initialize(). */
 	TMap<FString, FToolState> ToolStates;
 	TMap<FString, FCategoryState> CategoryStates;
 
-	/** Snapshot of initial enabled state from Initialize(), keyed by tool name. */
-	TMap<FString, bool> InitialToolEnabled;
-	TMap<FString, bool> InitialCategoryEnabled;
+	TMap<FString, FSessionOverrides> SessionOverrides;
 
-	FString LastMutationAction;
-	double LastMutationTime = 0.0;
-
-	/** Protects ToolStates, CategoryStates, InitialToolEnabled,
-	 *  InitialCategoryEnabled, LastMutationAction, LastMutationTime. */
+	/** Protects ToolStates, CategoryStates, SessionOverrides. */
 	mutable FCriticalSection StateMutex;
 
-	/** Lock-free impl — caller must hold StateMutex. */
-	bool IsToolEnabled_NoLock(const FString& ToolName) const;
+	// Lock-free impls — caller must hold StateMutex. Session may be null (defaults).
+	const FSessionOverrides* FindSession_NoLock(const FString& SessionId) const;
+	bool IsToolEnabled_NoLock(const FString& ToolName, const FSessionOverrides* Session) const;
+	bool IsCategoryEnabled_NoLock(const FString& Category, const FSessionOverrides* Session) const;
+	void RecordMutation_NoLock(FSessionOverrides& Session, const FString& Action, bool bChanged);
 
-	/** Record a state-changing action — caller must hold StateMutex. */
-	void RecordMutation_NoLock(const FString& Action, bool bChanged);
-
-	// Actions
-	TSharedPtr<FJsonObject> ListTools();
-	TSharedPtr<FJsonObject> ListCategories();
-	TSharedPtr<FJsonObject> EnableTools(const TArray<FString>& ToolNames, bool& bOutChanged);
-	TSharedPtr<FJsonObject> DisableTools(const TArray<FString>& ToolNames, bool& bOutChanged);
-	TSharedPtr<FJsonObject> EnableCategory(const FString& Category, bool& bOutChanged);
-	TSharedPtr<FJsonObject> DisableCategory(const FString& Category, bool& bOutChanged);
-	TSharedPtr<FJsonObject> GetStatus();
-	TSharedPtr<FJsonObject> Reset(bool& bOutChanged);
+	// Actions — caller must hold StateMutex.
+	TSharedPtr<FJsonObject> ListTools(const FSessionOverrides* Session) const;
+	TSharedPtr<FJsonObject> ListCategories(const FSessionOverrides* Session) const;
+	TSharedPtr<FJsonObject> GetStatus(const FSessionOverrides* Session) const;
+	TSharedPtr<FJsonObject> EnableTools(FSessionOverrides& Session, const TArray<FString>& ToolNames, bool& bOutChanged);
+	TSharedPtr<FJsonObject> DisableTools(FSessionOverrides& Session, const TArray<FString>& ToolNames, bool& bOutChanged);
+	TSharedPtr<FJsonObject> EnableCategory(FSessionOverrides& Session, const FString& Category, bool& bOutChanged);
+	TSharedPtr<FJsonObject> DisableCategory(FSessionOverrides& Session, const FString& Category, bool& bOutChanged);
+	TSharedPtr<FJsonObject> Reset(const FString& SessionId, bool& bOutChanged);
 
 	static bool IsProtectedTool(const FString& Name);
 	static bool IsProtectedCategory(const FString& Name);
