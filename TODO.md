@@ -904,12 +904,26 @@ pin re-specializes to `BP_Telegraph_C`, and the `TransformScaleMethod` pin (whos
 assert) is present. Gotcha for callers: Blueprint classes need the `.<Name>_C` generated-class suffix in
 `targetClass` (a bare asset path returns `CLASS_NOT_FOUND` — by design, fails loud).
 
-### [ ] 2026-06-22b — Anim state-machine reads via `get_graph_details`: works, ONE gap left (transition rules)
+### [x] 2026-06-22b — Anim state-machine reads via `get_graph_details`: works, ONE gap left (transition rules)
+**Gap 2 SHIPPED 2026-07-03 — CLOSED.** `list_animbp_graphs` and `get_transition_rule_graph`
+were schema-advertised with NO handler (fell through to INVALID_SUBACTION; the arch-review
+note calling them "implemented" was wrong). Both implemented in BlueprintGraphHandlers:
+`list_animbp_graphs` walks GetAllGraphs with type classification (StateMachine/State/
+TransitionRule/Conduit/AnimGraph/EventGraph/Function/…), parentGraph, and — since generated
+rule-graph names collide (`AnimationTransitionGraph_0` ×4 in ABP_Robo_MainStates) — a
+`transition:"From -> To"` label from the owning node. `get_transition_rule_graph` resolves by
+fromState+toState (optionally stateMachine) or transitionName, returns crossfadeDuration/
+priorityOrder/automaticRule/logicType + the bound rule graph with full per-node pins/links/
+defaults; parallel transitions between the same states are honest (`matchCount` +
+`transitionIndex` selector — ABP_Robo has a real Land->GroundLocomotion pair: automatic rule
++ 6-node conditional). `get_graph_details` gained `includePinLinks` (the dump was factored
+into a shared BuildGraphDetailsJson). Verified live on ABP_Robo_MainStates (both parallel
+rules read back, scoping, not-found lists all transitions) + ABP_FireGolem liveness regression.
 **Gap 1 FIXED 2026-07-03:** graphs with zero exec pins anywhere (AnimGraph, state-machine
 inner graphs) skip exec-liveness — `execReachable:true` for all, `deadNodeCount:0`, plus
 `livenessNote:"dataflow graph (no exec pins) — exec-liveness not applicable"`. Verified on
 ABP_FireGolem AnimGraph (22 nodes, 0 false deads) AND that a normal EventGraph still gets
-real analysis (no note). Gap 2 (transition rule graphs not surfaced) remains open below.
+real analysis (no note).
 Live-verified 2026-06-22 against `ABP_Robo_MainStates`. `get_graph_details` reads anim graphs cleanly:
 `AnimGraph` returns the root + state-machine nodes + cached-pose nodes; a state-machine graph addressed
 by its title (`Main States`, `Ground Locomotion`) returns its states + transition nodes (titles like

@@ -106,6 +106,13 @@ public:
 			.String(TEXT("sourcePinName"), TEXT("Name of the source pin."))
 			.String(TEXT("targetNodeId"), TEXT("ID of the target node."))
 			.String(TEXT("targetPinName"), TEXT("Name of the target pin."))
+			// AnimBP graph readback (list_animbp_graphs / get_transition_rule_graph).
+			.Bool(TEXT("includePinLinks"), TEXT("get_graph_details: include per-node pins with defaults and \"<nodeGuid>:<pinName>\" link refs (always on inside get_transition_rule_graph's ruleGraph)."))
+			.String(TEXT("stateMachine"), TEXT("get_transition_rule_graph: state machine graph name to search; all state machines searched when omitted."))
+			.String(TEXT("fromState"), TEXT("get_transition_rule_graph: source state name (paired with toState)."))
+			.String(TEXT("toState"), TEXT("get_transition_rule_graph: target state name (paired with fromState)."))
+			.String(TEXT("transitionName"), TEXT("get_transition_rule_graph: transition node title or rule-graph name, as an alternative to fromState/toState."))
+			.Number(TEXT("transitionIndex"), TEXT("get_transition_rule_graph: 0-based pick when parallel transitions between the same states match (see matchCount in the response)."))
 			// Widget-authoring (UMG) navigation params — this tool re-dispatches the widget
 			// action group. Handlers already read them from the payload; declared here so a
 			// schema-validating client can discover/pass them (per-widget value props still

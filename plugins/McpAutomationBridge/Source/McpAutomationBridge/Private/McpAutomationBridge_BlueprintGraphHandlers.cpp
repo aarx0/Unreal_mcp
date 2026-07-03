@@ -95,6 +95,15 @@
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
 
+// Anim graph readback (list_animbp_graphs / get_transition_rule_graph)
+#include "AnimationGraph.h"
+#include "AnimationStateMachineGraph.h"
+#include "AnimationStateGraph.h"
+#include "AnimationTransitionGraph.h"
+#include "AnimationCustomTransitionGraph.h"
+#include "AnimStateNodeBase.h"
+#include "AnimStateTransitionNode.h"
+
 // Blueprint Editor
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -252,6 +261,197 @@ void ComputeGraphLiveness(const UEdGraph* Graph,
             if (bFeedsLive) { OutLive.Add(N); bChanged = true; }
         }
     }
+}
+
+// Shared node dump for get_graph_details and get_transition_rule_graph — one
+// copy, or the two drift. bIncludePinLinks adds per-node pins with defaults
+// and "<nodeGuid>:<pinName>" link refs; rule graphs are small enough that
+// get_transition_rule_graph always opts in.
+static TSharedPtr<FJsonObject> BuildGraphDetailsJson(UEdGraph* Graph, bool bIncludePinLinks)
+{
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    if (!Graph) { return Result; }
+    Result->SetStringField(TEXT("graphName"), Graph->GetName());
+    Result->SetNumberField(TEXT("nodeCount"), Graph->Nodes.Num());
+
+    TSet<const UEdGraphNode*> ExecReachable;
+    TSet<const UEdGraphNode*> LiveNodes;
+    ComputeGraphLiveness(Graph, ExecReachable, LiveNodes);
+
+    // Pose-dataflow graphs (AnimGraph and state-machine inner graphs) have no
+    // exec pins anywhere, so exec-reachability is meaningless — it used to
+    // flag every anim node as dead. Detect and skip liveness for those.
+    bool bGraphHasExecPins = false;
+    for (const UEdGraphNode* N : Graph->Nodes)
+    {
+        if (!N) { continue; }
+        for (const UEdGraphPin* P : N->Pins)
+        {
+            if (ArrangePinIsExec(P)) { bGraphHasExecPins = true; break; }
+        }
+        if (bGraphHasExecPins) { break; }
+    }
+
+    TArray<TSharedPtr<FJsonValue>> Nodes;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        if (!Node) { continue; }
+        TSharedPtr<FJsonObject> NodeObj = McpHandlerUtils::CreateResultObject();
+        NodeObj->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
+        NodeObj->SetStringField(TEXT("nodeName"), Node->GetName());
+        NodeObj->SetStringField(
+            TEXT("nodeTitle"),
+            Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+
+        // Hygiene-pass fields: position (overlap detection), enabled state
+        // (disabled-node clutter), link count (orphan detection), exec
+        // reachability (dead-node detection) — so a graph review is one call
+        // instead of N get_node_details round-trips.
+        NodeObj->SetNumberField(TEXT("x"), Node->NodePosX);
+        NodeObj->SetNumberField(TEXT("y"), Node->NodePosY);
+
+        const TCHAR* EnabledStateName = nullptr;
+        switch (Node->GetDesiredEnabledState())
+        {
+        case ENodeEnabledState::Enabled:
+            EnabledStateName = TEXT("Enabled");
+            break;
+        case ENodeEnabledState::Disabled:
+            EnabledStateName = TEXT("Disabled");
+            break;
+        case ENodeEnabledState::DevelopmentOnly:
+            EnabledStateName = TEXT("DevelopmentOnly");
+            break;
+        default:
+            EnabledStateName = TEXT("Unknown");
+            break;
+        }
+        NodeObj->SetStringField(TEXT("enabledState"), EnabledStateName);
+
+        int32 LinkCount = 0;
+        for (const UEdGraphPin* Pin : Node->Pins)
+        {
+            if (Pin) { LinkCount += Pin->LinkedTo.Num(); }
+        }
+        NodeObj->SetNumberField(TEXT("linkCount"), LinkCount);
+        NodeObj->SetNumberField(TEXT("pinCount"), Node->Pins.Num());
+        // Pin-bearing node with zero links = orphan. Pinless nodes (comments)
+        // are not flagged — they are connected by placement, not pins.
+        NodeObj->SetBoolField(TEXT("isOrphan"),
+                              Node->Pins.Num() > 0 && LinkCount == 0);
+        // execReachable: exec node reachable from an entry along exec wires, or a
+        // pure node feeding one. False = the node never runs (see deadNodes).
+        // Dataflow graphs evaluate on demand — everything counts as reachable.
+        NodeObj->SetBoolField(TEXT("execReachable"),
+                              !bGraphHasExecPins || LiveNodes.Contains(Node));
+
+        if (bIncludePinLinks)
+        {
+            TArray<TSharedPtr<FJsonValue>> Pins;
+            for (const UEdGraphPin* Pin : Node->Pins)
+            {
+                if (!Pin) { continue; }
+                TSharedPtr<FJsonObject> PinObj = McpHandlerUtils::CreateResultObject();
+                PinObj->SetStringField(TEXT("pinName"), Pin->PinName.ToString());
+                PinObj->SetStringField(TEXT("direction"), Pin->Direction == EGPD_Input
+                                                              ? TEXT("Input")
+                                                              : TEXT("Output"));
+                PinObj->SetStringField(TEXT("pinType"),
+                                       Pin->PinType.PinCategory.ToString());
+                if (Pin->LinkedTo.Num() > 0)
+                {
+                    TArray<TSharedPtr<FJsonValue>> Links;
+                    for (const UEdGraphPin* Linked : Pin->LinkedTo)
+                    {
+                        if (!Linked) { continue; }
+                        const UEdGraphNode* Owner = Linked->GetOwningNode();
+                        Links.Add(MakeShared<FJsonValueString>(FString::Printf(
+                            TEXT("%s:%s"),
+                            Owner ? *Owner->NodeGuid.ToString() : TEXT("?"),
+                            *Linked->PinName.ToString())));
+                    }
+                    PinObj->SetArrayField(TEXT("linkedTo"), Links);
+                }
+                else if (!Pin->DefaultValue.IsEmpty())
+                {
+                    PinObj->SetStringField(TEXT("defaultValue"), Pin->DefaultValue);
+                }
+                Pins.Add(MakeShared<FJsonValueObject>(PinObj));
+            }
+            NodeObj->SetArrayField(TEXT("pins"), Pins);
+        }
+
+        Nodes.Add(MakeShared<FJsonValueObject>(NodeObj));
+    }
+    Result->SetArrayField(TEXT("nodes"), Nodes);
+
+    // Actionable dead-node summary: pin-bearing nodes that never run. Comments
+    // and other pinless nodes are connected by placement, not exec, so skip.
+    if (!bGraphHasExecPins)
+    {
+        Result->SetStringField(
+            TEXT("livenessNote"),
+            TEXT("dataflow graph (no exec pins) — exec-liveness not applicable"));
+    }
+    TArray<TSharedPtr<FJsonValue>> DeadNodes;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        if (!bGraphHasExecPins || !Node || Node->Pins.Num() == 0 ||
+            LiveNodes.Contains(Node))
+        {
+            continue;
+        }
+        TSharedPtr<FJsonObject> DeadObj = McpHandlerUtils::CreateResultObject();
+        DeadObj->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
+        DeadObj->SetStringField(
+            TEXT("nodeTitle"),
+            Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+        DeadObj->SetStringField(TEXT("reason"),
+                                ArrangeNodeIsPure(Node)
+                                    ? TEXT("feeds-nothing-live")
+                                    : TEXT("exec-unreachable"));
+        DeadNodes.Add(MakeShared<FJsonValueObject>(DeadObj));
+    }
+    Result->SetNumberField(TEXT("deadNodeCount"), DeadNodes.Num());
+    Result->SetArrayField(TEXT("deadNodes"), DeadNodes);
+
+    return Result;
+}
+
+// Best-effort graph kind for list_animbp_graphs. graphClass rides alongside in
+// the response, so an unclassified graph is still identifiable verbatim.
+static FString ClassifyBlueprintGraph(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (Cast<UAnimationStateMachineGraph>(Graph)) { return TEXT("StateMachine"); }
+    if (Cast<UAnimationCustomTransitionGraph>(Graph)) { return TEXT("CustomTransitionBlend"); }
+    if (Cast<UAnimationTransitionGraph>(Graph))
+    {
+        // Conduits reuse the transition graph class; only the schema differs.
+        if (Graph->Schema && Graph->Schema->GetName() == TEXT("AnimationConduitGraphSchema"))
+        {
+            return TEXT("Conduit");
+        }
+        return TEXT("TransitionRule");
+    }
+    if (Cast<UAnimationStateGraph>(Graph)) { return TEXT("State"); }
+    if (Cast<UAnimationGraph>(Graph)) { return TEXT("AnimGraph"); }
+    for (const TObjectPtr<UEdGraph>& G : Blueprint->UbergraphPages)
+    {
+        if (G == Graph) { return TEXT("EventGraph"); }
+    }
+    for (const TObjectPtr<UEdGraph>& G : Blueprint->FunctionGraphs)
+    {
+        if (G == Graph) { return TEXT("Function"); }
+    }
+    for (const TObjectPtr<UEdGraph>& G : Blueprint->MacroGraphs)
+    {
+        if (G == Graph) { return TEXT("Macro"); }
+    }
+    for (const TObjectPtr<UEdGraph>& G : Blueprint->DelegateSignatureGraphs)
+    {
+        if (G == Graph) { return TEXT("DelegateSignature"); }
+    }
+    return Graph->GetClass()->GetName();
 }
 
 // Lay out every node in Graph; returns the count repositioned.
@@ -1937,117 +2137,10 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     }
     return true;
   } else if (SubAction == TEXT("get_graph_details")) {
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("graphName"), TargetGraph->GetName());
-    Result->SetNumberField(TEXT("nodeCount"), TargetGraph->Nodes.Num());
-
-    TSet<const UEdGraphNode *> ExecReachable;
-    TSet<const UEdGraphNode *> LiveNodes;
-    ComputeGraphLiveness(TargetGraph, ExecReachable, LiveNodes);
-
-    // Pose-dataflow graphs (AnimGraph and state-machine inner graphs) have no
-    // exec pins anywhere, so exec-reachability is meaningless — it used to
-    // flag every anim node as dead. Detect and skip liveness for those.
-    bool bGraphHasExecPins = false;
-    for (const UEdGraphNode *N : TargetGraph->Nodes) {
-      if (!N) {
-        continue;
-      }
-      for (const UEdGraphPin *P : N->Pins) {
-        if (ArrangePinIsExec(P)) {
-          bGraphHasExecPins = true;
-          break;
-        }
-      }
-      if (bGraphHasExecPins) {
-        break;
-      }
-    }
-
-    TArray<TSharedPtr<FJsonValue>> Nodes;
-    for (UEdGraphNode *Node : TargetGraph->Nodes) {
-      if (!Node) {
-        continue;
-      }
-      TSharedPtr<FJsonObject> NodeObj = McpHandlerUtils::CreateResultObject();
-      NodeObj->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
-      NodeObj->SetStringField(TEXT("nodeName"), Node->GetName());
-      NodeObj->SetStringField(
-          TEXT("nodeTitle"),
-          Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
-
-      // Hygiene-pass fields: position (overlap detection), enabled state
-      // (disabled-node clutter), link count (orphan detection), exec
-      // reachability (dead-node detection) — so a graph review is one call
-      // instead of N get_node_details round-trips.
-      NodeObj->SetNumberField(TEXT("x"), Node->NodePosX);
-      NodeObj->SetNumberField(TEXT("y"), Node->NodePosY);
-
-      const TCHAR *EnabledStateName = nullptr;
-      switch (Node->GetDesiredEnabledState()) {
-      case ENodeEnabledState::Enabled:
-        EnabledStateName = TEXT("Enabled");
-        break;
-      case ENodeEnabledState::Disabled:
-        EnabledStateName = TEXT("Disabled");
-        break;
-      case ENodeEnabledState::DevelopmentOnly:
-        EnabledStateName = TEXT("DevelopmentOnly");
-        break;
-      default:
-        EnabledStateName = TEXT("Unknown");
-        break;
-      }
-      NodeObj->SetStringField(TEXT("enabledState"), EnabledStateName);
-
-      int32 LinkCount = 0;
-      for (const UEdGraphPin *Pin : Node->Pins) {
-        if (Pin) {
-          LinkCount += Pin->LinkedTo.Num();
-        }
-      }
-      NodeObj->SetNumberField(TEXT("linkCount"), LinkCount);
-      NodeObj->SetNumberField(TEXT("pinCount"), Node->Pins.Num());
-      // Pin-bearing node with zero links = orphan. Pinless nodes (comments)
-      // are not flagged — they are connected by placement, not pins.
-      NodeObj->SetBoolField(TEXT("isOrphan"),
-                            Node->Pins.Num() > 0 && LinkCount == 0);
-      // execReachable: exec node reachable from an entry along exec wires, or a
-      // pure node feeding one. False = the node never runs (see deadNodes).
-      // Dataflow graphs evaluate on demand — everything counts as reachable.
-      NodeObj->SetBoolField(TEXT("execReachable"),
-                            !bGraphHasExecPins || LiveNodes.Contains(Node));
-
-      Nodes.Add(MakeShared<FJsonValueObject>(NodeObj));
-    }
-    Result->SetArrayField(TEXT("nodes"), Nodes);
-
-    // Actionable dead-node summary: pin-bearing nodes that never run. Comments
-    // and other pinless nodes are connected by placement, not exec, so skip.
-    if (!bGraphHasExecPins) {
-      Result->SetStringField(
-          TEXT("livenessNote"),
-          TEXT("dataflow graph (no exec pins) — exec-liveness not applicable"));
-    }
-    TArray<TSharedPtr<FJsonValue>> DeadNodes;
-    for (UEdGraphNode *Node : TargetGraph->Nodes) {
-      if (!bGraphHasExecPins || !Node || Node->Pins.Num() == 0 ||
-          LiveNodes.Contains(Node)) {
-        continue;
-      }
-      TSharedPtr<FJsonObject> DeadObj = McpHandlerUtils::CreateResultObject();
-      DeadObj->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
-      DeadObj->SetStringField(
-          TEXT("nodeTitle"),
-          Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
-      DeadObj->SetStringField(TEXT("reason"),
-                              ArrangeNodeIsPure(Node)
-                                  ? TEXT("feeds-nothing-live")
-                                  : TEXT("exec-unreachable"));
-      DeadNodes.Add(MakeShared<FJsonValueObject>(DeadObj));
-    }
-    Result->SetNumberField(TEXT("deadNodeCount"), DeadNodes.Num());
-    Result->SetArrayField(TEXT("deadNodes"), DeadNodes);
+    const bool bIncludePinLinks =
+        GetJsonBoolField(Payload, TEXT("includePinLinks"), false);
+    TSharedPtr<FJsonObject> Result =
+        BuildGraphDetailsJson(TargetGraph, bIncludePinLinks);
     McpHandlerUtils::AddVerification(Result, Blueprint);
 
     SendAutomationResponse(RequestingSocket, RequestId, true,
@@ -2320,6 +2413,208 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     McpHandlerUtils::AddVerification(Result, Blueprint);
     SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Pin default value set."), Result);
+    return true;
+  } else if (SubAction == TEXT("list_animbp_graphs")) {
+    // Every graph in the blueprint, including anim subgraphs (state machines,
+    // state bodies, transition rules) that FunctionGraphs/UbergraphPages don't
+    // surface. Each graphName here is addressable by get_graph_details.
+    TArray<UEdGraph *> AllGraphs;
+    Blueprint->GetAllGraphs(AllGraphs);
+
+    // Child→parent from each graph's SubGraphs list (authoritative; a bound
+    // graph's Outer is the owning node, not the parent graph).
+    TMap<UEdGraph *, UEdGraph *> ParentOf;
+    for (UEdGraph *G : AllGraphs) {
+      if (!G) {
+        continue;
+      }
+      for (const TObjectPtr<UEdGraph> &Child : G->SubGraphs) {
+        if (Child) {
+          ParentOf.Add(Child, G);
+        }
+      }
+    }
+
+    TArray<TSharedPtr<FJsonValue>> GraphsJson;
+    for (UEdGraph *G : AllGraphs) {
+      if (!G) {
+        continue;
+      }
+      TSharedPtr<FJsonObject> Obj = McpHandlerUtils::CreateResultObject();
+      Obj->SetStringField(TEXT("graphName"), G->GetName());
+      Obj->SetStringField(TEXT("type"), ClassifyBlueprintGraph(Blueprint, G));
+      Obj->SetStringField(TEXT("graphClass"), G->GetClass()->GetName());
+      Obj->SetNumberField(TEXT("nodeCount"), G->Nodes.Num());
+      if (UEdGraph *const *Parent = ParentOf.Find(G)) {
+        Obj->SetStringField(TEXT("parentGraph"), (*Parent)->GetName());
+      }
+      // Rule graphs share generated names (AnimationTransitionGraph_0 ×N);
+      // the owning transition node's endpoints are the only useful identity.
+      // Addressing one by name is first-match — use get_transition_rule_graph.
+      if (UAnimStateTransitionNode *OwnerTrans =
+              Cast<UAnimStateTransitionNode>(G->GetOuter())) {
+        UAnimStateNodeBase *Prev = OwnerTrans->GetPreviousState();
+        UAnimStateNodeBase *Next = OwnerTrans->GetNextState();
+        Obj->SetStringField(
+            TEXT("transition"),
+            FString::Printf(TEXT("%s -> %s"),
+                            Prev ? *Prev->GetStateName() : TEXT("?"),
+                            Next ? *Next->GetStateName() : TEXT("?")));
+      }
+      GraphsJson.Add(MakeShared<FJsonValueObject>(Obj));
+    }
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    Result->SetArrayField(TEXT("graphs"), GraphsJson);
+    Result->SetNumberField(TEXT("count"), GraphsJson.Num());
+    McpHandlerUtils::AddVerification(Result, Blueprint);
+    SendAutomationResponse(
+        RequestingSocket, RequestId, true,
+        TEXT("Graphs listed. Pass any graphName to get_graph_details."),
+        Result);
+    return true;
+  } else if (SubAction == TEXT("get_transition_rule_graph")) {
+    const FString FromState = GetJsonStringField(Payload, TEXT("fromState"));
+    const FString ToState = GetJsonStringField(Payload, TEXT("toState"));
+    const FString TransitionName =
+        GetJsonStringField(Payload, TEXT("transitionName"));
+    const FString StateMachineName =
+        GetJsonStringField(Payload, TEXT("stateMachine"));
+    if (TransitionName.IsEmpty() && (FromState.IsEmpty() || ToState.IsEmpty())) {
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          TEXT("Provide fromState + toState (optionally stateMachine to "
+               "disambiguate) or transitionName."),
+          TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    TArray<UEdGraph *> AllGraphs;
+    Blueprint->GetAllGraphs(AllGraphs);
+    // Parallel transitions between the same two states are legal (e.g. an
+    // automatic rule alongside a conditional one, ordered by priority), so
+    // collect every match; transitionIndex selects among them.
+    TArray<UAnimStateTransitionNode *> Matches;
+    TArray<FString> MatchStateMachines;
+    TArray<FString> Candidates;
+    for (UEdGraph *G : AllGraphs) {
+      UAnimationStateMachineGraph *SMGraph =
+          Cast<UAnimationStateMachineGraph>(G);
+      if (!SMGraph) {
+        continue;
+      }
+      if (!StateMachineName.IsEmpty() &&
+          !SMGraph->GetName().Equals(StateMachineName,
+                                     ESearchCase::IgnoreCase)) {
+        continue;
+      }
+      for (UEdGraphNode *Node : SMGraph->Nodes) {
+        UAnimStateTransitionNode *Trans = Cast<UAnimStateTransitionNode>(Node);
+        if (!Trans) {
+          continue;
+        }
+        UAnimStateNodeBase *Prev = Trans->GetPreviousState();
+        UAnimStateNodeBase *Next = Trans->GetNextState();
+        const FString PrevName = Prev ? Prev->GetStateName() : FString();
+        const FString NextName = Next ? Next->GetStateName() : FString();
+        Candidates.Add(FString::Printf(TEXT("%s: %s -> %s"),
+                                       *SMGraph->GetName(), *PrevName,
+                                       *NextName));
+        bool bMatch;
+        if (!TransitionName.IsEmpty()) {
+          const FString Title =
+              Trans->GetNodeTitle(ENodeTitleType::ListView).ToString();
+          bMatch = Title.Equals(TransitionName, ESearchCase::IgnoreCase) ||
+                   (Trans->BoundGraph &&
+                    Trans->BoundGraph->GetName().Equals(
+                        TransitionName, ESearchCase::IgnoreCase));
+        } else {
+          bMatch = PrevName.Equals(FromState, ESearchCase::IgnoreCase) &&
+                   NextName.Equals(ToState, ESearchCase::IgnoreCase);
+        }
+        if (bMatch) {
+          Matches.Add(Trans);
+          MatchStateMachines.Add(SMGraph->GetName());
+        }
+      }
+    }
+
+    if (Matches.Num() == 0) {
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(
+              TEXT("No transition matched. Transitions present: %s"),
+              Candidates.Num() > 0 ? *FString::Join(Candidates, TEXT("; "))
+                                   : TEXT("(none — no state machine graphs "
+                                          "found in this blueprint)")),
+          TEXT("TRANSITION_NOT_FOUND"));
+      return true;
+    }
+
+    const int32 TransitionIndex =
+        GetJsonIntField(Payload, TEXT("transitionIndex"), 0);
+    if (TransitionIndex < 0 || TransitionIndex >= Matches.Num()) {
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(TEXT("transitionIndex %d out of range: %d parallel "
+                               "transition(s) matched."),
+                          TransitionIndex, Matches.Num()),
+          TEXT("INDEX_OUT_OF_RANGE"));
+      return true;
+    }
+    UAnimStateTransitionNode *Found = Matches[TransitionIndex];
+    const FString FoundStateMachine = MatchStateMachines[TransitionIndex];
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    Result->SetNumberField(TEXT("matchCount"), Matches.Num());
+    if (Matches.Num() > 1) {
+      Result->SetNumberField(TEXT("transitionIndex"), TransitionIndex);
+    }
+    Result->SetStringField(TEXT("stateMachine"), FoundStateMachine);
+    UAnimStateNodeBase *Prev = Found->GetPreviousState();
+    UAnimStateNodeBase *Next = Found->GetNextState();
+    Result->SetStringField(TEXT("fromState"),
+                           Prev ? Prev->GetStateName() : FString());
+    Result->SetStringField(TEXT("toState"),
+                           Next ? Next->GetStateName() : FString());
+    Result->SetStringField(
+        TEXT("transitionTitle"),
+        Found->GetNodeTitle(ENodeTitleType::ListView).ToString());
+    Result->SetNumberField(TEXT("crossfadeDuration"),
+                           Found->CrossfadeDuration);
+    Result->SetNumberField(TEXT("priorityOrder"), Found->PriorityOrder);
+    Result->SetBoolField(TEXT("automaticRule"),
+                         Found->bAutomaticRuleBasedOnSequencePlayerInState);
+    const TCHAR *LogicTypeName;
+    switch (Found->LogicType) {
+    case ETransitionLogicType::TLT_StandardBlend:
+      LogicTypeName = TEXT("StandardBlend");
+      break;
+    case ETransitionLogicType::TLT_Inertialization:
+      LogicTypeName = TEXT("Inertialization");
+      break;
+    case ETransitionLogicType::TLT_Custom:
+      LogicTypeName = TEXT("Custom");
+      break;
+    default:
+      LogicTypeName = TEXT("Unknown");
+      break;
+    }
+    Result->SetStringField(TEXT("logicType"), LogicTypeName);
+    if (Found->BoundGraph) {
+      Result->SetStringField(TEXT("ruleGraphName"),
+                             Found->BoundGraph->GetName());
+      Result->SetObjectField(
+          TEXT("ruleGraph"),
+          BuildGraphDetailsJson(Found->BoundGraph, /*bIncludePinLinks=*/true));
+    }
+    if (Found->CustomTransitionGraph) {
+      Result->SetStringField(TEXT("customBlendGraphName"),
+                             Found->CustomTransitionGraph->GetName());
+    }
+    McpHandlerUtils::AddVerification(Result, Blueprint);
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           TEXT("Transition rule graph retrieved."), Result);
     return true;
   }
 

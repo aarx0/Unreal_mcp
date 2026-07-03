@@ -4793,6 +4793,10 @@
           "description": "Font size (add_text_block, set_font).",
           "type": "number"
         },
+        "fromState": {
+          "description": "get_transition_rule_graph: source state name (paired with toState).",
+          "type": "string"
+        },
         "functionName": {
           "description": "Name of the function.",
           "type": "string"
@@ -4824,6 +4828,10 @@
         "hintText": {
           "description": "add_text_input: placeholder hint text.",
           "type": "string"
+        },
+        "includePinLinks": {
+          "description": "get_graph_details: include per-node pins with defaults and \"<nodeGuid>:<pinName>\" link refs (always on inside get_transition_rule_graph's ruleGraph).",
+          "type": "boolean"
         },
         "innerSlotPadding": {
           "description": "add_wrap_box: inner slot padding.",
@@ -5252,6 +5260,10 @@
           "description": "Name of the source pin.",
           "type": "string"
         },
+        "stateMachine": {
+          "description": "get_transition_rule_graph: state machine graph name to search; all state machines searched when omitted.",
+          "type": "string"
+        },
         "stepSize": {
           "description": "add_slider: step increment.",
           "type": "number"
@@ -5326,6 +5338,18 @@
         "top": {
           "description": "set_margin: top margin.",
           "type": "number"
+        },
+        "toState": {
+          "description": "get_transition_rule_graph: target state name (paired with fromState).",
+          "type": "string"
+        },
+        "transitionIndex": {
+          "description": "get_transition_rule_graph: 0-based pick when parallel transitions between the same states match (see matchCount in the response).",
+          "type": "number"
+        },
+        "transitionName": {
+          "description": "get_transition_rule_graph: transition node title or rule-graph name, as an alternative to fromState/toState.",
+          "type": "string"
         },
         "translation": {
           "description": "set_render_transform: 2D translation.",

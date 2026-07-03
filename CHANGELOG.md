@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### AnimBP graph readback (2026-07-03)
+
+- **`list_animbp_graphs` and `get_transition_rule_graph` implemented** — both were schema-advertised on `manage_blueprint` with no handler behind them (fell through to `INVALID_SUBACTION`). The list walks every graph in the blueprint (anim subgraphs included) with type classification (StateMachine / State / TransitionRule / Conduit / CustomTransitionBlend / AnimGraph / EventGraph / Function / Macro), node counts, parent hierarchy, and a `transition: "From -> To"` label on rule graphs — whose generated names collide (`AnimationTransitionGraph_0` ×4 in one state machine) and are otherwise indistinguishable.
+- **Transition conditions are finally readable** — `get_transition_rule_graph` resolves a transition by `fromState`+`toState` (optionally `stateMachine`) or `transitionName` and returns crossfade duration, priority, automatic-rule flag, blend logic type, and the bound rule graph with full per-node pins, defaults, and `"<nodeGuid>:<pinName>"` links — the "why does this transition fire" that `get_graph_details` topology never carried. Parallel transitions between the same two states are reported honestly (`matchCount` + `transitionIndex` selector).
+- **`get_graph_details` gained `includePinLinks`** — opt-in per-node pin/link detail on any graph; the node dump was factored into a shared builder used by both actions.
+
 ### Tool-result contract: failure details + structuredContent (2026-07-03)
 
 - **Failure responses carry the handler's details object** — `BuildToolResult` serialized the result JSON into the text block only on success; failures collapsed to a bare `Error [CODE]: message`, dropping validation specifics, per-item outcomes, and the ENGINE_ERROR guard's `engineErrors` array (assembled since the guard shipped, never reached a client). Failures now append the details JSON exactly like successes; the first line is unchanged, so existing clients see strictly more.
