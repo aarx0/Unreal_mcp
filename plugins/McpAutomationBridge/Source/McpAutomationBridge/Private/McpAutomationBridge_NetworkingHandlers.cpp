@@ -1938,6 +1938,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
     // Retrieves comprehensive networking configuration for a Blueprint CDO or
     // a live actor in the world. Returns replication settings, relevancy flags,
     // net update frequency, dormancy, roles, and authority status.
+    // For Blueprints additionally returns:
+    //   classDefaults: { bReplicates, bReplicateMovement, bNetLoadOnClient, bNetUseOwnerRelevancy }
+    //   perProperty:   [{ name, replicated, condition, repNotifyFunc|null }] (+ perPropertyTruncated)
+    //   rpcFunctions:  [{ name, type: Server|Client|NetMulticast, reliable }] (+ rpcFunctionsTruncated)
     //
     // Version notes:
     //   UE 5.0:   Net frequency/cull distance values returned as 0.0
@@ -1985,7 +1989,83 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
 #endif
                 NetworkingInfo->SetNumberField(TEXT("netPriority"), CDO->NetPriority);
                 NetworkingInfo->SetStringField(TEXT("netDormancy"), NetDormancyToString(CDO->NetDormancy));
+
+                TSharedPtr<FJsonObject> ClassDefaults = MakeShared<FJsonObject>();
+                ClassDefaults->SetBoolField(TEXT("bReplicates"), CDO->GetIsReplicated());
+                ClassDefaults->SetBoolField(TEXT("bReplicateMovement"), CDO->IsReplicatingMovement());
+                ClassDefaults->SetBoolField(TEXT("bNetLoadOnClient"), CDO->bNetLoadOnClient != 0);
+                ClassDefaults->SetBoolField(TEXT("bNetUseOwnerRelevancy"), CDO->bNetUseOwnerRelevancy != 0);
+                NetworkingInfo->SetObjectField(TEXT("classDefaults"), ClassDefaults);
             }
+
+            constexpr int32 MaxListedEntries = 100;
+
+            // Per-variable replication state comes from the authored
+            // FBPVariableDescription, which survives recompiles (unlike flags
+            // poked directly onto compiled FProperties).
+            const UEnum* LifetimeConditionEnum = StaticEnum<ELifetimeCondition>();
+            TArray<TSharedPtr<FJsonValue>> PerProperty;
+            for (const FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+            {
+                if (PerProperty.Num() >= MaxListedEntries)
+                {
+                    break;
+                }
+                TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+                Entry->SetStringField(TEXT("name"), VarDesc.VarName.ToString());
+                Entry->SetBoolField(TEXT("replicated"), (VarDesc.PropertyFlags & CPF_Net) != 0);
+                Entry->SetStringField(TEXT("condition"), LifetimeConditionEnum->GetNameStringByValue(static_cast<int64>(VarDesc.ReplicationCondition.GetValue())));
+                if (VarDesc.RepNotifyFunc.IsNone())
+                {
+                    Entry->SetField(TEXT("repNotifyFunc"), MakeShared<FJsonValueNull>());
+                }
+                else
+                {
+                    Entry->SetStringField(TEXT("repNotifyFunc"), VarDesc.RepNotifyFunc.ToString());
+                }
+                PerProperty.Add(MakeShared<FJsonValueObject>(Entry));
+            }
+            NetworkingInfo->SetArrayField(TEXT("perProperty"), PerProperty);
+            NetworkingInfo->SetBoolField(TEXT("perPropertyTruncated"), Blueprint->NewVariables.Num() > MaxListedEntries);
+
+            TArray<TSharedPtr<FJsonValue>> RpcFunctions;
+            bool bRpcFunctionsTruncated = false;
+            for (UEdGraph* FunctionGraph : Blueprint->FunctionGraphs)
+            {
+                if (!FunctionGraph)
+                {
+                    continue;
+                }
+                TArray<UK2Node_FunctionEntry*> EntryNodes;
+                FunctionGraph->GetNodesOfClass<UK2Node_FunctionEntry>(EntryNodes);
+                if (EntryNodes.Num() == 0)
+                {
+                    continue;
+                }
+                // GetFunctionFlags merges the compiled UFunction's flags with the
+                // entry node's authored ExtraFlags, so uncompiled edits are visible.
+                const int32 FunctionFlags = EntryNodes[0]->GetFunctionFlags();
+                if ((FunctionFlags & FUNC_Net) == 0)
+                {
+                    continue;
+                }
+                if (RpcFunctions.Num() >= MaxListedEntries)
+                {
+                    bRpcFunctionsTruncated = true;
+                    break;
+                }
+                FString RpcType = TEXT("Unknown");
+                if (FunctionFlags & FUNC_NetServer) RpcType = TEXT("Server");
+                else if (FunctionFlags & FUNC_NetClient) RpcType = TEXT("Client");
+                else if (FunctionFlags & FUNC_NetMulticast) RpcType = TEXT("NetMulticast");
+                TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+                Entry->SetStringField(TEXT("name"), FunctionGraph->GetName());
+                Entry->SetStringField(TEXT("type"), RpcType);
+                Entry->SetBoolField(TEXT("reliable"), (FunctionFlags & FUNC_NetReliable) != 0);
+                RpcFunctions.Add(MakeShared<FJsonValueObject>(Entry));
+            }
+            NetworkingInfo->SetArrayField(TEXT("rpcFunctions"), RpcFunctions);
+            NetworkingInfo->SetBoolField(TEXT("rpcFunctionsTruncated"), bRpcFunctionsTruncated);
         }
         else if (!ActorName.IsEmpty())
         {

@@ -519,6 +519,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("componentName"), ComponentName);
@@ -1060,6 +1061,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1125,6 +1127,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1177,6 +1180,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1574,6 +1578,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1637,6 +1642,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         SetAbilityPropertyValue(AbilityCDO, FName(TEXT("InstancingPolicy")), InstPolicy);
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1784,6 +1790,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1873,6 +1880,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         EffectCDO->Modifiers.Add(Modifier);
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1965,6 +1973,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -2028,6 +2037,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         EffectCDO->Executions.Add(ExecDef);
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -2077,6 +2087,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -2195,6 +2206,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -2345,6 +2357,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -3005,6 +3018,22 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         Result->SetStringField(TEXT("assetName"), Asset->GetName());
         Result->SetStringField(TEXT("class"), Asset->GetClass()->GetName());
 
+        constexpr int32 MaxListItems = 64;
+        auto AddTagsField = [&Result](const TCHAR* FieldName, const FGameplayTagContainer& Tags)
+        {
+            TArray<TSharedPtr<FJsonValue>> TagsJson;
+            for (const FGameplayTag& Tag : Tags)
+            {
+                if (TagsJson.Num() >= MaxListItems)
+                {
+                    Result->SetBoolField(FString(FieldName) + TEXT("Truncated"), true);
+                    break;
+                }
+                TagsJson.Add(MakeShared<FJsonValueString>(Tag.ToString()));
+            }
+            Result->SetArrayField(FieldName, TagsJson);
+        };
+
         if (UBlueprint* Blueprint = Cast<UBlueprint>(Asset))
         {
             Result->SetStringField(TEXT("type"), TEXT("Blueprint"));
@@ -3041,6 +3070,26 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                                 Result->SetStringField(TEXT("netExecutionPolicy"),
                                     StaticEnum<EGameplayAbilityNetExecutionPolicy::Type>()->GetNameStringByValue(static_cast<int64>(NetPolicy.GetValue())));
                             }
+
+                            TSubclassOf<UGameplayEffect> CostEffectClass;
+                            if (GetAbilityPropertyValue(AbilityCDO, FName(TEXT("CostGameplayEffectClass")), CostEffectClass) && CostEffectClass.Get())
+                            {
+                                Result->SetStringField(TEXT("costGameplayEffectClass"), CostEffectClass.Get()->GetPathName());
+                            }
+
+                            TSubclassOf<UGameplayEffect> CooldownEffectClass;
+                            if (GetAbilityPropertyValue(AbilityCDO, FName(TEXT("CooldownGameplayEffectClass")), CooldownEffectClass) && CooldownEffectClass.Get())
+                            {
+                                Result->SetStringField(TEXT("cooldownGameplayEffectClass"), CooldownEffectClass.Get()->GetPathName());
+                            }
+
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
+                            AddTagsField(TEXT("abilityTags"), AbilityCDO->GetAssetTags());
+#else
+                            PRAGMA_DISABLE_DEPRECATION_WARNINGS
+                            AddTagsField(TEXT("abilityTags"), AbilityCDO->AbilityTags);
+                            PRAGMA_ENABLE_DEPRECATION_WARNINGS
+#endif
                         }
                     }
                     else if (ParentClass->IsChildOf(UGameplayEffect::StaticClass()))
@@ -3066,11 +3115,98 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                                 StaticEnum<EGameplayEffectStackingType>()->GetNameStringByValue(static_cast<int64>(StackingTypeValue)));
                             Result->SetNumberField(TEXT("modifierCount"), EffectCDO->Modifiers.Num());
                             Result->SetNumberField(TEXT("cueCount"), EffectCDO->GameplayCues.Num());
+
+                            // Curve-scaled values are reported at level 0.
+                            if (EffectCDO->DurationPolicy == EGameplayEffectDurationType::HasDuration)
+                            {
+                                Result->SetStringField(TEXT("durationMagnitudeType"),
+                                    StaticEnum<EGameplayEffectMagnitudeCalculation>()->GetNameStringByValue(
+                                        static_cast<int64>(EffectCDO->DurationMagnitude.GetMagnitudeCalculationType())));
+                                float DurationValue = 0.0f;
+                                if (EffectCDO->DurationMagnitude.GetStaticMagnitudeIfPossible(0.0f, DurationValue))
+                                {
+                                    Result->SetNumberField(TEXT("duration"), DurationValue);
+                                }
+                            }
+                            Result->SetNumberField(TEXT("period"), EffectCDO->Period.GetValueAtLevel(0.0f));
+
+                            TArray<TSharedPtr<FJsonValue>> ModifiersJson;
+                            const int32 ReportedModifiers = FMath::Min(EffectCDO->Modifiers.Num(), MaxListItems);
+                            for (int32 Index = 0; Index < ReportedModifiers; ++Index)
+                            {
+                                const FGameplayModifierInfo& Modifier = EffectCDO->Modifiers[Index];
+                                TSharedPtr<FJsonObject> ModifierJson = MakeShared<FJsonObject>();
+                                ModifierJson->SetStringField(TEXT("attribute"),
+                                    Modifier.Attribute.IsValid() ? Modifier.Attribute.GetName() : FString(TEXT("None")));
+                                ModifierJson->SetStringField(TEXT("op"),
+                                    StaticEnum<EGameplayModOp::Type>()->GetNameStringByValue(static_cast<int64>(Modifier.ModifierOp.GetValue())));
+                                const EGameplayEffectMagnitudeCalculation MagnitudeType = Modifier.ModifierMagnitude.GetMagnitudeCalculationType();
+                                ModifierJson->SetStringField(TEXT("magnitudeType"),
+                                    StaticEnum<EGameplayEffectMagnitudeCalculation>()->GetNameStringByValue(static_cast<int64>(MagnitudeType)));
+                                if (MagnitudeType == EGameplayEffectMagnitudeCalculation::SetByCaller)
+                                {
+                                    const FSetByCallerFloat& SetByCaller = Modifier.ModifierMagnitude.GetSetByCallerFloat();
+                                    ModifierJson->SetStringField(TEXT("setByCallerTag"),
+                                        SetByCaller.DataTag.IsValid() ? SetByCaller.DataTag.ToString() : SetByCaller.DataName.ToString());
+                                }
+                                else
+                                {
+                                    float MagnitudeValue = 0.0f;
+                                    if (Modifier.ModifierMagnitude.GetStaticMagnitudeIfPossible(0.0f, MagnitudeValue))
+                                    {
+                                        ModifierJson->SetNumberField(TEXT("value"), MagnitudeValue);
+                                    }
+                                }
+                                ModifiersJson.Add(MakeShared<FJsonValueObject>(ModifierJson));
+                            }
+                            Result->SetArrayField(TEXT("modifiers"), ModifiersJson);
+                            Result->SetBoolField(TEXT("modifiersTruncated"), EffectCDO->Modifiers.Num() > MaxListItems);
+
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
+                            AddTagsField(TEXT("assetTags"), EffectCDO->GetAssetTags());
+                            AddTagsField(TEXT("grantedTags"), EffectCDO->GetGrantedTags());
+#endif
+                            // set_effect_tags writes the legacy inheritable containers; the cached
+                            // (effective) containers above only pick that up after a compile
+                            // migrates it into GEComponents. Expose both surfaces.
+                            PRAGMA_DISABLE_DEPRECATION_WARNINGS
+                            AddTagsField(TEXT("authoredAssetTags"), EffectCDO->InheritableGameplayEffectTags.CombinedTags);
+                            AddTagsField(TEXT("authoredGrantedTags"), EffectCDO->InheritableOwnedTagsContainer.CombinedTags);
+                            PRAGMA_ENABLE_DEPRECATION_WARNINGS
                         }
                     }
                     else if (ParentClass->IsChildOf(UAttributeSet::StaticClass()))
                     {
                         Result->SetStringField(TEXT("gasType"), TEXT("AttributeSet"));
+
+                        const UAttributeSet* AttrSetCDO = Cast<UAttributeSet>(
+                            Blueprint->GeneratedClass->GetDefaultObject());
+                        if (AttrSetCDO)
+                        {
+                            TArray<TSharedPtr<FJsonValue>> AttributesJson;
+                            int32 AttributeCount = 0;
+                            for (TFieldIterator<FStructProperty> It(Blueprint->GeneratedClass); It; ++It)
+                            {
+                                if (!FGameplayAttribute::IsGameplayAttributeDataProperty(*It))
+                                {
+                                    continue;
+                                }
+                                ++AttributeCount;
+                                if (AttributesJson.Num() >= MaxListItems)
+                                {
+                                    continue;
+                                }
+                                const FGameplayAttributeData* AttrData = It->ContainerPtrToValuePtr<FGameplayAttributeData>(AttrSetCDO);
+                                TSharedPtr<FJsonObject> AttrJson = MakeShared<FJsonObject>();
+                                AttrJson->SetStringField(TEXT("name"), It->GetName());
+                                AttrJson->SetNumberField(TEXT("baseValue"), AttrData->GetBaseValue());
+                                AttrJson->SetNumberField(TEXT("currentValue"), AttrData->GetCurrentValue());
+                                AttributesJson.Add(MakeShared<FJsonValueObject>(AttrJson));
+                            }
+                            Result->SetArrayField(TEXT("attributes"), AttributesJson);
+                            Result->SetNumberField(TEXT("attributeCount"), AttributeCount);
+                            Result->SetBoolField(TEXT("attributesTruncated"), AttributeCount > MaxListItems);
+                        }
                     }
                     else if (ParentClass->IsChildOf(UGameplayCueNotify_Static::StaticClass()))
                     {

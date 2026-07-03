@@ -74,6 +74,15 @@ as they land.
 >   SetByCaller magnitudeType previously silently wrote a ScalableFloat), EQS searchCenter;
 >   removed maxVerticesPerHull (no 5.7 slot), targetAttribute, loSHearingRange
 >   (UE_DEPRECATED 5.2). Dead pins now 6, all documented regex-invisible indirect reads.
+> - **set_effect_tags writes the 5.3-deprecated tag container (found 2026-07-02, readback
+>   wave):** it writes InheritableOwnedTagsContainer/InheritableGameplayEffectTags, but on
+>   modular (5.3+) GEs the engine's ConvertTargetTagsComponent overwrites those FROM
+>   UTargetTagsGameplayEffectComponent after compile — tag writes on fresh 5.7 effects are
+>   likely lost before reaching the runtime cache. get_gas_info now reports BOTH
+>   grantedTags (effective cache) and authoredGrantedTags (legacy container), so the
+>   divergence is visible in one call. Fix = write the GE component on 5.3+. Untestable
+>   end-to-end here until the project registers gameplay tags (unregistered tags are
+>   rejected since the fix wave).
 > - **add_effect_modifier never sets FGameplayModifierInfo::Attribute (found 2026-07-02,
 >   wave 2):** a modifier without a target attribute is inert — the action needs an
 >   'attribute' param (resolve against the effect's attribute sets) to be useful at all.

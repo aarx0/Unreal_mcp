@@ -58,7 +58,9 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpGeometryHandlers, Log, All);
 #include "Engine/StaticMeshActor.h"
 #include "Engine/Texture2D.h"
 #include "EngineUtils.h"
+#include "Materials/MaterialInterface.h"
 #include "Misc/PackageName.h"
+#include "PhysicsEngine/BodySetup.h"
 
 // GeometryCore includes for low-level mesh operations (FMeshBoundaryLoops, FEdgeLoop)
 // Required for bridge operations in UE 5.5+
@@ -1219,9 +1221,93 @@ static bool HandleGetMeshInfo(UMcpAutomationBridgeSubsystem* Self, const FString
                               const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
+    FString AssetPath = GetJsonStringField(Payload, TEXT("assetPath"), TEXT(""));
+
+    // Asset branch: reads saved UStaticMesh state so writes like generate_lods /
+    // generate_collision / convert_to_nanite verify in one call.
+    if (!AssetPath.IsEmpty())
+    {
+        FString SafePath = SanitizeProjectRelativePath(AssetPath);
+        if (SafePath.IsEmpty())
+        {
+            Self->SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Invalid asset path: %s"), *AssetPath), TEXT("INVALID_ASSET_PATH"));
+            return true;
+        }
+
+        UStaticMesh* StaticMesh = LoadObject<UStaticMesh>(nullptr, *SafePath);
+        if (!StaticMesh)
+        {
+            Self->SendAutomationError(Socket, RequestId, FString::Printf(TEXT("StaticMesh not found: %s"), *SafePath), TEXT("ASSET_NOT_FOUND"));
+            return true;
+        }
+
+        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+        Result->SetStringField(TEXT("assetPath"), SafePath);
+
+        const int32 NumLODs = StaticMesh->GetNumLODs();
+        Result->SetNumberField(TEXT("lodCount"), NumLODs);
+        Result->SetNumberField(TEXT("sourceModelCount"), StaticMesh->GetNumSourceModels());
+        Result->SetNumberField(TEXT("triangleCount"), StaticMesh->GetNumTriangles(0));
+        Result->SetNumberField(TEXT("vertexCount"), StaticMesh->GetNumVertices(0));
+
+        TArray<TSharedPtr<FJsonValue>> LodArray;
+        for (int32 LodIndex = 0; LodIndex < NumLODs; ++LodIndex)
+        {
+            TSharedPtr<FJsonObject> LodObj = MakeShared<FJsonObject>();
+            LodObj->SetNumberField(TEXT("lodIndex"), LodIndex);
+            LodObj->SetNumberField(TEXT("triangleCount"), StaticMesh->GetNumTriangles(LodIndex));
+            LodObj->SetNumberField(TEXT("vertexCount"), StaticMesh->GetNumVertices(LodIndex));
+            LodObj->SetNumberField(TEXT("sectionCount"), StaticMesh->GetNumSections(LodIndex));
+            LodArray.Add(MakeShared<FJsonValueObject>(LodObj));
+        }
+        Result->SetArrayField(TEXT("lods"), LodArray);
+
+        // naniteEnabled is the authored setting; naniteHasRenderData reflects
+        // whether Nanite data was actually built.
+        Result->SetBoolField(TEXT("naniteEnabled"), StaticMesh->GetNaniteSettings().bEnabled != 0);
+        Result->SetBoolField(TEXT("naniteHasRenderData"), StaticMesh->HasValidNaniteData());
+
+        TSharedPtr<FJsonObject> Collision = MakeShared<FJsonObject>();
+        UBodySetup* BodySetup = StaticMesh->GetBodySetup();
+        Collision->SetBoolField(TEXT("hasBodySetup"), BodySetup != nullptr);
+        const FKAggregateGeom* AggGeom = BodySetup ? &BodySetup->AggGeom : nullptr;
+        Collision->SetNumberField(TEXT("sphereCount"), AggGeom ? AggGeom->SphereElems.Num() : 0);
+        Collision->SetNumberField(TEXT("boxCount"), AggGeom ? AggGeom->BoxElems.Num() : 0);
+        Collision->SetNumberField(TEXT("capsuleCount"), AggGeom ? AggGeom->SphylElems.Num() : 0);
+        Collision->SetNumberField(TEXT("convexCount"), AggGeom ? AggGeom->ConvexElems.Num() : 0);
+        Collision->SetNumberField(TEXT("taperedCapsuleCount"), AggGeom ? AggGeom->TaperedCapsuleElems.Num() : 0);
+        Collision->SetNumberField(TEXT("levelSetCount"), AggGeom ? AggGeom->LevelSetElems.Num() : 0);
+        Collision->SetNumberField(TEXT("totalPrimitives"), AggGeom ? AggGeom->GetElementCount() : 0);
+        if (BodySetup)
+        {
+            Collision->SetStringField(TEXT("collisionComplexity"),
+                StaticEnum<ECollisionTraceFlag>()->GetNameStringByValue(static_cast<int64>(BodySetup->CollisionTraceFlag.GetValue())));
+        }
+        Result->SetObjectField(TEXT("collision"), Collision);
+
+        const TArray<FStaticMaterial>& StaticMaterials = StaticMesh->GetStaticMaterials();
+        constexpr int32 MaxMaterialSlots = 64;
+        TArray<TSharedPtr<FJsonValue>> SlotArray;
+        for (int32 SlotIndex = 0; SlotIndex < StaticMaterials.Num() && SlotIndex < MaxMaterialSlots; ++SlotIndex)
+        {
+            const FStaticMaterial& Slot = StaticMaterials[SlotIndex];
+            TSharedPtr<FJsonObject> SlotObj = MakeShared<FJsonObject>();
+            SlotObj->SetNumberField(TEXT("slotIndex"), SlotIndex);
+            SlotObj->SetStringField(TEXT("slotName"), Slot.MaterialSlotName.ToString());
+            SlotObj->SetStringField(TEXT("materialPath"), Slot.MaterialInterface ? Slot.MaterialInterface->GetPathName() : FString());
+            SlotArray.Add(MakeShared<FJsonValueObject>(SlotObj));
+        }
+        Result->SetArrayField(TEXT("materialSlots"), SlotArray);
+        Result->SetNumberField(TEXT("materialSlotCount"), StaticMaterials.Num());
+        Result->SetBoolField(TEXT("materialSlotsTruncated"), StaticMaterials.Num() > MaxMaterialSlots);
+
+        Self->SendAutomationResponse(Socket, RequestId, true, TEXT("Static mesh asset info retrieved"), Result);
+        return true;
+    }
+
     if (ActorName.IsEmpty())
     {
-        Self->SendAutomationError(Socket, RequestId, TEXT("actorName required"), TEXT("INVALID_ARGUMENT"));
+        Self->SendAutomationError(Socket, RequestId, TEXT("actorName or assetPath required"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 

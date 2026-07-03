@@ -160,10 +160,21 @@
 //   Payload:  { "blueprintPath": string }
 //   Response: { "blueprintPath": string, "assetName": string, "capsuleRadius": number,
 //               "capsuleHalfHeight": number, "walkSpeed": number, "jumpZVelocity": number,
+//               "crouchSpeed": number, "swimSpeed": number, "flySpeed": number,
+//               "acceleration": number, "brakingDeceleration": number,
+//               "groundFriction": number, "fallingLateralFriction": number,
+//               "canCrouch": bool, "crouchedHalfHeight": number,
+//               "rotationRate": {pitch,yaw,roll}, "useControllerDesiredRotation": bool,
+//               "navMovement": object, "jumpHoldTime": number,
+//               "useControllerRotationYaw|Pitch|Roll": bool,
+//               "runSpeed"?: number, "sprintSpeed"?: number (scaffolded var defaults),
+//               "meshComponent"?: { name, source, skeletalMesh, animationMode,
+//                                   animInstanceClass, animBlueprint?, relativeLocation,
+//                                   relativeRotation },
 //               "hasSpringArm": bool, "hasCamera": bool,
 //               "springArmTemplates": object[], "cameraTemplates": object[],
 //               "bFindCameraComponentWhenViewTarget"?: bool, "playerViewState": object,
-//               "movementVariables"?: string[] }
+//               "movementVariables"?: string[], "movementVariablesTruncated"?: bool }
 //
 // VERSION COMPATIBILITY:
 // ----------------------
@@ -1861,18 +1872,32 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
     // get_character_info
     // -------------------------------------------------------------------------
     // Retrieves comprehensive info about a Character Blueprint including:
-    // capsule dimensions, movement speeds, jump settings, Blueprint camera
-    // templates, active camera discovery flags, PIE player view state,
-    // and all movement-related Blueprint variables.
+    // capsule dimensions, movement speeds/physics, crouch and rotation settings,
+    // nav agent flags, mesh + anim class assignment, scaffolded speed variable
+    // defaults, Blueprint camera templates, active camera discovery flags,
+    // PIE player view state, and movement-related Blueprint variables.
     //
     // Payload:  { "blueprintPath": string }
     // Response: { "blueprintPath": string, "assetName": string,
     //             "capsuleRadius": number, "capsuleHalfHeight": number,
     //             "walkSpeed": number, "jumpZVelocity": number, "airControl": number,
+    //             "crouchSpeed": number, "swimSpeed": number, "flySpeed": number,
+    //             "acceleration": number, "brakingDeceleration": number,
+    //             "groundFriction": number, "fallingLateralFriction": number,
+    //             "canCrouch": bool, "crouchedHalfHeight": number,
+    //             "rotationRate": {pitch,yaw,roll}, "useControllerDesiredRotation": bool,
+    //             "navMovement": { agentRadius, agentHeight, agentStepHeight,
+    //                              avoidanceEnabled, canCrouch, canJump, canWalk,
+    //                              canSwim, canFly },
+    //             "jumpHoldTime": number, "useControllerRotationYaw|Pitch|Roll": bool,
+    //             "runSpeed"?: number, "sprintSpeed"?: number (only when scaffolded),
+    //             "meshComponent"?: { name, source: "SCS"|"CDO", skeletalMesh: path|null,
+    //                                 animationMode: string, animInstanceClass: path|null,
+    //                                 animBlueprint?: path, relativeLocation, relativeRotation },
     //             "hasSpringArm": bool, "hasCamera": bool,
     //             "springArmTemplates": object[], "cameraTemplates": object[],
     //             "bFindCameraComponentWhenViewTarget"?: bool, "playerViewState": object,
-    //             "movementVariables"?: string[] }
+    //             "movementVariables"?: string[], "movementVariablesTruncated"?: bool }
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("get_character_info"))
     {
@@ -1904,15 +1929,58 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
                 Result->SetBoolField(TEXT("orientToMovement"), Movement->bOrientRotationToMovement);
                 Result->SetNumberField(TEXT("gravityScale"), Movement->GravityScale);
                 Result->SetNumberField(TEXT("customMovementSpeed"), Movement->MaxCustomMovementSpeed);
+                Result->SetNumberField(TEXT("crouchSpeed"), Movement->MaxWalkSpeedCrouched);
+                Result->SetNumberField(TEXT("swimSpeed"), Movement->MaxSwimSpeed);
+                Result->SetNumberField(TEXT("flySpeed"), Movement->MaxFlySpeed);
+                Result->SetNumberField(TEXT("acceleration"), Movement->MaxAcceleration);
+                Result->SetNumberField(TEXT("brakingDeceleration"), Movement->BrakingDecelerationWalking);
+                Result->SetNumberField(TEXT("groundFriction"), Movement->GroundFriction);
+                Result->SetNumberField(TEXT("fallingLateralFriction"), Movement->FallingLateralFriction);
+                Result->SetBoolField(TEXT("canCrouch"), Movement->NavAgentProps.bCanCrouch);
+                Result->SetNumberField(TEXT("crouchedHalfHeight"), Movement->GetCrouchedHalfHeight());
+                Result->SetObjectField(TEXT("rotationRate"), McpHandlerUtils::RotatorToJson(Movement->RotationRate));
+                Result->SetBoolField(TEXT("useControllerDesiredRotation"), Movement->bUseControllerDesiredRotation);
+
+                TSharedPtr<FJsonObject> NavJson = MakeShared<FJsonObject>();
+                NavJson->SetNumberField(TEXT("agentRadius"), Movement->NavAgentProps.AgentRadius);
+                NavJson->SetNumberField(TEXT("agentHeight"), Movement->NavAgentProps.AgentHeight);
+                NavJson->SetNumberField(TEXT("agentStepHeight"), Movement->NavAgentProps.AgentStepHeight);
+                NavJson->SetBoolField(TEXT("avoidanceEnabled"), Movement->bUseRVOAvoidance);
+                NavJson->SetBoolField(TEXT("canCrouch"), Movement->NavAgentProps.bCanCrouch);
+                NavJson->SetBoolField(TEXT("canJump"), Movement->NavAgentProps.bCanJump);
+                NavJson->SetBoolField(TEXT("canWalk"), Movement->NavAgentProps.bCanWalk);
+                NavJson->SetBoolField(TEXT("canSwim"), Movement->NavAgentProps.bCanSwim);
+                NavJson->SetBoolField(TEXT("canFly"), Movement->NavAgentProps.bCanFly);
+                Result->SetObjectField(TEXT("navMovement"), NavJson);
             }
 
             Result->SetNumberField(TEXT("maxJumpCount"), CharCDO->JumpMaxCount);
+            Result->SetNumberField(TEXT("jumpHoldTime"), CharCDO->JumpMaxHoldTime);
             Result->SetBoolField(TEXT("useControllerRotationYaw"), CharCDO->bUseControllerRotationYaw);
+            Result->SetBoolField(TEXT("useControllerRotationPitch"), CharCDO->bUseControllerRotationPitch);
+            Result->SetBoolField(TEXT("useControllerRotationRoll"), CharCDO->bUseControllerRotationRoll);
+
+            // RunSpeed/SprintSpeed exist only when a configure action scaffolded
+            // them; absence of the response field means the variable is absent.
+            const auto ReadScaffoldedSpeed = [&Result, &Blueprint, CharCDO](const TCHAR* PropName, const TCHAR* FieldName)
+            {
+                if (const FNumericProperty* Prop = FindFProperty<FNumericProperty>(Blueprint->GeneratedClass, PropName))
+                {
+                    if (Prop->IsFloatingPoint())
+                    {
+                        Result->SetNumberField(FieldName, Prop->GetFloatingPointPropertyValue(Prop->ContainerPtrToValuePtr<void>(CharCDO)));
+                    }
+                }
+            };
+            ReadScaffoldedSpeed(TEXT("RunSpeed"), TEXT("runSpeed"));
+            ReadScaffoldedSpeed(TEXT("SprintSpeed"), TEXT("sprintSpeed"));
         }
 
-        // Check for spring arm and camera templates on the Blueprint asset.
+        // Check for spring arm, camera, and skeletal mesh templates on the Blueprint asset.
         bool bHasSpringArm = false;
         bool bHasCamera = false;
+        USkeletalMeshComponent* MeshTemplate = nullptr;
+        FString MeshTemplateSource;
         TArray<TSharedPtr<FJsonValue>> SpringArmTemplates;
         TArray<TSharedPtr<FJsonValue>> CameraTemplates;
         for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
@@ -1929,12 +1997,61 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
                     bHasCamera = true;
                     CameraTemplates.Add(MakeShared<FJsonValueObject>(CreateCameraComponentReportChar(Camera)));
                 }
+                else if (USkeletalMeshComponent* SCSMesh = Cast<USkeletalMeshComponent>(Node->ComponentTemplate))
+                {
+                    if (!MeshTemplate)
+                    {
+                        MeshTemplate = SCSMesh;
+                        MeshTemplateSource = TEXT("SCS");
+                    }
+                }
             }
         }
         Result->SetBoolField(TEXT("hasSpringArm"), bHasSpringArm);
         Result->SetBoolField(TEXT("hasCamera"), bHasCamera);
         Result->SetArrayField(TEXT("springArmTemplates"), SpringArmTemplates);
         Result->SetArrayField(TEXT("cameraTemplates"), CameraTemplates);
+
+        // Mesh readback prefers an SCS skeletal mesh template and falls back to the
+        // inherited CDO mesh — the same priority the write side assigns with.
+        if (!MeshTemplate && CharCDO && CharCDO->GetMesh())
+        {
+            MeshTemplate = CharCDO->GetMesh();
+            MeshTemplateSource = TEXT("CDO");
+        }
+        if (MeshTemplate)
+        {
+            TSharedPtr<FJsonObject> MeshJson = MakeShared<FJsonObject>();
+            MeshJson->SetStringField(TEXT("name"), MeshTemplate->GetName());
+            MeshJson->SetStringField(TEXT("source"), MeshTemplateSource);
+            if (const USkeletalMesh* MeshAsset = MeshTemplate->GetSkeletalMeshAsset())
+            {
+                MeshJson->SetStringField(TEXT("skeletalMesh"), MeshAsset->GetPathName());
+            }
+            else
+            {
+                MeshJson->SetField(TEXT("skeletalMesh"), MakeShared<FJsonValueNull>());
+            }
+            MeshJson->SetStringField(TEXT("animationMode"),
+                StaticEnum<EAnimationMode::Type>()->GetNameStringByValue(static_cast<int64>(MeshTemplate->GetAnimationMode())));
+            if (UClass* AnimClass = MeshTemplate->GetAnimClass())
+            {
+                MeshJson->SetStringField(TEXT("animInstanceClass"), AnimClass->GetPathName());
+                // For BP-generated anim classes, also report the authoring UAnimBlueprint
+                // asset path (matches the animBlueprintPath the write side accepts).
+                if (UObject* AnimBPAsset = AnimClass->ClassGeneratedBy)
+                {
+                    MeshJson->SetStringField(TEXT("animBlueprint"), AnimBPAsset->GetPathName());
+                }
+            }
+            else
+            {
+                MeshJson->SetField(TEXT("animInstanceClass"), MakeShared<FJsonValueNull>());
+            }
+            MeshJson->SetObjectField(TEXT("relativeLocation"), McpHandlerUtils::VectorToJson(MeshTemplate->GetRelativeLocation()));
+            MeshJson->SetObjectField(TEXT("relativeRotation"), McpHandlerUtils::RotatorToJson(MeshTemplate->GetRelativeRotation()));
+            Result->SetObjectField(TEXT("meshComponent"), MeshJson);
+        }
 
         if (CharCDO)
         {
@@ -1945,6 +2062,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
         AddPlayerViewStateReportChar(PIEWorld, Result);
 
         // List blueprint variables related to movement states
+        constexpr int32 MaxMovementVars = 100;
+        bool bMovementVarsTruncated = false;
         TArray<TSharedPtr<FJsonValue>> MovementVars;
         for (const FBPVariableDescription& Var : Blueprint->NewVariables)
         {
@@ -1952,12 +2071,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCharacterAction(
             if (VarName.StartsWith(TEXT("bIs")) || VarName.StartsWith(TEXT("bCan")) ||
                 VarName.Contains(TEXT("Speed")) || VarName.Contains(TEXT("Movement")))
             {
+                if (MovementVars.Num() >= MaxMovementVars)
+                {
+                    bMovementVarsTruncated = true;
+                    break;
+                }
                 MovementVars.Add(MakeShared<FJsonValueString>(VarName));
             }
         }
         if (MovementVars.Num() > 0)
         {
             Result->SetArrayField(TEXT("movementVariables"), MovementVars);
+            Result->SetBoolField(TEXT("movementVariablesTruncated"), bMovementVarsTruncated);
         }
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Character info retrieved"), Result);

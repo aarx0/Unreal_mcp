@@ -275,6 +275,73 @@ static void SetVariablesAdded(const TSharedPtr<FJsonObject>& Result, const TArra
     }
     Result->SetArrayField(TEXT("variablesAdded"), VarsAdded);
 }
+
+// Reads each Blueprint member variable's current generated-class CDO value into
+// Info.variableValues (bool as bool, numeric as number, enum as name string,
+// else export-text). A variable not yet compiled into the class reads as null.
+static void AddVariableValueReadbackCombat(const TSharedPtr<FJsonObject>& Info, UBlueprint* Blueprint)
+{
+    constexpr int32 MaxVariableValues = 256;
+    UObject* CDO = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : nullptr;
+    TSharedPtr<FJsonObject> Values = MakeShared<FJsonObject>();
+    bool bTruncated = false;
+    int32 Emitted = 0;
+    for (const FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+    {
+        if (Emitted >= MaxVariableValues)
+        {
+            bTruncated = true;
+            break;
+        }
+        ++Emitted;
+
+        const FString VarName = VarDesc.VarName.ToString();
+        FProperty* Property = CDO ? FindFProperty<FProperty>(CDO->GetClass(), VarDesc.VarName) : nullptr;
+        if (!Property)
+        {
+            Values->SetField(VarName, MakeShared<FJsonValueNull>());
+            continue;
+        }
+        if (const FBoolProperty* BoolProp = CastField<FBoolProperty>(Property))
+        {
+            Values->SetBoolField(VarName, BoolProp->GetPropertyValue_InContainer(CDO));
+            continue;
+        }
+        if (const FEnumProperty* EnumProp = CastField<FEnumProperty>(Property))
+        {
+            if (const UEnum* Enum = EnumProp->GetEnum())
+            {
+                const void* ValuePtr = EnumProp->ContainerPtrToValuePtr<void>(CDO);
+                Values->SetStringField(VarName, Enum->GetNameStringByValue(
+                    EnumProp->GetUnderlyingProperty()->GetSignedIntPropertyValue(ValuePtr)));
+                continue;
+            }
+        }
+        // Legacy BP enums compile to byte properties carrying a UEnum.
+        const FByteProperty* ByteProp = CastField<FByteProperty>(Property);
+        if (ByteProp && ByteProp->Enum)
+        {
+            Values->SetStringField(VarName, ByteProp->Enum->GetNameStringByValue(
+                ByteProp->GetPropertyValue_InContainer(CDO)));
+            continue;
+        }
+        if (const FNumericProperty* NumProp = CastField<FNumericProperty>(Property))
+        {
+            const void* ValuePtr = NumProp->ContainerPtrToValuePtr<void>(CDO);
+            Values->SetNumberField(VarName,
+                NumProp->IsFloatingPoint()
+                    ? NumProp->GetFloatingPointPropertyValue(ValuePtr)
+                    : static_cast<double>(NumProp->GetSignedIntPropertyValue(ValuePtr)));
+            continue;
+        }
+        FString ValueString;
+        FBlueprintEditorUtils::PropertyValueToString(Property, reinterpret_cast<const uint8*>(CDO), ValueString, CDO);
+        Values->SetStringField(VarName, ValueString);
+    }
+    Info->SetObjectField(TEXT("variableValues"), Values);
+    Info->SetNumberField(TEXT("variableCount"), Blueprint->NewVariables.Num());
+    Info->SetBoolField(TEXT("variableValuesTruncated"), bTruncated);
+}
 } // namespace
 #endif
 
@@ -2352,6 +2419,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
             VariableList.Add(MakeShared<FJsonValueString>(Var.VarName.ToString()));
         }
         Info->SetArrayField(TEXT("variables"), VariableList);
+        AddVariableValueReadbackCombat(Info, Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetObjectField(TEXT("combatInfo"), Info);

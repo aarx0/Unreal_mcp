@@ -197,6 +197,9 @@
 // Animation Blueprint Graph
 #if __has_include("AnimationGraph.h")
 #include "AnimationGraph.h"
+#define MCP_HAS_ANIMATION_GRAPH 1
+#else
+#define MCP_HAS_ANIMATION_GRAPH 0
 #endif
 #if __has_include("AnimGraphNode_StateMachine.h")
 #include "AnimGraphNode_StateMachine.h"
@@ -4044,12 +4047,47 @@ Retargeter->TargetIKRigAsset = TargetRig;
         }
         else if (UBlendSpace* BlendSpace = Cast<UBlendSpace>(Asset))
         {
-            AnimInfo->SetStringField(TEXT("assetType"), Cast<UBlendSpace1D>(Asset) ? TEXT("BlendSpace1D") : TEXT("BlendSpace2D"));
+            const bool bIs1D = Cast<UBlendSpace1D>(Asset) != nullptr;
+            AnimInfo->SetStringField(TEXT("assetType"), bIs1D ? TEXT("BlendSpace1D") : TEXT("BlendSpace2D"));
             if (BlendSpace->GetSkeleton())
             {
                 AnimInfo->SetStringField(TEXT("skeletonPath"), BlendSpace->GetSkeleton()->GetPathName());
             }
             AnimInfo->SetNumberField(TEXT("numSamples"), BlendSpace->GetBlendSamples().Num());
+
+            // Axes: index 2 of BlendParameters is never used by blend spaces, so
+            // emit only the dimensions this asset actually blends across.
+            TArray<TSharedPtr<FJsonValue>> AxesArr;
+            const int32 NumAxes = bIs1D ? 1 : 2;
+            for (int32 AxisIdx = 0; AxisIdx < NumAxes; ++AxisIdx)
+            {
+                const FBlendParameter& Param = BlendSpace->GetBlendParameter(AxisIdx);
+                TSharedPtr<FJsonObject> AxisObj = MakeShared<FJsonObject>();
+                AxisObj->SetStringField(TEXT("name"), Param.DisplayName);
+                AxisObj->SetNumberField(TEXT("min"), Param.Min);
+                AxisObj->SetNumberField(TEXT("max"), Param.Max);
+                AxisObj->SetNumberField(TEXT("gridDivisions"), Param.GridNum);
+                AxesArr.Add(MakeShared<FJsonValueObject>(AxisObj));
+            }
+            AnimInfo->SetArrayField(TEXT("axes"), AxesArr);
+
+            const TArray<FBlendSample>& BlendSamples = BlendSpace->GetBlendSamples();
+            constexpr int32 MaxSamples = 50;
+            TArray<TSharedPtr<FJsonValue>> SamplesArr;
+            for (int32 SampleIdx = 0; SampleIdx < BlendSamples.Num() && SampleIdx < MaxSamples; ++SampleIdx)
+            {
+                const FBlendSample& Sample = BlendSamples[SampleIdx];
+                TSharedPtr<FJsonObject> SampleObj = MakeShared<FJsonObject>();
+                SampleObj->SetStringField(TEXT("animation"), Sample.Animation ? Sample.Animation->GetPathName() : TEXT(""));
+                SampleObj->SetNumberField(TEXT("x"), Sample.SampleValue.X);
+                if (!bIs1D)
+                {
+                    SampleObj->SetNumberField(TEXT("y"), Sample.SampleValue.Y);
+                }
+                SamplesArr.Add(MakeShared<FJsonValueObject>(SampleObj));
+            }
+            AnimInfo->SetArrayField(TEXT("samples"), SamplesArr);
+            AnimInfo->SetBoolField(TEXT("samplesTruncated"), BlendSamples.Num() > MaxSamples);
         }
         else if (UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(Asset))
         {
@@ -4057,8 +4095,83 @@ Retargeter->TargetIKRigAsset = TargetRig;
             if (AnimBP->TargetSkeleton)
             {
                 AnimInfo->SetStringField(TEXT("skeletonPath"), AnimBP->TargetSkeleton->GetPathName());
+                AnimInfo->SetStringField(TEXT("targetSkeletonPath"), AnimBP->TargetSkeleton->GetPathName());
             }
             AnimInfo->SetStringField(TEXT("parentClass"), AnimBP->ParentClass ? AnimBP->ParentClass->GetName() : TEXT(""));
+
+#if MCP_HAS_ANIMATION_GRAPH
+            // Top-level anim graphs only (main AnimGraph + anim layer graphs); state/
+            // transition graphs live in node SubGraphs, not these arrays.
+            int32 AnimGraphCount = 0;
+            for (const UEdGraph* Graph : AnimBP->UbergraphPages)
+            {
+                if (Graph && Graph->IsA<UAnimationGraph>()) { ++AnimGraphCount; }
+            }
+            for (const UEdGraph* Graph : AnimBP->FunctionGraphs)
+            {
+                if (Graph && Graph->IsA<UAnimationGraph>()) { ++AnimGraphCount; }
+            }
+            AnimInfo->SetNumberField(TEXT("animGraphCount"), AnimGraphCount);
+#endif
+
+#if MCP_HAS_ANIM_STATE_MACHINE_GRAPH && MCP_HAS_ANIM_STATE_MACHINE_SCHEMA
+            // GetAllNodesOfClass walks SubGraphs too, so nested state machines are included.
+            TArray<UAnimGraphNode_StateMachine*> SMNodes;
+            FBlueprintEditorUtils::GetAllNodesOfClass<UAnimGraphNode_StateMachine>(AnimBP, SMNodes);
+            constexpr int32 MaxStateMachines = 20;
+            constexpr int32 MaxStatesPerMachine = 50;
+            TArray<TSharedPtr<FJsonValue>> SMArr;
+            for (int32 SMIdx = 0; SMIdx < SMNodes.Num() && SMIdx < MaxStateMachines; ++SMIdx)
+            {
+                UAnimGraphNode_StateMachine* SMNode = SMNodes[SMIdx];
+                if (!SMNode) { continue; }
+                TSharedPtr<FJsonObject> SMObj = MakeShared<FJsonObject>();
+                SMObj->SetStringField(TEXT("name"), SMNode->GetStateMachineName());
+
+                int32 NumStates = 0;
+                int32 NumTransitions = 0;
+                TArray<TSharedPtr<FJsonValue>> StatesArr;
+                TArray<TSharedPtr<FJsonValue>> TransitionsArr;
+                if (UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph))
+                {
+                    for (UEdGraphNode* Node : SMGraph->Nodes)
+                    {
+                        if (UAnimStateNode* StateNode = Cast<UAnimStateNode>(Node))
+                        {
+                            ++NumStates;
+                            if (StatesArr.Num() < MaxStatesPerMachine)
+                            {
+                                StatesArr.Add(MakeShared<FJsonValueString>(StateNode->GetStateName()));
+                            }
+                        }
+#if MCP_HAS_ANIM_STATE_TRANSITION
+                        else if (UAnimStateTransitionNode* Trans = Cast<UAnimStateTransitionNode>(Node))
+                        {
+                            ++NumTransitions;
+                            if (TransitionsArr.Num() < MaxStatesPerMachine)
+                            {
+                                UAnimStateNodeBase* PrevState = Trans->GetPreviousState();
+                                UAnimStateNodeBase* NextState = Trans->GetNextState();
+                                TSharedPtr<FJsonObject> TransObj = MakeShared<FJsonObject>();
+                                TransObj->SetStringField(TEXT("from"), PrevState ? PrevState->GetStateName() : TEXT(""));
+                                TransObj->SetStringField(TEXT("to"), NextState ? NextState->GetStateName() : TEXT(""));
+                                TransitionsArr.Add(MakeShared<FJsonValueObject>(TransObj));
+                            }
+                        }
+#endif
+                    }
+                }
+                SMObj->SetNumberField(TEXT("numStates"), NumStates);
+                SMObj->SetNumberField(TEXT("numTransitions"), NumTransitions);
+                SMObj->SetArrayField(TEXT("states"), StatesArr);
+                SMObj->SetArrayField(TEXT("transitions"), TransitionsArr);
+                SMObj->SetBoolField(TEXT("truncated"), NumStates > StatesArr.Num() || NumTransitions > TransitionsArr.Num());
+                SMArr.Add(MakeShared<FJsonValueObject>(SMObj));
+            }
+            AnimInfo->SetNumberField(TEXT("numStateMachines"), SMNodes.Num());
+            AnimInfo->SetArrayField(TEXT("stateMachines"), SMArr);
+            AnimInfo->SetBoolField(TEXT("stateMachinesTruncated"), SMNodes.Num() > MaxStateMachines);
+#endif
         }
         else
         {
