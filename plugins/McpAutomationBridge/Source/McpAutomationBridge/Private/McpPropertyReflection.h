@@ -53,13 +53,20 @@ namespace McpPropertyReflection
      * - Maps (with basic value types)
      * - Sets (of supported element types)
      *
+     * Struct properties (other than Vector/Rotator) are exported as a nested JSON
+     * object of their child properties; object references as their path string;
+     * arrays of structs/objects recurse element-by-element. Recursion is bounded
+     * by Depth (see ExportStructToJson) and falls back to ExportText at the cap.
+     *
      * @param TargetContainer Pointer to the container holding the property value
      * @param Property The property definition to export
+     * @param Depth Current recursion depth (callers pass 0; used internally)
      * @return JSON value representing the property, or null for unsupported types
      */
     MCPAUTOMATIONBRIDGE_API TSharedPtr<FJsonValue> ExportPropertyToJsonValue(
-        void* TargetContainer, 
-        FProperty* Property);
+        void* TargetContainer,
+        FProperty* Property,
+        int32 Depth = 0);
 
     /**
      * Export all properties of a UObject to a JSON object.
@@ -102,13 +109,21 @@ namespace McpPropertyReflection
      * @param Property The property to set
      * @param ValueField The JSON value to apply
      * @param OutError Receives error message on failure
+     * @param Depth Current recursion depth (callers pass 0; used internally)
+     * @param OwnerForInstancing UObject to use as the Outer when re-instancing an
+     *        Instanced subobject (CPF_InstancedReference) from a JSON object carrying
+     *        "__class". Must be threaded from the owning asset so the new subobject
+     *        serializes into the asset's package. nullptr disables re-instancing (the
+     *        object form then errors, preserving prior behavior).
      * @return true if successful
      */
     MCPAUTOMATIONBRIDGE_API bool ApplyJsonValueToProperty(
         void* TargetContainer,
         FProperty* Property,
         const TSharedPtr<FJsonValue>& ValueField,
-        FString& OutError);
+        FString& OutError,
+        int32 Depth = 0,
+        UObject* OwnerForInstancing = nullptr);
 
     /**
      * Apply multiple JSON values to properties of an object.
@@ -122,18 +137,6 @@ namespace McpPropertyReflection
         const TMap<FName, TSharedPtr<FJsonValue>>& JsonValues,
         TMap<FName, FString>* OutErrors = nullptr);
 
-    /**
-     * Apply properties from a JSON object to a UObject.
-     * @param Object The object to modify
-     * @param JsonObject The JSON object containing property values
-     * @param OutErrors Optional map to receive property-specific errors
-     * @return Number of properties successfully set
-     */
-    MCPAUTOMATIONBRIDGE_API int32 ApplyJsonObjectToObject(
-        UObject* Object,
-        const TSharedPtr<FJsonObject>& JsonObject,
-        TMap<FName, FString>* OutErrors = nullptr);
-
     // =========================================================================
     // Property Type Utilities
     // =========================================================================
@@ -142,11 +145,6 @@ namespace McpPropertyReflection
      * Get a human-readable type name for a property.
      */
     MCPAUTOMATIONBRIDGE_API FString GetPropertyTypeName(FProperty* Property);
-
-    /**
-     * Check if a property type is supported for JSON conversion.
-     */
-    MCPAUTOMATIONBRIDGE_API bool IsPropertyTypeSupported(FProperty* Property);
 
     /**
      * Get a property by name from an object's class.
@@ -169,56 +167,6 @@ namespace McpPropertyReflection
         
         return Class->FindPropertyByName(PropertyName);
     }
-
-    /**
-     * Get the value of a property as a string.
-     * @param Object The object containing the property
-     * @param Property The property to read
-     * @return String representation of the property value
-     */
-    MCPAUTOMATIONBRIDGE_API FString GetPropertyValueAsString(UObject* Object, FProperty* Property);
-
-    /**
-     * Set the value of a property from a string.
-     * @param Object The object containing the property
-     * @param Property The property to set
-     * @param ValueString The string value to set
-     * @param OutError Optional error message output
-     * @return true if successful
-     */
-    MCPAUTOMATIONBRIDGE_API bool SetPropertyValueFromString(
-        UObject* Object,
-        FProperty* Property,
-        const FString& ValueString,
-        FString* OutError = nullptr);
-
-    // =========================================================================
-    // Enum Utilities
-    // =========================================================================
-
-    /**
-     * Get all enum values as an array of strings.
-     * @param Enum The enum to get values from
-     * @return Array of enum value names
-     */
-    MCPAUTOMATIONBRIDGE_API TArray<FString> GetEnumValueNames(UEnum* Enum);
-
-    /**
-     * Convert an enum value to its string name.
-     * @param Enum The enum type
-     * @param Value The numeric enum value
-     * @return The enum value name, or empty string if not found
-     */
-    MCPAUTOMATIONBRIDGE_API FString EnumValueToName(UEnum* Enum, int64 Value);
-
-    /**
-     * Convert an enum name string to its numeric value.
-     * @param Enum The enum type
-     * @param Name The enum value name (with or without enum prefix)
-     * @param OutValue The numeric value output
-     * @return true if conversion succeeded
-     */
-    MCPAUTOMATIONBRIDGE_API bool EnumNameToValue(UEnum* Enum, const FString& Name, int64& OutValue);
 
     // =========================================================================
     // Struct Utilities
@@ -269,9 +217,19 @@ namespace McpPropertyReflection
         }
         
         double X = 0.0, Y = 0.0, Z = 0.0;
-        JsonObject->TryGetNumberField(TEXT("x"), X);
-        JsonObject->TryGetNumberField(TEXT("y"), Y);
-        JsonObject->TryGetNumberField(TEXT("z"), Z);
+        if (!JsonObject->TryGetNumberField(TEXT("x"), X))
+        {
+            JsonObject->TryGetNumberField(TEXT("X"), X);
+        }
+        if (!JsonObject->TryGetNumberField(TEXT("y"), Y))
+        {
+            JsonObject->TryGetNumberField(TEXT("Y"), Y);
+        }
+        if (!JsonObject->TryGetNumberField(TEXT("z"), Z))
+        {
+            JsonObject->TryGetNumberField(TEXT("Z"), Z);
+        }
+
         OutVector = FVector(X, Y, Z);
         return true;
     }
@@ -330,9 +288,19 @@ namespace McpPropertyReflection
         }
         
         double Pitch = 0.0, Yaw = 0.0, Roll = 0.0;
-        JsonObject->TryGetNumberField(TEXT("pitch"), Pitch);
-        JsonObject->TryGetNumberField(TEXT("yaw"), Yaw);
-        JsonObject->TryGetNumberField(TEXT("roll"), Roll);
+        if (!JsonObject->TryGetNumberField(TEXT("pitch"), Pitch))
+        {
+            JsonObject->TryGetNumberField(TEXT("Pitch"), Pitch);
+        }
+        if (!JsonObject->TryGetNumberField(TEXT("yaw"), Yaw))
+        {
+            JsonObject->TryGetNumberField(TEXT("Yaw"), Yaw);
+        }
+        if (!JsonObject->TryGetNumberField(TEXT("roll"), Roll))
+        {
+            JsonObject->TryGetNumberField(TEXT("Roll"), Roll);
+        }
+
         OutRotator = FRotator(Pitch, Yaw, Roll);
         return true;
     }
@@ -347,77 +315,6 @@ namespace McpPropertyReflection
         Obj->SetNumberField(TEXT("yaw"), Rotator.Yaw);
         Obj->SetNumberField(TEXT("roll"), Rotator.Roll);
         return Obj;
-    }
-
-    /**
-     * Convert a Color to a JSON object {r, g, b, a}.
-     */
-    inline TSharedPtr<FJsonObject> ColorToJson(const FColor& Color)
-    {
-        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-        Obj->SetNumberField(TEXT("r"), Color.R);
-        Obj->SetNumberField(TEXT("g"), Color.G);
-        Obj->SetNumberField(TEXT("b"), Color.B);
-        Obj->SetNumberField(TEXT("a"), Color.A);
-        return Obj;
-    }
-
-    /**
-     * Convert a JSON object to a Color.
-     */
-    inline bool JsonToColor(const TSharedPtr<FJsonObject>& Obj, FColor& OutColor)
-    {
-        if (!Obj.IsValid())
-        {
-            return false;
-        }
-        
-        double R = 255.0, G = 255.0, B = 255.0, A = 255.0;
-        Obj->TryGetNumberField(TEXT("r"), R);
-        Obj->TryGetNumberField(TEXT("g"), G);
-        Obj->TryGetNumberField(TEXT("b"), B);
-        Obj->TryGetNumberField(TEXT("a"), A);
-        
-        OutColor = FColor(
-            static_cast<uint8>(FMath::Clamp(static_cast<int>(R), 0, 255)),
-            static_cast<uint8>(FMath::Clamp(static_cast<int>(G), 0, 255)),
-            static_cast<uint8>(FMath::Clamp(static_cast<int>(B), 0, 255)),
-            static_cast<uint8>(FMath::Clamp(static_cast<int>(A), 0, 255))
-        );
-        return true;
-    }
-
-    /**
-     * Convert a LinearColor to a JSON object {r, g, b, a}.
-     */
-    inline TSharedPtr<FJsonObject> LinearColorToJson(const FLinearColor& Color)
-    {
-        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-        Obj->SetNumberField(TEXT("r"), Color.R);
-        Obj->SetNumberField(TEXT("g"), Color.G);
-        Obj->SetNumberField(TEXT("b"), Color.B);
-        Obj->SetNumberField(TEXT("a"), Color.A);
-        return Obj;
-    }
-
-    /**
-     * Convert a JSON object to a LinearColor.
-     */
-    inline bool JsonToLinearColor(const TSharedPtr<FJsonObject>& Obj, FLinearColor& OutColor)
-    {
-        if (!Obj.IsValid())
-        {
-            return false;
-        }
-        
-        double R = 1.0, G = 1.0, B = 1.0, A = 1.0;
-        Obj->TryGetNumberField(TEXT("r"), R);
-        Obj->TryGetNumberField(TEXT("g"), G);
-        Obj->TryGetNumberField(TEXT("b"), B);
-        Obj->TryGetNumberField(TEXT("a"), A);
-        
-        OutColor = FLinearColor(R, G, B, A);
-        return true;
     }
 
     // =========================================================================
@@ -462,121 +359,57 @@ namespace McpPropertyReflection
     MCPAUTOMATIONBRIDGE_API int32 GetArrayPropertyCount(void* Container, FArrayProperty* ArrayProp);
 
     /**
-     * Export an array property to a JSON array.
+     * Export an array property to a JSON array. Struct, object-reference and
+     * other non-primitive inner types recurse via ExportPropertyToJsonValue
+     * (the array Inner has offset 0, so each element pointer is a valid
+     * container base), falling back to ExportText only when that can't structure
+     * the element.
      */
     MCPAUTOMATIONBRIDGE_API TArray<TSharedPtr<FJsonValue>> ExportArrayToJson(
         void* Container,
-        FArrayProperty* ArrayProp);
+        FArrayProperty* ArrayProp,
+        int32 Depth = 0);
 
     /**
      * Import a JSON array into an array property (replaces existing elements).
+     * Struct and object-reference inners are supported via ApplyJsonValueToProperty.
      */
     MCPAUTOMATIONBRIDGE_API bool ImportJsonToArray(
         void* Container,
         FArrayProperty* ArrayProp,
         const TArray<TSharedPtr<FJsonValue>>& JsonArray,
-        FString& OutError);
-
-    // =========================================================================
-    // Output Capture Utility
-    // =========================================================================
+        FString& OutError,
+        int32 Depth = 0,
+        UObject* OwnerForInstancing = nullptr);
 
     /**
-     * Captures log output written to GLog into an in-memory list of lines.
-     * Attach as an FOutputDevice to collect serialized log messages.
-     */
-    struct FMcpOutputCapture : public FOutputDevice
-    {
-        TArray<FString> Lines;
-
-        /**
-         * Capture a log line, trim trailing newlines, and append to Lines.
-         */
-        virtual void Serialize(const TCHAR* V, ELogVerbosity::Type Verbosity, const FName& Category) override
-        {
-            if (!V)
-            {
-                return;
-            }
-            
-            FString S(V);
-            while (S.EndsWith(TEXT("\n")))
-            {
-                S.RemoveAt(S.Len() - 1);
-            }
-            Lines.Add(S);
-        }
-
-        /**
-         * Get all captured lines and clear the internal buffer.
-         */
-        TArray<FString> Consume()
-        {
-            TArray<FString> Tmp = MoveTemp(Lines);
-            Lines.Empty();
-            return Tmp;
-        }
-    };
-
-    // =========================================================================
-    // JSON String Extraction Utility
-    // =========================================================================
-
-    /**
-     * Extract all top-level JSON objects from a string that may contain
-     * mixed text and JSON content.
+     * Export a struct instance as a JSON object of its child properties (reusing
+     * the per-property export path, so nested structs, object references and
+     * arrays-of-structs are handled recursively). Object references become path
+     * strings. Returns null at the recursion-depth cap or for a null struct, so
+     * callers can fall back to a textual export.
      *
-     * @param In The input string that may contain JSON objects
-     * @return Array of complete top-level JSON object strings
+     * @param StructPtr Pointer to the struct instance (the container base for its
+     *                  child property offsets — do NOT pass an already-offset ptr)
+     * @param Struct    The struct layout
+     * @param Depth     Current recursion depth (the struct's own level)
      */
-    inline TArray<FString> ExtractTopLevelJsonObjects(const FString& In)
-    {
-        TArray<FString> Results;
-        int32 Depth = 0;
-        int32 Start = INDEX_NONE;
-        
-        for (int32 i = 0; i < In.Len(); ++i)
-        {
-            const TCHAR C = In[i];
-            if (C == '{')
-            {
-                if (Depth == 0)
-                {
-                    Start = i;
-                }
-                Depth++;
-            }
-            else if (C == '}')
-            {
-                Depth--;
-                if (Depth == 0 && Start != INDEX_NONE)
-                {
-                    Results.Add(In.Mid(Start, i - Start + 1));
-                    Start = INDEX_NONE;
-                }
-            }
-        }
-        
-        return Results;
-    }
+    MCPAUTOMATIONBRIDGE_API TSharedPtr<FJsonObject> ExportStructToJson(
+        void* StructPtr,
+        const UScriptStruct* Struct,
+        int32 Depth = 0);
 
     /**
-     * Convert a string to its UTF-8 hexadecimal representation for debugging.
+     * Deep-export an Instanced subobject (CPF_InstancedReference — e.g. an input
+     * trigger/modifier, a montage AnimNotify) as a nested JSON object carrying its
+     * concrete class under "__class" plus its own properties. Used by the export path
+     * for instanced object values, and shared with the helpers twin so a direct
+     * top-level instanced property reads back its config rather than a bare path.
+     * @param Subobject The instanced subobject instance
+     * @param Depth     Current recursion depth (bounded by the shared cap)
      */
-    inline FString HexifyUtf8(const FString& In)
-    {
-        FTCHARToUTF8 Converter(*In);
-        const uint8* Bytes = reinterpret_cast<const uint8*>(Converter.Get());
-        int32 Len = Converter.Length();
-        
-        FString Hex;
-        Hex.Reserve(Len * 2);
-        for (int32 i = 0; i < Len; ++i)
-        {
-            Hex += FString::Printf(TEXT("%02x"), Bytes[i]);
-        }
-        
-        return Hex;
-    }
+    MCPAUTOMATIONBRIDGE_API TSharedPtr<FJsonObject> ExportInstancedObjectToJson(
+        UObject* Subobject,
+        int32 Depth = 0);
 
 } // namespace McpPropertyReflection

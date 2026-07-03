@@ -16,10 +16,10 @@ This roadmap outlines the comprehensive development plan for expanding the Unrea
 
 ## Phase 2: Graph & Logic Automation (Completed)
 
-- [x] **Blueprint Graphs**: Add/remove nodes, pins, and properties (`manage_blueprint_graph`).
-- [x] **Material Graphs**: Edit material expressions and connections (`manage_material_graph`).
-- [x] **Niagara Graphs**: Edit emitters, modules, and parameters (`manage_niagara_graph`).
-- [x] **Behavior Trees**: Edit AI behavior trees, tasks, and decorators (`manage_behavior_tree`).
+- [x] **Blueprint Graphs**: Add/remove nodes, pins, and properties (`manage_blueprint` graph actions).
+- [x] **Material Graphs**: Edit material expressions and connections (`manage_asset` material actions).
+- [x] **Niagara Graphs**: Edit emitters, modules, and parameters (`manage_effect` actions).
+- [x] **Behavior Trees**: Edit AI behavior trees, tasks, and decorators (`manage_ai`).
 - [x] **Environment**: Unified environment builder (`build_environment`) for landscape, foliage, and proc-gen.
 
 ## Phase 3: Cinematic & Visual Automation (Completed)
@@ -31,7 +31,6 @@ This roadmap outlines the comprehensive development plan for expanding the Unrea
 
 ## Phase 4: System & Developer Experience (Completed)
 
-- [x] **GraphQL API**: Read/write access to assets and actors via GraphQL.
 - [x] **Pipeline Integration**: Direct UBT execution with output streaming.
 - [x] **Documentation**: Comprehensive handler mappings and API references.
 - [x] **Metrics Dashboard**: `ue://health` view backed by bridge/server metrics.
@@ -59,7 +58,7 @@ This roadmap outlines the comprehensive development plan for expanding the Unrea
 - [x] Remove "Use it when you need to:" bullet lists
 - [x] Condense all descriptions to 1-2 sentences max
 - [x] Remove parameter descriptions that just restate the parameter name
-- [x] Audit and trim `manage_geometry`, `manage_asset`, `manage_niagara_authoring`
+- [x] Audit and trim `manage_geometry`, `manage_asset`, `manage_effect`
 
 ---
 
@@ -83,8 +82,8 @@ This roadmap outlines the comprehensive development plan for expanding the Unrea
 **Results**: ~50,000 token reduction (when using category filtering)
 
 - [x] Add `listChanged: true` to server capabilities
-- [x] Add `manage_pipeline` tool with `set_categories`, `list_categories`, `get_status` actions
-- [x] Define tool categories: `core`, `world`, `authoring`, `gameplay`, `utility`, `all`
+- [x] Add `manage_tools` tool with `list_tools`, `list_categories`, enable/disable, status, and reset actions
+- [x] Define tool categories: `core`, `world`, `gameplay`, `utility`, `all`
 - [x] Filter tools by category in `ListToolsRequestSchema` handler
 - [x] Client capability detection via `mcp-client-capabilities` package
 - [x] Backward compatibility: clients without `listChanged` support get ALL tools
@@ -95,17 +94,20 @@ This roadmap outlines the comprehensive development plan for expanding the Unrea
 
 **Issue**: [#111](https://github.com/ChiR24/Unreal_mcp/issues/111)
 
-**Results**: Reduced tool count from 38 to 35 (~10,000 token savings)
+**Results**: Consolidated the public MCP surface to 22 canonical tools while keeping domain actions on parent tools.
 
 #### Tool Consolidations
-- [x] `manage_blueprint_graph` → merged into `manage_blueprint` (11 graph actions)
-- [x] `manage_audio_authoring` → merged into `manage_audio` (30 authoring actions)
-- [x] `manage_niagara_authoring` → merged into `manage_effect` (36 authoring actions)
-- [x] `manage_animation_authoring` → merged into `animation_physics` (45 authoring actions)
+- [x] Blueprint graph and widget authoring actions live on `manage_blueprint`
+- [x] Material authoring and texture actions live on `manage_asset`
+- [x] Behavior Tree and navigation actions live on `manage_ai`
+- [x] Sessions, game framework, and input actions live on `manage_networking`
+- [x] Volumes live on `manage_level_structure`
+- [x] Performance, UBT, tests, logs, and Python actions live on `system_control`
+- [x] Skeleton and animation authoring actions live on `animation_physics`
 
-#### Backward Compatibility
-- [x] Deprecated tools remain functional with once-per-session deprecation warnings
-- [x] Action routing uses parameter sniffing to resolve conflicts (e.g., `add_notify`: frame-based → authoring, time-based → runtime)
+#### Public Surface
+- [x] Former child tool names are no longer exposed or accepted as direct MCP tool names
+- [x] Action routing resolves consolidated actions on their canonical parent tools
 
 ---
 
@@ -195,7 +197,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Enable creation and editing of animated characters with proper rigs.
 
-**Tool**: `manage_skeleton`
+**Tool**: `animation_physics`
 
 **Status**: All 29 actions fully implemented in TypeScript and C++.
 
@@ -239,7 +241,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Full material creation and shader authoring capabilities.
 
-**Tool**: `manage_material_authoring`
+**Tool**: `manage_asset`
 
 **Status**: All 39 actions fully implemented in TypeScript and C++.
 
@@ -288,7 +290,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Procedural texture creation and processing.
 
-**Tool**: `manage_texture`
+**Tool**: `manage_asset`
 
 **Status**: All 21 actions fully implemented in TypeScript and C++.
 
@@ -323,9 +325,9 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Full animation authoring from keyframes to state machines.
 
-**Tool**: `manage_animation_authoring`
+**Tool**: `animation_physics`
 
-**Status**: All 35 actions fully implemented in TypeScript and C++.
+**Status**: All listed actions fully implemented in TypeScript and C++.
 
 ### 10.1 Animation Sequences
 - [x] `create_animation_sequence`
@@ -388,7 +390,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Full audio authoring including MetaSounds.
 
-**Tool**: `manage_audio_authoring`
+**Tool**: `manage_audio`
 
 ### 11.1 Sound Cues (Expanded)
 - [x] `create_sound_cue`
@@ -434,9 +436,9 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Full Niagara system authoring.
 
-**Tool**: `manage_niagara_authoring`
+**Tool**: `manage_effect`
 
-**Status**: All 35 actions fully implemented in TypeScript and C++.
+**Status**: All listed actions fully implemented in TypeScript and C++.
 
 ### 12.1 Systems & Emitters
 - [x] `create_niagara_system`
@@ -627,7 +629,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_ai`
 
-**Status**: All 35 actions fully implemented in TypeScript and C++.
+**Status**: All listed actions fully implemented in TypeScript and C++.
 
 ### 16.1 AI Controller
 - [x] `create_ai_controller`
@@ -688,11 +690,11 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Tool**: `manage_inventory`
 
-**Status**: All 27 actions fully implemented in TypeScript and C++.
+**Status**: All 33 actions fully implemented in TypeScript and C++.
 
 ### 17.1 Data Assets
 - [x] `create_item_data_asset`
-- [x] `set_item_properties` (name, description, icon, mesh, stack_size, weight, rarity)
+- [x] `set_item_properties` (properties object)
 - [x] `create_item_category`
 - [x] `assign_item_category`
 
@@ -728,7 +730,15 @@ The following phases represent the comprehensive expansion to enable **full proj
 - [x] `create_crafting_station`
 - [x] `add_crafting_component`
 
-### 17.7 Utility
+### 17.7 Additional Actions
+- [x] `configure_item_stacking`
+- [x] `set_item_icon`
+- [x] `add_recipe_ingredient`
+- [x] `remove_loot_entry`
+- [x] `configure_inventory_weight`
+- [x] `configure_station_recipes`
+
+### 17.8 Utility
 - [x] `get_inventory_info`
 
 ---
@@ -781,7 +791,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Full UMG widget authoring capabilities.
 
-**Tool**: `manage_widget_authoring`
+**Tool**: `manage_blueprint`
 
 **Status**: All 65 actions fully implemented in TypeScript and C++.
 
@@ -899,7 +909,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Complete game mode and session management.
 
-**Tool**: `manage_game_framework`
+**Tool**: `manage_networking`
 
 **Status**: All 20 actions fully implemented in TypeScript and C++.
 
@@ -939,7 +949,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Session management and split-screen support.
 
-**Tool**: `manage_sessions`
+**Tool**: `manage_networking`
 
 ### 22.1 Session Management (Local/LAN)
 > **Note**: Online session management (matchmaking, lobbies) is in Phase 43 (Online Services). This section covers local/LAN sessions only.
@@ -1011,7 +1021,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Complete volume and trigger system.
 
-**Tool**: `manage_volumes`
+**Tool**: `manage_level_structure`
 
 **Status**: All 18 actions fully implemented in TypeScript and C++.
 
@@ -1047,7 +1057,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Complete navigation mesh and pathfinding.
 
-**Tool**: `manage_navigation`
+**Tool**: `manage_ai`
 
 ### 25.1 NavMesh
 - [x] `configure_nav_mesh_settings`
@@ -1072,7 +1082,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Complete spline-based content creation.
 
-**Tool**: `manage_splines`
+**Tool**: `build_environment`
 
 **Status**: All 21 actions fully implemented in TypeScript and C++.
 
@@ -1211,7 +1221,7 @@ The following phases represent the comprehensive expansion to enable **full proj
 
 **Goal**: Complete lighting and post-processing.
 
-**Tool**: `manage_lighting` (Expanded) + `manage_post_process`
+**Tool**: `build_environment` (Expanded) + `manage_post_process`
 
 ### 29.1 Ray Tracing
 - [ ] `configure_ray_traced_shadows`

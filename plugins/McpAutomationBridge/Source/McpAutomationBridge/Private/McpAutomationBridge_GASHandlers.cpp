@@ -88,7 +88,6 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpGASHandlers, Log, All);
 #include "Kismet2/KismetEditorUtilities.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
-#include "UObject/SavePackage.h"
 #include "Misc/PackageName.h"
 #include "HAL/FileManager.h"
 #include "GameplayTagsManager.h"
@@ -101,6 +100,11 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpGASHandlers, Log, All);
 #if __has_include("AbilitySystemComponent.h")
 #define MCP_HAS_GAS 1
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"   // IAbilitySystemInterface (resolve ASC on a live actor)
+#include "EngineUtils.h"               // TActorIterator (find a live PIE actor)
+#include "GameFramework/Pawn.h"        // APawn (ASC fallback: pawn -> playerstate/controller)
+#include "GameFramework/Controller.h"  // AController
+#include "GameFramework/PlayerState.h" // APlayerState
 #include "AttributeSet.h"
 #include "GameplayEffect.h"
 #include "GameplayAbilitySpec.h"
@@ -108,15 +112,22 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpGASHandlers, Log, All);
 #include "GameplayCueNotify_Static.h"
 #include "GameplayCueNotify_Actor.h"
 #include "GameplayEffectExecutionCalculation.h"
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
+// Modular GE components: on 5.3+ the engine's PostCDOCompiled overwrites the
+// legacy Inheritable*/TagRequirements fields FROM these components, so tag
+// writes must target the components to survive a compile.
+#include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
+#include "GameplayEffectComponents/TargetTagRequirementsGameplayEffectComponent.h"
+#include "GameplayEffectComponents/ImmunityGameplayEffectComponent.h"
+#define MCP_HAS_MODULAR_GE_COMPONENTS 1
+#else
+#define MCP_HAS_MODULAR_GE_COMPONENTS 0
+#endif
 #else
 #define MCP_HAS_GAS 0
 #endif
 
 // Use consolidated JSON helpers from McpAutomationBridgeHelpers.h
-// Aliases for backward compatibility with existing code in this file
-#define GetStringFieldGAS GetJsonStringField
-#define GetNumberFieldGAS GetJsonNumberField
-#define GetBoolFieldGAS GetJsonBoolField
 
 // Helper to save package
 // Note: This helper is used for NEW assets created with CreatePackage + factory.
@@ -126,6 +137,147 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpGASHandlers, Log, All);
 static FGameplayTag GetOrRequestTag(const FString& TagString)
 {
     return FGameplayTag::RequestGameplayTag(FName(*TagString), false);
+}
+
+// Resolves "AttributeName" or "SetClassName.AttributeName" against loaded
+// UAttributeSet classes. Bare names must be unambiguous across sets.
+static FGameplayAttribute McpResolveGameplayAttribute(const FString& AttributeSpec, FString& OutError)
+{
+    FString ClassPart;
+    FString AttrPart = AttributeSpec;
+    AttributeSpec.Split(TEXT("."), &ClassPart, &AttrPart, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+
+    // Path-qualified specs ('/Game/X/AS_Foo.AttrName') load the attribute-set
+    // Blueprint themselves; bare/short names can only match already-loaded classes.
+    if (ClassPart.StartsWith(TEXT("/")))
+    {
+        const FString ShortName = FPackageName::GetShortName(ClassPart);
+        UClass* SetClass = StaticLoadClass(UAttributeSet::StaticClass(), nullptr,
+            *(ClassPart + TEXT(".") + ShortName + TEXT("_C")), nullptr, LOAD_NoWarn | LOAD_Quiet);
+        if (!SetClass)
+        {
+            if (UBlueprint* SetBP = LoadObject<UBlueprint>(nullptr, *ClassPart, nullptr, LOAD_NoWarn | LOAD_Quiet, nullptr))
+            {
+                SetClass = SetBP->GeneratedClass;
+            }
+        }
+        if (!SetClass || !SetClass->IsChildOf(UAttributeSet::StaticClass()))
+        {
+            OutError = FString::Printf(TEXT("'%s' did not resolve to an AttributeSet class."), *ClassPart);
+            return FGameplayAttribute();
+        }
+        FProperty* Prop = FindFProperty<FProperty>(SetClass, *AttrPart);
+        if (Prop && (FGameplayAttribute::IsGameplayAttributeDataProperty(Prop) || Prop->IsA<FFloatProperty>()))
+        {
+            return FGameplayAttribute(Prop);
+        }
+        OutError = FString::Printf(TEXT("Attribute '%s' not found on %s."), *AttrPart, *SetClass->GetName());
+        return FGameplayAttribute();
+    }
+
+    TArray<UClass*> SetClasses;
+    GetDerivedClasses(UAttributeSet::StaticClass(), SetClasses, true);
+
+    TArray<FProperty*> Matches;
+    TArray<FString> MatchOwners;
+    for (UClass* SetClass : SetClasses)
+    {
+        if (!ClassPart.IsEmpty()
+            && SetClass->GetName() != ClassPart
+            && SetClass->GetPathName() != ClassPart)
+        {
+            continue;
+        }
+        if (FProperty* Prop = FindFProperty<FProperty>(SetClass, *AttrPart))
+        {
+            if (FGameplayAttribute::IsGameplayAttributeDataProperty(Prop) || Prop->IsA<FFloatProperty>())
+            {
+                // Parent-class properties surface once per derived class; dedupe by property.
+                if (!Matches.Contains(Prop))
+                {
+                    Matches.Add(Prop);
+                    MatchOwners.Add(SetClass->GetName());
+                }
+            }
+        }
+    }
+
+    if (Matches.Num() == 0)
+    {
+        OutError = FString::Printf(
+            TEXT("Attribute '%s' not found on any loaded AttributeSet class. Pass 'AttributeName', 'SetClassName.AttributeName', or a path-qualified '/Game/...AttrSet.AttributeName' (loads the set)."),
+            *AttributeSpec);
+        return FGameplayAttribute();
+    }
+    if (Matches.Num() > 1)
+    {
+        OutError = FString::Printf(
+            TEXT("Attribute '%s' is ambiguous (found on: %s). Qualify it as 'SetClassName.AttributeName'."),
+            *AttributeSpec, *FString::Join(MatchOwners, TEXT(", ")));
+        return FGameplayAttribute();
+    }
+    return FGameplayAttribute(Matches[0]);
+}
+
+// Adds a granted (target-owned) tag so it survives a compile: on modular (5.3+)
+// GEs the engine overwrites the legacy container FROM the component in
+// PostCDOCompiled, so the component is the only durable write target.
+static void McpAddGrantedTagToEffect(UGameplayEffect* EffectCDO, const FGameplayTag& Tag)
+{
+#if MCP_HAS_MODULAR_GE_COMPONENTS
+    UTargetTagsGameplayEffectComponent& TagsComp = EffectCDO->FindOrAddComponent<UTargetTagsGameplayEffectComponent>();
+    FInheritedTagContainer TagChanges = TagsComp.GetConfiguredTargetTagChanges();
+    TagChanges.AddTag(Tag);
+    TagsComp.SetAndApplyTargetTagChanges(TagChanges);
+#else
+    PRAGMA_DISABLE_DEPRECATION_WARNINGS
+    EffectCDO->InheritableOwnedTagsContainer.AddTag(Tag);
+    PRAGMA_ENABLE_DEPRECATION_WARNINGS
+#endif
+}
+
+static FString NormalizeGASToken(FString Value)
+{
+    Value.TrimStartAndEndInline();
+    FString Normalized = Value.ToLower();
+    Normalized.ReplaceInline(TEXT("_"), TEXT(""));
+    Normalized.ReplaceInline(TEXT("-"), TEXT(""));
+    Normalized.ReplaceInline(TEXT(" "), TEXT(""));
+    return Normalized;
+}
+
+static FString GetGASStringFieldWithFallback(
+    const TSharedPtr<FJsonObject>& Payload,
+    const TCHAR* PrimaryField,
+    const TCHAR* FallbackField,
+    const FString& DefaultValue = FString())
+{
+    FString Value = GetJsonStringField(Payload, PrimaryField);
+    if (!Value.IsEmpty())
+    {
+        return Value;
+    }
+
+    Value = GetJsonStringField(Payload, FallbackField);
+    return Value.IsEmpty() ? DefaultValue : Value;
+}
+
+static double GetGASNumberFieldWithFallback(
+    const TSharedPtr<FJsonObject>& Payload,
+    const TCHAR* PrimaryField,
+    const TCHAR* FallbackField,
+    double DefaultValue = 0.0)
+{
+    double Value = 0.0;
+    if (Payload.IsValid() && Payload->TryGetNumberField(PrimaryField, Value))
+    {
+        return Value;
+    }
+    if (Payload.IsValid() && Payload->TryGetNumberField(FallbackField, Value))
+    {
+        return Value;
+    }
+    return DefaultValue;
 }
 
 // Helper to set protected UGameplayAbility properties via reflection (UE 5.7+ safe)
@@ -178,6 +330,62 @@ static bool AddTagToAbilityContainer(UGameplayAbility* Ability, const FName& Pro
 }
 
 // Helper to create blueprint asset with validated path
+static UClass* ResolveGameplayEffectClassFromPath(const FString& EffectPath)
+{
+    if (EffectPath.IsEmpty())
+    {
+        return nullptr;
+    }
+
+    TArray<FString> ClassPathCandidates;
+    ClassPathCandidates.Add(EffectPath);
+    if (EffectPath.Contains(TEXT(".")))
+    {
+        ClassPathCandidates.Add(EffectPath.EndsWith(TEXT("_C")) ? EffectPath : EffectPath + TEXT("_C"));
+    }
+    else
+    {
+        int32 LastSlash = INDEX_NONE;
+        EffectPath.FindLastChar(TEXT('/'), LastSlash);
+        const FString AssetName = LastSlash == INDEX_NONE ? EffectPath : EffectPath.Mid(LastSlash + 1);
+        ClassPathCandidates.Add(EffectPath + TEXT(".") + AssetName + TEXT("_C"));
+    }
+
+    for (const FString& ClassPath : ClassPathCandidates)
+    {
+        if (UClass* LoadedClass = LoadClass<UGameplayEffect>(nullptr, *ClassPath))
+        {
+            if (LoadedClass->IsChildOf(UGameplayEffect::StaticClass()))
+            {
+                return LoadedClass;
+            }
+        }
+    }
+
+    TArray<FString> ObjectPathCandidates;
+    ObjectPathCandidates.Add(EffectPath);
+    if (!EffectPath.Contains(TEXT(".")))
+    {
+        int32 LastSlash = INDEX_NONE;
+        EffectPath.FindLastChar(TEXT('/'), LastSlash);
+        const FString AssetName = LastSlash == INDEX_NONE ? EffectPath : EffectPath.Mid(LastSlash + 1);
+        ObjectPathCandidates.Add(EffectPath + TEXT(".") + AssetName);
+    }
+
+    for (const FString& ObjectPath : ObjectPathCandidates)
+    {
+        if (UBlueprint* EffectBlueprint = LoadObject<UBlueprint>(nullptr, *ObjectPath))
+        {
+            if (EffectBlueprint->GeneratedClass && EffectBlueprint->GeneratedClass->IsChildOf(UGameplayEffect::StaticClass()))
+            {
+                return EffectBlueprint->GeneratedClass;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
 static UBlueprint* CreateGASBlueprint(const FString& Path, const FString& Name, UClass* ParentClass, FString& OutError, bool& bOutReusedExisting)
 {
     bOutReusedExisting = false;
@@ -277,7 +485,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     if (Action != TEXT("manage_gas"))
     {
@@ -313,7 +521,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         return true;
     }
 
-    FString SubAction = GetStringFieldGAS(Payload, TEXT("subAction"));
+    FString SubAction = GetJsonStringField(Payload, TEXT("subAction"));
     if (SubAction.IsEmpty())
     {
         SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'subAction' in payload."), TEXT("INVALID_ARGUMENT"));
@@ -321,10 +529,23 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     }
 
     // Common parameters
-    FString Name = GetStringFieldGAS(Payload, TEXT("name"));
-    FString Path = GetStringFieldGAS(Payload, TEXT("path"), TEXT("/Game"));
-    FString BlueprintPath = GetStringFieldGAS(Payload, TEXT("blueprintPath"));
-    FString AssetPath = GetStringFieldGAS(Payload, TEXT("assetPath"));
+    FString Name = GetJsonStringField(Payload, TEXT("name"));
+    FString Path = GetJsonStringField(Payload, TEXT("path"), TEXT("/Game"));
+    FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
+    if (BlueprintPath.IsEmpty())
+    {
+        // Documented type-specific path params double as blueprintPath; a
+        // wrong-type asset still fails the action's own type check.
+        for (const TCHAR* Alias : { TEXT("attributeSetPath"), TEXT("effectPath"), TEXT("abilityPath"), TEXT("cuePath") })
+        {
+            BlueprintPath = GetJsonStringField(Payload, Alias);
+            if (!BlueprintPath.IsEmpty())
+            {
+                break;
+            }
+        }
+    }
+    FString AssetPath = GetJsonStringField(Payload, TEXT("assetPath"));
 
     // ============================================================
     // 13.1 COMPONENTS & ATTRIBUTES
@@ -333,21 +554,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     // add_ability_system_component
     if (SubAction == TEXT("add_ability_system_component"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString ComponentName = GetStringFieldGAS(Payload, TEXT("componentName"), TEXT("AbilitySystemComponent"));
+        FString ComponentName = GetJsonStringField(Payload, TEXT("componentName"), TEXT("AbilitySystemComponent"));
 
         USCS_Node* NewNode = Blueprint->SimpleConstructionScript->CreateNode(
             UAbilitySystemComponent::StaticClass(), FName(*ComponentName));
@@ -360,7 +570,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         Blueprint->SimpleConstructionScript->AddNode(NewNode);
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("componentName"), ComponentName);
@@ -373,22 +583,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     // configure_asc
     if (SubAction == TEXT("configure_asc"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString ComponentName = GetStringFieldGAS(Payload, TEXT("componentName"), TEXT("AbilitySystemComponent"));
-        FString ReplicationMode = GetStringFieldGAS(Payload, TEXT("replicationMode"), TEXT("full"));
+        FString ComponentName = GetJsonStringField(Payload, TEXT("componentName"), TEXT("AbilitySystemComponent"));
+        FString ReplicationMode = GetJsonStringField(Payload, TEXT("replicationMode"), TEXT("Full"));
+        const FString ReplicationModeToken = NormalizeGASToken(ReplicationMode);
 
         // Find ASC in SCS
         UAbilitySystemComponent* ASCTemplate = nullptr;
@@ -413,20 +613,21 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         // Configure replication mode
-        if (ReplicationMode == TEXT("full"))
+        if (ReplicationModeToken == TEXT("full"))
         {
             ASCTemplate->SetReplicationMode(EGameplayEffectReplicationMode::Full);
         }
-        else if (ReplicationMode == TEXT("mixed"))
+        else if (ReplicationModeToken == TEXT("mixed"))
         {
             ASCTemplate->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
         }
-        else if (ReplicationMode == TEXT("minimal"))
+        else if (ReplicationModeToken == TEXT("minimal"))
         {
             ASCTemplate->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("componentName"), ComponentName);
@@ -482,22 +683,22 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString AttributeName = GetStringFieldGAS(Payload, TEXT("attributeName"));
+        FString AttributeName = GetJsonStringField(Payload, TEXT("attributeName"));
         if (AttributeName.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing attributeName."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        float DefaultValue = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("defaultValue"), 0.0));
+        double BaseValue = 0.0;
+        bool bHasBaseValue = Payload->TryGetNumberField(TEXT("baseValue"), BaseValue);
+        if (!bHasBaseValue)
+        {
+            bHasBaseValue = Payload->TryGetNumberField(TEXT("defaultValue"), BaseValue);
+        }
 
         // Add FGameplayAttributeData member variable
         FEdGraphPinType PinType;
@@ -511,12 +712,30 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        if (bHasBaseValue)
+        {
+            for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+            {
+                if (VarDesc.VarName == FName(*AttributeName))
+                {
+                    VarDesc.DefaultValue = FString::Printf(
+                        TEXT("(BaseValue=%s,CurrentValue=%s)"),
+                        *FString::SanitizeFloat(BaseValue),
+                        *FString::SanitizeFloat(BaseValue));
+                    break;
+                }
+            }
+        }
+
+        const bool bSaved = McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("attributeName"), AttributeName);
-        Result->SetNumberField(TEXT("defaultValue"), DefaultValue);
+        Result->SetNumberField(TEXT("baseValue"), BaseValue);
+        Result->SetNumberField(TEXT("defaultValue"), BaseValue);
+        Result->SetBoolField(TEXT("baseValueApplied"), bHasBaseValue);
+        Result->SetBoolField(TEXT("saved"), bSaved);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Attribute added"), Result);
         return true;
     }
@@ -530,14 +749,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString AttributeName = GetStringFieldGAS(Payload, TEXT("attributeName"));
+        FString AttributeName = GetJsonStringField(Payload, TEXT("attributeName"));
         if (AttributeName.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing attributeName."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
 
-        float BaseValue = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("baseValue"), 0.0));
+        float BaseValue = static_cast<float>(GetJsonNumberField(Payload, TEXT("baseValue"), 0.0));
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -559,34 +778,53 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         FProperty* AttrProperty = AttrSetClass->FindPropertyByName(FName(*AttributeName));
         if (!AttrProperty)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Attribute not found: %s"), *AttributeName), TEXT("ATTRIBUTE_NOT_FOUND"));
-            return true;
-        }
+            bool bUpdatedBlueprintVariable = false;
+            for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+            {
+                if (VarDesc.VarName == FName(*AttributeName))
+                {
+                    VarDesc.DefaultValue = FString::Printf(
+                        TEXT("(BaseValue=%s,CurrentValue=%s)"),
+                        *FString::SanitizeFloat(BaseValue),
+                        *FString::SanitizeFloat(BaseValue));
+                    bUpdatedBlueprintVariable = true;
+                    break;
+                }
+            }
 
-        // Access the FGameplayAttributeData struct
-        void* AttrDataPtr = AttrProperty->ContainerPtrToValuePtr<void>(AttrSetCDO);
-        if (AttrDataPtr)
+            if (!bUpdatedBlueprintVariable)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Attribute not found: %s"), *AttributeName), TEXT("ATTRIBUTE_NOT_FOUND"));
+                return true;
+            }
+        }
+        else
         {
-            // Navigate into the FGameplayAttributeData struct to set BaseValue
-            UScriptStruct* AttrStruct = FGameplayAttributeData::StaticStruct();
-            FNumericProperty* BaseValueProp = CastField<FNumericProperty>(AttrStruct->FindPropertyByName(TEXT("BaseValue")));
-            if (BaseValueProp)
+            // Access the FGameplayAttributeData struct
+            void* AttrDataPtr = AttrProperty->ContainerPtrToValuePtr<void>(AttrSetCDO);
+            if (AttrDataPtr)
             {
-                void* BaseValueAddr = BaseValueProp->ContainerPtrToValuePtr<void>(AttrDataPtr);
-                BaseValueProp->SetFloatingPointPropertyValue(BaseValueAddr, static_cast<double>(BaseValue));
-            }
-            
-            // Also set CurrentValue to match
-            FNumericProperty* CurrentValueProp = CastField<FNumericProperty>(AttrStruct->FindPropertyByName(TEXT("CurrentValue")));
-            if (CurrentValueProp)
-            {
-                void* CurrentValueAddr = CurrentValueProp->ContainerPtrToValuePtr<void>(AttrDataPtr);
-                CurrentValueProp->SetFloatingPointPropertyValue(CurrentValueAddr, static_cast<double>(BaseValue));
+                // Navigate into the FGameplayAttributeData struct to set BaseValue
+                UScriptStruct* AttrStruct = FGameplayAttributeData::StaticStruct();
+                FNumericProperty* BaseValueProp = CastField<FNumericProperty>(AttrStruct->FindPropertyByName(TEXT("BaseValue")));
+                if (BaseValueProp)
+                {
+                    void* BaseValueAddr = BaseValueProp->ContainerPtrToValuePtr<void>(AttrDataPtr);
+                    BaseValueProp->SetFloatingPointPropertyValue(BaseValueAddr, static_cast<double>(BaseValue));
+                }
+
+                // Also set CurrentValue to match
+                FNumericProperty* CurrentValueProp = CastField<FNumericProperty>(AttrStruct->FindPropertyByName(TEXT("CurrentValue")));
+                if (CurrentValueProp)
+                {
+                    void* CurrentValueAddr = CurrentValueProp->ContainerPtrToValuePtr<void>(AttrDataPtr);
+                    CurrentValueProp->SetFloatingPointPropertyValue(CurrentValueAddr, static_cast<double>(BaseValue));
+                }
             }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
         AttrSetCDO->MarkPackageDirty();
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
@@ -606,23 +844,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString AttributeName = GetStringFieldGAS(Payload, TEXT("attributeName"));
+        FString AttributeName = GetJsonStringField(Payload, TEXT("attributeName"));
         if (AttributeName.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing attributeName."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
 
-        float MinValue = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("minValue"), 0.0));
-        float MaxValue = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("maxValue"), 100.0));
+        float MinValue = static_cast<float>(GetJsonNumberField(Payload, TEXT("minValue"), 0.0));
+        float MaxValue = static_cast<float>(GetJsonNumberField(Payload, TEXT("maxValue"), 100.0));
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         // Verify this is an AttributeSet blueprint
         if (!Blueprint->GeneratedClass || !Blueprint->GeneratedClass->IsChildOf(UAttributeSet::StaticClass()))
@@ -684,9 +917,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -767,14 +998,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         TArray<FString> TagsAdded;
+        TArray<FString> TagsNotRegistered;
+        TArray<FString> TagsFailedToApply;
+        int32 TagsRequested = 0;
 
         // Ability tags
-        const TArray<TSharedPtr<FJsonValue>>* AbilityTagsArray;
+        const TArray<TSharedPtr<FJsonValue>>* AbilityTagsArray = nullptr;
         if (Payload->TryGetArrayField(TEXT("abilityTags"), AbilityTagsArray))
         {
             for (const auto& TagValue : *AbilityTagsArray)
             {
                 FString TagStr = TagValue->AsString();
+                ++TagsRequested;
                 FGameplayTag Tag = GetOrRequestTag(TagStr);
                 if (Tag.IsValid())
                 {
@@ -794,40 +1029,147 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
 #endif
                     TagsAdded.Add(TagStr);
                 }
+                else
+                {
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
             }
         }
 
         // Cancel abilities with tags - use reflection to access protected member
-        const TArray<TSharedPtr<FJsonValue>>* CancelTagsArray;
-        if (Payload->TryGetArrayField(TEXT("cancelAbilitiesWithTags"), CancelTagsArray))
+        const TArray<TSharedPtr<FJsonValue>>* CancelTagsArray = nullptr;
+        if (!Payload->TryGetArrayField(TEXT("cancelAbilitiesWithTags"), CancelTagsArray))
+        {
+            Payload->TryGetArrayField(TEXT("cancelAbilitiesWithTag"), CancelTagsArray);
+        }
+        if (CancelTagsArray)
         {
             for (const auto& TagValue : *CancelTagsArray)
             {
-                FGameplayTag Tag = GetOrRequestTag(TagValue->AsString());
-                if (Tag.IsValid())
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
+                if (!Tag.IsValid())
                 {
-                    // Use string literal - GET_MEMBER_NAME_CHECKED doesn't work for protected members
-                    AddTagToAbilityContainer(AbilityCDO, FName(TEXT("CancelAbilitiesWithTag")), Tag);
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
+                // Use string literal - GET_MEMBER_NAME_CHECKED doesn't work for protected members
+                else if (AddTagToAbilityContainer(AbilityCDO, FName(TEXT("CancelAbilitiesWithTag")), Tag))
+                {
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsFailedToApply.AddUnique(TagStr);
                 }
             }
         }
 
         // Block abilities with tags - use reflection to access protected member
-        const TArray<TSharedPtr<FJsonValue>>* BlockTagsArray;
-        if (Payload->TryGetArrayField(TEXT("blockAbilitiesWithTags"), BlockTagsArray))
+        const TArray<TSharedPtr<FJsonValue>>* BlockTagsArray = nullptr;
+        if (!Payload->TryGetArrayField(TEXT("blockAbilitiesWithTags"), BlockTagsArray))
+        {
+            Payload->TryGetArrayField(TEXT("blockAbilitiesWithTag"), BlockTagsArray);
+        }
+        if (BlockTagsArray)
         {
             for (const auto& TagValue : *BlockTagsArray)
             {
-                FGameplayTag Tag = GetOrRequestTag(TagValue->AsString());
-                if (Tag.IsValid())
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
+                if (!Tag.IsValid())
                 {
-                    // Use string literal - GET_MEMBER_NAME_CHECKED doesn't work for protected members
-                    AddTagToAbilityContainer(AbilityCDO, FName(TEXT("BlockAbilitiesWithTag")), Tag);
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
+                // Use string literal - GET_MEMBER_NAME_CHECKED doesn't work for protected members
+                else if (AddTagToAbilityContainer(AbilityCDO, FName(TEXT("BlockAbilitiesWithTag")), Tag))
+                {
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsFailedToApply.AddUnique(TagStr);
                 }
             }
         }
 
+        const TArray<TSharedPtr<FJsonValue>>* ActivationRequiredTagsArray = nullptr;
+        if (Payload->TryGetArrayField(TEXT("activationRequiredTags"), ActivationRequiredTagsArray))
+        {
+            for (const auto& TagValue : *ActivationRequiredTagsArray)
+            {
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
+                if (!Tag.IsValid())
+                {
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
+                else if (AddTagToAbilityContainer(AbilityCDO, FName(TEXT("ActivationRequiredTags")), Tag))
+                {
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsFailedToApply.AddUnique(TagStr);
+                }
+            }
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* ActivationBlockedTagsArray = nullptr;
+        if (Payload->TryGetArrayField(TEXT("activationBlockedTags"), ActivationBlockedTagsArray))
+        {
+            for (const auto& TagValue : *ActivationBlockedTagsArray)
+            {
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
+                if (!Tag.IsValid())
+                {
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
+                else if (AddTagToAbilityContainer(AbilityCDO, FName(TEXT("ActivationBlockedTags")), Tag))
+                {
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsFailedToApply.AddUnique(TagStr);
+                }
+            }
+        }
+
+        if (TagsRequested == 0)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("No tags provided. Pass abilityTags, cancelAbilitiesWithTag, blockAbilitiesWithTag, activationRequiredTags, or activationBlockedTags."),
+                TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+
+        if (TagsAdded.Num() == 0)
+        {
+            FString Detail;
+            if (TagsNotRegistered.Num() > 0)
+            {
+                Detail = FString::Printf(
+                    TEXT(" Unregistered gameplay tags: %s. Register them in Project Settings > Project > Gameplay Tags (DefaultGameplayTags.ini) and retry."),
+                    *FString::Join(TagsNotRegistered, TEXT(", ")));
+            }
+            if (TagsFailedToApply.Num() > 0)
+            {
+                Detail += FString::Printf(TEXT(" Tag container write failed for: %s."),
+                    *FString::Join(TagsFailedToApply, TEXT(", ")));
+            }
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("None of the %d requested tags were applied.%s"), TagsRequested, *Detail),
+                TEXT("TAGS_NOT_APPLIED"));
+            return true;
+        }
+
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -837,6 +1179,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             TagsJsonArray.Add(MakeShared<FJsonValueString>(Tag));
         }
         Result->SetArrayField(TEXT("tagsAdded"), TagsJsonArray);
+        if (TagsNotRegistered.Num() > 0)
+        {
+            TArray<TSharedPtr<FJsonValue>> NotRegisteredJson;
+            for (const FString& Tag : TagsNotRegistered)
+            {
+                NotRegisteredJson.Add(MakeShared<FJsonValueString>(Tag));
+            }
+            Result->SetArrayField(TEXT("tagsNotRegistered"), NotRegisteredJson);
+        }
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Ability tags set"), Result);
         return true;
     }
@@ -850,7 +1201,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString CostEffectPath = GetStringFieldGAS(Payload, TEXT("costEffectPath"));
+        FString CostEffectPath = GetJsonStringField(Payload, TEXT("costEffectPath"));
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -867,22 +1218,29 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
+        bool bCostEffectAssigned = false;
         if (!CostEffectPath.IsEmpty())
         {
-            UClass* CostClass = LoadClass<UGameplayEffect>(nullptr, *CostEffectPath);
-            if (CostClass)
+            UClass* CostClass = ResolveGameplayEffectClassFromPath(CostEffectPath);
+            if (!CostClass)
             {
-                // Use reflection to set protected CostGameplayEffectClass property
-                // Use string literal - GET_MEMBER_NAME_CHECKED doesn't work for protected members
-                SetAbilityPropertyValue(AbilityCDO, FName(TEXT("CostGameplayEffectClass")), TSubclassOf<UGameplayEffect>(CostClass));
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Cost GameplayEffect not found or invalid: %s"), *CostEffectPath), TEXT("ASSET_NOT_FOUND"));
+                return true;
             }
+
+            // Use reflection to set protected CostGameplayEffectClass property
+            // Use string literal - GET_MEMBER_NAME_CHECKED doesn't work for protected members
+            bCostEffectAssigned = SetAbilityPropertyValue(AbilityCDO, FName(TEXT("CostGameplayEffectClass")), TSubclassOf<UGameplayEffect>(CostClass));
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("costEffectPath"), CostEffectPath);
+        Result->SetBoolField(TEXT("costEffectAssigned"), bCostEffectAssigned);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Ability cost set"), Result);
         return true;
     }
@@ -896,7 +1254,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString CooldownEffectPath = GetStringFieldGAS(Payload, TEXT("cooldownEffectPath"));
+        FString CooldownEffectPath = GetJsonStringField(Payload, TEXT("cooldownEffectPath"));
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -913,22 +1271,29 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
+        bool bCooldownEffectAssigned = false;
         if (!CooldownEffectPath.IsEmpty())
         {
-            UClass* CooldownClass = LoadClass<UGameplayEffect>(nullptr, *CooldownEffectPath);
-            if (CooldownClass)
+            UClass* CooldownClass = ResolveGameplayEffectClassFromPath(CooldownEffectPath);
+            if (!CooldownClass)
             {
-                // Use reflection to set protected CooldownGameplayEffectClass property
-                // Use string literal - GET_MEMBER_NAME_CHECKED doesn't work for protected members
-                SetAbilityPropertyValue(AbilityCDO, FName(TEXT("CooldownGameplayEffectClass")), TSubclassOf<UGameplayEffect>(CooldownClass));
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Cooldown GameplayEffect not found or invalid: %s"), *CooldownEffectPath), TEXT("ASSET_NOT_FOUND"));
+                return true;
             }
+
+            // Use reflection to set protected CooldownGameplayEffectClass property
+            // Use string literal - GET_MEMBER_NAME_CHECKED doesn't work for protected members
+            bCooldownEffectAssigned = SetAbilityPropertyValue(AbilityCDO, FName(TEXT("CooldownGameplayEffectClass")), TSubclassOf<UGameplayEffect>(CooldownClass));
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("cooldownEffectPath"), CooldownEffectPath);
+        Result->SetBoolField(TEXT("cooldownEffectAssigned"), bCooldownEffectAssigned);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Ability cooldown set"), Result);
         return true;
     }
@@ -942,10 +1307,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString TargetingType = GetStringFieldGAS(Payload, TEXT("targetingType"), TEXT("self"));
-        float TargetingRange = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("targetingRange"), 1000.0));
-        bool bRequiresLineOfSight = GetBoolFieldGAS(Payload, TEXT("requiresLineOfSight"), false);
-        float TargetingAngle = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("targetingAngle"), 360.0));
+        FString TargetingType = GetGASStringFieldWithFallback(Payload, TEXT("targetingType"), TEXT("targetingMode"), TEXT("self"));
+        float TargetingRange = static_cast<float>(GetGASNumberFieldWithFallback(Payload, TEXT("targetingRange"), TEXT("targetRange"), 1000.0));
+        float AOERadius = static_cast<float>(GetJsonNumberField(Payload, TEXT("aoeRadius"), 0.0));
+        bool bRequiresLineOfSight = GetJsonBoolField(Payload, TEXT("requiresLineOfSight"), false);
+        float TargetingAngle = static_cast<float>(GetJsonNumberField(Payload, TEXT("targetingAngle"), 360.0));
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -1024,6 +1390,20 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             }
         }
 
+        if (AOERadius > 0.0f)
+        {
+            FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("AOERadius"), FloatPinType);
+            FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("AOERadius"), nullptr, FText::FromString(TEXT("Targeting")));
+            for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+            {
+                if (VarDesc.VarName == TEXT("AOERadius"))
+                {
+                    VarDesc.DefaultValue = FString::SanitizeFloat(AOERadius);
+                    break;
+                }
+            }
+        }
+
         // 5. Add target actor variable for runtime use
         FEdGraphPinType ActorPinType;
         ActorPinType.PinCategory = UEdGraphSchema_K2::PC_Object;
@@ -1038,14 +1418,13 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TargetLocation"), VectorPinType);
         FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("TargetLocation"), nullptr, FText::FromString(TEXT("Targeting")));
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("targetingType"), TargetingType);
         Result->SetNumberField(TEXT("targetingRange"), TargetingRange);
+        Result->SetNumberField(TEXT("aoeRadius"), AOERadius);
         Result->SetBoolField(TEXT("requiresLineOfSight"), bRequiresLineOfSight);
         Result->SetNumberField(TEXT("targetingAngle"), TargetingAngle);
         
@@ -1054,6 +1433,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetingRange")));
         VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("bRequiresLineOfSight")));
         VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetingAngle")));
+        if (AOERadius > 0.0f)
+        {
+            VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("AOERadius")));
+        }
         VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetActor")));
         VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetLocation")));
         Result->SetArrayField(TEXT("variablesAdded"), VariablesArray);
@@ -1071,14 +1454,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString TaskType = GetStringFieldGAS(Payload, TEXT("taskType"));
+        FString TaskType = GetJsonStringField(Payload, TEXT("taskType"));
         if (TaskType.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing taskType."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
         
-        FString TaskClassName = GetStringFieldGAS(Payload, TEXT("taskClassName"));
+        FString TaskClassName = GetJsonStringField(Payload, TEXT("taskClassName"));
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -1210,9 +1593,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
         VariablesAdded.Add(TaskNameVarName);
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1243,7 +1624,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString Policy = GetStringFieldGAS(Payload, TEXT("policy"), TEXT("local_predicted"));
+        FString ActivationPolicy = GetJsonStringField(Payload, TEXT("activationPolicy"));
+        const FString PolicyDefault = ActivationPolicy.IsEmpty() ? FString(TEXT("local_predicted")) : ActivationPolicy;
+        FString Policy = GetJsonStringField(Payload, TEXT("policy"), PolicyDefault);
+        const FString PolicyToken = NormalizeGASToken(Policy);
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -1262,19 +1646,19 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
 
         // Use reflection to set protected NetExecutionPolicy property
         TEnumAsByte<EGameplayAbilityNetExecutionPolicy::Type> NetPolicy;
-        if (Policy == TEXT("local_only"))
+        if (PolicyToken == TEXT("localonly"))
         {
             NetPolicy = EGameplayAbilityNetExecutionPolicy::LocalOnly;
         }
-        else if (Policy == TEXT("local_predicted"))
+        else if (PolicyToken == TEXT("localpredicted"))
         {
             NetPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
         }
-        else if (Policy == TEXT("server_only"))
+        else if (PolicyToken == TEXT("serveronly"))
         {
             NetPolicy = EGameplayAbilityNetExecutionPolicy::ServerOnly;
         }
-        else if (Policy == TEXT("server_initiated"))
+        else if (PolicyToken == TEXT("serverinitiated"))
         {
             NetPolicy = EGameplayAbilityNetExecutionPolicy::ServerInitiated;
         }
@@ -1285,11 +1669,32 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         // Use string literal - GET_MEMBER_NAME_CHECKED doesn't work for protected members
         SetAbilityPropertyValue(AbilityCDO, FName(TEXT("NetExecutionPolicy")), NetPolicy);
 
+        if (!ActivationPolicy.IsEmpty())
+        {
+            FEdGraphPinType NamePinType;
+            NamePinType.PinCategory = UEdGraphSchema_K2::PC_Name;
+            FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("ActivationPolicy"), NamePinType);
+            FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("ActivationPolicy"), nullptr, FText::FromString(TEXT("Ability Activation")));
+            for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+            {
+                if (VarDesc.VarName == TEXT("ActivationPolicy"))
+                {
+                    VarDesc.DefaultValue = ActivationPolicy;
+                    break;
+                }
+            }
+        }
+
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("policy"), Policy);
+        if (!ActivationPolicy.IsEmpty())
+        {
+            Result->SetStringField(TEXT("activationPolicy"), ActivationPolicy);
+        }
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Activation policy set"), Result);
         return true;
     }
@@ -1303,7 +1708,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString Policy = GetStringFieldGAS(Payload, TEXT("policy"), TEXT("instanced_per_actor"));
+        FString Policy = GetGASStringFieldWithFallback(Payload, TEXT("policy"), TEXT("instancingPolicy"), TEXT("instanced_per_actor"));
+        const FString PolicyToken = NormalizeGASToken(Policy);
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -1322,17 +1728,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
 
         // Use reflection to set protected InstancingPolicy property
         TEnumAsByte<EGameplayAbilityInstancingPolicy::Type> InstPolicy;
-        if (Policy == TEXT("non_instanced"))
+        if (PolicyToken == TEXT("noninstanced"))
         {
             PRAGMA_DISABLE_DEPRECATION_WARNINGS
             InstPolicy = EGameplayAbilityInstancingPolicy::NonInstanced;
             PRAGMA_ENABLE_DEPRECATION_WARNINGS
         }
-        else if (Policy == TEXT("instanced_per_actor"))
+        else if (PolicyToken == TEXT("instancedperactor"))
         {
             InstPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
         }
-        else if (Policy == TEXT("instanced_per_execution"))
+        else if (PolicyToken == TEXT("instancedperexecution"))
         {
             InstPolicy = EGameplayAbilityInstancingPolicy::InstancedPerExecution;
         }
@@ -1344,6 +1750,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         SetAbilityPropertyValue(AbilityCDO, FName(TEXT("InstancingPolicy")), InstPolicy);
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1374,7 +1781,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString DurationType = GetStringFieldGAS(Payload, TEXT("durationType"), TEXT("instant"));
+        FString DurationType = GetJsonStringField(Payload, TEXT("durationType"), TEXT("Instant"));
+        const FString DurationTypeToken = NormalizeGASToken(DurationType);
 
         // Only set duration policy on CDO if we created a new blueprint
         if (!bReusedExisting)
@@ -1385,15 +1793,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                 UGameplayEffect* EffectCDO = Cast<UGameplayEffect>(Blueprint->GeneratedClass->GetDefaultObject());
                 if (EffectCDO)
                 {
-                    if (DurationType == TEXT("instant"))
+                    if (DurationTypeToken == TEXT("instant"))
                     {
                         EffectCDO->DurationPolicy = EGameplayEffectDurationType::Instant;
                     }
-                    else if (DurationType == TEXT("infinite"))
+                    else if (DurationTypeToken == TEXT("infinite"))
                     {
                         EffectCDO->DurationPolicy = EGameplayEffectDurationType::Infinite;
                     }
-                    else if (DurationType == TEXT("has_duration"))
+                    else if (DurationTypeToken == TEXT("hasduration"))
                     {
                         EffectCDO->DurationPolicy = EGameplayEffectDurationType::HasDuration;
                     }
@@ -1441,36 +1849,65 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString DurationType = GetStringFieldGAS(Payload, TEXT("durationType"), TEXT("instant"));
-        float Duration = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("duration"), 0.0));
+        FString DurationType = GetJsonStringField(Payload, TEXT("durationType"), TEXT("Instant"));
+        const FString DurationTypeToken = NormalizeGASToken(DurationType);
+        float Duration = static_cast<float>(GetJsonNumberField(Payload, TEXT("duration"), 0.0));
 
-        if (DurationType == TEXT("instant"))
+        // Resolve the target policy before mutating so validation failures leave the CDO untouched.
+        EGameplayEffectDurationType NewPolicy = EffectCDO->DurationPolicy;
+        if (DurationTypeToken == TEXT("instant"))
         {
-            EffectCDO->DurationPolicy = EGameplayEffectDurationType::Instant;
+            NewPolicy = EGameplayEffectDurationType::Instant;
         }
-        else if (DurationType == TEXT("infinite"))
+        else if (DurationTypeToken == TEXT("infinite"))
         {
-            EffectCDO->DurationPolicy = EGameplayEffectDurationType::Infinite;
+            NewPolicy = EGameplayEffectDurationType::Infinite;
         }
-        else if (DurationType == TEXT("has_duration"))
+        else if (DurationTypeToken == TEXT("hasduration"))
         {
-            EffectCDO->DurationPolicy = EGameplayEffectDurationType::HasDuration;
-            // Note: SetValue doesn't exist in UE 5.6, FScalableFloat constructor used in 5.7+
-            // Use assignment with FGameplayEffectModifierMagnitude constructor
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
+            NewPolicy = EGameplayEffectDurationType::HasDuration;
+        }
+
+        double PeriodValue = 0.0;
+        const bool bHasPeriod = Payload->TryGetNumberField(TEXT("period"), PeriodValue);
+        if (bHasPeriod)
+        {
+            if (PeriodValue <= 0.0)
+            {
+                SendAutomationError(RequestingSocket, RequestId, TEXT("'period' must be > 0."), TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            if (NewPolicy == EGameplayEffectDurationType::Instant)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("'period' requires durationType HasDuration or Infinite; Instant effects cannot be periodic."),
+                    TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+        }
+
+        EffectCDO->DurationPolicy = NewPolicy;
+        if (NewPolicy == EGameplayEffectDurationType::HasDuration)
+        {
+            // Note: SetValue doesn't exist in UE 5.6. Use FScalableFloat constructor.
             EffectCDO->DurationMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Duration));
-#else
-            // UE 5.6: Assign FScalableFloat directly to the magnitude
-            EffectCDO->DurationMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Duration));
-#endif
+        }
+        if (bHasPeriod)
+        {
+            EffectCDO->Period = FScalableFloat(static_cast<float>(PeriodValue));
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("durationType"), DurationType);
         Result->SetNumberField(TEXT("duration"), Duration);
+        if (bHasPeriod)
+        {
+            Result->SetNumberField(TEXT("period"), PeriodValue);
+        }
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Duration set"), Result);
         return true;
     }
@@ -1499,38 +1936,89 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString Operation = GetStringFieldGAS(Payload, TEXT("operation"), TEXT("additive"));
-        float Magnitude = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("magnitude"), 0.0));
+        FString Operation = GetGASStringFieldWithFallback(Payload, TEXT("operation"), TEXT("modifierOperation"), TEXT("Add"));
+        const FString OperationToken = NormalizeGASToken(Operation);
+        float Magnitude = static_cast<float>(GetGASNumberFieldWithFallback(Payload, TEXT("magnitude"), TEXT("modifierMagnitude"), 0.0));
+
+        const FString AttributeSpec = GetJsonStringField(Payload, TEXT("attribute"));
+        if (AttributeSpec.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("Missing 'attribute' - a modifier must target a gameplay attribute (pass 'AttributeName' or 'SetClassName.AttributeName')."),
+                TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+        FString AttrResolveError;
+        const FGameplayAttribute ResolvedAttribute = McpResolveGameplayAttribute(AttributeSpec, AttrResolveError);
+        if (!ResolvedAttribute.IsValid())
+        {
+            SendAutomationError(RequestingSocket, RequestId, AttrResolveError, TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
 
         FGameplayModifierInfo Modifier;
+        Modifier.Attribute = ResolvedAttribute;
         
-        if (Operation == TEXT("additive") || Operation == TEXT("add"))
+        if (OperationToken == TEXT("additive") || OperationToken == TEXT("add"))
         {
             Modifier.ModifierOp = EGameplayModOp::Additive;
         }
-        else if (Operation == TEXT("multiplicative") || Operation == TEXT("multiply"))
+        else if (OperationToken == TEXT("multiplicative") || OperationToken == TEXT("multiply"))
         {
             Modifier.ModifierOp = EGameplayModOp::Multiplicitive;
         }
-        else if (Operation == TEXT("division") || Operation == TEXT("divide"))
+        else if (OperationToken == TEXT("division") || OperationToken == TEXT("divide"))
         {
             Modifier.ModifierOp = EGameplayModOp::Division;
         }
-        else if (Operation == TEXT("override"))
+        else if (OperationToken == TEXT("override"))
         {
             Modifier.ModifierOp = EGameplayModOp::Override;
         }
 
-        // Note: SetValue doesn't exist in UE 5.6. Use FScalableFloat constructor.
-        Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Magnitude));
+        const FString SetByCallerTagString = GetJsonStringField(Payload, TEXT("setByCallerTag"));
+        if (!SetByCallerTagString.IsEmpty())
+        {
+            if (Payload->HasField(TEXT("magnitude")) || Payload->HasField(TEXT("modifierMagnitude")))
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("'setByCallerTag' and a numeric magnitude are mutually exclusive."), TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            const FGameplayTag DataTag = GetOrRequestTag(SetByCallerTagString);
+            if (!DataTag.IsValid())
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("setByCallerTag not registered: %s"), *SetByCallerTagString),
+                    TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            FSetByCallerFloat SetByCaller;
+            SetByCaller.DataTag = DataTag;
+            Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(SetByCaller);
+        }
+        else
+        {
+            // Note: SetValue doesn't exist in UE 5.6. Use FScalableFloat constructor.
+            Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Magnitude));
+        }
         EffectCDO->Modifiers.Add(Modifier);
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("operation"), Operation);
-        Result->SetNumberField(TEXT("magnitude"), Magnitude);
+        Result->SetStringField(TEXT("attribute"), ResolvedAttribute.GetName());
+        if (!SetByCallerTagString.IsEmpty())
+        {
+            Result->SetStringField(TEXT("setByCallerTag"), SetByCallerTagString);
+        }
+        else
+        {
+            Result->SetNumberField(TEXT("magnitude"), Magnitude);
+        }
         Result->SetNumberField(TEXT("modifierCount"), EffectCDO->Modifiers.Num());
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Modifier added"), Result);
         return true;
@@ -1560,9 +2048,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        int32 ModifierIndex = static_cast<int32>(GetNumberFieldGAS(Payload, TEXT("modifierIndex"), 0));
-        float Value = static_cast<float>(GetNumberFieldGAS(Payload, TEXT("value"), 0.0));
-        FString MagnitudeType = GetStringFieldGAS(Payload, TEXT("magnitudeType"), TEXT("scalable_float"));
+        int32 ModifierIndex = static_cast<int32>(GetJsonNumberField(Payload, TEXT("modifierIndex"), 0));
+        float Value = static_cast<float>(GetGASNumberFieldWithFallback(Payload, TEXT("value"), TEXT("modifierMagnitude"), 0.0));
+        FString MagnitudeType = GetGASStringFieldWithFallback(Payload, TEXT("magnitudeType"), TEXT("magnitudeCalculationType"), TEXT("ScalableFloat"));
 
         if (ModifierIndex >= EffectCDO->Modifiers.Num())
         {
@@ -1570,16 +2058,61 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        // Note: SetValue doesn't exist in UE 5.6. Use FScalableFloat constructor.
-        EffectCDO->Modifiers[ModifierIndex].ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Value));
+        const FString MagnitudeTypeToken = NormalizeGASToken(MagnitudeType);
+        const FString SetByCallerTagString = GetJsonStringField(Payload, TEXT("setByCallerTag"));
+        if (MagnitudeTypeToken == TEXT("setbycaller") || !SetByCallerTagString.IsEmpty())
+        {
+            if (MagnitudeTypeToken != TEXT("setbycaller"))
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("'setByCallerTag' requires magnitudeType 'SetByCaller'."), TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            if (SetByCallerTagString.IsEmpty())
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("magnitudeType 'SetByCaller' requires 'setByCallerTag'."), TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            if (Payload->HasField(TEXT("value")) || Payload->HasField(TEXT("modifierMagnitude")))
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("'setByCallerTag' and a numeric magnitude are mutually exclusive."), TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            const FGameplayTag DataTag = GetOrRequestTag(SetByCallerTagString);
+            if (!DataTag.IsValid())
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("setByCallerTag not registered: %s"), *SetByCallerTagString),
+                    TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+            FSetByCallerFloat SetByCaller;
+            SetByCaller.DataTag = DataTag;
+            EffectCDO->Modifiers[ModifierIndex].ModifierMagnitude = FGameplayEffectModifierMagnitude(SetByCaller);
+        }
+        else
+        {
+            // Note: SetValue doesn't exist in UE 5.6. Use FScalableFloat constructor.
+            EffectCDO->Modifiers[ModifierIndex].ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Value));
+        }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetNumberField(TEXT("modifierIndex"), ModifierIndex);
         Result->SetStringField(TEXT("magnitudeType"), MagnitudeType);
-        Result->SetNumberField(TEXT("value"), Value);
+        if (!SetByCallerTagString.IsEmpty())
+        {
+            Result->SetStringField(TEXT("setByCallerTag"), SetByCallerTagString);
+        }
+        else
+        {
+            Result->SetNumberField(TEXT("value"), Value);
+        }
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Magnitude set"), Result);
         return true;
     }
@@ -1593,7 +2126,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString CalculationClassPath = GetStringFieldGAS(Payload, TEXT("calculationClass"));
+        FString CalculationClassPath = GetJsonStringField(Payload, TEXT("calculationClass"));
         if (CalculationClassPath.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing calculationClass."), TEXT("INVALID_ARGUMENT"));
@@ -1630,6 +2163,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         EffectCDO->Executions.Add(ExecDef);
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1648,7 +2182,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString CueTag = GetStringFieldGAS(Payload, TEXT("cueTag"));
+        FString CueTag = GetJsonStringField(Payload, TEXT("cueTag"));
         if (CueTag.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing cueTag."), TEXT("INVALID_ARGUMENT"));
@@ -1679,6 +2213,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1712,10 +2247,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString StackingType = GetStringFieldGAS(Payload, TEXT("stackingType"), TEXT("none"));
-        int32 StackLimit = static_cast<int32>(GetNumberFieldGAS(Payload, TEXT("stackLimit"), 1));
+        FString StackingType = GetJsonStringField(Payload, TEXT("stackingType"), TEXT("None"));
+        const FString StackingTypeToken = NormalizeGASToken(StackingType);
+        int32 StackLimit = static_cast<int32>(GetGASNumberFieldWithFallback(Payload, TEXT("stackLimit"), TEXT("stackLimitCount"), 1));
 
-        if (StackingType == TEXT("none"))
+        if (StackingTypeToken == TEXT("none"))
         {
             // UE 5.7+: StackingType is deprecated, use version guard with warning suppression
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
@@ -1726,7 +2262,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             PRAGMA_ENABLE_DEPRECATION_WARNINGS
 #endif
         }
-        else if (StackingType == TEXT("aggregate_by_source"))
+        else if (StackingTypeToken == TEXT("aggregatebysource"))
         {
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
             PRAGMA_DISABLE_DEPRECATION_WARNINGS
@@ -1736,7 +2272,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             PRAGMA_ENABLE_DEPRECATION_WARNINGS
 #endif
         }
-        else if (StackingType == TEXT("aggregate_by_target"))
+        else if (StackingTypeToken == TEXT("aggregatebytarget"))
         {
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
             PRAGMA_DISABLE_DEPRECATION_WARNINGS
@@ -1749,12 +2285,62 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
 
         EffectCDO->StackLimitCount = StackLimit;
 
+        FString StackDurationRefreshPolicy = GetJsonStringField(Payload, TEXT("stackDurationRefreshPolicy"));
+        const FString StackDurationRefreshPolicyToken = NormalizeGASToken(StackDurationRefreshPolicy);
+        if (StackDurationRefreshPolicyToken == TEXT("refreshonsuccessfulapplication"))
+        {
+            EffectCDO->StackDurationRefreshPolicy = EGameplayEffectStackingDurationPolicy::RefreshOnSuccessfulApplication;
+        }
+        else if (StackDurationRefreshPolicyToken == TEXT("neverrefresh"))
+        {
+            EffectCDO->StackDurationRefreshPolicy = EGameplayEffectStackingDurationPolicy::NeverRefresh;
+        }
+        else if (StackDurationRefreshPolicyToken == TEXT("extendduration"))
+        {
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
+            EffectCDO->StackDurationRefreshPolicy = EGameplayEffectStackingDurationPolicy::ExtendDuration;
+#else
+            UE_LOG(LogTemp, Warning, TEXT("ExtendDuration stack duration refresh policy requires UE 5.7+. Using RefreshOnSuccessfulApplication instead."));
+            EffectCDO->StackDurationRefreshPolicy = EGameplayEffectStackingDurationPolicy::RefreshOnSuccessfulApplication;
+#endif
+        }
+
+        FString StackPeriodResetPolicy = GetJsonStringField(Payload, TEXT("stackPeriodResetPolicy"));
+        const FString StackPeriodResetPolicyToken = NormalizeGASToken(StackPeriodResetPolicy);
+        if (StackPeriodResetPolicyToken == TEXT("resetonsuccessfulapplication"))
+        {
+            EffectCDO->StackPeriodResetPolicy = EGameplayEffectStackingPeriodPolicy::ResetOnSuccessfulApplication;
+        }
+        else if (StackPeriodResetPolicyToken == TEXT("neverreset"))
+        {
+            EffectCDO->StackPeriodResetPolicy = EGameplayEffectStackingPeriodPolicy::NeverReset;
+        }
+
+        FString StackExpirationPolicy = GetJsonStringField(Payload, TEXT("stackExpirationPolicy"));
+        const FString StackExpirationPolicyToken = NormalizeGASToken(StackExpirationPolicy);
+        if (StackExpirationPolicyToken == TEXT("clearentirestack"))
+        {
+            EffectCDO->StackExpirationPolicy = EGameplayEffectStackingExpirationPolicy::ClearEntireStack;
+        }
+        else if (StackExpirationPolicyToken == TEXT("removesinglestackandrefreshduration"))
+        {
+            EffectCDO->StackExpirationPolicy = EGameplayEffectStackingExpirationPolicy::RemoveSingleStackAndRefreshDuration;
+        }
+        else if (StackExpirationPolicyToken == TEXT("refreshduration"))
+        {
+            EffectCDO->StackExpirationPolicy = EGameplayEffectStackingExpirationPolicy::RefreshDuration;
+        }
+
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("stackingType"), StackingType);
         Result->SetNumberField(TEXT("stackLimit"), StackLimit);
+        if (!StackDurationRefreshPolicy.IsEmpty()) Result->SetStringField(TEXT("stackDurationRefreshPolicy"), StackDurationRefreshPolicy);
+        if (!StackPeriodResetPolicy.IsEmpty()) Result->SetStringField(TEXT("stackPeriodResetPolicy"), StackPeriodResetPolicy);
+        if (!StackExpirationPolicy.IsEmpty()) Result->SetStringField(TEXT("stackExpirationPolicy"), StackExpirationPolicy);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Stacking set"), Result);
         return true;
     }
@@ -1784,6 +2370,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         }
 
         TArray<FString> TagsAdded;
+        TArray<FString> TagsNotRegistered;
+        int32 TagsRequested = 0;
 
         // Granted tags
         const TArray<TSharedPtr<FJsonValue>>* GrantedTagsArray;
@@ -1792,20 +2380,127 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             for (const auto& TagValue : *GrantedTagsArray)
             {
                 FString TagStr = TagValue->AsString();
+                ++TagsRequested;
                 FGameplayTag Tag = GetOrRequestTag(TagStr);
                 if (Tag.IsValid())
                 {
-                    // InheritableOwnedTagsContainer is deprecated in UE 5.5+. Suppress warning unconditionally.
-                    // For future: Use UTargetTagsGameplayEffectComponent instead.
-                    PRAGMA_DISABLE_DEPRECATION_WARNINGS
-                    EffectCDO->InheritableOwnedTagsContainer.AddTag(Tag);
-                    PRAGMA_ENABLE_DEPRECATION_WARNINGS
+                    McpAddGrantedTagToEffect(EffectCDO, Tag);
                     TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsNotRegistered.AddUnique(TagStr);
                 }
             }
         }
 
+        const TArray<TSharedPtr<FJsonValue>>* ApplicationRequiredTagsArray = nullptr;
+        if (Payload->TryGetArrayField(TEXT("applicationRequiredTags"), ApplicationRequiredTagsArray))
+        {
+            for (const auto& TagValue : *ApplicationRequiredTagsArray)
+            {
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
+                if (Tag.IsValid())
+                {
+#if MCP_HAS_MODULAR_GE_COMPONENTS
+                    UTargetTagRequirementsGameplayEffectComponent& ReqComp =
+                        EffectCDO->FindOrAddComponent<UTargetTagRequirementsGameplayEffectComponent>();
+                    ReqComp.ApplicationTagRequirements.RequireTags.AddTag(Tag);
+#else
+                    PRAGMA_DISABLE_DEPRECATION_WARNINGS
+                    EffectCDO->ApplicationTagRequirements.RequireTags.AddTag(Tag);
+                    PRAGMA_ENABLE_DEPRECATION_WARNINGS
+#endif
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
+            }
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* RemovalTagsArray = nullptr;
+        if (Payload->TryGetArrayField(TEXT("removalTags"), RemovalTagsArray))
+        {
+            for (const auto& TagValue : *RemovalTagsArray)
+            {
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
+                if (Tag.IsValid())
+                {
+#if MCP_HAS_MODULAR_GE_COMPONENTS
+                    UTargetTagRequirementsGameplayEffectComponent& ReqComp =
+                        EffectCDO->FindOrAddComponent<UTargetTagRequirementsGameplayEffectComponent>();
+                    ReqComp.RemovalTagRequirements.RequireTags.AddTag(Tag);
+#else
+                    PRAGMA_DISABLE_DEPRECATION_WARNINGS
+                    EffectCDO->RemovalTagRequirements.RequireTags.AddTag(Tag);
+                    PRAGMA_ENABLE_DEPRECATION_WARNINGS
+#endif
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
+            }
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* ImmunityTagsArray = nullptr;
+        if (Payload->TryGetArrayField(TEXT("immunityTags"), ImmunityTagsArray))
+        {
+            for (const auto& TagValue : *ImmunityTagsArray)
+            {
+                FString TagStr = TagValue->AsString();
+                ++TagsRequested;
+                FGameplayTag Tag = GetOrRequestTag(TagStr);
+                if (Tag.IsValid())
+                {
+#if MCP_HAS_MODULAR_GE_COMPONENTS
+                    // Modular immunity is query-based; match-any-owning-tags mirrors the
+                    // engine's own legacy-to-component upgrade conversion.
+                    UImmunityGameplayEffectComponent& ImmunityComp =
+                        EffectCDO->FindOrAddComponent<UImmunityGameplayEffectComponent>();
+                    ImmunityComp.ImmunityQueries.Add(
+                        FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tag)));
+#else
+                    PRAGMA_DISABLE_DEPRECATION_WARNINGS
+                    EffectCDO->GrantedApplicationImmunityTags.RequireTags.AddTag(Tag);
+                    PRAGMA_ENABLE_DEPRECATION_WARNINGS
+#endif
+                    TagsAdded.Add(TagStr);
+                }
+                else
+                {
+                    TagsNotRegistered.AddUnique(TagStr);
+                }
+            }
+        }
+
+        if (TagsRequested == 0)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("No tags provided. Pass grantedTags, applicationRequiredTags, removalTags, or immunityTags."),
+                TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+
+        if (TagsAdded.Num() == 0)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(
+                    TEXT("None of the %d requested tags were applied. Unregistered gameplay tags: %s. Register them in Project Settings > Project > Gameplay Tags (DefaultGameplayTags.ini) and retry."),
+                    TagsRequested, *FString::Join(TagsNotRegistered, TEXT(", "))),
+                TEXT("TAGS_NOT_APPLIED"));
+            return true;
+        }
+
         FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1815,6 +2510,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             TagsJsonArray.Add(MakeShared<FJsonValueString>(Tag));
         }
         Result->SetArrayField(TEXT("tagsAdded"), TagsJsonArray);
+        if (TagsNotRegistered.Num() > 0)
+        {
+            TArray<TSharedPtr<FJsonValue>> NotRegisteredJson;
+            for (const FString& Tag : TagsNotRegistered)
+            {
+                NotRegisteredJson.Add(MakeShared<FJsonValueString>(Tag));
+            }
+            Result->SetArrayField(TEXT("tagsNotRegistered"), NotRegisteredJson);
+        }
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Effect tags set"), Result);
         return true;
     }
@@ -1832,11 +2536,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString CueType = GetStringFieldGAS(Payload, TEXT("cueType"), TEXT("static"));
-        FString CueTag = GetStringFieldGAS(Payload, TEXT("cueTag"));
+        FString CueType = GetJsonStringField(Payload, TEXT("cueType"), TEXT("Static"));
+        const FString CueTypeToken = NormalizeGASToken(CueType);
+        FString CueTag = GetJsonStringField(Payload, TEXT("cueTag"));
 
-        UClass* ParentClass = (CueType == TEXT("actor")) 
-            ? AGameplayCueNotify_Actor::StaticClass() 
+        UClass* ParentClass = (CueTypeToken == TEXT("actor"))
+            ? AGameplayCueNotify_Actor::StaticClass()
             : UGameplayCueNotify_Static::StaticClass();
 
         FString Error;
@@ -1853,7 +2558,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         {
             FGameplayTag Tag = GetOrRequestTag(CueTag);
             
-            if (CueType == TEXT("static"))
+            if (CueTypeToken == TEXT("static"))
             {
                 UGameplayCueNotify_Static* CueCDO = Cast<UGameplayCueNotify_Static>(
                     Blueprint->GeneratedClass->GetDefaultObject());
@@ -1901,7 +2606,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString TriggerType = GetStringFieldGAS(Payload, TEXT("triggerType"), TEXT("on_execute"));
+        FString TriggerType = GetJsonStringField(Payload, TEXT("triggerType"), TEXT("Executed"));
+        const FString TriggerTypeToken = NormalizeGASToken(TriggerType);
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -1928,9 +2634,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Result->SetStringField(TEXT("triggerType"), TriggerType);
-        Result->SetBoolField(TEXT("onExecuteConfigured"), TriggerType == TEXT("on_execute"));
-        Result->SetBoolField(TEXT("whileActiveConfigured"), TriggerType == TEXT("while_active"));
-        Result->SetBoolField(TEXT("onRemoveConfigured"), TriggerType == TEXT("on_remove"));
+        Result->SetBoolField(TEXT("onExecuteConfigured"), TriggerTypeToken == TEXT("onexecute") || TriggerTypeToken == TEXT("executed"));
+        Result->SetBoolField(TEXT("whileActiveConfigured"), TriggerTypeToken == TEXT("whileactive"));
+        Result->SetBoolField(TEXT("onRemoveConfigured"), TriggerTypeToken == TEXT("onremove"));
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Cue trigger configuration variables added"), Result);
         return true;
     }
@@ -1944,9 +2650,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString ParticleSystem = GetStringFieldGAS(Payload, TEXT("particleSystem"));
-        FString Sound = GetStringFieldGAS(Payload, TEXT("sound"));
-        FString CameraShake = GetStringFieldGAS(Payload, TEXT("cameraShake"));
+        FString ParticleSystem = GetGASStringFieldWithFallback(Payload, TEXT("particleSystem"), TEXT("particleSystemPath"));
+        FString Sound = GetGASStringFieldWithFallback(Payload, TEXT("sound"), TEXT("soundPath"));
+        FString CameraShake = GetGASStringFieldWithFallback(Payload, TEXT("cameraShake"), TEXT("cameraShakePath"));
+        FString Decal = GetJsonStringField(Payload, TEXT("decalPath"));
 
         UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!Blueprint || !Blueprint->GeneratedClass)
@@ -2042,6 +2749,23 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             VariablesAdded.Add(TEXT("CameraShakeScale"));
         }
 
+        if (!Decal.IsEmpty())
+        {
+            FEdGraphPinType DecalPinType;
+            DecalPinType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
+            DecalPinType.PinSubCategoryObject = UObject::StaticClass();
+            FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("CueDecal"), DecalPinType);
+            FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("CueDecal"), nullptr, FText::FromString(TEXT("Cue Effects")));
+
+            FEdGraphPinType StringPinType;
+            StringPinType.PinCategory = UEdGraphSchema_K2::PC_String;
+            FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("DecalPath"), StringPinType);
+            FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("DecalPath"), nullptr, FText::FromString(TEXT("Cue Effects")));
+
+            VariablesAdded.Add(TEXT("CueDecal"));
+            VariablesAdded.Add(TEXT("DecalPath"));
+        }
+
         // Add a master enable flag
         FEdGraphPinType BoolPinType;
         BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
@@ -2056,6 +2780,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         if (!ParticleSystem.IsEmpty()) Result->SetStringField(TEXT("particleSystem"), ParticleSystem);
         if (!Sound.IsEmpty()) Result->SetStringField(TEXT("sound"), Sound);
         if (!CameraShake.IsEmpty()) Result->SetStringField(TEXT("cameraShake"), CameraShake);
+        if (!Decal.IsEmpty()) Result->SetStringField(TEXT("decalPath"), Decal);
         
         TArray<TSharedPtr<FJsonValue>> VarsArray;
         for (const FString& VarName : VariablesAdded)
@@ -2078,20 +2803,57 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString TagString = GetStringFieldGAS(Payload, TEXT("tag"));
+        FString TagString = GetGASStringFieldWithFallback(Payload, TEXT("tag"), TEXT("tagName"));
         if (TagString.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing tag."), TEXT("INVALID_ARGUMENT"));
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing tag (alias: tagName)."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
 
         FGameplayTag Tag = GetOrRequestTag(TagString);
-        if (!Tag.IsValid())
+        const bool bTagIsRegistered = Tag.IsValid();
+
+        auto AddLooseTagVariable = [&TagString](UBlueprint* Blueprint) -> bool
         {
-            SendAutomationError(RequestingSocket, RequestId, 
-                FString::Printf(TEXT("Invalid gameplay tag: %s"), *TagString), TEXT("INVALID_TAG"));
+            if (!Blueprint)
+            {
+                return false;
+            }
+
+            FString VariableName = FString::Printf(TEXT("MCPGameplayTag_%s"), *TagString);
+            VariableName = SanitizeAssetName(VariableName).Left(64);
+
+            FEdGraphPinType StringPinType;
+            StringPinType.PinCategory = UEdGraphSchema_K2::PC_String;
+
+            bool bHasVariable = false;
+            for (const FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+            {
+                if (VarDesc.VarName == FName(*VariableName))
+                {
+                    bHasVariable = true;
+                    break;
+                }
+            }
+
+            if (!bHasVariable)
+            {
+                FBlueprintEditorUtils::AddMemberVariable(Blueprint, FName(*VariableName), StringPinType);
+            }
+
+            for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+            {
+                if (VarDesc.VarName == FName(*VariableName))
+                {
+                    VarDesc.DefaultValue = TagString;
+                    VarDesc.Category = FText::FromString(TEXT("Gameplay Tags"));
+                    break;
+                }
+            }
+
+            McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
             return true;
-        }
+        };
 
         // Load the asset
         UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
@@ -2114,44 +2876,65 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             // Try GameplayAbility
             if (UGameplayAbility* AbilityCDO = Cast<UGameplayAbility>(CDO))
             {
-                // AbilityTags is deprecated in UE 5.5+, suppress warning unconditionally
-                PRAGMA_DISABLE_DEPRECATION_WARNINGS
-                AbilityCDO->AbilityTags.AddTag(Tag);
-                PRAGMA_ENABLE_DEPRECATION_WARNINGS
+                if (bTagIsRegistered)
+                {
+                    // AbilityTags is deprecated in UE 5.5+, suppress warning unconditionally
+                    PRAGMA_DISABLE_DEPRECATION_WARNINGS
+                    AbilityCDO->AbilityTags.AddTag(Tag);
+                    PRAGMA_ENABLE_DEPRECATION_WARNINGS
+                }
+                else
+                {
+                    AddLooseTagVariable(Blueprint);
+                }
                 AssetType = TEXT("GameplayAbility");
                 bTagAdded = true;
-                FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-                McpSafeAssetSave(Blueprint);
+                McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
             }
             // Try GameplayEffect
             else if (UGameplayEffect* EffectCDO = Cast<UGameplayEffect>(CDO))
             {
-                // InheritableOwnedTagsContainer is deprecated, suppress warning unconditionally
-                PRAGMA_DISABLE_DEPRECATION_WARNINGS
-                EffectCDO->InheritableOwnedTagsContainer.AddTag(Tag);
-                PRAGMA_ENABLE_DEPRECATION_WARNINGS
+                if (bTagIsRegistered)
+                {
+                    McpAddGrantedTagToEffect(EffectCDO, Tag);
+                }
+                else
+                {
+                    AddLooseTagVariable(Blueprint);
+                }
                 AssetType = TEXT("GameplayEffect");
                 bTagAdded = true;
-                FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-                McpSafeAssetSave(Blueprint);
+                McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
             }
             // Try GameplayCue Notify (Static)
             else if (UGameplayCueNotify_Static* CueStaticCDO = Cast<UGameplayCueNotify_Static>(CDO))
             {
-                CueStaticCDO->GameplayCueTag = Tag;
+                if (bTagIsRegistered)
+                {
+                    CueStaticCDO->GameplayCueTag = Tag;
+                }
+                else
+                {
+                    AddLooseTagVariable(Blueprint);
+                }
                 AssetType = TEXT("GameplayCueNotify_Static");
                 bTagAdded = true;
-                FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-                McpSafeAssetSave(Blueprint);
+                McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
             }
             // Try GameplayCue Notify (Actor)
             else if (AGameplayCueNotify_Actor* CueActorCDO = Cast<AGameplayCueNotify_Actor>(CDO))
             {
-                CueActorCDO->GameplayCueTag = Tag;
+                if (bTagIsRegistered)
+                {
+                    CueActorCDO->GameplayCueTag = Tag;
+                }
+                else
+                {
+                    AddLooseTagVariable(Blueprint);
+                }
                 AssetType = TEXT("GameplayCueNotify_Actor");
                 bTagAdded = true;
-                FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-                McpSafeAssetSave(Blueprint);
+                McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
             }
             // Try Actor with AbilitySystemComponent
             else if (AActor* ActorCDO = Cast<AActor>(CDO))
@@ -2189,8 +2972,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                                 
                                 AssetType = TEXT("Actor with ASC");
                                 bTagAdded = true;
-                                FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-                                McpSafeAssetSave(Blueprint);
+                                McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
                                 break;
                             }
                         }
@@ -2211,7 +2993,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         Result->SetStringField(TEXT("assetPath"), AssetPath);
         Result->SetStringField(TEXT("tag"), TagString);
         Result->SetStringField(TEXT("assetType"), AssetType);
-        Result->SetBoolField(TEXT("tagValid"), Tag.IsValid());
+        Result->SetBoolField(TEXT("tagValid"), bTagIsRegistered);
         Result->SetBoolField(TEXT("tagAdded"), bTagAdded);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Tag added to asset"), Result);
         return true;
@@ -2222,6 +3004,139 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     // ============================================================
 
     // get_gas_info
+    // get_attribute - read a LIVE actor's GAS attribute value during PIE. This is the
+    // verify-loop keystone for combat: enter PIE, act, then assert (e.g. Health dropped).
+    // Reads the runtime ASC, NOT an asset CDO (that's get_gas_info).
+    if (SubAction == TEXT("get_attribute") || SubAction == TEXT("get_attribute_value"))
+    {
+        UWorld* PieWorld = (GEditor && GEditor->PlayWorld) ? GEditor->PlayWorld.Get() : nullptr;
+        if (!PieWorld)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("get_attribute reads a live actor; start PIE first (control_editor play)."),
+                TEXT("NOT_IN_PIE"));
+            return true;
+        }
+
+        const FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
+        const FString AttributeName = GetJsonStringField(Payload, TEXT("attribute"));
+        if (AttributeName.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("get_attribute requires 'attribute' (e.g. 'Health'). Optional 'actorName' (defaults to the player pawn)."),
+                TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+
+        // Resolve the actor: by name (object name or label), else the first player pawn.
+        AActor* TargetActor = nullptr;
+        if (!ActorName.IsEmpty())
+        {
+            for (TActorIterator<AActor> It(PieWorld); It; ++It)
+            {
+                AActor* A = *It;
+                if (A && (A->GetName() == ActorName || A->GetActorNameOrLabel() == ActorName))
+                {
+                    TargetActor = A;
+                    break;
+                }
+            }
+            if (!TargetActor)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Actor '%s' not found in the PIE world."), *ActorName),
+                    TEXT("ACTOR_NOT_FOUND"));
+                return true;
+            }
+        }
+        else
+        {
+            APlayerController* PC = PieWorld->GetFirstPlayerController();
+            TargetActor = PC ? PC->GetPawn() : nullptr;
+            if (!TargetActor)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("No 'actorName' given and no player pawn found in PIE."),
+                    TEXT("ACTOR_NOT_FOUND"));
+                return true;
+            }
+        }
+
+        // Resolve the ASC. GAS commonly hangs the ASC off the PlayerState (player) or
+        // directly on the actor (enemies), so check the actor first, then walk
+        // pawn <-> controller <-> playerstate.
+        auto TryGetASC = [](AActor* A) -> UAbilitySystemComponent*
+        {
+            if (!A) return nullptr;
+            if (IAbilitySystemInterface* Iface = Cast<IAbilitySystemInterface>(A))
+            {
+                if (UAbilitySystemComponent* C = Iface->GetAbilitySystemComponent()) return C;
+            }
+            return A->FindComponentByClass<UAbilitySystemComponent>();
+        };
+        UAbilitySystemComponent* ASC = TryGetASC(TargetActor);
+        AActor* AscOwner = ASC ? TargetActor : nullptr;
+        if (!ASC)
+        {
+            if (APawn* Pawn = Cast<APawn>(TargetActor))
+            {
+                if ((ASC = TryGetASC(Pawn->GetPlayerState()))) AscOwner = Pawn->GetPlayerState();
+                else if ((ASC = TryGetASC(Pawn->GetController()))) AscOwner = Pawn->GetController();
+            }
+            else if (AController* Ctrl = Cast<AController>(TargetActor))
+            {
+                if ((ASC = TryGetASC(Ctrl->PlayerState))) AscOwner = Ctrl->PlayerState;
+                else if ((ASC = TryGetASC(Ctrl->GetPawn()))) AscOwner = Ctrl->GetPawn();
+            }
+        }
+        if (!ASC)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Actor '%s' (and its pawn/controller/playerstate) has no AbilitySystemComponent."), *TargetActor->GetName()),
+                TEXT("NO_ASC"));
+            return true;
+        }
+
+        // Match the attribute by name; collect the rest to guide the caller on a miss.
+        TArray<FGameplayAttribute> AllAttrs;
+        ASC->GetAllAttributes(AllAttrs);
+        FGameplayAttribute Matched;
+        TArray<TSharedPtr<FJsonValue>> AvailableJson;
+        for (const FGameplayAttribute& Attr : AllAttrs)
+        {
+            const FString AttrName = Attr.GetName();
+            AvailableJson.Add(MakeShared<FJsonValueString>(AttrName));
+            if (!Matched.IsValid() && AttrName.Equals(AttributeName, ESearchCase::IgnoreCase))
+            {
+                Matched = Attr;
+            }
+        }
+        if (!Matched.IsValid())
+        {
+            TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
+            Err->SetStringField(TEXT("actor"), TargetActor->GetName());
+            Err->SetArrayField(TEXT("availableAttributes"), AvailableJson);
+            SendAutomationResponse(RequestingSocket, RequestId, false,
+                FString::Printf(TEXT("Attribute '%s' not found on '%s'."), *AttributeName, *TargetActor->GetName()),
+                Err, TEXT("ATTRIBUTE_NOT_FOUND"));
+            return true;
+        }
+
+        bool bFound = false;
+        const float CurrentValue = ASC->GetGameplayAttributeValue(Matched, bFound);
+        const float BaseValue = ASC->GetNumericAttributeBase(Matched);
+
+        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+        Result->SetBoolField(TEXT("success"), true);
+        Result->SetStringField(TEXT("actor"), TargetActor->GetName());
+        Result->SetStringField(TEXT("ascOwner"), AscOwner ? AscOwner->GetName() : TargetActor->GetName());
+        Result->SetStringField(TEXT("attribute"), Matched.GetName());
+        Result->SetNumberField(TEXT("value"), CurrentValue);
+        Result->SetNumberField(TEXT("baseValue"), BaseValue);
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Attribute value"), Result, FString());
+        return true;
+    }
+
     if (SubAction == TEXT("get_gas_info"))
     {
         if (AssetPath.IsEmpty())
@@ -2242,6 +3157,22 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         Result->SetStringField(TEXT("assetPath"), AssetPath);
         Result->SetStringField(TEXT("assetName"), Asset->GetName());
         Result->SetStringField(TEXT("class"), Asset->GetClass()->GetName());
+
+        constexpr int32 MaxListItems = 64;
+        auto AddTagsField = [&Result](const TCHAR* FieldName, const FGameplayTagContainer& Tags)
+        {
+            TArray<TSharedPtr<FJsonValue>> TagsJson;
+            for (const FGameplayTag& Tag : Tags)
+            {
+                if (TagsJson.Num() >= MaxListItems)
+                {
+                    Result->SetBoolField(FString(FieldName) + TEXT("Truncated"), true);
+                    break;
+                }
+                TagsJson.Add(MakeShared<FJsonValueString>(Tag.ToString()));
+            }
+            Result->SetArrayField(FieldName, TagsJson);
+        };
 
         if (UBlueprint* Blueprint = Cast<UBlueprint>(Asset))
         {
@@ -2267,24 +3198,38 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                             // Use string literals - GET_MEMBER_NAME_CHECKED doesn't work for protected members
                             TEnumAsByte<EGameplayAbilityInstancingPolicy::Type> InstPolicy;
                             TEnumAsByte<EGameplayAbilityNetExecutionPolicy::Type> NetPolicy;
-                            
+
                             if (GetAbilityPropertyValue(AbilityCDO, FName(TEXT("InstancingPolicy")), InstPolicy))
                             {
-                                Result->SetNumberField(TEXT("instancingPolicy"), static_cast<int32>(InstPolicy));
+                                Result->SetStringField(TEXT("instancingPolicy"),
+                                    StaticEnum<EGameplayAbilityInstancingPolicy::Type>()->GetNameStringByValue(static_cast<int64>(InstPolicy.GetValue())));
                             }
-                            else
-                            {
-                                Result->SetNumberField(TEXT("instancingPolicy"), -1);
-                            }
-                            
+
                             if (GetAbilityPropertyValue(AbilityCDO, FName(TEXT("NetExecutionPolicy")), NetPolicy))
                             {
-                                Result->SetNumberField(TEXT("netExecutionPolicy"), static_cast<int32>(NetPolicy));
+                                Result->SetStringField(TEXT("netExecutionPolicy"),
+                                    StaticEnum<EGameplayAbilityNetExecutionPolicy::Type>()->GetNameStringByValue(static_cast<int64>(NetPolicy.GetValue())));
                             }
-                            else
+
+                            TSubclassOf<UGameplayEffect> CostEffectClass;
+                            if (GetAbilityPropertyValue(AbilityCDO, FName(TEXT("CostGameplayEffectClass")), CostEffectClass) && CostEffectClass.Get())
                             {
-                                Result->SetNumberField(TEXT("netExecutionPolicy"), -1);
+                                Result->SetStringField(TEXT("costGameplayEffectClass"), CostEffectClass.Get()->GetPathName());
                             }
+
+                            TSubclassOf<UGameplayEffect> CooldownEffectClass;
+                            if (GetAbilityPropertyValue(AbilityCDO, FName(TEXT("CooldownGameplayEffectClass")), CooldownEffectClass) && CooldownEffectClass.Get())
+                            {
+                                Result->SetStringField(TEXT("cooldownGameplayEffectClass"), CooldownEffectClass.Get()->GetPathName());
+                            }
+
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
+                            AddTagsField(TEXT("abilityTags"), AbilityCDO->GetAssetTags());
+#else
+                            PRAGMA_DISABLE_DEPRECATION_WARNINGS
+                            AddTagsField(TEXT("abilityTags"), AbilityCDO->AbilityTags);
+                            PRAGMA_ENABLE_DEPRECATION_WARNINGS
+#endif
                         }
                     }
                     else if (ParentClass->IsChildOf(UGameplayEffect::StaticClass()))
@@ -2295,25 +3240,113 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                             Blueprint->GeneratedClass->GetDefaultObject());
                         if (EffectCDO)
                         {
-                            Result->SetNumberField(TEXT("durationPolicy"),
-                                static_cast<int32>(EffectCDO->DurationPolicy));
+                            Result->SetStringField(TEXT("durationPolicy"),
+                                StaticEnum<EGameplayEffectDurationType>()->GetNameStringByValue(static_cast<int64>(EffectCDO->DurationPolicy)));
                             // UE 5.7+: StackingType is deprecated but GetStackingType() isn't exported
                             // Use deprecation suppression to access the property directly
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
                             PRAGMA_DISABLE_DEPRECATION_WARNINGS
 #endif
-                            Result->SetNumberField(TEXT("stackingType"),
-                                static_cast<int32>(EffectCDO->StackingType));
+                            const EGameplayEffectStackingType StackingTypeValue = EffectCDO->StackingType;
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
                             PRAGMA_ENABLE_DEPRECATION_WARNINGS
 #endif
+                            Result->SetStringField(TEXT("stackingType"),
+                                StaticEnum<EGameplayEffectStackingType>()->GetNameStringByValue(static_cast<int64>(StackingTypeValue)));
                             Result->SetNumberField(TEXT("modifierCount"), EffectCDO->Modifiers.Num());
                             Result->SetNumberField(TEXT("cueCount"), EffectCDO->GameplayCues.Num());
+
+                            // Curve-scaled values are reported at level 0.
+                            if (EffectCDO->DurationPolicy == EGameplayEffectDurationType::HasDuration)
+                            {
+                                Result->SetStringField(TEXT("durationMagnitudeType"),
+                                    StaticEnum<EGameplayEffectMagnitudeCalculation>()->GetNameStringByValue(
+                                        static_cast<int64>(EffectCDO->DurationMagnitude.GetMagnitudeCalculationType())));
+                                float DurationValue = 0.0f;
+                                if (EffectCDO->DurationMagnitude.GetStaticMagnitudeIfPossible(0.0f, DurationValue))
+                                {
+                                    Result->SetNumberField(TEXT("duration"), DurationValue);
+                                }
+                            }
+                            Result->SetNumberField(TEXT("period"), EffectCDO->Period.GetValueAtLevel(0.0f));
+
+                            TArray<TSharedPtr<FJsonValue>> ModifiersJson;
+                            const int32 ReportedModifiers = FMath::Min(EffectCDO->Modifiers.Num(), MaxListItems);
+                            for (int32 Index = 0; Index < ReportedModifiers; ++Index)
+                            {
+                                const FGameplayModifierInfo& Modifier = EffectCDO->Modifiers[Index];
+                                TSharedPtr<FJsonObject> ModifierJson = MakeShared<FJsonObject>();
+                                ModifierJson->SetStringField(TEXT("attribute"),
+                                    Modifier.Attribute.IsValid() ? Modifier.Attribute.GetName() : FString(TEXT("None")));
+                                ModifierJson->SetStringField(TEXT("op"),
+                                    StaticEnum<EGameplayModOp::Type>()->GetNameStringByValue(static_cast<int64>(Modifier.ModifierOp.GetValue())));
+                                const EGameplayEffectMagnitudeCalculation MagnitudeType = Modifier.ModifierMagnitude.GetMagnitudeCalculationType();
+                                ModifierJson->SetStringField(TEXT("magnitudeType"),
+                                    StaticEnum<EGameplayEffectMagnitudeCalculation>()->GetNameStringByValue(static_cast<int64>(MagnitudeType)));
+                                if (MagnitudeType == EGameplayEffectMagnitudeCalculation::SetByCaller)
+                                {
+                                    const FSetByCallerFloat& SetByCaller = Modifier.ModifierMagnitude.GetSetByCallerFloat();
+                                    ModifierJson->SetStringField(TEXT("setByCallerTag"),
+                                        SetByCaller.DataTag.IsValid() ? SetByCaller.DataTag.ToString() : SetByCaller.DataName.ToString());
+                                }
+                                else
+                                {
+                                    float MagnitudeValue = 0.0f;
+                                    if (Modifier.ModifierMagnitude.GetStaticMagnitudeIfPossible(0.0f, MagnitudeValue))
+                                    {
+                                        ModifierJson->SetNumberField(TEXT("value"), MagnitudeValue);
+                                    }
+                                }
+                                ModifiersJson.Add(MakeShared<FJsonValueObject>(ModifierJson));
+                            }
+                            Result->SetArrayField(TEXT("modifiers"), ModifiersJson);
+                            Result->SetBoolField(TEXT("modifiersTruncated"), EffectCDO->Modifiers.Num() > MaxListItems);
+
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
+                            AddTagsField(TEXT("assetTags"), EffectCDO->GetAssetTags());
+                            AddTagsField(TEXT("grantedTags"), EffectCDO->GetGrantedTags());
+#endif
+                            // set_effect_tags writes the legacy inheritable containers; the cached
+                            // (effective) containers above only pick that up after a compile
+                            // migrates it into GEComponents. Expose both surfaces.
+                            PRAGMA_DISABLE_DEPRECATION_WARNINGS
+                            AddTagsField(TEXT("authoredAssetTags"), EffectCDO->InheritableGameplayEffectTags.CombinedTags);
+                            AddTagsField(TEXT("authoredGrantedTags"), EffectCDO->InheritableOwnedTagsContainer.CombinedTags);
+                            PRAGMA_ENABLE_DEPRECATION_WARNINGS
                         }
                     }
                     else if (ParentClass->IsChildOf(UAttributeSet::StaticClass()))
                     {
                         Result->SetStringField(TEXT("gasType"), TEXT("AttributeSet"));
+
+                        const UAttributeSet* AttrSetCDO = Cast<UAttributeSet>(
+                            Blueprint->GeneratedClass->GetDefaultObject());
+                        if (AttrSetCDO)
+                        {
+                            TArray<TSharedPtr<FJsonValue>> AttributesJson;
+                            int32 AttributeCount = 0;
+                            for (TFieldIterator<FStructProperty> It(Blueprint->GeneratedClass); It; ++It)
+                            {
+                                if (!FGameplayAttribute::IsGameplayAttributeDataProperty(*It))
+                                {
+                                    continue;
+                                }
+                                ++AttributeCount;
+                                if (AttributesJson.Num() >= MaxListItems)
+                                {
+                                    continue;
+                                }
+                                const FGameplayAttributeData* AttrData = It->ContainerPtrToValuePtr<FGameplayAttributeData>(AttrSetCDO);
+                                TSharedPtr<FJsonObject> AttrJson = MakeShared<FJsonObject>();
+                                AttrJson->SetStringField(TEXT("name"), It->GetName());
+                                AttrJson->SetNumberField(TEXT("baseValue"), AttrData->GetBaseValue());
+                                AttrJson->SetNumberField(TEXT("currentValue"), AttrData->GetCurrentValue());
+                                AttributesJson.Add(MakeShared<FJsonValueObject>(AttrJson));
+                            }
+                            Result->SetArrayField(TEXT("attributes"), AttributesJson);
+                            Result->SetNumberField(TEXT("attributeCount"), AttributeCount);
+                            Result->SetBoolField(TEXT("attributesTruncated"), AttributeCount > MaxListItems);
+                        }
                     }
                     else if (ParentClass->IsChildOf(UGameplayCueNotify_Static::StaticClass()))
                     {
@@ -2338,10 +3371,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     // create_ability_set - Create UGameplayAbilitySet (data asset with granted abilities)
     if (SubAction == TEXT("create_ability_set"))
     {
-        FString SetPath = GetStringFieldGAS(Payload, TEXT("setPath"));
+        FString SetPath = GetJsonStringField(Payload, TEXT("setPath"));
         if (SetPath.IsEmpty())
         {
-            SetPath = GetStringFieldGAS(Payload, TEXT("assetPath"));
+            SetPath = GetJsonStringField(Payload, TEXT("assetPath"));
         }
         if (SetPath.IsEmpty())
         {
@@ -2446,7 +3479,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
         StringType.PinCategory = UEdGraphSchema_K2::PC_String;
         FBlueprintEditorUtils::AddMemberVariable(SetBlueprint, TEXT("SetDisplayName"), StringType);
 
-        FString SetName = GetStringFieldGAS(Payload, TEXT("setName"));
+        FString SetName = GetJsonStringField(Payload, TEXT("setName"));
         if (SetName.IsEmpty())
         {
             SetName = AssetName;
@@ -2476,17 +3509,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     // add_ability - Add ability class reference to ability set
     if (SubAction == TEXT("add_ability"))
     {
-        FString SetPath = GetStringFieldGAS(Payload, TEXT("setPath"));
+        FString SetPath = GetJsonStringField(Payload, TEXT("setPath"));
         if (SetPath.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("Missing setPath"), TEXT("INVALID_ARGUMENT"));
             return true;
         }
 
-        FString AbilityPath = GetStringFieldGAS(Payload, TEXT("abilityPath"));
+        FString AbilityPath = GetJsonStringField(Payload, TEXT("abilityPath"));
         if (AbilityPath.IsEmpty())
         {
-            AbilityPath = GetStringFieldGAS(Payload, TEXT("abilityClass"));
+            AbilityPath = GetJsonStringField(Payload, TEXT("abilityClass"));
         }
         if (AbilityPath.IsEmpty())
         {
@@ -2523,31 +3556,94 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        // Find the GrantedAbilities variable and add to its default value
-        // This is complex because we need to modify the CDO's array
-        // For simplicity, we'll add a note that the array should be configured in editor
-        
-        // Mark as modified
-        FBlueprintEditorUtils::MarkBlueprintAsModified(SetBlueprint);
-        McpSafeAssetSave(SetBlueprint);
+        // The GrantedAbilities variable reaches the generated class only after a compile.
+        FProperty* GrantedProp = SetBlueprint->GeneratedClass
+            ? SetBlueprint->GeneratedClass->FindPropertyByName(TEXT("GrantedAbilities"))
+            : nullptr;
+        if (!GrantedProp)
+        {
+            McpSafeCompileBlueprint(SetBlueprint);
+            GrantedProp = SetBlueprint->GeneratedClass
+                ? SetBlueprint->GeneratedClass->FindPropertyByName(TEXT("GrantedAbilities"))
+                : nullptr;
+        }
+
+        FArrayProperty* GrantedArrayProp = CastField<FArrayProperty>(GrantedProp);
+        if (!GrantedArrayProp)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("'%s' has no GrantedAbilities array property. Create the set via create_ability_set."), *SetPath),
+                TEXT("PROPERTY_NOT_FOUND"));
+            return true;
+        }
+
+        FSoftClassProperty* SoftClassInner = CastField<FSoftClassProperty>(GrantedArrayProp->Inner);
+        FClassProperty* ClassInner = CastField<FClassProperty>(GrantedArrayProp->Inner);
+        if (!SoftClassInner && !ClassInner)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("GrantedAbilities on '%s' is not a class or soft-class array."), *SetPath),
+                TEXT("INVALID_TYPE"));
+            return true;
+        }
+
+        UObject* SetCDO = SetBlueprint->GeneratedClass->GetDefaultObject();
+        FScriptArrayHelper ArrayHelper(GrantedArrayProp, GrantedArrayProp->ContainerPtrToValuePtr<void>(SetCDO));
+
+        const FSoftObjectPath AbilityObjectPath(AbilityClass);
+        bool bAlreadyPresent = false;
+        for (int32 Index = 0; Index < ArrayHelper.Num() && !bAlreadyPresent; ++Index)
+        {
+            if (SoftClassInner)
+            {
+                bAlreadyPresent = SoftClassInner->GetPropertyValue(ArrayHelper.GetRawPtr(Index)).GetUniqueID() == AbilityObjectPath;
+            }
+            else
+            {
+                bAlreadyPresent = ClassInner->GetObjectPropertyValue(ArrayHelper.GetRawPtr(Index)) == AbilityClass;
+            }
+        }
+
+        bool bSaved = true;
+        if (!bAlreadyPresent)
+        {
+            SetCDO->Modify();
+            SetBlueprint->Modify();
+            const int32 NewIndex = ArrayHelper.AddValue();
+            if (SoftClassInner)
+            {
+                SoftClassInner->SetPropertyValue(ArrayHelper.GetRawPtr(NewIndex), FSoftObjectPtr(AbilityObjectPath));
+            }
+            else
+            {
+                ClassInner->SetObjectPropertyValue(ArrayHelper.GetRawPtr(NewIndex), AbilityClass);
+            }
+        }
+        const int32 GrantedCount = ArrayHelper.Num();
+        if (!bAlreadyPresent)
+        {
+            bSaved = McpFinalizeBlueprint(SetBlueprint, /*bStructural=*/false, /*bSave=*/true);
+        }
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("setPath"), SetPath);
-        Result->SetStringField(TEXT("abilityPath"), AbilityPath);
-        Result->SetStringField(TEXT("abilityClass"), AbilityClass->GetName());
-        Result->SetStringField(TEXT("note"), TEXT("Ability reference validated. Add to GrantedAbilities array in the Data Asset editor."));
-
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Ability validated for set"), Result);
+        Result->SetStringField(TEXT("abilityClass"), AbilityClass->GetPathName());
+        Result->SetStringField(TEXT("arrayProperty"), TEXT("GrantedAbilities"));
+        Result->SetBoolField(TEXT("alreadyPresent"), bAlreadyPresent);
+        Result->SetNumberField(TEXT("grantedAbilityCount"), GrantedCount);
+        Result->SetBoolField(TEXT("saved"), bSaved);
+        SendAutomationResponse(RequestingSocket, RequestId, true,
+            bAlreadyPresent ? TEXT("Ability already in set") : TEXT("Ability added to set"), Result);
         return true;
     }
 
     // grant_ability - Grant ability to actor's AbilitySystemComponent at runtime
     if (SubAction == TEXT("grant_ability"))
     {
-        FString ActorPath = GetStringFieldGAS(Payload, TEXT("actorPath"));
+        FString ActorPath = GetJsonStringField(Payload, TEXT("actorPath"));
         if (ActorPath.IsEmpty())
         {
-            ActorPath = GetStringFieldGAS(Payload, TEXT("blueprintPath"));
+            ActorPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
         }
         if (ActorPath.IsEmpty())
         {
@@ -2555,10 +3651,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        FString AbilityPath = GetStringFieldGAS(Payload, TEXT("abilityPath"));
+        FString AbilityPath = GetJsonStringField(Payload, TEXT("abilityPath"));
         if (AbilityPath.IsEmpty())
         {
-            AbilityPath = GetStringFieldGAS(Payload, TEXT("abilityClass"));
+            AbilityPath = GetJsonStringField(Payload, TEXT("abilityClass"));
         }
         if (AbilityPath.IsEmpty())
         {
@@ -2633,49 +3729,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
             return true;
         }
 
-        // To grant abilities at design time, we need to add them to the ASC's DefaultAbilitiesGranted
-        // or use a custom initialization. For now, we'll add a variable to track granted abilities.
-        
-        // Check if GrantedAbilities variable exists
-        bool bHasGrantedVar = false;
-        for (const FBPVariableDescription& VarDesc : ActorBlueprint->NewVariables)
-        {
-            if (VarDesc.VarName == TEXT("InitialAbilities"))
-            {
-                bHasGrantedVar = true;
-                break;
-            }
-        }
-
-        if (!bHasGrantedVar)
-        {
-            // Add InitialAbilities array variable
-            FEdGraphPinType AbilityArrayType;
-            AbilityArrayType.PinCategory = UEdGraphSchema_K2::PC_SoftClass;
-            AbilityArrayType.PinSubCategoryObject = UGameplayAbility::StaticClass();
-            AbilityArrayType.ContainerType = EPinContainerType::Array;
-            
-            FBlueprintEditorUtils::AddMemberVariable(ActorBlueprint, TEXT("InitialAbilities"), AbilityArrayType);
-            FBlueprintEditorUtils::SetBlueprintVariableCategory(ActorBlueprint, TEXT("InitialAbilities"), nullptr, 
-                FText::FromString(TEXT("GAS")));
-        }
-
-        int32 AbilityLevel = static_cast<int32>(GetNumberFieldGAS(Payload, TEXT("abilityLevel"), 1.0));
-        int32 InputID = static_cast<int32>(GetNumberFieldGAS(Payload, TEXT("inputID"), -1.0));
-
-        FBlueprintEditorUtils::MarkBlueprintAsModified(ActorBlueprint);
-        McpSafeAssetSave(ActorBlueprint);
-
-        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetStringField(TEXT("actorPath"), ActorPath);
-        Result->SetStringField(TEXT("abilityClass"), AbilityClass->GetName());
-        Result->SetNumberField(TEXT("abilityLevel"), AbilityLevel);
-        Result->SetNumberField(TEXT("inputID"), InputID);
-        Result->SetBoolField(TEXT("hasASC"), bHasASC);
-        Result->SetBoolField(TEXT("createdInitialAbilitiesVar"), !bHasGrantedVar);
-        Result->SetStringField(TEXT("note"), TEXT("Add ability to InitialAbilities array. Call GiveAbility on ASC in BeginPlay to grant."));
-
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Ability grant configured"), Result);
+        // This created an EMPTY InitialAbilities array variable but never inserted the requested ability,
+        // then reported "grant configured". Actually granting means writing the ability into an array
+        // default (or calling GiveAbility at runtime) — unbuilt. Fail honestly. (ASC presence verified above.)
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("grant_ability is not implemented: it does not grant '%s'. Grant at runtime "
+                "by calling GiveAbility on the AbilitySystemComponent in BeginPlay, or populate the actor's "
+                "ability-array default via set_default / set_asset_property on the CDO."), *AbilityClass->GetName()),
+            TEXT("NOT_IMPLEMENTED"));
         return true;
     }
 
@@ -2738,9 +3799,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
                 FText::FromString(TEXT("Execution Calculation")));
 
 
-            FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-            McpSafeCompileBlueprint(Blueprint);
-            McpSafeAssetSave(Blueprint);
+            McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
         }
 
         // Use the actual blueprint name (which may have been sanitized) in the response
@@ -2776,6 +3835,6 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
-#undef GetStringFieldGAS
-#undef GetNumberFieldGAS
-#undef GetBoolFieldGAS
+#undef GetJsonStringField
+#undef GetJsonNumberField
+#undef GetJsonBoolField

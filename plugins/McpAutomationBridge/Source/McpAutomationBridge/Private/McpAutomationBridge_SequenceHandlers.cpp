@@ -46,6 +46,7 @@
 #include "McpAutomationBridgeSubsystem.h"
 #include "MovieScene.h"
 #include "MovieSceneBinding.h"
+#include "MovieSceneBindingReferences.h"
 #include "MovieSceneSection.h"
 #include "MovieSceneSequence.h"
 #include "MovieSceneTrack.h"
@@ -178,7 +179,7 @@ UMcpAutomationBridgeSubsystem::EnsureSequenceEntry(const FString &SeqPath) {
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceCreate(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   // Runtime check: Verify LevelSequenceEditor module is loaded
   // This handles the case where headers were available at compile time
@@ -296,7 +297,7 @@ if (NewObj) {
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceSetDisplayRate(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
@@ -387,7 +388,7 @@ if (bRateFound) {
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceSetProperties(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString SeqPath = ResolveSequencePath(LocalPayload);
@@ -522,7 +523,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetProperties(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceOpen(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString SeqPath = ResolveSequencePath(LocalPayload);
@@ -598,7 +599,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceOpen(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceAddCamera(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString SeqPath = ResolveSequencePath(LocalPayload);
@@ -625,18 +626,43 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddCamera(
         CameraClass, FVector::ZeroVector, FRotator::ZeroRotator,
         TEXT("SequenceCamera"));
     if (Spawned) {
-      // Fix for Issue #6: Auto-bind the camera to the sequence
-      if (ULevelSequence *LevelSeq = Cast<ULevelSequence>(SeqObj)) {
-        if (UMovieScene *MovieScene = LevelSeq->GetMovieScene()) {
-          FGuid BindingGuid = MovieScene->AddPossessable(
-              Spawned->GetActorLabel(), Spawned->GetClass());
-          if (MovieScene->FindPossessable(BindingGuid)) {
-            MovieScene->Modify();
-            Resp->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());
-          }
-        }
+      ULevelSequence *LevelSeq = Cast<ULevelSequence>(SeqObj);
+      if (!LevelSeq) {
+        SendAutomationError(Socket, RequestId,
+                            TEXT("Sequence object is not a LevelSequence"),
+                            TEXT("INVALID_SEQUENCE"));
+        return true;
+      }
+      UMovieScene *MovieScene = LevelSeq->GetMovieScene();
+      if (!MovieScene) {
+        SendAutomationError(Socket, RequestId,
+                            TEXT("Sequence has no MovieScene"),
+                            TEXT("INVALID_SEQUENCE"));
+        return true;
       }
 
+      MovieScene->Modify();
+      FGuid BindingGuid = MovieScene->AddPossessable(Spawned->GetActorLabel(),
+                                                     Spawned->GetClass());
+      // AddPossessable only creates the MovieScene struct; the actor stays
+      // unbound until BindPossessableObject writes a binding reference.
+      LevelSeq->Modify();
+      LevelSeq->BindPossessableObject(
+          BindingGuid, *Spawned,
+          GEditor->GetEditorWorldContext().World());
+
+      const FMovieSceneBindingReferences *BindingRefs =
+          LevelSeq->GetBindingReferences();
+      if (!BindingRefs || !BindingRefs->HasBinding(BindingGuid)) {
+        SendAutomationError(
+            Socket, RequestId,
+            TEXT("Camera spawned but failed to bind to the sequence"),
+            TEXT("ADD_CAMERA_BIND_FAILED"));
+        return true;
+      }
+      LevelSeq->MarkPackageDirty();
+
+      Resp->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());
       Resp->SetBoolField(TEXT("success"), true);
       Resp->SetStringField(TEXT("actorLabel"), Spawned->GetActorLabel());
       SendAutomationResponse(Socket, RequestId, true,
@@ -664,7 +690,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddCamera(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequencePlay(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString SeqPath = ResolveSequencePath(LocalPayload);
@@ -703,7 +729,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequencePlay(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceAddActor(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString ActorName;
@@ -743,7 +769,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddActor(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceAddActors(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   const TArray<TSharedPtr<FJsonValue>> *Arr = nullptr;
@@ -805,16 +831,27 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddActors(
         if (ULevelSequence *LevelSeq = Cast<ULevelSequence>(SeqObj)) {
           UMovieScene *MovieScene = LevelSeq->GetMovieScene();
           if (MovieScene) {
+            MovieScene->Modify();
             FGuid BindingGuid = MovieScene->AddPossessable(
                 Found->GetActorLabel(), Found->GetClass());
-            if (MovieScene->FindPossessable(BindingGuid)) {
+            // AddPossessable only creates the MovieScene struct; the actor
+            // stays unbound until BindPossessableObject writes a binding
+            // reference.
+            LevelSeq->Modify();
+            LevelSeq->BindPossessableObject(
+                BindingGuid, *Found,
+                GEditor->GetEditorWorldContext().World());
+
+            const FMovieSceneBindingReferences *BindingRefs =
+                LevelSeq->GetBindingReferences();
+            if (BindingRefs && BindingRefs->HasBinding(BindingGuid)) {
+              LevelSeq->MarkPackageDirty();
               Item->SetBoolField(TEXT("success"), true);
               Item->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());
-              MovieScene->Modify();
             } else {
               Item->SetBoolField(TEXT("success"), false);
-              Item->SetStringField(
-                  TEXT("error"), TEXT("Failed to create possessable binding"));
+              Item->SetStringField(TEXT("error"),
+                                   TEXT("Failed to bind actor to sequence"));
             }
           } else {
             Item->SetBoolField(TEXT("success"), false);
@@ -855,7 +892,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddActors(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceAddSpawnable(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString ClassName;
@@ -939,7 +976,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddSpawnable(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceRemoveActors(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   const TArray<TSharedPtr<FJsonValue>> *Arr = nullptr;
@@ -1056,7 +1093,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceRemoveActors(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceGetBindings(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString SeqPath = ResolveSequencePath(LocalPayload);
@@ -1116,7 +1153,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceGetBindings(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceGetProperties(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString SeqPath = ResolveSequencePath(LocalPayload);
@@ -1172,7 +1209,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceGetProperties(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceSetPlaybackSpeed(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   double Speed = 1.0;
@@ -1216,11 +1253,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetPlaybackSpeed(
       // Note: dynamic_cast doesn't work with /GR- compiler flag in UE 5.7+
       if (ILevelSequenceEditorToolkit *LSEditor =
               static_cast<ILevelSequenceEditorToolkit *>(Editor)) {
-        if (LSEditor->GetSequencer().IsValid()) {
-          UE_LOG(LogMcpAutomationBridgeSubsystem, Display,
-                 TEXT("HandleSequenceSetPlaybackSpeed: Setting speed to %.2f"),
-                 Speed);
-          LSEditor->GetSequencer()->SetPlaybackSpeed(static_cast<float>(Speed));
+		if (LSEditor->GetSequencer().IsValid()) {
+				LSEditor->GetSequencer()->SetPlaybackSpeed(static_cast<float>(Speed));
           Subsystem->SendAutomationResponse(
               Socket, RequestIdArg, true,
               FString::Printf(TEXT("Playback speed set to %.2f"), Speed),
@@ -1252,7 +1286,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetPlaybackSpeed(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequencePause(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString SeqPath = ResolveSequencePath(LocalPayload);
@@ -1294,7 +1328,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequencePause(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceStop(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString SeqPath = ResolveSequencePath(LocalPayload);
@@ -1348,7 +1382,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceStop(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceList(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   TArray<TSharedPtr<FJsonValue>> SequencesArray;
@@ -1401,7 +1435,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceList(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceDuplicate(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString SourcePath;
@@ -1458,7 +1492,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceDuplicate(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceRename(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString Path;
@@ -1502,7 +1536,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceRename(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceDelete(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString Path;
@@ -1546,7 +1580,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceDelete(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceGetMetadata(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString SeqPath = ResolveSequencePath(LocalPayload);
@@ -1581,7 +1615,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceGetMetadata(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString SeqPath = ResolveSequencePath(LocalPayload);
@@ -1876,7 +1910,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceAddSection(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString SeqPath = ResolveSequencePath(Payload);
   if (SeqPath.IsEmpty()) {
@@ -1986,7 +2020,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddSection(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTickResolution(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString ResolutionStr;
   Payload->TryGetStringField(TEXT("resolution"), ResolutionStr);
@@ -2051,7 +2085,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTickResolution(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceSetViewRange(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   double Start = 0;
   double End = 10;
@@ -2083,7 +2117,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetViewRange(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackMuted(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString SeqPath = ResolveSequencePath(Payload);
   if (SeqPath.IsEmpty()) {
@@ -2157,7 +2191,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackMuted(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackSolo(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   // Note: UE doesn't have a direct "solo" property on tracks, but we can
   // simulate it by muting all other tracks
@@ -2213,23 +2247,35 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackSolo(
     return true;
   }
 
-  // If enabling solo, mute all other tracks; if disabling, unmute all
+  int32 AffectedTrackCount = 0;
+  int32 DisabledOtherTrackCount = 0;
+
+  // If enabling solo, disable evaluation on every other track; if disabling, re-enable all tracks.
   for (UMovieSceneTrack *Track : AllTracks) {
+    if (!Track) {
+      continue;
+    }
     if (bSolo) {
-      Track->SetEvalDisabled(Track != SoloTrack);
+      const bool bDisableTrack = Track != SoloTrack;
+      Track->SetEvalDisabled(bDisableTrack);
+      if (bDisableTrack) {
+        ++DisabledOtherTrackCount;
+      }
     } else {
       Track->SetEvalDisabled(false);
     }
+    ++AffectedTrackCount;
   }
   MovieScene->Modify();
 
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetStringField(TEXT("trackName"), SoloTrack->GetName());
   Resp->SetBoolField(TEXT("solo"), bSolo);
-  Resp->SetStringField(TEXT("note"), TEXT("Solo is simulated by muting all other tracks. Unreal Engine does not have native track solo support."));
+  Resp->SetNumberField(TEXT("affectedTrackCount"), AffectedTrackCount);
+  Resp->SetNumberField(TEXT("disabledOtherTrackCount"), DisabledOtherTrackCount);
   SendAutomationResponse(
       Socket, RequestId, true,
-      bSolo ? TEXT("Track solo enabled (simulated via muting other tracks)") : TEXT("Solo disabled (all tracks unmuted)"), Resp);
+      bSolo ? TEXT("Track solo enabled by disabling evaluation on other tracks") : TEXT("Solo disabled; all tracks evaluation-enabled"), Resp);
   return true;
 #else
   SendAutomationResponse(Socket, RequestId, false,
@@ -2241,7 +2287,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackSolo(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackLocked(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString SeqPath = ResolveSequencePath(Payload);
   if (SeqPath.IsEmpty()) {
@@ -2320,7 +2366,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackLocked(
 
 bool UMcpAutomationBridgeSubsystem::HandleSequenceRemoveTrack(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket) {
+    FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString SeqPath = ResolveSequencePath(Payload);
   if (SeqPath.IsEmpty()) {
@@ -2393,7 +2439,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceRemoveTrack(
 bool UMcpAutomationBridgeSubsystem::HandleSequenceAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   // Also handle manage_sequence which acts as a dispatcher for sub-actions
   if (!Lower.StartsWith(TEXT("sequence_")) &&
@@ -2818,10 +2864,18 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAction(
 #endif
   }
 
+  FString AttemptedAction = Action;
+  if (Payload.IsValid())
+  {
+    Payload->TryGetStringField(TEXT("action"), AttemptedAction);
+  }
   SendAutomationResponse(
       RequestingSocket, RequestId, false,
-      FString::Printf(TEXT("Sequence action not implemented by plugin: %s"),
-                      *Action),
-      nullptr, TEXT("NOT_IMPLEMENTED"));
+      FString::Printf(TEXT("Unknown manage_sequence action '%s'. To create a Level "
+                           "Sequence use action 'create' (or 'sequence_create'); "
+                           "other actions are sequence_add_actor / sequence_add_camera / "
+                           "sequence_open / sequence_play / sequence_list / etc."),
+                      *AttemptedAction),
+      nullptr, TEXT("UNKNOWN_ACTION"));
   return true;
 }

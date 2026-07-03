@@ -1,0 +1,19 @@
+{
+  "name": "Pause menu - gamepad golden path",
+  "description": "Open the pause menu via TogglePause, confirm it is the active screen, drive one gamepad nav, and confirm focus sits on a volume row's inner AnalogSlider (named VolumeSlider). Green since 2026-06-09: WBP_VolumeSlider is focusable with its own DesiredFocusWidget pointed at the inner slider, so the engine's UUserWidget focus relay (UserWidget.cpp NativeOnFocusReceived) forwards the router's desired-target focus from the wrapper row to the real slider. If this spec goes red again, either the pause screen's DesiredFocusWidget no longer targets a slider row, or the row widget lost bIsFocusable / its relay target - the exact nav-rot this layer exists to catch.",
+  "steps": [
+    { "do": "play" },
+    { "do": "wait", "ms": 4000 },
+    { "do": "resolvePC" },
+    { "do": "call", "function": "TogglePause" },
+    { "do": "wait", "ms": 1500 },
+    { "assert": "inPie", "equals": true },
+    { "assert": "stackContains", "value": "WBP_PauseScreen_C" },
+    { "do": "nav", "direction": "Down", "device": "gamepad" },
+    { "do": "wait", "ms": 500 },
+    { "assert": "inputType", "equals": "Gamepad", "note": "deterministic since the simulate_nav inactive-input fix (2026-06-09)" },
+    { "assert": "focusedName", "value": "VolumeSlider", "note": "focus must sit on a row's inner AnalogSlider (all rows name it VolumeSlider); stackContains pins the screen" },
+    { "do": "call", "function": "TogglePause" },
+    { "do": "stop" }
+  ]
+}

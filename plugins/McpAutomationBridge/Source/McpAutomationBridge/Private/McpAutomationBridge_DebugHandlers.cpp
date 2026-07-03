@@ -34,6 +34,21 @@
 // Engine Includes
 // -----------------------------------------------------------------------------
 #include "Dom/JsonObject.h"
+#include "EngineUtils.h"
+#include "GameplayDebuggerCategory.h"
+#include "GameplayDebuggerCategoryReplicator.h"
+#include "GameplayDebuggerConfig.h"
+#if __has_include("GameplayDebuggerModule.h")
+#include "GameplayDebuggerModule.h"
+#define MCP_HAS_GAMEPLAY_DEBUGGER_MODULE_HEADER 1
+#else
+#define MCP_HAS_GAMEPLAY_DEBUGGER_MODULE_HEADER 0
+#endif
+#include "Modules/ModuleManager.h"
+
+#if WITH_EDITOR
+#include "Editor.h"
+#endif
 
 // =============================================================================
 // Handler Implementation
@@ -43,10 +58,11 @@ bool UMcpAutomationBridgeSubsystem::HandleDebugAction(
     const FString& RequestId, 
     const FString& Action, 
     const TSharedPtr<FJsonObject>& Payload, 
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Validate action
-    if (Action != TEXT("manage_debug"))
+    const FString LowerAction = Action.ToLower();
+    if (LowerAction != TEXT("manage_debug") && LowerAction != TEXT("spawn_category"))
     {
         return false;
     }
@@ -60,7 +76,16 @@ bool UMcpAutomationBridgeSubsystem::HandleDebugAction(
     }
 
     // Extract subaction
-    const FString SubAction = GetJsonStringField(Payload, TEXT("subAction"));
+    FString SubAction = GetJsonStringField(Payload, TEXT("subAction")).ToLower();
+    if (SubAction.IsEmpty())
+    {
+        Payload->TryGetStringField(TEXT("action"), SubAction);
+        SubAction = SubAction.ToLower();
+    }
+    if (SubAction.IsEmpty() && LowerAction == TEXT("spawn_category"))
+    {
+        SubAction = TEXT("spawn_category");
+    }
 
     // -------------------------------------------------------------------------
     // spawn_category: Toggle gameplay debugger category
@@ -104,37 +129,113 @@ bool UMcpAutomationBridgeSubsystem::HandleDebugAction(
             return true;
         }
 
-        // Guard GEngine before Exec call
-        if (!GEngine)
+        bool bEnabled = true;
+        Payload->TryGetBoolField(TEXT("enabled"), bEnabled);
+
+#if MCP_HAS_GAMEPLAY_DEBUGGER_MODULE_HEADER
+        FGameplayDebuggerModule* GameplayDebuggerModule =
+            FModuleManager::LoadModulePtr<FGameplayDebuggerModule>(TEXT("GameplayDebugger"));
+#else
+        const bool bGameplayDebuggerModuleLoaded = FModuleManager::Get().LoadModule(TEXT("GameplayDebugger")) != nullptr;
+#endif
+
+        bool bConfigUpdated = false;
+        bool bReplicatorUpdated = false;
+        int32 UpdatedReplicatorCount = 0;
+        int32 UpdatedCategoryIndex = INDEX_NONE;
+
+        if (UGameplayDebuggerConfig* Config = GetMutableDefault<UGameplayDebuggerConfig>())
         {
-            SendAutomationError(RequestingSocket, RequestId,
-                TEXT("Engine is not available."), TEXT("ENGINE_UNAVAILABLE"));
-            return true;
+            FGameplayDebuggerCategoryConfig* CategoryConfig = Config->Categories.FindByPredicate(
+                [&CategoryName](const FGameplayDebuggerCategoryConfig& Entry) {
+                    return Entry.CategoryName.Equals(CategoryName, ESearchCase::IgnoreCase);
+                });
+            if (!CategoryConfig)
+            {
+                CategoryConfig = &Config->Categories.AddDefaulted_GetRef();
+                CategoryConfig->CategoryName = CategoryName;
+            }
+
+            CategoryConfig->ActiveInGame = bEnabled
+                ? EGameplayDebuggerOverrideMode::Enable
+                : EGameplayDebuggerOverrideMode::Disable;
+            CategoryConfig->ActiveInSimulate = bEnabled
+                ? EGameplayDebuggerOverrideMode::Enable
+                : EGameplayDebuggerOverrideMode::Disable;
+            CategoryConfig->Hidden = EGameplayDebuggerOverrideMode::Disable;
+            bConfigUpdated = true;
         }
 
-        // Execute via console command for robustness
-        // Alternative: IGameplayDebugger::Get().ToggleCategory(CategoryName)
-        // requires "GameplayDebugger" module dependency
-        const FString Cmd = FString::Printf(TEXT("GameplayDebuggerCategory %s"), *CategoryName);
-        const bool bCommandExecuted = GEngine->Exec(nullptr, *Cmd);
-
-        // Check if command was executed successfully
-        if (!bCommandExecuted)
+#if MCP_HAS_GAMEPLAY_DEBUGGER_MODULE_HEADER
+        if (GameplayDebuggerModule)
         {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Failed to toggle gameplay debugger category: %s"), *CategoryName),
-                TEXT("COMMAND_EXECUTION_FAILED"));
-            return true;
+            GameplayDebuggerModule->NotifyCategoriesChanged();
+        }
+#endif
+
+        UWorld* World = nullptr;
+#if WITH_EDITOR
+        if (GEditor)
+        {
+            World = GEditor->PlayWorld.Get();
+            if (!World)
+            {
+                World = GEditor->GetEditorWorldContext().World();
+            }
+        }
+#endif
+        if (!World)
+        {
+            World = GetWorld();
+        }
+
+        if (World)
+        {
+            for (TActorIterator<AGameplayDebuggerCategoryReplicator> It(World); It; ++It)
+            {
+                AGameplayDebuggerCategoryReplicator* Replicator = *It;
+                if (!IsValid(Replicator))
+                {
+                    continue;
+                }
+
+                for (int32 CategoryIndex = 0; CategoryIndex < Replicator->GetNumCategories(); ++CategoryIndex)
+                {
+                    const FString ReplicatorCategoryName = Replicator->GetCategory(CategoryIndex)->GetCategoryName().ToString();
+                    if (ReplicatorCategoryName.Equals(CategoryName, ESearchCase::IgnoreCase))
+                    {
+                        Replicator->SetEnabled(true);
+                        Replicator->SetCategoryEnabled(CategoryIndex, bEnabled);
+                        Replicator->CollectCategoryData(false);
+                        bReplicatorUpdated = true;
+                        ++UpdatedReplicatorCount;
+                        UpdatedCategoryIndex = CategoryIndex;
+                        break;
+                    }
+                }
+            }
         }
 
         // Build response
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("categoryName"), CategoryName);
-        Result->SetStringField(TEXT("consoleCommand"), Cmd);
-        Result->SetBoolField(TEXT("commandExecuted"), true);
+        Result->SetBoolField(TEXT("enabled"), bEnabled);
+#if MCP_HAS_GAMEPLAY_DEBUGGER_MODULE_HEADER
+        Result->SetBoolField(TEXT("moduleLoaded"), GameplayDebuggerModule != nullptr);
+#else
+        Result->SetBoolField(TEXT("moduleLoaded"), bGameplayDebuggerModuleLoaded);
+#endif
+        Result->SetBoolField(TEXT("configUpdated"), bConfigUpdated);
+        Result->SetBoolField(TEXT("replicatorUpdated"), bReplicatorUpdated);
+        Result->SetNumberField(TEXT("updatedReplicatorCount"), UpdatedReplicatorCount);
+        if (UpdatedCategoryIndex != INDEX_NONE)
+        {
+            Result->SetNumberField(TEXT("categoryIndex"), UpdatedCategoryIndex);
+        }
 
         SendAutomationResponse(RequestingSocket, RequestId, true, 
-            FString::Printf(TEXT("Toggled gameplay debugger category: %s"), *CategoryName), 
+            FString::Printf(TEXT("Gameplay debugger category %s: %s"),
+                bEnabled ? TEXT("enabled") : TEXT("disabled"), *CategoryName),
             Result);
         return true;
     }

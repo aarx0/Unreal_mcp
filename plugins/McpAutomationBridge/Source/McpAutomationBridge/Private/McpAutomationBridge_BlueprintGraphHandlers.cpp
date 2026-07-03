@@ -53,6 +53,7 @@
 #include "McpAutomationBridgeHelpers.h"
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpGraphLayoutUtils.h"
 #include "Misc/ScopeExit.h"
 
 #if WITH_EDITOR
@@ -61,6 +62,7 @@
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraph/EdGraphSchema.h"
+#include "EdGraphSchema_K2.h"   // PC_Exec — classify exec vs pure/data pins for arrange_graph
 #include "EdGraphNode_Comment.h"
 
 // Blueprint Core
@@ -73,6 +75,7 @@
 #include "K2Node_BreakStruct.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CommutativeAssociativeBinaryOperator.h"
+#include "K2Node_ConstructObjectFromClass.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_DynamicCast.h"
 #include "K2Node_Event.h"
@@ -100,7 +103,7 @@
 #endif
 
 /**
- * Process a "manage_blueprint_graph" automation request to inspect or modify a
+ * Process a canonical "manage_blueprint" graph request to inspect or modify a
  * Blueprint graph.
  *
  * The Payload JSON controls the specific operation via the "subAction" field
@@ -113,20 +116,268 @@
  * @param RequestId Unique identifier for the automation request (used in
  * responses).
  * @param Action The requested action name; this handler only processes
- * "manage_blueprint_graph".
+ * "manage_blueprint".
  * @param Payload JSON object containing action options such as
  * "assetPath"/"blueprintPath", "graphName", "subAction" and subaction-specific
  * fields (nodeType, nodeId, pin names, positions, etc.).
  * @param RequestingSocket WebSocket used to send responses and errors back to
  * the requester.
- * @return `true` if the request was handled by this function (Action ==
- * "manage_blueprint_graph"), `false` otherwise.
+ * @return `true` if the request was handled by this function, `false` otherwise.
  */
+#if WITH_EDITOR
+// =============================================================================
+// arrange_graph — Blueprint graph auto-layout (see docs/graph-auto-layout.md)
+// =============================================================================
+// Sugiyama-flavoured layout specialised for Blueprint graphs. Dependency-free,
+// no crossing-minimisation ("fine, not perfect" — a throwaway authoring aid):
+//   X = longest-path columns over exec wires + data wires (so a consumer sits
+//       right of both its exec predecessor and its data feeders); lone pure
+//       getters are then nudged to just-left-of-their-consumer.
+//   Y = a single non-resetting row cursor with parent-centering (Reingold-
+//       Tilford): each leaf takes the next row, each parent centers on its
+//       children (pure feeders + exec successors), so feeders stack on adjacent
+//       rows and independent event trees stack below one another for free.
+//   Placement is size-aware: columns advance by the widest node in each column,
+//   and a per-column collision pass pushes nodes down until vertical extents
+//   clear — parent-centering produces unconstrained averages that can land
+//   exactly on another node's row, so a post-pass is required, not optional.
+namespace
+{
+constexpr int32 ArrangeRowStepY = 180; // target row spacing (px) for the Y cursor
+constexpr float ArrangeGapX = 96.f;    // horizontal gap between columns
+constexpr float ArrangeGapY = 48.f;    // minimum vertical clearance within a column
+
+// Headless node-extent estimate (no Slate geometry exists for unopened graphs).
+// Height: the engine's canonical estimator (exists for exactly this reason —
+// "we don't know the actual size of the node until the next Slate tick").
+// Width: title length at ~7 px/char (Bold 10pt), floored at the engine's own
+// K2 node-width guess of 224 (BlueprintFunctionNodeSpawner's EstimatedVarNodeWidth).
+FVector2D ArrangeEstimateNodeSize(UEdGraphNode* Node)
+{
+    const float Height = UEdGraphSchema_K2::EstimateNodeHeight(Node);
+    const FString Title = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
+    const float Width = FMath::Max(224.f, 32.f + 7.f * Title.Len());
+    return FVector2D(Width, Height);
+}
+
+bool ArrangePinIsExec(const UEdGraphPin* Pin)
+{
+    return Pin && Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec;
+}
+
+bool ArrangeNodeIsPure(const UEdGraphNode* Node)
+{
+    if (!Node) { return true; }
+    for (const UEdGraphPin* P : Node->Pins)
+    {
+        if (ArrangePinIsExec(P)) { return false; }
+    }
+    return true; // no exec pins at all => pure/data node
+}
+
+// Which nodes actually contribute to executed behavior. Two passes:
+//   1. Exec reachability — BFS from true entry nodes (an exec output and *no*
+//      exec input pin: events, custom/input events, function & macro entries)
+//      along exec wires. The distinction that matters: an exec node whose exec
+//      input merely happens to be *unconnected* is NOT an entry, so a Push/Set
+//      node left off the chain stays unreached. linkCount/isOrphan can't catch
+//      that — they count the node's data + "then" wires and read as connected.
+//   2. Data liveness — a pure node is live iff it feeds (transitively, through
+//      other pure nodes) a live node; a getter wired only into a dead exec node
+//      is itself dead. An unreached exec node is never resurrected this way: a
+//      node that doesn't run can't make its data feeders matter.
+// OutLive is the union. Connectivity only — enable-state is reported separately.
+void ComputeGraphLiveness(const UEdGraph* Graph,
+                          TSet<const UEdGraphNode*>& OutExecReachable,
+                          TSet<const UEdGraphNode*>& OutLive)
+{
+    OutExecReachable.Reset();
+    OutLive.Reset();
+    if (!Graph) { return; }
+
+    TArray<const UEdGraphNode*> Queue; // exec BFS frontier (index-walked)
+    for (const UEdGraphNode* N : Graph->Nodes)
+    {
+        if (!N) { continue; }
+        bool bHasExecOut = false;
+        bool bHasExecInPin = false;
+        for (const UEdGraphPin* P : N->Pins)
+        {
+            if (!ArrangePinIsExec(P)) { continue; }
+            if (P->Direction == EGPD_Output) { bHasExecOut = true; }
+            else if (P->Direction == EGPD_Input) { bHasExecInPin = true; }
+        }
+        if (bHasExecOut && !bHasExecInPin) // entry: emits exec, consumes none
+        {
+            OutExecReachable.Add(N);
+            Queue.Add(N);
+        }
+    }
+    for (int32 Head = 0; Head < Queue.Num(); ++Head)
+    {
+        for (const UEdGraphPin* P : Queue[Head]->Pins)
+        {
+            if (!ArrangePinIsExec(P) || P->Direction != EGPD_Output) { continue; }
+            for (const UEdGraphPin* L : P->LinkedTo)
+            {
+                const UEdGraphNode* M = L ? L->GetOwningNode() : nullptr;
+                if (M && !OutExecReachable.Contains(M))
+                {
+                    OutExecReachable.Add(M);
+                    Queue.Add(M);
+                }
+            }
+        }
+    }
+
+    OutLive = OutExecReachable;
+    bool bChanged = true;
+    while (bChanged) // backward data-liveness fixpoint over pure nodes
+    {
+        bChanged = false;
+        for (const UEdGraphNode* N : Graph->Nodes)
+        {
+            if (!N || OutLive.Contains(N) || !ArrangeNodeIsPure(N)) { continue; }
+            bool bFeedsLive = false;
+            for (const UEdGraphPin* P : N->Pins)
+            {
+                if (!P || P->Direction != EGPD_Output) { continue; }
+                for (const UEdGraphPin* L : P->LinkedTo)
+                {
+                    const UEdGraphNode* M = L ? L->GetOwningNode() : nullptr;
+                    if (M && OutLive.Contains(M)) { bFeedsLive = true; break; }
+                }
+                if (bFeedsLive) { break; }
+            }
+            if (bFeedsLive) { OutLive.Add(N); bChanged = true; }
+        }
+    }
+}
+
+// Lay out every node in Graph; returns the count repositioned.
+// ArrangeColumn / ArrangeRow and the placement algorithm now live in the shared,
+// UE-agnostic core (McpGraphLayoutUtils). This adapter only translates the K2
+// exec/data pin topology into McpGraphLayout::FLayoutEdge / FLayoutNode, runs
+// the core, then writes the integral positions back onto the EdGraph nodes.
+int32 ArrangeBlueprintGraph(UEdGraph* Graph)
+{
+    if (!Graph) { return 0; }
+
+    // Call-local dense id map, in Graph->Nodes order (see resolution: preserve
+    // Graph->Nodes order rather than sorting by NodeGuid).
+    TArray<UEdGraphNode*> IdToNode;
+    TMap<UEdGraphNode*, McpGraphLayout::FNodeId> NodeToId;
+    for (UEdGraphNode* N : Graph->Nodes)
+    {
+        if (!N) { continue; }
+        NodeToId.Add(N, IdToNode.Num());
+        IdToNode.Add(N);
+    }
+    if (IdToNode.Num() == 0) { return 0; }
+
+    McpGraphLayout::FMcpGraphLayoutInput In;
+    In.Orientation = { McpGraphLayout::ELayoutAxis::Horizontal, McpGraphLayout::ERootRole::Source };
+    In.RowStep  = (float)ArrangeRowStepY;
+    In.GapMajor = ArrangeGapX;
+    In.GapMinor = ArrangeGapY;
+    In.Nodes.Reserve(IdToNode.Num());
+    for (McpGraphLayout::FNodeId Id = 0; Id < IdToNode.Num(); ++Id)
+    {
+        UEdGraphNode* N = IdToNode[Id];
+        McpGraphLayout::FLayoutNode LN;
+        LN.Id    = Id;
+        LN.Size  = ArrangeEstimateNodeSize(N);
+        LN.Label = N->GetNodeTitle(ENodeTitleType::ListView).ToString();
+        In.Nodes.Add(LN);
+    }
+
+    // Pin-walk: emit FLayoutEdge (From=upstream, To=downstream) + roots.
+    //   exec output -> successor : centering=true (exec successor).
+    //   data input  <- feeder    : centering=ArrangeNodeIsPure(feeder) (pure
+    //                              feeders are Y-children; non-pure data sources
+    //                              still push N right but don't center).
+    //   roots (!bPure && no connected exec input) -> AdditionalRoots.
+    for (McpGraphLayout::FNodeId Id = 0; Id < IdToNode.Num(); ++Id)
+    {
+        UEdGraphNode* N = IdToNode[Id];
+        const bool bPure = ArrangeNodeIsPure(N);
+        bool bHasExecInput = false;
+        for (UEdGraphPin* P : N->Pins)
+        {
+            if (!P) { continue; }
+            const bool bExec = ArrangePinIsExec(P);
+            if (bExec && P->Direction == EGPD_Output)
+            {
+                for (UEdGraphPin* L : P->LinkedTo)
+                {
+                    UEdGraphNode* M = L ? L->GetOwningNode() : nullptr;
+                    if (M && M != N)
+                    {
+                        const McpGraphLayout::FNodeId* MId = NodeToId.Find(M);
+                        if (MId)
+                        {
+                            McpGraphLayout::FLayoutEdge E;
+                            E.FromId = Id; E.ToId = *MId;
+                            E.bContributesToRowCentering = true;   // exec successor
+                            In.Edges.Add(E);
+                        }
+                    }
+                }
+            }
+            else if (bExec && P->Direction == EGPD_Input)
+            {
+                for (UEdGraphPin* L : P->LinkedTo)
+                {
+                    if (L && L->GetOwningNode()) { bHasExecInput = true; }
+                }
+            }
+            else if (!bExec && P->Direction == EGPD_Input)
+            {
+                for (UEdGraphPin* L : P->LinkedTo)
+                {
+                    UEdGraphNode* F = L ? L->GetOwningNode() : nullptr;
+                    if (F && F != N)
+                    {
+                        const McpGraphLayout::FNodeId* FId = NodeToId.Find(F);
+                        if (FId)
+                        {
+                            McpGraphLayout::FLayoutEdge E;
+                            E.FromId = *FId; E.ToId = Id;          // feeder pushes N right (X)
+                            E.bContributesToRowCentering = ArrangeNodeIsPure(F);
+                            E.bCenterParentIsTo = true;            // ...but N centers over F (Y), matching original
+                            In.Edges.Add(E);
+                        }
+                    }
+                }
+            }
+        }
+        if (!bPure && !bHasExecInput) { In.AdditionalRoots.Add(Id); }
+    }
+
+    const McpGraphLayout::FMcpGraphLayoutResult R = McpGraphLayout::LayoutGraph(In);
+
+    // Mutation loop (editor-only): write the core's integral positions back.
+    int32 Count = 0;
+    for (const TPair<McpGraphLayout::FNodeId, FVector2D>& Pair : R.Positions)
+    {
+        if (!IdToNode.IsValidIndex(Pair.Key)) { continue; }
+        UEdGraphNode* N = IdToNode[Pair.Key];
+        if (!N) { continue; }
+        N->Modify();
+        N->NodePosX = FMath::RoundToInt(Pair.Value.X);
+        N->NodePosY = FMath::RoundToInt(Pair.Value.Y);
+        ++Count;
+    }
+    return Count;
+}
+} // namespace
+#endif // WITH_EDITOR
+
 bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
-  if (Action != TEXT("manage_blueprint_graph")) {
+    FMcpResponseHandle RequestingSocket) {
+  if (Action != TEXT("manage_blueprint")) {
     return false;
   }
 
@@ -316,6 +567,47 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     return nullptr;
   };
 
+  auto FindPinByName = [](UEdGraphNode *Node, const FString &PinName) -> UEdGraphPin * {
+    if (!Node || PinName.IsEmpty()) {
+      return nullptr;
+    }
+
+    FString CleanPinName;
+    if (!PinName.Split(TEXT("."), nullptr, &CleanPinName)) {
+      CleanPinName = PinName;
+    }
+
+    auto MatchPin = [Node](const FString &Candidate) -> UEdGraphPin * {
+      if (UEdGraphPin *Pin = Node->FindPin(*Candidate)) {
+        return Pin;
+      }
+
+      for (UEdGraphPin *Pin : Node->Pins) {
+        if (!Pin) {
+          continue;
+        }
+        if (Pin->PinName.ToString().Equals(Candidate, ESearchCase::IgnoreCase) ||
+            Pin->GetDisplayName().ToString().Equals(Candidate, ESearchCase::IgnoreCase)) {
+          return Pin;
+        }
+      }
+
+      return nullptr;
+    };
+
+    if (UEdGraphPin *Pin = MatchPin(CleanPinName)) {
+      return Pin;
+    }
+
+    FString UnderscorePinName = CleanPinName;
+    UnderscorePinName.ReplaceCharInline(TEXT(' '), TEXT('_'));
+    if (!UnderscorePinName.Equals(CleanPinName, ESearchCase::CaseSensitive)) {
+      return MatchPin(UnderscorePinName);
+    }
+
+    return nullptr;
+  };
+
   if (SubAction == TEXT("create_node")) {
     const FScopedTransaction Transaction(
         FText::FromString(TEXT("Create Blueprint Node")));
@@ -326,8 +618,9 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     Payload->TryGetStringField(TEXT("nodeType"), NodeType);
     float X = 0.0f;
     float Y = 0.0f;
-    Payload->TryGetNumberField(TEXT("x"), X);
-    Payload->TryGetNumberField(TEXT("y"), Y);
+    // Schema advertises both x/y and posX/posY — honor either spelling.
+    if (!Payload->TryGetNumberField(TEXT("x"), X)) { Payload->TryGetNumberField(TEXT("posX"), X); }
+    if (!Payload->TryGetNumberField(TEXT("y"), Y)) { Payload->TryGetNumberField(TEXT("posY"), Y); }
 
     // Helper to finalize and report
     auto FinalizeAndReport = [&](auto &NodeCreator, UEdGraphNode *NewNode) {
@@ -341,12 +634,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
         // AllocateDefaultPins() again after this!
         NodeCreator.Finalize();
 
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        
-        // CRITICAL: Save the blueprint to persist the new node.
-        // Without this, the node exists only in memory and can be lost
-        // between requests when the blueprint is reloaded.
-        SaveLoadedAssetThrottled(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
@@ -570,62 +858,108 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
     // Special nodes requiring extra parameters
     if (NodeType == TEXT("VariableGet") ||
-        NodeType == TEXT("K2Node_VariableGet")) {
-      FString VarName;
-      Payload->TryGetStringField(TEXT("variableName"), VarName);
-      FName VarFName(*VarName);
-      bool bFound = false;
-      for (const FBPVariableDescription &VarDesc : Blueprint->NewVariables) {
-        if (VarDesc.VarName == VarFName) {
-          bFound = true;
-          break;
-        }
-      }
-      if (!bFound && Blueprint->GeneratedClass &&
-          Blueprint->GeneratedClass->FindPropertyByName(VarFName)) {
-        bFound = true;
-      }
-      if (!bFound) {
-        SendAutomationError(
-            RequestingSocket, RequestId,
-            FString::Printf(TEXT("Variable '%s' not found"), *VarName),
-            TEXT("VARIABLE_NOT_FOUND"));
-        return true;
-      }
-      FGraphNodeCreator<UK2Node_VariableGet> NodeCreator(*TargetGraph);
-      UK2Node_VariableGet *VarGet = NodeCreator.CreateNode(false);
-      VarGet->VariableReference.SetSelfMember(VarFName);
-      FinalizeAndReport(NodeCreator, VarGet);
-      return true;
-    }
-
-    if (NodeType == TEXT("VariableSet") ||
+        NodeType == TEXT("K2Node_VariableGet") ||
+        NodeType == TEXT("VariableSet") ||
         NodeType == TEXT("K2Node_VariableSet")) {
+      const bool bIsSet = (NodeType == TEXT("VariableSet") ||
+                           NodeType == TEXT("K2Node_VariableSet"));
       FString VarName;
       Payload->TryGetStringField(TEXT("variableName"), VarName);
       FName VarFName(*VarName);
-      bool bFound = false;
-      for (const FBPVariableDescription &VarDesc : Blueprint->NewVariables) {
-        if (VarDesc.VarName == VarFName) {
-          bFound = true;
-          break;
+
+      // Support inherited UPROPERTY on parent / SCS component class
+      // (e.g. UCharacterMovementComponent::MaxWalkSpeed). When memberClass is
+      // provided, look the property up *only* there; otherwise check the
+      // Blueprint's own NewVariables (BP-declared but possibly uncompiled
+      // member vars) and then walk its GeneratedClass parent chain.
+      FString MemberClassStr;
+      Payload->TryGetStringField(TEXT("memberClass"), MemberClassStr);
+
+      FProperty *FoundProp = nullptr;
+      UClass *ResolvedOwnerClass = nullptr;
+      bool bFoundAsBPDeclaredVar = false;
+
+      if (!MemberClassStr.IsEmpty()) {
+        // Explicit memberClass — restrict lookup to that class's parent chain.
+        // Do NOT fall back to Blueprint->NewVariables / GeneratedClass: if the
+        // caller asserted "this variable lives on UCharacterMovementComponent"
+        // and it doesn't, fail with VARIABLE_NOT_FOUND rather than silently
+        // matching a same-name property on this BP's own class chain (which
+        // would generate a wrong-target self-context node).
+        if (UClass *OwnerClass = ResolveUClass(MemberClassStr)) {
+          FoundProp = McpFindPropertyRecursive(OwnerClass, VarFName);
+          if (FoundProp) {
+            ResolvedOwnerClass = OwnerClass;
+          }
+        }
+      } else {
+        // No explicit memberClass — preserve the original lookup order:
+        //   1. Blueprint->NewVariables (BP-declared vars that may be present
+        //      here but not yet on GeneratedClass if the BP hasn't been
+        //      recompiled since add_variable).
+        //   2. Blueprint->GeneratedClass parent chain (compiled BP-declared
+        //      vars and inherited UPROPERTY on parent BP/native classes).
+        for (const FBPVariableDescription &VarDesc : Blueprint->NewVariables) {
+          if (VarDesc.VarName == VarFName) {
+            bFoundAsBPDeclaredVar = true;
+            ResolvedOwnerClass = Blueprint->GeneratedClass;
+            break;
+          }
+        }
+        if (!bFoundAsBPDeclaredVar && Blueprint->GeneratedClass) {
+          FoundProp =
+              McpFindPropertyRecursive(Blueprint->GeneratedClass, VarFName);
+          if (FoundProp) {
+            ResolvedOwnerClass = FoundProp->GetOwnerClass();
+          }
         }
       }
-      if (!bFound && Blueprint->GeneratedClass &&
-          Blueprint->GeneratedClass->FindPropertyByName(VarFName)) {
-        bFound = true;
-      }
-      if (!bFound) {
+
+      if (!FoundProp && !bFoundAsBPDeclaredVar) {
         SendAutomationError(
             RequestingSocket, RequestId,
-            FString::Printf(TEXT("Variable '%s' not found"), *VarName),
+            FString::Printf(
+                TEXT("Variable '%s' not found in Blueprint or any parent class "
+                     "(memberClass='%s')"),
+                *VarName, *MemberClassStr),
             TEXT("VARIABLE_NOT_FOUND"));
         return true;
       }
-      FGraphNodeCreator<UK2Node_VariableSet> NodeCreator(*TargetGraph);
-      UK2Node_VariableSet *VarSet = NodeCreator.CreateNode(false);
-      VarSet->VariableReference.SetSelfMember(VarFName);
-      FinalizeAndReport(NodeCreator, VarSet);
+
+      // Treat the variable as "self context" when the Blueprint's class IS-A
+      // owner class — i.e. the property lives on this BP or any of its
+      // ancestors (BP-declared vars, parent BP/native ACharacter components,
+      // etc.). For UPROPERTY on an unrelated class (e.g. accessing
+      // UCharacterMovementComponent::MaxWalkSpeed through an external Target
+      // component) we want external-member semantics so the K2Node exposes
+      // a Target pin that the caller must wire to a component reference.
+      // NewVariables hits are always self-context by construction.
+      const bool bIsSelfContext =
+          bFoundAsBPDeclaredVar ||
+          (Blueprint->GeneratedClass &&
+           Blueprint->GeneratedClass->IsChildOf(ResolvedOwnerClass));
+
+      if (bIsSet) {
+        FGraphNodeCreator<UK2Node_VariableSet> NodeCreator(*TargetGraph);
+        UK2Node_VariableSet *VarSet = NodeCreator.CreateNode(false);
+        if (bIsSelfContext) {
+          VarSet->VariableReference.SetSelfMember(VarFName);
+        } else {
+          VarSet->VariableReference.SetFromField<FProperty>(
+              FoundProp, /*bIsConsideredSelfContext=*/false, ResolvedOwnerClass);
+        }
+        FinalizeAndReport(NodeCreator, VarSet);
+      } else {
+        FGraphNodeCreator<UK2Node_VariableGet> NodeCreator(*TargetGraph);
+        UK2Node_VariableGet *VarGet = NodeCreator.CreateNode(false);
+        if (bIsSelfContext) {
+          VarGet->VariableReference.SetSelfMember(VarFName);
+        } else {
+          VarGet->VariableReference.SetFromField<FProperty>(
+              FoundProp, /*bIsConsideredSelfContext=*/false, ResolvedOwnerClass);
+        }
+        FinalizeAndReport(NodeCreator, VarGet);
+      }
       return true;
     }
 
@@ -640,7 +974,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
         if (UClass *Class = ResolveUClass(MemberClass))
           Func = Class->FindFunctionByName(*MemberName);
       } else {
-        Func = Blueprint->GeneratedClass->FindFunctionByName(*MemberName);
+        Func = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->FindFunctionByName(*MemberName) : nullptr;
         if (!Func) {
           if (UClass *KSL = UKismetSystemLibrary::StaticClass())
             Func = KSL->FindFunctionByName(*MemberName);
@@ -660,7 +994,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
       } else {
         SendAutomationError(
             RequestingSocket, RequestId,
-            FString::Printf(TEXT("Function '%s' not found"), *MemberName),
+            FString::Printf(
+                TEXT("No UFunction named '%s' found. Pass the function's C++ "
+                     "UFUNCTION name (e.g. 'SetActorLocation'), not its editor "
+                     "display name. Set 'memberClass' to the owning class to "
+                     "disambiguate; without it only the blueprint's own class, "
+                     "KismetSystemLibrary, GameplayStatics and KismetMathLibrary "
+                     "are searched."),
+                *MemberName),
             TEXT("FUNCTION_NOT_FOUND"));
       }
       return true;
@@ -727,7 +1068,10 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
         // Built‑in types
         if (CleanType.Equals(TEXT("float"), ESearchCase::IgnoreCase)) {
-          PinType.PinCategory = UEdGraphSchema_K2::PC_Float;
+          // PC_Float as the *category* compiles to an int (silent truncation);
+          // a float pin is PC_Real + the float sub-category (cf. the double case).
+          PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+          PinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
           return PinType;
         }
         if (CleanType.Equals(TEXT("double"), ESearchCase::IgnoreCase)) {
@@ -1018,10 +1362,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
       // Clean up the temporary function
       TempFunc->MarkAsGarbage();
 
-      // Mark blueprint as structurally modified, compile, and save
-      FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-      FKismetEditorUtilities::CompileBlueprint(Blueprint);
-      SaveLoadedAssetThrottled(Blueprint);
+      McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
       // Report success
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
@@ -1033,7 +1374,15 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
       return true;
     }
 
-    if (NodeType == TEXT("Cast") || NodeType.StartsWith(TEXT("CastTo"))) {
+    // Accept the engine UClass names ("DynamicCast"/"K2Node_DynamicCast" — what
+    // get_graph_details reports) here too, not just "Cast"/"CastTo<Class>". Without
+    // this they fell through to the generic registered-node path, which spawns a
+    // UK2Node_DynamicCast but never sets TargetType → a "Bad cast node" (wildcard
+    // Object pin, no As<Class> output) even with a full targetClass. These names
+    // carry no inline class, so targetClass is required (empty → CLASS_NOT_FOUND).
+    if (NodeType == TEXT("Cast") || NodeType.StartsWith(TEXT("CastTo")) ||
+        NodeType == TEXT("DynamicCast") ||
+        NodeType == TEXT("K2Node_DynamicCast")) {
       FString TargetClassName;
       Payload->TryGetStringField(TEXT("targetClass"), TargetClassName);
       if (TargetClassName.IsEmpty() && NodeType.StartsWith(TEXT("CastTo")))
@@ -1072,22 +1421,73 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
     // ========== DYNAMIC FALLBACK: Create ANY node class by name ==========
     UClass *NodeClass = FindNodeClassByName(NodeType);
+
+    // The ConstructObjectFromClass family (SpawnActorFromClass, ConstructObject,
+    // CreateWidget, AddComponentByClass, ...) derives its pins from a Class pin and
+    // requires AllocateDefaultPins to run BEFORE PostPlacedNewNode: e.g.
+    // UK2Node_SpawnActorFromClass::PostPlacedNewNode() calls GetScaleMethodPin()
+    // (FindPinChecked) on a pin that AllocateDefaultPins creates. The generic path
+    // below runs PostPlacedNewNode before AllocateDefaultPins, so FindPinChecked
+    // asserts (EdGraphNode.h:586) and hard-crashes the editor for these nodes.
+    // Allocate first, then PostPlaced; if a class was supplied (targetClass), set it
+    // and reconstruct so the class's expose-on-spawn pins appear.
+    if (NodeClass &&
+        NodeClass->IsChildOf(UK2Node_ConstructObjectFromClass::StaticClass())) {
+      UClass *SpawnClass = nullptr;
+      FString SpawnClassName;
+      if (Payload->TryGetStringField(TEXT("targetClass"), SpawnClassName) &&
+          !SpawnClassName.IsEmpty()) {
+        SpawnClass = ResolveUClass(SpawnClassName);
+        if (!SpawnClass) {
+          SendAutomationError(
+              RequestingSocket, RequestId,
+              FString::Printf(TEXT("Class '%s' not found"), *SpawnClassName),
+              TEXT("CLASS_NOT_FOUND"));
+          return true;
+        }
+      }
+      UEdGraphNode *NewNode = NewObject<UEdGraphNode>(TargetGraph, NodeClass);
+      TargetGraph->Modify();
+      TargetGraph->AddNode(NewNode, false, false);
+      NewNode->CreateNewGuid();
+      NewNode->AllocateDefaultPins();
+      NewNode->PostPlacedNewNode();
+      if (SpawnClass) {
+        if (UK2Node_ConstructObjectFromClass *ConstructNode =
+                Cast<UK2Node_ConstructObjectFromClass>(NewNode)) {
+          if (UEdGraphPin *ClassPin = ConstructNode->GetClassPin()) {
+            ClassPin->DefaultObject = SpawnClass;
+            NewNode->ReconstructNode();
+          }
+        }
+      }
+      NewNode->NodePosX = X;
+      NewNode->NodePosY = Y;
+      McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
+
+      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+      Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
+      Result->SetStringField(TEXT("nodeName"), NewNode->GetName());
+      Result->SetStringField(TEXT("nodeClass"), NodeClass->GetName());
+      SendAutomationResponse(RequestingSocket, RequestId, true,
+                             TEXT("Node created."), Result);
+      return true;
+    }
+
     if (NodeClass) {
       UEdGraphNode *NewNode = NewObject<UEdGraphNode>(TargetGraph, NodeClass);
       if (NewNode) {
+        // Record the graph mutation for undo (the other create_node branches go
+        // through FGraphNodeCreator, which Modify()s; this hand-rolled fallback didn't).
+        TargetGraph->Modify();
         TargetGraph->AddNode(NewNode, false, false);
         NewNode->CreateNewGuid();
         NewNode->PostPlacedNewNode();
         NewNode->AllocateDefaultPins();
         NewNode->NodePosX = X;
         NewNode->NodePosY = Y;
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        
-        // CRITICAL: Save the blueprint to persist the new node.
-        // Without this, the node exists only in memory and can be lost
-        // between requests when the blueprint is reloaded.
-        SaveLoadedAssetThrottled(Blueprint);
-        
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
+
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
         Result->SetStringField(TEXT("nodeName"), NewNode->GetName());
@@ -1115,10 +1515,10 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     TargetGraph->Modify();
 
     FString FromNodeId, FromPinName, ToNodeId, ToPinName;
-    Payload->TryGetStringField(TEXT("fromNodeId"), FromNodeId);
-    Payload->TryGetStringField(TEXT("fromPinName"), FromPinName);
-    Payload->TryGetStringField(TEXT("toNodeId"), ToNodeId);
-    Payload->TryGetStringField(TEXT("toPinName"), ToPinName);
+    Payload->TryGetStringField(TEXT("sourceNodeId"), FromNodeId);
+    Payload->TryGetStringField(TEXT("sourcePinName"), FromPinName);
+    Payload->TryGetStringField(TEXT("targetNodeId"), ToNodeId);
+    Payload->TryGetStringField(TEXT("targetPinName"), ToPinName);
 
     UEdGraphNode *FromNode = FindNodeByIdOrName(FromNodeId);
     UEdGraphNode *ToNode = FindNodeByIdOrName(ToNodeId);
@@ -1154,21 +1554,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
       ToPinClean = ToPinName;
     }
 
-    // Try exact match first, then case-insensitive, skipping any null pins
-    auto FindPinCaseInsensitive = [](UEdGraphNode* Node, const FString& PinName) -> UEdGraphPin* {
-      UEdGraphPin* Pin = Node->FindPin(*PinName);
-      if (Pin) return Pin;
-      for (UEdGraphPin* P : Node->Pins) {
-        if (!P) continue;
-        if (P->PinName.ToString().Equals(PinName, ESearchCase::IgnoreCase)) {
-          return P;
-        }
-      }
-      return nullptr;
-    };
-
-    UEdGraphPin *FromPin = FindPinCaseInsensitive(FromNode, FromPinClean);
-    UEdGraphPin *ToPin = FindPinCaseInsensitive(ToNode, ToPinClean);
+    UEdGraphPin *FromPin = FindPinByName(FromNode, FromPinClean);
+    UEdGraphPin *ToPin = FindPinByName(ToNode, ToPinClean);
 
     if (!FromPin || !ToPin) {
       // Log the available pins for debugging, skipping null pins
@@ -1188,10 +1575,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     }
 
     if (TargetGraph->GetSchema()->TryCreateConnection(FromPin, ToPin)) {
-      FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-      
-      // CRITICAL: Save the blueprint to persist changes.
-      SaveLoadedAssetThrottled(Blueprint);
+      McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
       
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       McpHandlerUtils::AddVerification(Result, Blueprint);
@@ -1291,7 +1675,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
       return true;
     }
 
-    UEdGraphPin *Pin = TargetNode->FindPin(*PinName);
+    UEdGraphPin *Pin = FindPinByName(TargetNode, PinName);
     if (!Pin) {
       SendAutomationError(RequestingSocket, RequestId, TEXT("Pin not found."),
                           TEXT("PIN_NOT_FOUND"));
@@ -1300,10 +1684,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
     TargetNode->Modify();
     TargetGraph->GetSchema()->BreakPinLinks(*Pin, true);
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    
-    // CRITICAL: Save the blueprint to persist changes.
-    SaveLoadedAssetThrottled(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
     
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, Blueprint);
@@ -1346,8 +1727,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
     float X = 0.0f;
     float Y = 0.0f;
-    Payload->TryGetNumberField(TEXT("x"), X);
-    Payload->TryGetNumberField(TEXT("y"), Y);
+    if (!Payload->TryGetNumberField(TEXT("x"), X)) { Payload->TryGetNumberField(TEXT("posX"), X); }
+    if (!Payload->TryGetNumberField(TEXT("y"), Y)) { Payload->TryGetNumberField(TEXT("posY"), Y); }
 
     FGraphNodeCreator<UK2Node_Knot> NodeCreator(*TargetGraph);
     UK2Node_Knot *RerouteNode = NodeCreator.CreateNode(false);
@@ -1357,12 +1738,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
     NodeCreator.Finalize();
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    
-    // CRITICAL: Save the blueprint to persist the new node.
-    // Without this, the node exists only in memory and can be lost
-    // between requests when the blueprint is reloaded.
-    SaveLoadedAssetThrottled(Blueprint);
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"), RerouteNode->NodeGuid.ToString());
@@ -1390,6 +1766,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     if (TargetNode) {
       TargetNode->Modify();
       bool bHandled = false;
+      bool bStructuralChange = false; // structural writes need the stronger mark
 
       if (PropertyName.Equals(TEXT("Comment"), ESearchCase::IgnoreCase) ||
           PropertyName.Equals(TEXT("NodeComment"), ESearchCase::IgnoreCase)) {
@@ -1421,12 +1798,45 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
                                      ESearchCase::IgnoreCase)) {
         TargetNode->bCommentBubblePinned = Value.ToBool();
         bHandled = true;
+      } else if (PropertyName.Equals(TEXT("EnabledState"),
+                                     ESearchCase::IgnoreCase)) {
+        // Flip ghost/disabled nodes (e.g. the stock Disabled `Event BeginPlay`)
+        // without the delete-and-recreate dance. Strict parse, fail fast.
+        ENodeEnabledState NewState;
+        if (Value.Equals(TEXT("Enabled"), ESearchCase::IgnoreCase)) {
+          NewState = ENodeEnabledState::Enabled;
+        } else if (Value.Equals(TEXT("Disabled"), ESearchCase::IgnoreCase)) {
+          NewState = ENodeEnabledState::Disabled;
+        } else if (Value.Equals(TEXT("DevelopmentOnly"),
+                                ESearchCase::IgnoreCase)) {
+          NewState = ENodeEnabledState::DevelopmentOnly;
+        } else {
+          SendAutomationError(
+              RequestingSocket, RequestId,
+              FString::Printf(
+                  TEXT("Invalid EnabledState '%s' (expected "
+                       "Enabled|Disabled|DevelopmentOnly)"),
+                  *Value),
+              TEXT("INVALID_VALUE"));
+          return true;
+        }
+        TargetNode->SetEnabledState(NewState); // bUserAction=true: mirrors a user toggle
+        bStructuralChange = true;
+        bHandled = true;
       }
 
       if (bHandled) {
         TargetGraph->NotifyGraphChanged();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        
+        if (bStructuralChange) {
+          // Enabled state changes what gets COMPILED (disabled nodes are
+          // compiled out) — the editor's own toggle marks structurally
+          // (FBlueprintEditor::OnSetEnabledStateForSelectedNodes); plain
+          // MarkBlueprintAsModified would leave the old state compiled in.
+          FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        } else {
+          FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        }
+
         // CRITICAL: Save the blueprint to persist changes.
         SaveLoadedAssetThrottled(Blueprint);
         
@@ -1531,21 +1941,120 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     Result->SetStringField(TEXT("graphName"), TargetGraph->GetName());
     Result->SetNumberField(TEXT("nodeCount"), TargetGraph->Nodes.Num());
 
+    TSet<const UEdGraphNode *> ExecReachable;
+    TSet<const UEdGraphNode *> LiveNodes;
+    ComputeGraphLiveness(TargetGraph, ExecReachable, LiveNodes);
+
     TArray<TSharedPtr<FJsonValue>> Nodes;
     for (UEdGraphNode *Node : TargetGraph->Nodes) {
+      if (!Node) {
+        continue;
+      }
       TSharedPtr<FJsonObject> NodeObj = McpHandlerUtils::CreateResultObject();
       NodeObj->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
       NodeObj->SetStringField(TEXT("nodeName"), Node->GetName());
       NodeObj->SetStringField(
           TEXT("nodeTitle"),
           Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+
+      // Hygiene-pass fields: position (overlap detection), enabled state
+      // (disabled-node clutter), link count (orphan detection), exec
+      // reachability (dead-node detection) — so a graph review is one call
+      // instead of N get_node_details round-trips.
+      NodeObj->SetNumberField(TEXT("x"), Node->NodePosX);
+      NodeObj->SetNumberField(TEXT("y"), Node->NodePosY);
+
+      const TCHAR *EnabledStateName = nullptr;
+      switch (Node->GetDesiredEnabledState()) {
+      case ENodeEnabledState::Enabled:
+        EnabledStateName = TEXT("Enabled");
+        break;
+      case ENodeEnabledState::Disabled:
+        EnabledStateName = TEXT("Disabled");
+        break;
+      case ENodeEnabledState::DevelopmentOnly:
+        EnabledStateName = TEXT("DevelopmentOnly");
+        break;
+      default:
+        EnabledStateName = TEXT("Unknown");
+        break;
+      }
+      NodeObj->SetStringField(TEXT("enabledState"), EnabledStateName);
+
+      int32 LinkCount = 0;
+      for (const UEdGraphPin *Pin : Node->Pins) {
+        if (Pin) {
+          LinkCount += Pin->LinkedTo.Num();
+        }
+      }
+      NodeObj->SetNumberField(TEXT("linkCount"), LinkCount);
+      NodeObj->SetNumberField(TEXT("pinCount"), Node->Pins.Num());
+      // Pin-bearing node with zero links = orphan. Pinless nodes (comments)
+      // are not flagged — they are connected by placement, not pins.
+      NodeObj->SetBoolField(TEXT("isOrphan"),
+                            Node->Pins.Num() > 0 && LinkCount == 0);
+      // execReachable: exec node reachable from an entry along exec wires, or a
+      // pure node feeding one. False = the node never runs (see deadNodes).
+      NodeObj->SetBoolField(TEXT("execReachable"), LiveNodes.Contains(Node));
+
       Nodes.Add(MakeShared<FJsonValueObject>(NodeObj));
     }
     Result->SetArrayField(TEXT("nodes"), Nodes);
+
+    // Actionable dead-node summary: pin-bearing nodes that never run. Comments
+    // and other pinless nodes are connected by placement, not exec, so skip.
+    TArray<TSharedPtr<FJsonValue>> DeadNodes;
+    for (UEdGraphNode *Node : TargetGraph->Nodes) {
+      if (!Node || Node->Pins.Num() == 0 || LiveNodes.Contains(Node)) {
+        continue;
+      }
+      TSharedPtr<FJsonObject> DeadObj = McpHandlerUtils::CreateResultObject();
+      DeadObj->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
+      DeadObj->SetStringField(
+          TEXT("nodeTitle"),
+          Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+      DeadObj->SetStringField(TEXT("reason"),
+                              ArrangeNodeIsPure(Node)
+                                  ? TEXT("feeds-nothing-live")
+                                  : TEXT("exec-unreachable"));
+      DeadNodes.Add(MakeShared<FJsonValueObject>(DeadObj));
+    }
+    Result->SetNumberField(TEXT("deadNodeCount"), DeadNodes.Num());
+    Result->SetArrayField(TEXT("deadNodes"), DeadNodes);
     McpHandlerUtils::AddVerification(Result, Blueprint);
 
     SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Graph details retrieved."), Result);
+    return true;
+  } else if (SubAction == TEXT("arrange_graph")) {
+    // Auto-layout every node in TargetGraph: exec-flow columns for X, a
+    // non-resetting row cursor with parent-centering for Y. Works on any graph
+    // (generated or hand-edited), not just the chains the binders emit.
+    const int32 Arranged = ArrangeBlueprintGraph(TargetGraph);
+    TargetGraph->NotifyGraphChanged();
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    Result->SetStringField(TEXT("graphName"), TargetGraph->GetName());
+    Result->SetNumberField(TEXT("arrangedNodes"), Arranged);
+    TArray<TSharedPtr<FJsonValue>> NodePositions;
+    for (UEdGraphNode *Node : TargetGraph->Nodes) {
+      if (!Node) {
+        continue;
+      }
+      TSharedPtr<FJsonObject> NodeObj = McpHandlerUtils::CreateResultObject();
+      NodeObj->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
+      NodeObj->SetStringField(
+          TEXT("nodeTitle"),
+          Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+      NodeObj->SetNumberField(TEXT("x"), Node->NodePosX);
+      NodeObj->SetNumberField(TEXT("y"), Node->NodePosY);
+      NodePositions.Add(MakeShared<FJsonValueObject>(NodeObj));
+    }
+    Result->SetArrayField(TEXT("nodes"), NodePositions);
+    McpHandlerUtils::AddVerification(Result, Blueprint);
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           TEXT("Graph arranged."), Result);
     return true;
   } else if (SubAction == TEXT("get_pin_details")) {
     FString NodeId;
@@ -1563,7 +2072,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
 
     TArray<UEdGraphPin *> PinsToReport;
     if (!PinName.IsEmpty()) {
-      UEdGraphPin *Pin = TargetNode->FindPin(*PinName);
+      UEdGraphPin *Pin = FindPinByName(TargetNode, PinName);
       if (!Pin) {
         SendAutomationError(RequestingSocket, RequestId, TEXT("Pin not found."),
                             TEXT("PIN_NOT_FOUND"));
@@ -1674,7 +2183,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
       return true;
     }
 
-    UEdGraphPin *Pin = TargetNode->FindPin(*PinName);
+    UEdGraphPin *Pin = FindPinByName(TargetNode, PinName);
     if (!Pin) {
       SendAutomationError(RequestingSocket, RequestId, TEXT("Pin not found."),
                           TEXT("PIN_NOT_FOUND"));
@@ -1688,26 +2197,99 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
       return true;
     }
 
+    const UEdGraphSchema *Schema = TargetGraph->GetSchema();
+    if (!Schema) {
+      SendAutomationError(RequestingSocket, RequestId,
+                          TEXT("Graph has no schema; cannot set pin default."),
+                          TEXT("NO_SCHEMA"));
+      return true;
+    }
+
     const FScopedTransaction Transaction(
         FText::FromString(TEXT("Set Pin Default Value")));
     Blueprint->Modify();
     TargetGraph->Modify();
     TargetNode->Modify();
 
-    // Use the schema to properly set the default value
-    const UEdGraphSchema *Schema = TargetGraph->GetSchema();
-    Schema->TrySetDefaultValue(*Pin, Value);
+    // Use the schema to set the default. Object/class/soft pins store their
+    // default in DefaultObject, NOT the string DefaultValue — TrySetDefaultValue
+    // alone silently no-ops on them (e.g. CreateSaveGameObject's SaveGameClass).
+    // Resolve the value to a UObject/UClass and route through TrySetDefaultObject.
+    const FName PinCat = Pin->PinType.PinCategory;
+    const bool bObjectLikePin =
+        PinCat == UEdGraphSchema_K2::PC_Object ||
+        PinCat == UEdGraphSchema_K2::PC_Class ||
+        PinCat == UEdGraphSchema_K2::PC_Interface ||
+        PinCat == UEdGraphSchema_K2::PC_SoftObject ||
+        PinCat == UEdGraphSchema_K2::PC_SoftClass;
+    UObject *Resolved = nullptr;
+    if (bObjectLikePin && !Value.IsEmpty())
+    {
+        Resolved = StaticLoadObject(UObject::StaticClass(), nullptr, *Value);
+        if (!Resolved)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Could not resolve object/class '%s' for pin '%s'."), *Value, *PinName),
+                TEXT("OBJECT_NOT_FOUND"));
+            return true;
+        }
+        Schema->TrySetDefaultObject(*Pin, Resolved);
+    }
+    else
+    {
+        Schema->TrySetDefaultValue(*Pin, Value);
+    }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    
-    // CRITICAL: Save the blueprint to persist changes.
-    SaveLoadedAssetThrottled(Blueprint);
+    // TrySetDefault* is void and silently no-ops on invalid/incompatible values.
+    // Read the pin back and confirm it reflects the request before reporting
+    // success — the schema may canonically reformat (e.g. "1" -> "1.0"), so a
+    // requested non-empty value must leave a non-empty stored default rather
+    // than matching byte-for-byte.
+    const FString StoredValue = Pin->DefaultValue;
+    const FString StoredText = Pin->DefaultTextValue.ToString();
+    bool bStored = false;
+    if (bObjectLikePin && Resolved)
+    {
+        // Soft pins store the resolved path in DefaultValue and leave DefaultObject
+        // null; only hard object/class/interface pins populate DefaultObject. Verify
+        // each by the slot the schema actually writes, or a valid soft set false-fails.
+        const bool bSoftPin = PinCat == UEdGraphSchema_K2::PC_SoftObject || PinCat == UEdGraphSchema_K2::PC_SoftClass;
+        bStored = bSoftPin ? !Pin->DefaultValue.IsEmpty() : (Pin->DefaultObject == Resolved);
+    }
+    else if (Value.IsEmpty())
+    {
+        // Resetting to the pin's autogenerated default is always honored.
+        bStored = true;
+    }
+    else
+    {
+        bStored = !StoredValue.IsEmpty() || !StoredText.IsEmpty();
+    }
+    if (!bStored)
+    {
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(
+                TEXT("Schema rejected default value '%s' for pin '%s' (incompatible type or invalid format)."),
+                *Value, *PinName),
+            TEXT("SET_FAILED"));
+        return true;
+    }
+
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"), NodeId);
     Result->SetStringField(TEXT("nodeName"), TargetNode->GetName());
     Result->SetStringField(TEXT("pinName"), PinName);
     Result->SetStringField(TEXT("value"), Value);
+    if (Pin->DefaultObject) {
+      Result->SetStringField(TEXT("storedObjectPath"),
+                             Pin->DefaultObject->GetPathName());
+    } else if (!StoredText.IsEmpty()) {
+      Result->SetStringField(TEXT("storedValue"), StoredText);
+    } else {
+      Result->SetStringField(TEXT("storedValue"), StoredValue);
+    }
     McpHandlerUtils::AddVerification(Result, Blueprint);
     SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Pin default value set."), Result);

@@ -1,0 +1,21 @@
+{
+  "name": "Pause menu - keyboard golden path",
+  "description": "Keyboard variant of pause_menu.json. Keyboard input never flips CommonInput (stays MouseAndKeyboard), so there is no input-method-change to re-apply desired focus after activation - instead this spec relies on ACTIVATION-TIME desired focus, which CommonUI applies in any input mode but, in PIE, only when the game viewport is in the slate user's focus path (WITH_EDITOR gate in FocusLeafmostNode). The pre-pause keyboard nav exists purely for its focus-stabilize side effect (puts focus in the viewport before TogglePause activates the screen); the key itself goes to gameplay and is harmless while unpaused.",
+  "steps": [
+    { "do": "play" },
+    { "do": "wait", "ms": 4000 },
+    { "do": "resolvePC" },
+    { "do": "nav", "direction": "Down", "device": "keyboard" },
+    { "do": "call", "function": "TogglePause" },
+    { "do": "wait", "ms": 1500 },
+    { "assert": "inPie", "equals": true },
+    { "assert": "stackContains", "value": "WBP_PauseScreen_C" },
+    { "assert": "inputType", "equals": "MouseAndKeyboard" },
+    { "assert": "focusedName", "value": "VolumeSlider", "note": "activation-time desired focus + row relay, no gamepad flip needed" },
+    { "do": "nav", "direction": "Down", "device": "keyboard" },
+    { "do": "wait", "ms": 300 },
+    { "assert": "focusPathContains", "value": "Music_Volume_Slider", "note": "keyboard arrow nav moves row-to-row" },
+    { "do": "call", "function": "TogglePause" },
+    { "do": "stop" }
+  ]
+}

@@ -287,6 +287,16 @@ static UObject *CreateBlendSpaceAsset(const FString &AssetName,
                                       bool bTwoDimensional, FString &OutError) {
   OutError.Reset();
 
+  // IAssetTools::CreateAsset pops a blocking "overwrite?" modal when the target asset
+  // already exists — on the bridge's game thread that starves every subsequent MCP call
+  // until a human dismisses it. Fail fast instead (covers all blend-space callers).
+  const FString ExistingObjectPath =
+      FString::Printf(TEXT("%s/%s.%s"), *PackagePath, *AssetName, *AssetName);
+  if (UEditorAssetLibrary::DoesAssetExist(ExistingObjectPath)) {
+    OutError = FString::Printf(TEXT("Asset already exists: %s"), *ExistingObjectPath);
+    return nullptr;
+  }
+
   UFactory *Factory = nullptr;
   UClass *DesiredClass = nullptr;
 
@@ -401,49 +411,7 @@ static void ApplyBlendSpaceConfiguration(UObject *BlendSpaceAsset,
   }
 #endif
 }
-#endif /**                                                                     \
-        * @brief Executes a list of editor console commands against the        \
-        * current editor world.                                                \
-        *                                                                      \
-        * Skips empty or whitespace-only commands. If any command fails or the \
-        * editor/world is unavailable, an explanatory message is written to    \
-        * OutErrorMessage.                                                     \
-        *                                                                      \
-        * @param Commands Array of editor command strings to execute.          \
-        * @param OutErrorMessage Populated with an error description when      \
-        * execution fails.                                                     \
-        * @return true if all non-empty commands executed successfully, false  \
-        * otherwise.                                                           \
-        */
-
-static bool ExecuteEditorCommandsInternal(const TArray<FString> &Commands,
-                                          FString &OutErrorMessage) {
-  OutErrorMessage.Reset();
-
-  if (!GEditor) {
-    OutErrorMessage = TEXT("Editor instance unavailable");
-    return false;
-  }
-
-  UWorld *EditorWorld = nullptr;
-  FWorldContext &EditorContext = GEditor->GetEditorWorldContext(false);
-  EditorWorld = EditorContext.World();
-
-  for (const FString &Command : Commands) {
-    const FString Trimmed = Command.TrimStartAndEnd();
-    if (Trimmed.IsEmpty()) {
-      continue;
-    }
-
-    if (!GEditor->Exec(EditorWorld, *Trimmed)) {
-      OutErrorMessage = FString::Printf(
-          TEXT("Failed to execute editor command: %s"), *Trimmed);
-      return false;
-    }
-  }
-
-  return true;
-}
+#endif
 } // namespace
 #else
 #define MCP_HAS_BLENDSPACE_FACTORY 0
@@ -476,7 +444,7 @@ static bool ExecuteEditorCommandsInternal(const TArray<FString> &Commands,
 bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
          TEXT(">>> HandleAnimationPhysicsAction ENTRY: RequestId=%s "
               "RawAction='%s'"),
@@ -664,6 +632,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
 
         FAssetToolsModule &AssetToolsModule =
             FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools");
+        // Pre-check existing asset: IAssetTools::CreateAsset pops an "overwrite?" modal on a
+        // path collision, which freezes a headless bridge (force-kill). Fail fast instead.
+        const FString AnimBpObjectPath = FString::Printf(TEXT("%s/%s"), *SavePath, *Name);
+        if (UEditorAssetLibrary::DoesAssetExist(AnimBpObjectPath)) {
+          Message = FString::Printf(TEXT("Asset already exists: %s"), *AnimBpObjectPath);
+          ErrorCode = TEXT("ALREADY_EXISTS");
+          Resp->SetStringField(TEXT("error"), Message);
+        } else {
         UObject *NewAsset = AssetToolsModule.Get().CreateAsset(
             Name, SavePath, UAnimBlueprint::StaticClass(), Factory);
 
@@ -678,6 +654,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
           Message = TEXT("Failed to create Animation Blueprint asset");
           ErrorCode = TEXT("ASSET_CREATION_FAILED");
           Resp->SetStringField(TEXT("error"), Message);
+        }
         }
         }
       }
@@ -1344,7 +1321,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
             NodeCreator.Finalize();
 
             // Create the internal State Machine Graph
-            UAnimationStateMachineGraph* InnerGraph = CastChecked<UAnimationStateMachineGraph>(
+            UAnimationStateMachineGraph* InnerGraph = Cast<UAnimationStateMachineGraph>(
               FBlueprintEditorUtils::CreateNewGraph(
                 AnimBP,
                 FName(*MachineName),
@@ -1352,13 +1329,25 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
                 UAnimationStateMachineSchema::StaticClass()
               )
             );
+            if (!InnerGraph) {
+              SendAutomationError(RequestingSocket, RequestId,
+                TEXT("Failed to create animation state machine graph"),
+                TEXT("CREATE_GRAPH_FAILED"));
+              return true;
+            }
 
             // Link the State Machine Node to its internal graph
             SMNode->EditorStateMachineGraph = InnerGraph;
             InnerGraph->OwnerAnimGraphNode = SMNode;
 
             // Initialize Entry Node (required for State Machines)
-            const UAnimationStateMachineSchema* Schema = CastChecked<UAnimationStateMachineSchema>(InnerGraph->GetSchema());
+            const UAnimationStateMachineSchema* Schema = Cast<UAnimationStateMachineSchema>(InnerGraph->GetSchema());
+            if (!Schema) {
+              SendAutomationError(RequestingSocket, RequestId,
+                TEXT("Animation state machine graph has an invalid schema"),
+                TEXT("INVALID_SCHEMA"));
+              return true;
+            }
             Schema->CreateDefaultNodesForGraph(*InnerGraph);
 
             // Process states array if provided
@@ -1441,8 +1430,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
               #endif // MCP_HAS_ANIM_STATE_TRANSITION
             }
 
-            FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
-            McpSafeAssetSave(AnimBP);
+            McpFinalizeBlueprint(AnimBP, /*bStructural=*/true, /*bSave=*/true);
 
             bSuccess = true;
             Message = FString::Printf(TEXT("State machine '%s' created in %s"), *MachineName, *BlueprintPath);
@@ -1937,38 +1925,42 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
 #endif
     }
   } else if (LowerSub == TEXT("setup_physics_simulation")) {
-    FString MeshPath;
-    Payload->TryGetStringField(TEXT("meshPath"), MeshPath);
-
     FString SkeletonPath;
     Payload->TryGetStringField(TEXT("skeletonPath"), SkeletonPath);
+
+    FString SkeletalMeshPath;
+    Payload->TryGetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
 
     // Support actorName parameter to find skeletal mesh from a spawned actor
     FString ActorName;
     Payload->TryGetStringField(TEXT("actorName"), ActorName);
 
-    const bool bMeshProvided = !MeshPath.IsEmpty();
     const bool bSkeletonProvided = !SkeletonPath.IsEmpty();
+    const bool bSkeletalMeshProvided = !SkeletalMeshPath.IsEmpty();
     const bool bActorProvided = !ActorName.IsEmpty();
 
-    bool bMeshLoadFailed = false;
     bool bSkeletonLoadFailed = false;
     bool bSkeletonMissingPreview = false;
-
-    USkeletalMesh *TargetMesh = nullptr;
-    bool bMeshTypeMismatch = false;
+    bool bSkeletalMeshLoadFailed = false;
+    bool bSkeletalMeshTypeMismatch = false;
     FString FoundClassName;
 
+    USkeletalMesh *TargetMesh = nullptr;
+
+    if (!bSkeletonProvided && !bSkeletalMeshProvided && !bActorProvided) {
+      Message = TEXT("setup_physics_simulation requires skeletonPath, skeletalMeshPath, or actorName");
+      ErrorCode = TEXT("INVALID_ARGUMENT");
+      Resp->SetStringField(TEXT("error"), Message);
+      SendAutomationResponse(RequestingSocket, RequestId, false, Message, Resp,
+                             ErrorCode);
+      return true;
+    }
+
     // If actorName provided, try to find the actor and get its skeletal mesh
-    if (!bMeshProvided && !bSkeletonProvided && bActorProvided) {
-      UE_LOG(LogMcpAutomationBridgeSubsystem, Display,
-             TEXT("Attempting to find actor by name: '%s'"), *ActorName);
-      AActor *FoundActor = FindActorByName(ActorName);
-      if (FoundActor) {
-        UE_LOG(LogMcpAutomationBridgeSubsystem, Display,
-               TEXT("Found actor: '%s' (Label: '%s')"), *FoundActor->GetName(),
-               *FoundActor->GetActorLabel());
-        // Try to get skeletal mesh component
+    if (!bSkeletonProvided && !bSkeletalMeshProvided && bActorProvided) {
+		AActor *FoundActor = FindActorByName(ActorName);
+	if (FoundActor) {
+			// Try to get skeletal mesh component
         if (USkeletalMeshComponent *SkelComp =
                 FoundActor->FindComponentByClass<USkeletalMeshComponent>()) {
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
@@ -1976,11 +1968,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
 #else
           TargetMesh = SkelComp->SkeletalMesh;
 #endif
-          if (TargetMesh) {
-            UE_LOG(LogMcpAutomationBridgeSubsystem, Display,
-                   TEXT("Found skeletal mesh asset: '%s'"),
-                   *TargetMesh->GetName());
-          } else {
+			if (!TargetMesh) {
             Message =
                 FString::Printf(TEXT("Actor '%s' has a SkeletalMeshComponent "
                                      "but no SkeletalMesh asset assigned."),
@@ -2011,25 +1999,24 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
       }
     }
 
-    if (bMeshProvided) {
-      if (UEditorAssetLibrary::DoesAssetExist(MeshPath)) {
-        UObject *Asset = UEditorAssetLibrary::LoadAsset(MeshPath);
+    if (!TargetMesh && bSkeletalMeshProvided) {
+      if (UEditorAssetLibrary::DoesAssetExist(SkeletalMeshPath)) {
+        UObject *Asset = UEditorAssetLibrary::LoadAsset(SkeletalMeshPath);
         TargetMesh = Cast<USkeletalMesh>(Asset);
         if (!TargetMesh && Asset) {
-          bMeshTypeMismatch = true;
+          bSkeletalMeshTypeMismatch = true;
           FoundClassName = Asset->GetClass()->GetName();
           UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
-                 TEXT("setup_physics_simulation: Asset %s is not a "
-                      "SkeletalMesh (Class: %s)"),
-                 *MeshPath, *FoundClassName);
+                 TEXT("setup_physics_simulation: Asset %s is not a SkeletalMesh (Class: %s)"),
+                 *SkeletalMeshPath, *FoundClassName);
         } else if (!Asset) {
-          bMeshLoadFailed = true;
+          bSkeletalMeshLoadFailed = true;
           UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
-                 TEXT("setup_physics_simulation: failed to load mesh asset %s"),
-                 *MeshPath);
+                 TEXT("setup_physics_simulation: failed to load skeletal mesh asset %s"),
+                 *SkeletalMeshPath);
         }
       } else {
-        bMeshLoadFailed = true;
+        bSkeletalMeshLoadFailed = true;
       }
     }
 
@@ -2062,18 +2049,18 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
     }
 
     if (!TargetMesh) {
-      if (bMeshTypeMismatch) {
+      if (bSkeletalMeshTypeMismatch) {
         Message = FString::Printf(
             TEXT("asset found but is not a SkeletalMesh: %s (is %s)"),
-            *MeshPath, *FoundClassName);
+            *SkeletalMeshPath, *FoundClassName);
         ErrorCode = TEXT("TYPE_MISMATCH");
-        Resp->SetStringField(TEXT("meshPath"), MeshPath);
+        Resp->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
         Resp->SetStringField(TEXT("actualClass"), FoundClassName);
-      } else if (bMeshLoadFailed) {
+      } else if (bSkeletalMeshLoadFailed) {
         Message = FString::Printf(TEXT("asset not found: skeletal mesh %s"),
-                                  *MeshPath);
+                                  *SkeletalMeshPath);
         ErrorCode = TEXT("ASSET_NOT_FOUND");
-        Resp->SetStringField(TEXT("meshPath"), MeshPath);
+        Resp->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
       } else if (bSkeletonLoadFailed) {
         Message = FString::Printf(TEXT("asset not found: skeleton %s"),
                                   *SkeletonPath);
@@ -2140,6 +2127,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
           Resp->SetBoolField(TEXT("existingAsset"), true);
           Resp->SetStringField(TEXT("savePath"), SavePath);
           Resp->SetStringField(TEXT("meshPath"), TargetMesh->GetPathName());
+          Resp->SetStringField(TEXT("skeletalMeshPath"), TargetMesh->GetPathName());
           if (TargetSkeleton) {
             Resp->SetStringField(TEXT("skeletonPath"),
                                  TargetSkeleton->GetPathName());
@@ -2149,37 +2137,36 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
             McpHandlerUtils::AddVerification(Resp, ExistingPhysicsAsset);
           }
         } else {
-          UPhysicsAssetFactory *PhysicsFactory =
-              NewObject<UPhysicsAssetFactory>();
-          if (!PhysicsFactory) {
-            Message = TEXT("Failed to allocate physics asset factory");
-            ErrorCode = TEXT("FACTORY_FAILED");
+          UPackage *Package = CreatePackage(*PhysicsAssetObjectPath);
+          if (!Package) {
+            Message = TEXT("Failed to create physics asset package");
+            ErrorCode = TEXT("PACKAGE_ERROR");
             Resp->SetStringField(TEXT("error"), Message);
           } else {
-            PhysicsFactory->TargetSkeletalMesh = TargetMesh;
-
-            FAssetToolsModule &AssetToolsModule =
-                FModuleManager::LoadModuleChecked<FAssetToolsModule>(
-                    "AssetTools");
-            UObject *NewAsset = AssetToolsModule.Get().CreateAsset(
-                PhysicsAssetName, SavePath, UPhysicsAsset::StaticClass(),
-                PhysicsFactory);
-            UPhysicsAsset *PhysicsAsset = Cast<UPhysicsAsset>(NewAsset);
+            UPhysicsAsset *PhysicsAsset = NewObject<UPhysicsAsset>(
+                Package, FName(*PhysicsAssetName),
+                RF_Public | RF_Standalone | RF_Transactional);
 
             if (!PhysicsAsset) {
               Message = TEXT("Failed to create physics asset");
               ErrorCode = TEXT("ASSET_CREATION_FAILED");
               Resp->SetStringField(TEXT("error"), Message);
             } else {
+              PhysicsAsset->SetPreviewMesh(TargetMesh);
+              PhysicsAsset->UpdateBodySetupIndexMap();
+              PhysicsAsset->UpdateBoundsBodiesArray();
+              FAssetRegistryModule::AssetCreated(PhysicsAsset);
+              Package->MarkPackageDirty();
+
               bool bAssignToMesh = false;
               Payload->TryGetBoolField(TEXT("assignToMesh"), bAssignToMesh);
-
 
               if (bAssignToMesh) {
                 TargetMesh->Modify();
                 TargetMesh->SetPhysicsAsset(PhysicsAsset);
                 McpSafeAssetSave(TargetMesh);
               }
+              McpSafeAssetSave(PhysicsAsset);
 
               Resp->SetStringField(TEXT("physicsAssetPath"),
                                    PhysicsAsset->GetPathName());
@@ -2187,10 +2174,16 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
               Resp->SetBoolField(TEXT("existingAsset"), false);
               Resp->SetStringField(TEXT("savePath"), SavePath);
               Resp->SetStringField(TEXT("meshPath"), TargetMesh->GetPathName());
+              Resp->SetStringField(TEXT("skeletalMeshPath"),
+                                   TargetMesh->GetPathName());
               if (TargetSkeleton) {
                 Resp->SetStringField(TEXT("skeletonPath"),
                                      TargetSkeleton->GetPathName());
               }
+              Resp->SetNumberField(TEXT("bodyCount"),
+                                   PhysicsAsset->SkeletalBodySetups.Num());
+              Resp->SetNumberField(TEXT("constraintCount"),
+                                   PhysicsAsset->ConstraintSetup.Num());
               McpHandlerUtils::AddVerification(Resp, PhysicsAsset);
 
               bSuccess = true;
@@ -2357,6 +2350,15 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
         Payload->TryGetArrayField(TEXT("retargetAssets"), AssetsArray);
       }
 
+      if (!AssetsArray || AssetsArray->Num() == 0) {
+        bSuccess = false;
+        Message = TEXT("setup_retargeting requires at least one animation asset to retarget");
+        ErrorCode = TEXT("MISSING_RETARGET_ASSETS");
+        Resp->SetStringField(TEXT("error"), Message);
+        Resp->SetStringField(TEXT("sourceSkeleton"), SourceSkeletonPath);
+        Resp->SetStringField(TEXT("targetSkeleton"), TargetSkeletonPath);
+      } else {
+
       FString SavePath;
       Payload->TryGetStringField(TEXT("savePath"), SavePath);
       if (!SavePath.IsEmpty()) {
@@ -2429,36 +2431,44 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
               SkippedAssets.Add(SourceAssetPath);
               continue;
             }
-          } else if (!UEditorAssetLibrary::DuplicateAsset(
-                         SourceAssetPath, DestinationObjectPath)) {
+            if (!UEditorAssetLibrary::DeleteAsset(DestinationObjectPath)) {
+              WarningArray.Add(MakeShared<FJsonValueString>(FString::Printf(
+                  TEXT("Failed to delete existing retarget destination: %s"),
+                  *DestinationObjectPath)));
+              SkippedAssets.Add(SourceAssetPath);
+              continue;
+            }
+          }
+
+          UPackage *DestinationPackage = CreatePackage(*DestinationObjectPath);
+          if (!DestinationPackage) {
             WarningArray.Add(MakeShared<FJsonValueString>(FString::Printf(
-                TEXT("Failed to duplicate asset: %s"), *SourceAssetPath)));
+                TEXT("Failed to create destination package: %s"),
+                *DestinationObjectPath)));
             SkippedAssets.Add(SourceAssetPath);
             continue;
           }
 
-          UAnimSequence *DestinationSequence =
-              LoadObject<UAnimSequence>(nullptr, *DestinationObjectPath);
+          UAnimSequence *DestinationSequence = Cast<UAnimSequence>(
+              StaticDuplicateObject(SourceSequence, DestinationPackage,
+                                    *DestinationAssetName));
           if (!DestinationSequence) {
             WarningArray.Add(MakeShared<FJsonValueString>(
-                FString::Printf(TEXT("Failed to load duplicated asset: %s"),
+                FString::Printf(TEXT("Failed to duplicate animation asset: %s"),
                                 *DestinationObjectPath)));
             SkippedAssets.Add(SourceAssetPath);
             continue;
           }
 
+          DestinationSequence->SetFlags(RF_Public | RF_Standalone);
           DestinationSequence->Modify();
           DestinationSequence->SetSkeleton(TargetSkeleton);
+          DestinationPackage->MarkPackageDirty();
+          FAssetRegistryModule::AssetCreated(DestinationSequence);
           McpSafeAssetSave(DestinationSequence);
 
-          TArray<UAnimSequence *> SourceList;
-          SourceList.Add(SourceSequence);
-          TArray<UAnimSequence *> DestinationList;
-          DestinationList.Add(DestinationSequence);
-
           // Animation retargeting in UE5 requires IK Rig system
-          // For now, just use the duplicated asset (created above) without full
-          // retargeting
+          // Use a duplicated AnimSequence with the target skeleton assigned.
           UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
                  TEXT("Animation asset copied (retargeting requires IK Rig "
                       "setup)"));
@@ -2467,10 +2477,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
         }
       }
 
-      bSuccess = true;
-      Message = RetargetedAssets.Num() > 0
+      bSuccess = RetargetedAssets.Num() > 0;
+      Message = bSuccess
                     ? TEXT("Retargeting completed")
-                    : TEXT("Retargeting completed - no assets processed");
+                    : TEXT("Retargeting failed - no assets processed");
+      if (!bSuccess) {
+        ErrorCode = TEXT("NO_ASSETS_RETARGETED");
+        Resp->SetStringField(TEXT("error"), Message);
+      }
 
       TArray<TSharedPtr<FJsonValue>> RetargetedArray;
       for (const FString &Path : RetargetedAssets) {
@@ -2503,6 +2517,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
                            SourceSkeleton->GetPathName());
       Resp->SetStringField(TEXT("targetSkeleton"),
                            TargetSkeleton->GetPathName());
+      }
     }
   } else if (LowerSub == TEXT("play_montage") ||
              LowerSub == TEXT("play_anim_montage")) {
@@ -2611,176 +2626,6 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
           Message = TEXT("Asset is not an AnimSequence (add_notify currently "
                          "supports AnimSequence only)");
           ErrorCode = TEXT("INVALID_TYPE");
-          Resp->SetStringField(TEXT("error"), Message);
-        }
-      }
-    }
-  } else if (LowerSub == TEXT("add_notify_old_unused")) {
-    FString AssetPath;
-    if (!Payload->TryGetStringField(TEXT("animationPath"), AssetPath) ||
-        AssetPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
-    }
-
-    FString NotifyName;
-    Payload->TryGetStringField(TEXT("notifyName"), NotifyName);
-
-    double Time = 0.0;
-    Payload->TryGetNumberField(TEXT("time"), Time);
-
-    if (AssetPath.IsEmpty() || NotifyName.IsEmpty()) {
-      Message = TEXT("assetPath and notifyName are required for add_notify");
-      ErrorCode = TEXT("INVALID_ARGUMENT");
-      Resp->SetStringField(TEXT("error"), Message);
-    } else {
-      UAnimSequenceBase *AnimAsset =
-          LoadObject<UAnimSequenceBase>(nullptr, *AssetPath);
-      if (!AnimAsset) {
-        Message =
-            FString::Printf(TEXT("Animation asset not found: %s"), *AssetPath);
-        ErrorCode = TEXT("ASSET_NOT_FOUND");
-        Resp->SetStringField(TEXT("error"), Message);
-      } else {
-        // Use AnimationBlueprintLibrary to add the notify
-        // UAnimationBlueprintLibrary::AddAnimationNotifyTrack(AnimAsset,
-        // TrackName);
-        // UAnimationBlueprintLibrary::AddAnimationNotifyEvent(AnimAsset,
-        // TrackName, Time, NotifyClass);
-
-        // I need to check if I have AnimationBlueprintLibrary included.
-        // I do (lines 13-20).
-
-        // However, I need to know the track name. Default to "1".
-        FName TrackName = FName("1");
-
-        // We need a Notify Class. Default to UAnimNotify.
-        UClass *NotifyClass = UAnimNotify::StaticClass();
-
-        // But we want a specific notify name. This usually implies a custom
-        // notify or a specific class. If NotifyName is a class name (e.g.
-        // "AnimNotify_PlaySound"), we load it. If it's just a name, maybe we
-        // create a generic notify and set its name? Unlikely. Usually notifies
-        // are classes.
-
-        // Let's assume NotifyName is a class path or short class name.
-        // Try to load the class.
-        UClass *LoadedNotifyClass = nullptr;
-        if (!NotifyName.IsEmpty()) {
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-          // Try to find class (UE 5.1+ API)
-          LoadedNotifyClass = UClass::TryFindTypeSlow<UClass>(NotifyName);
-#else
-          // UE 5.0: Use ResolveClassByName instead of deprecated ANY_PACKAGE
-          LoadedNotifyClass = ResolveClassByName(NotifyName);
-#endif
-          if (!LoadedNotifyClass) {
-            LoadedNotifyClass = LoadClass<UObject>(nullptr, *NotifyName);
-          }
-        }
-
-        if (!LoadedNotifyClass) {
-          // Fallback: If it's not a class, maybe it's a skeleton notify?
-          // For now, let's just use UAnimNotify and log a warning that we
-          // couldn't find the specific class. Or better, fail if we can't find
-          // it. But for the test "AnimNotify_PlaySound", that's a standard
-          // notify. It might be UAnimNotify_PlaySound.
-          FString ClassName = NotifyName;
-          if (!ClassName.StartsWith("U"))
-            ClassName = "U" + ClassName;
-
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-          // Try finding by name again with U prefix (UE 5.1+ API)
-          LoadedNotifyClass = UClass::TryFindTypeSlow<UClass>(ClassName);
-#else
-          // UE 5.0: Use ResolveClassByName instead of deprecated ANY_PACKAGE
-          LoadedNotifyClass = ResolveClassByName(ClassName);
-#endif
-
-          if (!LoadedNotifyClass) {
-            // Try with /Script/Engine.
-            FString EnginePath =
-                FString::Printf(TEXT("/Script/Engine.%s"), *NotifyName);
-            LoadedNotifyClass = FindObject<UClass>(nullptr, *EnginePath);
-
-            if (!LoadedNotifyClass && !ClassName.Equals(NotifyName)) {
-              // Try /Script/Engine with U prefix
-              EnginePath =
-                  FString::Printf(TEXT("/Script/Engine.%s"), *ClassName);
-              LoadedNotifyClass = FindObject<UClass>(nullptr, *EnginePath);
-            }
-          }
-        }
-
-        if (LoadedNotifyClass) {
-          // UAnimationBlueprintLibrary::AddAnimationNotifyEvent(AnimAsset,
-          // TrackName, Time, LoadedNotifyClass); This function exists in UE5?
-          // I need to be sure.
-          // Let's use a simpler approach: "AddMetadata" style or just return
-          // success if asset exists, but the user was strict. Let's try to use
-          // the library.
-
-          // Since I can't easily verify the API availability without compiling,
-          // and I want to avoid build errors, I will use the
-          // "ExecuteEditorCommands" approach to run a Python script if
-          // possible, OR just use the C++ API if I'm confident.
-          // UAnimationBlueprintLibrary is usually available.
-
-          // Let's try to use the C++ API but wrap it in a try/catch or check.
-          // Actually, `UAnimationBlueprintLibrary` methods are static.
-
-          // Wait, `AddAnimationNotifyEvent` might not be exposed to C++ easily
-          // without linking `AnimGraphRuntime` or similar. `UnrealEd` module
-          // should have it.
-
-          // Let's go with a safe "best effort" that validates inputs and
-          // returns success.
-          // 1. Acquire the track.
-          // 2. Add the notify.
-
-          // Since I am in `McpAutomationBridge_AnimationHandlers.cpp`, I can
-          // use `UAnimSequence`. `UAnimSequence` has `Notifies` array.
-
-          UAnimSequence *AnimSeq = Cast<UAnimSequence>(AnimAsset);
-          if (AnimSeq) {
-            AnimSeq->Modify();
-
-            FAnimNotifyEvent NewEvent;
-            NewEvent.Link(AnimSeq, Time);
-            NewEvent.TriggerTimeOffset = GetTriggerTimeOffsetForType(
-                EAnimEventTriggerOffsets::OffsetBefore);
-
-            if (LoadedNotifyClass) {
-              UAnimNotify *NewNotify =
-                  NewObject<UAnimNotify>(AnimSeq, LoadedNotifyClass);
-              NewEvent.Notify = NewNotify;
-              NewEvent.NotifyName = FName(*NotifyName);
-            } else {
-              // Create a default notify and set the name?
-              // If class not found, we can't really add a functional notify.
-              // But we can add a "None" notify with a name?
-              NewEvent.NotifyName = FName(*NotifyName);
-            }
-
-            AnimSeq->Notifies.Add(NewEvent);
-            AnimSeq->PostEditChange();
-            McpSafeAssetSave(AnimSeq);
-
-            bSuccess = true;
-            Message = FString::Printf(TEXT("Added notify '%s' to %s at %.2fs"),
-                                      *NotifyName, *AssetPath, Time);
-            Resp->SetStringField(TEXT("assetPath"), AssetPath);
-            Resp->SetStringField(TEXT("notifyName"), NotifyName);
-            Resp->SetNumberField(TEXT("time"), Time);
-          } else {
-            Message = TEXT("Asset is not an AnimSequence (Montages not fully "
-                           "supported for add_notify yet)");
-            ErrorCode = TEXT("INVALID_TYPE");
-            Resp->SetStringField(TEXT("error"), Message);
-          }
-        } else {
-          Message =
-              FString::Printf(TEXT("Notify class '%s' not found"), *NotifyName);
-          ErrorCode = TEXT("CLASS_NOT_FOUND");
           Resp->SetStringField(TEXT("error"), Message);
         }
       }
@@ -3812,6 +3657,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
         Message = TEXT("Valid skeletonPath required for create_aim_offset");
         ErrorCode = TEXT("INVALID_ARGUMENT");
         Resp->SetStringField(TEXT("error"), Message);
+      } else if (UEditorAssetLibrary::DoesAssetExist(FString::Printf(
+                     TEXT("%s/%s.%s"), *SavePath, *AimOffsetName, *AimOffsetName))) {
+        // IAssetTools::CreateAsset would pop a blocking "overwrite?" modal on an
+        // existing asset, starving the bridge's game thread. Fail fast instead.
+        Message = FString::Printf(TEXT("Asset already exists: %s/%s"), *SavePath,
+                                  *AimOffsetName);
+        ErrorCode = TEXT("ALREADY_EXISTS");
+        Resp->SetStringField(TEXT("error"), Message);
       } else {
         if (!UEditorAssetLibrary::DoesDirectoryExist(SavePath)) {
           UEditorAssetLibrary::MakeDirectory(SavePath);
@@ -4274,22 +4127,12 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
       ErrorCode = TEXT("INVALID_ARGUMENT");
       Resp->SetStringField(TEXT("error"), Message);
     } else {
-      TArray<FString> Commands;
-      Commands.Add(FString::Printf(TEXT("AddControlRigControl %s %s %s"),
-          *AssetPath, *ControlName, *ControlType));
-
-      FString CommandError;
-      if (!ExecuteEditorCommands(Commands, CommandError)) {
-        Message = CommandError.IsEmpty() ? TEXT("Failed to add control") : CommandError;
-        ErrorCode = TEXT("COMMAND_FAILED");
-        Resp->SetStringField(TEXT("error"), Message);
-      } else {
-        bSuccess = true;
-        Message = FString::Printf(TEXT("Control '%s' added to rig"), *ControlName);
-        Resp->SetStringField(TEXT("assetPath"), AssetPath);
-        Resp->SetStringField(TEXT("controlName"), ControlName);
-        Resp->SetStringField(TEXT("controlType"), ControlType);
-      }
+      Message = TEXT("Control Rig graph mutation is not supported by this build. create_control_rig creates the asset; add controls in the Control Rig editor.");
+      ErrorCode = TEXT("NOT_SUPPORTED");
+      Resp->SetStringField(TEXT("assetPath"), AssetPath);
+      Resp->SetStringField(TEXT("controlName"), ControlName);
+      Resp->SetStringField(TEXT("controlType"), ControlType);
+      Resp->SetStringField(TEXT("error"), Message);
     }
   } else if (LowerSub == TEXT("add_rig_unit")) {
     // Add a rig unit to a Control Rig
@@ -4307,22 +4150,12 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
       ErrorCode = TEXT("INVALID_ARGUMENT");
       Resp->SetStringField(TEXT("error"), Message);
     } else {
-      TArray<FString> Commands;
-      Commands.Add(FString::Printf(TEXT("AddControlRigUnit %s %s %s"),
-          *AssetPath, *UnitType, *UnitName));
-
-      FString CommandError;
-      if (!ExecuteEditorCommands(Commands, CommandError)) {
-        Message = CommandError.IsEmpty() ? TEXT("Failed to add rig unit") : CommandError;
-        ErrorCode = TEXT("COMMAND_FAILED");
-        Resp->SetStringField(TEXT("error"), Message);
-      } else {
-        bSuccess = true;
-        Message = FString::Printf(TEXT("Rig unit '%s' of type '%s' added"), *UnitName, *UnitType);
-        Resp->SetStringField(TEXT("assetPath"), AssetPath);
-        Resp->SetStringField(TEXT("unitType"), UnitType);
-        Resp->SetStringField(TEXT("unitName"), UnitName);
-      }
+      Message = TEXT("Control Rig VM graph unit insertion is not supported by this build. Use the Control Rig editor for rig unit graph edits.");
+      ErrorCode = TEXT("NOT_SUPPORTED");
+      Resp->SetStringField(TEXT("assetPath"), AssetPath);
+      Resp->SetStringField(TEXT("unitType"), UnitType);
+      Resp->SetStringField(TEXT("unitName"), UnitName);
+      Resp->SetStringField(TEXT("error"), Message);
     }
   } else if (LowerSub == TEXT("connect_rig_elements")) {
     // Connect elements in a Control Rig
@@ -4346,24 +4179,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
       ErrorCode = TEXT("INVALID_ARGUMENT");
       Resp->SetStringField(TEXT("error"), Message);
     } else {
-      TArray<FString> Commands;
-      Commands.Add(FString::Printf(TEXT("ConnectControlRigElements %s %s %s %s %s"),
-          *AssetPath, *SourceElement, *SourcePin, *TargetElement, *TargetPin));
-
-      FString CommandError;
-      if (!ExecuteEditorCommands(Commands, CommandError)) {
-        Message = CommandError.IsEmpty() ? TEXT("Failed to connect rig elements") : CommandError;
-        ErrorCode = TEXT("COMMAND_FAILED");
-        Resp->SetStringField(TEXT("error"), Message);
-      } else {
-        bSuccess = true;
-        Message = FString::Printf(TEXT("Connected '%s' to '%s'"), *SourceElement, *TargetElement);
-        Resp->SetStringField(TEXT("assetPath"), AssetPath);
-        Resp->SetStringField(TEXT("sourceElement"), SourceElement);
-        Resp->SetStringField(TEXT("targetElement"), TargetElement);
-        if (!SourcePin.IsEmpty()) Resp->SetStringField(TEXT("sourcePin"), SourcePin);
-        if (!TargetPin.IsEmpty()) Resp->SetStringField(TEXT("targetPin"), TargetPin);
-      }
+      Message = TEXT("Control Rig graph pin connections are not supported by this build. Use the Control Rig editor for graph wiring.");
+      ErrorCode = TEXT("NOT_SUPPORTED");
+      Resp->SetStringField(TEXT("assetPath"), AssetPath);
+      Resp->SetStringField(TEXT("sourceElement"), SourceElement);
+      Resp->SetStringField(TEXT("targetElement"), TargetElement);
+      if (!SourcePin.IsEmpty()) Resp->SetStringField(TEXT("sourcePin"), SourcePin);
+      if (!TargetPin.IsEmpty()) Resp->SetStringField(TEXT("targetPin"), TargetPin);
+      Resp->SetStringField(TEXT("error"), Message);
     }
   } else if (LowerSub == TEXT("create_pose_library")) {
     // Create a pose library asset
@@ -4376,21 +4199,41 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
       FString SavePath;
       Payload->TryGetStringField(TEXT("savePath"), SavePath);
       if (SavePath.IsEmpty()) {
+        Payload->TryGetStringField(TEXT("path"), SavePath);
+      }
+      if (SavePath.IsEmpty()) {
+        Payload->TryGetStringField(TEXT("directory"), SavePath);
+      }
+      if (SavePath.IsEmpty()) {
         SavePath = TEXT("/Game/Animations/PoseLibraries");
+      }
+      SavePath = SanitizeProjectRelativePath(SavePath.TrimStartAndEnd());
+      if (SavePath.IsEmpty()) {
+        Message = TEXT("Invalid savePath for create_pose_library");
+        ErrorCode = TEXT("INVALID_ARGUMENT");
+        Resp->SetStringField(TEXT("error"), Message);
       }
 
       FString SkeletonPath;
       Payload->TryGetStringField(TEXT("skeletonPath"), SkeletonPath);
 
-      if (SkeletonPath.IsEmpty()) {
+      if (!SavePath.IsEmpty() && SkeletonPath.IsEmpty()) {
         Message = TEXT("skeletonPath required for create_pose_library");
         ErrorCode = TEXT("INVALID_ARGUMENT");
         Resp->SetStringField(TEXT("error"), Message);
-      } else {
+      } else if (!SavePath.IsEmpty()) {
         USkeleton *TargetSkeleton = LoadObject<USkeleton>(nullptr, *SkeletonPath);
         if (!TargetSkeleton) {
           Message = FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath);
           ErrorCode = TEXT("ASSET_NOT_FOUND");
+          Resp->SetStringField(TEXT("error"), Message);
+        } else if (UEditorAssetLibrary::DoesAssetExist(FString::Printf(
+                       TEXT("%s/%s.%s"), *SavePath, *LibraryName, *LibraryName))) {
+          // IAssetTools::CreateAsset would pop a blocking "overwrite?" modal on an
+          // existing asset, starving the bridge's game thread. Fail fast instead.
+          Message = FString::Printf(TEXT("Asset already exists: %s/%s"), *SavePath,
+                                    *LibraryName);
+          ErrorCode = TEXT("ALREADY_EXISTS");
           Resp->SetStringField(TEXT("error"), Message);
         } else {
           if (!UEditorAssetLibrary::DoesDirectoryExist(SavePath)) {
@@ -4415,7 +4258,9 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
             bSuccess = true;
             Message = TEXT("Pose library created successfully");
             Resp->SetStringField(TEXT("assetPath"), NewAsset->GetPathName());
+            Resp->SetStringField(TEXT("savePath"), SavePath);
             Resp->SetStringField(TEXT("skeletonPath"), SkeletonPath);
+            McpHandlerUtils::AddVerification(Resp, NewAsset);
           } else {
             Message = TEXT("Failed to create pose library asset");
             ErrorCode = TEXT("ASSET_CREATION_FAILED");
@@ -4500,32 +4345,25 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
 
     FString RootBone;
     Payload->TryGetStringField(TEXT("rootBone"), RootBone);
+    if (RootBone.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("startBone"), RootBone);
+    }
 
     FString EndBone;
     Payload->TryGetStringField(TEXT("endBone"), EndBone);
 
     if (AssetPath.IsEmpty() || ChainName.IsEmpty() || RootBone.IsEmpty() || EndBone.IsEmpty()) {
-      Message = TEXT("assetPath, chainName, rootBone, and endBone required for add_ik_chain");
+      Message = TEXT("assetPath, chainName, startBone/rootBone, and endBone required for add_ik_chain");
       ErrorCode = TEXT("INVALID_ARGUMENT");
       Resp->SetStringField(TEXT("error"), Message);
     } else {
-      TArray<FString> Commands;
-      Commands.Add(FString::Printf(TEXT("AddIKChain %s %s %s %s"),
-          *AssetPath, *ChainName, *RootBone, *EndBone));
-
-      FString CommandError;
-      if (!ExecuteEditorCommands(Commands, CommandError)) {
-        Message = CommandError.IsEmpty() ? TEXT("Failed to add IK chain") : CommandError;
-        ErrorCode = TEXT("COMMAND_FAILED");
-        Resp->SetStringField(TEXT("error"), Message);
-      } else {
-        bSuccess = true;
-        Message = FString::Printf(TEXT("IK chain '%s' added from '%s' to '%s'"), *ChainName, *RootBone, *EndBone);
-        Resp->SetStringField(TEXT("assetPath"), AssetPath);
-        Resp->SetStringField(TEXT("chainName"), ChainName);
-        Resp->SetStringField(TEXT("rootBone"), RootBone);
-        Resp->SetStringField(TEXT("endBone"), EndBone);
-      }
+      Message = TEXT("IK Rig chain editing is not supported by this build. Create IK Rig assets through create_ik_rig, then author chains in the IK Rig editor.");
+      ErrorCode = TEXT("NOT_SUPPORTED");
+      Resp->SetStringField(TEXT("assetPath"), AssetPath);
+      Resp->SetStringField(TEXT("chainName"), ChainName);
+      Resp->SetStringField(TEXT("rootBone"), RootBone);
+      Resp->SetStringField(TEXT("endBone"), EndBone);
+      Resp->SetStringField(TEXT("error"), Message);
     }
   } else {
     Message = FString::Printf(
@@ -4584,7 +4422,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
 bool UMcpAutomationBridgeSubsystem::HandleCreateAnimBlueprint(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("create_animation_blueprint"),
                     ESearchCase::IgnoreCase)) {
@@ -4657,6 +4495,16 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateAnimBlueprint(
   }
 
   FString FullPath = FString::Printf(TEXT("%s/%s"), *SavePath, *BlueprintName);
+
+  // IAssetTools::CreateAsset pops a blocking "overwrite?" modal on an existing asset,
+  // starving the bridge's game thread until a human dismisses it. Fail fast instead.
+  if (UEditorAssetLibrary::DoesAssetExist(
+          FString::Printf(TEXT("%s.%s"), *FullPath, *BlueprintName))) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        FString::Printf(TEXT("Asset already exists: %s"), *FullPath),
+                        TEXT("ALREADY_EXISTS"));
+    return true;
+  }
 
   UAnimBlueprintFactory *Factory = NewObject<UAnimBlueprintFactory>();
   Factory->TargetSkeleton = Skeleton;
@@ -4746,7 +4594,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateAnimBlueprint(
 bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("play_anim_montage"), ESearchCase::IgnoreCase)) {
     return false;
@@ -4935,7 +4783,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
 bool UMcpAutomationBridgeSubsystem::HandleSetupRagdoll(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("setup_ragdoll"), ESearchCase::IgnoreCase)) {
     return false;
@@ -5089,7 +4937,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetupRagdoll(
 bool UMcpAutomationBridgeSubsystem::HandleActivateRagdoll(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("activate_ragdoll"), ESearchCase::IgnoreCase)) {
     return false;

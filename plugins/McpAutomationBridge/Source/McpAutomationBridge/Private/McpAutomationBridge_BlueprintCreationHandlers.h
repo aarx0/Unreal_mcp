@@ -4,7 +4,7 @@
 #include "Dom/JsonObject.h"
 
 class UMcpAutomationBridgeSubsystem;
-class FMcpBridgeWebSocket;
+#include "McpAutomationBridgeGlobals.h"
 
 /**
  * Handle a request to create or instantiate a Blueprint asset or Blueprint-derived object described in the payload.
@@ -26,6 +26,6 @@ class FMcpBridgeWebSocket;
 class FBlueprintCreationHandlers
 {
 public:
-    static bool HandleBlueprintCreate(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId, const TSharedPtr<FJsonObject>& LocalPayload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
-    static bool HandleBlueprintProbeSubobjectHandle(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId, const TSharedPtr<FJsonObject>& LocalPayload, TSharedPtr<FMcpBridgeWebSocket> RequestingSocket);
+    static bool HandleBlueprintCreate(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId, const TSharedPtr<FJsonObject>& LocalPayload, FMcpResponseHandle RequestingSocket);
+    static bool HandleBlueprintProbeSubobjectHandle(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId, const TSharedPtr<FJsonObject>& LocalPayload, FMcpResponseHandle RequestingSocket);
 };

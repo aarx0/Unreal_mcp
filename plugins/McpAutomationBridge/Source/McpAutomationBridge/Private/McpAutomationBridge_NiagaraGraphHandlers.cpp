@@ -66,7 +66,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraGraphAction(
     const FString& RequestId, 
     const FString& Action, 
     const TSharedPtr<FJsonObject>& Payload, 
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Validate action
     if (Action != TEXT("manage_niagara_graph"))
@@ -233,12 +233,70 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraGraphAction(
     {
         FString FromNodeId, FromPinName;
         FString ToNodeId, ToPinName;
+        const bool bAutoConnect = GetJsonBoolField(Payload, TEXT("autoConnect"), false);
 
-        if (!Payload->TryGetStringField(TEXT("fromNode"), FromNodeId) ||
-            !Payload->TryGetStringField(TEXT("fromPin"), FromPinName) ||
-            !Payload->TryGetStringField(TEXT("toNode"), ToNodeId) ||
-            !Payload->TryGetStringField(TEXT("toPin"), ToPinName))
+        if (!Payload->TryGetStringField(TEXT("sourceNodeId"), FromNodeId) ||
+            !Payload->TryGetStringField(TEXT("sourcePinName"), FromPinName) ||
+            !Payload->TryGetStringField(TEXT("targetNodeId"), ToNodeId) ||
+            !Payload->TryGetStringField(TEXT("targetPinName"), ToPinName))
         {
+            if (bAutoConnect)
+            {
+                TargetGraph->Modify();
+                for (UEdGraphNode* FromCandidate : TargetGraph->Nodes)
+                {
+                    if (!FromCandidate)
+                    {
+                        continue;
+                    }
+
+                    for (UEdGraphPin* FromCandidatePin : FromCandidate->Pins)
+                    {
+                        if (!FromCandidatePin || FromCandidatePin->Direction != EGPD_Output)
+                        {
+                            continue;
+                        }
+
+                        for (UEdGraphNode* ToCandidate : TargetGraph->Nodes)
+                        {
+                            if (!ToCandidate || ToCandidate == FromCandidate)
+                            {
+                                continue;
+                            }
+
+                            for (UEdGraphPin* ToCandidatePin : ToCandidate->Pins)
+                            {
+                                if (!ToCandidatePin || ToCandidatePin->Direction != EGPD_Input)
+                                {
+                                    continue;
+                                }
+
+                                if (TargetGraph->GetSchema()->TryCreateConnection(FromCandidatePin, ToCandidatePin))
+                                {
+                                    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+                                    McpHandlerUtils::AddVerification(Result, System);
+                                    Result->SetStringField(TEXT("sourceNodeId"), FromCandidate->NodeGuid.ToString());
+                                    Result->SetStringField(TEXT("sourcePinName"), FromCandidatePin->PinName.ToString());
+                                    Result->SetStringField(TEXT("targetNodeId"), ToCandidate->NodeGuid.ToString());
+                                    Result->SetStringField(TEXT("targetPinName"), ToCandidatePin->PinName.ToString());
+                                    Result->SetBoolField(TEXT("connected"), true);
+                                    Result->SetBoolField(TEXT("autoConnected"), true);
+
+                                    SendAutomationResponse(RequestingSocket, RequestId, true,
+                                        TEXT("Pins connected successfully."), Result);
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("Could not find a compatible Niagara graph pin pair to auto-connect."),
+                    TEXT("PIN_NOT_FOUND"));
+                return true;
+            }
+
             SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("connect_pins requires fromNode, fromPin, toNode, toPin"), 
                 TEXT("INVALID_ARGUMENT"));
@@ -316,10 +374,10 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraGraphAction(
         {
             TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
             McpHandlerUtils::AddVerification(Result, System);
-            Result->SetStringField(TEXT("fromNode"), FromNodeId);
-            Result->SetStringField(TEXT("fromPin"), FromPinName);
-            Result->SetStringField(TEXT("toNode"), ToNodeId);
-            Result->SetStringField(TEXT("toPin"), ToPinName);
+            Result->SetStringField(TEXT("sourceNodeId"), FromNodeId);
+            Result->SetStringField(TEXT("sourcePinName"), FromPinName);
+            Result->SetStringField(TEXT("targetNodeId"), ToNodeId);
+            Result->SetStringField(TEXT("targetPinName"), ToPinName);
             Result->SetBoolField(TEXT("connected"), true);
 
             SendAutomationResponse(RequestingSocket, RequestId, true, 

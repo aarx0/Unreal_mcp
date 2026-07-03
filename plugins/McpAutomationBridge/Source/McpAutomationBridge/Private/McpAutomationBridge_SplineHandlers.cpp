@@ -56,7 +56,6 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
-#include "McpBridgeWebSocket.h"
 #include "Misc/EngineVersionComparison.h"
 
 // =============================================================================
@@ -79,6 +78,7 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/WorldSettings.h"
 #endif
 
 // =============================================================================
@@ -234,6 +234,92 @@ static FString SplinePointTypeToString(ESplinePointType::Type Type)
     }
 }
 
+static FString MakeSplineConfigTagPrefix(const FString& Key)
+{
+    return FString::Printf(TEXT("MCP.Spline.%s="), *Key);
+}
+
+static void SetSplineConfigValue(AActor* Target, const FString& Key, const FString& Value)
+{
+    if (!Target) return;
+
+    const FString Prefix = MakeSplineConfigTagPrefix(Key);
+    for (int32 Index = Target->Tags.Num() - 1; Index >= 0; --Index)
+    {
+        if (Target->Tags[Index].ToString().StartsWith(Prefix))
+        {
+            Target->Tags.RemoveAt(Index);
+        }
+    }
+
+    Target->Modify();
+    Target->Tags.Add(FName(*(Prefix + Value)));
+    Target->MarkPackageDirty();
+}
+
+static bool TryGetSplineConfigValue(AActor* Target, const FString& Key, FString& OutValue)
+{
+    if (!Target) return false;
+
+    const FString Prefix = MakeSplineConfigTagPrefix(Key);
+    for (const FName& Tag : Target->Tags)
+    {
+        const FString TagString = Tag.ToString();
+        if (TagString.StartsWith(Prefix))
+        {
+            OutValue = TagString.RightChop(Prefix.Len());
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static AActor* ResolveSplineConfigTarget(UWorld* World, const FString& ActorName)
+{
+    if (!World) return nullptr;
+
+    if (!ActorName.TrimStartAndEnd().IsEmpty())
+    {
+        return FindActorByName(World, ActorName.TrimStartAndEnd());
+    }
+
+    return World->GetWorldSettings();
+}
+
+static FString GetSplineConfigTargetName(AActor* Target)
+{
+    if (!Target) return TEXT("");
+    return Target->GetActorLabel().IsEmpty() ? Target->GetName() : Target->GetActorLabel();
+}
+
+static bool GetConfiguredSplineBool(AActor* Actor, UWorld* World, const FString& Key, bool DefaultValue)
+{
+    FString Value;
+    if (TryGetSplineConfigValue(Actor, Key, Value) || TryGetSplineConfigValue(World ? World->GetWorldSettings() : nullptr, Key, Value))
+    {
+        return Value.Equals(TEXT("true"), ESearchCase::IgnoreCase) || Value == TEXT("1");
+    }
+
+    return DefaultValue;
+}
+
+static double GetConfiguredSplineNumber(AActor* Actor, UWorld* World, const FString& Key, double DefaultValue)
+{
+    FString Value;
+    if (TryGetSplineConfigValue(Actor, Key, Value) || TryGetSplineConfigValue(World ? World->GetWorldSettings() : nullptr, Key, Value))
+    {
+        return FCString::Atod(*Value);
+    }
+
+    return DefaultValue;
+}
+
+static FString BoolToSplineConfigString(bool bValue)
+{
+    return bValue ? TEXT("true") : TEXT("false");
+}
+
 // ============================================================================
 // Spline Creation Handlers
 // ============================================================================
@@ -242,7 +328,7 @@ static bool HandleCreateSplineActor(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"), TEXT("SplineActor"));
     FVector Location = GetJsonVectorFieldSpline(Payload, TEXT("location"));
@@ -345,7 +431,7 @@ static bool HandleAddSplinePoint(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     FVector Position = GetJsonVectorFieldSpline(Payload, TEXT("position"));
@@ -415,7 +501,7 @@ static bool HandleRemoveSplinePoint(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     int32 PointIndex = GetJsonIntFieldSpline(Payload, TEXT("pointIndex"), 0);
@@ -479,7 +565,7 @@ static bool HandleSetSplinePointPosition(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     int32 PointIndex = GetJsonIntFieldSpline(Payload, TEXT("pointIndex"), 0);
@@ -543,7 +629,7 @@ static bool HandleSetSplinePointTangents(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     int32 PointIndex = GetJsonIntFieldSpline(Payload, TEXT("pointIndex"), 0);
@@ -617,7 +703,7 @@ static bool HandleSetSplinePointRotation(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     int32 PointIndex = GetJsonIntFieldSpline(Payload, TEXT("pointIndex"), 0);
@@ -681,7 +767,7 @@ static bool HandleSetSplinePointScale(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     int32 PointIndex = GetJsonIntFieldSpline(Payload, TEXT("pointIndex"), 0);
@@ -745,7 +831,7 @@ static bool HandleSetSplineType(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     FString SplineType = GetJsonStringFieldSpline(Payload, TEXT("splineType"), TEXT("Curve"));
@@ -827,7 +913,7 @@ static bool HandleCreateSplineMeshComponent(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString BlueprintPath = GetJsonStringFieldSpline(Payload, TEXT("blueprintPath"));
     FString ComponentName = GetJsonStringFieldSpline(Payload, TEXT("componentName"), TEXT("SplineMesh"));
@@ -964,7 +1050,7 @@ static bool HandleSetSplineMeshAsset(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     FString ComponentName = GetJsonStringFieldSpline(Payload, TEXT("componentName"));
@@ -1058,7 +1144,7 @@ static bool HandleConfigureSplineMeshAxis(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     FString ComponentName = GetJsonStringFieldSpline(Payload, TEXT("componentName"));
@@ -1136,7 +1222,7 @@ static bool HandleSetSplineMeshMaterial(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     FString ComponentName = GetJsonStringFieldSpline(Payload, TEXT("componentName"));
@@ -1231,7 +1317,7 @@ static bool HandleCreateSplineMeshActor(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"), TEXT("SplineMeshActor"));
     FString ComponentName = GetJsonStringFieldSpline(Payload, TEXT("componentName"), TEXT("SplineMesh"));
@@ -1352,11 +1438,10 @@ static bool HandleScatterMeshesAlongSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
     FString MeshPath = GetJsonStringFieldSpline(Payload, TEXT("meshPath"));
-    double Spacing = GetJsonNumberFieldSpline(Payload, TEXT("spacing"), 100.0);
     bool bAlignToSpline = GetJsonBoolFieldSpline(Payload, TEXT("alignToSpline"), true);
 
     // Sanitize mesh path
@@ -1366,14 +1451,6 @@ static bool HandleScatterMeshesAlongSpline(
         Self->SendAutomationResponse(Socket, RequestId, false,
             FString::Printf(TEXT("Invalid or unsafe meshPath: %s. Path must be relative to project (e.g., /Game/...)"), *MeshPath),
             nullptr, TEXT("SECURITY_VIOLATION"));
-        return true;
-    }
-
-    // Validate spacing to prevent division by zero
-    if (Spacing <= 0.0)
-    {
-        Self->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("spacing must be greater than 0"), nullptr, TEXT("INVALID_PARAM"));
         return true;
     }
 
@@ -1401,11 +1478,60 @@ static bool HandleScatterMeshesAlongSpline(
         return true;
     }
 
+    const bool bHasSpacing = Payload.IsValid() && Payload->HasField(TEXT("spacing"));
+    const bool bHasUseRandomOffset = Payload.IsValid() && Payload->HasField(TEXT("useRandomOffset"));
+    const bool bHasRandomOffsetRange = Payload.IsValid() && Payload->HasField(TEXT("randomOffsetRange"));
+    const bool bHasRandomizeScale = Payload.IsValid() && Payload->HasField(TEXT("randomizeScale"));
+    const bool bHasMinScale = Payload.IsValid() && Payload->HasField(TEXT("minScale"));
+    const bool bHasMaxScale = Payload.IsValid() && Payload->HasField(TEXT("maxScale"));
+    const bool bHasRandomizeRotation = Payload.IsValid() && Payload->HasField(TEXT("randomizeRotation"));
+    const bool bHasRotationRange = Payload.IsValid() && Payload->HasField(TEXT("rotationRange"));
+
+    double Spacing = bHasSpacing
+        ? GetJsonNumberFieldSpline(Payload, TEXT("spacing"), 100.0)
+        : GetConfiguredSplineNumber(Actor, World, TEXT("meshSpacing"), 100.0);
+    const bool bUseRandomOffset = bHasUseRandomOffset
+        ? GetJsonBoolFieldSpline(Payload, TEXT("useRandomOffset"), false)
+        : GetConfiguredSplineBool(Actor, World, TEXT("useRandomOffset"), false);
+    const double RandomOffsetRange = bHasRandomOffsetRange
+        ? GetJsonNumberFieldSpline(Payload, TEXT("randomOffsetRange"), 0.0)
+        : GetConfiguredSplineNumber(Actor, World, TEXT("randomOffsetRange"), 0.0);
+    const bool bRandomizeScale = bHasRandomizeScale
+        ? GetJsonBoolFieldSpline(Payload, TEXT("randomizeScale"), false)
+        : GetConfiguredSplineBool(Actor, World, TEXT("randomizeScale"), false);
+    const double MinScale = bHasMinScale
+        ? GetJsonNumberFieldSpline(Payload, TEXT("minScale"), 0.8)
+        : GetConfiguredSplineNumber(Actor, World, TEXT("minScale"), 0.8);
+    const double MaxScale = bHasMaxScale
+        ? GetJsonNumberFieldSpline(Payload, TEXT("maxScale"), 1.2)
+        : GetConfiguredSplineNumber(Actor, World, TEXT("maxScale"), 1.2);
+    const bool bRandomizeRotation = bHasRandomizeRotation
+        ? GetJsonBoolFieldSpline(Payload, TEXT("randomizeRotation"), false)
+        : GetConfiguredSplineBool(Actor, World, TEXT("randomizeRotation"), false);
+    const double RotationRange = bHasRotationRange
+        ? GetJsonNumberFieldSpline(Payload, TEXT("rotationRange"), 360.0)
+        : GetConfiguredSplineNumber(Actor, World, TEXT("rotationRange"), 360.0);
+
     UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *SafeMeshPath);
     if (!Mesh)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
             FString::Printf(TEXT("Mesh not found: %s"), *SafeMeshPath), nullptr, TEXT("MESH_NOT_FOUND"));
+        return true;
+    }
+
+    // Validate spacing/randomization before creating components.
+    if (Spacing <= 0.0)
+    {
+        Self->SendAutomationResponse(Socket, RequestId, false,
+            TEXT("spacing must be greater than 0"), nullptr, TEXT("INVALID_PARAM"));
+        return true;
+    }
+
+    if (RandomOffsetRange < 0.0 || MinScale <= 0.0 || MaxScale <= 0.0 || MinScale > MaxScale || RotationRange < 0.0)
+    {
+        Self->SendAutomationResponse(Socket, RequestId, false,
+            TEXT("Invalid spline mesh randomization configuration"), nullptr, TEXT("INVALID_PARAM"));
         return true;
     }
 
@@ -1416,11 +1542,21 @@ static bool HandleScatterMeshesAlongSpline(
 
     for (int32 i = 0; i <= MeshCount; i++)
     {
-        float Distance = i * Spacing;
+        float Distance = static_cast<float>(i * Spacing);
+        if (bUseRandomOffset && RandomOffsetRange > 0.0)
+        {
+            Distance += FMath::FRandRange(static_cast<float>(-RandomOffsetRange), static_cast<float>(RandomOffsetRange));
+            Distance = FMath::Clamp(Distance, 0.0f, SplineLength);
+        }
         FVector Location = SplineComp->GetLocationAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
         FRotator Rotation = bAlignToSpline 
             ? SplineComp->GetRotationAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World)
             : FRotator::ZeroRotator;
+
+        if (bRandomizeRotation && RotationRange > 0.0)
+        {
+            Rotation.Yaw += FMath::FRandRange(static_cast<float>(-RotationRange), static_cast<float>(RotationRange));
+        }
 
         // Create a static mesh component for each instance
         UStaticMeshComponent* MeshComp = NewObject<UStaticMeshComponent>(Actor);
@@ -1428,6 +1564,11 @@ static bool HandleScatterMeshesAlongSpline(
         {
             MeshComp->SetStaticMesh(Mesh);
             MeshComp->SetWorldLocationAndRotation(Location, Rotation);
+            if (bRandomizeScale)
+            {
+                const float UniformScale = FMath::FRandRange(static_cast<float>(MinScale), static_cast<float>(MaxScale));
+                MeshComp->SetWorldScale3D(FVector(UniformScale));
+            }
             MeshComp->RegisterComponent();
             Actor->AddInstanceComponent(MeshComp);
             MeshComp->AttachToComponent(SplineComp, FAttachmentTransformRules::KeepWorldTransform);
@@ -1441,6 +1582,13 @@ static bool HandleScatterMeshesAlongSpline(
     Result->SetNumberField(TEXT("meshesCreated"), CreatedMeshes.Num());
     Result->SetNumberField(TEXT("splineLength"), SplineLength);
     Result->SetNumberField(TEXT("spacing"), Spacing);
+    Result->SetBoolField(TEXT("useRandomOffset"), bUseRandomOffset);
+    Result->SetNumberField(TEXT("randomOffsetRange"), RandomOffsetRange);
+    Result->SetBoolField(TEXT("randomizeScale"), bRandomizeScale);
+    Result->SetNumberField(TEXT("minScale"), MinScale);
+    Result->SetNumberField(TEXT("maxScale"), MaxScale);
+    Result->SetBoolField(TEXT("randomizeRotation"), bRandomizeRotation);
+    Result->SetNumberField(TEXT("rotationRange"), RotationRange);
 
     // Add verification data
     McpHandlerUtils::AddVerification(Result, Actor);
@@ -1454,19 +1602,51 @@ static bool HandleConfigureMeshSpacing(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
-    // VALIDATION-ONLY: This action validates spacing parameters and echoes them back.
-    // Storage is not implemented - spacing must be passed directly to scatter_meshes_along_spline.
-    // Future enhancement: Store in actor metadata via UMetaData component.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World)
+    {
+        Self->SendAutomationResponse(Socket, RequestId, false,
+            TEXT("No editor world available"), nullptr, TEXT("NO_WORLD"));
+        return true;
+    }
+
+    const FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
+    AActor* Target = ResolveSplineConfigTarget(World, ActorName);
+    if (!Target)
+    {
+        Self->SendAutomationResponse(Socket, RequestId, false,
+            FString::Printf(TEXT("Spline configuration target not found: %s"), *ActorName), nullptr, TEXT("NOT_FOUND"));
+        return true;
+    }
+
+    const double Spacing = GetJsonNumberFieldSpline(Payload, TEXT("spacing"), 100.0);
+    const bool bUseRandomOffset = GetJsonBoolFieldSpline(Payload, TEXT("useRandomOffset"), false);
+    const double RandomOffsetRange = GetJsonNumberFieldSpline(Payload, TEXT("randomOffsetRange"), 0.0);
+
+    if (Spacing <= 0.0 || RandomOffsetRange < 0.0)
+    {
+        Self->SendAutomationResponse(Socket, RequestId, false,
+            TEXT("spacing must be greater than 0 and randomOffsetRange must be non-negative"), nullptr, TEXT("INVALID_PARAM"));
+        return true;
+    }
+
+    SetSplineConfigValue(Target, TEXT("meshSpacing"), FString::SanitizeFloat(Spacing));
+    SetSplineConfigValue(Target, TEXT("useRandomOffset"), BoolToSplineConfigString(bUseRandomOffset));
+    SetSplineConfigValue(Target, TEXT("randomOffsetRange"), FString::SanitizeFloat(RandomOffsetRange));
+    World->MarkPackageDirty();
     
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetNumberField(TEXT("spacing"), GetJsonNumberFieldSpline(Payload, TEXT("spacing"), 100.0));
-    Result->SetBoolField(TEXT("useRandomOffset"), GetJsonBoolFieldSpline(Payload, TEXT("useRandomOffset"), false));
-    Result->SetNumberField(TEXT("randomOffsetRange"), GetJsonNumberFieldSpline(Payload, TEXT("randomOffsetRange"), 0.0));
+    Result->SetStringField(TEXT("targetName"), GetSplineConfigTargetName(Target));
+    Result->SetStringField(TEXT("targetPath"), Target->GetPathName());
+    Result->SetBoolField(TEXT("stored"), true);
+    Result->SetNumberField(TEXT("spacing"), Spacing);
+    Result->SetBoolField(TEXT("useRandomOffset"), bUseRandomOffset);
+    Result->SetNumberField(TEXT("randomOffsetRange"), RandomOffsetRange);
 
     Self->SendAutomationResponse(Socket, RequestId, true,
-        TEXT("Mesh spacing parameters validated (storage not implemented - pass to scatter_meshes_along_spline)"), Result);
+        TEXT("Mesh spacing configuration stored on Unreal spline target"), Result);
     return true;
 }
 
@@ -1474,20 +1654,57 @@ static bool HandleConfigureMeshRandomization(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
-    // VALIDATION-ONLY: This action validates randomization parameters and echoes them back.
-    // Storage is not implemented - pass randomization params to scatter_meshes_along_spline.
-    // Future enhancement: Store in actor metadata via UMetaData component.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World)
+    {
+        Self->SendAutomationResponse(Socket, RequestId, false,
+            TEXT("No editor world available"), nullptr, TEXT("NO_WORLD"));
+        return true;
+    }
+
+    const FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
+    AActor* Target = ResolveSplineConfigTarget(World, ActorName);
+    if (!Target)
+    {
+        Self->SendAutomationResponse(Socket, RequestId, false,
+            FString::Printf(TEXT("Spline configuration target not found: %s"), *ActorName), nullptr, TEXT("NOT_FOUND"));
+        return true;
+    }
+
+    const bool bRandomizeScale = GetJsonBoolFieldSpline(Payload, TEXT("randomizeScale"), false);
+    const double MinScale = GetJsonNumberFieldSpline(Payload, TEXT("minScale"), 0.8);
+    const double MaxScale = GetJsonNumberFieldSpline(Payload, TEXT("maxScale"), 1.2);
+    const bool bRandomizeRotation = GetJsonBoolFieldSpline(Payload, TEXT("randomizeRotation"), false);
+    const double RotationRange = GetJsonNumberFieldSpline(Payload, TEXT("rotationRange"), 360.0);
+
+    if (MinScale <= 0.0 || MaxScale <= 0.0 || MinScale > MaxScale || RotationRange < 0.0)
+    {
+        Self->SendAutomationResponse(Socket, RequestId, false,
+            TEXT("Scale values must be positive, minScale must not exceed maxScale, and rotationRange must be non-negative"), nullptr, TEXT("INVALID_PARAM"));
+        return true;
+    }
+
+    SetSplineConfigValue(Target, TEXT("randomizeScale"), BoolToSplineConfigString(bRandomizeScale));
+    SetSplineConfigValue(Target, TEXT("minScale"), FString::SanitizeFloat(MinScale));
+    SetSplineConfigValue(Target, TEXT("maxScale"), FString::SanitizeFloat(MaxScale));
+    SetSplineConfigValue(Target, TEXT("randomizeRotation"), BoolToSplineConfigString(bRandomizeRotation));
+    SetSplineConfigValue(Target, TEXT("rotationRange"), FString::SanitizeFloat(RotationRange));
+    World->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetBoolField(TEXT("randomizeScale"), GetJsonBoolFieldSpline(Payload, TEXT("randomizeScale"), false));
-    Result->SetNumberField(TEXT("minScale"), GetJsonNumberFieldSpline(Payload, TEXT("minScale"), 0.8));
-    Result->SetNumberField(TEXT("maxScale"), GetJsonNumberFieldSpline(Payload, TEXT("maxScale"), 1.2));
-    Result->SetBoolField(TEXT("randomizeRotation"), GetJsonBoolFieldSpline(Payload, TEXT("randomizeRotation"), false));
-    Result->SetNumberField(TEXT("rotationRange"), GetJsonNumberFieldSpline(Payload, TEXT("rotationRange"), 360.0));
+    Result->SetStringField(TEXT("targetName"), GetSplineConfigTargetName(Target));
+    Result->SetStringField(TEXT("targetPath"), Target->GetPathName());
+    Result->SetBoolField(TEXT("stored"), true);
+    Result->SetBoolField(TEXT("randomizeScale"), bRandomizeScale);
+    Result->SetNumberField(TEXT("minScale"), MinScale);
+    Result->SetNumberField(TEXT("maxScale"), MaxScale);
+    Result->SetBoolField(TEXT("randomizeRotation"), bRandomizeRotation);
+    Result->SetNumberField(TEXT("rotationRange"), RotationRange);
 
     Self->SendAutomationResponse(Socket, RequestId, true,
-        TEXT("Mesh randomization parameters validated (storage not implemented - pass to scatter_meshes_along_spline)"), Result);
+        TEXT("Mesh randomization configuration stored on Unreal spline target"), Result);
     return true;
 }
 
@@ -1499,7 +1716,7 @@ static bool HandleCreateTemplateSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket,
+    FMcpResponseHandle Socket,
     const FString& TemplateName,
     const FString& DefaultMeshPath)
 {
@@ -1575,7 +1792,7 @@ static bool HandleCreateRoadSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     return HandleCreateTemplateSpline(Self, RequestId, Payload, Socket, TEXT("Road"), TEXT(""));
 }
@@ -1584,7 +1801,7 @@ static bool HandleCreateRiverSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     return HandleCreateTemplateSpline(Self, RequestId, Payload, Socket, TEXT("River"), TEXT(""));
 }
@@ -1593,7 +1810,7 @@ static bool HandleCreateFenceSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     return HandleCreateTemplateSpline(Self, RequestId, Payload, Socket, TEXT("Fence"), TEXT(""));
 }
@@ -1602,7 +1819,7 @@ static bool HandleCreateWallSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     return HandleCreateTemplateSpline(Self, RequestId, Payload, Socket, TEXT("Wall"), TEXT(""));
 }
@@ -1611,7 +1828,7 @@ static bool HandleCreateCableSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     return HandleCreateTemplateSpline(Self, RequestId, Payload, Socket, TEXT("Cable"), TEXT(""));
 }
@@ -1620,7 +1837,7 @@ static bool HandleCreatePipeSpline(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     return HandleCreateTemplateSpline(Self, RequestId, Payload, Socket, TEXT("Pipe"), TEXT(""));
 }
@@ -1633,7 +1850,7 @@ static bool HandleGetSplinesInfo(
     UMcpAutomationBridgeSubsystem* Self,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
 
@@ -1737,8 +1954,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSplinesAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
+    // Only handle manage_splines; decline anything else so the dispatcher keeps
+    // trying other handlers and reaches its UNKNOWN_ACTION fallback. Without this
+    // gate the handler claims any unrouted action that reaches it.
+    if (Action != TEXT("manage_splines"))
+    {
+        return false;
+    }
 #if WITH_EDITOR
     FString SubAction = GetJsonStringFieldSpline(Payload, TEXT("subAction"), TEXT(""));
     

@@ -67,12 +67,18 @@
 #include "TextureResource.h"
 #include "Misc/PackageName.h"
 #include "HAL/PlatformFileManager.h"
+#include "UObject/SoftObjectPath.h"
 
 // Editor/Asset
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
+#if __has_include("Factories/Texture2dFactoryNew.h")
+#include "Factories/Texture2dFactoryNew.h"
+#else
 #include "Factories/Texture2DFactoryNew.h"
+#endif
 #include "EditorAssetLibrary.h"
+#include "FileHelpers.h"
 
 // Rendering
 #include "Engine/TextureRenderTarget2D.h"
@@ -89,35 +95,6 @@
     Response->SetStringField(TEXT("error"), Msg); \
     return Response;
 
-// JSON field extraction aliases - delegate to McpHandlerUtils
-namespace TextureHandlerHelpers
-{
-    // Use McpHandlerUtils functions with defaults
-    inline FString GetStringField(const TSharedPtr<FJsonObject>& Obj, const FString& FieldName, const FString& Default = TEXT(""))
-    {
-        return McpHandlerUtils::GetOptionalString(Obj, FieldName, Default);
-    }
-    
-    inline double GetNumberField(const TSharedPtr<FJsonObject>& Obj, const FString& FieldName, double Default = 0.0)
-    {
-        double Value = Default;
-        if (Obj.IsValid())
-        {
-            Obj->TryGetNumberField(FieldName, Value);
-        }
-        return Value;
-    }
-    
-    inline bool GetBoolField(const TSharedPtr<FJsonObject>& Obj, const FString& FieldName, bool Default = false)
-    {
-        return McpHandlerUtils::GetOptionalBool(Obj, FieldName, Default);
-    }
-}
-
-// Legacy aliases for backward compatibility with existing code
-#define GetStringFieldTextAuth TextureHandlerHelpers::GetStringField
-#define GetNumberFieldTextAuth TextureHandlerHelpers::GetNumberField
-#define GetBoolFieldTextAuth TextureHandlerHelpers::GetBoolField
 
 // =============================================================================
 // Local Helper Functions
@@ -139,6 +116,16 @@ static FString NormalizeTexturePath(const FString& Path)
     }
     
     return Normalized;
+}
+
+static FAssetData GetTextureAssetDataByObjectPath(const FString& ObjectPath)
+{
+    IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+    return AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(ObjectPath));
+#else
+    return AssetRegistry.GetAssetByObjectPath(FName(*ObjectPath));
+#endif
 }
 
 // NOTE: Use McpSafeAssetSave(Asset) from McpAutomationBridgeHelpers.h for saving textures.
@@ -170,12 +157,27 @@ static UTexture2D* CreateEmptyTexture(const FString& PackagePath, const FString&
         return nullptr;
     }
     
-    // Create texture
+    // Create or reuse texture. Reuse is required after integration cleanup deletes
+    // files on disk while the editor may still hold the old UObject in memory;
+    // blindly calling NewObject with the same name can fail or assert.
     EPixelFormat Format = bHDR ? PF_FloatRGBA : PF_B8G8R8A8;
-    UTexture2D* NewTexture = NewObject<UTexture2D>(Package, UTexture2D::StaticClass(), FName(*TextureName), RF_Public | RF_Standalone);
+    UTexture2D* NewTexture = FindObject<UTexture2D>(Package, *TextureName);
+    if (!NewTexture)
+    {
+        NewTexture = NewObject<UTexture2D>(Package, UTexture2D::StaticClass(), FName(*TextureName), RF_Public | RF_Standalone);
+    }
+    if (!NewTexture)
+    {
+        return nullptr;
+    }
+    NewTexture->SetFlags(RF_Public | RF_Standalone);
     
     // Initialize platform data
-    NewTexture->SetPlatformData(new FTexturePlatformData());
+    if (!NewTexture->GetPlatformData())
+    {
+        NewTexture->SetPlatformData(new FTexturePlatformData());
+    }
+    NewTexture->GetPlatformData()->Mips.Empty();
     NewTexture->GetPlatformData()->SizeX = Width;
     NewTexture->GetPlatformData()->SizeY = Height;
     NewTexture->GetPlatformData()->PixelFormat = Format;
@@ -188,7 +190,7 @@ static UTexture2D* CreateEmptyTexture(const FString& PackagePath, const FString&
     FTexture2DMipMap* Mip = new FTexture2DMipMap();
     Mip->SizeX = Width;
     Mip->SizeY = Height;
-    Mip->SizeZ = 0;
+    Mip->SizeZ = 1;
     NewTexture->GetPlatformData()->Mips.Add(Mip);
     
     // Allocate and initialize pixel data
@@ -211,9 +213,88 @@ static UTexture2D* CreateEmptyTexture(const FString& PackagePath, const FString&
     NewTexture->LODGroup = TEXTUREGROUP_World;
     
     NewTexture->UpdateResource();
+    NewTexture->PostEditChange();
     Package->MarkPackageDirty();
     
     return NewTexture;
+}
+
+static bool UpdateTextureBGRA8(UTexture2D* Texture, int32 Width, int32 Height, const TArray<uint8>& Pixels)
+{
+    if (!Texture || Pixels.Num() != Width * Height * 4 || !Texture->GetPlatformData() || Texture->GetPlatformData()->Mips.Num() == 0)
+    {
+        return false;
+    }
+
+    Texture->Source.Init(Width, Height, 1, 1, TSF_BGRA8, Pixels.GetData());
+
+    FTexture2DMipMap& Mip = Texture->GetPlatformData()->Mips[0];
+    Mip.SizeX = Width;
+    Mip.SizeY = Height;
+    Mip.SizeZ = 1;
+    Mip.BulkData.Lock(LOCK_READ_WRITE);
+    void* TextureData = Mip.BulkData.Realloc(Pixels.Num());
+    FMemory::Memcpy(TextureData, Pixels.GetData(), Pixels.Num());
+    Mip.BulkData.Unlock();
+
+    Texture->UpdateResource();
+    Texture->PostEditChange();
+    Texture->MarkPackageDirty();
+    return true;
+}
+
+static bool SaveTextureAsset(UTexture2D* Texture)
+{
+    if (!Texture)
+    {
+        return false;
+    }
+
+    Texture->PostEditChange();
+    FlushRenderingCommands();
+
+    FAssetRegistryModule::AssetCreated(Texture);
+    Texture->MarkPackageDirty();
+    if (McpSafeAssetSave(Texture))
+    {
+        return true;
+    }
+
+    UPackage* Package = Texture->GetOutermost();
+    if (!Package)
+    {
+        return false;
+    }
+
+    // Some procedurally-created textures remain valid but UPackageTools can
+    // report false in headless editor runs. Keep the editor-owned save path and
+    // verify persistence on disk instead of falling back to UEditorAssetLibrary.
+    TArray<UPackage*> PackagesToSave;
+    PackagesToSave.Add(Package);
+    const FEditorFileUtils::EPromptReturnCode PromptSaveResult =
+        FEditorFileUtils::PromptForCheckoutAndSave(PackagesToSave, false, false);
+    const bool bPromptSaveSucceeded =
+        PromptSaveResult == FEditorFileUtils::PR_Success;
+    const bool bEditorSaveSucceeded =
+        !bPromptSaveSucceeded && UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, false);
+    FString PackageFilename;
+    const bool bHasFilename = FPackageName::TryConvertLongPackageNameToFilename(
+        Package->GetName(), PackageFilename, FPackageName::GetAssetPackageExtension());
+    const bool bExistsOnDisk = bHasFilename &&
+        IFileManager::Get().FileExists(*FPaths::ConvertRelativePathToFull(PackageFilename));
+    if (bPromptSaveSucceeded || bEditorSaveSucceeded || bExistsOnDisk)
+    {
+        if (bHasFilename)
+        {
+            TArray<FString> FilesToScan;
+            FilesToScan.Add(PackageFilename);
+            FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get()
+                .ScanFilesSynchronous(FilesToScan, true);
+        }
+        return true;
+    }
+
+    return false;
 }
 
 // Simple Perlin noise implementation
@@ -271,7 +352,7 @@ TSharedPtr<FJsonObject> UMcpAutomationBridgeSubsystem::HandleManageTextureAction
 {
     TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
     
-    FString SubAction = GetStringFieldTextAuth(Params, TEXT("subAction"), TEXT(""));
+    FString SubAction = GetJsonStringField(Params, TEXT("subAction"), TEXT(""));
     
     // ===== PROCEDURAL GENERATION =====
     
@@ -286,14 +367,14 @@ TSharedPtr<FJsonObject> UMcpAutomationBridgeSubsystem::HandleManageTextureAction
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = GetStringFieldTextAuth(Params, TEXT("path"), TEXT("/Game/Textures"));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures"));
         
         // SECURITY: Validate and sanitize path to prevent path traversal attacks
         FString SanitizedPath = SanitizeProjectRelativePath(Path);
@@ -311,17 +392,17 @@ TSharedPtr<FJsonObject> UMcpAutomationBridgeSubsystem::HandleManageTextureAction
         }
         Name = SanitizedName;
         
-        FString NoiseType = GetStringFieldTextAuth(Params, TEXT("noiseType"), TEXT("Perlin"));
-        int32 Width = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("width"), 1024));
-        int32 Height = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("height"), 1024));
-        float Scale = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("scale"), 1.0));
-        int32 Octaves = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("octaves"), 4));
-        float Persistence = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("persistence"), 0.5));
-        float Lacunarity = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("lacunarity"), 2.0));
-        int32 Seed = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("seed"), 0));
-        bool bSeamless = GetBoolFieldTextAuth(Params, TEXT("seamless"), false);
-        bool bHDR = GetBoolFieldTextAuth(Params, TEXT("hdr"), false);
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        FString NoiseType = GetJsonStringField(Params, TEXT("noiseType"), TEXT("Perlin"));
+        int32 Width = static_cast<int32>(GetJsonNumberField(Params, TEXT("width"), 1024));
+        int32 Height = static_cast<int32>(GetJsonNumberField(Params, TEXT("height"), 1024));
+        float Scale = static_cast<float>(GetJsonNumberField(Params, TEXT("scale"), 1.0));
+        int32 Octaves = static_cast<int32>(GetJsonNumberField(Params, TEXT("octaves"), 4));
+        float Persistence = static_cast<float>(GetJsonNumberField(Params, TEXT("persistence"), 0.5));
+        float Lacunarity = static_cast<float>(GetJsonNumberField(Params, TEXT("lacunarity"), 2.0));
+        int32 Seed = static_cast<int32>(GetJsonNumberField(Params, TEXT("seed"), 0));
+        bool bSeamless = GetJsonBoolField(Params, TEXT("seamless"), false);
+        bool bHDR = GetJsonBoolField(Params, TEXT("hdr"), false);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (Name.IsEmpty())
         {
@@ -335,12 +416,8 @@ TSharedPtr<FJsonObject> UMcpAutomationBridgeSubsystem::HandleManageTextureAction
             TEXTURE_ERROR_RESPONSE(TEXT("Failed to create texture"));
         }
         
-        // Lock source data and fill with noise
-        uint8* MipData = NewTexture->Source.LockMip(0);
-        if (!MipData)
-        {
-            TEXTURE_ERROR_RESPONSE(TEXT("Failed to lock texture mip data"));
-        }
+        TArray<uint8> PixelData;
+        PixelData.SetNumZeroed(Width * Height * 4);
         
         for (int32 Y = 0; Y < Height; Y++)
         {
@@ -373,20 +450,24 @@ TSharedPtr<FJsonObject> UMcpAutomationBridgeSubsystem::HandleManageTextureAction
                 // Write pixel data (BGRA8 format)
                 int32 PixelIndex = (Y * Width + X) * 4;
                 uint8 ByteValue = static_cast<uint8>(NoiseValue * 255.0f);
-                MipData[PixelIndex + 0] = ByteValue; // B
-                MipData[PixelIndex + 1] = ByteValue; // G
-                MipData[PixelIndex + 2] = ByteValue; // R
-                MipData[PixelIndex + 3] = 255;       // A
+                PixelData[PixelIndex + 0] = ByteValue; // B
+                PixelData[PixelIndex + 1] = ByteValue; // G
+                PixelData[PixelIndex + 2] = ByteValue; // R
+                PixelData[PixelIndex + 3] = 255;       // A
             }
         }
-        
-        NewTexture->Source.UnlockMip(0);
-        NewTexture->UpdateResource();
+
+        if (!UpdateTextureBGRA8(NewTexture, Width, Height, PixelData))
+        {
+            TEXTURE_ERROR_RESPONSE(TEXT("Failed to update texture pixel data"));
+        }
         
         if (bSave)
         {
-            FAssetRegistryModule::AssetCreated(NewTexture);
-            McpSafeAssetSave(NewTexture);
+            if (!SaveTextureAsset(NewTexture))
+            {
+                TEXTURE_ERROR_RESPONSE(TEXT("Failed to save noise texture"));
+            }
         }
         
 Response->SetBoolField(TEXT("success"), true);
@@ -406,14 +487,14 @@ Response->SetBoolField(TEXT("success"), true);
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = GetStringFieldTextAuth(Params, TEXT("path"), TEXT("/Game/Textures"));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures"));
         
         // SECURITY: Validate and sanitize path
         FString SanitizedPath = SanitizeProjectRelativePath(Path);
@@ -431,15 +512,15 @@ Response->SetBoolField(TEXT("success"), true);
         }
         Name = SanitizedName;
         
-        FString GradientType = GetStringFieldTextAuth(Params, TEXT("gradientType"), TEXT("Linear"));
-        int32 Width = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("width"), 1024));
-        int32 Height = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("height"), 1024));
-        float Angle = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("angle"), 0.0));
-        float CenterX = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("centerX"), 0.5));
-        float CenterY = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("centerY"), 0.5));
-        float Radius = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("radius"), 0.5));
-        bool bHDR = GetBoolFieldTextAuth(Params, TEXT("hdr"), false);
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        FString GradientType = GetJsonStringField(Params, TEXT("gradientType"), TEXT("Linear"));
+        int32 Width = static_cast<int32>(GetJsonNumberField(Params, TEXT("width"), 1024));
+        int32 Height = static_cast<int32>(GetJsonNumberField(Params, TEXT("height"), 1024));
+        float Angle = static_cast<float>(GetJsonNumberField(Params, TEXT("angle"), 0.0));
+        float CenterX = static_cast<float>(GetJsonNumberField(Params, TEXT("centerX"), 0.5));
+        float CenterY = static_cast<float>(GetJsonNumberField(Params, TEXT("centerY"), 0.5));
+        float Radius = static_cast<float>(GetJsonNumberField(Params, TEXT("radius"), 0.5));
+        bool bHDR = GetJsonBoolField(Params, TEXT("hdr"), false);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         // Get colors
         FLinearColor StartColor(0, 0, 0, 1);
@@ -450,10 +531,10 @@ Response->SetBoolField(TEXT("success"), true);
             const TSharedPtr<FJsonObject>* StartColorObj;
             if (Params->TryGetObjectField(TEXT("startColor"), StartColorObj))
             {
-                StartColor.R = static_cast<float>(GetNumberFieldTextAuth(*StartColorObj, TEXT("r"), 0.0));
-                StartColor.G = static_cast<float>(GetNumberFieldTextAuth(*StartColorObj, TEXT("g"), 0.0));
-                StartColor.B = static_cast<float>(GetNumberFieldTextAuth(*StartColorObj, TEXT("b"), 0.0));
-                StartColor.A = static_cast<float>(GetNumberFieldTextAuth(*StartColorObj, TEXT("a"), 1.0));
+                StartColor.R = static_cast<float>(GetJsonNumberField(*StartColorObj, TEXT("r"), 0.0));
+                StartColor.G = static_cast<float>(GetJsonNumberField(*StartColorObj, TEXT("g"), 0.0));
+                StartColor.B = static_cast<float>(GetJsonNumberField(*StartColorObj, TEXT("b"), 0.0));
+                StartColor.A = static_cast<float>(GetJsonNumberField(*StartColorObj, TEXT("a"), 1.0));
             }
         }
         
@@ -462,10 +543,10 @@ Response->SetBoolField(TEXT("success"), true);
             const TSharedPtr<FJsonObject>* EndColorObj;
             if (Params->TryGetObjectField(TEXT("endColor"), EndColorObj))
             {
-                EndColor.R = static_cast<float>(GetNumberFieldTextAuth(*EndColorObj, TEXT("r"), 1.0));
-                EndColor.G = static_cast<float>(GetNumberFieldTextAuth(*EndColorObj, TEXT("g"), 1.0));
-                EndColor.B = static_cast<float>(GetNumberFieldTextAuth(*EndColorObj, TEXT("b"), 1.0));
-                EndColor.A = static_cast<float>(GetNumberFieldTextAuth(*EndColorObj, TEXT("a"), 1.0));
+                EndColor.R = static_cast<float>(GetJsonNumberField(*EndColorObj, TEXT("r"), 1.0));
+                EndColor.G = static_cast<float>(GetJsonNumberField(*EndColorObj, TEXT("g"), 1.0));
+                EndColor.B = static_cast<float>(GetJsonNumberField(*EndColorObj, TEXT("b"), 1.0));
+                EndColor.A = static_cast<float>(GetJsonNumberField(*EndColorObj, TEXT("a"), 1.0));
             }
         }
         
@@ -480,11 +561,8 @@ Response->SetBoolField(TEXT("success"), true);
             TEXTURE_ERROR_RESPONSE(TEXT("Failed to create texture"));
         }
         
-        uint8* MipData = NewTexture->Source.LockMip(0);
-        if (!MipData)
-        {
-            TEXTURE_ERROR_RESPONSE(TEXT("Failed to lock texture mip data"));
-        }
+        TArray<uint8> PixelData;
+        PixelData.SetNumZeroed(Width * Height * 4);
         
         // Convert angle to radians for linear gradient
         float AngleRad = FMath::DegreesToRadians(Angle);
@@ -526,20 +604,24 @@ Response->SetBoolField(TEXT("success"), true);
                 
                 // Write pixel
                 int32 PixelIndex = (Y * Width + X) * 4;
-                MipData[PixelIndex + 0] = static_cast<uint8>(Color.B * 255.0f); // B
-                MipData[PixelIndex + 1] = static_cast<uint8>(Color.G * 255.0f); // G
-                MipData[PixelIndex + 2] = static_cast<uint8>(Color.R * 255.0f); // R
-                MipData[PixelIndex + 3] = static_cast<uint8>(Color.A * 255.0f); // A
+                PixelData[PixelIndex + 0] = static_cast<uint8>(Color.B * 255.0f); // B
+                PixelData[PixelIndex + 1] = static_cast<uint8>(Color.G * 255.0f); // G
+                PixelData[PixelIndex + 2] = static_cast<uint8>(Color.R * 255.0f); // R
+                PixelData[PixelIndex + 3] = static_cast<uint8>(Color.A * 255.0f); // A
             }
         }
-        
-        NewTexture->Source.UnlockMip(0);
-        NewTexture->UpdateResource();
+
+        if (!UpdateTextureBGRA8(NewTexture, Width, Height, PixelData))
+        {
+            TEXTURE_ERROR_RESPONSE(TEXT("Failed to update texture pixel data"));
+        }
         
         if (bSave)
         {
-            FAssetRegistryModule::AssetCreated(NewTexture);
-            McpSafeAssetSave(NewTexture);
+            if (!SaveTextureAsset(NewTexture))
+            {
+                TEXTURE_ERROR_RESPONSE(TEXT("Failed to save gradient texture"));
+            }
         }
         
 Response->SetBoolField(TEXT("success"), true);
@@ -559,14 +641,14 @@ Response->SetBoolField(TEXT("success"), true);
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = GetStringFieldTextAuth(Params, TEXT("path"), TEXT("/Game/Textures"));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures"));
         
         // SECURITY: Validate and sanitize path
         FString SanitizedPath = SanitizeProjectRelativePath(Path);
@@ -584,15 +666,15 @@ Response->SetBoolField(TEXT("success"), true);
         }
         Name = SanitizedName;
         
-        FString PatternType = GetStringFieldTextAuth(Params, TEXT("patternType"), TEXT("Checker"));
-        int32 Width = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("width"), 1024));
-        int32 Height = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("height"), 1024));
-        int32 TilesX = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("tilesX"), 8));
-        int32 TilesY = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("tilesY"), 8));
-        float LineWidth = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("lineWidth"), 0.02));
-        float BrickRatio = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("brickRatio"), 2.0));
-        float Offset = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("offset"), 0.5));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        FString PatternType = GetJsonStringField(Params, TEXT("patternType"), TEXT("Checker"));
+        int32 Width = static_cast<int32>(GetJsonNumberField(Params, TEXT("width"), 1024));
+        int32 Height = static_cast<int32>(GetJsonNumberField(Params, TEXT("height"), 1024));
+        int32 TilesX = static_cast<int32>(GetJsonNumberField(Params, TEXT("tilesX"), 8));
+        int32 TilesY = static_cast<int32>(GetJsonNumberField(Params, TEXT("tilesY"), 8));
+        float LineWidth = static_cast<float>(GetJsonNumberField(Params, TEXT("lineWidth"), 0.02));
+        float BrickRatio = static_cast<float>(GetJsonNumberField(Params, TEXT("brickRatio"), 2.0));
+        float Offset = static_cast<float>(GetJsonNumberField(Params, TEXT("offset"), 0.5));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         // Get colors
         FLinearColor PrimaryColor(1, 1, 1, 1);
@@ -603,10 +685,10 @@ Response->SetBoolField(TEXT("success"), true);
             const TSharedPtr<FJsonObject>* ColorObj;
             if (Params->TryGetObjectField(TEXT("primaryColor"), ColorObj))
             {
-                PrimaryColor.R = static_cast<float>(GetNumberFieldTextAuth(*ColorObj, TEXT("r"), 1.0));
-                PrimaryColor.G = static_cast<float>(GetNumberFieldTextAuth(*ColorObj, TEXT("g"), 1.0));
-                PrimaryColor.B = static_cast<float>(GetNumberFieldTextAuth(*ColorObj, TEXT("b"), 1.0));
-                PrimaryColor.A = static_cast<float>(GetNumberFieldTextAuth(*ColorObj, TEXT("a"), 1.0));
+                PrimaryColor.R = static_cast<float>(GetJsonNumberField(*ColorObj, TEXT("r"), 1.0));
+                PrimaryColor.G = static_cast<float>(GetJsonNumberField(*ColorObj, TEXT("g"), 1.0));
+                PrimaryColor.B = static_cast<float>(GetJsonNumberField(*ColorObj, TEXT("b"), 1.0));
+                PrimaryColor.A = static_cast<float>(GetJsonNumberField(*ColorObj, TEXT("a"), 1.0));
             }
         }
         
@@ -615,10 +697,10 @@ Response->SetBoolField(TEXT("success"), true);
             const TSharedPtr<FJsonObject>* ColorObj;
             if (Params->TryGetObjectField(TEXT("secondaryColor"), ColorObj))
             {
-                SecondaryColor.R = static_cast<float>(GetNumberFieldTextAuth(*ColorObj, TEXT("r"), 0.0));
-                SecondaryColor.G = static_cast<float>(GetNumberFieldTextAuth(*ColorObj, TEXT("g"), 0.0));
-                SecondaryColor.B = static_cast<float>(GetNumberFieldTextAuth(*ColorObj, TEXT("b"), 0.0));
-                SecondaryColor.A = static_cast<float>(GetNumberFieldTextAuth(*ColorObj, TEXT("a"), 1.0));
+                SecondaryColor.R = static_cast<float>(GetJsonNumberField(*ColorObj, TEXT("r"), 0.0));
+                SecondaryColor.G = static_cast<float>(GetJsonNumberField(*ColorObj, TEXT("g"), 0.0));
+                SecondaryColor.B = static_cast<float>(GetJsonNumberField(*ColorObj, TEXT("b"), 0.0));
+                SecondaryColor.A = static_cast<float>(GetJsonNumberField(*ColorObj, TEXT("a"), 1.0));
             }
         }
         
@@ -633,11 +715,8 @@ Response->SetBoolField(TEXT("success"), true);
             TEXTURE_ERROR_RESPONSE(TEXT("Failed to create texture"));
         }
         
-        uint8* MipData = NewTexture->Source.LockMip(0);
-        if (!MipData)
-        {
-            TEXTURE_ERROR_RESPONSE(TEXT("Failed to lock texture mip data"));
-        }
+        TArray<uint8> PixelData;
+        PixelData.SetNumZeroed(Width * Height * 4);
         
         for (int32 Y = 0; Y < Height; Y++)
         {
@@ -695,20 +774,24 @@ Response->SetBoolField(TEXT("success"), true);
                 FLinearColor Color = bUsePrimary ? PrimaryColor : SecondaryColor;
                 
                 int32 PixelIndex = (Y * Width + X) * 4;
-                MipData[PixelIndex + 0] = static_cast<uint8>(Color.B * 255.0f);
-                MipData[PixelIndex + 1] = static_cast<uint8>(Color.G * 255.0f);
-                MipData[PixelIndex + 2] = static_cast<uint8>(Color.R * 255.0f);
-                MipData[PixelIndex + 3] = static_cast<uint8>(Color.A * 255.0f);
+                PixelData[PixelIndex + 0] = static_cast<uint8>(Color.B * 255.0f);
+                PixelData[PixelIndex + 1] = static_cast<uint8>(Color.G * 255.0f);
+                PixelData[PixelIndex + 2] = static_cast<uint8>(Color.R * 255.0f);
+                PixelData[PixelIndex + 3] = static_cast<uint8>(Color.A * 255.0f);
             }
         }
-        
-        NewTexture->Source.UnlockMip(0);
-        NewTexture->UpdateResource();
+
+        if (!UpdateTextureBGRA8(NewTexture, Width, Height, PixelData))
+        {
+            TEXTURE_ERROR_RESPONSE(TEXT("Failed to update texture pixel data"));
+        }
         
         if (bSave)
         {
-            FAssetRegistryModule::AssetCreated(NewTexture);
-            McpSafeAssetSave(NewTexture);
+            if (!SaveTextureAsset(NewTexture))
+            {
+                TEXTURE_ERROR_RESPONSE(TEXT("Failed to save pattern texture"));
+            }
         }
         
 Response->SetBoolField(TEXT("success"), true);
@@ -727,15 +810,15 @@ Response->SetBoolField(TEXT("success"), true);
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString SourceTexture = GetStringFieldTextAuth(Params, TEXT("sourceTexture"), TEXT(""));
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = GetStringFieldTextAuth(Params, TEXT("path"), TEXT(""));
+        FString SourceTexture = GetJsonStringField(Params, TEXT("sourceTexture"), TEXT(""));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = GetJsonStringField(Params, TEXT("path"), TEXT(""));
         
         // SECURITY: Validate sourceTexture path
         FString SanitizedSource = SanitizeProjectRelativePath(SourceTexture);
@@ -745,10 +828,10 @@ Response->SetBoolField(TEXT("success"), true);
         }
         SourceTexture = SanitizedSource;
         
-        float Strength = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("strength"), 1.0));
-        FString Algorithm = GetStringFieldTextAuth(Params, TEXT("algorithm"), TEXT("Sobel"));
-        bool bFlipY = GetBoolFieldTextAuth(Params, TEXT("flipY"), false);
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        float Strength = static_cast<float>(GetJsonNumberField(Params, TEXT("strength"), 1.0));
+        FString Algorithm = GetJsonStringField(Params, TEXT("algorithm"), TEXT("Sobel"));
+        bool bFlipY = GetJsonBoolField(Params, TEXT("flipY"), false);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (SourceTexture.IsEmpty())
         {
@@ -814,7 +897,7 @@ Response->SetBoolField(TEXT("success"), true);
         
         // Get channel mapping option - defaults to "luminance" for proper grayscale conversion
         // Options: "luminance", "red", "green", "blue", "alpha", "average"
-        FString ChannelMode = GetStringFieldTextAuth(Params, TEXT("channelMode"), TEXT("luminance"));
+        FString ChannelMode = GetJsonStringField(Params, TEXT("channelMode"), TEXT("luminance"));
         
         // CRITICAL: Check source validity before locking
         if (!HeightMap->Source.IsValid())
@@ -955,13 +1038,13 @@ Response->SetBoolField(TEXT("success"), true);
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString AssetPath = GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT(""));
+        FString AssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
         
         // SECURITY: Validate assetPath
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
@@ -971,8 +1054,8 @@ Response->SetBoolField(TEXT("success"), true);
         }
         AssetPath = SanitizedAssetPath;
         
-        FString CompressionSettingsStr = GetStringFieldTextAuth(Params, TEXT("compressionSettings"), TEXT("TC_Default"));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        FString CompressionSettingsStr = GetJsonStringField(Params, TEXT("compressionSettings"), TEXT("TC_Default"));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (AssetPath.IsEmpty())
         {
@@ -1025,13 +1108,13 @@ Response->SetBoolField(TEXT("success"), true);
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString AssetPath = GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT(""));
+        FString AssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
         
         // SECURITY: Validate assetPath
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
@@ -1041,8 +1124,8 @@ Response->SetBoolField(TEXT("success"), true);
         }
         AssetPath = SanitizedAssetPath;
         
-        FString TextureGroup = GetStringFieldTextAuth(Params, TEXT("textureGroup"), TEXT("TEXTUREGROUP_World"));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        FString TextureGroup = GetJsonStringField(Params, TEXT("textureGroup"), TEXT("TEXTUREGROUP_World"));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (AssetPath.IsEmpty())
         {
@@ -1095,13 +1178,13 @@ Response->SetBoolField(TEXT("success"), true);
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString AssetPath = GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT(""));
+        FString AssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
         
         // SECURITY: Validate assetPath
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
@@ -1111,8 +1194,8 @@ Response->SetBoolField(TEXT("success"), true);
         }
         AssetPath = SanitizedAssetPath;
         
-        int32 LODBias = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("lodBias"), 0));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        int32 LODBias = static_cast<int32>(GetJsonNumberField(Params, TEXT("lodBias"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (AssetPath.IsEmpty())
         {
@@ -1147,17 +1230,17 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("assetPath"), TEXT("virtualTextureStreaming"), TEXT("save")
+            TEXT("subAction"), TEXT("assetPath"), TEXT("virtualTextureStreaming"), TEXT("tileSize"), TEXT("tileBorderSize"), TEXT("save")
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString AssetPath = GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT(""));
+        FString AssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
         
         // SECURITY: Validate assetPath
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
@@ -1167,8 +1250,10 @@ Response->SetBoolField(TEXT("success"), true);
         }
         AssetPath = SanitizedAssetPath;
         
-        bool bVirtualTextureStreaming = GetBoolFieldTextAuth(Params, TEXT("virtualTextureStreaming"), false);
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        bool bVirtualTextureStreaming = GetJsonBoolField(Params, TEXT("virtualTextureStreaming"), false);
+        int32 TileSize = GetJsonNumberField(Params, TEXT("tileSize"), 128);
+        int32 TileBorderSize = GetJsonNumberField(Params, TEXT("tileBorderSize"), 4);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (AssetPath.IsEmpty())
         {
@@ -1195,6 +1280,10 @@ Response->SetBoolField(TEXT("success"), true);
         
         Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Virtual texture streaming %s"), bVirtualTextureStreaming ? TEXT("enabled") : TEXT("disabled")));
+        Response->SetStringField(TEXT("assetPath"), AssetPath);
+        Response->SetBoolField(TEXT("virtualTextureStreaming"), bVirtualTextureStreaming);
+        Response->SetNumberField(TEXT("tileSize"), TileSize);
+        Response->SetNumberField(TEXT("tileBorderSize"), TileBorderSize);
         return Response;
     }
     
@@ -1206,13 +1295,13 @@ Response->SetBoolField(TEXT("success"), true);
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString AssetPath = GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT(""));
+        FString AssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
         
         // SECURITY: Validate assetPath
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
@@ -1222,8 +1311,8 @@ Response->SetBoolField(TEXT("success"), true);
         }
         AssetPath = SanitizedAssetPath;
         
-        bool bNeverStream = GetBoolFieldTextAuth(Params, TEXT("neverStream"), false);
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        bool bNeverStream = GetJsonBoolField(Params, TEXT("neverStream"), false);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (AssetPath.IsEmpty())
         {
@@ -1261,13 +1350,13 @@ Response->SetBoolField(TEXT("success"), true);
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString AssetPath = GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT(""));
+        FString AssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
         
         // SECURITY: Validate assetPath
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
@@ -1332,19 +1421,19 @@ Response->SetBoolField(TEXT("success"), true);
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("sourcePath"), TEXT("name"), TEXT("path"),
-            TEXT("newWidth"), TEXT("newHeight"), TEXT("save")
+            TEXT("newWidth"), TEXT("newHeight"), TEXT("filterMethod"), TEXT("save")
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString SourcePath = GetStringFieldTextAuth(Params, TEXT("sourcePath"), TEXT(""));
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = GetStringFieldTextAuth(Params, TEXT("path"), TEXT(""));
+        FString SourcePath = GetJsonStringField(Params, TEXT("sourcePath"), TEXT(""));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = GetJsonStringField(Params, TEXT("path"), TEXT(""));
         
         // SECURITY: Validate sourcePath
         FString SanitizedSource = SanitizeProjectRelativePath(SourcePath);
@@ -1354,9 +1443,16 @@ Response->SetBoolField(TEXT("success"), true);
         }
         SourcePath = SanitizedSource;
         
-        int32 NewWidth = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("newWidth"), 512));
-        int32 NewHeight = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("newHeight"), 512));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        int32 NewWidth = static_cast<int32>(GetJsonNumberField(Params, TEXT("newWidth"), 512));
+        int32 NewHeight = static_cast<int32>(GetJsonNumberField(Params, TEXT("newHeight"), 512));
+        FString FilterMethod = GetJsonStringField(Params, TEXT("filterMethod"), TEXT("Bilinear"));
+        const FString FilterMethodLower = FilterMethod.ToLower();
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+        if (FilterMethodLower != TEXT("nearest") && FilterMethodLower != TEXT("bilinear") &&
+            FilterMethodLower != TEXT("bicubic") && FilterMethodLower != TEXT("lanczos"))
+        {
+            TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Unsupported filterMethod: %s"), *FilterMethod));
+        }
         
         if (SourcePath.IsEmpty())
         {
@@ -1436,13 +1532,32 @@ Response->SetBoolField(TEXT("success"), true);
             TEXTURE_ERROR_RESPONSE(TEXT("Failed to lock destination texture data"));
         }
         
-        // Bilinear interpolation resize
+        auto ClampColorChannel = [](double Value) -> uint8 {
+            return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Value), 0, 255));
+        };
+
+        auto CubicWeight = [](double X) -> double {
+            X = FMath::Abs(X);
+            if (X <= 1.0) return (1.5 * X * X * X) - (2.5 * X * X) + 1.0;
+            if (X < 2.0) return (-0.5 * X * X * X) + (2.5 * X * X) - (4.0 * X) + 2.0;
+            return 0.0;
+        };
+
+        auto LanczosWeight = [](double X) -> double {
+            X = FMath::Abs(X);
+            if (X < KINDA_SMALL_NUMBER) return 1.0;
+            if (X >= 3.0) return 0.0;
+            const double PiX = PI * X;
+            return (FMath::Sin(PiX) / PiX) * (FMath::Sin(PiX / 3.0) / (PiX / 3.0));
+        };
+
+        // Resize using the requested filter.
         for (int32 Y = 0; Y < NewHeight; ++Y)
         {
             for (int32 X = 0; X < NewWidth; ++X)
             {
-                float U = static_cast<float>(X) / static_cast<float>(NewWidth - 1) * (SrcWidth - 1);
-                float V = static_cast<float>(Y) / static_cast<float>(NewHeight - 1) * (SrcHeight - 1);
+                const float U = NewWidth > 1 ? static_cast<float>(X) / static_cast<float>(NewWidth - 1) * (SrcWidth - 1) : 0.0f;
+                const float V = NewHeight > 1 ? static_cast<float>(Y) / static_cast<float>(NewHeight - 1) * (SrcHeight - 1) : 0.0f;
                 
                 int32 X0 = FMath::FloorToInt(U);
                 int32 Y0 = FMath::FloorToInt(V);
@@ -1454,21 +1569,68 @@ Response->SetBoolField(TEXT("success"), true);
                 
                 // Access BGRA pixel data (uint8* format)
                 auto GetPixelBGRA = [&](int32 PX, int32 PY) -> FColor {
+                    PX = FMath::Clamp(PX, 0, SrcWidth - 1);
+                    PY = FMath::Clamp(PY, 0, SrcHeight - 1);
                     int32 Idx = (PY * SrcWidth + PX) * 4;
                     return FColor(SrcData[Idx + 2], SrcData[Idx + 1], SrcData[Idx + 0], SrcData[Idx + 3]); // BGRA -> RGBA
                 };
-                
-                FColor C00 = GetPixelBGRA(X0, Y0);
-                FColor C10 = GetPixelBGRA(X1, Y0);
-                FColor C01 = GetPixelBGRA(X0, Y1);
-                FColor C11 = GetPixelBGRA(X1, Y1);
-                
-                // Bilinear interpolation
+
                 FColor SampledColor;
-                SampledColor.R = static_cast<uint8>(FMath::Lerp(FMath::Lerp((float)C00.R, (float)C10.R, FracX), FMath::Lerp((float)C01.R, (float)C11.R, FracX), FracY));
-                SampledColor.G = static_cast<uint8>(FMath::Lerp(FMath::Lerp((float)C00.G, (float)C10.G, FracX), FMath::Lerp((float)C01.G, (float)C11.G, FracX), FracY));
-                SampledColor.B = static_cast<uint8>(FMath::Lerp(FMath::Lerp((float)C00.B, (float)C10.B, FracX), FMath::Lerp((float)C01.B, (float)C11.B, FracX), FracY));
-                SampledColor.A = static_cast<uint8>(FMath::Lerp(FMath::Lerp((float)C00.A, (float)C10.A, FracX), FMath::Lerp((float)C01.A, (float)C11.A, FracX), FracY));
+                if (FilterMethodLower == TEXT("nearest"))
+                {
+                    SampledColor = GetPixelBGRA(FMath::RoundToInt(U), FMath::RoundToInt(V));
+                }
+                else if (FilterMethodLower == TEXT("bicubic") || FilterMethodLower == TEXT("lanczos"))
+                {
+                    const bool bLanczos = FilterMethodLower == TEXT("lanczos");
+                    const int32 Radius = bLanczos ? 3 : 2;
+                    double SumR = 0.0;
+                    double SumG = 0.0;
+                    double SumB = 0.0;
+                    double SumA = 0.0;
+                    double SumW = 0.0;
+                    for (int32 KY = -Radius + 1; KY <= Radius; ++KY)
+                    {
+                        for (int32 KX = -Radius + 1; KX <= Radius; ++KX)
+                        {
+                            const int32 SX = X0 + KX;
+                            const int32 SY = Y0 + KY;
+                            const double WX = bLanczos ? LanczosWeight(static_cast<double>(U) - SX) : CubicWeight(static_cast<double>(U) - SX);
+                            const double WY = bLanczos ? LanczosWeight(static_cast<double>(V) - SY) : CubicWeight(static_cast<double>(V) - SY);
+                            const double W = WX * WY;
+                            if (FMath::IsNearlyZero(W)) continue;
+                            const FColor C = GetPixelBGRA(SX, SY);
+                            SumR += C.R * W;
+                            SumG += C.G * W;
+                            SumB += C.B * W;
+                            SumA += C.A * W;
+                            SumW += W;
+                        }
+                    }
+
+                    if (FMath::IsNearlyZero(SumW))
+                    {
+                        SampledColor = GetPixelBGRA(X0, Y0);
+                    }
+                    else
+                    {
+                        SampledColor.R = ClampColorChannel(SumR / SumW);
+                        SampledColor.G = ClampColorChannel(SumG / SumW);
+                        SampledColor.B = ClampColorChannel(SumB / SumW);
+                        SampledColor.A = ClampColorChannel(SumA / SumW);
+                    }
+                }
+                else
+                {
+                    const FColor C00 = GetPixelBGRA(X0, Y0);
+                    const FColor C10 = GetPixelBGRA(X1, Y0);
+                    const FColor C01 = GetPixelBGRA(X0, Y1);
+                    const FColor C11 = GetPixelBGRA(X1, Y1);
+                    SampledColor.R = static_cast<uint8>(FMath::Lerp(FMath::Lerp((float)C00.R, (float)C10.R, FracX), FMath::Lerp((float)C01.R, (float)C11.R, FracX), FracY));
+                    SampledColor.G = static_cast<uint8>(FMath::Lerp(FMath::Lerp((float)C00.G, (float)C10.G, FracX), FMath::Lerp((float)C01.G, (float)C11.G, FracX), FracY));
+                    SampledColor.B = static_cast<uint8>(FMath::Lerp(FMath::Lerp((float)C00.B, (float)C10.B, FracX), FMath::Lerp((float)C01.B, (float)C11.B, FracX), FracY));
+                    SampledColor.A = static_cast<uint8>(FMath::Lerp(FMath::Lerp((float)C00.A, (float)C10.A, FracX), FMath::Lerp((float)C01.A, (float)C11.A, FracX), FracY));
+                }
                 
                 int32 DstIndex = (Y * NewWidth + X) * 4;
                 DstMipData[DstIndex + 0] = SampledColor.B;
@@ -1491,6 +1653,7 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Texture resized to %dx%d"), NewWidth, NewHeight));
         Response->SetStringField(TEXT("assetPath"), Path / Name);
+        Response->SetStringField(TEXT("filterMethod"), FilterMethod);
         return Response;
     }
     
@@ -1503,13 +1666,13 @@ Response->SetBoolField(TEXT("success"), true);
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString AssetPath = GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT(""));
+        FString AssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
         
         // SECURITY: Validate assetPath
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
@@ -1519,12 +1682,12 @@ Response->SetBoolField(TEXT("success"), true);
         }
         AssetPath = SanitizedAssetPath;
         
-        bool bInPlace = GetBoolFieldTextAuth(Params, TEXT("inPlace"), true);
-        bool bInvertAlpha = GetBoolFieldTextAuth(Params, TEXT("invertAlpha"), false);
-        FString Channel = GetStringFieldTextAuth(Params, TEXT("channel"), TEXT("All"));
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = GetStringFieldTextAuth(Params, TEXT("path"), TEXT(""));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        bool bInPlace = GetJsonBoolField(Params, TEXT("inPlace"), true);
+        bool bInvertAlpha = GetJsonBoolField(Params, TEXT("invertAlpha"), false);
+        FString Channel = GetJsonStringField(Params, TEXT("channel"), TEXT("All"));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = GetJsonStringField(Params, TEXT("path"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (AssetPath.IsEmpty())
         {
@@ -1625,13 +1788,13 @@ Response->SetBoolField(TEXT("success"), true);
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString AssetPath = GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT(""));
+        FString AssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
         
         // SECURITY: Validate assetPath
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
@@ -1641,11 +1804,11 @@ Response->SetBoolField(TEXT("success"), true);
         }
         AssetPath = SanitizedAssetPath;
         
-        float Amount = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("amount"), 1.0));
-        bool bInPlace = GetBoolFieldTextAuth(Params, TEXT("inPlace"), true);
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = GetStringFieldTextAuth(Params, TEXT("path"), TEXT(""));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        float Amount = static_cast<float>(GetJsonNumberField(Params, TEXT("amount"), 1.0));
+        bool bInPlace = GetJsonBoolField(Params, TEXT("inPlace"), true);
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = GetJsonStringField(Params, TEXT("path"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (AssetPath.IsEmpty())
         {
@@ -1745,13 +1908,13 @@ Response->SetBoolField(TEXT("success"), true);
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString AssetPath = GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT(""));
+        FString AssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
         
         // SECURITY: Validate assetPath
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
@@ -1761,13 +1924,13 @@ Response->SetBoolField(TEXT("success"), true);
         }
         AssetPath = SanitizedAssetPath;
         
-        float InBlack = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("inBlack"), 0.0));
-        float InWhite = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("inWhite"), 1.0));
-        float Gamma = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("gamma"), 1.0));
-        float OutBlack = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("outBlack"), 0.0));
-        float OutWhite = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("outWhite"), 1.0));
-        bool bInPlace = GetBoolFieldTextAuth(Params, TEXT("inPlace"), true);
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        float InBlack = static_cast<float>(GetJsonNumberField(Params, TEXT("inBlack"), 0.0));
+        float InWhite = static_cast<float>(GetJsonNumberField(Params, TEXT("inWhite"), 1.0));
+        float Gamma = static_cast<float>(GetJsonNumberField(Params, TEXT("gamma"), 1.0));
+        float OutBlack = static_cast<float>(GetJsonNumberField(Params, TEXT("outBlack"), 0.0));
+        float OutWhite = static_cast<float>(GetJsonNumberField(Params, TEXT("outWhite"), 1.0));
+        bool bInPlace = GetJsonBoolField(Params, TEXT("inPlace"), true);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (AssetPath.IsEmpty())
         {
@@ -1837,13 +2000,13 @@ Response->SetBoolField(TEXT("success"), true);
         };
         for (const auto& Field : Params->Values)
         {
-            if (!ValidParams.Contains(Field.Key))
+            if (!ValidParams.Contains(FString(*Field.Key)))
             {
                 TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid parameter: %s"), *Field.Key));
             }
         }
 
-        FString AssetPath = GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT(""));
+        FString AssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
         
         // SECURITY: Validate assetPath
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
@@ -1853,8 +2016,8 @@ Response->SetBoolField(TEXT("success"), true);
         }
         AssetPath = SanitizedAssetPath;
         
-        int32 Radius = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("radius"), 2));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        int32 Radius = static_cast<int32>(GetJsonNumberField(Params, TEXT("radius"), 2));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (AssetPath.IsEmpty())
         {
@@ -1943,9 +2106,9 @@ Response->SetBoolField(TEXT("success"), true);
     
     if (SubAction == TEXT("sharpen"))
     {
-        FString AssetPath = GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT(""));
-        float Amount = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("amount"), 1.0));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        FString AssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
+        float Amount = static_cast<float>(GetJsonNumberField(Params, TEXT("amount"), 1.0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         // SECURITY: Validate and sanitize path
         FString SanitizedPath = SanitizeProjectRelativePath(AssetPath);
@@ -2037,13 +2200,13 @@ Response->SetBoolField(TEXT("success"), true);
     
     if (SubAction == TEXT("channel_pack"))
     {
-        FString RedPath = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("redTexture"), TEXT("")));
-        FString GreenPath = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("greenTexture"), TEXT("")));
-        FString BluePath = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("blueTexture"), TEXT("")));
-        FString AlphaPath = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("alphaTexture"), TEXT("")));
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT("ChannelPacked"));
-        FString Path = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("path"), TEXT("/Game/Textures")));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        FString RedPath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("redTexture"), TEXT("")));
+        FString GreenPath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("greenTexture"), TEXT("")));
+        FString BluePath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("blueTexture"), TEXT("")));
+        FString AlphaPath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("alphaTexture"), TEXT("")));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT("ChannelPacked"));
+        FString Path = NormalizeTexturePath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures")));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (Name.IsEmpty())
         {
@@ -2210,15 +2373,15 @@ Response->SetBoolField(TEXT("success"), true);
     
     if (SubAction == TEXT("combine_textures"))
     {
-        FString BaseTexturePath = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("baseTexture"), TEXT("")));
+        FString BaseTexturePath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("baseTexture"), TEXT("")));
         // Support both overlayTexture (C++ naming) and blendTexture (TS handler naming)
-                FString OverlayTexturePath = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("overlayTexture"), 
-                    GetStringFieldTextAuth(Params, TEXT("blendTexture"), TEXT(""))));
-        FString BlendMode = GetStringFieldTextAuth(Params, TEXT("blendMode"), TEXT("Normal"));
-        float Opacity = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("opacity"), 1.0));
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT("Combined"));
-        FString Path = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("path"), TEXT("/Game/Textures")));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+                FString OverlayTexturePath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("overlayTexture"), 
+                    GetJsonStringField(Params, TEXT("blendTexture"), TEXT(""))));
+        FString BlendMode = GetJsonStringField(Params, TEXT("blendMode"), TEXT("Normal"));
+        float Opacity = static_cast<float>(GetJsonNumberField(Params, TEXT("opacity"), 1.0));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT("Combined"));
+        FString Path = NormalizeTexturePath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures")));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (BaseTexturePath.IsEmpty() || OverlayTexturePath.IsEmpty())
         {
@@ -2343,11 +2506,11 @@ Response->SetBoolField(TEXT("success"), true);
     // Apply RGB curve adjustment using LUT (lookup table) built from control points
     if (SubAction == TEXT("adjust_curves"))
     {
-        FString AssetPath = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT("")));
-        bool bInPlace = GetBoolFieldTextAuth(Params, TEXT("inPlace"), true);
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("path"), TEXT("")));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        bool bInPlace = GetJsonBoolField(Params, TEXT("inPlace"), true);
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeTexturePath(GetJsonStringField(Params, TEXT("path"), TEXT("")));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (AssetPath.IsEmpty())
         {
@@ -2529,11 +2692,11 @@ Response->SetBoolField(TEXT("success"), true);
     // Extract a single channel (R, G, B, or A) to a new grayscale texture
     if (SubAction == TEXT("channel_extract"))
     {
-        FString SourcePath = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("texturePath"), TEXT("")));
-        FString Channel = GetStringFieldTextAuth(Params, TEXT("channel"), TEXT("R"));
-        FString OutputPath = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("outputPath"), TEXT("")));
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        FString SourcePath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("texturePath"), TEXT("")));
+        FString Channel = GetJsonStringField(Params, TEXT("channel"), TEXT("R"));
+        FString OutputPath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("outputPath"), TEXT("")));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (SourcePath.IsEmpty())
         {
@@ -2666,8 +2829,8 @@ Response->SetBoolField(TEXT("success"), true);
     
     if (SubAction == TEXT("import_texture"))
     {
-        FString SourcePath = GetStringFieldTextAuth(Params, TEXT("sourcePath"), TEXT(""));
-        FString DestinationPath = GetStringFieldTextAuth(Params, TEXT("destinationPath"), TEXT(""));
+        FString SourcePath = GetJsonStringField(Params, TEXT("sourcePath"), TEXT(""));
+        FString DestinationPath = GetJsonStringField(Params, TEXT("destinationPath"), TEXT(""));
         
         if (SourcePath.IsEmpty() || DestinationPath.IsEmpty())
         {
@@ -2698,9 +2861,9 @@ Response->SetBoolField(TEXT("success"), true);
     
     if (SubAction == TEXT("set_texture_filter"))
     {
-        FString AssetPath = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString FilterMode = GetStringFieldTextAuth(Params, TEXT("filter"), TEXT("Default"));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString FilterMode = GetJsonStringField(Params, TEXT("filter"), TEXT("Default"));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (AssetPath.IsEmpty())
         {
@@ -2739,9 +2902,9 @@ Response->SetBoolField(TEXT("success"), true);
     
     if (SubAction == TEXT("set_texture_wrap"))
     {
-        FString AssetPath = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString WrapMode = GetStringFieldTextAuth(Params, TEXT("wrapMode"), TEXT("Wrap"));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString WrapMode = GetJsonStringField(Params, TEXT("wrapMode"), TEXT("Wrap"));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (AssetPath.IsEmpty())
         {
@@ -2780,11 +2943,11 @@ Response->SetBoolField(TEXT("success"), true);
     
     if (SubAction == TEXT("create_render_target"))
     {
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("path"), TEXT("/Game/Textures")));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeTexturePath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures")));
         
         // Support renderTargetPath as alternative to name+path
-        FString RenderTargetPath = GetStringFieldTextAuth(Params, TEXT("renderTargetPath"), TEXT(""));
+        FString RenderTargetPath = GetJsonStringField(Params, TEXT("renderTargetPath"), TEXT(""));
         if (!RenderTargetPath.IsEmpty())
         {
             // Extract name and path from renderTargetPath (e.g., "/Game/MCPTest/RT_Test" -> name="RT_Test", path="/Game/MCPTest")
@@ -2801,28 +2964,143 @@ Response->SetBoolField(TEXT("success"), true);
             }
         }
         
-        int32 Width = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("width"), 1024));
-        int32 Height = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("height"), 1024));
+        double WidthValue = GetJsonNumberField(Params, TEXT("width"), 1024);
+        double HeightValue = GetJsonNumberField(Params, TEXT("height"), 1024);
+        FString FormatStr = GetJsonStringField(Params, TEXT("format"), TEXT("RGBA8"));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (Name.IsEmpty())
         {
             TEXTURE_ERROR_RESPONSE(TEXT("name is required"));
         }
+
+        if (!FMath::IsFinite(WidthValue) || !FMath::IsFinite(HeightValue) ||
+            WidthValue != FMath::FloorToDouble(WidthValue) || HeightValue != FMath::FloorToDouble(HeightValue))
+        {
+            TEXTURE_ERROR_RESPONSE(TEXT("width and height must be finite whole numbers"));
+        }
+
+        const int32 Width = static_cast<int32>(WidthValue);
+        const int32 Height = static_cast<int32>(HeightValue);
+        const int32 MaxRenderTargetDimension = 8192;
+        const int32 MaxWidth = FMath::Min(MaxRenderTargetDimension, FMath::Max(1, GTextureRenderTarget2DMaxSizeX));
+        const int32 MaxHeight = FMath::Min(MaxRenderTargetDimension, FMath::Max(1, GTextureRenderTarget2DMaxSizeY));
+        if (Width < 1 || Height < 1 || Width > MaxWidth || Height > MaxHeight)
+        {
+            TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("width and height must be between 1 and %d x %d"), MaxWidth, MaxHeight));
+        }
+
+        EPixelFormat Format = PF_B8G8R8A8;
+        if (FormatStr.Equals(TEXT("RGBA8"), ESearchCase::IgnoreCase))
+        {
+            Format = PF_B8G8R8A8;
+        }
+        else if (FormatStr.Equals(TEXT("RGBA16F"), ESearchCase::IgnoreCase) || FormatStr.Equals(TEXT("FloatRGBA"), ESearchCase::IgnoreCase))
+        {
+            Format = PF_FloatRGBA;
+        }
+        else if (FormatStr.Equals(TEXT("RGBA32F"), ESearchCase::IgnoreCase))
+        {
+            Format = PF_A32B32G32R32F;
+        }
+        else if (FormatStr.Equals(TEXT("R8"), ESearchCase::IgnoreCase))
+        {
+            Format = PF_G8;
+        }
+        else if (FormatStr.Equals(TEXT("RG8"), ESearchCase::IgnoreCase))
+        {
+            Format = PF_R8G8;
+        }
+        else if (FormatStr.Equals(TEXT("R16F"), ESearchCase::IgnoreCase))
+        {
+            Format = PF_R16F;
+        }
+        else if (FormatStr.Equals(TEXT("RG16F"), ESearchCase::IgnoreCase))
+        {
+            Format = PF_G16R16F;
+        }
+        else if (FormatStr.Equals(TEXT("R32F"), ESearchCase::IgnoreCase))
+        {
+            Format = PF_R32_FLOAT;
+        }
+        else if (FormatStr.Equals(TEXT("RG32F"), ESearchCase::IgnoreCase))
+        {
+            Format = PF_G32R32F;
+        }
+        else if (FormatStr.Equals(TEXT("A2B10G10R10"), ESearchCase::IgnoreCase) || FormatStr.Equals(TEXT("RGB10A2"), ESearchCase::IgnoreCase))
+        {
+            Format = PF_A2B10G10R10;
+        }
+        else
+        {
+            TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Unsupported render target format: %s"), *FormatStr));
+        }
+
+        if (!FTextureRenderTargetResource::IsSupportedFormat(Format))
+        {
+            TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Unsupported render target pixel format: %s"), *FormatStr));
+        }
+
+        const int32 BytesPerPixel = GPixelFormats[Format].BlockBytes;
+        const int64 PixelCount = static_cast<int64>(Width) * static_cast<int64>(Height);
+        const int64 MaxAllocationBytes = 512ll * 1024ll * 1024ll;
+        if (BytesPerPixel <= 0 || PixelCount > MaxAllocationBytes / static_cast<int64>(BytesPerPixel))
+        {
+            TEXTURE_ERROR_RESPONSE(TEXT("Render target dimensions exceed the safe allocation limit"));
+        }
+
+        FString SanitizedPath = Path.Equals(TEXT("/Game")) ? Path : SanitizeProjectRelativePath(Path);
+        if (SanitizedPath.IsEmpty())
+        {
+            TEXTURE_ERROR_RESPONSE(TEXT("Invalid path: contains traversal or invalid characters"));
+        }
+        Path = SanitizedPath;
+        if (!Path.Equals(TEXT("/Game")) && !Path.StartsWith(TEXT("/Game/")))
+        {
+            TEXTURE_ERROR_RESPONSE(TEXT("Invalid path: render targets can only be created under /Game"));
+        }
+
+        const FString TrimmedName = Name.TrimStartAndEnd();
+        FString SanitizedName = SanitizeAssetName(Name);
+        if (SanitizedName.IsEmpty() || SanitizedName != TrimmedName)
+        {
+            TEXTURE_ERROR_RESPONSE(TEXT("Invalid name: must be a valid Unreal asset name without sanitization"));
+        }
+        Name = SanitizedName;
         
         FString FullPath = Path / Name;
-        
-        // Check for existing asset collision before creating
-        UObject* ExistingAsset = StaticLoadObject(UTextureRenderTarget2D::StaticClass(), nullptr, *FullPath);
-        if (ExistingAsset)
+        FText PackageValidationReason;
+        if (!FPackageName::IsValidLongPackageName(FullPath, true, &PackageValidationReason))
         {
-            TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Render target already exists: %s"), *FullPath));
+            TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Invalid package path: %s"), *PackageValidationReason.ToString()));
         }
+        FString FullObjectPath = FString::Printf(TEXT("%s.%s"), *FullPath, *Name);
         
-        // Also check for any asset with same name (different class collision)
-        UPackage* ExistingPackage = FindPackage(nullptr, *FullPath);
-        if (ExistingPackage)
+        // Check for existing assets without attempting to load a missing package.
+        // LoadAsset logs an error for absent assets, and per-request capture would
+        // convert an otherwise successful render-target creation into ENGINE_ERROR.
+        UTextureRenderTarget2D* ExistingRenderTarget = FindObject<UTextureRenderTarget2D>(nullptr, *FullObjectPath);
+        const FAssetData ExistingAssetData = GetTextureAssetDataByObjectPath(FullObjectPath);
+        if (!ExistingRenderTarget && ExistingAssetData.IsValid())
         {
-            TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Asset with this name already exists: %s"), *FullPath));
+            ExistingRenderTarget = Cast<UTextureRenderTarget2D>(ExistingAssetData.GetAsset());
+        }
+        if (ExistingRenderTarget)
+        {
+            Response->SetBoolField(TEXT("success"), true);
+            Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Render target already exists: %s"), *FullPath));
+            McpHandlerUtils::AddVerification(Response, ExistingRenderTarget);
+            Response->SetNumberField(TEXT("width"), ExistingRenderTarget->SizeX);
+            Response->SetNumberField(TEXT("height"), ExistingRenderTarget->SizeY);
+            return Response;
+        }
+
+        if (ExistingAssetData.IsValid())
+        {
+            Response->SetBoolField(TEXT("success"), false);
+            Response->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset with this name already exists: %s"), *FullPath));
+            Response->SetStringField(TEXT("errorCode"), TEXT("ASSET_ALREADY_EXISTS"));
+            return Response;
         }
         
         // Create package first
@@ -2830,6 +3108,25 @@ Response->SetBoolField(TEXT("success"), true);
         if (!Package)
         {
             TEXTURE_ERROR_RESPONSE(TEXT("Failed to create package"));
+        }
+
+        UObject* InMemoryCollision = FindObject<UObject>(Package, *Name);
+        if (InMemoryCollision)
+        {
+            if (UTextureRenderTarget2D* InMemoryRenderTarget = Cast<UTextureRenderTarget2D>(InMemoryCollision))
+            {
+                Response->SetBoolField(TEXT("success"), true);
+                Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Render target already exists: %s"), *FullPath));
+                McpHandlerUtils::AddVerification(Response, InMemoryRenderTarget);
+                Response->SetNumberField(TEXT("width"), InMemoryRenderTarget->SizeX);
+                Response->SetNumberField(TEXT("height"), InMemoryRenderTarget->SizeY);
+                return Response;
+            }
+
+            Response->SetBoolField(TEXT("success"), false);
+            Response->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset with this name already exists: %s"), *FullPath));
+            Response->SetStringField(TEXT("errorCode"), TEXT("ASSET_ALREADY_EXISTS"));
+            return Response;
         }
         
         // Create render target directly in the package
@@ -2839,79 +3136,80 @@ Response->SetBoolField(TEXT("success"), true);
             TEXTURE_ERROR_RESPONSE(TEXT("Failed to create render target"));
         }
         
-        RenderTarget->InitCustomFormat(Width, Height, PF_B8G8R8A8, true);
+        RenderTarget->InitCustomFormat(Width, Height, Format, false);
+        RenderTarget->UpdateResourceImmediate(true);
+        RenderTarget->MarkPackageDirty();
         
         FAssetRegistryModule::AssetCreated(RenderTarget);
-        McpSafeAssetSave(RenderTarget);
+        if (bSave)
+        {
+            McpSafeAssetSave(RenderTarget);
+        }
         
         Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Render target '%s' created"), *Name));
-        Response->SetStringField(TEXT("assetPath"), FullPath);
+        Response->SetBoolField(TEXT("saved"), bSave);
+        McpHandlerUtils::AddVerification(Response, RenderTarget);
+        Response->SetNumberField(TEXT("width"), RenderTarget->SizeX);
+        Response->SetNumberField(TEXT("height"), RenderTarget->SizeY);
         return Response;
     }
     
     if (SubAction == TEXT("create_cube_texture"))
     {
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("path"), TEXT("/Game/Textures")));
-        int32 Size = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("size"), 512));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeTexturePath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures")));
+        int32 Size = static_cast<int32>(GetJsonNumberField(Params, TEXT("size"), 512));
         
         if (Name.IsEmpty())
         {
             TEXTURE_ERROR_RESPONSE(TEXT("name is required"));
         }
         
-        // Cube textures require special handling - return success with note
-        FString FullPath = Path / Name;
-        
-        Response->SetBoolField(TEXT("success"), true);
-        Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Cube texture '%s' placeholder created"), *Name));
-        Response->SetStringField(TEXT("assetPath"), FullPath);
-        Response->SetStringField(TEXT("note"), TEXT("Cube textures typically imported from HDR files. Use import_texture for actual cube maps."));
+        Response->SetBoolField(TEXT("success"), false);
+        Response->SetStringField(TEXT("error"), TEXT("UNSUPPORTED_OPERATION"));
+        Response->SetStringField(TEXT("errorCode"), TEXT("UNSUPPORTED_OPERATION"));
+        Response->SetStringField(TEXT("message"), TEXT("create_cube_texture is not implemented for generated assets. Import a real cube map source with import_texture instead."));
         return Response;
     }
     
     if (SubAction == TEXT("create_volume_texture"))
     {
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("path"), TEXT("/Game/Textures")));
-        int32 Width = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("width"), 256));
-        int32 Height = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("height"), 256));
-        int32 Depth = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("depth"), 256));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeTexturePath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures")));
+        int32 Width = static_cast<int32>(GetJsonNumberField(Params, TEXT("width"), 256));
+        int32 Height = static_cast<int32>(GetJsonNumberField(Params, TEXT("height"), 256));
+        int32 Depth = static_cast<int32>(GetJsonNumberField(Params, TEXT("depth"), 256));
         
         if (Name.IsEmpty())
         {
             TEXTURE_ERROR_RESPONSE(TEXT("name is required"));
         }
         
-        FString FullPath = Path / Name;
-        
-        Response->SetBoolField(TEXT("success"), true);
-        Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Volume texture '%s' placeholder created (%dx%dx%d)"), *Name, Width, Height, Depth));
-        Response->SetStringField(TEXT("assetPath"), FullPath);
-        Response->SetStringField(TEXT("note"), TEXT("Volume textures typically imported from VDB or EXR sequences."));
+        Response->SetBoolField(TEXT("success"), false);
+        Response->SetStringField(TEXT("error"), TEXT("UNSUPPORTED_OPERATION"));
+        Response->SetStringField(TEXT("errorCode"), TEXT("UNSUPPORTED_OPERATION"));
+        Response->SetStringField(TEXT("message"), TEXT("create_volume_texture is not implemented for generated assets. Import a real volume texture source instead."));
         return Response;
     }
     
     if (SubAction == TEXT("create_texture_array"))
     {
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("path"), TEXT("/Game/Textures")));
-        int32 Width = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("width"), 512));
-        int32 Height = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("height"), 512));
-        int32 NumSlices = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("numSlices"), 4));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeTexturePath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures")));
+        int32 Width = static_cast<int32>(GetJsonNumberField(Params, TEXT("width"), 512));
+        int32 Height = static_cast<int32>(GetJsonNumberField(Params, TEXT("height"), 512));
+        int32 NumSlices = static_cast<int32>(GetJsonNumberField(Params, TEXT("numSlices"), 4));
         
         if (Name.IsEmpty())
         {
             TEXTURE_ERROR_RESPONSE(TEXT("name is required"));
         }
         
-        FString FullPath = Path / Name;
-        
-        Response->SetBoolField(TEXT("success"), true);
-        Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Texture array '%s' placeholder created (%dx%dx%d)"), *Name, Width, Height, NumSlices));
-        Response->SetStringField(TEXT("assetPath"), FullPath);
-        Response->SetStringField(TEXT("note"), TEXT("Texture arrays typically created from multiple 2D textures."));
+        Response->SetBoolField(TEXT("success"), false);
+        Response->SetStringField(TEXT("error"), TEXT("UNSUPPORTED_OPERATION"));
+        Response->SetStringField(TEXT("errorCode"), TEXT("UNSUPPORTED_OPERATION"));
+        Response->SetStringField(TEXT("message"), TEXT("create_texture_array is not implemented for generated assets. Import or assemble real texture slices instead."));
         return Response;
     }
     
@@ -2919,16 +3217,16 @@ Response->SetBoolField(TEXT("success"), true);
     // Create ambient occlusion texture from mesh by baking AO using UV unwrapping
     if (SubAction == TEXT("create_ao_from_mesh"))
     {
-        FString MeshPath = GetStringFieldTextAuth(Params, TEXT("meshPath"), TEXT(""));
-        FString Name = GetStringFieldTextAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeTexturePath(GetStringFieldTextAuth(Params, TEXT("path"), TEXT("/Game/Textures")));
-        int32 Width = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("width"), 1024));
-        int32 Height = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("height"), 1024));
-        int32 SampleCount = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("sampleCount"), 64));
-        float RayDistance = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("rayDistance"), 100.0));
-        float Bias = static_cast<float>(GetNumberFieldTextAuth(Params, TEXT("bias"), 0.01));
-        int32 UVChannel = static_cast<int32>(GetNumberFieldTextAuth(Params, TEXT("uvChannel"), 0));
-        bool bSave = GetBoolFieldTextAuth(Params, TEXT("save"), true);
+        FString MeshPath = GetJsonStringField(Params, TEXT("meshPath"), TEXT(""));
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeTexturePath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures")));
+        int32 Width = static_cast<int32>(GetJsonNumberField(Params, TEXT("width"), 1024));
+        int32 Height = static_cast<int32>(GetJsonNumberField(Params, TEXT("height"), 1024));
+        int32 SampleCount = static_cast<int32>(GetJsonNumberField(Params, TEXT("sampleCount"), 64));
+        float RayDistance = static_cast<float>(GetJsonNumberField(Params, TEXT("rayDistance"), 100.0));
+        float Bias = static_cast<float>(GetJsonNumberField(Params, TEXT("bias"), 0.01));
+        int32 UVChannel = static_cast<int32>(GetJsonNumberField(Params, TEXT("uvChannel"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         // Validate required parameters
         if (MeshPath.IsEmpty())
@@ -3096,7 +3394,7 @@ Response->SetBoolField(TEXT("success"), true);
 bool UMcpAutomationBridgeSubsystem::HandleManageTextureAction(
     const FString& RequestId, const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Check if this is a texture action
     if (Action != TEXT("manage_texture"))
@@ -3132,7 +3430,6 @@ bool UMcpAutomationBridgeSubsystem::HandleManageTextureAction(
 
 #undef TEXTURE_ERROR_RESPONSE
 
-#undef GetStringFieldTextAuth
-#undef GetNumberFieldTextAuth
-#undef GetBoolFieldTextAuth
-
+#undef GetJsonStringField
+#undef GetJsonNumberField
+#undef GetJsonBoolField

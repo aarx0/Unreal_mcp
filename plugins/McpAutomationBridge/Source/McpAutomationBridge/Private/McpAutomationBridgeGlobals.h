@@ -11,11 +11,16 @@
 #include "Dom/JsonObject.h"
 #include "HAL/CriticalSection.h"
 
-extern TMap<FString,
-            TArray<TPair<FString, TSharedPtr<class FMcpBridgeWebSocket>>>>
-    GBlueprintExistsInflight;
-extern TMap<FString,
-            TArray<TPair<FString, TSharedPtr<class FMcpBridgeWebSocket>>>>
+DECLARE_LOG_CATEGORY_EXTERN(LogMcpAutomationBridgeSubsystem, Log, All);
+
+// Inert response-routing handle threaded through handler signatures. Always
+// null: the legacy WebSocket transport was deleted and responses route by
+// RequestId via FMcpNativeTransport's pending-request map. The class is never
+// defined, so the handle cannot be dereferenced.
+class FMcpBridgeWebSocket;
+using FMcpResponseHandle = TSharedPtr<FMcpBridgeWebSocket>;
+
+extern TMap<FString, TArray<TPair<FString, FMcpResponseHandle>>>
     GBlueprintCreateInflight;
 extern TMap<FString, double> GBlueprintCreateInflightTs;
 extern FCriticalSection GBlueprintCreateMutex;

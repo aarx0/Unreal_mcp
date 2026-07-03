@@ -88,69 +88,6 @@ FString JsonValueToString(const TSharedPtr<FJsonValue>& Value)
     return Serialized;
 }
 
-// =============================================================================
-// Asset Path Utilities
-// =============================================================================
-
-FString ValidateAssetPath(const FString& Path)
-{
-    if (Path.IsEmpty())
-    {
-        return FString();
-    }
-
-    FString CleanPath = Path;
-    
-    // Reject Windows absolute paths
-    if (CleanPath.Len() >= 2 && CleanPath[1] == TEXT(':'))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("ValidateAssetPath: Rejected Windows absolute path: %s"), *Path);
-        return FString();
-    }
-
-    // Normalize slashes
-    CleanPath.ReplaceInline(TEXT("\\"), TEXT("/"));
-    
-    // Remove double slashes
-    while (CleanPath.Contains(TEXT("//")))
-    {
-        CleanPath = CleanPath.Replace(TEXT("//"), TEXT("/"));
-    }
-
-    // Reject path traversal
-    if (CleanPath.Contains(TEXT("..")))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("ValidateAssetPath: Rejected path containing '..': %s"), *Path);
-        return FString();
-    }
-
-    // Ensure path starts with /
-    if (!CleanPath.StartsWith(TEXT("/")))
-    {
-        CleanPath = TEXT("/") + CleanPath;
-    }
-
-    // Validate root
-    const bool bValidRoot = CleanPath.StartsWith(TEXT("/Game")) ||
-                           CleanPath.StartsWith(TEXT("/Engine")) ||
-                           CleanPath.StartsWith(TEXT("/Script"));
-
-    if (!bValidRoot)
-    {
-        // Check for plugin-like paths (e.g., /MyPlugin/Content/Asset)
-        TArray<FString> Segments;
-        CleanPath.ParseIntoArray(Segments, TEXT("/"), true);
-        const bool bLooksLikePluginPath = Segments.Num() >= 3;
-        
-        if (!bLooksLikePluginPath)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("ValidateAssetPath: Rejected path without valid root: %s"), *Path);
-            return FString();
-        }
-    }
-
-    return CleanPath;
-}
 
 // =============================================================================
 // Actor/Component Utilities
@@ -159,7 +96,11 @@ FString ValidateAssetPath(const FString& Path)
 #if WITH_EDITOR
 AActor* FindActorByName(const FString& ActorName, bool bExactMatch)
 {
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = nullptr;
+    if (GEditor)
+    {
+        World = GEditor->PlayWorld ? GEditor->PlayWorld.Get() : GEditor->GetEditorWorldContext().World();
+    }
     if (!World)
     {
         return nullptr;
@@ -171,7 +112,13 @@ AActor* FindActorByName(const FString& ActorName, bool bExactMatch)
         for (TActorIterator<AActor> It(World); It; ++It)
         {
             AActor* Actor = *It;
-            if (Actor && Actor->GetName().Equals(SearchName, ESearchCase::IgnoreCase))
+            // Match either the object name (e.g. BP_Telegraph_C_0) or the editor
+            // label (e.g. BP_Telegraph0); callers use both interchangeably.
+            if (Actor && (Actor->GetName().Equals(SearchName, ESearchCase::IgnoreCase)
+#if WITH_EDITOR
+                          || Actor->GetActorLabel().Equals(SearchName, ESearchCase::IgnoreCase)
+#endif
+                              ))
             {
                 return Actor;
             }
@@ -183,7 +130,11 @@ AActor* FindActorByName(const FString& ActorName, bool bExactMatch)
         for (TActorIterator<AActor> It(World); It; ++It)
         {
             AActor* Actor = *It;
-            if (Actor && Actor->GetName().StartsWith(SearchName, ESearchCase::IgnoreCase))
+            if (Actor && (Actor->GetName().StartsWith(SearchName, ESearchCase::IgnoreCase)
+#if WITH_EDITOR
+                          || Actor->GetActorLabel().StartsWith(SearchName, ESearchCase::IgnoreCase)
+#endif
+                              ))
             {
                 return Actor;
             }
@@ -265,108 +216,6 @@ UActorComponent* FindActorComponentByName(AActor* Actor, const FString& Componen
 #endif
 
 // =============================================================================
-// String Utilities
-// =============================================================================
-
-FString ToSafeAssetName(const FString& Input)
-{
-    if (Input.IsEmpty())
-    {
-        return TEXT("Asset");
-    }
-
-    FString Sanitized = Input.TrimStartAndEnd();
-
-    // Replace SQL injection patterns
-    Sanitized = Sanitized.Replace(TEXT(";"), TEXT("_"));
-    Sanitized = Sanitized.Replace(TEXT("'"), TEXT("_"));
-    Sanitized = Sanitized.Replace(TEXT("\""), TEXT("_"));
-    Sanitized = Sanitized.Replace(TEXT("--"), TEXT("_"));
-    Sanitized = Sanitized.Replace(TEXT("`"), TEXT("_"));
-
-    // Replace invalid characters for Unreal asset names
-    const TArray<TCHAR> InvalidChars = {
-        TEXT('@'), TEXT('#'), TEXT('%'), TEXT('$'), TEXT('&'), TEXT('*'),
-        TEXT('('), TEXT(')'), TEXT('+'), TEXT('='), TEXT('['), TEXT(']'),
-        TEXT('{'), TEXT('}'), TEXT('<'), TEXT('>'), TEXT('?'), TEXT('|'),
-        TEXT('\\'), TEXT(':'), TEXT('~'), TEXT('!'), TEXT(' ')
-    };
-
-    for (TCHAR C : InvalidChars)
-    {
-        TCHAR CharStr[2] = { C, TEXT('\0') };
-        Sanitized = Sanitized.Replace(CharStr, TEXT("_"));
-    }
-
-    // Remove consecutive underscores
-    while (Sanitized.Contains(TEXT("__")))
-    {
-        Sanitized = Sanitized.Replace(TEXT("__"), TEXT("_"));
-    }
-
-    // Remove leading/trailing underscores
-    while (Sanitized.StartsWith(TEXT("_")))
-    {
-        Sanitized.RemoveAt(0);
-    }
-    while (Sanitized.EndsWith(TEXT("_")))
-    {
-        Sanitized.RemoveAt(Sanitized.Len() - 1);
-    }
-
-    // If empty after sanitization, use default
-    if (Sanitized.IsEmpty())
-    {
-        return TEXT("Asset");
-    }
-
-    // Ensure name starts with letter or underscore
-    if (!FChar::IsAlpha(Sanitized[0]) && Sanitized[0] != TEXT('_'))
-    {
-        Sanitized = TEXT("Asset_") + Sanitized;
-    }
-
-    // Truncate to reasonable length
-    if (Sanitized.Len() > 64)
-    {
-        Sanitized = Sanitized.Left(64);
-    }
-
-    return Sanitized;
-}
-
-FString MakeUniqueAssetName(const FString& BaseName, const FString& PackagePath)
-{
-#if WITH_EDITOR
-    FString TestName = ToSafeAssetName(BaseName);
-    FString TestPath = PackagePath / TestName;
-    
-    // Check if the name is already unique
-    if (!UEditorAssetLibrary::DoesAssetExist(TestPath))
-    {
-        return TestName;
-    }
-
-    // Append number suffix until we find a unique name
-    int32 Suffix = 1;
-    while (Suffix < 10000) // Safety limit
-    {
-        FString Candidate = FString::Printf(TEXT("%s_%d"), *TestName, Suffix);
-        TestPath = PackagePath / Candidate;
-        
-        if (!UEditorAssetLibrary::DoesAssetExist(TestPath))
-        {
-            return Candidate;
-        }
-        Suffix++;
-    }
-#endif
-
-    // Fallback
-    return FString::Printf(TEXT("%s_%d"), *ToSafeAssetName(BaseName), FMath::Rand());
-}
-
-// =============================================================================
 // Object and Property Resolution Implementation
 // =============================================================================
 
@@ -415,7 +264,7 @@ UObject* ResolveObjectFromPath(const FString& ObjectPath, FString* OutResolvedPa
     // Try to find by actor label (display name) as fallback
     if (GEditor)
     {
-        UWorld* World = GEditor->GetEditorWorldContext().World();
+        UWorld* World = GEditor->PlayWorld ? GEditor->PlayWorld.Get() : GEditor->GetEditorWorldContext().World();
         if (World)
         {
             for (TActorIterator<AActor> It(World); It; ++It)
@@ -434,34 +283,32 @@ UObject* ResolveObjectFromPath(const FString& ObjectPath, FString* OutResolvedPa
         }
     }
     
-    // Try to load as asset (supports both /Game/ and /Engine/ paths)
-    if (Path.StartsWith(TEXT("/Game/")) || Path.StartsWith(TEXT("/Engine/")) || Path.StartsWith(TEXT("/Script/")))
+    // Try to load as asset (whitelist known roots + engine-registered mount points)
+    if (Path.StartsWith(TEXT("/Game/")) || Path.StartsWith(TEXT("/Engine/")) || Path.StartsWith(TEXT("/Script/")) ||
+        FPackageName::IsValidLongPackageName(Path, true))
     {
-        FString PackagePath = Path;
-        if (PackagePath.Contains(TEXT(".")))
+        // Normalize to a fully-qualified object path (Package.Object). A bare
+        // package path (no ".") refers to the package's primary asset, whose
+        // object name matches the package's short name. The previous code loaded
+        // the package then called FindObject(package, fullPath) — which never
+        // matches, so it returned the UPackage itself and every subsequent
+        // property lookup failed. StaticLoadObject with the object path returns
+        // the actual asset (SoundControlBus, Submix, DataAsset, etc.).
+        FString ObjectPathStr = Path;
+        if (!ObjectPathStr.Contains(TEXT(".")))
         {
-            PackagePath = PackagePath.Left(PackagePath.Find(TEXT(".")));
+            ObjectPathStr = ObjectPathStr + TEXT(".") + FPackageName::GetShortName(ObjectPathStr);
         }
-        UPackage* LoadedPackage = LoadPackage(nullptr, *PackagePath, LOAD_None);
-        if (LoadedPackage)
+        if (UObject* Found = StaticLoadObject(UObject::StaticClass(), nullptr, *ObjectPathStr))
         {
-            if (UObject* Found = FindObject<UObject>(LoadedPackage, *Path))
-            {
-                if (OutResolvedPath)
-                {
-                    *OutResolvedPath = Found->GetPathName();
-                }
-                return Found;
-            }
             if (OutResolvedPath)
             {
-                *OutResolvedPath = LoadedPackage->GetPathName();
+                *OutResolvedPath = Found->GetPathName();
             }
-            return LoadedPackage;
+            return Found;
         }
-        
-        // Try StaticFindObject for engine assets that may not need package loading
-        if (UObject* Found = FindObject<UObject>(nullptr, *Path))
+        // Fallback: an already-in-memory object matching the exact path.
+        if (UObject* Found = FindObject<UObject>(nullptr, *ObjectPathStr))
         {
             if (OutResolvedPath)
             {
@@ -558,49 +405,6 @@ UEdGraphPin* FindExecPin(UEdGraphNode* Node, EEdGraphPinDirection Direction)
     return nullptr;
 }
 
-UEdGraphPin* FindOutputPin(UEdGraphNode* Node, const FName& PinName)
-{
-    if (!Node)
-    {
-        return nullptr;
-    }
-
-    for (UEdGraphPin* Pin : Node->Pins)
-    {
-        if (Pin && Pin->Direction == EGPD_Output)
-        {
-            if (PinName.IsNone())
-            {
-                return Pin;
-            }
-            if (Pin->PinName == PinName)
-            {
-                return Pin;
-            }
-        }
-    }
-
-    return nullptr;
-}
-
-UEdGraphPin* FindInputPin(UEdGraphNode* Node, const FName& PinName)
-{
-    if (!Node)
-    {
-        return nullptr;
-    }
-
-    for (UEdGraphPin* Pin : Node->Pins)
-    {
-        if (Pin && Pin->Direction == EGPD_Input && Pin->PinName == PinName)
-        {
-            return Pin;
-        }
-    }
-
-    return nullptr;
-}
-
 UEdGraphPin* FindDataPin(UEdGraphNode* Node, EEdGraphPinDirection Direction, const FName& PreferredName)
 {
     if (!Node)
@@ -679,9 +483,19 @@ FEdGraphPinType MakePinType(const FString& InType)
     const FString Lower = InType.ToLower();
     const FString CleanType = InType.TrimStartAndEnd();
 
-    if (Lower == TEXT("float") || Lower == TEXT("double"))
+    if (Lower == TEXT("float"))
     {
-        PinType.PinCategory = UEdGraphSchema_K2::PC_Float;
+        // UE5 float pins are PC_Real + a Float subcategory. The legacy bare
+        // PC_Float category compiles to an INT property (silent truncation) — it
+        // spliced a Truncate node into float param connections. Same bug family
+        // as the add_variable PC_Real fix.
+        PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+        PinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+    }
+    else if (Lower == TEXT("double"))
+    {
+        PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+        PinType.PinSubCategory = UEdGraphSchema_K2::PC_Double;
     }
     else if (Lower == TEXT("int") || Lower == TEXT("integer"))
     {
@@ -898,23 +712,53 @@ TArray<TSharedPtr<FJsonValue>> CollectBlueprintVariables(UBlueprint* Blueprint)
         return Out;
     }
 
-    for (const FBPVariableDescription& Var : Blueprint->NewVariables)
+    TArray<UBlueprint*> Chain;
     {
-        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-        Obj->SetStringField(TEXT("name"), Var.VarName.ToString());
-        Obj->SetStringField(TEXT("type"), DescribePinType(Var.VarType));
-        Obj->SetBoolField(TEXT("replicated"), (Var.PropertyFlags & CPF_Net) != 0);
-        Obj->SetBoolField(TEXT("public"), (Var.PropertyFlags & CPF_BlueprintReadOnly) == 0);
-        
-        const FString CategoryStr = Var.Category.IsEmpty() ? FString() : Var.Category.ToString();
-        if (!CategoryStr.IsEmpty())
+        UBlueprint* Current = Blueprint;
+        while (Current)
         {
-            Obj->SetStringField(TEXT("category"), CategoryStr);
+            Chain.Add(Current);
+            UClass* ParentClass = Current->ParentClass;
+            UBlueprint* ParentBP = ParentClass
+                ? Cast<UBlueprint>(ParentClass->ClassGeneratedBy)
+                : nullptr;
+            if (!ParentBP || ParentBP == Current || Chain.Contains(ParentBP))
+            {
+                break;
+            }
+            Current = ParentBP;
         }
-        
-        Out.Add(MakeShared<FJsonValueObject>(Obj));
     }
-    
+
+    for (int32 ChainIdx = Chain.Num() - 1; ChainIdx >= 0; --ChainIdx)
+    {
+        UBlueprint* CurrentBP = Chain[ChainIdx];
+        const bool bInherited = (CurrentBP != Blueprint);
+
+        for (const FBPVariableDescription& Var : CurrentBP->NewVariables)
+        {
+            TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+            Obj->SetStringField(TEXT("name"), Var.VarName.ToString());
+            Obj->SetStringField(TEXT("type"), DescribePinType(Var.VarType));
+            Obj->SetBoolField(TEXT("replicated"), (Var.PropertyFlags & CPF_Net) != 0);
+            Obj->SetBoolField(TEXT("public"), (Var.PropertyFlags & CPF_DisableEditOnInstance) == 0);
+
+            const FString CategoryStr = Var.Category.IsEmpty() ? FString() : Var.Category.ToString();
+            if (!CategoryStr.IsEmpty())
+            {
+                Obj->SetStringField(TEXT("category"), CategoryStr);
+            }
+
+            if (bInherited)
+            {
+                Obj->SetBoolField(TEXT("inherited"), true);
+                Obj->SetStringField(TEXT("declaringBlueprint"), CurrentBP->GetName());
+            }
+
+            Out.Add(MakeShared<FJsonValueObject>(Obj));
+        }
+    }
+
     return Out;
 }
 
@@ -989,92 +833,6 @@ TArray<TSharedPtr<FJsonValue>> CollectBlueprintFunctions(UBlueprint* Blueprint)
     }
 
     return Out;
-}
-
-FProperty* FindBlueprintProperty(UBlueprint* Blueprint, const FString& PropertyName)
-{
-    if (!Blueprint || PropertyName.TrimStartAndEnd().IsEmpty())
-    {
-        return nullptr;
-    }
-
-    const FName PropFName(*PropertyName.TrimStartAndEnd());
-    const TArray<UClass*> CandidateClasses = {
-        Blueprint->GeneratedClass,
-        Blueprint->SkeletonGeneratedClass,
-        Blueprint->ParentClass
-    };
-
-    for (UClass* Candidate : CandidateClasses)
-    {
-        if (!Candidate)
-        {
-            continue;
-        }
-
-        if (FProperty* Found = Candidate->FindPropertyByName(PropFName))
-        {
-            return Found;
-        }
-    }
-
-    return nullptr;
-}
-
-UFunction* FindBlueprintFunction(UBlueprint* Blueprint, const FString& FunctionName)
-{
-    if (!Blueprint || FunctionName.TrimStartAndEnd().IsEmpty())
-    {
-        return nullptr;
-    }
-
-    const FString CleanFunc = FunctionName.TrimStartAndEnd();
-
-    UFunction* Found = FindObject<UFunction>(nullptr, *CleanFunc);
-    if (Found)
-    {
-        return Found;
-    }
-
-    const FName FuncFName(*CleanFunc);
-    const TArray<UClass*> CandidateClasses = {
-        Blueprint->GeneratedClass,
-        Blueprint->SkeletonGeneratedClass,
-        Blueprint->ParentClass
-    };
-
-    for (UClass* Candidate : CandidateClasses)
-    {
-        if (Candidate)
-        {
-            UFunction* CandidateFunc = Candidate->FindFunctionByName(FuncFName);
-            if (CandidateFunc)
-            {
-                return CandidateFunc;
-            }
-        }
-    }
-
-    // Try class.function format
-    int32 DotIndex = INDEX_NONE;
-    if (CleanFunc.FindChar('.', DotIndex))
-    {
-        const FString ClassPath = CleanFunc.Left(DotIndex);
-        const FString FuncSegment = CleanFunc.Mid(DotIndex + 1);
-        if (!ClassPath.IsEmpty() && !FuncSegment.IsEmpty())
-        {
-            if (UClass* ExplicitClass = FindObject<UClass>(nullptr, *ClassPath))
-            {
-                UFunction* ExplicitFunc = ExplicitClass->FindFunctionByName(FName(*FuncSegment));
-                if (ExplicitFunc)
-                {
-                    return ExplicitFunc;
-                }
-            }
-        }
-    }
-
-    return nullptr;
 }
 
 } // namespace McpBlueprintUtils

@@ -32,7 +32,15 @@
 // 
 // Performance:
 //   - Uses AssetRegistry cached data - no asset loading required
-//   - REMOVED ScanPathsSynchronous() to prevent indefinite hangs on unindexed paths
+//   - ScanPathsSynchronous() was REMOVED to prevent GameThread blocking
+//     (which caused SSE/HTTP transport timeouts on slow projects).
+//     Asset listing now uses cached AssetRegistry data exclusively.
+//
+// LIMITATION: Recently-added assets (created on disk but not yet indexed
+// by the editor's background scanner) will NOT appear in search results
+// until the editor rescans. Use the Asset Registry's "Rescan" button in
+// the Content Browser, or call system_control rescan_content_directory,
+// to force an update before querying.
 // =============================================================================
 
 #include "McpVersionCompatibility.h"  // MUST be first - UE version compatibility macros
@@ -51,6 +59,7 @@
 #include "Dom/JsonObject.h"
 #include "AssetRegistry/ARFilter.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "Misc/PackageName.h"
 
 #if WITH_EDITOR
 #include "EditorAssetLibrary.h"
@@ -67,7 +76,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Validate action (case-insensitive)
     if (!Action.ToLower().Equals(TEXT("asset_query"), ESearchCase::IgnoreCase))
@@ -207,6 +216,10 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
         Filter.PackagePaths.Add(FName(*Path));
         Filter.bRecursivePaths = true;
 
+        // NOTE: ScanPathsSynchronous() was removed to prevent GameThread blocking.
+        // Asset listing uses cached AssetRegistry data exclusively.
+        // LIMITATION: Assets not yet indexed by the editor's background scanner
+        // will NOT appear. Use Content Browser "Rescan" or rescan_content_directory.
         TArray<FAssetData> AssetDataList;
         AssetRegistry.GetAssets(Filter, AssetDataList);
 
@@ -434,8 +447,9 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
         FString SearchText;
         Payload->TryGetStringField(TEXT("searchText"), SearchText);
 
-        // Parse recursion (default to false for safety, but true when searchText is provided)
-        bool bRecursivePaths = !SearchText.IsEmpty(); // default true for text search
+        // Parse recursion: default to true so that classNames-only / path-only searches
+        // traverse the full content tree. Callers can opt out with recursivePaths=false.
+        bool bRecursivePaths = true;
         if (Payload->HasField(TEXT("recursivePaths")))
         {
             Payload->TryGetBoolField(TEXT("recursivePaths"), bRecursivePaths);
@@ -454,6 +468,10 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
             FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
         IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
 
+        // NOTE: ScanPathsSynchronous() was removed to prevent GameThread blocking.
+        // Asset listing uses cached AssetRegistry data exclusively.
+        // LIMITATION: Assets not yet indexed by the editor's background scanner
+        // will NOT appear. Use Content Browser "Rescan" or rescan_content_directory.
         TArray<FAssetData> AssetDataList;
         AssetRegistry.GetAssets(Filter, AssetDataList);
 
@@ -553,14 +571,45 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
         FString AssetPath;
         Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
 
+        if (AssetPath.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("Missing assetPath."), TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+
+        const FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
+        if (SanitizedAssetPath.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Invalid assetPath: '%s' contains traversal or invalid characters."), *AssetPath),
+                TEXT("INVALID_PATH"));
+            return true;
+        }
+
         if (ISourceControlModule::Get().IsEnabled())
         {
             ISourceControlProvider& Provider = ISourceControlModule::Get().GetProvider();
-            FSourceControlStatePtr State = Provider.GetState(AssetPath, EStateCacheUsage::Use);
+            const FString PackageName = FPackageName::ObjectPathToPackageName(SanitizedAssetPath);
+            FString FilePath;
+            if (!FPackageName::TryConvertLongPackageNameToFilename(
+                    PackageName, FilePath, FPackageName::GetAssetPackageExtension()) &&
+                !FPackageName::TryConvertLongPackageNameToFilename(
+                    PackageName, FilePath, FPackageName::GetMapPackageExtension()))
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Could not convert assetPath to source-control filename: %s"), *SanitizedAssetPath),
+                    TEXT("INVALID_PATH"));
+                return true;
+            }
+
+            FSourceControlStatePtr State = Provider.GetState(FilePath, EStateCacheUsage::Use);
 
             if (State.IsValid())
             {
                 TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+                Result->SetStringField(TEXT("assetPath"), SanitizedAssetPath);
+                Result->SetStringField(TEXT("filePath"), FilePath);
                 Result->SetBoolField(TEXT("isCheckedOut"), State->IsCheckedOut());
                 Result->SetBoolField(TEXT("isAdded"), State->IsAdded());
                 Result->SetBoolField(TEXT("isDeleted"), State->IsDeleted());
@@ -602,7 +651,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSearchAssets(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Build payload with subAction
     TSharedPtr<FJsonObject> RoutedPayload = Payload;

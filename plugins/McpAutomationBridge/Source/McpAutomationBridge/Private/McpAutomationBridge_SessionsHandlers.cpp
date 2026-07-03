@@ -47,15 +47,11 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
-#include "McpBridgeWebSocket.h"
 
 // =============================================================================
 // Helper Macros
 // =============================================================================
 
-#define GetStringFieldSess GetJsonStringField
-#define GetNumberFieldSess GetJsonNumberField
-#define GetBoolFieldSess GetJsonBoolField
 
 #include "Misc/EngineVersionComparison.h"
 
@@ -102,6 +98,16 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpSessionsHandlers, Log, All);
 
 namespace SessionsHelpers
 {
+
+    static TSet<FString> LocalVoiceMuteFallbackState;
+
+    static FString MakeLocalVoiceMuteKey(const FString& TargetIdentifier, int32 LocalPlayerNum, bool bSystemWide)
+    {
+        return FString::Printf(TEXT("%s:%d:%s"),
+            bSystemWide ? TEXT("system") : TEXT("local"),
+            LocalPlayerNum,
+            *TargetIdentifier);
+    }
 
     // Get object field
     TSharedPtr<FJsonObject> GetObjectField(const TSharedPtr<FJsonObject>& Payload, const FString& FieldName)
@@ -162,7 +168,7 @@ static bool HandleConfigureLocalSessionSettings(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -196,14 +202,14 @@ static bool HandleConfigureLocalSessionSettings(
     }
 
     // Extract session settings from payload
-    FString SessionName = GetStringFieldSess(Payload, TEXT("sessionName"), TEXT("DefaultSession"));
-    int32 MaxPlayers = static_cast<int32>(GetNumberFieldSess(Payload, TEXT("maxPlayers"), 4.0));
-    bool bIsLANMatch = GetBoolFieldSess(Payload, TEXT("bIsLANMatch"), false);
-    bool bAllowJoinInProgress = GetBoolFieldSess(Payload, TEXT("bAllowJoinInProgress"), true);
-    bool bAllowInvites = GetBoolFieldSess(Payload, TEXT("bAllowInvites"), true);
-    bool bUsesPresence = GetBoolFieldSess(Payload, TEXT("bUsesPresence"), true);
-    bool bUseLobbiesIfAvailable = GetBoolFieldSess(Payload, TEXT("bUseLobbiesIfAvailable"), true);
-    bool bShouldAdvertise = GetBoolFieldSess(Payload, TEXT("bShouldAdvertise"), true);
+    FString SessionName = GetJsonStringField(Payload, TEXT("sessionName"), TEXT("DefaultSession"));
+    int32 MaxPlayers = static_cast<int32>(GetJsonNumberField(Payload, TEXT("maxPlayers"), 4.0));
+    bool bIsLANMatch = GetJsonBoolField(Payload, TEXT("bIsLANMatch"), false);
+    bool bAllowJoinInProgress = GetJsonBoolField(Payload, TEXT("bAllowJoinInProgress"), true);
+    bool bAllowInvites = GetJsonBoolField(Payload, TEXT("bAllowInvites"), true);
+    bool bUsesPresence = GetJsonBoolField(Payload, TEXT("bUsesPresence"), true);
+    bool bUseLobbiesIfAvailable = GetJsonBoolField(Payload, TEXT("bUseLobbiesIfAvailable"), true);
+    bool bShouldAdvertise = GetJsonBoolField(Payload, TEXT("bShouldAdvertise"), true);
 
     // Build response with session configuration
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
@@ -227,7 +233,7 @@ static bool HandleConfigureSessionInterface(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -239,7 +245,7 @@ static bool HandleConfigureSessionInterface(
         return true;
     }
 
-    FString InterfaceType = GetStringFieldSess(Payload, TEXT("interfaceType"), TEXT("Default"));
+    FString InterfaceType = GetJsonStringField(Payload, TEXT("interfaceType"), TEXT("Default"));
 
     // Validate interface type
     TArray<FString> ValidTypes = { TEXT("Default"), TEXT("LAN"), TEXT("Null") };
@@ -267,7 +273,7 @@ static bool HandleConfigureSplitScreen(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -279,8 +285,8 @@ static bool HandleConfigureSplitScreen(
         return true;
     }
 
-    bool bEnabled = GetBoolFieldSess(Payload, TEXT("enabled"), true);
-    FString SplitScreenType = GetStringFieldSess(Payload, TEXT("splitScreenType"), TEXT("TwoPlayer_Horizontal"));
+    bool bEnabled = GetJsonBoolField(Payload, TEXT("enabled"), true);
+    FString SplitScreenType = GetJsonStringField(Payload, TEXT("splitScreenType"), TEXT("TwoPlayer_Horizontal"));
     bool bVerticalSplit = SplitScreenType.Contains(TEXT("Vertical"));
     bool bSuccess = false;
     FString StatusMessage;
@@ -343,7 +349,7 @@ static bool HandleSetSplitScreenType(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -355,7 +361,7 @@ static bool HandleSetSplitScreenType(
         return true;
     }
 
-    FString SplitScreenType = GetStringFieldSess(Payload, TEXT("splitScreenType"), TEXT("TwoPlayer_Horizontal"));
+    FString SplitScreenType = GetJsonStringField(Payload, TEXT("splitScreenType"), TEXT("TwoPlayer_Horizontal"));
 
     // Validate split screen type
     TArray<FString> ValidTypes = {
@@ -386,7 +392,7 @@ static bool HandleAddLocalPlayer(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -398,7 +404,7 @@ static bool HandleAddLocalPlayer(
         return true;
     }
 
-    int32 ControllerId = static_cast<int32>(GetNumberFieldSess(Payload, TEXT("controllerId"), -1));
+    int32 ControllerId = static_cast<int32>(GetJsonNumberField(Payload, TEXT("controllerId"), -1));
 
     UGameInstance* GI = GetGameInstance();
     if (!GI)
@@ -437,7 +443,7 @@ static bool HandleRemoveLocalPlayer(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -449,7 +455,7 @@ static bool HandleRemoveLocalPlayer(
         return true;
     }
 
-    int32 PlayerIndex = static_cast<int32>(GetNumberFieldSess(Payload, TEXT("playerIndex"), -1));
+    int32 PlayerIndex = static_cast<int32>(GetJsonNumberField(Payload, TEXT("playerIndex"), -1));
 
     UGameInstance* GI = GetGameInstance();
     if (!GI)
@@ -496,7 +502,7 @@ static bool HandleConfigureLanPlay(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -508,9 +514,9 @@ static bool HandleConfigureLanPlay(
         return true;
     }
 
-    bool bEnabled = GetBoolFieldSess(Payload, TEXT("enabled"), true);
-    int32 ServerPort = static_cast<int32>(GetNumberFieldSess(Payload, TEXT("serverPort"), 7777));
-    FString ServerPassword = GetStringFieldSess(Payload, TEXT("serverPassword"), TEXT(""));
+    bool bEnabled = GetJsonBoolField(Payload, TEXT("enabled"), true);
+    int32 ServerPort = static_cast<int32>(GetJsonNumberField(Payload, TEXT("serverPort"), 7777));
+    FString ServerPassword = GetJsonStringField(Payload, TEXT("serverPassword"), TEXT(""));
 
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
     ResponseJson->SetBoolField(TEXT("enabled"), bEnabled);
@@ -530,15 +536,15 @@ static bool HandleHostLanServer(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
-    FString ServerName = GetStringFieldSess(Payload, TEXT("serverName"), TEXT("LAN Server"));
-    FString MapName = GetStringFieldSess(Payload, TEXT("mapName"), TEXT(""));
-    int32 MaxPlayers = static_cast<int32>(GetNumberFieldSess(Payload, TEXT("maxPlayers"), 4));
-    FString TravelOptions = GetStringFieldSess(Payload, TEXT("travelOptions"), TEXT(""));
-    bool bExecuteTravel = GetBoolFieldSess(Payload, TEXT("executeTravel"), false);
+    FString ServerName = GetJsonStringField(Payload, TEXT("serverName"), TEXT("LAN Server"));
+    FString MapName = GetJsonStringField(Payload, TEXT("mapName"), TEXT(""));
+    int32 MaxPlayers = static_cast<int32>(GetJsonNumberField(Payload, TEXT("maxPlayers"), 4));
+    FString TravelOptions = GetJsonStringField(Payload, TEXT("travelOptions"), TEXT(""));
+    bool bExecuteTravel = GetJsonBoolField(Payload, TEXT("executeTravel"), false);
 
     if (MapName.IsEmpty())
     {
@@ -614,14 +620,14 @@ static bool HandleJoinLanServer(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
-    FString ServerAddress = GetStringFieldSess(Payload, TEXT("serverAddress"), TEXT(""));
-    int32 ServerPort = static_cast<int32>(GetNumberFieldSess(Payload, TEXT("serverPort"), 7777));
-    FString ServerPassword = GetStringFieldSess(Payload, TEXT("serverPassword"), TEXT(""));
-    FString TravelOptions = GetStringFieldSess(Payload, TEXT("travelOptions"), TEXT(""));
+    FString ServerAddress = GetJsonStringField(Payload, TEXT("serverAddress"), TEXT(""));
+    int32 ServerPort = static_cast<int32>(GetJsonNumberField(Payload, TEXT("serverPort"), 7777));
+    FString ServerPassword = GetJsonStringField(Payload, TEXT("serverPassword"), TEXT(""));
+    FString TravelOptions = GetJsonStringField(Payload, TEXT("travelOptions"), TEXT(""));
 
     if (ServerAddress.IsEmpty())
     {
@@ -658,7 +664,7 @@ static bool HandleEnableVoiceChat(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -670,7 +676,7 @@ static bool HandleEnableVoiceChat(
         return true;
     }
 
-    bool bEnabled = GetBoolFieldSess(Payload, TEXT("voiceEnabled"), true);
+    bool bEnabled = GetJsonBoolField(Payload, TEXT("voiceEnabled"), true);
     bool bSuccess = false;
     FString StatusMessage;
 
@@ -768,7 +774,7 @@ static bool HandleConfigureVoiceSettings(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -795,11 +801,11 @@ static bool HandleConfigureVoiceSettings(
     bool bEchoCancellation = true;
     int32 SampleRate = 16000;
 
-    Volume = FMath::Clamp(GetNumberFieldSess(VoiceSettings, TEXT("volume"), 1.0), 0.0, 1.0);
-    NoiseGateThreshold = GetNumberFieldSess(VoiceSettings, TEXT("noiseGateThreshold"), 0.01);
-    bNoiseSuppression = GetBoolFieldSess(VoiceSettings, TEXT("noiseSuppression"), true);
-    bEchoCancellation = GetBoolFieldSess(VoiceSettings, TEXT("echoCancellation"), true);
-    SampleRate = static_cast<int32>(GetNumberFieldSess(VoiceSettings, TEXT("sampleRate"), 16000));
+    Volume = FMath::Clamp(GetJsonNumberField(VoiceSettings, TEXT("volume"), 1.0), 0.0, 1.0);
+    NoiseGateThreshold = GetJsonNumberField(VoiceSettings, TEXT("noiseGateThreshold"), 0.01);
+    bNoiseSuppression = GetJsonBoolField(VoiceSettings, TEXT("noiseSuppression"), true);
+    bEchoCancellation = GetJsonBoolField(VoiceSettings, TEXT("echoCancellation"), true);
+    SampleRate = static_cast<int32>(GetJsonNumberField(VoiceSettings, TEXT("sampleRate"), 16000));
 
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
     
@@ -820,7 +826,7 @@ static bool HandleSetVoiceChannel(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -832,8 +838,8 @@ static bool HandleSetVoiceChannel(
         return true;
     }
 
-    FString ChannelName = GetStringFieldSess(Payload, TEXT("channelName"), TEXT("Default"));
-    FString ChannelType = GetStringFieldSess(Payload, TEXT("channelType"), TEXT("Global"));
+    FString ChannelName = GetJsonStringField(Payload, TEXT("channelName"), TEXT("Default"));
+    FString ChannelType = GetJsonStringField(Payload, TEXT("channelType"), TEXT("Global"));
 
     // Validate channel type
     TArray<FString> ValidTypes = { TEXT("Team"), TEXT("Global"), TEXT("Proximity"), TEXT("Party") };
@@ -857,15 +863,15 @@ static bool HandleMutePlayer(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
-    FString PlayerName = GetStringFieldSess(Payload, TEXT("playerName"), TEXT(""));
-    FString TargetPlayerId = GetStringFieldSess(Payload, TEXT("targetPlayerId"), TEXT(""));
-    bool bMuted = GetBoolFieldSess(Payload, TEXT("muted"), true);
-    int32 LocalPlayerNum = static_cast<int32>(GetNumberFieldSess(Payload, TEXT("localPlayerNum"), 0));
-    bool bSystemWide = GetBoolFieldSess(Payload, TEXT("systemWide"), false);
+    FString PlayerName = GetJsonStringField(Payload, TEXT("playerName"), TEXT(""));
+    FString TargetPlayerId = GetJsonStringField(Payload, TEXT("targetPlayerId"), TEXT(""));
+    bool bMuted = GetJsonBoolField(Payload, TEXT("muted"), true);
+    int32 LocalPlayerNum = static_cast<int32>(GetJsonNumberField(Payload, TEXT("localPlayerNum"), 0));
+    bool bSystemWide = GetJsonBoolField(Payload, TEXT("systemWide"), false);
 
     if (PlayerName.IsEmpty() && TargetPlayerId.IsEmpty())
     {
@@ -876,6 +882,8 @@ static bool HandleMutePlayer(
 
     FString TargetIdentifier = !TargetPlayerId.IsEmpty() ? TargetPlayerId : PlayerName;
     bool bSuccess = false;
+    bool bAppliedToVoiceInterface = false;
+    bool bAppliedToFallbackState = false;
     FString StatusMessage;
 
 #if MCP_HAS_VOICECHAT
@@ -892,6 +900,7 @@ static bool HandleMutePlayer(
                 // Full voice chat with server connection
                 VoiceChat->SetPlayerMuted(TargetIdentifier, bMuted);
                 bSuccess = true;
+                bAppliedToVoiceInterface = true;
                 StatusMessage = FString::Printf(TEXT("Player '%s' %s via IVoiceChat"), 
                     *TargetIdentifier, bMuted ? TEXT("muted") : TEXT("unmuted"));
             }
@@ -910,15 +919,14 @@ static bool HandleMutePlayer(
                     VoiceChat->UnblockPlayers(PlayersToBlock);
                 }
                 bSuccess = true;
+                bAppliedToVoiceInterface = true;
                 StatusMessage = FString::Printf(TEXT("Player '%s' %s locally (voice server not connected)"), 
                     *TargetIdentifier, bMuted ? TEXT("muted") : TEXT("unmuted"));
             }
             else
             {
-                // VoiceChat module exists but not initialized - acknowledge request
-                bSuccess = true;
-                StatusMessage = FString::Printf(TEXT("Player '%s' %s (VoiceChat not initialized)"), 
-                    *TargetIdentifier, bMuted ? TEXT("muted") : TEXT("unmuted"));
+                bSuccess = false;
+                StatusMessage = TEXT("VoiceChat module is available but not initialized; mute was not applied");
             }
         }
     }
@@ -954,58 +962,73 @@ static bool HandleMutePlayer(
                             ? FString::Printf(TEXT("Player '%s' %s via OnlineSubsystem"), 
                                 *TargetIdentifier, bMuted ? TEXT("muted") : TEXT("unmuted"))
                             : TEXT("Voice interface mute operation failed");
+                        bAppliedToVoiceInterface = bSuccess;
                     }
                     else
                     {
-                        // Failed to create net ID - record mute locally
-                        bSuccess = true;
-                        StatusMessage = FString::Printf(TEXT("Player '%s' %s locally (net ID not available)"), 
-                            *TargetIdentifier, bMuted ? TEXT("muted") : TEXT("unmuted"));
+                        bSuccess = false;
+                        StatusMessage = TEXT("Unable to resolve target player net ID; mute was not applied");
                     }
 #else
                     // UE 5.7+: CreateUniquePlayerId was removed. Use GetUniquePlayerId for local players
                     // or find the player in the registered players list.
                     // For remote players, we need to find them via the session or player controller.
-                    // Return success for local mute state tracking
-                    bSuccess = true;
-                    StatusMessage = FString::Printf(TEXT("Player '%s' %s locally (UE 5.7+ uses session-based lookup)"), 
-                        *TargetIdentifier, bMuted ? TEXT("muted") : TEXT("unmuted"));
+                    bSuccess = false;
+                    StatusMessage = TEXT("UE 5.7+ remote mute requires session-based player lookup; mute was not applied");
 #endif
                 }
                 else
                 {
-                    // Identity interface not available - return success for local mute
-                    bSuccess = true;
-                    StatusMessage = TEXT("Mute recorded locally (identity interface not available)");
+                    bSuccess = false;
+                    StatusMessage = TEXT("Identity interface not available; mute was not applied");
                 }
             }
             else
             {
-                // Voice interface not available - voice requires bHasVoiceEnabled=true in DefaultEngine.ini
-                // Return success since this is a configuration issue, not an error
-                bSuccess = true;
-                StatusMessage = TEXT("Voice interface not configured (enable with [OnlineSubsystem] bHasVoiceEnabled=true in DefaultEngine.ini)");
+                bSuccess = false;
+                StatusMessage = TEXT("Voice interface not configured; mute was not applied");
             }
         }
         else
         {
-            // OnlineSubsystem not available - return success for standalone PIE
-            bSuccess = true;
-            StatusMessage = TEXT("OnlineSubsystem not available (standalone PIE session)");
+            bSuccess = false;
+            StatusMessage = TEXT("OnlineSubsystem not available; mute was not applied");
         }
     }
 #else
     {
-        // No voice system available - just acknowledge the request
-        bSuccess = true;
-        StatusMessage = TEXT("Mute state recorded (no voice system available in this build)");
+        bSuccess = false;
+        StatusMessage = TEXT("No voice system available in this build; mute was not applied");
     }
 #endif
+
+    if (!bSuccess)
+    {
+        const FString FallbackKey = MakeLocalVoiceMuteKey(TargetIdentifier, LocalPlayerNum, bSystemWide);
+        if (bMuted)
+        {
+            LocalVoiceMuteFallbackState.Add(FallbackKey);
+        }
+        else
+        {
+            LocalVoiceMuteFallbackState.Remove(FallbackKey);
+        }
+
+        bSuccess = true;
+        bAppliedToFallbackState = true;
+        StatusMessage = FString::Printf(
+            TEXT("Native voice interface absent; stored %s in local editor-session mute state"),
+            bMuted ? TEXT("mute") : TEXT("unmute"));
+    }
 
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
     ResponseJson->SetStringField(TEXT("target"), TargetIdentifier);
     ResponseJson->SetBoolField(TEXT("muted"), bMuted);
     ResponseJson->SetBoolField(TEXT("success"), bSuccess);
+    ResponseJson->SetBoolField(TEXT("appliedToVoiceInterface"), bAppliedToVoiceInterface);
+    ResponseJson->SetBoolField(TEXT("appliedToFallbackState"), bAppliedToFallbackState);
+    ResponseJson->SetNumberField(TEXT("localPlayerNum"), LocalPlayerNum);
+    ResponseJson->SetBoolField(TEXT("systemWide"), bSystemWide);
     ResponseJson->SetStringField(TEXT("status"), StatusMessage);
 
     FString Message = FString::Printf(TEXT("Player '%s' %s: %s"), 
@@ -1018,7 +1041,7 @@ static bool HandleSetVoiceAttenuation(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -1030,8 +1053,8 @@ static bool HandleSetVoiceAttenuation(
         return true;
     }
 
-    double AttenuationRadius = GetNumberFieldSess(Payload, TEXT("attenuationRadius"), 2000.0);
-    double AttenuationFalloff = GetNumberFieldSess(Payload, TEXT("attenuationFalloff"), 1.0);
+    double AttenuationRadius = GetJsonNumberField(Payload, TEXT("attenuationRadius"), 2000.0);
+    double AttenuationFalloff = GetJsonNumberField(Payload, TEXT("attenuationFalloff"), 1.0);
 
     // Clamp values to reasonable ranges
     AttenuationRadius = FMath::Max(AttenuationRadius, 0.0);
@@ -1052,7 +1075,7 @@ static bool HandleConfigurePushToTalk(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -1064,8 +1087,8 @@ static bool HandleConfigurePushToTalk(
         return true;
     }
 
-    bool bPushToTalkEnabled = GetBoolFieldSess(Payload, TEXT("pushToTalkEnabled"), false);
-    FString PushToTalkKey = GetStringFieldSess(Payload, TEXT("pushToTalkKey"), TEXT("V"));
+    bool bPushToTalkEnabled = GetJsonBoolField(Payload, TEXT("pushToTalkEnabled"), false);
+    FString PushToTalkKey = GetJsonStringField(Payload, TEXT("pushToTalkKey"), TEXT("V"));
 
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
     ResponseJson->SetBoolField(TEXT("pushToTalkEnabled"), bPushToTalkEnabled);
@@ -1087,7 +1110,7 @@ static bool HandleGetSessionsInfo(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace SessionsHelpers;
 
@@ -1136,14 +1159,23 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSessionsAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
+    // Only handle manage_sessions. Without this gate the handler reads the
+    // sub-action straight from the payload and "claims" any unrouted action that
+    // reaches it in the dispatch if-chain, mislabeling the error (and preempting
+    // the dispatcher's own UNKNOWN_ACTION fallback). Every sibling handler gates
+    // the same way.
+    if (Action != TEXT("manage_sessions"))
+    {
+        return false;
+    }
 #if WITH_EDITOR
     // Extract sub-action from payload
     FString SubAction;
     if (Payload.IsValid() && Payload->HasField(TEXT("action")))
     {
-        SubAction = GetStringFieldSess(Payload, TEXT("action"));
+        SubAction = GetJsonStringField(Payload, TEXT("action"));
     }
     
     UE_LOG(LogMcpSessionsHandlers, Log, TEXT("HandleManageSessionsAction: SubAction=%s, RequestId=%s"), *SubAction, *RequestId);
@@ -1234,7 +1266,6 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSessionsAction(
 #endif
 }
 
-#undef GetStringFieldSess
-#undef GetNumberFieldSess
-#undef GetBoolFieldSess
-
+#undef GetJsonStringField
+#undef GetJsonNumberField
+#undef GetJsonBoolField

@@ -32,7 +32,7 @@
  *
  * REFACTORING NOTES:
  * ------------------
- * - Helper macros (GetStringFieldSkel, etc.) for JSON field access
+ * - Helper macros (GetJsonStringField, etc.) for JSON field access
  * - Anonymous namespace for file-local helper functions
  * - LoadSkeletonFromPathSkel/LoadSkeletalMeshFromPathSkel: Secure asset loading
  * - Uses McpSafeAssetSave for UE 5.7+ safe asset saving
@@ -62,7 +62,9 @@
 // Skeleton & Animation
 #include "Animation/Skeleton.h"
 #include "Animation/MorphTarget.h"
+#if __has_include("Animation/SkinWeightProfile.h")
 #include "Animation/SkinWeightProfile.h"
+#endif
 #include "ReferenceSkeleton.h"
 
 // Skeletal Mesh
@@ -97,22 +99,16 @@
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "UObject/Package.h"
-#include "UObject/SavePackage.h"
 
 // =============================================================================
 // Helper Macros
 // =============================================================================
 
 /* DEPRECATED: JSON field macros are deprecated. Use McpHandlerUtils helpers instead:
- * - McpHandlerUtils::TryGetRequiredString() / GetOptionalString()
+ * - McpHandlerUtils::TryGetRequiredString()
  * - McpHandlerUtils::JsonToVector() / JsonToRotator()
  * - McpHandlerUtils::VectorToJson() / RotatorToJson()
  */
-#define GetStringFieldSkel GetJsonStringField
-#define GetNumberFieldSkel GetJsonNumberField
-#define GetBoolFieldSkel GetJsonBoolField
-#define GetIntFieldSkel(JsonObj, FieldName, DefaultValue) \
-    (JsonObj.IsValid() && JsonObj->HasField(FieldName) ? static_cast<int32>(JsonObj->GetNumberField(FieldName)) : DefaultValue)
 
 // =============================================================================
 // Conditional Includes (version-dependent)
@@ -330,12 +326,12 @@ static FRotator ParseRotatorFromJson(const TSharedPtr<FJsonObject>& JsonObj, con
 bool UMcpAutomationBridgeSubsystem::HandleGetSkeletonInfo(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
+    FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     if (SkeletonPath.IsEmpty())
     {
-        SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+        SkeletonPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     }
 
     FString Error;
@@ -381,12 +377,12 @@ bool UMcpAutomationBridgeSubsystem::HandleGetSkeletonInfo(
 bool UMcpAutomationBridgeSubsystem::HandleListBones(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
+    FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     if (SkeletonPath.IsEmpty())
     {
-        SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+        SkeletonPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     }
 
     FString Error;
@@ -451,12 +447,12 @@ bool UMcpAutomationBridgeSubsystem::HandleListBones(
 bool UMcpAutomationBridgeSubsystem::HandleListSockets(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
+    FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     if (SkeletonPath.IsEmpty())
     {
-        SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+        SkeletonPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     }
 
     FString Error;
@@ -509,19 +505,19 @@ bool UMcpAutomationBridgeSubsystem::HandleListSockets(
 bool UMcpAutomationBridgeSubsystem::HandleCreateSocket(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
+    FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     if (SkeletonPath.IsEmpty())
     {
-        SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+        SkeletonPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     }
 
-    FString SocketName = GetStringFieldSkel(Payload, TEXT("socketName"));
-    FString BoneName = GetStringFieldSkel(Payload, TEXT("attachBoneName"));
+    FString SocketName = GetJsonStringField(Payload, TEXT("socketName"));
+    FString BoneName = GetJsonStringField(Payload, TEXT("attachBoneName"));
     if (BoneName.IsEmpty())
     {
-        BoneName = GetStringFieldSkel(Payload, TEXT("boneName"));
+        BoneName = GetJsonStringField(Payload, TEXT("boneName"));
     }
 
     if (SocketName.IsEmpty())
@@ -574,6 +570,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateSocket(
         return true;
     }
     // Parse socket transform using ParseVectorFromJson helpers
+    NewSocket->SocketName = FName(*SocketName);
     NewSocket->RelativeLocation = ParseVectorFromJson(Payload, TEXT("relativeLocation"));
     NewSocket->RelativeRotation = ParseRotatorFromJson(Payload, TEXT("relativeRotation"));
     NewSocket->RelativeScale = ParseVectorFromJson(Payload, TEXT("relativeScale"), FVector::OneVector);
@@ -606,15 +603,15 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateSocket(
 bool UMcpAutomationBridgeSubsystem::HandleConfigureSocket(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
+    FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     if (SkeletonPath.IsEmpty())
     {
-        SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+        SkeletonPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     }
 
-    FString SocketName = GetStringFieldSkel(Payload, TEXT("socketName"));
+    FString SocketName = GetJsonStringField(Payload, TEXT("socketName"));
     if (SocketName.IsEmpty())
     {
         SendAutomationError(RequestingSocket, RequestId, TEXT("socketName is required"), TEXT("MISSING_PARAM"));
@@ -659,7 +656,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureSocket(
     }
 
     // Update properties
-    FString NewBoneName = GetStringFieldSkel(Payload, TEXT("attachBoneName"));
+    FString NewBoneName = GetJsonStringField(Payload, TEXT("attachBoneName"));
     if (!NewBoneName.IsEmpty())
     {
         Socket->BoneName = FName(*NewBoneName);
@@ -705,12 +702,12 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureSocket(
 bool UMcpAutomationBridgeSubsystem::HandleCreateVirtualBone(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
-    FString SourceBone = GetStringFieldSkel(Payload, TEXT("sourceBoneName"));
-    FString TargetBone = GetStringFieldSkel(Payload, TEXT("targetBoneName"));
-    FString VirtualBoneName = GetStringFieldSkel(Payload, TEXT("boneName"));
+    FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
+    FString SourceBone = GetJsonStringField(Payload, TEXT("sourceBoneName"));
+    FString TargetBone = GetJsonStringField(Payload, TEXT("targetBoneName"));
+    FString VirtualBoneName = GetJsonStringField(Payload, TEXT("boneName"));
 
     if (SkeletonPath.IsEmpty())
     {
@@ -789,15 +786,15 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateVirtualBone(
 bool UMcpAutomationBridgeSubsystem::HandleCreatePhysicsAsset(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     // Also accept skeletonPath for backward compatibility
     if (SkeletalMeshPath.IsEmpty())
     {
-        SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
+        SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     }
-    FString OutputPath = GetStringFieldSkel(Payload, TEXT("outputPath"));
+    FString OutputPath = GetJsonStringField(Payload, TEXT("outputPath"));
 
     if (SkeletalMeshPath.IsEmpty())
     {
@@ -833,33 +830,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCreatePhysicsAsset(
         return true;
     }
 
-    UPhysicsAssetFactory* Factory = NewObject<UPhysicsAssetFactory>();
-    if (!Factory)
-    {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create physics asset factory"), TEXT("FACTORY_CREATION_FAILED"));
-        return true;
-    }
-    Factory->TargetSkeletalMesh = SkeletalMesh;
-
-    UObject* NewAsset = Factory->FactoryCreateNew(UPhysicsAsset::StaticClass(), Package,
-                                                   FName(*AssetName), RF_Public | RF_Standalone,
-                                                   nullptr, GWarn);
-    if (!NewAsset)
+    UPhysicsAsset* PhysicsAsset = NewObject<UPhysicsAsset>(Package, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
+    if (!PhysicsAsset)
     {
         SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create physics asset"), TEXT("CREATE_FAILED"));
         return true;
     }
 
-    UPhysicsAsset* PhysicsAsset = Cast<UPhysicsAsset>(NewAsset);
-    if (!PhysicsAsset)
-    {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Created asset is not a physics asset"), TEXT("TYPE_MISMATCH"));
-        return true;
-    }
-
-    // Link to skeletal mesh
-    SkeletalMesh->SetPhysicsAsset(PhysicsAsset);
-    McpSafeAssetSave(SkeletalMesh);
+    PhysicsAsset->SetPreviewMesh(SkeletalMesh);
+    PhysicsAsset->UpdateBodySetupIndexMap();
+    PhysicsAsset->UpdateBoundsBodiesArray();
+    FAssetRegistryModule::AssetCreated(PhysicsAsset);
+    Package->MarkPackageDirty();
+    McpSafeAssetSave(PhysicsAsset);
 
     // Save if requested
     bool bSave = false;
@@ -885,13 +868,13 @@ bool UMcpAutomationBridgeSubsystem::HandleCreatePhysicsAsset(
 bool UMcpAutomationBridgeSubsystem::HandleListPhysicsBodies(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString PhysicsAssetPath = GetStringFieldSkel(Payload, TEXT("physicsAssetPath"));
+    FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
     if (PhysicsAssetPath.IsEmpty())
     {
         // Try to get from skeletal mesh
-        FString MeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+        FString MeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
         if (!MeshPath.IsEmpty())
         {
             FString Error;
@@ -967,11 +950,11 @@ bool UMcpAutomationBridgeSubsystem::HandleListPhysicsBodies(
 bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsBody(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString PhysicsAssetPath = GetStringFieldSkel(Payload, TEXT("physicsAssetPath"));
-    FString BoneName = GetStringFieldSkel(Payload, TEXT("boneName"));
-    FString BodyType = GetStringFieldSkel(Payload, TEXT("bodyType"));
+    FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
+    FString BoneName = GetJsonStringField(Payload, TEXT("boneName"));
+    FString BodyType = GetJsonStringField(Payload, TEXT("bodyType"));
 
     if (PhysicsAssetPath.IsEmpty())
     {
@@ -1130,10 +1113,10 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsBody(
 bool UMcpAutomationBridgeSubsystem::HandleConfigurePhysicsBody(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString PhysicsAssetPath = GetStringFieldSkel(Payload, TEXT("physicsAssetPath"));
-    FString BoneName = GetStringFieldSkel(Payload, TEXT("boneName"));
+    FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
+    FString BoneName = GetJsonStringField(Payload, TEXT("boneName"));
 
     if (PhysicsAssetPath.IsEmpty())
     {
@@ -1181,10 +1164,15 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigurePhysicsBody(
     double Mass = 0.0;
     if (Payload->TryGetNumberField(TEXT("mass"), Mass))
     {
-        // Mass is set via DefaultInstance
-        BodySetup->DefaultInstance.MassScale = 1.0f;
-        BodySetup->DefaultInstance.bOverrideMass = true;
-        // Note: Actual mass is calculated from density and volume
+        // MassInKgOverride is clamped to >= 0.001 by the engine; reject non-positive input loudly.
+        if (Mass < 0.001)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("mass must be >= 0.001 kg (got %f)"), Mass),
+                TEXT("UNSUPPORTED_PARAM"));
+            return true;
+        }
+        BodySetup->DefaultInstance.SetMassOverride(static_cast<float>(Mass), true);
     }
 
     double LinearDamping = 0.0;
@@ -1238,12 +1226,12 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigurePhysicsBody(
 bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsConstraint(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString PhysicsAssetPath = GetStringFieldSkel(Payload, TEXT("physicsAssetPath"));
-    FString BodyA = GetStringFieldSkel(Payload, TEXT("bodyA"));
-    FString BodyB = GetStringFieldSkel(Payload, TEXT("bodyB"));
-    FString ConstraintName = GetStringFieldSkel(Payload, TEXT("constraintName"));
+    FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
+    FString BodyA = GetJsonStringField(Payload, TEXT("bodyA"));
+    FString BodyB = GetJsonStringField(Payload, TEXT("bodyB"));
+    FString ConstraintName = GetJsonStringField(Payload, TEXT("constraintName"));
 
     if (PhysicsAssetPath.IsEmpty())
     {
@@ -1360,11 +1348,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsConstraint(
 bool UMcpAutomationBridgeSubsystem::HandleConfigureConstraintLimits(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString PhysicsAssetPath = GetStringFieldSkel(Payload, TEXT("physicsAssetPath"));
-    FString BodyA = GetStringFieldSkel(Payload, TEXT("bodyA"));
-    FString BodyB = GetStringFieldSkel(Payload, TEXT("bodyB"));
+    FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
+    FString BodyA = GetJsonStringField(Payload, TEXT("bodyA"));
+    FString BodyB = GetJsonStringField(Payload, TEXT("bodyB"));
 
     if (PhysicsAssetPath.IsEmpty())
     {
@@ -1497,11 +1485,11 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureConstraintLimits(
 bool UMcpAutomationBridgeSubsystem::HandleRenameBone(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
-    FString BoneName = GetStringFieldSkel(Payload, TEXT("boneName"));
-    FString NewBoneName = GetStringFieldSkel(Payload, TEXT("newBoneName"));
+    FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
+    FString BoneName = GetJsonStringField(Payload, TEXT("boneName"));
+    FString NewBoneName = GetJsonStringField(Payload, TEXT("newBoneName"));
 
     if (SkeletonPath.IsEmpty() || BoneName.IsEmpty() || NewBoneName.IsEmpty())
     {
@@ -1566,15 +1554,15 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameBone(
 bool UMcpAutomationBridgeSubsystem::HandleSetBoneTransform(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     // Also accept skeletonPath for backward compatibility
     if (SkeletalMeshPath.IsEmpty())
     {
-        SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
+        SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
     }
-    FString BoneName = GetStringFieldSkel(Payload, TEXT("boneName"));
+    FString BoneName = GetJsonStringField(Payload, TEXT("boneName"));
 
     if (SkeletalMeshPath.IsEmpty() || BoneName.IsEmpty())
     {
@@ -1643,10 +1631,10 @@ bool UMcpAutomationBridgeSubsystem::HandleSetBoneTransform(
 bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
-    FString MorphTargetName = GetStringFieldSkel(Payload, TEXT("morphTargetName"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
+    FString MorphTargetName = GetJsonStringField(Payload, TEXT("morphTargetName"));
 
     if (SkeletalMeshPath.IsEmpty() || MorphTargetName.IsEmpty())
     {
@@ -1814,10 +1802,10 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
 bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
-    FString MorphTargetName = GetStringFieldSkel(Payload, TEXT("morphTargetName"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
+    FString MorphTargetName = GetJsonStringField(Payload, TEXT("morphTargetName"));
 
     if (SkeletalMeshPath.IsEmpty() || MorphTargetName.IsEmpty())
     {
@@ -1835,12 +1823,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
     }
 
     UMorphTarget* MorphTarget = Mesh->FindMorphTarget(FName(*MorphTargetName));
-    if (!MorphTarget)
-    {
-        SendAutomationError(RequestingSocket, RequestId, 
-            FString::Printf(TEXT("Morph target '%s' not found"), *MorphTargetName), TEXT("MORPH_NOT_FOUND"));
-        return true;
-    }
+    bool bCreatedMorphTarget = false;
 
     // Parse deltas array
     const TArray<TSharedPtr<FJsonValue>>* DeltasArray = nullptr;
@@ -1888,6 +1871,18 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
         }
     }
 
+    if (!MorphTarget)
+    {
+        MorphTarget = NewObject<UMorphTarget>(Mesh, FName(*MorphTargetName));
+        if (!MorphTarget)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create morph target object"), TEXT("CREATION_FAILED"));
+            return true;
+        }
+        MorphTarget->BaseSkelMesh = Mesh;
+        bCreatedMorphTarget = true;
+    }
+
     // Apply deltas to morph target
     // MorphLODModels is protected in UE 5.6+, use PopulateDeltas() for proper editor workflow
 #if WITH_EDITOR
@@ -1911,6 +1906,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
         return true;
     }
 
+    if (bCreatedMorphTarget)
+    {
+        Mesh->RegisterMorphTarget(MorphTarget);
+    }
+
     McpSafeAssetSave(Mesh);
 
     // Save if requested
@@ -1923,6 +1923,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("morphTargetName"), MorphTargetName);
     Result->SetNumberField(TEXT("deltaCount"), Deltas.Num());
+    Result->SetBoolField(TEXT("created"), bCreatedMorphTarget);
 
     SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Set %d deltas on morph target '%s'"), Deltas.Num(), *MorphTargetName), Result);
@@ -1936,13 +1937,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
 bool UMcpAutomationBridgeSubsystem::HandleImportMorphTargets(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
-    FString SourceFilePath = GetStringFieldSkel(Payload, TEXT("morphTargetPath"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
+    FString SourceFilePath = GetJsonStringField(Payload, TEXT("morphTargetPath"));
     if (SourceFilePath.IsEmpty())
     {
-        SourceFilePath = GetStringFieldSkel(Payload, TEXT("sourcePath"));
+        SourceFilePath = GetJsonStringField(Payload, TEXT("sourcePath"));
     }
 
     if (SkeletalMeshPath.IsEmpty())
@@ -2002,9 +2003,9 @@ bool UMcpAutomationBridgeSubsystem::HandleImportMorphTargets(
 bool UMcpAutomationBridgeSubsystem::HandleNormalizeWeights(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
 
     if (SkeletalMeshPath.IsEmpty())
     {
@@ -2020,24 +2021,13 @@ bool UMcpAutomationBridgeSubsystem::HandleNormalizeWeights(
         return true;
     }
 
-    // Weight normalization is typically done during import
-    // The mesh's skin weights should already be normalized
-    // We can trigger a rebuild of the weights
-    
-    Mesh->Build();
-    McpSafeAssetSave(Mesh);
-
-    // Save if requested
-    bool bSave = false;
-    Payload->TryGetBoolField(TEXT("save"), bSave);
-    if (bSave)
-    {
-    }
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
-
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Skin weights normalized"), Result);
+    // A plain Mesh->Build() does NOT renormalize skin weights; it only rebuilds
+    // render data from the existing imported weights. Re-weighting requires the
+    // Skeletal Mesh Editor's weight tools (no safe in-place API on UE 5.7).
+    SendAutomationError(RequestingSocket, RequestId,
+        TEXT("Skin weight normalization is not supported via the bridge. Use the Skeletal Mesh Editor's ")
+        TEXT("Skin Weights tools (or re-import with normalization enabled). A plain rebuild does not renormalize weights."),
+        TEXT("MANUAL_INTERVENTION_REQUIRED"));
     return true;
 }
 
@@ -2048,9 +2038,9 @@ bool UMcpAutomationBridgeSubsystem::HandleNormalizeWeights(
 bool UMcpAutomationBridgeSubsystem::HandlePruneWeights(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     double Threshold = 0.01;
     Payload->TryGetNumberField(TEXT("threshold"), Threshold);
 
@@ -2068,26 +2058,14 @@ bool UMcpAutomationBridgeSubsystem::HandlePruneWeights(
         return true;
     }
 
-    // Skin weight pruning is done during import/build
-    // For runtime, we can trigger a rebuild with the threshold
-    // Note: This requires setting import options which are not accessible post-import
-    
-    Mesh->Build();
-    McpSafeAssetSave(Mesh);
-
-    // Save if requested
-    bool bSave = false;
-    Payload->TryGetBoolField(TEXT("save"), bSave);
-    if (bSave)
-    {
-    }
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
-    Result->SetNumberField(TEXT("threshold"), Threshold);
-
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
-        FString::Printf(TEXT("Weights pruned with threshold %f"), Threshold), Result);
+    // The prune threshold is an import-time option; a post-import Mesh->Build()
+    // does NOT drop low influences (it rebuilds render data from existing weights).
+    // Pruning safely requires the editor's Skin Weights tools or a re-import.
+    SendAutomationError(RequestingSocket, RequestId,
+        FString::Printf(TEXT("Skin weight pruning (threshold %f) is not supported via the bridge. ")
+            TEXT("Re-import the mesh with the influence threshold set, or use the Skeletal Mesh Editor. ")
+            TEXT("A plain rebuild does not prune influences."), Threshold),
+        TEXT("MANUAL_INTERVENTION_REQUIRED"));
     return true;
 }
 
@@ -2103,10 +2081,10 @@ bool UMcpAutomationBridgeSubsystem::HandlePruneWeights(
 bool UMcpAutomationBridgeSubsystem::HandleBindClothToSkeletalMesh(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
-    FString ClothAssetName = GetStringFieldSkel(Payload, TEXT("clothAssetName"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
+    FString ClothAssetName = GetJsonStringField(Payload, TEXT("clothAssetName"));
     int32 MeshLodIndex = 0;
     int32 SectionIndex = 0;
     int32 AssetLodIndex = 0;
@@ -2233,9 +2211,9 @@ bool UMcpAutomationBridgeSubsystem::HandleBindClothToSkeletalMesh(
 bool UMcpAutomationBridgeSubsystem::HandleAssignClothAssetToMesh(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
 
     if (SkeletalMeshPath.IsEmpty())
     {
@@ -2272,8 +2250,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssignClothAssetToMesh(
     Result->SetArrayField(TEXT("clothingAssets"), ClothingArray);
     Result->SetNumberField(TEXT("count"), ClothingArray.Num());
 
-    // CRITICAL FIX: Return error instead of success when operation requires manual intervention
-    // This prevents false positives where tests pass even though no cloth assignment occurred
+    // Return an explicit error rather than claiming cloth assignment occurred.
     SendAutomationError(RequestingSocket, RequestId, 
         TEXT("Cloth asset assignment requires using the Cloth Paint tool in Unreal Editor. ")
         TEXT("Use the Skeletal Mesh Editor's Paint Cloth tool to assign cloth assets to mesh sections."), 
@@ -2289,15 +2266,15 @@ bool UMcpAutomationBridgeSubsystem::HandleAssignClothAssetToMesh(
 bool UMcpAutomationBridgeSubsystem::HandleSetPhysicsAsset(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     if (SkeletalMeshPath.IsEmpty())
     {
-        SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("meshPath"));
+        SkeletalMeshPath = GetJsonStringField(Payload, TEXT("meshPath"));
     }
-    FString PhysicsAssetPath = GetStringFieldSkel(Payload, TEXT("physicsAssetPath"));
+    FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
     
     if (SkeletalMeshPath.IsEmpty() || PhysicsAssetPath.IsEmpty())
     {
@@ -2353,11 +2330,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSetPhysicsAsset(
 bool UMcpAutomationBridgeSubsystem::HandleRemovePhysicsBody(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    FString PhysicsAssetPath = GetStringFieldSkel(Payload, TEXT("physicsAssetPath"));
-    FString BoneName = GetStringFieldSkel(Payload, TEXT("boneName"));
+    FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
+    FString BoneName = GetJsonStringField(Payload, TEXT("boneName"));
     
     if (PhysicsAssetPath.IsEmpty() || BoneName.IsEmpty())
     {
@@ -2444,13 +2421,13 @@ bool UMcpAutomationBridgeSubsystem::HandleRemovePhysicsBody(
 bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetValue(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    FString ActorName = GetStringFieldSkel(Payload, TEXT("actorName"));
-    FString MorphTargetName = GetStringFieldSkel(Payload, TEXT("morphTargetName"));
-    double Value = GetNumberFieldSkel(Payload, TEXT("value"), 0.0);
-    bool bAddMissing = GetBoolFieldSkel(Payload, TEXT("addMissing"), false);
+    FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
+    FString MorphTargetName = GetJsonStringField(Payload, TEXT("morphTargetName"));
+    double Value = GetJsonNumberField(Payload, TEXT("value"), 0.0);
+    bool bAddMissing = GetJsonBoolField(Payload, TEXT("addMissing"), false);
     
     if (ActorName.IsEmpty() || MorphTargetName.IsEmpty())
     {
@@ -2564,12 +2541,12 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetValue(
 bool UMcpAutomationBridgeSubsystem::HandleDeleteSocket(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
-    FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
-    FString SocketName = GetStringFieldSkel(Payload, TEXT("socketName"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
+    FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
+    FString SocketName = GetJsonStringField(Payload, TEXT("socketName"));
     
     if (SocketName.IsEmpty())
     {
@@ -2666,13 +2643,13 @@ bool UMcpAutomationBridgeSubsystem::HandleDeleteSocket(
 bool UMcpAutomationBridgeSubsystem::HandleListMorphTargets(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     if (SkeletalMeshPath.IsEmpty())
     {
-        SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("meshPath"));
+        SkeletalMeshPath = GetJsonStringField(Payload, TEXT("meshPath"));
     }
     
     if (SkeletalMeshPath.IsEmpty())
@@ -2724,11 +2701,11 @@ bool UMcpAutomationBridgeSubsystem::HandleListMorphTargets(
 bool UMcpAutomationBridgeSubsystem::HandleDeleteMorphTarget(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
-    FString MorphTargetName = GetStringFieldSkel(Payload, TEXT("morphTargetName"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
+    FString MorphTargetName = GetJsonStringField(Payload, TEXT("morphTargetName"));
     
     if (SkeletalMeshPath.IsEmpty() || MorphTargetName.IsEmpty())
     {
@@ -2793,13 +2770,13 @@ bool UMcpAutomationBridgeSubsystem::HandleDeleteMorphTarget(
 bool UMcpAutomationBridgeSubsystem::HandleGetBoneTransform(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
-    FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
-    FString BoneName = GetStringFieldSkel(Payload, TEXT("boneName"));
-    int32 LODIndex = GetIntFieldSkel(Payload, TEXT("lodIndex"), 0);
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
+    FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
+    FString BoneName = GetJsonStringField(Payload, TEXT("boneName"));
+    int32 LODIndex = GetJsonIntField(Payload, TEXT("lodIndex"), 0);
     
     if (BoneName.IsEmpty())
     {
@@ -2900,11 +2877,11 @@ bool UMcpAutomationBridgeSubsystem::HandleGetBoneTransform(
 bool UMcpAutomationBridgeSubsystem::HandleListVirtualBones(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+    FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     
     USkeleton* Skeleton = nullptr;
     
@@ -2969,11 +2946,11 @@ bool UMcpAutomationBridgeSubsystem::HandleListVirtualBones(
 bool UMcpAutomationBridgeSubsystem::HandleDeleteVirtualBone(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
-    FString VirtualBoneName = GetStringFieldSkel(Payload, TEXT("virtualBoneName"));
+    FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
+    FString VirtualBoneName = GetJsonStringField(Payload, TEXT("virtualBoneName"));
     
     if (SkeletonPath.IsEmpty() || VirtualBoneName.IsEmpty())
     {
@@ -3037,11 +3014,11 @@ bool UMcpAutomationBridgeSubsystem::HandleDeleteVirtualBone(
 bool UMcpAutomationBridgeSubsystem::HandleGetPhysicsAssetInfo(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    FString PhysicsAssetPath = GetStringFieldSkel(Payload, TEXT("physicsAssetPath"));
-    FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+    FString PhysicsAssetPath = GetJsonStringField(Payload, TEXT("physicsAssetPath"));
+    FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
     
     UPhysicsAsset* PhysAsset = nullptr;
     
@@ -3128,12 +3105,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
-    // Only handle manage_skeleton action
+    // Only handle manage_skeleton action. Return false so the dispatcher keeps
+    // trying other handlers — returning true here would CLAIM every unrelated
+    // action that reaches this point in the if-chain, swallowing it with no
+    // response (the request then parks until the stale-request watchdog).
     if (Action != TEXT("manage_skeleton"))
     {
-        return true; // Not handled
+        return false; // Not our action
     }
 
     // Read subAction from payload (the actual operation to perform)
@@ -3279,12 +3259,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     // Skeleton structure operations using FReferenceSkeletonModifier
     else if (SubAction == TEXT("create_skeleton"))
     {
-        FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("path"));
+        FString SkeletonPath = GetJsonStringField(Payload, TEXT("path"));
         if (SkeletonPath.IsEmpty())
         {
-            SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
+            SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
         }
-        FString RootBoneName = GetStringFieldSkel(Payload, TEXT("rootBoneName"));
+        FString RootBoneName = GetJsonStringField(Payload, TEXT("rootBoneName"));
         if (RootBoneName.IsEmpty())
         {
             RootBoneName = TEXT("Root");
@@ -3372,12 +3352,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     }
     else if (SubAction == TEXT("add_bone"))
     {
-        FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
-        FString BoneName = GetStringFieldSkel(Payload, TEXT("boneName"));
-        FString ParentName = GetStringFieldSkel(Payload, TEXT("parentBone"));
+        FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
+        FString BoneName = GetJsonStringField(Payload, TEXT("boneName"));
+        FString ParentName = GetJsonStringField(Payload, TEXT("parentBone"));
         if (ParentName.IsEmpty())
         {
-            ParentName = GetStringFieldSkel(Payload, TEXT("parentBoneName"));
+            ParentName = GetJsonStringField(Payload, TEXT("parentBoneName"));
         }
         
         if (SkeletonPath.IsEmpty() || BoneName.IsEmpty())
@@ -3461,8 +3441,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     }
     else if (SubAction == TEXT("remove_bone"))
     {
-        FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
-        FString BoneName = GetStringFieldSkel(Payload, TEXT("boneName"));
+        FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
+        FString BoneName = GetJsonStringField(Payload, TEXT("boneName"));
         bool bRemoveChildren = false;
         Payload->TryGetBoolField(TEXT("removeChildren"), bRemoveChildren);
         
@@ -3522,12 +3502,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     }
     else if (SubAction == TEXT("set_bone_parent"))
     {
-        FString SkeletonPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
-        FString BoneName = GetStringFieldSkel(Payload, TEXT("boneName"));
-        FString NewParentName = GetStringFieldSkel(Payload, TEXT("parentBone"));
+        FString SkeletonPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
+        FString BoneName = GetJsonStringField(Payload, TEXT("boneName"));
+        FString NewParentName = GetJsonStringField(Payload, TEXT("parentBone"));
         if (NewParentName.IsEmpty())
         {
-            NewParentName = GetStringFieldSkel(Payload, TEXT("newParentBone"));
+            NewParentName = GetJsonStringField(Payload, TEXT("newParentBone"));
         }
         
         if (SkeletonPath.IsEmpty() || BoneName.IsEmpty())
@@ -3590,8 +3570,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     // Skin weight operations using FSkinWeightProfileData
     else if (SubAction == TEXT("set_vertex_weights"))
     {
-        FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
-        FString ProfileName = GetStringFieldSkel(Payload, TEXT("profileName"));
+        FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
+        FString ProfileName = GetJsonStringField(Payload, TEXT("profileName"));
         if (ProfileName.IsEmpty())
         {
             ProfileName = TEXT("CustomWeights");
@@ -3731,16 +3711,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     }
     else if (SubAction == TEXT("auto_skin_weights"))
     {
-        // Auto skin weights computation - typically done during import
-        // We trigger a mesh rebuild which recalculates default weights
-        FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
-        
+        FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
+
         if (SkeletalMeshPath.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
             return true;
         }
-        
+
         FString Error;
         USkeletalMesh* Mesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
         if (!Mesh)
@@ -3748,24 +3726,22 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
             SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
             return true;
         }
-        
-        // Rebuild the mesh - this recalculates skin weights based on bone positions
-        Mesh->Build();
-        McpSafeAssetSave(Mesh);
-        
-        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
-        Result->SetBoolField(TEXT("rebuilt"), true);
-        
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
-            TEXT("Mesh rebuilt with recalculated skin weights"), Result);
+
+        // Mesh->Build() rebuilds render data from existing weights; it does NOT compute
+        // auto/heat-map skin weights from bone positions. Auto-skinning lives in the
+        // DCC import pipeline / editor tools, with no safe in-place API on UE 5.7.
+        SendAutomationError(RequestingSocket, RequestId,
+            TEXT("Automatic skin weight computation is not supported via the bridge. Auto-skinning is an ")
+            TEXT("import-time / DCC operation; re-import the mesh with auto weights, or bind weights in the ")
+            TEXT("Skeletal Mesh Editor. A plain rebuild does not compute new weights."),
+            TEXT("MANUAL_INTERVENTION_REQUIRED"));
         return true;
     }
     else if (SubAction == TEXT("copy_weights"))
     {
-        FString SourceMeshPath = GetStringFieldSkel(Payload, TEXT("sourceMeshPath"));
-        FString TargetMeshPath = GetStringFieldSkel(Payload, TEXT("targetMeshPath"));
-        FString ProfileName = GetStringFieldSkel(Payload, TEXT("profileName"));
+        FString SourceMeshPath = GetJsonStringField(Payload, TEXT("sourceMeshPath"));
+        FString TargetMeshPath = GetJsonStringField(Payload, TEXT("targetMeshPath"));
+        FString ProfileName = GetJsonStringField(Payload, TEXT("profileName"));
         if (ProfileName.IsEmpty())
         {
             ProfileName = TEXT("CopiedWeights");
@@ -3781,7 +3757,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
         
         // CRITICAL: Validate any extra path parameters for security and existence
         // This prevents false negatives where unused parameters contain invalid paths
-        FString ExtraSkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+        FString ExtraSkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
         if (!ExtraSkeletalMeshPath.IsEmpty())
         {
             FString SanitizedExtraPath = SanitizeProjectRelativePath(ExtraSkeletalMeshPath);
@@ -3832,41 +3808,16 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
             return true;
         }
         
-        FSkeletalMeshLODModel& SourceLOD = SourceModel->LODModels[LODIndex];
-        FSkeletalMeshLODModel& TargetLOD = TargetModel->LODModels[LODIndex];
-        
-        // Create skin weight profile on target
-        FSkinWeightProfileInfo NewProfile;
-        NewProfile.Name = FName(*ProfileName);
-        TargetMesh->AddSkinWeightProfile(NewProfile);
-        
-        FImportedSkinWeightProfileData& ProfileData = TargetLOD.SkinWeightProfiles.FindOrAdd(FName(*ProfileName));
-        
-        // Copy weights from source (limited by vertex count)
-        uint32 VertsToCopy = FMath::Min(SourceLOD.NumVertices, TargetLOD.NumVertices);
-        ProfileData.SkinWeights.SetNum(TargetLOD.NumVertices);
-        
-        // Initialize with zeros
-        for (uint32 i = 0; i < TargetLOD.NumVertices; ++i)
-        {
-            FMemory::Memzero(&ProfileData.SkinWeights[i], sizeof(FRawSkinWeight));
-        }
-        
-        // Note: Direct weight copying requires accessing the source vertex buffer
-        // For now we indicate the profile was created and user should use the editor for precise transfer
-        
-        TargetMesh->Build();
-        McpSafeAssetSave(TargetMesh);
-        
-        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetStringField(TEXT("sourceMeshPath"), SourceMeshPath);
-        Result->SetStringField(TEXT("targetMeshPath"), TargetMeshPath);
-        Result->SetStringField(TEXT("profileName"), ProfileName);
-        Result->SetNumberField(TEXT("lodIndex"), LODIndex);
-        Result->SetStringField(TEXT("note"), TEXT("Skin weight profile created. Use FSkinWeightProfileHelpers::ImportSkinWeightProfile for precise transfer."));
-        
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
-            FString::Printf(TEXT("Skin weight profile '%s' created on target mesh"), *ProfileName), Result);
+        // Per-vertex weight transfer requires mapping source vertices onto target
+        // topology (closest-point / barycentric) and the SkeletalMeshUtilitiesCommon
+        // transfer API. Creating an empty profile and zeroing every influence is NOT
+        // a copy, so report an honest error instead of fabricating one.
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("Skin weight transfer from '%s' to '%s' is not supported via the bridge. ")
+                TEXT("Use the Skeletal Mesh Editor's 'Transfer Skin Weights' tool (or a DCC weight-transfer) ")
+                TEXT("for a correct mapping; the bridge will not write an empty profile and call it copied."),
+                *SourceMeshPath, *TargetMeshPath),
+            TEXT("MANUAL_INTERVENTION_REQUIRED"));
         return true;
 #else
         SendAutomationError(RequestingSocket, RequestId, TEXT("copy_weights requires editor mode"), TEXT("NOT_EDITOR"));
@@ -3875,13 +3826,13 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     }
     else if (SubAction == TEXT("mirror_weights"))
     {
-        FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
-        FString Axis = GetStringFieldSkel(Payload, TEXT("axis"));
+        FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
+        FString Axis = GetJsonStringField(Payload, TEXT("axis"));
         if (Axis.IsEmpty())
         {
             Axis = TEXT("X");
         }
-        FString ProfileName = GetStringFieldSkel(Payload, TEXT("profileName"));
+        FString ProfileName = GetJsonStringField(Payload, TEXT("profileName"));
         if (ProfileName.IsEmpty())
         {
             ProfileName = TEXT("MirroredWeights");
@@ -3953,14 +3904,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
         // Delegate to add_physics_constraint which handles both creation and modification
         return HandleAddPhysicsConstraint(RequestId, Payload, RequestingSocket);
     }
-    // preview_physics - Preview physics simulation (stub for future implementation)
+    // preview_physics - explicit editor-only unsupported response
     else if (SubAction == TEXT("preview_physics"))
     {
-        FString SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletalMeshPath"));
+        FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
         // Also accept skeletonPath for backward compatibility
         if (SkeletalMeshPath.IsEmpty())
         {
-            SkeletalMeshPath = GetStringFieldSkel(Payload, TEXT("skeletonPath"));
+            SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletonPath"));
         }
         bool bEnable = GetJsonBoolField(Payload, TEXT("enable"), true);
         
@@ -3970,14 +3921,23 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
             return true;
         }
         
-        // Preview physics is a runtime feature - return success with note
+        UObject* PreviewAsset = LoadObject<UObject>(nullptr, *SkeletalMeshPath);
+        if (!PreviewAsset)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Skeletal mesh or skeleton not found: %s"), *SkeletalMeshPath),
+                TEXT("ASSET_NOT_FOUND"));
+            return true;
+        }
+
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
-        Result->SetBoolField(TEXT("previewEnabled"), bEnable);
-        Result->SetStringField(TEXT("note"), TEXT("Physics preview requires PIE or runtime simulation."));
-        
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
-            FString::Printf(TEXT("Physics preview %s"), bEnable ? TEXT("enabled") : TEXT("disabled")), Result);
+        Result->SetStringField(TEXT("assetPath"), PreviewAsset->GetPathName());
+        Result->SetBoolField(TEXT("previewRequested"), bEnable);
+        Result->SetBoolField(TEXT("assetVerified"), true);
+        Result->SetStringField(TEXT("mode"), TEXT("editor_asset_verification"));
+        SendAutomationResponse(RequestingSocket, RequestId, true,
+            bEnable ? TEXT("Physics preview asset verified") : TEXT("Physics preview request disabled"),
+            Result);
         return true;
     }
     else
@@ -3989,9 +3949,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     }
 }
 
-#undef GetStringFieldSkel
-#undef GetNumberFieldSkel
-#undef GetBoolFieldSkel
+#undef GetJsonStringField
+#undef GetJsonNumberField
+#undef GetJsonBoolField
 
 #endif // WITH_EDITOR
-

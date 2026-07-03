@@ -206,7 +206,7 @@ static void ApplyPropertiesToObject(UObject *TargetObj,
 bool FBlueprintCreationHandlers::HandleBlueprintProbeSubobjectHandle(
     UMcpAutomationBridgeSubsystem *Self, const FString &RequestId,
     const TSharedPtr<FJsonObject> &LocalPayload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   check(Self);
   // Local extraction
   FString ComponentClass;
@@ -246,6 +246,11 @@ bool FBlueprintCreationHandlers::HandleBlueprintProbeSubobjectHandle(
   // ---------------------------------------------------------------------------
   // Create Probe Blueprint
   // ---------------------------------------------------------------------------
+  TSharedPtr<FJsonObject> ResultObj = McpHandlerUtils::CreateResultObject();
+  ResultObj->SetStringField(TEXT("componentClass"), ComponentClass);
+  ResultObj->SetBoolField(TEXT("success"), false);
+  ResultObj->SetBoolField(TEXT("subsystemAvailable"), false);
+
   const FString ProbeFolder = TEXT("/Game/Temp/MCPProbe");
   const FString ProbeName = FString::Printf(
       TEXT("MCP_Probe_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
@@ -286,6 +291,54 @@ bool FBlueprintCreationHandlers::HandleBlueprintProbeSubobjectHandle(
       CleanupProbeAsset(CreatedBP);
       return true;
     }
+
+    UClass *ProbeComponentClass = ResolveClassByName(ComponentClass);
+    if (!ProbeComponentClass ||
+        !ProbeComponentClass->IsChildOf(UActorComponent::StaticClass())) {
+      TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
+      Err->SetStringField(TEXT("componentClass"), ComponentClass);
+      Err->SetStringField(TEXT("error"),
+                          TEXT("Component class could not be resolved to a UActorComponent subclass"));
+      Self->SendAutomationResponse(RequestingSocket, RequestId, false,
+                                   TEXT("Probe component class invalid"), Err,
+                                   TEXT("INVALID_COMPONENT_CLASS"));
+      CleanupProbeAsset(CreatedBP);
+      return true;
+    }
+
+    USimpleConstructionScript *SCS = CreatedBP->SimpleConstructionScript;
+    if (!SCS) {
+      SCS = NewObject<USimpleConstructionScript>(CreatedBP);
+      CreatedBP->SimpleConstructionScript = SCS;
+    }
+    if (!SCS) {
+      TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
+      Err->SetStringField(TEXT("componentClass"), ComponentClass);
+      Err->SetStringField(TEXT("error"),
+                          TEXT("Failed to create SimpleConstructionScript for probe Blueprint"));
+      Self->SendAutomationResponse(RequestingSocket, RequestId, false,
+                                   TEXT("Probe SCS unavailable"), Err,
+                                   TEXT("SCS_UNAVAILABLE"));
+      CleanupProbeAsset(CreatedBP);
+      return true;
+    }
+
+    const FName ProbeNodeName(TEXT("ProbeComponent"));
+    USCS_Node *ProbeNode = SCS->CreateNode(ProbeComponentClass, ProbeNodeName);
+    if (!ProbeNode) {
+      TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
+      Err->SetStringField(TEXT("componentClass"), ComponentClass);
+      Err->SetStringField(TEXT("error"), TEXT("Failed to create probe SCS node"));
+      Self->SendAutomationResponse(RequestingSocket, RequestId, false,
+                                   TEXT("Probe component node creation failed"), Err,
+                                   TEXT("PROBE_NODE_CREATE_FAILED"));
+      CleanupProbeAsset(CreatedBP);
+      return true;
+    }
+    SCS->AddNode(ProbeNode);
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(CreatedBP);
+    ResultObj->SetStringField(TEXT("componentNodeName"), ProbeNodeName.ToString());
+
     FAssetRegistryModule &Arm =
         FModuleManager::LoadModuleChecked<FAssetRegistryModule>(
             TEXT("AssetRegistry"));
@@ -295,11 +348,6 @@ bool FBlueprintCreationHandlers::HandleBlueprintProbeSubobjectHandle(
   // ---------------------------------------------------------------------------
   // Gather Subobject Handles
   // ---------------------------------------------------------------------------
-  TSharedPtr<FJsonObject> ResultObj = McpHandlerUtils::CreateResultObject();
-  ResultObj->SetStringField(TEXT("componentClass"), ComponentClass);
-  ResultObj->SetBoolField(TEXT("success"), false);
-  ResultObj->SetBoolField(TEXT("subsystemAvailable"), false);
-
 #if MCP_HAS_SUBOBJECT_DATA_SUBSYSTEM
   if (USubobjectDataSubsystem *Subsystem =
           (GEngine ? GEngine->GetEngineSubsystem<USubobjectDataSubsystem>()
@@ -322,7 +370,18 @@ bool FBlueprintCreationHandlers::HandleBlueprintProbeSubobjectHandle(
       }
       HandleJsonArr.Add(MakeShared<FJsonValueString>(Repr));
     }
+    if (HandleJsonArr.Num() == 0) {
+      ResultObj->SetStringField(TEXT("error"),
+                                TEXT("SubobjectDataSubsystem returned no handles for probe Blueprint"));
+      CleanupProbeAsset(CreatedBP);
+      Self->SendAutomationResponse(RequestingSocket, RequestId, false,
+                                   TEXT("Probe produced no component handles"),
+                                   ResultObj, TEXT("PROBE_NO_HANDLES"));
+      return true;
+    }
     ResultObj->SetArrayField(TEXT("gatheredHandles"), HandleJsonArr);
+    ResultObj->SetNumberField(TEXT("handleCount"), HandleJsonArr.Num());
+    ResultObj->SetBoolField(TEXT("hasHandles"), true);
     ResultObj->SetBoolField(TEXT("success"), true);
 
     CleanupProbeAsset(CreatedBP);
@@ -347,10 +406,17 @@ bool FBlueprintCreationHandlers::HandleBlueprintProbeSubobjectHandle(
     }
   }
   if (HandleJsonArr.Num() == 0) {
-    HandleJsonArr.Add(
-        MakeShared<FJsonValueString>(TEXT("<probe_handle_stub>")));
+    ResultObj->SetStringField(TEXT("error"),
+                              TEXT("No subobject handles or SCS nodes were gathered from probe Blueprint"));
+    CleanupProbeAsset(CreatedBP);
+    Self->SendAutomationResponse(RequestingSocket, RequestId, false,
+                                 TEXT("Probe produced no component handles"),
+                                 ResultObj, TEXT("PROBE_NO_HANDLES"));
+    return true;
   }
   ResultObj->SetArrayField(TEXT("gatheredHandles"), HandleJsonArr);
+  ResultObj->SetNumberField(TEXT("handleCount"), HandleJsonArr.Num());
+  ResultObj->SetBoolField(TEXT("hasHandles"), true);
   ResultObj->SetBoolField(TEXT("success"), true);
 
   CleanupProbeAsset(CreatedBP);
@@ -391,7 +457,7 @@ bool FBlueprintCreationHandlers::HandleBlueprintProbeSubobjectHandle(
 bool FBlueprintCreationHandlers::HandleBlueprintCreate(
     UMcpAutomationBridgeSubsystem *Self, const FString &RequestId,
     const TSharedPtr<FJsonObject> &LocalPayload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   check(Self);
   UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
          TEXT("HandleBlueprintCreate ENTRY: RequestId=%s"), *RequestId);
@@ -447,7 +513,7 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
     FScopeLock Lock(&GBlueprintCreateMutex);
     if (GBlueprintCreateInflight.Contains(CreateKey)) {
       GBlueprintCreateInflight[CreateKey].Add(
-          TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>(RequestId,
+          TPair<FString, FMcpResponseHandle>(RequestId,
                                                           RequestingSocket));
       UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
              TEXT("HandleBlueprintCreate: Coalescing request %s for %s"),
@@ -456,10 +522,10 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
     }
 
     GBlueprintCreateInflight.Add(
-        CreateKey, TArray<TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>>());
+        CreateKey, TArray<TPair<FString, FMcpResponseHandle>>());
     GBlueprintCreateInflightTs.Add(CreateKey, Now);
     GBlueprintCreateInflight[CreateKey].Add(
-        TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>(RequestId,
+        TPair<FString, FMcpResponseHandle>(RequestId,
                                                         RequestingSocket));
   }
 
@@ -493,27 +559,29 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
     ResultPayload->SetStringField(TEXT("path"), CreatedNormalizedPath);
     ResultPayload->SetStringField(TEXT("assetPath"),
                                   PreExistingBP->GetPathName());
-    ResultPayload->SetBoolField(TEXT("saved"), true);
+    // Nothing was created or written here; saved reflects the on-disk state.
+    {
+      const UPackage *Pkg = PreExistingBP->GetPackage();
+      ResultPayload->SetBoolField(
+          TEXT("saved"), Pkg && FPackageName::DoesPackageExist(Pkg->GetName()) &&
+                             !Pkg->IsDirty());
+    }
     McpHandlerUtils::AddVerification(ResultPayload, PreExistingBP);
 
     FScopeLock Lock(&GBlueprintCreateMutex);
-    if (TArray<TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>> *Subs =
+    if (TArray<TPair<FString, FMcpResponseHandle>> *Subs =
             GBlueprintCreateInflight.Find(CreateKey)) {
-      for (const TPair<FString, TSharedPtr<FMcpBridgeWebSocket>> &Pair :
+      for (const TPair<FString, FMcpResponseHandle> &Pair :
            *Subs) {
         Self->SendAutomationResponse(Pair.Value, Pair.Key, true,
                                      TEXT("Blueprint already exists"),
                                      ResultPayload, FString());
       }
-      GBlueprintCreateInflight.Remove(CreateKey);
-      GBlueprintCreateInflightTs.Remove(CreateKey);
-      UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
-             TEXT("blueprint_create RequestId=%s completed (existing blueprint "
-                  "found early)."),
-             *RequestId);
-    } else {
-      Self->SendAutomationResponse(RequestingSocket, RequestId, true,
-                                   TEXT("Blueprint already exists"),
+		GBlueprintCreateInflight.Remove(CreateKey);
+		GBlueprintCreateInflightTs.Remove(CreateKey);
+	} else {
+		Self->SendAutomationResponse(RequestingSocket, RequestId, true,
+			TEXT("Blueprint already exists"),
                                    ResultPayload, FString());
     }
 
@@ -662,27 +730,30 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
       ResultPayload->SetStringField(TEXT("path"), CreatedNormalizedPath);
       ResultPayload->SetStringField(TEXT("assetPath"),
                                     ExistingBP->GetPathName());
-      ResultPayload->SetBoolField(TEXT("saved"), true);
+      // Nothing was created or written here; saved reflects the on-disk state.
+      {
+        const UPackage *Pkg = ExistingBP->GetPackage();
+        ResultPayload->SetBoolField(
+            TEXT("saved"),
+            Pkg && FPackageName::DoesPackageExist(Pkg->GetName()) &&
+                !Pkg->IsDirty());
+      }
       McpHandlerUtils::AddVerification(ResultPayload, ExistingBP);
 
       FScopeLock Lock(&GBlueprintCreateMutex);
-      if (TArray<TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>> *Subs =
+      if (TArray<TPair<FString, FMcpResponseHandle>> *Subs =
               GBlueprintCreateInflight.Find(CreateKey)) {
-        for (const TPair<FString, TSharedPtr<FMcpBridgeWebSocket>> &Pair :
+        for (const TPair<FString, FMcpResponseHandle> &Pair :
              *Subs) {
           Self->SendAutomationResponse(Pair.Value, Pair.Key, true,
                                        TEXT("Blueprint already exists"),
                                        ResultPayload, FString());
         }
-        GBlueprintCreateInflight.Remove(CreateKey);
-        GBlueprintCreateInflightTs.Remove(CreateKey);
-        UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
-               TEXT("blueprint_create RequestId=%s completed (existing "
-                    "blueprint)."),
-               *RequestId);
-      } else {
-        Self->SendAutomationResponse(RequestingSocket, RequestId, true,
-                                     TEXT("Blueprint already exists"),
+	GBlueprintCreateInflight.Remove(CreateKey);
+	GBlueprintCreateInflightTs.Remove(CreateKey);
+	} else {
+		Self->SendAutomationResponse(RequestingSocket, RequestId, true,
+			TEXT("Blueprint already exists"),
                                      ResultPayload, FString());
       }
 
@@ -695,9 +766,9 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
 
     {
       FScopeLock Lock(&GBlueprintCreateMutex);
-      if (TArray<TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>> *Subs =
+      if (TArray<TPair<FString, FMcpResponseHandle>> *Subs =
               GBlueprintCreateInflight.Find(CreateKey)) {
-        for (const TPair<FString, TSharedPtr<FMcpBridgeWebSocket>> &Pair :
+        for (const TPair<FString, FMcpResponseHandle> &Pair :
              *Subs) {
           Self->SendAutomationResponse(Pair.Value, Pair.Key, false,
                                        CreationError, nullptr,
@@ -726,17 +797,20 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
           TEXT("AssetRegistry"));
   AssetRegistryModule.AssetCreated(CreatedBlueprint);
 
+  // CreateAsset only creates in memory; persist so saved:true means on-disk.
+  const bool bSavedToDisk = SaveLoadedAssetThrottled(CreatedBlueprint);
+
   TSharedPtr<FJsonObject> ResultPayload = McpHandlerUtils::CreateResultObject();
   ResultPayload->SetStringField(TEXT("path"), CreatedNormalizedPath);
   ResultPayload->SetStringField(TEXT("assetPath"),
                                 CreatedBlueprint->GetPathName());
-  ResultPayload->SetBoolField(TEXT("saved"), true);
+  ResultPayload->SetBoolField(TEXT("saved"), bSavedToDisk);
   McpHandlerUtils::AddVerification(ResultPayload, CreatedBlueprint);
 
   FScopeLock Lock(&GBlueprintCreateMutex);
-  if (TArray<TPair<FString, TSharedPtr<FMcpBridgeWebSocket>>> *Subs =
+  if (TArray<TPair<FString, FMcpResponseHandle>> *Subs =
           GBlueprintCreateInflight.Find(CreateKey)) {
-    for (const TPair<FString, TSharedPtr<FMcpBridgeWebSocket>> &Pair : *Subs) {
+    for (const TPair<FString, FMcpResponseHandle> &Pair : *Subs) {
       Self->SendAutomationResponse(Pair.Value, Pair.Key, true,
                                    TEXT("Blueprint created"), ResultPayload,
                                    FString());

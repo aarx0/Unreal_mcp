@@ -44,9 +44,14 @@
 #include "McpHandlerUtils.h"
 
 #include "Dom/JsonObject.h"
+#include "McpAutomationBridgeGlobals.h"
+
+class UProjectileMovementComponent;
+class USphereComponent;
+class UBoxComponent;
+
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
-#include "McpAutomationBridgeGlobals.h"
 
 #if WITH_EDITOR
 #include "Engine/Blueprint.h"
@@ -57,7 +62,6 @@
 #include "EdGraphSchema_K2.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
-#include "UObject/SavePackage.h"
 #include "Misc/PackageName.h"
 #include "HAL/FileManager.h"
 #include "GameFramework/Actor.h"
@@ -80,10 +84,6 @@
 #endif
 
 // Use consolidated JSON helpers from McpAutomationBridgeHelpers.h
-// Aliases for backward compatibility with existing code in this file
-#define GetStringFieldCombat GetJsonStringField
-#define GetNumberFieldCombat GetJsonNumberField
-#define GetBoolFieldCombat GetJsonBoolField
 
 #if WITH_EDITOR
 // Helper to create Actor blueprint
@@ -193,9 +193,9 @@ static FVector GetVectorFromJsonCombat(const TSharedPtr<FJsonObject>& Obj)
 {
     if (!Obj.IsValid()) return FVector::ZeroVector;
     return FVector(
-        GetNumberFieldCombat(Obj, TEXT("x"), 0.0),
-        GetNumberFieldCombat(Obj, TEXT("y"), 0.0),
-        GetNumberFieldCombat(Obj, TEXT("z"), 0.0)
+        GetJsonNumberField(Obj, TEXT("x"), 0.0),
+        GetJsonNumberField(Obj, TEXT("y"), 0.0),
+        GetJsonNumberField(Obj, TEXT("z"), 0.0)
     );
 }
 
@@ -265,6 +265,83 @@ static FEdGraphPinType MakeObjectPinType(UClass* ObjectClass)
     PinType.PinSubCategoryObject = ObjectClass;
     return PinType;
 }
+
+static void SetVariablesAdded(const TSharedPtr<FJsonObject>& Result, const TArray<FString>& VarNames)
+{
+    TArray<TSharedPtr<FJsonValue>> VarsAdded;
+    for (const FString& VarName : VarNames)
+    {
+        VarsAdded.Add(MakeShared<FJsonValueString>(VarName));
+    }
+    Result->SetArrayField(TEXT("variablesAdded"), VarsAdded);
+}
+
+// Reads each Blueprint member variable's current generated-class CDO value into
+// Info.variableValues (bool as bool, numeric as number, enum as name string,
+// else export-text). A variable not yet compiled into the class reads as null.
+static void AddVariableValueReadbackCombat(const TSharedPtr<FJsonObject>& Info, UBlueprint* Blueprint)
+{
+    constexpr int32 MaxVariableValues = 256;
+    UObject* CDO = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : nullptr;
+    TSharedPtr<FJsonObject> Values = MakeShared<FJsonObject>();
+    bool bTruncated = false;
+    int32 Emitted = 0;
+    for (const FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+    {
+        if (Emitted >= MaxVariableValues)
+        {
+            bTruncated = true;
+            break;
+        }
+        ++Emitted;
+
+        const FString VarName = VarDesc.VarName.ToString();
+        FProperty* Property = CDO ? FindFProperty<FProperty>(CDO->GetClass(), VarDesc.VarName) : nullptr;
+        if (!Property)
+        {
+            Values->SetField(VarName, MakeShared<FJsonValueNull>());
+            continue;
+        }
+        if (const FBoolProperty* BoolProp = CastField<FBoolProperty>(Property))
+        {
+            Values->SetBoolField(VarName, BoolProp->GetPropertyValue_InContainer(CDO));
+            continue;
+        }
+        if (const FEnumProperty* EnumProp = CastField<FEnumProperty>(Property))
+        {
+            if (const UEnum* Enum = EnumProp->GetEnum())
+            {
+                const void* ValuePtr = EnumProp->ContainerPtrToValuePtr<void>(CDO);
+                Values->SetStringField(VarName, Enum->GetNameStringByValue(
+                    EnumProp->GetUnderlyingProperty()->GetSignedIntPropertyValue(ValuePtr)));
+                continue;
+            }
+        }
+        // Legacy BP enums compile to byte properties carrying a UEnum.
+        const FByteProperty* ByteProp = CastField<FByteProperty>(Property);
+        if (ByteProp && ByteProp->Enum)
+        {
+            Values->SetStringField(VarName, ByteProp->Enum->GetNameStringByValue(
+                ByteProp->GetPropertyValue_InContainer(CDO)));
+            continue;
+        }
+        if (const FNumericProperty* NumProp = CastField<FNumericProperty>(Property))
+        {
+            const void* ValuePtr = NumProp->ContainerPtrToValuePtr<void>(CDO);
+            Values->SetNumberField(VarName,
+                NumProp->IsFloatingPoint()
+                    ? NumProp->GetFloatingPointPropertyValue(ValuePtr)
+                    : static_cast<double>(NumProp->GetSignedIntPropertyValue(ValuePtr)));
+            continue;
+        }
+        FString ValueString;
+        FBlueprintEditorUtils::PropertyValueToString(Property, reinterpret_cast<const uint8*>(CDO), ValueString, CDO);
+        Values->SetStringField(VarName, ValueString);
+    }
+    Info->SetObjectField(TEXT("variableValues"), Values);
+    Info->SetNumberField(TEXT("variableCount"), Blueprint->NewVariables.Num());
+    Info->SetBoolField(TEXT("variableValuesTruncated"), bTruncated);
+}
 } // namespace
 #endif
 
@@ -272,7 +349,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     if (Action != TEXT("manage_combat"))
     {
@@ -289,7 +366,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         return true;
     }
 
-    FString SubAction = GetStringFieldCombat(Payload, TEXT("subAction"));
+    FString SubAction = GetJsonStringField(Payload, TEXT("subAction"));
     if (SubAction.IsEmpty())
     {
         SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'subAction' in payload."), TEXT("INVALID_ARGUMENT"));
@@ -297,9 +374,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     }
 
     // Common parameters
-    FString Name = GetStringFieldCombat(Payload, TEXT("name"));
-    FString Path = GetStringFieldCombat(Payload, TEXT("path"), TEXT("/Game"));
-    FString BlueprintPath = GetStringFieldCombat(Payload, TEXT("blueprintPath"));
+    FString Name = GetJsonStringField(Payload, TEXT("name"));
+    FString Path = GetJsonStringField(Payload, TEXT("path"), TEXT("/Game"));
+    FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
     // ============================================================
     // 15.1 WEAPON BASE
@@ -326,7 +403,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         UStaticMeshComponent* WeaponMesh = GetOrCreateSCSComponent<UStaticMeshComponent>(Blueprint, TEXT("WeaponMesh"));
         if (WeaponMesh)
         {
-            FString MeshPath = GetStringFieldCombat(Payload, TEXT("weaponMeshPath"));
+            FString MeshPath = GetJsonStringField(Payload, TEXT("weaponMeshPath"));
             if (!MeshPath.IsEmpty())
             {
                 UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
@@ -338,10 +415,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         }
 
         // Set base damage as default variable if needed
-        double BaseDamage = GetNumberFieldCombat(Payload, TEXT("baseDamage"), 25.0);
-        double FireRate = GetNumberFieldCombat(Payload, TEXT("fireRate"), 600.0);
-        double Range = GetNumberFieldCombat(Payload, TEXT("range"), 10000.0);
-        double Spread = GetNumberFieldCombat(Payload, TEXT("spread"), 2.0);
+        double BaseDamage = GetJsonNumberField(Payload, TEXT("baseDamage"), 25.0);
+        double FireRate = GetJsonNumberField(Payload, TEXT("fireRate"), 600.0);
+        double Range = GetJsonNumberField(Payload, TEXT("range"), 10000.0);
+        double Spread = GetJsonNumberField(Payload, TEXT("spread"), 2.0);
 
         // Apply weapon stats as Blueprint variables using FBlueprintEditorUtils
         AddBlueprintVariableCombat(Blueprint, TEXT("BaseDamage"), MakeFloatPinType());
@@ -386,7 +463,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("fireRate"), FireRate);
         Result->SetNumberField(TEXT("range"), Range);
         Result->SetNumberField(TEXT("spread"), Spread);
-        
+        SetVariablesAdded(Result, {TEXT("BaseDamage"), TEXT("FireRate"), TEXT("Range"), TEXT("Spread")});
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Weapon blueprint created successfully."), Result);
         return true;
     }
@@ -394,20 +472,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_weapon_mesh
     if (SubAction == TEXT("configure_weapon_mesh"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString MeshPath = GetStringFieldCombat(Payload, TEXT("weaponMeshPath"));
+        FString MeshPath = GetJsonStringField(Payload, TEXT("weaponMeshPath"));
         if (!MeshPath.IsEmpty())
         {
             UStaticMeshComponent* WeaponMesh = GetOrCreateSCSComponent<UStaticMeshComponent>(Blueprint, TEXT("WeaponMesh"));
@@ -436,22 +504,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_weapon_sockets
     if (SubAction == TEXT("configure_weapon_sockets"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         // Add socket name variables to Blueprint
-        FString MuzzleSocket = GetStringFieldCombat(Payload, TEXT("muzzleSocketName"), TEXT("Muzzle"));
-        FString EjectionSocket = GetStringFieldCombat(Payload, TEXT("ejectionSocketName"), TEXT("ShellEject"));
+        FString MuzzleSocket = GetJsonStringField(Payload, TEXT("muzzleSocketName"), TEXT("Muzzle"));
+        FString EjectionSocket = GetJsonStringField(Payload, TEXT("ejectionSocketName"), TEXT("ShellEject"));
 
         AddBlueprintVariableCombat(Blueprint, TEXT("MuzzleSocketName"), MakeNamePinType());
         AddBlueprintVariableCombat(Blueprint, TEXT("EjectionSocketName"), MakeNamePinType());
@@ -481,7 +539,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetStringField(TEXT("muzzleSocket"), MuzzleSocket);
         Result->SetStringField(TEXT("ejectionSocket"), EjectionSocket);
-        
+        SetVariablesAdded(Result, {TEXT("MuzzleSocketName"), TEXT("EjectionSocketName")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Weapon sockets configured."), Result);
         return true;
@@ -490,23 +549,13 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // set_weapon_stats
     if (SubAction == TEXT("set_weapon_stats"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        double BaseDamage = GetNumberFieldCombat(Payload, TEXT("baseDamage"), 25.0);
-        double FireRate = GetNumberFieldCombat(Payload, TEXT("fireRate"), 600.0);
-        double Range = GetNumberFieldCombat(Payload, TEXT("range"), 10000.0);
-        double Spread = GetNumberFieldCombat(Payload, TEXT("spread"), 2.0);
+        double BaseDamage = GetJsonNumberField(Payload, TEXT("baseDamage"), 25.0);
+        double FireRate = GetJsonNumberField(Payload, TEXT("fireRate"), 600.0);
+        double Range = GetJsonNumberField(Payload, TEXT("range"), 10000.0);
+        double Spread = GetJsonNumberField(Payload, TEXT("spread"), 2.0);
 
         // Add/update variables
         AddBlueprintVariableCombat(Blueprint, TEXT("BaseDamage"), MakeFloatPinType());
@@ -549,7 +598,22 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("fireRate"), FireRate);
         Result->SetNumberField(TEXT("range"), Range);
         Result->SetNumberField(TEXT("spread"), Spread);
-        
+        SetVariablesAdded(Result, {TEXT("BaseDamage"), TEXT("FireRate"), TEXT("Range"), TEXT("Spread")});
+
+        TSharedPtr<FJsonObject> IgnoredParams = MakeShared<FJsonObject>();
+        if (Payload->HasField(TEXT("criticalMultiplier")))
+        {
+            IgnoredParams->SetStringField(TEXT("criticalMultiplier"), TEXT("Not consumed by set_weapon_stats; use configure_damage_execution."));
+        }
+        if (Payload->HasField(TEXT("headshotMultiplier")))
+        {
+            IgnoredParams->SetStringField(TEXT("headshotMultiplier"), TEXT("Not consumed by set_weapon_stats; use configure_damage_execution."));
+        }
+        if (IgnoredParams->Values.Num() > 0)
+        {
+            Result->SetObjectField(TEXT("ignoredParams"), IgnoredParams);
+        }
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Weapon stats configured."), Result);
         return true;
@@ -562,22 +626,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_hitscan
     if (SubAction == TEXT("configure_hitscan"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        bool bHitscanEnabled = GetBoolFieldCombat(Payload, TEXT("hitscanEnabled"), true);
-        FString TraceChannel = GetStringFieldCombat(Payload, TEXT("traceChannel"), TEXT("Visibility"));
-        double Range = GetNumberFieldCombat(Payload, TEXT("range"), 10000.0);
+        bool bHitscanEnabled = GetJsonBoolField(Payload, TEXT("hitscanEnabled"), true);
+        FString TraceChannel = GetJsonStringField(Payload, TEXT("traceChannel"), TEXT("Visibility"));
+        double Range = GetJsonNumberField(Payload, TEXT("range"), 10000.0);
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("bIsHitscan"), MakeBoolPinType());
@@ -614,7 +668,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetBoolField(TEXT("hitscanEnabled"), bHitscanEnabled);
         Result->SetStringField(TEXT("traceChannel"), TraceChannel);
         Result->SetNumberField(TEXT("range"), Range);
-        
+        SetVariablesAdded(Result, {TEXT("bIsHitscan"), TEXT("TraceChannel"), TEXT("HitscanRange")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hitscan configured."), Result);
         return true;
@@ -623,21 +678,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_projectile
     if (SubAction == TEXT("configure_projectile"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString ProjectileClass = GetStringFieldCombat(Payload, TEXT("projectileClass"));
-        double ProjectileSpeed = GetNumberFieldCombat(Payload, TEXT("projectileSpeed"), 5000.0);
+        FString ProjectileClass = GetJsonStringField(Payload, TEXT("projectileClass"));
+        double ProjectileSpeed = GetJsonNumberField(Payload, TEXT("projectileSpeed"), 5000.0);
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("ProjectileClassPath"), MakeStringPinType());
@@ -668,7 +713,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetStringField(TEXT("projectileClass"), ProjectileClass);
         Result->SetNumberField(TEXT("projectileSpeed"), ProjectileSpeed);
-        
+        SetVariablesAdded(Result, {TEXT("ProjectileClassPath"), TEXT("ProjectileSpeed")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Projectile firing configured."), Result);
         return true;
@@ -677,22 +723,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_spread_pattern
     if (SubAction == TEXT("configure_spread_pattern"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString PatternType = GetStringFieldCombat(Payload, TEXT("spreadPattern"), TEXT("Random"));
-        double SpreadIncrease = GetNumberFieldCombat(Payload, TEXT("spreadIncrease"), 0.5);
-        double SpreadRecovery = GetNumberFieldCombat(Payload, TEXT("spreadRecovery"), 2.0);
+        FString PatternType = GetJsonStringField(Payload, TEXT("spreadPattern"), TEXT("Random"));
+        double SpreadIncrease = GetJsonNumberField(Payload, TEXT("spreadIncrease"), 0.5);
+        double SpreadRecovery = GetJsonNumberField(Payload, TEXT("spreadRecovery"), 2.0);
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("SpreadPatternType"), MakeStringPinType());
@@ -734,7 +770,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("patternType"), PatternType);
         Result->SetNumberField(TEXT("spreadIncrease"), SpreadIncrease);
         Result->SetNumberField(TEXT("spreadRecovery"), SpreadRecovery);
-        
+        SetVariablesAdded(Result, {TEXT("SpreadPatternType"), TEXT("SpreadIncreasePerShot"), TEXT("SpreadRecoveryRate"), TEXT("CurrentSpread")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Spread pattern configured."), Result);
         return true;
@@ -743,22 +780,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_recoil_pattern
     if (SubAction == TEXT("configure_recoil_pattern"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        double RecoilPitch = GetNumberFieldCombat(Payload, TEXT("recoilPitch"), 1.0);
-        double RecoilYaw = GetNumberFieldCombat(Payload, TEXT("recoilYaw"), 0.3);
-        double RecoilRecovery = GetNumberFieldCombat(Payload, TEXT("recoilRecovery"), 5.0);
+        double RecoilPitch = GetJsonNumberField(Payload, TEXT("recoilPitch"), 1.0);
+        double RecoilYaw = GetJsonNumberField(Payload, TEXT("recoilYaw"), 0.3);
+        double RecoilRecovery = GetJsonNumberField(Payload, TEXT("recoilRecovery"), 5.0);
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("RecoilPitch"), MakeFloatPinType());
@@ -795,7 +822,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("recoilPitch"), RecoilPitch);
         Result->SetNumberField(TEXT("recoilYaw"), RecoilYaw);
         Result->SetNumberField(TEXT("recoilRecovery"), RecoilRecovery);
-        
+        SetVariablesAdded(Result, {TEXT("RecoilPitch"), TEXT("RecoilYaw"), TEXT("RecoilRecoverySpeed")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Recoil pattern configured."), Result);
         return true;
@@ -804,23 +832,13 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_aim_down_sights
     if (SubAction == TEXT("configure_aim_down_sights"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        bool bAdsEnabled = GetBoolFieldCombat(Payload, TEXT("adsEnabled"), true);
-        double AdsFov = GetNumberFieldCombat(Payload, TEXT("adsFov"), 60.0);
-        double AdsSpeed = GetNumberFieldCombat(Payload, TEXT("adsSpeed"), 0.2);
-        double AdsSpreadMultiplier = GetNumberFieldCombat(Payload, TEXT("adsSpreadMultiplier"), 0.5);
+        bool bAdsEnabled = GetJsonBoolField(Payload, TEXT("adsEnabled"), true);
+        double AdsFov = GetJsonNumberField(Payload, TEXT("adsFov"), 60.0);
+        double AdsSpeed = GetJsonNumberField(Payload, TEXT("adsSpeed"), 0.2);
+        double AdsSpreadMultiplier = GetJsonNumberField(Payload, TEXT("adsSpreadMultiplier"), 0.5);
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("bADSEnabled"), MakeBoolPinType());
@@ -868,7 +886,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("adsFov"), AdsFov);
         Result->SetNumberField(TEXT("adsSpeed"), AdsSpeed);
         Result->SetNumberField(TEXT("adsSpreadMultiplier"), AdsSpreadMultiplier);
-        
+        SetVariablesAdded(Result, {TEXT("bADSEnabled"), TEXT("ADSFieldOfView"), TEXT("ADSTransitionSpeed"), TEXT("ADSSpreadMultiplier"), TEXT("bIsAiming")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Aim down sights configured."), Result);
         return true;
@@ -899,22 +918,25 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         USphereComponent* CollisionComp = GetOrCreateSCSComponent<USphereComponent>(Blueprint, TEXT("CollisionComponent"));
         if (CollisionComp)
         {
-            double CollisionRadius = GetNumberFieldCombat(Payload, TEXT("collisionRadius"), 5.0);
+            double CollisionRadius = GetJsonNumberField(Payload, TEXT("collisionRadius"), 5.0);
             CollisionComp->SetSphereRadius(static_cast<float>(CollisionRadius));
             CollisionComp->SetCollisionProfileName(TEXT("Projectile"));
         }
+
+        FString ProjectileMeshPath = GetJsonStringField(Payload, TEXT("projectileMeshPath"));
+        bool bProjectileMeshLoaded = false;
 
         // Add static mesh for visual
         UStaticMeshComponent* MeshComp = GetOrCreateSCSComponent<UStaticMeshComponent>(Blueprint, TEXT("ProjectileMesh"), TEXT("CollisionComponent"));
         if (MeshComp)
         {
-            FString MeshPath = GetStringFieldCombat(Payload, TEXT("projectileMeshPath"));
-            if (!MeshPath.IsEmpty())
+            if (!ProjectileMeshPath.IsEmpty())
             {
-                UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
+                UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *ProjectileMeshPath);
                 if (Mesh)
                 {
                     MeshComp->SetStaticMesh(Mesh);
+                    bProjectileMeshLoaded = true;
                 }
             }
         }
@@ -923,8 +945,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         UProjectileMovementComponent* MovementComp = GetOrCreateSCSComponent<UProjectileMovementComponent>(Blueprint, TEXT("ProjectileMovement"));
         if (MovementComp)
         {
-            double Speed = GetNumberFieldCombat(Payload, TEXT("projectileSpeed"), 5000.0);
-            double GravityScale = GetNumberFieldCombat(Payload, TEXT("projectileGravityScale"), 0.0);
+            double Speed = GetJsonNumberField(Payload, TEXT("projectileSpeed"), 5000.0);
+            double GravityScale = GetJsonNumberField(Payload, TEXT("projectileGravityScale"), 0.0);
             
             MovementComp->InitialSpeed = static_cast<float>(Speed);
             MovementComp->MaxSpeed = static_cast<float>(Speed);
@@ -936,6 +958,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
+        Result->SetStringField(TEXT("projectileMeshPath"), ProjectileMeshPath);
+        Result->SetBoolField(TEXT("projectileMeshLoaded"), bProjectileMeshLoaded);
         
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Projectile blueprint created successfully."), Result);
@@ -945,25 +969,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_projectile_movement
     if (SubAction == TEXT("configure_projectile_movement"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         UProjectileMovementComponent* MovementComp = GetOrCreateSCSComponent<UProjectileMovementComponent>(Blueprint, TEXT("ProjectileMovement"));
         if (MovementComp)
         {
-            double Speed = GetNumberFieldCombat(Payload, TEXT("projectileSpeed"), 5000.0);
-            double GravityScale = GetNumberFieldCombat(Payload, TEXT("projectileGravityScale"), 0.0);
-            double Lifespan = GetNumberFieldCombat(Payload, TEXT("projectileLifespan"), 5.0);
+            double Speed = GetJsonNumberField(Payload, TEXT("projectileSpeed"), 5000.0);
+            double GravityScale = GetJsonNumberField(Payload, TEXT("projectileGravityScale"), 0.0);
+            double Lifespan = GetJsonNumberField(Payload, TEXT("projectileLifespan"), 5.0);
             
             MovementComp->InitialSpeed = static_cast<float>(Speed);
             MovementComp->MaxSpeed = static_cast<float>(Speed);
@@ -984,26 +998,16 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_projectile_collision
     if (SubAction == TEXT("configure_projectile_collision"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         USphereComponent* CollisionComp = GetOrCreateSCSComponent<USphereComponent>(Blueprint, TEXT("CollisionComponent"));
         if (CollisionComp)
         {
-            double CollisionRadius = GetNumberFieldCombat(Payload, TEXT("collisionRadius"), 5.0);
+            double CollisionRadius = GetJsonNumberField(Payload, TEXT("collisionRadius"), 5.0);
             CollisionComp->SetSphereRadius(static_cast<float>(CollisionRadius));
             
-            bool bBounceEnabled = GetBoolFieldCombat(Payload, TEXT("bounceEnabled"), false);
+            bool bBounceEnabled = GetJsonBoolField(Payload, TEXT("bounceEnabled"), false);
             // Bounce settings would be on the movement component
             UProjectileMovementComponent* MovementComp = GetOrCreateSCSComponent<UProjectileMovementComponent>(Blueprint, TEXT("ProjectileMovement"));
             if (MovementComp)
@@ -1011,7 +1015,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
                 MovementComp->bShouldBounce = bBounceEnabled;
                 if (bBounceEnabled)
                 {
-                    double BounceRatio = GetNumberFieldCombat(Payload, TEXT("bounceVelocityRatio"), 0.6);
+                    double BounceRatio = GetJsonNumberField(Payload, TEXT("bounceVelocityRatio"), 0.6);
                     MovementComp->Bounciness = static_cast<float>(BounceRatio);
                 }
             }
@@ -1030,24 +1034,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_projectile_homing
     if (SubAction == TEXT("configure_projectile_homing"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         UProjectileMovementComponent* MovementComp = GetOrCreateSCSComponent<UProjectileMovementComponent>(Blueprint, TEXT("ProjectileMovement"));
         if (MovementComp)
         {
-            bool bHomingEnabled = GetBoolFieldCombat(Payload, TEXT("homingEnabled"), true);
-            double HomingAcceleration = GetNumberFieldCombat(Payload, TEXT("homingAcceleration"), 20000.0);
+            bool bHomingEnabled = GetJsonBoolField(Payload, TEXT("homingEnabled"), true);
+            double HomingAcceleration = GetJsonNumberField(Payload, TEXT("homingAcceleration"), 20000.0);
             
             MovementComp->bIsHomingProjectile = bHomingEnabled;
             MovementComp->HomingAccelerationMagnitude = static_cast<float>(HomingAcceleration);
@@ -1139,22 +1133,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_damage_execution
     if (SubAction == TEXT("configure_damage_execution"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        double DamageImpulse = GetNumberFieldCombat(Payload, TEXT("damageImpulse"), 500.0);
-        double CriticalMultiplier = GetNumberFieldCombat(Payload, TEXT("criticalMultiplier"), 2.0);
-        double HeadshotMultiplier = GetNumberFieldCombat(Payload, TEXT("headshotMultiplier"), 2.5);
+        double DamageImpulse = GetJsonNumberField(Payload, TEXT("damageImpulse"), 500.0);
+        double CriticalMultiplier = GetJsonNumberField(Payload, TEXT("criticalMultiplier"), 2.0);
+        double HeadshotMultiplier = GetJsonNumberField(Payload, TEXT("headshotMultiplier"), 2.5);
 
         // Add damage-related variables
         AddBlueprintVariableCombat(Blueprint, TEXT("DamageImpulse"), MakeFloatPinType());
@@ -1191,7 +1175,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("damageImpulse"), DamageImpulse);
         Result->SetNumberField(TEXT("criticalMultiplier"), CriticalMultiplier);
         Result->SetNumberField(TEXT("headshotMultiplier"), HeadshotMultiplier);
-        
+        SetVariablesAdded(Result, {TEXT("DamageImpulse"), TEXT("CriticalMultiplier"), TEXT("HeadshotMultiplier")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Damage execution configured."), Result);
         return true;
@@ -1200,43 +1185,39 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // setup_hitbox_component
     if (SubAction == TEXT("setup_hitbox_component"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString HitboxType = GetStringFieldCombat(Payload, TEXT("hitboxType"), TEXT("Capsule"));
-        FString BoneName = GetStringFieldCombat(Payload, TEXT("hitboxBoneName"), TEXT(""));
-        bool bIsDamageZoneHead = GetBoolFieldCombat(Payload, TEXT("isDamageZoneHead"), false);
-        double DamageMultiplier = GetNumberFieldCombat(Payload, TEXT("damageMultiplier"), 1.0);
+        FString HitboxType = GetJsonStringField(Payload, TEXT("hitboxType"), TEXT("Capsule"));
+        FString BoneName = GetJsonStringField(Payload, TEXT("hitboxBoneName"), TEXT(""));
+        bool bIsDamageZoneHead = GetJsonBoolField(Payload, TEXT("isDamageZoneHead"), false);
+        double DamageMultiplier = GetJsonNumberField(Payload, TEXT("damageMultiplier"), 1.0);
+        FString ComponentName = Name.IsEmpty()
+            ? FString::Printf(TEXT("Hitbox%s"), *HitboxType)
+            : Name;
+        TSharedPtr<FJsonObject> AppliedHitboxSize = MakeShared<FJsonObject>();
 
         // Create appropriate collision component based on type
         if (HitboxType == TEXT("Capsule"))
         {
-            UCapsuleComponent* Hitbox = GetOrCreateSCSComponent<UCapsuleComponent>(Blueprint, TEXT("HitboxCapsule"));
+            UCapsuleComponent* Hitbox = GetOrCreateSCSComponent<UCapsuleComponent>(Blueprint, ComponentName);
             if (Hitbox)
             {
                 auto HitboxSizeObj = Payload->GetObjectField(TEXT("hitboxSize"));
                 if (HitboxSizeObj.IsValid())
                 {
-                    double Radius = GetNumberFieldCombat(HitboxSizeObj, TEXT("radius"), 34.0);
-                    double HalfHeight = GetNumberFieldCombat(HitboxSizeObj, TEXT("halfHeight"), 88.0);
+                    double Radius = GetJsonNumberField(HitboxSizeObj, TEXT("radius"), 34.0);
+                    double HalfHeight = GetJsonNumberField(HitboxSizeObj, TEXT("halfHeight"), 88.0);
                     Hitbox->SetCapsuleRadius(static_cast<float>(Radius));
                     Hitbox->SetCapsuleHalfHeight(static_cast<float>(HalfHeight));
+                    AppliedHitboxSize->SetNumberField(TEXT("radius"), Radius);
+                    AppliedHitboxSize->SetNumberField(TEXT("halfHeight"), HalfHeight);
                 }
             }
         }
         else if (HitboxType == TEXT("Box"))
         {
-            UBoxComponent* Hitbox = GetOrCreateSCSComponent<UBoxComponent>(Blueprint, TEXT("HitboxBox"));
+            UBoxComponent* Hitbox = GetOrCreateSCSComponent<UBoxComponent>(Blueprint, ComponentName);
             if (Hitbox)
             {
                 auto HitboxSizeObj = Payload->GetObjectField(TEXT("hitboxSize"));
@@ -1247,20 +1228,26 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
                     {
                         FVector Extent = GetVectorFromJsonCombat(ExtentObj);
                         Hitbox->SetBoxExtent(Extent);
+                        TSharedPtr<FJsonObject> ExtentResult = MakeShared<FJsonObject>();
+                        ExtentResult->SetNumberField(TEXT("x"), Extent.X);
+                        ExtentResult->SetNumberField(TEXT("y"), Extent.Y);
+                        ExtentResult->SetNumberField(TEXT("z"), Extent.Z);
+                        AppliedHitboxSize->SetObjectField(TEXT("extent"), ExtentResult);
                     }
                 }
             }
         }
         else if (HitboxType == TEXT("Sphere"))
         {
-            USphereComponent* Hitbox = GetOrCreateSCSComponent<USphereComponent>(Blueprint, TEXT("HitboxSphere"));
+            USphereComponent* Hitbox = GetOrCreateSCSComponent<USphereComponent>(Blueprint, ComponentName);
             if (Hitbox)
             {
                 auto HitboxSizeObj = Payload->GetObjectField(TEXT("hitboxSize"));
                 if (HitboxSizeObj.IsValid())
                 {
-                    double Radius = GetNumberFieldCombat(HitboxSizeObj, TEXT("radius"), 50.0);
+                    double Radius = GetJsonNumberField(HitboxSizeObj, TEXT("radius"), 50.0);
                     Hitbox->SetSphereRadius(static_cast<float>(Radius));
+                    AppliedHitboxSize->SetNumberField(TEXT("radius"), Radius);
                 }
             }
         }
@@ -1268,6 +1255,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         // Add hitbox metadata variables
         AddBlueprintVariableCombat(Blueprint, TEXT("bIsHeadshotZone"), MakeBoolPinType());
         AddBlueprintVariableCombat(Blueprint, TEXT("HitboxDamageMultiplier"), MakeFloatPinType());
+        AddBlueprintVariableCombat(Blueprint, TEXT("HitboxBoneName"), MakeNamePinType());
 
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
         McpSafeCompileBlueprint(Blueprint);
@@ -1285,6 +1273,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
                 {
                     MultProp->SetPropertyValue_InContainer(CDO, DamageMultiplier);
                 }
+                if (FNameProperty* BoneProp = FindFProperty<FNameProperty>(BPGC, TEXT("HitboxBoneName")))
+                {
+                    BoneProp->SetPropertyValue_InContainer(CDO, FName(*BoneName));
+                }
             }
         }
 
@@ -1293,9 +1285,13 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetStringField(TEXT("hitboxType"), HitboxType);
+        Result->SetStringField(TEXT("componentName"), ComponentName);
+        Result->SetStringField(TEXT("hitboxBoneName"), BoneName);
+        Result->SetObjectField(TEXT("hitboxSize"), AppliedHitboxSize);
         Result->SetBoolField(TEXT("isDamageZoneHead"), bIsDamageZoneHead);
         Result->SetNumberField(TEXT("damageMultiplier"), DamageMultiplier);
-        
+        SetVariablesAdded(Result, {TEXT("bIsHeadshotZone"), TEXT("HitboxDamageMultiplier"), TEXT("HitboxBoneName")});
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hitbox component configured."), Result);
         return true;
@@ -1308,22 +1304,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // setup_reload_system
     if (SubAction == TEXT("setup_reload_system"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        int32 MagazineSize = static_cast<int32>(GetNumberFieldCombat(Payload, TEXT("magazineSize"), 30));
-        double ReloadTime = GetNumberFieldCombat(Payload, TEXT("reloadTime"), 2.0);
-        FString ReloadAnimPath = GetStringFieldCombat(Payload, TEXT("reloadAnimationPath"));
+        int32 MagazineSize = static_cast<int32>(GetJsonNumberField(Payload, TEXT("magazineSize"), 30));
+        double ReloadTime = GetJsonNumberField(Payload, TEXT("reloadTime"), 2.0);
+        FString ReloadAnimPath = GetJsonStringField(Payload, TEXT("reloadAnimationPath"));
 
         // Add integer variable: MagazineSize
         AddBlueprintVariableCombat(Blueprint, TEXT("MagazineSize"), MakeIntPinType());
@@ -1381,6 +1367,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("magazineSize"), MagazineSize);
         Result->SetNumberField(TEXT("currentAmmo"), MagazineSize);
         Result->SetNumberField(TEXT("reloadTime"), ReloadTime);
+        Result->SetStringField(TEXT("reloadAnimationPath"), ReloadAnimPath);
         Result->SetBoolField(TEXT("reloadAnimationLoaded"), bReloadAnimLoaded);
         
         TArray<TSharedPtr<FJsonValue>> VarsAdded;
@@ -1390,7 +1377,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         VarsAdded.Add(MakeShared<FJsonValueString>(TEXT("bIsReloading")));
         if (bReloadAnimLoaded) VarsAdded.Add(MakeShared<FJsonValueString>(TEXT("ReloadAnimation")));
         Result->SetArrayField(TEXT("variablesAdded"), VarsAdded);
-        
+
+        if (Payload->HasField(TEXT("maxAmmo")))
+        {
+            TSharedPtr<FJsonObject> IgnoredParams = MakeShared<FJsonObject>();
+            IgnoredParams->SetStringField(TEXT("maxAmmo"), TEXT("Not consumed by setup_reload_system; use setup_ammo_system."));
+            Result->SetObjectField(TEXT("ignoredParams"), IgnoredParams);
+        }
+
         McpHandlerUtils::AddVerification(Result, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Reload system configured with Blueprint variables."), Result);
         return true;
@@ -1399,24 +1393,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // setup_ammo_system
     if (SubAction == TEXT("setup_ammo_system"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString AmmoType = GetStringFieldCombat(Payload, TEXT("ammoType"), TEXT("Default"));
-        int32 MaxAmmo = static_cast<int32>(GetNumberFieldCombat(Payload, TEXT("maxAmmo"), 150));
-        int32 StartingAmmo = static_cast<int32>(GetNumberFieldCombat(Payload, TEXT("startingAmmo"), 60));
-        int32 AmmoPerShot = static_cast<int32>(GetNumberFieldCombat(Payload, TEXT("ammoPerShot"), 1));
-        bool bInfiniteAmmo = GetBoolFieldCombat(Payload, TEXT("infiniteAmmo"), false);
+        FString AmmoType = GetJsonStringField(Payload, TEXT("ammoType"), TEXT("Default"));
+        int32 MaxAmmo = static_cast<int32>(GetJsonNumberField(Payload, TEXT("maxAmmo"), 150));
+        int32 StartingAmmo = static_cast<int32>(GetJsonNumberField(Payload, TEXT("startingAmmo"), 60));
+        int32 AmmoPerShot = static_cast<int32>(GetJsonNumberField(Payload, TEXT("ammoPerShot"), 1));
+        bool bInfiniteAmmo = GetJsonBoolField(Payload, TEXT("infiniteAmmo"), false);
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("MaxAmmo"), MakeIntPinType());
@@ -1481,18 +1465,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // setup_attachment_system
     if (SubAction == TEXT("setup_attachment_system"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         // Parse attachment slots and create actual SceneComponent attach points
         const TArray<TSharedPtr<FJsonValue>>* AttachmentSlotsArray;
@@ -1509,8 +1483,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
                     if (SlotValue->Type == EJson::Object)
                     {
                         auto SlotObj = SlotValue->AsObject();
-                        FString SlotName = GetStringFieldCombat(SlotObj, TEXT("slotName"));
-                        FString SlotType = GetStringFieldCombat(SlotObj, TEXT("slotType"), TEXT("Optic"));
+                        FString SlotName = GetJsonStringField(SlotObj, TEXT("slotName"));
+                        FString SlotType = GetJsonStringField(SlotObj, TEXT("slotType"), TEXT("Optic"));
                         
                         if (!SlotName.IsEmpty())
                         {
@@ -1545,9 +1519,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
             }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
-        McpSafeAssetSave(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
@@ -1573,23 +1545,13 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // setup_weapon_switching
     if (SubAction == TEXT("setup_weapon_switching"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        double SwitchInTime = GetNumberFieldCombat(Payload, TEXT("switchInTime"), 0.3);
-        double SwitchOutTime = GetNumberFieldCombat(Payload, TEXT("switchOutTime"), 0.2);
-        FString EquipAnimPath = GetStringFieldCombat(Payload, TEXT("equipAnimationPath"));
-        FString UnequipAnimPath = GetStringFieldCombat(Payload, TEXT("unequipAnimationPath"));
+        double SwitchInTime = GetJsonNumberField(Payload, TEXT("switchInTime"), 0.3);
+        double SwitchOutTime = GetJsonNumberField(Payload, TEXT("switchOutTime"), 0.2);
+        FString EquipAnimPath = GetJsonStringField(Payload, TEXT("equipAnimationPath"));
+        FString UnequipAnimPath = GetJsonStringField(Payload, TEXT("unequipAnimationPath"));
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("SwitchInTime"), MakeFloatPinType());
@@ -1652,6 +1614,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetNumberField(TEXT("switchInTime"), SwitchInTime);
         Result->SetNumberField(TEXT("switchOutTime"), SwitchOutTime);
+        Result->SetStringField(TEXT("equipAnimationPath"), EquipAnimPath);
+        Result->SetStringField(TEXT("unequipAnimationPath"), UnequipAnimPath);
         Result->SetBoolField(TEXT("equipAnimationLoaded"), bEquipAnimLoaded);
         Result->SetBoolField(TEXT("unequipAnimationLoaded"), bUnequipAnimLoaded);
         
@@ -1675,27 +1639,18 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_muzzle_flash
     if (SubAction == TEXT("configure_muzzle_flash"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString ParticlePath = GetStringFieldCombat(Payload, TEXT("muzzleFlashParticlePath"));
-        double Scale = GetNumberFieldCombat(Payload, TEXT("muzzleFlashScale"), 1.0);
-        FString SoundPath = GetStringFieldCombat(Payload, TEXT("muzzleSoundPath"));
+        FString ParticlePath = GetJsonStringField(Payload, TEXT("muzzleFlashParticlePath"));
+        double Scale = GetJsonNumberField(Payload, TEXT("muzzleFlashScale"), 1.0);
+        FString SoundPath = GetJsonStringField(Payload, TEXT("muzzleSoundPath"));
 
         // Add variables for muzzle flash config
         AddBlueprintVariableCombat(Blueprint, TEXT("MuzzleFlashParticlePath"), MakeStringPinType());
         AddBlueprintVariableCombat(Blueprint, TEXT("MuzzleFlashScale"), MakeFloatPinType());
         AddBlueprintVariableCombat(Blueprint, TEXT("MuzzleSoundPath"), MakeStringPinType());
+        TArray<FString> VarsAdded = {TEXT("MuzzleFlashParticlePath"), TEXT("MuzzleFlashScale"), TEXT("MuzzleSoundPath")};
 
         // Load and add object references if paths are valid
         bool bParticleLoaded = false;
@@ -1706,6 +1661,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
             if (NiagaraSystem)
             {
                 AddBlueprintVariableCombat(Blueprint, TEXT("MuzzleFlashNiagara"), MakeObjectPinType(UNiagaraSystem::StaticClass()));
+                VarsAdded.Add(TEXT("MuzzleFlashNiagara"));
                 bParticleLoaded = true;
             }
             else
@@ -1714,6 +1670,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
                 if (ParticleSystem)
                 {
                     AddBlueprintVariableCombat(Blueprint, TEXT("MuzzleFlashParticle"), MakeObjectPinType(UParticleSystem::StaticClass()));
+                    VarsAdded.Add(TEXT("MuzzleFlashParticle"));
                     bParticleLoaded = true;
                 }
             }
@@ -1724,6 +1681,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
             if (SoundCue)
             {
                 AddBlueprintVariableCombat(Blueprint, TEXT("MuzzleSound"), MakeObjectPinType(USoundCue::StaticClass()));
+                VarsAdded.Add(TEXT("MuzzleSound"));
                 bSoundLoaded = true;
             }
         }
@@ -1756,10 +1714,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetStringField(TEXT("particlePath"), ParticlePath);
+        Result->SetStringField(TEXT("soundPath"), SoundPath);
         Result->SetNumberField(TEXT("scale"), Scale);
         Result->SetBoolField(TEXT("particleLoaded"), bParticleLoaded);
         Result->SetBoolField(TEXT("soundLoaded"), bSoundLoaded);
-        
+        SetVariablesAdded(Result, VarsAdded);
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Muzzle flash configured."), Result);
         return true;
     }
@@ -1767,21 +1727,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_tracer
     if (SubAction == TEXT("configure_tracer"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString TracerPath = GetStringFieldCombat(Payload, TEXT("tracerParticlePath"));
-        double TracerSpeed = GetNumberFieldCombat(Payload, TEXT("tracerSpeed"), 10000.0);
+        FString TracerPath = GetJsonStringField(Payload, TEXT("tracerParticlePath"));
+        double TracerSpeed = GetJsonNumberField(Payload, TEXT("tracerSpeed"), 10000.0);
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("TracerParticlePath"), MakeStringPinType());
@@ -1817,7 +1767,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetStringField(TEXT("tracerPath"), TracerPath);
         Result->SetNumberField(TEXT("tracerSpeed"), TracerSpeed);
-        
+        SetVariablesAdded(Result, {TEXT("TracerParticlePath"), TEXT("TracerSpeed"), TEXT("bUseTracers")});
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Tracer configured."), Result);
         return true;
     }
@@ -1825,22 +1776,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_impact_effects
     if (SubAction == TEXT("configure_impact_effects"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString ParticlePath = GetStringFieldCombat(Payload, TEXT("impactParticlePath"));
-        FString SoundPath = GetStringFieldCombat(Payload, TEXT("impactSoundPath"));
-        FString DecalPath = GetStringFieldCombat(Payload, TEXT("impactDecalPath"));
+        FString ParticlePath = GetJsonStringField(Payload, TEXT("impactParticlePath"));
+        FString SoundPath = GetJsonStringField(Payload, TEXT("impactSoundPath"));
+        FString DecalPath = GetJsonStringField(Payload, TEXT("impactDecalPath"));
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("ImpactParticlePath"), MakeStringPinType());
@@ -1877,7 +1818,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("particlePath"), ParticlePath);
         Result->SetStringField(TEXT("soundPath"), SoundPath);
         Result->SetStringField(TEXT("decalPath"), DecalPath);
-        
+        SetVariablesAdded(Result, {TEXT("ImpactParticlePath"), TEXT("ImpactSoundPath"), TEXT("ImpactDecalPath")});
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Impact effects configured."), Result);
         return true;
     }
@@ -1885,22 +1827,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_shell_ejection
     if (SubAction == TEXT("configure_shell_ejection"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString ShellMeshPath = GetStringFieldCombat(Payload, TEXT("shellMeshPath"));
-        double EjectionForce = GetNumberFieldCombat(Payload, TEXT("shellEjectionForce"), 300.0);
-        double ShellLifespan = GetNumberFieldCombat(Payload, TEXT("shellLifespan"), 5.0);
+        FString ShellMeshPath = GetJsonStringField(Payload, TEXT("shellMeshPath"));
+        double EjectionForce = GetJsonNumberField(Payload, TEXT("shellEjectionForce"), 300.0);
+        double ShellLifespan = GetJsonNumberField(Payload, TEXT("shellLifespan"), 5.0);
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("ShellMeshPath"), MakeStringPinType());
@@ -1942,7 +1874,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("shellMeshPath"), ShellMeshPath);
         Result->SetNumberField(TEXT("ejectionForce"), EjectionForce);
         Result->SetNumberField(TEXT("shellLifespan"), ShellLifespan);
-        
+        SetVariablesAdded(Result, {TEXT("ShellMeshPath"), TEXT("ShellEjectionForce"), TEXT("ShellLifespan"), TEXT("bEjectShells")});
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Shell ejection configured."), Result);
         return true;
     }
@@ -1954,22 +1887,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // create_melee_trace
     if (SubAction == TEXT("create_melee_trace"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString TraceStartSocket = GetStringFieldCombat(Payload, TEXT("meleeTraceStartSocket"), TEXT("WeaponBase"));
-        FString TraceEndSocket = GetStringFieldCombat(Payload, TEXT("meleeTraceEndSocket"), TEXT("WeaponTip"));
-        double TraceRadius = GetNumberFieldCombat(Payload, TEXT("meleeTraceRadius"), 10.0);
+        FString TraceStartSocket = GetJsonStringField(Payload, TEXT("meleeTraceStartSocket"), TEXT("WeaponBase"));
+        FString TraceEndSocket = GetJsonStringField(Payload, TEXT("meleeTraceEndSocket"), TEXT("WeaponTip"));
+        double TraceRadius = GetJsonNumberField(Payload, TEXT("meleeTraceRadius"), 10.0);
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("MeleeTraceStartSocket"), MakeNamePinType());
@@ -2011,29 +1934,21 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("traceStartSocket"), TraceStartSocket);
         Result->SetStringField(TEXT("traceEndSocket"), TraceEndSocket);
         Result->SetNumberField(TEXT("traceRadius"), TraceRadius);
-        
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Melee trace configured."), Result);
+        SetVariablesAdded(Result, {TEXT("MeleeTraceStartSocket"), TEXT("MeleeTraceEndSocket"), TEXT("MeleeTraceRadius"), TEXT("bIsTracing")});
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Melee trace variables scaffolded; game code must perform the trace."), Result);
         return true;
     }
 
     // configure_combo_system
     if (SubAction == TEXT("configure_combo_system"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        double ComboWindowTime = GetNumberFieldCombat(Payload, TEXT("comboWindowTime"), 0.5);
-        int32 MaxComboCount = static_cast<int32>(GetNumberFieldCombat(Payload, TEXT("maxComboCount"), 3));
+        double ComboWindowTime = GetJsonNumberField(Payload, TEXT("comboWindowTime"), 0.5);
+        int32 MaxComboCount = static_cast<int32>(GetJsonNumberField(Payload, TEXT("maxComboCount"), 3));
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("ComboWindowTime"), MakeFloatPinType());
@@ -2074,7 +1989,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetNumberField(TEXT("comboWindowTime"), ComboWindowTime);
         Result->SetNumberField(TEXT("maxComboCount"), MaxComboCount);
-        
+        SetVariablesAdded(Result, {TEXT("ComboWindowTime"), TEXT("MaxComboCount"), TEXT("CurrentComboIndex"), TEXT("bInComboWindow")});
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Combo system configured."), Result);
         return true;
     }
@@ -2082,21 +1998,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // create_hit_pause (hitstop)
     if (SubAction == TEXT("create_hit_pause"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        double HitPauseDuration = GetNumberFieldCombat(Payload, TEXT("hitPauseDuration"), 0.05);
-        double TimeDilation = GetNumberFieldCombat(Payload, TEXT("hitPauseTimeDilation"), 0.1);
+        double HitPauseDuration = GetJsonNumberField(Payload, TEXT("hitPauseDuration"), 0.05);
+        double TimeDilation = GetJsonNumberField(Payload, TEXT("hitPauseTimeDilation"), 0.1);
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("HitPauseDuration"), MakeFloatPinType());
@@ -2132,29 +2038,21 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetNumberField(TEXT("hitPauseDuration"), HitPauseDuration);
         Result->SetNumberField(TEXT("timeDilation"), TimeDilation);
-        
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hit pause (hitstop) configured."), Result);
+        SetVariablesAdded(Result, {TEXT("HitPauseDuration"), TEXT("HitPauseTimeDilation"), TEXT("bEnableHitPause")});
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hit pause variables scaffolded; game code must apply the time dilation."), Result);
         return true;
     }
 
     // configure_hit_reaction
     if (SubAction == TEXT("configure_hit_reaction"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString HitReactionMontage = GetStringFieldCombat(Payload, TEXT("hitReactionMontage"));
-        double StunTime = GetNumberFieldCombat(Payload, TEXT("hitReactionStunTime"), 0.5);
+        FString HitReactionMontage = GetJsonStringField(Payload, TEXT("hitReactionMontage"));
+        double StunTime = GetJsonNumberField(Payload, TEXT("hitReactionStunTime"), 0.5);
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("HitReactionMontagePath"), MakeStringPinType());
@@ -2203,7 +2101,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("hitReactionMontage"), HitReactionMontage);
         Result->SetNumberField(TEXT("stunTime"), StunTime);
         Result->SetBoolField(TEXT("animationLoaded"), bAnimLoaded);
-        
+
+        TArray<FString> VarsAdded = {TEXT("HitReactionMontagePath"), TEXT("HitReactionStunTime"), TEXT("bIsStunned")};
+        if (bAnimLoaded) VarsAdded.Add(TEXT("HitReactionMontage"));
+        SetVariablesAdded(Result, VarsAdded);
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hit reaction configured."), Result);
         return true;
     }
@@ -2211,24 +2113,14 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // setup_parry_block_system
     if (SubAction == TEXT("setup_parry_block_system"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        double ParryWindowStart = GetNumberFieldCombat(Payload, TEXT("parryWindowStart"), 0.0);
-        double ParryWindowEnd = GetNumberFieldCombat(Payload, TEXT("parryWindowEnd"), 0.15);
-        FString ParryAnimPath = GetStringFieldCombat(Payload, TEXT("parryAnimationPath"));
-        double BlockDamageReduction = GetNumberFieldCombat(Payload, TEXT("blockDamageReduction"), 0.8);
-        double BlockStaminaCost = GetNumberFieldCombat(Payload, TEXT("blockStaminaCost"), 10.0);
+        double ParryWindowStart = GetJsonNumberField(Payload, TEXT("parryWindowStart"), 0.0);
+        double ParryWindowEnd = GetJsonNumberField(Payload, TEXT("parryWindowEnd"), 0.15);
+        FString ParryAnimPath = GetJsonStringField(Payload, TEXT("parryAnimationPath"));
+        double BlockDamageReduction = GetJsonNumberField(Payload, TEXT("blockDamageReduction"), 0.8);
+        double BlockStaminaCost = GetJsonNumberField(Payload, TEXT("blockStaminaCost"), 10.0);
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("ParryWindowStart"), MakeFloatPinType());
@@ -2291,6 +2183,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetNumberField(TEXT("parryWindowStart"), ParryWindowStart);
         Result->SetNumberField(TEXT("parryWindowEnd"), ParryWindowEnd);
+        Result->SetStringField(TEXT("parryAnimationPath"), ParryAnimPath);
         Result->SetNumberField(TEXT("blockDamageReduction"), BlockDamageReduction);
         Result->SetNumberField(TEXT("blockStaminaCost"), BlockStaminaCost);
         Result->SetBoolField(TEXT("parryAnimationLoaded"), bAnimLoaded);
@@ -2312,22 +2205,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_weapon_trails
     if (SubAction == TEXT("configure_weapon_trails"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString TrailParticlePath = GetStringFieldCombat(Payload, TEXT("weaponTrailParticlePath"));
-        FString TrailStartSocket = GetStringFieldCombat(Payload, TEXT("weaponTrailStartSocket"), TEXT("WeaponBase"));
-        FString TrailEndSocket = GetStringFieldCombat(Payload, TEXT("weaponTrailEndSocket"), TEXT("WeaponTip"));
+        FString TrailParticlePath = GetJsonStringField(Payload, TEXT("weaponTrailParticlePath"));
+        FString TrailStartSocket = GetJsonStringField(Payload, TEXT("weaponTrailStartSocket"), TEXT("WeaponBase"));
+        FString TrailEndSocket = GetJsonStringField(Payload, TEXT("weaponTrailEndSocket"), TEXT("WeaponTip"));
 
         // Add variables
         AddBlueprintVariableCombat(Blueprint, TEXT("WeaponTrailParticlePath"), MakeStringPinType());
@@ -2369,7 +2252,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("trailParticlePath"), TrailParticlePath);
         Result->SetStringField(TEXT("trailStartSocket"), TrailStartSocket);
         Result->SetStringField(TEXT("trailEndSocket"), TrailEndSocket);
-        
+        SetVariablesAdded(Result, {TEXT("WeaponTrailParticlePath"), TEXT("WeaponTrailStartSocket"), TEXT("WeaponTrailEndSocket"), TEXT("bShowWeaponTrail")});
+
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Weapon trails configured."), Result);
         return true;
     }
@@ -2381,18 +2265,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // get_combat_info
     if (SubAction == TEXT("get_combat_info"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         TSharedPtr<FJsonObject> Info = McpHandlerUtils::CreateResultObject();
         Info->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
@@ -2484,21 +2358,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // configure_hit_detection -> alias for setup_hitbox_component
     if (SubAction == TEXT("configure_hit_detection"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        FString HitboxType = GetStringFieldCombat(Payload, TEXT("hitboxType"), TEXT("Capsule"));
-        double DamageMultiplier = GetNumberFieldCombat(Payload, TEXT("damageMultiplier"), 1.0);
+        FString HitboxType = GetJsonStringField(Payload, TEXT("hitboxType"), TEXT("Capsule"));
+        double DamageMultiplier = GetJsonNumberField(Payload, TEXT("damageMultiplier"), 1.0);
 
         // Create collision component based on type
         if (HitboxType == TEXT("Capsule"))
@@ -2515,13 +2379,26 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         }
 
         AddBlueprintVariableCombat(Blueprint, TEXT("HitboxDamageMultiplier"), MakeFloatPinType());
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/false);
+
+        if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(Blueprint->GeneratedClass))
+        {
+            if (UObject* CDO = BPGC->GetDefaultObject())
+            {
+                if (FDoubleProperty* MultProp = FindFProperty<FDoubleProperty>(BPGC, TEXT("HitboxDamageMultiplier")))
+                {
+                    MultProp->SetPropertyValue_InContainer(CDO, DamageMultiplier);
+                }
+            }
+        }
+
         McpSafeAssetSave(Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetStringField(TEXT("hitboxType"), HitboxType);
+        Result->SetNumberField(TEXT("damageMultiplier"), DamageMultiplier);
+        SetVariablesAdded(Result, {TEXT("HitboxDamageMultiplier")});
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hit detection configured."), Result);
         return true;
     }
@@ -2529,18 +2406,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
     // get_combat_stats -> alias for get_combat_info
     if (SubAction == TEXT("get_combat_stats"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
         TSharedPtr<FJsonObject> Info = McpHandlerUtils::CreateResultObject();
         Info->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
@@ -2552,6 +2419,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
             VariableList.Add(MakeShared<FJsonValueString>(Var.VarName.ToString()));
         }
         Info->SetArrayField(TEXT("variables"), VariableList);
+        AddVariableValueReadbackCombat(Info, Blueprint);
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetObjectField(TEXT("combatInfo"), Info);
@@ -2580,9 +2448,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
             return true;
         }
 
-        double Duration = GetNumberFieldCombat(Payload, TEXT("duration"), 5.0);
-        double DamagePerSecond = GetNumberFieldCombat(Payload, TEXT("damagePerSecond"), 10.0);
-        FString EffectType = GetStringFieldCombat(Payload, TEXT("effectType"), TEXT("DamageOverTime"));
+        double Duration = GetJsonNumberField(Payload, TEXT("duration"), 5.0);
+        double DamagePerSecond = GetJsonNumberField(Payload, TEXT("damagePerSecond"), 10.0);
+        FString EffectType = GetJsonStringField(Payload, TEXT("effectType"), TEXT("DamageOverTime"));
 
         AddBlueprintVariableCombat(Blueprint, TEXT("EffectDuration"), MakeFloatPinType());
         AddBlueprintVariableCombat(Blueprint, TEXT("DamagePerSecond"), MakeFloatPinType());
@@ -2612,28 +2480,20 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("duration"), Duration);
         Result->SetNumberField(TEXT("damagePerSecond"), DamagePerSecond);
         Result->SetStringField(TEXT("effectType"), EffectType);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Damage effect created."), Result);
+        SetVariablesAdded(Result, {TEXT("EffectDuration"), TEXT("DamagePerSecond"), TEXT("EffectType"), TEXT("bIsActive")});
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Damage effect blueprint created with scaffold variables; game code must implement the damage-over-time logic."), Result);
         return true;
     }
 
     // apply_damage - adds damage application variables to a blueprint
     if (SubAction == TEXT("apply_damage"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        double DamageAmount = GetNumberFieldCombat(Payload, TEXT("damageAmount"), 25.0);
-        FString DamageTypeName = GetStringFieldCombat(Payload, TEXT("damageType"), TEXT("Default"));
+        double DamageAmount = GetJsonNumberField(Payload, TEXT("damageAmount"), 25.0);
+        FString DamageTypeName = GetJsonStringField(Payload, TEXT("damageType"), TEXT("Default"));
 
         AddBlueprintVariableCombat(Blueprint, TEXT("AppliedDamageAmount"), MakeFloatPinType());
         AddBlueprintVariableCombat(Blueprint, TEXT("AppliedDamageType"), MakeStringPinType());
@@ -2658,28 +2518,20 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetNumberField(TEXT("damageAmount"), DamageAmount);
         Result->SetStringField(TEXT("damageType"), DamageTypeName);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Damage application configured."), Result);
+        SetVariablesAdded(Result, {TEXT("AppliedDamageAmount"), TEXT("AppliedDamageType")});
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Damage variables scaffolded; no damage was applied at runtime."), Result);
         return true;
     }
 
     // heal - adds healing variables to a blueprint
     if (SubAction == TEXT("heal"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        double HealAmount = GetNumberFieldCombat(Payload, TEXT("healAmount"), 25.0);
-        double MaxHealth = GetNumberFieldCombat(Payload, TEXT("maxHealth"), 100.0);
+        double HealAmount = GetJsonNumberField(Payload, TEXT("healAmount"), 25.0);
+        double MaxHealth = GetJsonNumberField(Payload, TEXT("maxHealth"), 100.0);
 
         AddBlueprintVariableCombat(Blueprint, TEXT("CurrentHealth"), MakeFloatPinType());
         AddBlueprintVariableCombat(Blueprint, TEXT("MaxHealth"), MakeFloatPinType());
@@ -2707,30 +2559,22 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetNumberField(TEXT("healAmount"), HealAmount);
         Result->SetNumberField(TEXT("maxHealth"), MaxHealth);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Healing configured."), Result);
+        SetVariablesAdded(Result, {TEXT("CurrentHealth"), TEXT("MaxHealth"), TEXT("HealAmount")});
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Healing variables scaffolded; no healing was applied at runtime."), Result);
         return true;
     }
 
     // create_shield - adds shield/barrier variables to a blueprint
     if (SubAction == TEXT("create_shield"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        double ShieldAmount = GetNumberFieldCombat(Payload, TEXT("shieldAmount"), 50.0);
-        double MaxShield = GetNumberFieldCombat(Payload, TEXT("maxShield"), 100.0);
-        double ShieldRegenRate = GetNumberFieldCombat(Payload, TEXT("shieldRegenRate"), 5.0);
-        double ShieldRegenDelay = GetNumberFieldCombat(Payload, TEXT("shieldRegenDelay"), 3.0);
+        double ShieldAmount = GetJsonNumberField(Payload, TEXT("shieldAmount"), 50.0);
+        double MaxShield = GetJsonNumberField(Payload, TEXT("maxShield"), 100.0);
+        double ShieldRegenRate = GetJsonNumberField(Payload, TEXT("shieldRegenRate"), 5.0);
+        double ShieldRegenDelay = GetJsonNumberField(Payload, TEXT("shieldRegenDelay"), 3.0);
 
         AddBlueprintVariableCombat(Blueprint, TEXT("CurrentShield"), MakeFloatPinType());
         AddBlueprintVariableCombat(Blueprint, TEXT("MaxShield"), MakeFloatPinType());
@@ -2765,28 +2609,30 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetNumberField(TEXT("shieldAmount"), ShieldAmount);
         Result->SetNumberField(TEXT("maxShield"), MaxShield);
         Result->SetNumberField(TEXT("shieldRegenRate"), ShieldRegenRate);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Shield system configured."), Result);
+        Result->SetNumberField(TEXT("shieldRegenDelay"), ShieldRegenDelay);
+        SetVariablesAdded(Result, {TEXT("CurrentShield"), TEXT("MaxShield"), TEXT("ShieldRegenRate"), TEXT("ShieldRegenDelay"), TEXT("bShieldActive")});
+
+        TSharedPtr<FJsonObject> AppliedDefaults = MakeShared<FJsonObject>();
+        AppliedDefaults->SetNumberField(TEXT("CurrentShield"), ShieldAmount);
+        AppliedDefaults->SetNumberField(TEXT("MaxShield"), MaxShield);
+        AppliedDefaults->SetNumberField(TEXT("ShieldRegenRate"), ShieldRegenRate);
+        AppliedDefaults->SetNumberField(TEXT("ShieldRegenDelay"), ShieldRegenDelay);
+        AppliedDefaults->SetBoolField(TEXT("bShieldActive"), true);
+        Result->SetObjectField(TEXT("appliedDefaults"), AppliedDefaults);
+
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Shield variables scaffolded (shieldAmount stored as CurrentShield); game code must implement absorption and regen."), Result);
         return true;
     }
 
     // modify_armor - adds armor/damage reduction variables to a blueprint
     if (SubAction == TEXT("modify_armor"))
     {
-        if (BlueprintPath.IsEmpty())
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
+        UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+        if (!Blueprint) return true;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-        if (!Blueprint)
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint not found."), TEXT("NOT_FOUND"));
-            return true;
-        }
-
-        double ArmorValue = GetNumberFieldCombat(Payload, TEXT("armorValue"), 50.0);
-        double DamageReduction = GetNumberFieldCombat(Payload, TEXT("damageReduction"), 0.25);
+        double ArmorValue = GetJsonNumberField(Payload, TEXT("armorValue"), 50.0);
+        double DamageReduction = GetJsonNumberField(Payload, TEXT("damageReduction"), 0.25);
 
         AddBlueprintVariableCombat(Blueprint, TEXT("ArmorValue"), MakeFloatPinType());
         AddBlueprintVariableCombat(Blueprint, TEXT("ArmorDamageReduction"), MakeFloatPinType());
@@ -2811,7 +2657,9 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
         Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         Result->SetNumberField(TEXT("armorValue"), ArmorValue);
         Result->SetNumberField(TEXT("damageReduction"), DamageReduction);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Armor configured."), Result);
+        SetVariablesAdded(Result, {TEXT("ArmorValue"), TEXT("ArmorDamageReduction")});
+        Result->SetBoolField(TEXT("scaffoldOnly"), true);
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Armor variables scaffolded; game code must apply the damage reduction."), Result);
         return true;
     }
 
@@ -2823,7 +2671,6 @@ bool UMcpAutomationBridgeSubsystem::HandleManageCombatAction(
 #endif
 }
 
-#undef GetStringFieldCombat
-#undef GetNumberFieldCombat
-#undef GetBoolFieldCombat
-
+#undef GetJsonStringField
+#undef GetJsonNumberField
+#undef GetJsonBoolField

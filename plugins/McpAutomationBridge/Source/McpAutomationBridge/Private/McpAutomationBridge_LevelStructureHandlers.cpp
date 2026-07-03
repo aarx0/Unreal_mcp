@@ -43,8 +43,8 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
-#include "McpBridgeWebSocket.h"
 #include "Misc/EngineVersionComparison.h"
+#include "Misc/App.h"
 
 #if WITH_EDITOR
 #include "Editor.h"
@@ -69,7 +69,6 @@
 #include "K2Node_Event.h"
 #include "K2Node_CallFunction.h"
 #include "AssetRegistry/AssetRegistryModule.h"
-#include "UObject/SavePackage.h"
 #include "WorldPartition/WorldPartition.h"
 #include "WorldPartition/DataLayer/DataLayerSubsystem.h"
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
@@ -94,6 +93,14 @@
 #include "WorldPartition/WorldPartitionRuntimeSpatialHash.h"
 #include "Engine/LevelStreamingVolume.h"
 #include "EditorAssetLibrary.h"
+// ScopedTransaction header location varies by UE version
+#if __has_include("ScopedTransaction.h")
+#include "ScopedTransaction.h"
+#elif __has_include("Misc/ScopedTransaction.h")
+#include "Misc/ScopedTransaction.h"
+#else
+#define MCP_NO_SCOPED_TRANSACTION 1
+#endif
 #endif
 
 DEFINE_LOG_CATEGORY_STATIC(LogMcpLevelStructureHandlers, Log, All);
@@ -167,7 +174,7 @@ static bool HandleCreateLevel(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -231,6 +238,7 @@ static bool HandleCreateLevel(
     bool bCreateWorldPartition = GetJsonBoolField(Payload, TEXT("bCreateWorldPartition"), false);
     bool bUseExternalActors = GetJsonBoolField(Payload, TEXT("bUseExternalActors"), false);
     bool bSave = GetJsonBoolField(Payload, TEXT("save"), true);
+    bool bLoadAfterCreate = GetJsonBoolField(Payload, TEXT("loadAfterCreate"), false);
 
     // CRITICAL: When creating a World Partition level, OFPA (External Actors) should be enabled
     // for data layer support. If bCreateWorldPartition is true but bUseExternalActors is not specified,
@@ -254,7 +262,7 @@ static bool HandleCreateLevel(
 
     // Build full path
     FString FullPath = LevelPath / LevelName;
-    if (!FullPath.StartsWith(TEXT("/Game/")))
+    if (!FullPath.StartsWith(TEXT("/")))
     {
         FullPath = TEXT("/Game/") + FullPath;
     }
@@ -277,6 +285,19 @@ static bool HandleCreateLevel(
             Result->SetStringField(TEXT("levelPath"), FullPath);
             Result->SetBoolField(TEXT("exists"), true);
             Result->SetBoolField(TEXT("alreadyExisted"), true);
+            if (bLoadAfterCreate) {
+                const bool bLoaded = McpSafeLoadMap(FullPath, true);
+                Result->SetBoolField(TEXT("loaded"), bLoaded);
+                if (GEditor && GEditor->GetEditorWorldContext().World()) {
+                    Result->SetStringField(TEXT("currentLevelPath"), GEditor->GetEditorWorldContext().World()->GetOutermost()->GetName());
+                }
+                if (!bLoaded) {
+                    Subsystem->SendAutomationResponse(Socket, RequestId, false,
+                        FString::Printf(TEXT("Level exists but could not be loaded: %s"), *FullPath),
+                        Result, TEXT("LOAD_FAILED"));
+                    return true;
+                }
+            }
             Subsystem->SendAutomationResponse(Socket, RequestId, true,
                 FString::Printf(TEXT("Level already exists: %s"), *FullPath),
                 Result, FString());
@@ -292,6 +313,19 @@ static bool HandleCreateLevel(
         Result->SetStringField(TEXT("levelPath"), FullPath);
         Result->SetBoolField(TEXT("exists"), true);
         Result->SetBoolField(TEXT("alreadyExisted"), true);
+        if (bLoadAfterCreate) {
+            const bool bLoaded = McpSafeLoadMap(FullPath, true);
+            Result->SetBoolField(TEXT("loaded"), bLoaded);
+            if (GEditor && GEditor->GetEditorWorldContext().World()) {
+                Result->SetStringField(TEXT("currentLevelPath"), GEditor->GetEditorWorldContext().World()->GetOutermost()->GetName());
+            }
+            if (!bLoaded) {
+                Subsystem->SendAutomationResponse(Socket, RequestId, false,
+                    FString::Printf(TEXT("Level exists but could not be loaded: %s"), *FullPath),
+                    Result, TEXT("LOAD_FAILED"));
+                return true;
+            }
+        }
         Subsystem->SendAutomationResponse(Socket, RequestId, true,
             FString::Printf(TEXT("Level already exists: %s"), *FullPath),
             Result, FString());
@@ -515,6 +549,23 @@ static bool HandleCreateLevel(
         UE_LOG(LogMcpLevelStructureHandlers, Log, TEXT("HandleCreateLevel: World cleaned up from memory: %s"), *FullPath);
     }
 
+    if (bLoadAfterCreate)
+    {
+        const bool bLoaded = McpSafeLoadMap(FullPath, true);
+        ResponseJson->SetBoolField(TEXT("loaded"), bLoaded);
+        if (GEditor && GEditor->GetEditorWorldContext().World())
+        {
+            ResponseJson->SetStringField(TEXT("currentLevelPath"), GEditor->GetEditorWorldContext().World()->GetOutermost()->GetName());
+        }
+        if (!bLoaded)
+        {
+            Subsystem->SendAutomationResponse(Socket, RequestId, false,
+                FString::Printf(TEXT("Level created but could not be loaded: %s"), *FullPath),
+                ResponseJson, TEXT("LOAD_FAILED"));
+            return true;
+        }
+    }
+
     FString Message = FString::Printf(TEXT("Created level: %s"), *FullPath);
     Subsystem->SendAutomationResponse(Socket, RequestId, true, Message, ResponseJson);
     return true;
@@ -524,7 +575,7 @@ static bool HandleCreateSublevel(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -684,24 +735,30 @@ static bool HandleCreateSublevel(
 
     // Create streaming level to add to parent world
     ULevelStreamingDynamic* StreamingLevel = NewObject<ULevelStreamingDynamic>(World, ULevelStreamingDynamic::StaticClass());
-    if (StreamingLevel)
+    if (!StreamingLevel)
     {
-        StreamingLevel->SetWorldAssetByPackageName(FName(*SublevelPackageName));
-        StreamingLevel->LevelTransform = FTransform::Identity;
-        StreamingLevel->SetShouldBeVisible(true);
-        StreamingLevel->SetShouldBeLoaded(true);
-        
-        // Add to world's streaming levels
-        World->AddStreamingLevel(StreamingLevel);
+        Subsystem->SendAutomationResponse(Socket, RequestId, false,
+            FString::Printf(TEXT("Sublevel asset created but failed to create streaming reference in parent world for: %s"), *SublevelName),
+            nullptr, TEXT("STREAMING_LEVEL_CREATION_FAILED"));
+        return true;
     }
+
+    StreamingLevel->SetWorldAssetByPackageName(FName(*SublevelPackageName));
+    StreamingLevel->LevelTransform = FTransform::Identity;
+    StreamingLevel->SetShouldBeVisible(true);
+    StreamingLevel->SetShouldBeLoaded(true);
+
+    // Add to world's streaming levels
+    World->AddStreamingLevel(StreamingLevel);
 
     // Mark parent world dirty
     World->MarkPackageDirty();
-    
+
     // Save parent world if requested (to persist streaming level reference)
-    if (bSave && StreamingLevel)
+    bool bParentSaveSucceeded = true;
+    if (bSave)
     {
-        McpSafeAssetSave(World);
+        bParentSaveSucceeded = McpSafeAssetSave(World);
     }
 
     // CRITICAL: Clean up the created sublevel world from memory to prevent "World Memory Leaks" crash
@@ -763,12 +820,21 @@ static bool HandleCreateSublevel(
     ResponseJson->SetStringField(TEXT("sublevelPath"), FullSublevelPath);
     ResponseJson->SetStringField(TEXT("parentLevel"), World->GetMapName());
     ResponseJson->SetBoolField(TEXT("saved"), bSave && bSaveSucceeded);
-    ResponseJson->SetBoolField(TEXT("streamingAdded"), StreamingLevel != nullptr);
+    ResponseJson->SetBoolField(TEXT("parentSaved"), bSave && bParentSaveSucceeded);
+    ResponseJson->SetBoolField(TEXT("streamingAdded"), true);
 
     if (bSave && !bSaveSucceeded)
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
             FString::Printf(TEXT("Sublevel created but save failed: %s"), *SublevelName),
+            ResponseJson, TEXT("SAVE_FAILED"));
+        return true;
+    }
+
+    if (bSave && !bParentSaveSucceeded)
+    {
+        Subsystem->SendAutomationResponse(Socket, RequestId, false,
+            FString::Printf(TEXT("Sublevel saved but parent world save failed; streaming reference not persisted: %s"), *SublevelName),
             ResponseJson, TEXT("SAVE_FAILED"));
         return true;
     }
@@ -782,7 +848,7 @@ static bool HandleConfigureLevelStreaming(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -899,7 +965,7 @@ static bool HandleSetStreamingDistance(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -1113,7 +1179,7 @@ static bool HandleConfigureLevelBounds(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -1198,7 +1264,7 @@ static bool HandleEnableWorldPartition(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -1246,7 +1312,7 @@ static bool HandleConfigureGridSize(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -1354,6 +1420,30 @@ static bool HandleConfigureGridSize(
 
         UStruct* PartitionStruct = StructProp->Struct;
 
+        // On UE 5.7 the RuntimePartitions descriptor no longer carries the grid fields
+        // (LoadingRange/GridSize moved to the MainLayer sub-object); without them the
+        // writes below silently no-op, so fail loudly instead of reporting a phantom grid.
+        {
+            FProperty* LRProbe = PartitionStruct->FindPropertyByName(TEXT("LoadingRange"));
+            FProperty* GSProbe = PartitionStruct->FindPropertyByName(TEXT("GridSize"));
+            if (!GSProbe) GSProbe = PartitionStruct->FindPropertyByName(TEXT("CellSize"));
+            const bool bHasGridFields =
+                (LRProbe && LRProbe->IsA<FFloatProperty>()) ||
+                (GSProbe && GSProbe->IsA<FIntProperty>());
+            if (!bHasGridFields)
+            {
+                Subsystem->SendAutomationResponse(Socket, RequestId, false,
+                    TEXT("RuntimeHashSet grid settings live on the MainLayer sub-object on this engine, not the RuntimePartitions descriptor; configuring HashSet grid size is not supported here (SpatialHash levels are)."),
+                    nullptr, TEXT("HASHSET_GRID_UNSUPPORTED"));
+                return true;
+            }
+        }
+
+#if !defined(MCP_NO_SCOPED_TRANSACTION)
+        const FScopedTransaction Transaction(FText::FromString(TEXT("Configure World Partition Grid Size")));
+#endif
+        HashSet->Modify();
+
         for (int32 i = 0; i < ArrayHelper.Num(); ++i)
         {
             void* PartitionPtr = ArrayHelper.GetRawPtr(i);
@@ -1399,38 +1489,54 @@ static bool HandleConfigureGridSize(
         {
             int32 NewIndex = ArrayHelper.AddValue();
             void* NewPartition = ArrayHelper.GetRawPtr(NewIndex);
-            if (NewPartition)
+            if (!NewPartition)
             {
-                // Initialize the new partition
-                FProperty* NameProp = PartitionStruct->FindPropertyByName(TEXT("Name"));
-                if (NameProp && NameProp->IsA<FNameProperty>())
-                {
-                    CastField<FNameProperty>(NameProp)->SetPropertyValue(NewPartition, TargetPartitionName);
-                }
-
-                FProperty* LoadingRangeProp = PartitionStruct->FindPropertyByName(TEXT("LoadingRange"));
-                if (LoadingRangeProp && LoadingRangeProp->IsA<FFloatProperty>())
-                {
-                    CastField<FFloatProperty>(LoadingRangeProp)->SetPropertyValue(NewPartition, LoadingRange);
-                }
-
-                FProperty* GridSizeProp = PartitionStruct->FindPropertyByName(TEXT("GridSize"));
-                if (!GridSizeProp)
-                {
-                    GridSizeProp = PartitionStruct->FindPropertyByName(TEXT("CellSize"));
-                }
-                if (GridSizeProp && GridSizeProp->IsA<FIntProperty>())
-                {
-                    CastField<FIntProperty>(GridSizeProp)->SetPropertyValue(NewPartition, GridCellSize);
-                }
-
-                bCreated = true;
-                bFound = true;
+                Subsystem->SendAutomationResponse(Socket, RequestId, false,
+                    FString::Printf(TEXT("Failed to allocate new partition '%s' in RuntimeHashSet"), *TargetPartitionName.ToString()),
+                    nullptr, TEXT("PARTITION_ALLOC_FAILED"));
+                return true;
             }
+
+            // Initialize the new partition
+            FProperty* NameProp = PartitionStruct->FindPropertyByName(TEXT("Name"));
+            if (NameProp && NameProp->IsA<FNameProperty>())
+            {
+                CastField<FNameProperty>(NameProp)->SetPropertyValue(NewPartition, TargetPartitionName);
+            }
+
+            FProperty* LoadingRangeProp = PartitionStruct->FindPropertyByName(TEXT("LoadingRange"));
+            if (LoadingRangeProp && LoadingRangeProp->IsA<FFloatProperty>())
+            {
+                CastField<FFloatProperty>(LoadingRangeProp)->SetPropertyValue(NewPartition, LoadingRange);
+            }
+
+            FProperty* GridSizeProp = PartitionStruct->FindPropertyByName(TEXT("GridSize"));
+            if (!GridSizeProp)
+            {
+                GridSizeProp = PartitionStruct->FindPropertyByName(TEXT("CellSize"));
+            }
+            if (GridSizeProp && GridSizeProp->IsA<FIntProperty>())
+            {
+                CastField<FIntProperty>(GridSizeProp)->SetPropertyValue(NewPartition, GridCellSize);
+            }
+
+            bCreated = true;
+            bFound = true;
         }
 
-        // Mark package dirty
+        // Neither matched an existing partition nor created one: report failure
+        // rather than claiming the grid was configured.
+        if (!bFound)
+        {
+            Subsystem->SendAutomationResponse(Socket, RequestId, false,
+                FString::Printf(TEXT("Partition '%s' not found in RuntimeHashSet (use createIfMissing=true to create it)"), *TargetPartitionName.ToString()),
+                nullptr, TEXT("PARTITION_NOT_FOUND"));
+            return true;
+        }
+
+        HashSet->PostEditChange();
         HashSet->MarkPackageDirty();
+        World->MarkPackageDirty();
 
         TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
         McpHandlerUtils::AddVerification(ResponseJson, World);
@@ -1480,6 +1586,11 @@ static bool HandleConfigureGridSize(
     int32 ModifiedIndex = -1;
     FName TargetGridName = GridName.IsEmpty() ? FName(NAME_None) : FName(*GridName);
 
+#if !defined(MCP_NO_SCOPED_TRANSACTION)
+    const FScopedTransaction Transaction(FText::FromString(TEXT("Configure World Partition Grid Size")));
+#endif
+    SpatialHash->Modify();
+
     for (int32 i = 0; i < ArrayHelper.Num(); ++i)
     {
         FSpatialHashRuntimeGrid* Grid = reinterpret_cast<FSpatialHashRuntimeGrid*>(ArrayHelper.GetRawPtr(i));
@@ -1506,23 +1617,28 @@ static bool HandleConfigureGridSize(
     {
         int32 NewIndex = ArrayHelper.AddValue();
         FSpatialHashRuntimeGrid* NewGrid = reinterpret_cast<FSpatialHashRuntimeGrid*>(ArrayHelper.GetRawPtr(NewIndex));
-        if (NewGrid)
+        if (!NewGrid)
         {
-            NewGrid->GridName = FName(*GridName);
-            NewGrid->CellSize = GridCellSize;
-            NewGrid->LoadingRange = LoadingRange;
-            NewGrid->bBlockOnSlowStreaming = bBlockOnSlowStreaming;
-            NewGrid->Priority = Priority;
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
-            NewGrid->Origin = FVector2D::ZeroVector;
-#endif
-            NewGrid->DebugColor = FLinearColor::MakeRandomColor();
-            NewGrid->bClientOnlyVisible = false;
-            NewGrid->HLODLayer = nullptr;
-
-            bCreated = true;
-            ModifiedIndex = NewIndex;
+            Subsystem->SendAutomationResponse(Socket, RequestId, false,
+                FString::Printf(TEXT("Failed to allocate new grid '%s' in RuntimeSpatialHash"), *GridName),
+                nullptr, TEXT("GRID_ALLOC_FAILED"));
+            return true;
         }
+
+        NewGrid->GridName = FName(*GridName);
+        NewGrid->CellSize = GridCellSize;
+        NewGrid->LoadingRange = LoadingRange;
+        NewGrid->bBlockOnSlowStreaming = bBlockOnSlowStreaming;
+        NewGrid->Priority = Priority;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
+        NewGrid->Origin = FVector2D::ZeroVector;
+#endif
+        NewGrid->DebugColor = FLinearColor::MakeRandomColor();
+        NewGrid->bClientOnlyVisible = false;
+        NewGrid->HLODLayer = nullptr;
+
+        bCreated = true;
+        ModifiedIndex = NewIndex;
     }
 
     if (!bFound && !bCreated)
@@ -1547,8 +1663,8 @@ static bool HandleConfigureGridSize(
         return true;
     }
 
-    // Mark the object as modified
-    SpatialHash->Modify();
+    // Propagate the reflected-array edits and dirty the owning packages.
+    SpatialHash->PostEditChange();
     SpatialHash->MarkPackageDirty();
     World->MarkPackageDirty();
 
@@ -1620,7 +1736,7 @@ static bool HandleCreateDataLayer(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
     using namespace LevelStructureHelpers;
@@ -1791,7 +1907,7 @@ static bool HandleAssignActorToDataLayer(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
     using namespace LevelStructureHelpers;
@@ -1985,7 +2101,7 @@ static bool HandleConfigureHlodLayer(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -2022,7 +2138,7 @@ static bool HandleConfigureHlodLayer(
 
     // Build full path
     FString FullPath = HlodLayerPath / HlodLayerName;
-    if (!FullPath.StartsWith(TEXT("/Game/")))
+    if (!FullPath.StartsWith(TEXT("/")))
     {
         FullPath = TEXT("/Game/") + FullPath;
     }
@@ -2045,37 +2161,60 @@ static bool HandleConfigureHlodLayer(
         return true;
     }
 
-    // Configure the HLOD layer
-    // UE 5.1-5.6: SetIsSpatiallyLoaded is available
-    // UE 5.7+: Deprecated - streaming grid properties are in partition settings
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1 && ENGINE_MINOR_VERSION < 7
-    NewHLODLayer->SetIsSpatiallyLoaded(bIsSpatiallyLoaded);
-    
-    // Set layer type
+    // Configure the layer type (SetLayerType is non-deprecated on all supported versions).
+    EHLODLayerType ResolvedLayerType;
     if (LayerType == TEXT("Instancing"))
     {
-        NewHLODLayer->SetLayerType(EHLODLayerType::Instancing);
+        ResolvedLayerType = EHLODLayerType::Instancing;
     }
     else if (LayerType == TEXT("MeshSimplify") || LayerType == TEXT("SimplifiedMesh"))
     {
-        NewHLODLayer->SetLayerType(EHLODLayerType::MeshSimplify);
+        ResolvedLayerType = EHLODLayerType::MeshSimplify;
     }
     else if (LayerType == TEXT("MeshApproximate") || LayerType == TEXT("ApproximatedMesh"))
     {
-        NewHLODLayer->SetLayerType(EHLODLayerType::MeshApproximate);
+        ResolvedLayerType = EHLODLayerType::MeshApproximate;
     }
     else // Default to MeshMerge
     {
-        NewHLODLayer->SetLayerType(EHLODLayerType::MeshMerge);
+        ResolvedLayerType = EHLODLayerType::MeshMerge;
     }
-#endif
+    NewHLODLayer->SetLayerType(ResolvedLayerType);
+
+    // Streaming grid settings (bIsSpatiallyLoaded / CellSize / LoadingRange).
+    // The dedicated setters are deprecated on UE 5.7+ (the runtime grid now derives from the
+    // owning partition's settings), but the editor-only properties still exist on the asset
+    // across all supported versions, so write them via reflection to actually persist the
+    // request without tripping deprecation. We do NOT claim to have written the partition's
+    // runtime grid.
+    bool bSpatialSettingsApplied = false;
+    {
+        UClass* HLODClass = NewHLODLayer->GetClass();
+        if (FBoolProperty* SpatialProp = CastField<FBoolProperty>(HLODClass->FindPropertyByName(TEXT("bIsSpatiallyLoaded"))))
+        {
+            SpatialProp->SetPropertyValue_InContainer(NewHLODLayer, bIsSpatiallyLoaded);
+            bSpatialSettingsApplied = true;
+        }
+        if (FIntProperty* CellSizeProp = CastField<FIntProperty>(HLODClass->FindPropertyByName(TEXT("CellSize"))))
+        {
+            CellSizeProp->SetPropertyValue_InContainer(NewHLODLayer, CellSize);
+            bSpatialSettingsApplied = true;
+        }
+        if (FDoubleProperty* LoadingRangeProp = CastField<FDoubleProperty>(HLODClass->FindPropertyByName(TEXT("LoadingRange"))))
+        {
+            LoadingRangeProp->SetPropertyValue_InContainer(NewHLODLayer, LoadingDistance);
+            bSpatialSettingsApplied = true;
+        }
+    }
+
+    NewHLODLayer->PostEditChange();
 
     // Mark package dirty and notify asset registry
     AssetPackage->MarkPackageDirty();
     FAssetRegistryModule::AssetCreated(NewHLODLayer);
 
     // Save the asset
-    McpSafeAssetSave(NewHLODLayer);
+    const bool bSaveSucceeded = McpSafeAssetSave(NewHLODLayer);
 
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
     ResponseJson->SetStringField(TEXT("hlodLayerName"), HlodLayerName);
@@ -2084,6 +2223,28 @@ static bool HandleConfigureHlodLayer(
     ResponseJson->SetNumberField(TEXT("cellSize"), CellSize);
     ResponseJson->SetNumberField(TEXT("loadingDistance"), LoadingDistance);
     ResponseJson->SetStringField(TEXT("layerType"), LayerType);
+    ResponseJson->SetBoolField(TEXT("spatialSettingsApplied"), bSpatialSettingsApplied);
+    ResponseJson->SetBoolField(TEXT("saved"), bSaveSucceeded);
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7
+    ResponseJson->SetStringField(TEXT("note"),
+        TEXT("UE 5.7: cellSize/loadingDistance are stored on the HLOD layer asset, but the runtime grid is now derived from the owning World Partition's settings. Configure the partition (configure_grid_size) to control runtime streaming."));
+#endif
+
+    if (!bSaveSucceeded)
+    {
+        Subsystem->SendAutomationResponse(Socket, RequestId, false,
+            FString::Printf(TEXT("HLOD layer '%s' created and configured but save failed"), *HlodLayerName),
+            ResponseJson, TEXT("SAVE_FAILED"));
+        return true;
+    }
+
+    if (!bSpatialSettingsApplied)
+    {
+        Subsystem->SendAutomationResponse(Socket, RequestId, false,
+            FString::Printf(TEXT("HLOD layer '%s' created but streaming grid properties could not be applied (properties not found on this engine version)"), *HlodLayerName),
+            ResponseJson, TEXT("HLOD_SETTINGS_UNSUPPORTED"));
+        return true;
+    }
 
     FString Message = FString::Printf(TEXT("Created HLOD layer '%s' at '%s'"),
         *HlodLayerName, *FullPath);
@@ -2095,7 +2256,7 @@ static bool HandleCreateMinimapVolume(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
     using namespace LevelStructureHelpers;
@@ -2187,7 +2348,7 @@ static bool HandleOpenLevelBlueprint(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -2230,14 +2391,25 @@ static bool HandleOpenLevelBlueprint(
         return true;
     }
 
-    // Open the blueprint editor
-    GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->OpenEditorForAsset(LevelBP);
+    bool bOpenedEditor = false;
+    const bool bCanOpenEditorUi = !FApp::IsUnattended() && !IsRunningCommandlet();
+    if (bCanOpenEditorUi)
+    {
+        if (UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
+        {
+            bOpenedEditor = AssetEditorSubsystem->OpenEditorForAsset(LevelBP);
+        }
+    }
 
     TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(ResponseJson, LevelBP);
     ResponseJson->SetStringField(TEXT("levelName"), World->GetMapName());
+    ResponseJson->SetBoolField(TEXT("openedEditor"), bOpenedEditor);
+    ResponseJson->SetBoolField(TEXT("headlessSafeMode"), !bCanOpenEditorUi);
 
-    FString Message = FString::Printf(TEXT("Opened Level Blueprint for: %s"), *World->GetMapName());
+    FString Message = bCanOpenEditorUi
+        ? FString::Printf(TEXT("Opened Level Blueprint for: %s"), *World->GetMapName())
+        : FString::Printf(TEXT("Verified Level Blueprint for: %s (headless editor UI skipped)"), *World->GetMapName());
     Subsystem->SendAutomationResponse(Socket, RequestId, true, Message, ResponseJson);
     return true;
 }
@@ -2246,7 +2418,7 @@ static bool HandleAddLevelBlueprintNode(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -2333,13 +2505,29 @@ static bool HandleAddLevelBlueprintNode(
         UK2Node* NewNode = NewObject<UK2Node>(EventGraph, NodeClassObj);
         if (NewNode)
         {
+            if (!NodeName.IsEmpty())
+            {
+                FString SafeNodeName = NodeName.TrimStartAndEnd();
+                SafeNodeName.ReplaceInline(TEXT(" "), TEXT("_"));
+                SafeNodeName.ReplaceInline(TEXT("/"), TEXT("_"));
+                SafeNodeName.ReplaceInline(TEXT("\\"), TEXT("_"));
+                SafeNodeName.ReplaceInline(TEXT(":"), TEXT("_"));
+                SafeNodeName.ReplaceInline(TEXT("."), TEXT("_"));
+                SafeNodeName.ReplaceInline(TEXT("'"), TEXT("_"));
+                SafeNodeName.ReplaceInline(TEXT("\""), TEXT("_"));
+                if (!SafeNodeName.IsEmpty())
+                {
+                    FName UniqueNodeName = MakeUniqueObjectName(EventGraph, NodeClassObj, FName(*SafeNodeName));
+                    NewNode->Rename(*UniqueNodeName.ToString(), EventGraph, REN_DontCreateRedirectors | REN_NonTransactional);
+                }
+            }
             NewNode->CreateNewGuid();
             NewNode->PostPlacedNewNode();
             NewNode->AllocateDefaultPins();
             NewNode->NodePosX = PosX;
             NewNode->NodePosY = PosY;
             EventGraph->AddNode(NewNode, true, false);
-            CreatedNodeName = NewNode->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
+            CreatedNodeName = NewNode->GetName();
         }
     }
 
@@ -2370,6 +2558,10 @@ static bool HandleAddLevelBlueprintNode(
     McpHandlerUtils::AddVerification(ResponseJson, LevelBP);
     ResponseJson->SetStringField(TEXT("nodeClass"), NodeClass);
     ResponseJson->SetStringField(TEXT("nodeName"), CreatedNodeName);
+    if (UEdGraphNode* CreatedGraphNode = FindObject<UEdGraphNode>(EventGraph, *CreatedNodeName))
+    {
+        ResponseJson->SetStringField(TEXT("nodeTitle"), CreatedGraphNode->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+    }
     ResponseJson->SetNumberField(TEXT("posX"), PosX);
     ResponseJson->SetNumberField(TEXT("posY"), PosY);
     ResponseJson->SetBoolField(TEXT("nodeCreated"), true);
@@ -2383,7 +2575,7 @@ static bool HandleConnectLevelBlueprintNodes(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -2424,18 +2616,21 @@ static bool HandleConnectLevelBlueprintNodes(
         return true;
     }
 
-    // Find source and target nodes
+    // Find source and target nodes by EXACT title or object name (substring matching
+    // silently grabs the wrong node and is a fail-loudly violation).
     UEdGraphNode* SourceNode = nullptr;
     UEdGraphNode* TargetNode = nullptr;
-    
+
     for (UEdGraphNode* Node : EventGraph->Nodes)
     {
-        FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
-        if (NodeTitle.Contains(SourceNodeName) || Node->GetName().Contains(SourceNodeName))
+        if (!Node) continue;
+        const FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
+        const FString NodeName = Node->GetName();
+        if (!SourceNode && (NodeTitle == SourceNodeName || NodeName == SourceNodeName))
         {
             SourceNode = Node;
         }
-        if (NodeTitle.Contains(TargetNodeName) || Node->GetName().Contains(TargetNodeName))
+        if (!TargetNode && (NodeTitle == TargetNodeName || NodeName == TargetNodeName))
         {
             TargetNode = Node;
         }
@@ -2444,18 +2639,18 @@ static bool HandleConnectLevelBlueprintNodes(
     if (!SourceNode || !TargetNode)
     {
         Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            FString::Printf(TEXT("Could not find nodes: source='%s' target='%s'"), 
-                *SourceNodeName, *TargetNodeName), nullptr);
+            FString::Printf(TEXT("Could not find nodes (exact match): source='%s' target='%s'"),
+                *SourceNodeName, *TargetNodeName), nullptr, TEXT("NODE_NOT_FOUND"));
         return true;
     }
 
-    // Find pins and connect
+    // Find pins by exact pin name or display name.
     UEdGraphPin* SourcePin = nullptr;
     UEdGraphPin* TargetPin = nullptr;
 
     for (UEdGraphPin* Pin : SourceNode->Pins)
     {
-        if (Pin->PinName.ToString() == SourcePinName || Pin->GetDisplayName().ToString() == SourcePinName)
+        if (Pin && (Pin->PinName.ToString() == SourcePinName || Pin->GetDisplayName().ToString() == SourcePinName))
         {
             SourcePin = Pin;
             break;
@@ -2464,18 +2659,44 @@ static bool HandleConnectLevelBlueprintNodes(
 
     for (UEdGraphPin* Pin : TargetNode->Pins)
     {
-        if (Pin->PinName.ToString() == TargetPinName || Pin->GetDisplayName().ToString() == TargetPinName)
+        if (Pin && (Pin->PinName.ToString() == TargetPinName || Pin->GetDisplayName().ToString() == TargetPinName))
         {
             TargetPin = Pin;
             break;
         }
     }
 
-    bool bConnected = false;
-    if (SourcePin && TargetPin)
+    if (!SourcePin || !TargetPin)
     {
+        Subsystem->SendAutomationResponse(Socket, RequestId, false,
+            FString::Printf(TEXT("Could not find pins: source pin '%s' on '%s' %s, target pin '%s' on '%s' %s"),
+                *SourcePinName, *SourceNodeName, SourcePin ? TEXT("found") : TEXT("NOT FOUND"),
+                *TargetPinName, *TargetNodeName, TargetPin ? TEXT("found") : TEXT("NOT FOUND")),
+            nullptr, TEXT("PIN_NOT_FOUND"));
+        return true;
+    }
+
+    bool bConnected = false;
+    {
+#if !defined(MCP_NO_SCOPED_TRANSACTION)
+        const FScopedTransaction Transaction(FText::FromString(TEXT("Connect Level Blueprint Pins")));
+#endif
+        LevelBP->Modify();
+        EventGraph->Modify();
+        SourceNode->Modify();
+        TargetNode->Modify();
+
         SourcePin->MakeLinkTo(TargetPin);
         bConnected = SourcePin->LinkedTo.Contains(TargetPin);
+    }
+
+    if (!bConnected)
+    {
+        Subsystem->SendAutomationResponse(Socket, RequestId, false,
+            FString::Printf(TEXT("Failed to link %s.%s -> %s.%s (pins incompatible or connection rejected)"),
+                *SourceNodeName, *SourcePinName, *TargetNodeName, *TargetPinName),
+            nullptr, TEXT("CONNECTION_FAILED"));
+        return true;
     }
 
     FBlueprintEditorUtils::MarkBlueprintAsModified(LevelBP);
@@ -2486,11 +2707,10 @@ static bool HandleConnectLevelBlueprintNodes(
     ResponseJson->SetStringField(TEXT("sourcePin"), SourcePinName);
     ResponseJson->SetStringField(TEXT("targetNode"), TargetNodeName);
     ResponseJson->SetStringField(TEXT("targetPin"), TargetPinName);
-    ResponseJson->SetBoolField(TEXT("connected"), bConnected);
+    ResponseJson->SetBoolField(TEXT("connected"), true);
 
-    FString Message = bConnected 
-        ? FString::Printf(TEXT("Connected %s.%s -> %s.%s"), *SourceNodeName, *SourcePinName, *TargetNodeName, *TargetPinName)
-        : TEXT("Nodes prepared for connection (manual pin connection may be required)");
+    FString Message = FString::Printf(TEXT("Connected %s.%s -> %s.%s"),
+        *SourceNodeName, *SourcePinName, *TargetNodeName, *TargetPinName);
     Subsystem->SendAutomationResponse(Socket, RequestId, true, Message, ResponseJson);
     return true;
 }
@@ -2503,7 +2723,7 @@ static bool HandleCreateLevelInstance(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -2598,7 +2818,7 @@ static bool HandleCreatePackedLevelActor(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -2680,7 +2900,7 @@ static bool HandleGetLevelStructureInfo(
     UMcpAutomationBridgeSubsystem* Subsystem,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
     using namespace LevelStructureHelpers;
 
@@ -2855,8 +3075,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageLevelStructureAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> Socket)
+    FMcpResponseHandle Socket)
 {
+    // Only handle manage_level_structure; decline anything else so the dispatcher
+    // keeps trying other handlers and reaches its UNKNOWN_ACTION fallback. Without
+    // this gate the handler claims any unrouted action that reaches it.
+    if (Action != TEXT("manage_level_structure"))
+    {
+        return false;
+    }
 #if WITH_EDITOR
     FString SubAction;
     if (Payload.IsValid())

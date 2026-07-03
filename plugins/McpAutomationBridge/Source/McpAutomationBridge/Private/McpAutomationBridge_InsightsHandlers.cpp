@@ -43,7 +43,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInsightsAction(
     const FString& RequestId, 
     const FString& Action, 
     const TSharedPtr<FJsonObject>& Payload, 
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Validate action
     if (Action != TEXT("manage_insights"))
@@ -59,8 +59,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInsightsAction(
         return true;
     }
 
-    // Extract subaction
-    const FString SubAction = GetJsonStringField(Payload, TEXT("subAction"));
+    // Extract subaction. Native MCP clients send "action"; TS bridge paths send
+    // "subAction".
+    FString SubAction = GetJsonStringField(Payload, TEXT("subAction"));
+    if (SubAction.IsEmpty())
+    {
+        SubAction = GetJsonStringField(Payload, TEXT("action"));
+    }
 
     // -------------------------------------------------------------------------
     // start_session: Start trace session with optional channels
@@ -69,7 +74,27 @@ bool UMcpAutomationBridgeSubsystem::HandleInsightsAction(
     {
         FString Channels;
         const bool bHasChannels = Payload->TryGetStringField(TEXT("channels"), Channels) 
-            && !Channels.IsEmpty();
+            && !Channels.TrimStartAndEnd().IsEmpty();
+
+        if (bHasChannels)
+        {
+            Channels.TrimStartAndEndInline();
+            bool bChannelsSafe = !McpContainsUnsafeCommandSeparator(Channels);
+            for (int32 Index = 0; bChannelsSafe && Index < Channels.Len(); ++Index)
+            {
+                const TCHAR Ch = Channels[Index];
+                bChannelsSafe = FChar::IsAlnum(Ch) || Ch == TEXT('_') ||
+                                Ch == TEXT('-') || Ch == TEXT(',') || Ch == TEXT(' ');
+            }
+
+            if (!bChannelsSafe)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    TEXT("Trace channels contain unsupported characters."),
+                    TEXT("INVALID_CHANNELS"));
+                return true;
+            }
+        }
 
         // Guard GEngine before Exec call
         if (!GEngine)
@@ -102,7 +127,9 @@ bool UMcpAutomationBridgeSubsystem::HandleInsightsAction(
 
         // Build response
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetStringField(TEXT("action"), TEXT("start_trace"));
+        Result->SetStringField(TEXT("action"), TEXT("manage_insights"));
+        Result->SetStringField(TEXT("subAction"), TEXT("start_session"));
+        Result->SetStringField(TEXT("traceAction"), TEXT("start_trace"));
         Result->SetStringField(TEXT("status"), TEXT("started"));
         if (bHasChannels)
         {

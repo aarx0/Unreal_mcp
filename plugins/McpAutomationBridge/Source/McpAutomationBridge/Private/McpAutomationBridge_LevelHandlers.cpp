@@ -18,7 +18,7 @@
 //   - unload_streaming_level       : Unload streaming level
 //
 // Section 3: Level Operations
-//   - get_current_level_name       : Get current level path
+//   - get_current_level            : Get current level path and editor world identity
 //   - get_all_levels               : List all levels in world
 //   - set_current_level            : Set active editing level
 //
@@ -54,11 +54,17 @@
 #include "LevelEditor.h"
 #include "RenderingThread.h"
 #include "GameFramework/WorldSettings.h"
+#include "GameFramework/GameModeBase.h"
+#include "GameMapsSettings.h"
 #include "Engine/LevelBounds.h"
 #include "LevelUtils.h"
 #include "EditorBuildUtils.h"
 #include "EditorAssetLibrary.h"
-#include "TickTaskManagerInterface.h"  // Required for proper tick system cleanup
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "HAL/FileManager.h"
+#include "Misc/App.h"
+#include "Misc/CommandLine.h"
+#include "Misc/PackageName.h"
 #include "WorldPartition/WorldPartition.h"  // Required for World Partition detection
 
 // ScopedTransaction header location varies by UE version
@@ -85,6 +91,779 @@
 #define MCP_HAS_LEVELEDITOR_SUBSYSTEM 0
 #endif
 
+namespace {
+bool IsSafeLevelConsoleToken(const FString& Value) {
+  const FString Trimmed = Value.TrimStartAndEnd();
+  return !Trimmed.IsEmpty() && !Trimmed.Contains(TEXT("\n")) &&
+         !Trimmed.Contains(TEXT("\r")) && !Trimmed.Contains(TEXT("&&")) &&
+         !Trimmed.Contains(TEXT("||")) && !Trimmed.Contains(TEXT(";")) &&
+         !Trimmed.Contains(TEXT("|")) && !Trimmed.Contains(TEXT("`")) &&
+         !Trimmed.Contains(TEXT(" ")) && !Trimmed.Contains(TEXT("\t"));
+}
+
+FString NormalizeLevelPackagePath(const FString& InPath) {
+  FString PackagePath = InPath;
+  int32 ObjectDelimiter = INDEX_NONE;
+  if (PackagePath.FindChar(TEXT('.'), ObjectDelimiter)) {
+    PackagePath = PackagePath.Left(ObjectDelimiter);
+  }
+  return PackagePath;
+}
+
+bool TryGetAbsoluteMapFilename(const FString& PackagePath, FString& OutFilename) {
+  FString RelativeFilename;
+  if (!FPackageName::TryConvertLongPackageNameToFilename(
+          PackagePath, RelativeFilename, FPackageName::GetMapPackageExtension())) {
+    return false;
+  }
+  OutFilename = FPaths::ConvertRelativePathToFull(RelativeFilename);
+  FPaths::NormalizeFilename(OutFilename);
+  return true;
+}
+
+bool IsGameLevelPackagePath(const FString& PackagePath) {
+  return PackagePath.StartsWith(TEXT("/Game/")) &&
+         !PackagePath.Contains(TEXT(".."));
+}
+
+bool IsUnderProjectContentDir(const FString& AbsolutePath) {
+  FString ProjectContentDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectContentDir());
+  FPaths::NormalizeDirectoryName(ProjectContentDir);
+  if (!ProjectContentDir.EndsWith(TEXT("/"))) {
+    ProjectContentDir += TEXT("/");
+  }
+
+  FString NormalizedPath = AbsolutePath;
+  FPaths::NormalizeFilename(NormalizedPath);
+  return NormalizedPath.StartsWith(ProjectContentDir, ESearchCase::IgnoreCase);
+}
+
+bool ValidateWritableGameMapPath(const FString& PackagePath,
+                                 const FString& AbsoluteMapFilename,
+                                 const TCHAR* Label,
+                                 FString& ErrorMessage,
+                                 FString& ErrorCode) {
+  if (!IsGameLevelPackagePath(PackagePath)) {
+    ErrorMessage = FString::Printf(
+        TEXT("%s level path must be under /Game: %s"), Label, *PackagePath);
+    ErrorCode = TEXT("SECURITY_VIOLATION");
+    return false;
+  }
+  if (!IsUnderProjectContentDir(AbsoluteMapFilename)) {
+    ErrorMessage = FString::Printf(
+        TEXT("%s level file must be inside the project Content directory: %s"),
+        Label, *PackagePath);
+    ErrorCode = TEXT("SECURITY_VIOLATION");
+    return false;
+  }
+  return true;
+}
+
+bool TryResolveWritableGameMapFilename(const FString& PackagePath,
+                                       FString& OutFilename,
+                                       FString& ErrorMessage,
+                                       FString& ErrorCode,
+                                       const TCHAR* Label) {
+  if (!TryGetAbsoluteMapFilename(PackagePath, OutFilename)) {
+    ErrorMessage = FString::Printf(
+        TEXT("Could not convert %s level to filename: %s"), Label, *PackagePath);
+    ErrorCode = TEXT("INVALID_LEVEL_PATH");
+    return false;
+  }
+  return ValidateWritableGameMapPath(PackagePath, OutFilename, Label,
+                                     ErrorMessage, ErrorCode);
+}
+
+void ScanLevelPackagePath(const FString& PackagePath, const FString& AbsoluteMapFilename) {
+  IAssetRegistry& AssetRegistry =
+      FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
+  if (!AbsoluteMapFilename.IsEmpty() && IFileManager::Get().FileExists(*AbsoluteMapFilename)) {
+    TArray<FString> FilesToScan;
+    FilesToScan.Add(AbsoluteMapFilename);
+    AssetRegistry.ScanFilesSynchronous(FilesToScan, true);
+  }
+  const FString PackageDir = FPaths::GetPath(PackagePath);
+  if (!PackageDir.IsEmpty()) {
+    TArray<FString> PathsToScan;
+    PathsToScan.Add(PackageDir);
+    AssetRegistry.ScanPathsSynchronous(PathsToScan, false);
+  }
+}
+
+bool IsCurrentEditorWorldPackage(const FString& PackagePath) {
+  if (!GEditor) {
+    return false;
+  }
+  UWorld* EditorWorld = GEditor->GetEditorWorldContext().World();
+  return EditorWorld && EditorWorld->GetOutermost() &&
+         EditorWorld->GetOutermost()->GetName() == PackagePath;
+}
+
+bool GetExternalPackageDirectory(const FString& PackagePath,
+                                 const FString& RootDirectoryName,
+                                 FString& OutDirectory) {
+  if (!IsGameLevelPackagePath(PackagePath)) {
+    return false;
+  }
+  const FString RelativePackagePath = PackagePath.RightChop(6);
+  if (RelativePackagePath.IsEmpty()) {
+    return false;
+  }
+  OutDirectory = FPaths::ConvertRelativePathToFull(
+      FPaths::ProjectContentDir() / RootDirectoryName / RelativePackagePath);
+  FPaths::NormalizeDirectoryName(OutDirectory);
+  return IsUnderProjectContentDir(OutDirectory);
+}
+
+struct FExternalPackageDirectoryCopyPlan {
+  FString SourceDirectory;
+  FString DestinationDirectory;
+  bool bSourceExists = false;
+  bool bDestinationExists = false;
+  bool bDeletedDestination = false;
+  bool bCopied = false;
+};
+
+bool BuildExternalPackageDirectoryCopyPlan(
+    const FString& SourcePackagePath,
+    const FString& DestinationPackagePath,
+    const FString& RootDirectoryName,
+    bool bOverwrite,
+    FExternalPackageDirectoryCopyPlan& Plan,
+    FString& ErrorMessage,
+    FString& ErrorCode) {
+  if (!GetExternalPackageDirectory(SourcePackagePath, RootDirectoryName,
+                                   Plan.SourceDirectory) ||
+      !GetExternalPackageDirectory(DestinationPackagePath, RootDirectoryName,
+                                   Plan.DestinationDirectory)) {
+    return true;
+  }
+
+  IFileManager& FileManager = IFileManager::Get();
+  Plan.bSourceExists = FileManager.DirectoryExists(*Plan.SourceDirectory);
+  Plan.bDestinationExists = FileManager.DirectoryExists(*Plan.DestinationDirectory);
+  if (Plan.SourceDirectory.Equals(Plan.DestinationDirectory,
+                                  ESearchCase::IgnoreCase)) {
+    ErrorMessage = FString::Printf(
+        TEXT("Source and destination external package directories are identical: %s"),
+        *Plan.SourceDirectory);
+    ErrorCode = TEXT("SAME_PATH");
+    return false;
+  }
+
+  if (Plan.bDestinationExists && !bOverwrite) {
+    ErrorMessage = FString::Printf(
+        TEXT("Destination external package directory already exists: %s"),
+        *Plan.DestinationDirectory);
+    ErrorCode = TEXT("DESTINATION_EXISTS");
+    return false;
+  }
+  return true;
+}
+
+bool CopyExternalPackageDirectory(FExternalPackageDirectoryCopyPlan& Plan,
+                                  FString& ErrorMessage,
+                                  FString& ErrorCode) {
+  IFileManager& FileManager = IFileManager::Get();
+  if (!Plan.bSourceExists) {
+    if (Plan.bDestinationExists) {
+      Plan.bDeletedDestination = FileManager.DeleteDirectory(
+          *Plan.DestinationDirectory, false, true);
+      if (!Plan.bDeletedDestination) {
+        ErrorMessage = FString::Printf(
+            TEXT("Failed to remove stale destination external package directory: %s"),
+            *Plan.DestinationDirectory);
+        ErrorCode = TEXT("DESTINATION_DELETE_FAILED");
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (Plan.bDestinationExists) {
+    Plan.bDeletedDestination = FileManager.DeleteDirectory(
+        *Plan.DestinationDirectory, false, true);
+    if (!Plan.bDeletedDestination) {
+      ErrorMessage = FString::Printf(
+          TEXT("Failed to overwrite destination external package directory: %s"),
+          *Plan.DestinationDirectory);
+      ErrorCode = TEXT("DESTINATION_DELETE_FAILED");
+      return false;
+    }
+  }
+
+  FileManager.MakeDirectory(*FPaths::GetPath(Plan.DestinationDirectory), true);
+  IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+  Plan.bCopied = PlatformFile.CopyDirectoryTree(
+      *Plan.DestinationDirectory, *Plan.SourceDirectory, false);
+  if (!Plan.bCopied) {
+    ErrorMessage = FString::Printf(
+        TEXT("Failed to copy external package directory from %s to %s"),
+        *Plan.SourceDirectory, *Plan.DestinationDirectory);
+    ErrorCode = TEXT("COPY_FAILED");
+    return false;
+  }
+  return true;
+}
+
+bool DeleteExternalPackageDirectory(const FString& PackagePath,
+                                    const FString& RootDirectoryName,
+                                    bool& bSourceExists,
+                                    bool& bDeleted,
+                                    FString& ErrorMessage,
+                                    FString& ErrorCode) {
+  FString Directory;
+  if (!GetExternalPackageDirectory(PackagePath, RootDirectoryName, Directory)) {
+    bSourceExists = false;
+    bDeleted = false;
+    return true;
+  }
+
+  IFileManager& FileManager = IFileManager::Get();
+  bSourceExists = FileManager.DirectoryExists(*Directory);
+  if (!bSourceExists) {
+    bDeleted = false;
+    return true;
+  }
+
+  bDeleted = FileManager.DeleteDirectory(*Directory, false, true);
+  if (!bDeleted) {
+    ErrorMessage = FString::Printf(
+        TEXT("Failed to delete source external package directory: %s"),
+        *Directory);
+    ErrorCode = TEXT("SOURCE_EXTERNAL_DELETE_FAILED");
+    return false;
+  }
+  return true;
+}
+
+
+bool BackupFileForOverwrite(const FString& Filename,
+                            const TCHAR* Label,
+                            bool& bExisted,
+                            FString& BackupFilename,
+                            FString& ErrorMessage,
+                            FString& ErrorCode) {
+  IFileManager& FileManager = IFileManager::Get();
+  bExisted = FileManager.FileExists(*Filename);
+  BackupFilename.Reset();
+  if (!bExisted) {
+    return true;
+  }
+
+  BackupFilename = FString::Printf(TEXT("%s.mcp_backup_%s"), *Filename,
+                                   *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+  IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+  if (!PlatformFile.CopyFile(*BackupFilename, *Filename)) {
+    ErrorMessage = FString::Printf(TEXT("Failed to back up %s before overwrite: %s"),
+                                   Label, *Filename);
+    ErrorCode = TEXT("DESTINATION_BACKUP_FAILED");
+    BackupFilename.Reset();
+    return false;
+  }
+  if (!FileManager.Delete(*Filename, false, true, true)) {
+    FileManager.Delete(*BackupFilename, false, true, true);
+    ErrorMessage = FString::Printf(TEXT("Failed to prepare %s for overwrite: %s"),
+                                   Label, *Filename);
+    ErrorCode = TEXT("DESTINATION_DELETE_FAILED");
+    BackupFilename.Reset();
+    return false;
+  }
+  return true;
+}
+
+bool RestoreFileBackup(const FString& Filename, const FString& BackupFilename) {
+  if (BackupFilename.IsEmpty() ||
+      !IFileManager::Get().FileExists(*BackupFilename)) {
+    return true;
+  }
+  IFileManager::Get().Delete(*Filename, false, true, true);
+  IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+  const bool bRestored = PlatformFile.CopyFile(*Filename, *BackupFilename);
+  if (bRestored) {
+    IFileManager::Get().Delete(*BackupFilename, false, true, true);
+  }
+  return bRestored;
+}
+
+void DeleteFileBackup(const FString& BackupFilename) {
+  if (!BackupFilename.IsEmpty()) {
+    IFileManager::Get().Delete(*BackupFilename, false, true, true);
+  }
+}
+
+bool BackupDirectoryForOverwrite(const FString& Directory,
+                                 const TCHAR* Label,
+                                 bool& bExisted,
+                                 FString& BackupDirectory,
+                                 FString& ErrorMessage,
+                                 FString& ErrorCode) {
+  IFileManager& FileManager = IFileManager::Get();
+  bExisted = FileManager.DirectoryExists(*Directory);
+  BackupDirectory.Reset();
+  if (!bExisted) {
+    return true;
+  }
+
+  BackupDirectory = FString::Printf(TEXT("%s_mcp_backup_%s"), *Directory,
+                                    *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+  FileManager.MakeDirectory(*FPaths::GetPath(BackupDirectory), true);
+  IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+  if (!PlatformFile.CopyDirectoryTree(*BackupDirectory, *Directory, false)) {
+    ErrorMessage = FString::Printf(TEXT("Failed to back up %s before overwrite: %s"),
+                                   Label, *Directory);
+    ErrorCode = TEXT("DESTINATION_BACKUP_FAILED");
+    BackupDirectory.Reset();
+    return false;
+  }
+  if (!FileManager.DeleteDirectory(*Directory, false, true)) {
+    FileManager.DeleteDirectory(*BackupDirectory, false, true);
+    ErrorMessage = FString::Printf(TEXT("Failed to prepare %s for overwrite: %s"),
+                                   Label, *Directory);
+    ErrorCode = TEXT("DESTINATION_DELETE_FAILED");
+    BackupDirectory.Reset();
+    return false;
+  }
+  return true;
+}
+
+bool RestoreDirectoryBackup(const FString& Directory, const FString& BackupDirectory) {
+  if (BackupDirectory.IsEmpty() ||
+      !IFileManager::Get().DirectoryExists(*BackupDirectory)) {
+    return true;
+  }
+  IFileManager::Get().DeleteDirectory(*Directory, false, true);
+  IFileManager::Get().MakeDirectory(*FPaths::GetPath(Directory), true);
+  IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+  const bool bRestored = PlatformFile.CopyDirectoryTree(*Directory, *BackupDirectory, false);
+  if (bRestored) {
+    IFileManager::Get().DeleteDirectory(*BackupDirectory, false, true);
+  }
+  return bRestored;
+}
+
+void DeleteDirectoryBackup(const FString& BackupDirectory) {
+  if (!BackupDirectory.IsEmpty()) {
+    IFileManager::Get().DeleteDirectory(*BackupDirectory, false, true);
+  }
+}
+
+bool IsBlockingDirtyPackageForLevelLoad(UPackage* Package) {
+  if (!Package || Package->HasAnyFlags(RF_Transient)) {
+    return false;
+  }
+
+  const FString PackagePath = Package->GetPathName();
+  return !PackagePath.StartsWith(TEXT("/Temp/")) &&
+         !PackagePath.StartsWith(TEXT("/Transient/")) &&
+         !PackagePath.StartsWith(TEXT("/Engine/Transient"));
+}
+
+void CountBlockingDirtyPackages(int32& OutWorldPackages,
+                                int32& OutContentPackages) {
+  OutWorldPackages = 0;
+  OutContentPackages = 0;
+
+  TArray<UPackage*> DirtyWorldPackages;
+  TArray<UPackage*> DirtyContentPackages;
+  FEditorFileUtils::GetDirtyWorldPackages(DirtyWorldPackages);
+  FEditorFileUtils::GetDirtyContentPackages(DirtyContentPackages);
+
+  TSet<UPackage*> SeenPackages;
+  for (UPackage* Package : DirtyWorldPackages) {
+    if (IsBlockingDirtyPackageForLevelLoad(Package) && !SeenPackages.Contains(Package)) {
+      SeenPackages.Add(Package);
+      OutWorldPackages++;
+    }
+  }
+  for (UPackage* Package : DirtyContentPackages) {
+    if (IsBlockingDirtyPackageForLevelLoad(Package) && !SeenPackages.Contains(Package)) {
+      SeenPackages.Add(Package);
+      OutContentPackages++;
+    }
+  }
+}
+
+bool SaveBlockingDirtyPackagesForLevelLoad(int32& OutInitialWorldPackages,
+                                           int32& OutInitialContentPackages,
+                                           int32& OutRemainingWorldPackages,
+                                           int32& OutRemainingContentPackages,
+                                           int32& OutFailedPackages) {
+  OutFailedPackages = 0;
+  CountBlockingDirtyPackages(OutInitialWorldPackages, OutInitialContentPackages);
+  if (OutInitialWorldPackages + OutInitialContentPackages == 0) {
+    OutRemainingWorldPackages = 0;
+    OutRemainingContentPackages = 0;
+    return true;
+  }
+
+  TArray<UPackage*> DirtyWorldPackages;
+  TArray<UPackage*> DirtyContentPackages;
+  FEditorFileUtils::GetDirtyWorldPackages(DirtyWorldPackages);
+  FEditorFileUtils::GetDirtyContentPackages(DirtyContentPackages);
+
+  TSet<UPackage*> ProcessedPackages;
+  auto SavePackage = [&ProcessedPackages, &OutFailedPackages](UPackage* Package) {
+    if (!IsBlockingDirtyPackageForLevelLoad(Package) || ProcessedPackages.Contains(Package)) {
+      return;
+    }
+
+    ProcessedPackages.Add(Package);
+    const FString PackagePath = Package->GetName();
+    UWorld* PackageWorld = UWorld::FindWorldInPackage(Package);
+    const bool bSaved = PackageWorld && PackageWorld->PersistentLevel
+        ? McpSafeLevelSave(PackageWorld->PersistentLevel, PackagePath)
+        : McpSafeAssetSave(Package);
+    if (!bSaved) {
+      OutFailedPackages++;
+    }
+  };
+
+  for (UPackage* Package : DirtyWorldPackages) {
+    SavePackage(Package);
+  }
+  for (UPackage* Package : DirtyContentPackages) {
+    SavePackage(Package);
+  }
+
+  FlushRenderingCommands();
+  CountBlockingDirtyPackages(OutRemainingWorldPackages, OutRemainingContentPackages);
+  return OutFailedPackages == 0 && OutRemainingWorldPackages + OutRemainingContentPackages == 0;
+}
+
+bool CopyLevelMapPackageFile(const FString& SourcePackagePath,
+                             const FString& DestinationPackagePath,
+                             bool bOverwrite,
+                             TSharedPtr<FJsonObject>& Result,
+                             FString& ErrorMessage,
+                             FString& ErrorCode) {
+  FString SourceFilename;
+  FString DestinationFilename;
+  if (!TryGetAbsoluteMapFilename(SourcePackagePath, SourceFilename)) {
+    ErrorMessage = FString::Printf(TEXT("Could not convert source level to filename: %s"), *SourcePackagePath);
+    ErrorCode = TEXT("INVALID_SOURCE_PATH");
+    return false;
+  }
+  if (!TryGetAbsoluteMapFilename(DestinationPackagePath, DestinationFilename)) {
+    ErrorMessage = FString::Printf(TEXT("Could not convert destination level to filename: %s"), *DestinationPackagePath);
+    ErrorCode = TEXT("INVALID_DESTINATION_PATH");
+    return false;
+  }
+
+  if (!ValidateWritableGameMapPath(SourcePackagePath, SourceFilename,
+                                   TEXT("Source"), ErrorMessage, ErrorCode) ||
+      !ValidateWritableGameMapPath(DestinationPackagePath, DestinationFilename,
+                                   TEXT("Destination"), ErrorMessage, ErrorCode)) {
+    return false;
+  }
+  if (SourceFilename.Equals(DestinationFilename, ESearchCase::IgnoreCase)) {
+    ErrorMessage = FString::Printf(
+        TEXT("Source and destination levels are identical: %s"), *SourcePackagePath);
+    ErrorCode = TEXT("SAME_PATH");
+    return false;
+  }
+
+  IFileManager& FileManager = IFileManager::Get();
+  if (!FileManager.FileExists(*SourceFilename)) {
+    ErrorMessage = FString::Printf(TEXT("Source level file not found: %s"), *SourcePackagePath);
+    ErrorCode = TEXT("SOURCE_NOT_FOUND");
+    return false;
+  }
+
+  const FString SourceBuiltDataPackagePath = SourcePackagePath + TEXT("_BuiltData");
+  const FString DestinationBuiltDataPackagePath = DestinationPackagePath + TEXT("_BuiltData");
+  FString SourceBuiltDataFilename;
+  FString DestinationBuiltDataFilename;
+  bool bSourceBuiltDataExists = false;
+  bool bDestinationBuiltDataExists = false;
+  bool bDeletedDestinationBuiltData = false;
+  if (FPackageName::TryConvertLongPackageNameToFilename(
+          SourceBuiltDataPackagePath, SourceBuiltDataFilename, FPackageName::GetAssetPackageExtension()) &&
+      FPackageName::TryConvertLongPackageNameToFilename(
+          DestinationBuiltDataPackagePath, DestinationBuiltDataFilename, FPackageName::GetAssetPackageExtension())) {
+    SourceBuiltDataFilename = FPaths::ConvertRelativePathToFull(SourceBuiltDataFilename);
+    DestinationBuiltDataFilename = FPaths::ConvertRelativePathToFull(DestinationBuiltDataFilename);
+    FPaths::NormalizeFilename(SourceBuiltDataFilename);
+    FPaths::NormalizeFilename(DestinationBuiltDataFilename);
+    bSourceBuiltDataExists = FileManager.FileExists(*SourceBuiltDataFilename);
+    bDestinationBuiltDataExists = FileManager.FileExists(*DestinationBuiltDataFilename);
+    if (bSourceBuiltDataExists &&
+        SourceBuiltDataFilename.Equals(DestinationBuiltDataFilename,
+                                       ESearchCase::IgnoreCase)) {
+      ErrorMessage = FString::Printf(
+          TEXT("Source and destination built data are identical: %s"),
+          *SourceBuiltDataPackagePath);
+      ErrorCode = TEXT("SAME_PATH");
+      return false;
+    }
+    if (bDestinationBuiltDataExists && !bOverwrite) {
+      ErrorMessage = FString::Printf(
+          TEXT("Destination built data already exists: %s"),
+          *DestinationBuiltDataPackagePath);
+      ErrorCode = TEXT("DESTINATION_EXISTS");
+      return false;
+    }
+  }
+
+  FExternalPackageDirectoryCopyPlan ExternalActorsPlan;
+  FExternalPackageDirectoryCopyPlan ExternalObjectsPlan;
+  if (!BuildExternalPackageDirectoryCopyPlan(
+          SourcePackagePath, DestinationPackagePath, TEXT("__ExternalActors__"),
+          bOverwrite, ExternalActorsPlan, ErrorMessage, ErrorCode) ||
+      !BuildExternalPackageDirectoryCopyPlan(
+          SourcePackagePath, DestinationPackagePath, TEXT("__ExternalObjects__"),
+          bOverwrite, ExternalObjectsPlan, ErrorMessage, ErrorCode)) {
+    return false;
+  }
+
+  const bool bDestinationMapExists = FileManager.FileExists(*DestinationFilename);
+  bool bDeletedDestinationMap = false;
+  if (bDestinationMapExists && !bOverwrite) {
+    ErrorMessage = FString::Printf(TEXT("Destination level already exists: %s"), *DestinationPackagePath);
+    ErrorCode = TEXT("DESTINATION_EXISTS");
+    return false;
+  }
+  if (bOverwrite && FindPackage(nullptr, *DestinationPackagePath) != nullptr) {
+    ErrorMessage = FString::Printf(
+        TEXT("Destination level package is loaded and cannot be overwritten: %s"),
+        *DestinationPackagePath);
+    ErrorCode = TEXT("DESTINATION_LOADED");
+    return false;
+  }
+
+  FString DestinationMapBackup;
+  FString DestinationBuiltDataBackup;
+  FString DestinationExternalActorsBackup;
+  FString DestinationExternalObjectsBackup;
+  auto AppendRollbackFailure = [](FString& RollbackError, const FString& Detail) {
+    if (!RollbackError.IsEmpty()) {
+      RollbackError += TEXT("; ");
+    }
+    RollbackError += Detail;
+  };
+  auto RestoreDestinationBackups = [&](FString& RollbackError) {
+    bool bRollbackSucceeded = true;
+    if (!RestoreFileBackup(DestinationFilename, DestinationMapBackup)) {
+      bRollbackSucceeded = false;
+      AppendRollbackFailure(RollbackError,
+                            FString::Printf(TEXT("failed to restore destination level backup: %s"),
+                                            *DestinationMapBackup));
+    }
+    if (!RestoreFileBackup(DestinationBuiltDataFilename, DestinationBuiltDataBackup)) {
+      bRollbackSucceeded = false;
+      AppendRollbackFailure(RollbackError,
+                            FString::Printf(TEXT("failed to restore destination built data backup: %s"),
+                                            *DestinationBuiltDataBackup));
+    }
+    if (!RestoreDirectoryBackup(ExternalActorsPlan.DestinationDirectory, DestinationExternalActorsBackup)) {
+      bRollbackSucceeded = false;
+      AppendRollbackFailure(RollbackError,
+                            FString::Printf(TEXT("failed to restore destination external actors backup: %s"),
+                                            *DestinationExternalActorsBackup));
+    }
+    if (!RestoreDirectoryBackup(ExternalObjectsPlan.DestinationDirectory, DestinationExternalObjectsBackup)) {
+      bRollbackSucceeded = false;
+      AppendRollbackFailure(RollbackError,
+                            FString::Printf(TEXT("failed to restore destination external objects backup: %s"),
+                                            *DestinationExternalObjectsBackup));
+    }
+    return bRollbackSucceeded;
+  };
+  auto RecordRollbackResult = [&](bool bRollbackSucceeded, const FString& RollbackError) {
+    if (!Result.IsValid()) {
+      Result = McpHandlerUtils::CreateResultObject();
+    }
+    Result->SetBoolField(TEXT("rollbackSucceeded"), bRollbackSucceeded);
+    if (!RollbackError.IsEmpty()) {
+      Result->SetStringField(TEXT("rollbackError"), RollbackError);
+    }
+  };
+  auto RollbackCopiedDestinationArtifacts = [&](FString& RollbackError) {
+    if (DestinationMapBackup.IsEmpty()) {
+      if (!DestinationFilename.IsEmpty()) {
+        FileManager.Delete(*DestinationFilename, false, true, true);
+      }
+    }
+    if (DestinationBuiltDataBackup.IsEmpty()) {
+      if (!DestinationBuiltDataFilename.IsEmpty()) {
+        FileManager.Delete(*DestinationBuiltDataFilename, false, true, true);
+      }
+    }
+    if (DestinationExternalActorsBackup.IsEmpty()) {
+      if (!ExternalActorsPlan.DestinationDirectory.IsEmpty()) {
+        FileManager.DeleteDirectory(*ExternalActorsPlan.DestinationDirectory, false, true);
+      }
+    }
+    if (DestinationExternalObjectsBackup.IsEmpty()) {
+      if (!ExternalObjectsPlan.DestinationDirectory.IsEmpty()) {
+        FileManager.DeleteDirectory(*ExternalObjectsPlan.DestinationDirectory, false, true);
+      }
+    }
+    const bool bRollbackSucceeded = RestoreDestinationBackups(RollbackError);
+    RecordRollbackResult(bRollbackSucceeded, RollbackError);
+    return bRollbackSucceeded;
+  };
+  auto DeleteDestinationBackups = [&]() {
+    DeleteFileBackup(DestinationMapBackup);
+    DeleteFileBackup(DestinationBuiltDataBackup);
+    DeleteDirectoryBackup(DestinationExternalActorsBackup);
+    DeleteDirectoryBackup(DestinationExternalObjectsBackup);
+  };
+
+  if (!BackupFileForOverwrite(DestinationFilename, TEXT("destination level"),
+                              bDeletedDestinationMap, DestinationMapBackup,
+                              ErrorMessage, ErrorCode) ||
+      (!DestinationBuiltDataFilename.IsEmpty() && !BackupFileForOverwrite(
+                                  DestinationBuiltDataFilename,
+                                  TEXT("destination built data"),
+                                  bDeletedDestinationBuiltData,
+                                  DestinationBuiltDataBackup,
+                                  ErrorMessage, ErrorCode)) ||
+      !BackupDirectoryForOverwrite(ExternalActorsPlan.DestinationDirectory,
+                                   TEXT("destination external actors"),
+                                   ExternalActorsPlan.bDeletedDestination,
+                                   DestinationExternalActorsBackup,
+                                   ErrorMessage, ErrorCode) ||
+      !BackupDirectoryForOverwrite(ExternalObjectsPlan.DestinationDirectory,
+                                   TEXT("destination external objects"),
+                                   ExternalObjectsPlan.bDeletedDestination,
+                                   DestinationExternalObjectsBackup,
+                                   ErrorMessage, ErrorCode)) {
+    FString RollbackError;
+    const bool bRollbackSucceeded = RestoreDestinationBackups(RollbackError);
+    RecordRollbackResult(bRollbackSucceeded, RollbackError);
+    if (!bRollbackSucceeded) {
+      ErrorMessage += FString::Printf(TEXT(" Rollback failed: %s"), *RollbackError);
+      ErrorCode = TEXT("ROLLBACK_FAILED");
+    }
+    return false;
+  }
+
+  const FString DestinationDir = FPaths::GetPath(DestinationFilename);
+  if (!DestinationDir.IsEmpty()) {
+    FileManager.MakeDirectory(*DestinationDir, true);
+  }
+
+  IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+  const bool bCopiedMap = PlatformFile.CopyFile(*DestinationFilename, *SourceFilename);
+  if (!bCopiedMap) {
+    FString RollbackError;
+    const bool bRollbackSucceeded = RollbackCopiedDestinationArtifacts(RollbackError);
+    ErrorMessage = FString::Printf(TEXT("Failed to copy level file from %s to %s"),
+                                   *SourcePackagePath, *DestinationPackagePath);
+    if (!bRollbackSucceeded) {
+      ErrorMessage += FString::Printf(TEXT(" Rollback failed: %s"), *RollbackError);
+    }
+    ErrorCode = bRollbackSucceeded ? TEXT("COPY_FAILED") : TEXT("ROLLBACK_FAILED");
+    return false;
+  }
+
+  bool bCopiedBuiltData = false;
+  if (bSourceBuiltDataExists) {
+    FileManager.MakeDirectory(*FPaths::GetPath(DestinationBuiltDataFilename), true);
+    bCopiedBuiltData = PlatformFile.CopyFile(*DestinationBuiltDataFilename, *SourceBuiltDataFilename);
+    if (!bCopiedBuiltData) {
+      FString RollbackError;
+      const bool bRollbackSucceeded = RollbackCopiedDestinationArtifacts(RollbackError);
+      ErrorMessage = FString::Printf(
+          TEXT("Failed to copy built data from %s to %s"),
+          *SourceBuiltDataPackagePath, *DestinationBuiltDataPackagePath);
+      if (!bRollbackSucceeded) {
+        ErrorMessage += FString::Printf(TEXT(" Rollback failed: %s"), *RollbackError);
+      }
+      ErrorCode = bRollbackSucceeded ? TEXT("COPY_FAILED") : TEXT("ROLLBACK_FAILED");
+      return false;
+    }
+  }
+
+  bool bCopiedExternalActors = false;
+  if (ExternalActorsPlan.bSourceExists) {
+    FileManager.MakeDirectory(*FPaths::GetPath(ExternalActorsPlan.DestinationDirectory), true);
+    bCopiedExternalActors = PlatformFile.CopyDirectoryTree(
+        *ExternalActorsPlan.DestinationDirectory,
+        *ExternalActorsPlan.SourceDirectory, false);
+    if (!bCopiedExternalActors) {
+      FString RollbackError;
+      const bool bRollbackSucceeded = RollbackCopiedDestinationArtifacts(RollbackError);
+      ErrorMessage = FString::Printf(
+          TEXT("Failed to copy external actors from %s to %s"),
+          *ExternalActorsPlan.SourceDirectory,
+          *ExternalActorsPlan.DestinationDirectory);
+      if (!bRollbackSucceeded) {
+        ErrorMessage += FString::Printf(TEXT(" Rollback failed: %s"), *RollbackError);
+      }
+      ErrorCode = bRollbackSucceeded ? TEXT("COPY_FAILED") : TEXT("ROLLBACK_FAILED");
+      return false;
+    }
+  }
+  ExternalActorsPlan.bCopied = bCopiedExternalActors;
+
+  bool bCopiedExternalObjects = false;
+  if (ExternalObjectsPlan.bSourceExists) {
+    FileManager.MakeDirectory(*FPaths::GetPath(ExternalObjectsPlan.DestinationDirectory), true);
+    bCopiedExternalObjects = PlatformFile.CopyDirectoryTree(
+        *ExternalObjectsPlan.DestinationDirectory,
+        *ExternalObjectsPlan.SourceDirectory, false);
+    if (!bCopiedExternalObjects) {
+      FString RollbackError;
+      const bool bRollbackSucceeded = RollbackCopiedDestinationArtifacts(RollbackError);
+      ErrorMessage = FString::Printf(
+          TEXT("Failed to copy external objects from %s to %s"),
+          *ExternalObjectsPlan.SourceDirectory,
+          *ExternalObjectsPlan.DestinationDirectory);
+      if (!bRollbackSucceeded) {
+        ErrorMessage += FString::Printf(TEXT(" Rollback failed: %s"), *RollbackError);
+      }
+      ErrorCode = bRollbackSucceeded ? TEXT("COPY_FAILED") : TEXT("ROLLBACK_FAILED");
+      return false;
+    }
+  }
+  ExternalObjectsPlan.bCopied = bCopiedExternalObjects;
+  DeleteDestinationBackups();
+
+  Result = McpHandlerUtils::CreateResultObject();
+
+  ScanLevelPackagePath(DestinationPackagePath, DestinationFilename);
+  const bool bDestinationFileExists = FileManager.FileExists(*DestinationFilename);
+  const bool bDestinationPackageExists = FPackageName::DoesPackageExist(DestinationPackagePath);
+
+  if (!Result.IsValid()) {
+    Result = McpHandlerUtils::CreateResultObject();
+  }
+  Result->SetStringField(TEXT("sourcePath"), SourcePackagePath);
+  Result->SetStringField(TEXT("destinationPath"), DestinationPackagePath);
+  Result->SetStringField(TEXT("sourceFilename"), SourceFilename);
+  Result->SetStringField(TEXT("destinationFilename"), DestinationFilename);
+  Result->SetBoolField(TEXT("overwrite"), bOverwrite);
+  Result->SetBoolField(TEXT("copiedMapFile"), bCopiedMap);
+  Result->SetBoolField(TEXT("destinationMapExisted"), bDestinationMapExists);
+  Result->SetBoolField(TEXT("deletedDestinationMap"), bDeletedDestinationMap);
+  Result->SetBoolField(TEXT("sourceBuiltDataExists"), bSourceBuiltDataExists);
+  Result->SetBoolField(TEXT("destinationBuiltDataExisted"), bDestinationBuiltDataExists);
+  Result->SetBoolField(TEXT("deletedDestinationBuiltData"), bDeletedDestinationBuiltData);
+  Result->SetBoolField(TEXT("copiedBuiltData"), bCopiedBuiltData);
+  Result->SetBoolField(TEXT("sourceExternalActorsExists"), ExternalActorsPlan.bSourceExists);
+  Result->SetBoolField(TEXT("destinationExternalActorsExisted"), ExternalActorsPlan.bDestinationExists);
+  Result->SetBoolField(TEXT("deletedDestinationExternalActors"), ExternalActorsPlan.bDeletedDestination);
+  Result->SetBoolField(TEXT("copiedExternalActors"), ExternalActorsPlan.bCopied);
+  Result->SetBoolField(TEXT("sourceExternalObjectsExists"), ExternalObjectsPlan.bSourceExists);
+  Result->SetBoolField(TEXT("destinationExternalObjectsExisted"), ExternalObjectsPlan.bDestinationExists);
+  Result->SetBoolField(TEXT("deletedDestinationExternalObjects"), ExternalObjectsPlan.bDeletedDestination);
+  Result->SetBoolField(TEXT("copiedExternalObjects"), ExternalObjectsPlan.bCopied);
+  Result->SetBoolField(TEXT("destinationFileExists"), bDestinationFileExists);
+  Result->SetBoolField(TEXT("destinationPackageExists"), bDestinationPackageExists);
+
+  if (!bCopiedMap || !bDestinationFileExists) {
+    ErrorMessage = FString::Printf(TEXT("Failed to copy level file from %s to %s"),
+                                   *SourcePackagePath, *DestinationPackagePath);
+    ErrorCode = TEXT("COPY_FAILED");
+    return false;
+  }
+
+  return true;
+}
+} // namespace
+
 /**
  * Safely creates a new map with proper tick system cleanup to prevent
  * TickTaskManager assertion crashes in UE 5.7+.
@@ -96,8 +875,8 @@
  * the old world remain registered when the new world is created.
  *
  * Root Cause Analysis:
- * The FTickTaskManager maintains a LevelList that's filled during StartFrame() 
- * and cleared during EndFrame(). When NewMap() destroys the old world:
+ * The FTickTaskManager tracks visible levels during the engine frame. When
+ * NewMap() destroys the old world:
  * 1. ULevel destructor calls FreeTickTaskLevel()
  * 2. FreeTickTaskLevel() asserts: check(!LevelList.Contains(TickTaskLevel))
  * 3. If a tick frame started but didn't complete, LevelList still has entries
@@ -105,7 +884,8 @@
  * Fix Strategy:
  * 1. Set all levels to invisible (prevents FillLevelList from adding them)
  * 2. Disable all actor/component ticking
- * 3. Force a complete tick frame cycle to clear LevelList
+ * 3. Drain end-of-frame updates, render work, streaming, and GC without
+ *    manually advancing the engine tick lifecycle
  * 4. Properly cleanup before world destruction
   *
   * @param bForceNewMap If true, create a completely new empty map (default: true)
@@ -255,25 +1035,17 @@ static UWorld* McpSafeNewMap(bool bForceNewMap = true, UMcpAutomationBridgeSubsy
             Subsystem->SendProgressUpdate(RequestId, 55.0f, TEXT("Garbage collection complete"));
         }
         
-        // STEP 9: CRITICAL FIX - Call EndFrame() to clear FTickTaskManager's LevelList
-        // The FTickTaskManager maintains a LevelList that's populated by FillLevelList() during
-        // StartFrame() and cleared by LevelList.Reset() in EndFrame(). When NewMap() destroys
-        // the old world, FreeTickTaskLevel() asserts that the TickTaskLevel is NOT in LevelList.
-        // By calling EndFrame(), we ensure LevelList is cleared before world destruction.
-        // 
-        // This is safe because:
-        // 1. We've already unregistered all tick functions (Step 2)
-        // 2. We've set bIsVisible=false on all levels (Step 1)
-        // 3. EndFrame() doesn't have assertions that would fail if called outside a tick frame
-        // 4. The TickTaskSequencer.EndFrame() just clears batched tick data
-        // 5. The LevelList.Reset() is the critical operation we need
-        FTickTaskManagerInterface::Get().EndFrame();
-        UE_LOG(LogTemp, Log, TEXT("McpSafeNewMap: Called EndFrame() to clear LevelList"));
-        
-        // Progress update: LevelList cleared
+        // STEP 9: Do not call FTickTaskManagerInterface::EndFrame() from an
+        // automation handler. EndFrame belongs to the engine frame lifecycle;
+        // invoking it here can corrupt active tick state and later crash during
+        // level load with TickTaskManager assertions. The explicit tick
+        // unregister, end-of-frame update, GC, and render flushes above are the
+        // safe cleanup boundary for this handler.
+
+        // Progress update: tick cleanup complete
         if (Subsystem && !RequestId.IsEmpty())
         {
-            Subsystem->SendProgressUpdate(RequestId, 65.0f, TEXT("Cleared tick task level list"));
+            Subsystem->SendProgressUpdate(RequestId, 65.0f, TEXT("Completed tick cleanup"));
         }
         
         // STEP 10: Give the engine a moment to process cleanup
@@ -299,21 +1071,25 @@ static UWorld* McpSafeNewMap(bool bForceNewMap = true, UMcpAutomationBridgeSubsy
     
     if (NewWorld)
     {
-        // STEP 12: CRITICAL - Disable ticking on the new world's actors immediately
-        // The NewMap creates actors (like WorldSettings) that might trigger tick assertions
-        // if not properly initialized before the next tick frame
+        // STEP 12: CRITICAL - Unregister ticking on the new world's actors immediately.
+        // SetActorTickEnabled(false) only disables execution; the tick function can
+        // remain registered in TickTaskManager. Unregistering removes these newly
+        // created editor-world ticks from the manager before the next frame.
         if (NewWorld->PersistentLevel)
         {
             for (AActor* Actor : NewWorld->PersistentLevel->Actors)
             {
                 if (Actor)
                 {
-                    Actor->SetActorTickEnabled(false);
+                    if (Actor->PrimaryActorTick.IsTickFunctionRegistered())
+                    {
+                        Actor->PrimaryActorTick.UnRegisterTickFunction();
+                    }
                     for (UActorComponent* Component : Actor->GetComponents())
                     {
-                        if (Component)
+                        if (Component && Component->PrimaryComponentTick.IsTickFunctionRegistered())
                         {
-                            Component->SetComponentTickEnabled(false);
+                            Component->PrimaryComponentTick.UnRegisterTickFunction();
                         }
                     }
                 }
@@ -356,20 +1132,21 @@ static UWorld* McpSafeNewMap(bool bForceNewMap = true, UMcpAutomationBridgeSubsy
 bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   const bool bIsLevelAction =
       (Lower == TEXT("manage_level") || Lower == TEXT("save_current_level") ||
        Lower == TEXT("create_new_level") || Lower == TEXT("stream_level") ||
        Lower == TEXT("spawn_light") || Lower == TEXT("build_lighting") ||
-       Lower == TEXT("spawn_light") || Lower == TEXT("build_lighting") ||
        Lower == TEXT("bake_lightmap") || Lower == TEXT("list_levels") ||
+       Lower == TEXT("get_current_level") ||
        Lower == TEXT("export_level") || Lower == TEXT("import_level") ||
        Lower == TEXT("add_sublevel"));
   if (!bIsLevelAction)
     return false;
 
   FString EffectiveAction = Lower;
+  bool bForceStreamUnload = false;
 
   // Unpack manage_level
   if (Lower == TEXT("manage_level")) {
@@ -387,6 +1164,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
       // Map to Open command
       FString LevelPath;
       Payload->TryGetStringField(TEXT("levelPath"), LevelPath);
+      bool bSaveDirtyPackages = false;
+      Payload->TryGetBoolField(TEXT("saveDirtyPackages"), bSaveDirtyPackages);
 
       // Determine invalid characters for checks
       if (LevelPath.IsEmpty()) {
@@ -440,6 +1219,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
       // needs full path. Let's try to load what we have if conversion returned
       // something, else fallback to input.
       const FString FileToLoad = bGotFilename ? Filename : LevelPath;
+      FString ResolvedFileToLoad = FileToLoad;
+      FString ExpectedLoadedPath = LevelPath;
 
       // Verify file exists before attempting load to avoid false positives
       // CRITICAL: Unreal stores levels in TWO possible path patterns:
@@ -459,16 +1240,21 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
         
         // Also build folder-based path: /Game/Path/LevelName -> /Game/Path/LevelName/LevelName.umap
         FString LevelName = FPaths::GetBaseFilename(LevelPath);
-        FolderMapPath = FPaths::GetPath(FlatMapPath) / LevelName + FPackageName::GetMapPackageExtension();
+        FolderMapPath = FPaths::GetPath(FlatMapPath) / LevelName / (LevelName + FPackageName::GetMapPackageExtension());
         FullFolderMapPath = FPaths::ConvertRelativePathToFull(FolderMapPath);
       }
       
       // Check both paths - prefer folder-based (UE 5.x standard)
       if (!FullFolderMapPath.IsEmpty() && IFileManager::Get().FileExists(*FullFolderMapPath)) {
         bFileExists = true;
+        ResolvedFileToLoad = FolderMapPath;
+        const FString LevelName = FPaths::GetBaseFilename(LevelPath);
+        ExpectedLoadedPath = FPaths::GetPath(LevelPath) / LevelName / LevelName;
         UE_LOG(LogTemp, Log, TEXT("load: Found level at folder-based path: %s"), *FullFolderMapPath);
       } else if (!FullFlatMapPath.IsEmpty() && IFileManager::Get().FileExists(*FullFlatMapPath)) {
         bFileExists = true;
+        ResolvedFileToLoad = FlatMapPath;
+        ExpectedLoadedPath = LevelPath;
         UE_LOG(LogTemp, Log, TEXT("load: Found level at flat path: %s"), *FullFlatMapPath);
       }
       
@@ -494,11 +1280,51 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
       // Force any pending work to complete
       FlushRenderingCommands();
 
-      // LoadMap prompts for save if dirty. To avoid blocking automation, we
-      // should carefuly consider. But for now, we assume user wants standard
-      // behavior or has saved. There isn't a simple "Force Load" via FileUtils
-      // without clearing dirty flags manually. We will proceed with LoadMap.
-      const bool bLoaded = McpSafeLoadMap(FileToLoad);
+      bool bSavedDirtyPackagesBeforeLoad = false;
+      int32 DirtyWorldPackagesBeforeLoad = 0;
+      int32 DirtyContentPackagesBeforeLoad = 0;
+      int32 DirtyWorldPackagesAfterSave = 0;
+      int32 DirtyContentPackagesAfterSave = 0;
+      int32 FailedDirtyPackageSaves = 0;
+      if (FApp::IsUnattended() || IsRunningCommandlet() || FParse::Param(FCommandLine::Get(), TEXT("nullrhi"))) {
+        CountBlockingDirtyPackages(DirtyWorldPackagesBeforeLoad, DirtyContentPackagesBeforeLoad);
+        if (DirtyWorldPackagesBeforeLoad + DirtyContentPackagesBeforeLoad > 0 && !bSaveDirtyPackages) {
+          TSharedPtr<FJsonObject> ErrorDetails = McpHandlerUtils::CreateResultObject();
+          ErrorDetails->SetNumberField(TEXT("dirtyWorldPackages"), DirtyWorldPackagesBeforeLoad);
+          ErrorDetails->SetNumberField(TEXT("dirtyContentPackages"), DirtyContentPackagesBeforeLoad);
+          ErrorDetails->SetBoolField(TEXT("saveDirtyPackages"), bSaveDirtyPackages);
+          ErrorDetails->SetStringField(TEXT("levelPath"), LevelPath);
+          SendAutomationResponse(
+              RequestingSocket, RequestId, false,
+              TEXT("Cannot load a level in unattended/headless mode while packages are dirty. Pass saveDirtyPackages=true to save them before loading."),
+              ErrorDetails, TEXT("DIRTY_PACKAGES"));
+          return true;
+        }
+
+        if (bSaveDirtyPackages) {
+        bSavedDirtyPackagesBeforeLoad = SaveBlockingDirtyPackagesForLevelLoad(
+            DirtyWorldPackagesBeforeLoad, DirtyContentPackagesBeforeLoad,
+            DirtyWorldPackagesAfterSave, DirtyContentPackagesAfterSave,
+            FailedDirtyPackageSaves);
+        if (!bSavedDirtyPackagesBeforeLoad) {
+          TSharedPtr<FJsonObject> ErrorDetails = McpHandlerUtils::CreateResultObject();
+          ErrorDetails->SetNumberField(TEXT("dirtyWorldPackagesBeforeSave"), DirtyWorldPackagesBeforeLoad);
+          ErrorDetails->SetNumberField(TEXT("dirtyContentPackagesBeforeSave"), DirtyContentPackagesBeforeLoad);
+          ErrorDetails->SetNumberField(TEXT("dirtyWorldPackages"), DirtyWorldPackagesAfterSave);
+          ErrorDetails->SetNumberField(TEXT("dirtyContentPackages"), DirtyContentPackagesAfterSave);
+          ErrorDetails->SetNumberField(TEXT("failedPackageSaves"), FailedDirtyPackageSaves);
+          ErrorDetails->SetBoolField(TEXT("saveDirtyPackagesSucceeded"), bSavedDirtyPackagesBeforeLoad);
+          ErrorDetails->SetStringField(TEXT("levelPath"), LevelPath);
+          SendAutomationResponse(
+              RequestingSocket, RequestId, false,
+              TEXT("Cannot load a level in unattended/headless mode while packages remain dirty after non-interactive save."),
+              ErrorDetails, TEXT("DIRTY_PACKAGES"));
+          return true;
+        }
+        }
+      }
+
+      const bool bLoaded = McpSafeLoadMap(ResolvedFileToLoad);
 
       // Post-load verification: check that the loaded world matches the requested path
       if (bLoaded) {
@@ -506,18 +1332,27 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
         if (LoadedWorld) {
           FString LoadedPath = LoadedWorld->GetOutermost()->GetName();
           // Normalize paths for comparison (handle case differences)
-          if (LoadedPath.ToLower() != LevelPath.ToLower()) {
+          if (LoadedPath.ToLower() != ExpectedLoadedPath.ToLower()) {
             // The requested level was not actually loaded - engine fell back to default
             SendAutomationResponse(
                 RequestingSocket, RequestId, false,
-                FString::Printf(TEXT("Level path mismatch: requested %s but loaded %s"), *LevelPath, *LoadedPath),
+                FString::Printf(TEXT("Level path mismatch: requested %s but loaded %s"), *ExpectedLoadedPath, *LoadedPath),
                 nullptr, TEXT("LOAD_MISMATCH"));
             return true;
           }
         }
         
-TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-        VerifyAssetExists(Resp, LevelPath);
+        TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+        Resp->SetStringField(TEXT("requestedPath"), LevelPath);
+        Resp->SetStringField(TEXT("loadedPath"), ExpectedLoadedPath);
+        Resp->SetBoolField(TEXT("saveDirtyPackages"), bSaveDirtyPackages);
+        Resp->SetBoolField(TEXT("savedDirtyPackagesBeforeLoad"), bSavedDirtyPackagesBeforeLoad);
+        Resp->SetNumberField(TEXT("dirtyWorldPackagesBeforeLoad"), DirtyWorldPackagesBeforeLoad);
+        Resp->SetNumberField(TEXT("dirtyContentPackagesBeforeLoad"), DirtyContentPackagesBeforeLoad);
+        Resp->SetNumberField(TEXT("dirtyWorldPackagesAfterSave"), DirtyWorldPackagesAfterSave);
+        Resp->SetNumberField(TEXT("dirtyContentPackagesAfterSave"), DirtyContentPackagesAfterSave);
+        Resp->SetNumberField(TEXT("failedDirtyPackageSaves"), FailedDirtyPackageSaves);
+        VerifyAssetExists(Resp, ExpectedLoadedPath);
         SendAutomationResponse(RequestingSocket, RequestId, true,
                                TEXT("Level loaded"), Resp, FString());
         return true;
@@ -534,7 +1369,7 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
 #else
       return false;
 #endif
-    } else if (LowerSub == TEXT("save")) {
+    } else if (LowerSub == TEXT("save") || LowerSub == TEXT("save_level")) {
       EffectiveAction = TEXT("save_current_level");
     } else if (LowerSub == TEXT("save_as") ||
                LowerSub == TEXT("save_level_as")) {
@@ -545,8 +1380,18 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       EffectiveAction = TEXT("stream_level");
     } else if (LowerSub == TEXT("create_light")) {
       EffectiveAction = TEXT("spawn_light");
+    } else if (LowerSub == TEXT("build_lighting")) {
+      EffectiveAction = TEXT("build_lighting");
+    } else if (LowerSub == TEXT("set_metadata")) {
+      EffectiveAction = TEXT("set_metadata");
+    } else if (LowerSub == TEXT("validate_level")) {
+      EffectiveAction = TEXT("validate_level");
     } else if (LowerSub == TEXT("list") || LowerSub == TEXT("list_levels")) {
       EffectiveAction = TEXT("list_levels");
+    } else if (LowerSub == TEXT("get_current_level")) {
+      // Keep the documented manage_level action on the native route instead of
+      // falling through to UNKNOWN_ACTION or relying on a TS-side list fallback.
+      EffectiveAction = TEXT("get_current_level");
     } else if (LowerSub == TEXT("export_level")) {
       EffectiveAction = TEXT("export_level");
     } else if (LowerSub == TEXT("import_level")) {
@@ -565,6 +1410,7 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       EffectiveAction = TEXT("delete_level");
     } else if (LowerSub == TEXT("unload") || LowerSub == TEXT("unload_level")) {
       EffectiveAction = TEXT("stream_level");
+      bForceStreamUnload = true;
     } else if (LowerSub == TEXT("get_level_info")) {
       EffectiveAction = TEXT("get_level_info");
     } else if (LowerSub == TEXT("set_level_world_settings")) {
@@ -622,6 +1468,64 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     
     return Levels;
   };
+
+  if (EffectiveAction == TEXT("get_current_level")) {
+    UWorld* EditorWorld = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!EditorWorld) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("No editor world available"), nullptr, TEXT("NO_WORLD"));
+      return true;
+    }
+
+    ULevel* CurrentLevel = EditorWorld->GetCurrentLevel();
+    if (!CurrentLevel) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("No current level available"), nullptr, TEXT("NO_LEVEL"));
+      return true;
+    }
+
+    UPackage* WorldPackage = EditorWorld->GetOutermost();
+    UPackage* LevelPackage = CurrentLevel->GetOutermost();
+
+    auto WorldTypeToString = [](EWorldType::Type WorldType) -> FString {
+      switch (WorldType) {
+      case EWorldType::Game:
+        return TEXT("Game");
+      case EWorldType::Editor:
+        return TEXT("Editor");
+      case EWorldType::PIE:
+        return TEXT("PIE");
+      case EWorldType::EditorPreview:
+        return TEXT("EditorPreview");
+      case EWorldType::GamePreview:
+        return TEXT("GamePreview");
+      case EWorldType::GameRPC:
+        return TEXT("GameRPC");
+      case EWorldType::Inactive:
+        return TEXT("Inactive");
+      case EWorldType::None:
+      default:
+        return TEXT("None");
+      }
+    };
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    Result->SetStringField(TEXT("mapName"), EditorWorld->GetMapName());
+    Result->SetStringField(TEXT("mapPath"), WorldPackage ? WorldPackage->GetName() : TEXT(""));
+    Result->SetStringField(TEXT("levelName"), CurrentLevel->GetName());
+    Result->SetStringField(TEXT("levelPath"), LevelPackage ? LevelPackage->GetName() : TEXT(""));
+    // Include editor-world identity separately from the map package so agents
+    // can distinguish persistent map state from transient PIE/editor worlds.
+    Result->SetStringField(TEXT("editorWorldName"), EditorWorld->GetName());
+    Result->SetStringField(TEXT("editorWorldPath"), WorldPackage ? WorldPackage->GetPathName() : TEXT(""));
+    Result->SetStringField(TEXT("worldType"), WorldTypeToString(EditorWorld->WorldType));
+    Result->SetNumberField(TEXT("actorCount"), CurrentLevel->Actors.Num());
+    Result->SetBoolField(TEXT("isPersistentLevel"), CurrentLevel == EditorWorld->PersistentLevel);
+
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           TEXT("Current level retrieved"), Result);
+    return true;
+  }
 
   if (EffectiveAction == TEXT("save_current_level")) {
     if (!GEditor) {
@@ -728,6 +1632,14 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       return true;
     }
 
+    SavePath = SanitizeProjectRelativePath(SavePath);
+    if (SavePath.IsEmpty()) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Invalid savePath: contains path traversal (..) or invalid characters"),
+                             nullptr, TEXT("SECURITY_VIOLATION"));
+      return true;
+    }
+
     // CRITICAL: Validate path length BEFORE attempting save to prevent silent hangs
     // McpSafeLevelSave validates internally but may not send error response in all code paths
     {
@@ -820,6 +1732,88 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     }
     return true;
   }
+  if (EffectiveAction == TEXT("set_metadata")) {
+    TSharedPtr<FJsonObject> AssetPayload = MakeShared<FJsonObject>();
+    FString AssetPath;
+    if (Payload.IsValid()) {
+      AssetPayload->Values = Payload->Values;
+      if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
+        Payload->TryGetStringField(TEXT("levelPath"), AssetPath);
+      }
+    }
+
+    AssetPath = NormalizeLevelPackagePath(AssetPath);
+    FString MapFilename;
+    FString ErrorMessage;
+    FString ErrorCode;
+    if (AssetPath.IsEmpty() || !TryGetAbsoluteMapFilename(AssetPath, MapFilename) ||
+        !ValidateWritableGameMapPath(AssetPath, MapFilename, TEXT("Metadata"),
+                                     ErrorMessage, ErrorCode)) {
+      if (ErrorMessage.IsEmpty()) {
+        ErrorMessage = FString::Printf(TEXT("metadata target must be a /Game level path: %s"), *AssetPath);
+        ErrorCode = TEXT("SECURITY_VIOLATION");
+      }
+      SendAutomationResponse(RequestingSocket, RequestId, false, ErrorMessage,
+                             nullptr, ErrorCode);
+      return true;
+    }
+    if (!IFileManager::Get().FileExists(*MapFilename) &&
+        !FPackageName::DoesPackageExist(AssetPath)) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             FString::Printf(TEXT("Level not found: %s"), *AssetPath),
+                             nullptr, TEXT("NOT_FOUND"));
+      return true;
+    }
+
+    AssetPayload->SetStringField(TEXT("assetPath"), AssetPath);
+    return HandleSetMetadata(RequestId, AssetPayload, RequestingSocket);
+  }
+  if (EffectiveAction == TEXT("validate_level")) {
+    FString LevelPath;
+    if (Payload.IsValid()) {
+      Payload->TryGetStringField(TEXT("levelPath"), LevelPath);
+      if (LevelPath.IsEmpty()) Payload->TryGetStringField(TEXT("assetPath"), LevelPath);
+    }
+    if (LevelPath.IsEmpty()) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("levelPath required for validate_level"), nullptr,
+                             TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+    LevelPath = NormalizeLevelPackagePath(LevelPath);
+    LevelPath = SanitizeProjectRelativePath(LevelPath);
+    if (LevelPath.IsEmpty()) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Invalid levelPath"), nullptr,
+                             TEXT("SECURITY_VIOLATION"));
+      return true;
+    }
+
+    FString MapFilename;
+    const bool bHasFilename = TryGetAbsoluteMapFilename(LevelPath, MapFilename);
+    const bool bFileExists = bHasFilename && IFileManager::Get().FileExists(*MapFilename);
+    if (bHasFilename) {
+      ScanLevelPackagePath(LevelPath, MapFilename);
+    }
+    const bool bPackageExists = FPackageName::DoesPackageExist(LevelPath);
+    const bool bExists = bPackageExists || bFileExists;
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    Result->SetBoolField(TEXT("success"), bExists);
+    Result->SetBoolField(TEXT("exists"), bExists);
+    Result->SetBoolField(TEXT("isValid"), bExists);
+    Result->SetStringField(TEXT("levelPath"), LevelPath);
+    if (!MapFilename.IsEmpty()) {
+      Result->SetStringField(TEXT("mapFilename"), MapFilename);
+    }
+    Result->SetBoolField(TEXT("packageExists"), bPackageExists);
+    Result->SetBoolField(TEXT("fileExists"), bFileExists);
+
+    SendAutomationResponse(RequestingSocket, RequestId, bExists,
+                           bExists ? TEXT("Level validated") : TEXT("Level not found"),
+                           Result, bExists ? FString() : TEXT("NOT_FOUND"));
+    return true;
+  }
   if (EffectiveAction == TEXT("create_new_level")) {
     FString LevelName;
     if (Payload.IsValid())
@@ -908,18 +1902,40 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
 
     // Check if map already exists
     if (FPackageName::DoesPackageExist(SavePath)) {
-      // Level already exists - return success with info instead of trying to open
-      // Opening an existing level can trigger dialogs about unsaved changes, causing hangs
       TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       Resp->SetStringField(TEXT("levelPath"), SavePath);
       Resp->SetStringField(TEXT("packagePath"), SavePath);
       Resp->SetBoolField(TEXT("alreadyExists"), true);
+      const bool bLoaded = McpSafeLoadMap(SavePath, true);
+      Resp->SetBoolField(TEXT("loaded"), bLoaded);
+      if (bLoaded && GEditor && GEditor->GetEditorWorldContext().World()) {
+        UWorld* LoadedWorld = GEditor->GetEditorWorldContext().World();
+        if (LoadedWorld && LoadedWorld->GetOutermost()) {
+          Resp->SetStringField(TEXT("currentLevelPath"), LoadedWorld->GetOutermost()->GetName());
+        }
+      }
       SendAutomationResponse(
-          RequestingSocket, RequestId, true,
-          FString::Printf(TEXT("Level already exists: %s"), *SavePath), Resp,
-          FString());
+          RequestingSocket, RequestId, bLoaded,
+          bLoaded ? FString::Printf(TEXT("Level already exists and was loaded: %s"), *SavePath)
+                  : FString::Printf(TEXT("Level already exists but could not be loaded: %s"), *SavePath),
+          Resp, bLoaded ? FString() : TEXT("LOAD_FAILED"));
       return true;
     }
+
+    // UE 5.7: GEditor->NewMap can assert while destroying the current editor
+    // world if TickTaskManager still tracks a level from a previous automation
+    // map transition. The manage_level_structure create_level path creates and
+    // saves an inactive UWorld package without switching the editor world, so it
+    // avoids EditorDestroyWorld/NewMap entirely while still producing a real
+    // level asset that manage_level load/stream/export actions can use.
+    TSharedPtr<FJsonObject> CreatePayload = MakeShared<FJsonObject>();
+    CreatePayload->SetStringField(TEXT("subAction"), TEXT("create_level"));
+    CreatePayload->SetStringField(TEXT("levelName"), FPaths::GetBaseFilename(SavePath));
+    CreatePayload->SetStringField(TEXT("levelPath"), FPaths::GetPath(SavePath));
+    CreatePayload->SetBoolField(TEXT("bCreateWorldPartition"), bUseWorldPartition);
+    CreatePayload->SetBoolField(TEXT("save"), true);
+    CreatePayload->SetBoolField(TEXT("loadAfterCreate"), true);
+    return HandleManageLevelStructureAction(RequestId, TEXT("manage_level_structure"), CreatePayload, RequestingSocket);
 
     // Create new map
 #if defined(MCP_HAS_LEVELEDITOR_SUBSYSTEM) && __has_include("FileHelpers.h")
@@ -1142,14 +2158,18 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   }
   if (EffectiveAction == TEXT("stream_level")) {
     FString LevelName;
-    bool bLoad = true;
-    bool bVis = true;
+    bool bLoad = bForceStreamUnload ? false : true;
+    bool bVis = bForceStreamUnload ? false : true;
     if (Payload.IsValid()) {
       Payload->TryGetStringField(TEXT("levelName"), LevelName);
       Payload->TryGetBoolField(TEXT("shouldBeLoaded"), bLoad);
       Payload->TryGetBoolField(TEXT("shouldBeVisible"), bVis);
       if (LevelName.IsEmpty())
         Payload->TryGetStringField(TEXT("levelPath"), LevelName);
+    }
+    if (bForceStreamUnload) {
+      bLoad = false;
+      bVis = false;
     }
     if (LevelName.TrimStartAndEnd().IsEmpty()) {
       SendAutomationResponse(
@@ -1220,6 +2240,13 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
                              Result);
     } else {
       // Streaming level not found - try console command as fallback
+      if (!IsSafeLevelConsoleToken(NormalizedLevelName)) {
+        SendAutomationResponse(RequestingSocket, RequestId, false,
+                               TEXT("Invalid streaming level name"), Result,
+                               TEXT("INVALID_ARGUMENT"));
+        return true;
+      }
+
       const FString Cmd =
           FString::Printf(TEXT("StreamLevel %s %s %s"), *NormalizedLevelName,
                           bLoad ? TEXT("Load") : TEXT("Unload"),
@@ -1236,14 +2263,17 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
         SendAutomationResponse(RequestingSocket, RequestId, true,
                                TEXT("Streaming command executed"), Result);
       } else {
-        // Even if console command returns false, the operation may still be in progress
-        // Remove HANDLED error code — success=true means no error occurred
+        // No ULevelStreaming was located in the world and the StreamLevel Exec
+        // did not handle the command — nothing was actually streamed. Fail loudly
+        // rather than reporting a phantom success.
         Result->SetStringField(TEXT("method"), TEXT("console_command_fallback"));
         Result->SetStringField(TEXT("command"), Cmd);
-        Result->SetBoolField(TEXT("handled"), true);
-        SendAutomationResponse(RequestingSocket, RequestId, true,
-                               TEXT("Streaming command submitted (level may not be in world yet)"), 
-                               Result);
+        SendAutomationResponse(
+            RequestingSocket, RequestId, false,
+            FString::Printf(
+                TEXT("Streaming level not found in world and StreamLevel command failed: %s"),
+                *NormalizedLevelName),
+            Result, TEXT("LEVEL_NOT_FOUND"));
       }
     }
     return true;
@@ -1390,7 +2420,7 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     }
 
     // SECURITY: Sanitize export path as an asset path
-    FString SafeExportPath = SanitizeProjectRelativePath(ExportPath);
+    FString SafeExportPath = NormalizeLevelPackagePath(SanitizeProjectRelativePath(ExportPath));
     if (SafeExportPath.IsEmpty()) {
       SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Invalid or unsafe exportPath"), nullptr,
@@ -1428,10 +2458,13 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
                       Current->GetPathName() == LevelPath)) {
         WorldToExport = Current;
       } else {
-        // Should we load?
-        // SendAutomationError(RequestingSocket, RequestId, TEXT("Level must be
-        // loaded to export"), TEXT("LEVEL_NOT_LOADED")); return true; For
-        // robustness, let's assume export current if path matches or empty.
+        SendAutomationResponse(
+            RequestingSocket, RequestId, false,
+            FString::Printf(
+                TEXT("Requested level is not loaded: %s. Load the level before exporting it."),
+                *LevelPath),
+            nullptr, TEXT("LEVEL_NOT_LOADED"));
+        return true;
       }
     }
     if (!WorldToExport)
@@ -1444,16 +2477,22 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       return true;
     }
 
-    // Ensure directory
     FString AbsoluteFilePath;
-    if (FPackageName::TryConvertLongPackageNameToFilename(SafeExportPath, AbsoluteFilePath, FPackageName::GetMapPackageExtension())) {
-      IFileManager::Get().MakeDirectory(*FPaths::GetPath(AbsoluteFilePath), true);
-    } else {
+    FString ExportErrorMessage;
+    FString ExportErrorCode;
+    if (!TryResolveWritableGameMapFilename(SafeExportPath, AbsoluteFilePath,
+                                           ExportErrorMessage,
+                                           ExportErrorCode,
+                                           TEXT("Export destination"))) {
       SendAutomationResponse(RequestingSocket, RequestId, false,
-                             FString::Printf(TEXT("Failed to resolve package path: %s"), *SafeExportPath), nullptr,
-                             TEXT("INVALID_ARGUMENT"));
+                             ExportErrorMessage, nullptr,
+                             ExportErrorCode.IsEmpty() ? TEXT("INVALID_ARGUMENT") : ExportErrorCode);
       return true;
     }
+
+    // Ensure directory only after the export destination is validated as a
+    // writable /Game map inside the project Content directory.
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(AbsoluteFilePath), true);
 
     // CRITICAL: Use McpSafeLevelSave instead of FEditorFileUtils::SaveMap
     // to prevent Intel GPU driver crashes (MONZA DdiThreadingContext)
@@ -1494,11 +2533,26 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
                                nullptr, TEXT("INVALID_ARGUMENT"));
         return true;
       }
-      
-      // CRITICAL FIX: Check if destination already exists BEFORE trying to duplicate
-      // This prevents "An asset already exists at this location" errors and makes
-      // the operation idempotent
-      if (UEditorAssetLibrary::DoesAssetExist(DestinationPath)) {
+
+      SourcePath = NormalizeLevelPackagePath(SanitizeProjectRelativePath(SourcePath));
+      DestinationPath = NormalizeLevelPackagePath(SanitizeProjectRelativePath(DestinationPath));
+      if (SourcePath.IsEmpty() || DestinationPath.IsEmpty()) {
+        SendAutomationResponse(RequestingSocket, RequestId, false,
+                               TEXT("Invalid sourcePath or destinationPath"),
+                               nullptr, TEXT("SECURITY_VIOLATION"));
+        return true;
+      }
+
+      bool bOverwrite = false;
+      if (Payload.IsValid()) {
+        Payload->TryGetBoolField(TEXT("overwrite"), bOverwrite);
+      }
+
+      FString DestinationFilename;
+      const bool bDestinationFileExists =
+          TryGetAbsoluteMapFilename(DestinationPath, DestinationFilename) &&
+          IFileManager::Get().FileExists(*DestinationFilename);
+      if (!bOverwrite && (bDestinationFileExists || FPackageName::DoesPackageExist(DestinationPath))) {
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("sourcePath"), SourcePath);
         Result->SetStringField(TEXT("destinationPath"), DestinationPath);
@@ -1507,14 +2561,21 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
                                FString::Printf(TEXT("Destination already exists: %s"), *DestinationPath), Result);
         return true;
       }
-      
-      if (UEditorAssetLibrary::DuplicateAsset(SourcePath, DestinationPath) != nullptr) {
+
+      TSharedPtr<FJsonObject> Result;
+      FString ErrorMessage;
+      FString ErrorCode;
+      const bool bCopied = CopyLevelMapPackageFile(SourcePath, DestinationPath,
+                                                   bOverwrite, Result,
+                                                   ErrorMessage, ErrorCode);
+      if (bCopied) {
+        Result->SetBoolField(TEXT("imported"), true);
         SendAutomationResponse(RequestingSocket, RequestId, true,
-                               TEXT("Level imported (duplicated)"), nullptr);
+                               TEXT("Level imported (copied)"), Result);
       } else {
-        SendAutomationResponse(RequestingSocket, RequestId, false,
-                               TEXT("Failed to duplicate level asset"), nullptr,
-                               TEXT("IMPORT_FAILED"));
+        SendAutomationResponse(RequestingSocket, RequestId, false, ErrorMessage,
+                               Result,
+                               ErrorCode.IsEmpty() ? TEXT("IMPORT_FAILED") : ErrorCode);
       }
       return true;
     }
@@ -1570,6 +2631,14 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       SendAutomationError(RequestingSocket, RequestId,
                           TEXT("subLevelPath required"),
                           TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    SubLevelPath = SanitizeProjectRelativePath(SubLevelPath);
+    if (SubLevelPath.IsEmpty()) {
+      SendAutomationError(RequestingSocket, RequestId,
+                          TEXT("Invalid subLevelPath"),
+                          TEXT("SECURITY_VIOLATION"));
       return true;
     }
 
@@ -1739,18 +2808,275 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     }
     LevelPath = SanitizedPath;
 
-    // Use UEditorAssetLibrary to delete the level asset
-    bool bDeleted = UEditorAssetLibrary::DeleteAsset(LevelPath);
-    if (bDeleted) {
-      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-      Result->SetStringField(TEXT("levelPath"), LevelPath);
-      Result->SetBoolField(TEXT("deleted"), true);
+    FString LongPackageName = LevelPath;
+    int32 ObjectPathDelimiter = INDEX_NONE;
+    if (LongPackageName.FindChar(TEXT('.'), ObjectPathDelimiter)) {
+      LongPackageName = LongPackageName.Left(ObjectPathDelimiter);
+    }
+
+    FString DeleteMapFilename;
+    FString DeleteErrorMessage;
+    FString DeleteErrorCode;
+    if (!TryGetAbsoluteMapFilename(LongPackageName, DeleteMapFilename) ||
+        !ValidateWritableGameMapPath(LongPackageName, DeleteMapFilename,
+                                     TEXT("Delete target"),
+                                     DeleteErrorMessage, DeleteErrorCode)) {
+      if (DeleteErrorMessage.IsEmpty()) {
+        DeleteErrorMessage = FString::Printf(
+            TEXT("Could not convert delete target level to filename: %s"),
+            *LongPackageName);
+        DeleteErrorCode = TEXT("INVALID_LEVEL_PATH");
+      }
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             DeleteErrorMessage, nullptr, DeleteErrorCode);
+      return true;
+    }
+
+    const FString AssetName = FPaths::GetBaseFilename(LongPackageName);
+    const FString ObjectPath = AssetName.IsEmpty()
+                                   ? LongPackageName
+                                   : FString::Printf(TEXT("%s.%s"), *LongPackageName, *AssetName);
+    const FString PackageDir = FPaths::GetPath(LongPackageName);
+
+    FString MapFilename;
+    FString AbsoluteMapFilename;
+    const bool bHasMapFilename = FPackageName::TryConvertLongPackageNameToFilename(
+        LongPackageName, MapFilename, FPackageName::GetMapPackageExtension());
+    if (bHasMapFilename) {
+      AbsoluteMapFilename = FPaths::ConvertRelativePathToFull(MapFilename);
+      FPaths::NormalizeFilename(AbsoluteMapFilename);
+    }
+
+    IFileManager& FileManager = IFileManager::Get();
+    IAssetRegistry& AssetRegistry =
+        FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
+
+    auto RescanLevelPackage = [&]() {
+      if (bHasMapFilename && FileManager.FileExists(*AbsoluteMapFilename)) {
+        TArray<FString> FilesToScan;
+        FilesToScan.Add(AbsoluteMapFilename);
+        AssetRegistry.ScanFilesSynchronous(FilesToScan, true);
+      }
+      if (!PackageDir.IsEmpty()) {
+        TArray<FString> PathsToScan;
+        PathsToScan.Add(PackageDir);
+        AssetRegistry.ScanPathsSynchronous(PathsToScan, true);
+      }
+    };
+
+    RescanLevelPackage();
+
+    int32 RemovedStreamingRefs = 0;
+    bool bCurrentWorldMatchesTarget = false;
+    if (GEditor) {
+      UWorld* EditorWorld = GEditor->GetEditorWorldContext().World();
+      if (EditorWorld) {
+        bCurrentWorldMatchesTarget = EditorWorld->GetOutermost() &&
+                                     EditorWorld->GetOutermost()->GetName() == LongPackageName;
+        if (!bCurrentWorldMatchesTarget) {
+          TArray<ULevelStreaming*> StreamingLevels = EditorWorld->GetStreamingLevels();
+          for (ULevelStreaming* StreamingLevel : StreamingLevels) {
+            if (!StreamingLevel) {
+              continue;
+            }
+
+            const FString StreamingPackage = StreamingLevel->GetWorldAssetPackageFName().ToString();
+            if (StreamingPackage == LongPackageName || StreamingPackage == ObjectPath) {
+              StreamingLevel->SetShouldBeLoaded(false);
+              StreamingLevel->SetShouldBeVisible(false);
+              if (ULevel* LoadedStreamingLevel = StreamingLevel->GetLoadedLevel()) {
+                if (UEditorLevelUtils::RemoveLevelFromWorld(LoadedStreamingLevel)) {
+                  ++RemovedStreamingRefs;
+                }
+              } else {
+                EditorWorld->RemoveStreamingLevel(StreamingLevel);
+                ++RemovedStreamingRefs;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (RemovedStreamingRefs > 0) {
+      FlushRenderingCommands();
+      if (GEditor) {
+        GEditor->ForceGarbageCollection(true);
+      }
+      CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+      FlushRenderingCommands();
+    }
+
+    UPackage* LoadedPackage = FindPackage(nullptr, *LongPackageName);
+    const bool bWasLoaded = LoadedPackage != nullptr;
+    bool bPackageUnloadAttempted = false;
+    bool bPackageUnloadSucceeded = false;
+    if (LoadedPackage && !bCurrentWorldMatchesTarget) {
+      FlushRenderingCommands();
+      if (GEditor) {
+        GEditor->ForceGarbageCollection(true);
+      }
+      CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+      FlushRenderingCommands();
+      LoadedPackage = FindPackage(nullptr, *LongPackageName);
+
+      if (LoadedPackage) {
+#if MCP_HAS_PACKAGE_TOOLS
+        TArray<UPackage*> PackagesToUnload;
+        PackagesToUnload.Add(LoadedPackage);
+        TWeakObjectPtr<UPackage> WeakLoadedPackage = LoadedPackage;
+        FText UnloadError;
+        bPackageUnloadAttempted = true;
+        bPackageUnloadSucceeded = UPackageTools::UnloadPackages(PackagesToUnload, UnloadError, true);
+        if (!UnloadError.IsEmpty()) {
+          UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
+                 TEXT("delete_level: UnloadPackages reported for %s: %s"),
+                 *LongPackageName, *UnloadError.ToString());
+        }
+        FlushRenderingCommands();
+        if (GEditor) {
+          GEditor->ForceGarbageCollection(true);
+        }
+        CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+        FlushRenderingCommands();
+        LoadedPackage = FindPackage(nullptr, *LongPackageName);
+        bPackageUnloadSucceeded = bPackageUnloadSucceeded && !WeakLoadedPackage.IsValid() && LoadedPackage == nullptr;
+#else
+        UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
+               TEXT("delete_level: PackageTools unavailable; cannot unload loaded map package %s"),
+               *LongPackageName);
+#endif
+      }
+    }
+    const bool bPackageStillLoaded = LoadedPackage != nullptr;
+
+    const bool bMapFileExisted = bHasMapFilename && FileManager.FileExists(*AbsoluteMapFilename);
+    const bool bPackageExisted = FPackageName::DoesPackageExist(LongPackageName);
+    bool bDeletedViaFileFallback = false;
+    bool bDeletedBuiltData = false;
+    bool bBuiltDataExists = false;
+    bool bExternalSidecarDeleteAttempted = false;
+    bool bExternalSidecarDeleteFailed = false;
+    bool bExternalActorsExists = false;
+    bool bDeletedExternalActors = false;
+    bool bExternalObjectsExists = false;
+    bool bDeletedExternalObjects = false;
+    FString ExternalDeleteErrorMessage;
+    FString ExternalDeleteErrorCode;
+
+    const FString BuiltDataPackagePath = LongPackageName + TEXT("_BuiltData");
+    FString BuiltDataFilename;
+    FString AbsoluteBuiltDataFilename;
+    if (FPackageName::TryConvertLongPackageNameToFilename(
+            BuiltDataPackagePath, BuiltDataFilename, FPackageName::GetAssetPackageExtension())) {
+      AbsoluteBuiltDataFilename = FPaths::ConvertRelativePathToFull(BuiltDataFilename);
+      FPaths::NormalizeFilename(AbsoluteBuiltDataFilename);
+      bBuiltDataExists = FileManager.FileExists(*AbsoluteBuiltDataFilename);
+    }
+
+    if (!bCurrentWorldMatchesTarget && !bPackageStillLoaded && bMapFileExisted) {
+      UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
+             TEXT("delete_level: Deleting map file directly after registry/editor cleanup: %s"),
+             *AbsoluteMapFilename);
+      bDeletedViaFileFallback = FileManager.Delete(*AbsoluteMapFilename, false, true, true);
+
+      if (bBuiltDataExists) {
+        bDeletedBuiltData = FileManager.Delete(*AbsoluteBuiltDataFilename, false, true, true);
+      }
+    }
+
+    if (!bCurrentWorldMatchesTarget && !bPackageStillLoaded &&
+        (!bMapFileExisted || bDeletedViaFileFallback)) {
+      bExternalSidecarDeleteAttempted = true;
+
+      FString ActorsErrorMessage;
+      FString ActorsErrorCode;
+      if (!DeleteExternalPackageDirectory(LongPackageName, TEXT("__ExternalActors__"),
+                                          bExternalActorsExists,
+                                          bDeletedExternalActors,
+                                          ActorsErrorMessage, ActorsErrorCode)) {
+        bExternalSidecarDeleteFailed = true;
+        ExternalDeleteErrorMessage = ActorsErrorMessage;
+        ExternalDeleteErrorCode = ActorsErrorCode;
+      }
+
+      FString ObjectsErrorMessage;
+      FString ObjectsErrorCode;
+      if (!DeleteExternalPackageDirectory(LongPackageName, TEXT("__ExternalObjects__"),
+                                          bExternalObjectsExists,
+                                          bDeletedExternalObjects,
+                                          ObjectsErrorMessage, ObjectsErrorCode)) {
+        bExternalSidecarDeleteFailed = true;
+        if (ExternalDeleteErrorMessage.IsEmpty()) {
+          ExternalDeleteErrorMessage = ObjectsErrorMessage;
+          ExternalDeleteErrorCode = ObjectsErrorCode;
+        }
+      }
+    }
+
+    RescanLevelPackage();
+
+    const bool bMapFileStillExists = bHasMapFilename && FileManager.FileExists(*AbsoluteMapFilename);
+    const bool bPackageStillExists = FPackageName::DoesPackageExist(LongPackageName);
+    const bool bRemovedBuiltData = !bBuiltDataExists || bDeletedBuiltData;
+    const bool bRemovedExternalActors = !bExternalActorsExists || bDeletedExternalActors;
+    const bool bRemovedExternalObjects = !bExternalObjectsExists || bDeletedExternalObjects;
+    const bool bDeleted = (bDeletedViaFileFallback && !bMapFileStillExists) ||
+                          (!bMapFileExisted && !bPackageExisted && !bPackageStillLoaded);
+    const bool bDeletedWithSidecars = bDeleted && !bExternalSidecarDeleteFailed &&
+                                       bRemovedBuiltData &&
+                                       bRemovedExternalActors && bRemovedExternalObjects;
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    Result->SetStringField(TEXT("levelPath"), LongPackageName);
+    Result->SetStringField(TEXT("objectPath"), ObjectPath);
+    Result->SetStringField(TEXT("mapFilename"), AbsoluteMapFilename);
+    Result->SetBoolField(TEXT("deleted"), bDeletedWithSidecars);
+    Result->SetBoolField(TEXT("deletedMapFile"), bDeletedViaFileFallback);
+    Result->SetBoolField(TEXT("mapDeletedOrAlreadyAbsent"), bDeleted);
+    Result->SetBoolField(TEXT("deletedViaFileFallback"), bDeletedViaFileFallback);
+    Result->SetBoolField(TEXT("builtDataExists"), bBuiltDataExists);
+    Result->SetBoolField(TEXT("deletedBuiltData"), bDeletedBuiltData);
+    Result->SetBoolField(TEXT("externalSidecarDeleteAttempted"), bExternalSidecarDeleteAttempted);
+    Result->SetBoolField(TEXT("externalSidecarDeleteFailed"), bExternalSidecarDeleteFailed);
+    Result->SetBoolField(TEXT("externalActorsExists"), bExternalActorsExists);
+    Result->SetBoolField(TEXT("deletedExternalActors"), bDeletedExternalActors);
+    Result->SetBoolField(TEXT("externalObjectsExists"), bExternalObjectsExists);
+    Result->SetBoolField(TEXT("deletedExternalObjects"), bDeletedExternalObjects);
+    if (!ExternalDeleteErrorMessage.IsEmpty()) {
+      Result->SetStringField(TEXT("externalDeleteError"), ExternalDeleteErrorMessage);
+    }
+    if (!ExternalDeleteErrorCode.IsEmpty()) {
+      Result->SetStringField(TEXT("externalDeleteErrorCode"), ExternalDeleteErrorCode);
+    }
+    Result->SetBoolField(TEXT("editorDeletionSkippedForMap"), true);
+    Result->SetBoolField(TEXT("deleteAssetFailed"), false);
+    Result->SetBoolField(TEXT("wasLoaded"), bWasLoaded);
+    Result->SetBoolField(TEXT("packageUnloadAttempted"), bPackageUnloadAttempted);
+    Result->SetBoolField(TEXT("packageUnloadSucceeded"), bPackageUnloadSucceeded);
+    Result->SetBoolField(TEXT("packageStillLoaded"), bPackageStillLoaded);
+    Result->SetBoolField(TEXT("currentWorldMatchesTarget"), bCurrentWorldMatchesTarget);
+    Result->SetNumberField(TEXT("removedStreamingRefs"), RemovedStreamingRefs);
+    Result->SetBoolField(TEXT("fileExistsAfter"), bMapFileStillExists);
+    Result->SetBoolField(TEXT("packageExistsAfter"), bPackageStillExists);
+
+    if (bExternalSidecarDeleteFailed) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             ExternalDeleteErrorMessage, Result,
+                             ExternalDeleteErrorCode.IsEmpty()
+                                 ? TEXT("SOURCE_EXTERNAL_DELETE_FAILED")
+                                 : ExternalDeleteErrorCode);
+    } else if (bDeletedWithSidecars) {
       SendAutomationResponse(RequestingSocket, RequestId, true,
-                             FString::Printf(TEXT("Level deleted: %s"), *LevelPath), Result);
+                             FString::Printf(TEXT("Level file deleted: %s"), *LongPackageName), Result);
+    } else if (bCurrentWorldMatchesTarget || bPackageStillLoaded) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             FString::Printf(TEXT("Level is still loaded and cannot be deleted safely: %s"), *LongPackageName),
+                             Result, TEXT("LEVEL_LOADED"));
     } else {
       SendAutomationResponse(RequestingSocket, RequestId, false,
-                             FString::Printf(TEXT("Failed to delete level: %s"), *LevelPath),
-                             nullptr, TEXT("DELETE_FAILED"));
+                             FString::Printf(TEXT("Failed to delete level: %s"), *LongPackageName),
+                             Result, TEXT("DELETE_FAILED"));
     }
     return true;
   }
@@ -1764,10 +3090,23 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     FString DestinationPath;
     if (Payload.IsValid())
       Payload->TryGetStringField(TEXT("destinationPath"), DestinationPath);
+    if (DestinationPath.IsEmpty() && Payload.IsValid()) {
+      FString NewName;
+      Payload->TryGetStringField(TEXT("newName"), NewName);
+      if (!NewName.IsEmpty()) {
+        DestinationPath = FPaths::GetPath(NormalizeLevelPackagePath(SourcePath)) / NewName;
+      }
+    }
 
     if (SourcePath.IsEmpty()) {
       SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("levelPath or sourcePath required for rename_level"),
+                             nullptr, TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+    if (DestinationPath.IsEmpty()) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("destinationPath required for rename_level"),
                              nullptr, TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -1787,44 +3126,96 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
                              nullptr, TEXT("SECURITY_VIOLATION"));
       return true;
     }
-    SourcePath = SanitizedSource;
-    DestinationPath = SanitizedDest;
-    if (DestinationPath.IsEmpty()) {
+    SourcePath = NormalizeLevelPackagePath(SanitizedSource);
+    DestinationPath = NormalizeLevelPackagePath(SanitizedDest);
+
+    if (IsCurrentEditorWorldPackage(SourcePath)) {
       SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("destinationPath required for rename_level"),
-                             nullptr, TEXT("INVALID_ARGUMENT"));
+                             FString::Printf(TEXT("Cannot rename the current loaded level: %s"), *SourcePath),
+                             nullptr, TEXT("LEVEL_LOADED"));
       return true;
     }
 
-    // Use DuplicateAsset + DeleteAsset to rename (avoids "Find/Replace"
-    // modal dialog that auto-cancels during automation)
-    // Wrap in a transaction for atomic undo/redo support
-    FScopedTransaction Transaction(FText::FromString(TEXT("Rename Level")));
-    
-    TObjectPtr<UObject> DuplicatedForRename = UEditorAssetLibrary::DuplicateAsset(SourcePath, DestinationPath);
-    bool bRenamed = (DuplicatedForRename != nullptr);
-    if (bRenamed) {
-      bRenamed = UEditorAssetLibrary::DeleteAsset(SourcePath);
-      if (!bRenamed) {
-        // Failed to delete original — clean up the duplicate to avoid leaving artifacts
-        UE_LOG(LogTemp, Warning, TEXT("rename_level: Failed to delete source '%s', cleaning up duplicate '%s'"), *SourcePath, *DestinationPath);
-        UEditorAssetLibrary::DeleteAsset(DestinationPath);
-        // Transaction will be canceled since we're returning false
-      }
-    } else {
-      UE_LOG(LogTemp, Warning, TEXT("rename_level: Failed to duplicate '%s' to '%s'"), *SourcePath, *DestinationPath);
+    bool bOverwrite = false;
+    if (Payload.IsValid()) {
+      Payload->TryGetBoolField(TEXT("overwrite"), bOverwrite);
     }
+
+    TSharedPtr<FJsonObject> Result;
+    FString ErrorMessage;
+    FString ErrorCode;
+    const bool bCopied = CopyLevelMapPackageFile(SourcePath, DestinationPath, bOverwrite, Result, ErrorMessage, ErrorCode);
+    if (!bCopied) {
+      SendAutomationResponse(RequestingSocket, RequestId, false, ErrorMessage, Result, ErrorCode);
+      return true;
+    }
+
+    FString SourceFilename;
+    TryGetAbsoluteMapFilename(SourcePath, SourceFilename);
+    bool bDeletedSource = false;
+    if (!SourceFilename.IsEmpty()) {
+      bDeletedSource = IFileManager::Get().Delete(*SourceFilename, false, true, true);
+    }
+
+    const FString SourceBuiltDataPackagePath = SourcePath + TEXT("_BuiltData");
+    FString SourceBuiltDataFilename;
+    bool bSourceBuiltDataExists = false;
+    bool bDeletedBuiltData = false;
+    if (FPackageName::TryConvertLongPackageNameToFilename(
+            SourceBuiltDataPackagePath, SourceBuiltDataFilename, FPackageName::GetAssetPackageExtension())) {
+      SourceBuiltDataFilename = FPaths::ConvertRelativePathToFull(SourceBuiltDataFilename);
+      FPaths::NormalizeFilename(SourceBuiltDataFilename);
+      bSourceBuiltDataExists = IFileManager::Get().FileExists(*SourceBuiltDataFilename);
+      if (bSourceBuiltDataExists) {
+        bDeletedBuiltData = IFileManager::Get().Delete(*SourceBuiltDataFilename, false, true, true);
+      }
+    }
+
+    bool bSourceExternalActorsExists = false;
+    bool bDeletedSourceExternalActors = false;
+    bool bSourceExternalObjectsExists = false;
+    bool bDeletedSourceExternalObjects = false;
+    if (bDeletedSource) {
+      if (!DeleteExternalPackageDirectory(SourcePath, TEXT("__ExternalActors__"),
+                                          bSourceExternalActorsExists,
+                                          bDeletedSourceExternalActors,
+                                          ErrorMessage, ErrorCode) ||
+          !DeleteExternalPackageDirectory(SourcePath, TEXT("__ExternalObjects__"),
+                                          bSourceExternalObjectsExists,
+                                          bDeletedSourceExternalObjects,
+                                          ErrorMessage, ErrorCode)) {
+        Result->SetStringField(TEXT("externalDeleteError"), ErrorMessage);
+        SendAutomationResponse(RequestingSocket, RequestId, false, ErrorMessage,
+                               Result, ErrorCode);
+        return true;
+      }
+    }
+
+    ScanLevelPackagePath(SourcePath, SourceFilename);
+    const bool bSourceFileExistsAfter = !SourceFilename.IsEmpty() && IFileManager::Get().FileExists(*SourceFilename);
+    const bool bRemovedSourceBuiltData = !bSourceBuiltDataExists || bDeletedBuiltData;
+    const bool bRemovedSourceExternalActors = !bSourceExternalActorsExists || bDeletedSourceExternalActors;
+    const bool bRemovedSourceExternalObjects = !bSourceExternalObjectsExists || bDeletedSourceExternalObjects;
+    const bool bRenamed = bDeletedSource && !bSourceFileExistsAfter &&
+        bRemovedSourceBuiltData && bRemovedSourceExternalActors &&
+        bRemovedSourceExternalObjects;
+    Result->SetBoolField(TEXT("renamed"), bRenamed);
+    Result->SetBoolField(TEXT("deletedSourceFile"), bDeletedSource);
+    Result->SetBoolField(TEXT("sourceBuiltDataExists"), bSourceBuiltDataExists);
+    Result->SetBoolField(TEXT("deletedSourceBuiltData"), bDeletedBuiltData);
+    Result->SetBoolField(TEXT("sourceExternalActorsExists"), bSourceExternalActorsExists);
+    Result->SetBoolField(TEXT("deletedSourceExternalActors"), bDeletedSourceExternalActors);
+    Result->SetBoolField(TEXT("sourceExternalObjectsExists"), bSourceExternalObjectsExists);
+    Result->SetBoolField(TEXT("deletedSourceExternalObjects"), bDeletedSourceExternalObjects);
+    Result->SetBoolField(TEXT("sourceFileExistsAfter"), bSourceFileExistsAfter);
+
     if (bRenamed) {
-      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-      Result->SetStringField(TEXT("sourcePath"), SourcePath);
-      Result->SetStringField(TEXT("destinationPath"), DestinationPath);
-      Result->SetBoolField(TEXT("renamed"), true);
       SendAutomationResponse(RequestingSocket, RequestId, true,
                              FString::Printf(TEXT("Level renamed to: %s"), *DestinationPath), Result);
     } else {
       SendAutomationResponse(RequestingSocket, RequestId, false,
-                             FString::Printf(TEXT("Failed to rename level: %s"), *SourcePath),
-                             nullptr, TEXT("RENAME_FAILED"));
+                             FString::Printf(TEXT("Failed to delete source level after copy: %s"), *SourcePath),
+                             Result, TEXT("SOURCE_DELETE_FAILED"));
     }
     return true;
   }
@@ -1867,44 +3258,25 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
                              nullptr, TEXT("SECURITY_VIOLATION"));
       return true;
     }
-    SourcePath = SanitizedSource;
-    DestinationPath = SanitizedDest;
+    SourcePath = NormalizeLevelPackagePath(SanitizedSource);
+    DestinationPath = NormalizeLevelPackagePath(SanitizedDest);
 
-    // Validate source exists before duplicating
-    if (!FPackageName::DoesPackageExist(SourcePath)) {
-      // Also verify on disk as fallback
-      FString Filename;
-      bool bFileFound = false;
-      if (FPackageName::TryConvertLongPackageNameToFilename(
-              SourcePath, Filename, FPackageName::GetMapPackageExtension())) {
-        bFileFound = IFileManager::Get().FileExists(*Filename);
-      }
-      if (!bFileFound) {
-        SendAutomationResponse(RequestingSocket, RequestId, false,
-                               FString::Printf(TEXT("Source level not found: %s"), *SourcePath),
-                               nullptr, TEXT("SOURCE_NOT_FOUND"));
-        return true;
-      }
+    bool bOverwrite = false;
+    if (Payload.IsValid()) {
+      Payload->TryGetBoolField(TEXT("overwrite"), bOverwrite);
     }
 
-    // If destination already exists, delete it first so duplicate succeeds
-    if (UEditorAssetLibrary::DoesAssetExist(DestinationPath)) {
-      UEditorAssetLibrary::DeleteAsset(DestinationPath);
-    }
-
-    // Use UEditorAssetLibrary to duplicate the level asset
-    UObject* DuplicatedAsset = UEditorAssetLibrary::DuplicateAsset(SourcePath, DestinationPath);
-    if (DuplicatedAsset != nullptr) {
-      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-      Result->SetStringField(TEXT("sourcePath"), SourcePath);
-      Result->SetStringField(TEXT("destinationPath"), DestinationPath);
+    TSharedPtr<FJsonObject> Result;
+    FString ErrorMessage;
+    FString ErrorCode;
+    const bool bDuplicated = CopyLevelMapPackageFile(SourcePath, DestinationPath, bOverwrite, Result, ErrorMessage, ErrorCode);
+    if (bDuplicated) {
       Result->SetBoolField(TEXT("duplicated"), true);
       SendAutomationResponse(RequestingSocket, RequestId, true,
                              FString::Printf(TEXT("Level duplicated to: %s"), *DestinationPath), Result);
     } else {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             FString::Printf(TEXT("Failed to duplicate level: %s"), *SourcePath),
-                             nullptr, TEXT("DUPLICATE_FAILED"));
+      SendAutomationResponse(RequestingSocket, RequestId, false, ErrorMessage, Result,
+                             ErrorCode.IsEmpty() ? TEXT("DUPLICATE_FAILED") : ErrorCode);
     }
     return true;
   }
@@ -1914,16 +3286,24 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       Payload->TryGetStringField(TEXT("levelPath"), LevelPath);
       if (LevelPath.IsEmpty()) Payload->TryGetStringField(TEXT("level_path"), LevelPath);
     }
-    
+
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World) {
       SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("No editor world available"), nullptr, TEXT("NO_WORLD"));
       return true;
     }
-    
+
     ULevel* TargetLevel = nullptr;
     if (!LevelPath.IsEmpty()) {
+      LevelPath = SanitizeProjectRelativePath(LevelPath);
+      if (LevelPath.IsEmpty()) {
+        SendAutomationResponse(RequestingSocket, RequestId, false,
+                               TEXT("Invalid levelPath"), nullptr,
+                               TEXT("SECURITY_VIOLATION"));
+        return true;
+      }
+
       TArray<ULevel*> Levels = GetAllLevelsFromWorld(World);
       for (ULevel* Level : Levels) {
         if (Level && Level->GetOutermost() && Level->GetOutermost()->GetName() == LevelPath) {
@@ -1934,20 +3314,105 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     } else {
       TargetLevel = World->GetCurrentLevel();
     }
-    
-    if (!TargetLevel) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             FString::Printf(TEXT("Level not found: %s"), *LevelPath),
-                             nullptr, TEXT("LEVEL_NOT_FOUND"));
+
+    if (TargetLevel) {
+      // Loaded path: preserve existing JSON shape, only ADD `loaded: true`.
+      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+      Result->SetStringField(TEXT("levelPath"), TargetLevel->GetOutermost() ? TargetLevel->GetOutermost()->GetName() : TEXT(""));
+      Result->SetStringField(TEXT("levelName"), TargetLevel->GetName());
+      Result->SetNumberField(TEXT("actorCount"), TargetLevel->Actors.Num());
+      Result->SetBoolField(TEXT("loaded"), true);
+
+      // GameMode / default pawn, so "what pawn does map X spawn" doesn't need python.
+      // World Settings' "GameMode Override" is AWorldSettings::DefaultGameMode; when it's
+      // null the project-wide UGameMapsSettings::GlobalDefaultGameMode applies. The default
+      // pawn is read off the effective game mode's CDO.
+      if (AWorldSettings* WorldSettings = TargetLevel->GetWorldSettings()) {
+        TSubclassOf<AGameModeBase> OverrideGameMode = WorldSettings->DefaultGameMode;
+        Result->SetStringField(TEXT("gameModeOverride"),
+            OverrideGameMode ? OverrideGameMode->GetPathName() : TEXT(""));
+
+        TSubclassOf<AGameModeBase> EffectiveGameMode = OverrideGameMode;
+        if (!EffectiveGameMode) {
+          // GlobalDefaultGameMode is private; the static accessor returns its path string.
+          const FSoftClassPath GlobalGameModePath(
+              UGameMapsSettings::GetGlobalDefaultGameMode());
+          if (GlobalGameModePath.IsValid()) {
+            EffectiveGameMode = GlobalGameModePath.TryLoadClass<AGameModeBase>();
+          }
+        }
+        Result->SetStringField(TEXT("effectiveGameMode"),
+            EffectiveGameMode ? EffectiveGameMode->GetPathName() : TEXT(""));
+
+        if (EffectiveGameMode) {
+          if (const AGameModeBase* GameModeCDO =
+                  EffectiveGameMode->GetDefaultObject<AGameModeBase>()) {
+            Result->SetStringField(TEXT("defaultPawnClass"),
+                GameModeCDO->DefaultPawnClass ? GameModeCDO->DefaultPawnClass->GetPathName()
+                                              : TEXT(""));
+          }
+        }
+      }
+
+      SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Level info retrieved"), Result);
       return true;
     }
-    
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("levelPath"), TargetLevel->GetOutermost() ? TargetLevel->GetOutermost()->GetName() : TEXT(""));
-    Result->SetStringField(TEXT("levelName"), TargetLevel->GetName());
-    Result->SetNumberField(TEXT("actorCount"), TargetLevel->Actors.Num());
-    
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Level info retrieved"), Result);
+
+    // Not loaded as a UWorld — fall back to AssetRegistry lookup so callers can
+    // query metadata for any map asset without forcing a load. We do NOT auto-load.
+    if (!LevelPath.IsEmpty()) {
+      IAssetRegistry& AssetRegistry =
+          FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
+
+      // Accept either a package path ("/Game/Maps/Foo") or a full object path
+      // ("/Game/Maps/Foo.Foo"). FSoftObjectPath handles both forms.
+      FAssetData AssetData;
+      #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+      AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(LevelPath));
+      if (!AssetData.IsValid()) {
+        // Try appending `.<ShortName>` to a bare package path.
+        const FString ShortName = FPackageName::GetShortName(LevelPath);
+        if (!ShortName.IsEmpty() && !LevelPath.Contains(TEXT("."))) {
+          const FString ObjectPath = LevelPath + TEXT(".") + ShortName;
+          AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(ObjectPath));
+        }
+      }
+      #else
+      AssetData = AssetRegistry.GetAssetByObjectPath(FName(*LevelPath));
+      if (!AssetData.IsValid()) {
+        const FString ShortName = FPackageName::GetShortName(LevelPath);
+        if (!ShortName.IsEmpty() && !LevelPath.Contains(TEXT("."))) {
+          const FString ObjectPath = LevelPath + TEXT(".") + ShortName;
+          AssetData = AssetRegistry.GetAssetByObjectPath(FName(*ObjectPath));
+        }
+      }
+      #endif
+
+      if (AssetData.IsValid()) {
+        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+        Result->SetBoolField(TEXT("loaded"), false);
+        Result->SetStringField(TEXT("levelPath"), AssetData.PackageName.ToString());
+        Result->SetStringField(TEXT("levelName"), AssetData.AssetName.ToString());
+        Result->SetStringField(TEXT("packageName"), AssetData.PackageName.ToString());
+        Result->SetStringField(TEXT("assetName"), AssetData.AssetName.ToString());
+        Result->SetStringField(TEXT("objectPath"), MCP_ASSET_DATA_GET_OBJECT_PATH(AssetData));
+        Result->SetStringField(TEXT("assetClass"), MCP_ASSET_DATA_GET_CLASS_PATH(AssetData));
+
+        TSharedPtr<FJsonObject> TagsObj = McpHandlerUtils::CreateResultObject();
+        for (const auto& Kvp : AssetData.TagsAndValues) {
+          TagsObj->SetStringField(Kvp.Key.ToString(), Kvp.Value.AsString());
+        }
+        Result->SetObjectField(TEXT("tagsAndValues"), TagsObj);
+
+        SendAutomationResponse(RequestingSocket, RequestId, true,
+                               TEXT("Level info retrieved (asset registry, not loaded)"), Result);
+        return true;
+      }
+    }
+
+    SendAutomationResponse(RequestingSocket, RequestId, false,
+                           FString::Printf(TEXT("Level not found: %s"), *LevelPath),
+                           nullptr, TEXT("LEVEL_NOT_FOUND"));
     return true;
   }
   if (EffectiveAction == TEXT("set_level_world_settings")) {
@@ -1956,6 +3421,16 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       Payload->TryGetStringField(TEXT("levelPath"), RequestedLevelPath);
       if (RequestedLevelPath.IsEmpty()) Payload->TryGetStringField(TEXT("level_path"), RequestedLevelPath);
     }
+
+    if (!RequestedLevelPath.IsEmpty()) {
+      RequestedLevelPath = SanitizeProjectRelativePath(RequestedLevelPath);
+      if (RequestedLevelPath.IsEmpty()) {
+        SendAutomationResponse(RequestingSocket, RequestId, false,
+                               TEXT("Invalid levelPath"), nullptr,
+                               TEXT("SECURITY_VIOLATION"));
+        return true;
+      }
+    }
     
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World) {
@@ -1972,24 +3447,101 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     }
     
     FString CurrentLevelPath = TargetLevel->GetOutermost() ? TargetLevel->GetOutermost()->GetName() : TEXT("");
-    
+
     // If a specific level path was requested, validate it matches the current level
     if (!RequestedLevelPath.IsEmpty()) {
       if (CurrentLevelPath.ToLower() != RequestedLevelPath.ToLower()) {
         SendAutomationResponse(
             RequestingSocket, RequestId, false,
-            FString::Printf(TEXT("Requested level '%s' is not loaded (current: %s)"), 
+            FString::Printf(TEXT("Requested level '%s' is not loaded (current: %s)"),
                            *RequestedLevelPath, *CurrentLevelPath),
             nullptr, TEXT("LEVEL_NOT_LOADED"));
         return true;
       }
     }
-    
+
+    AWorldSettings* WorldSettings = TargetLevel->GetWorldSettings();
+    if (!WorldSettings) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Level has no WorldSettings actor"), nullptr,
+                             TEXT("NO_WORLD_SETTINGS"));
+      return true;
+    }
+
+    // Collect the property map to apply. Accept a dedicated settings object under
+    // any of the documented aliases, otherwise fall back to top-level payload
+    // fields (minus routing keys) so a flat payload also works.
+    TMap<FName, TSharedPtr<FJsonValue>> SettingsToApply;
+    if (Payload.IsValid()) {
+      const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
+      if (Payload->TryGetObjectField(TEXT("worldSettings"), SettingsObj) ||
+          Payload->TryGetObjectField(TEXT("settings"), SettingsObj) ||
+          Payload->TryGetObjectField(TEXT("properties"), SettingsObj)) {
+        if (SettingsObj && (*SettingsObj).IsValid()) {
+          for (const auto& Pair : (*SettingsObj)->Values) {
+            SettingsToApply.Add(FName(*Pair.Key), Pair.Value);
+          }
+        }
+      } else {
+        static const TSet<FString> RoutingKeys = {
+            TEXT("levelPath"), TEXT("level_path"), TEXT("action"),
+            TEXT("subAction"), TEXT("sub_action")};
+        for (const auto& Pair : Payload->Values) {
+          if (!RoutingKeys.Contains(Pair.Key)) {
+            SettingsToApply.Add(FName(*Pair.Key), Pair.Value);
+          }
+        }
+      }
+    }
+
+    if (SettingsToApply.Num() == 0) {
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("No world settings provided to apply (expected a 'worldSettings' "
+               "object or world-settings property fields)"),
+          nullptr, TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    WorldSettings->Modify();
+    TMap<FName, FString> ApplyErrors;
+    const int32 AppliedCount = McpPropertyReflection::ApplyJsonValuesToObject(
+        WorldSettings, SettingsToApply, &ApplyErrors);
+
+    if (AppliedCount == 0) {
+      TSharedPtr<FJsonObject> ErrResult = McpHandlerUtils::CreateResultObject();
+      ErrResult->SetStringField(TEXT("levelPath"), CurrentLevelPath);
+      for (const auto& Err : ApplyErrors) {
+        ErrResult->SetStringField(Err.Key.ToString(), Err.Value);
+      }
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("No world settings could be applied (no matching properties on "
+               "AWorldSettings)"),
+          ErrResult, TEXT("PROPERTY_CONVERSION_FAILED"));
+      return true;
+    }
+
+    WorldSettings->PostEditChange();
+    WorldSettings->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("levelPath"), CurrentLevelPath);
+    Result->SetNumberField(TEXT("appliedCount"), AppliedCount);
+    Result->SetNumberField(TEXT("requestedCount"), SettingsToApply.Num());
     Result->SetBoolField(TEXT("settingsApplied"), true);
-    
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("World settings updated"), Result);
+    if (ApplyErrors.Num() > 0) {
+      TSharedPtr<FJsonObject> ErrObj = McpHandlerUtils::CreateResultObject();
+      for (const auto& Err : ApplyErrors) {
+        ErrObj->SetStringField(Err.Key.ToString(), Err.Value);
+      }
+      Result->SetObjectField(TEXT("skippedProperties"), ErrObj);
+    }
+    SendAutomationResponse(
+        RequestingSocket, RequestId, true,
+        FString::Printf(TEXT("World settings updated (%d of %d applied)"),
+                        AppliedCount, SettingsToApply.Num()),
+        Result);
     return true;
   }
   if (EffectiveAction == TEXT("set_level_lighting")) {
@@ -1998,6 +3550,16 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       Payload->TryGetStringField(TEXT("levelPath"), RequestedLevelPath);
       if (RequestedLevelPath.IsEmpty()) Payload->TryGetStringField(TEXT("level_path"), RequestedLevelPath);
     }
+
+    if (!RequestedLevelPath.IsEmpty()) {
+      RequestedLevelPath = SanitizeProjectRelativePath(RequestedLevelPath);
+      if (RequestedLevelPath.IsEmpty()) {
+        SendAutomationResponse(RequestingSocket, RequestId, false,
+                               TEXT("Invalid levelPath"), nullptr,
+                               TEXT("SECURITY_VIOLATION"));
+        return true;
+      }
+    }
     
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World) {
@@ -2014,24 +3576,103 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     }
     
     FString CurrentLevelPath = TargetLevel->GetOutermost() ? TargetLevel->GetOutermost()->GetName() : TEXT("");
-    
+
     // If a specific level path was requested, validate it matches the current level
     if (!RequestedLevelPath.IsEmpty()) {
       if (CurrentLevelPath.ToLower() != RequestedLevelPath.ToLower()) {
         SendAutomationResponse(
             RequestingSocket, RequestId, false,
-            FString::Printf(TEXT("Requested level '%s' is not loaded (current: %s)"), 
+            FString::Printf(TEXT("Requested level '%s' is not loaded (current: %s)"),
                            *RequestedLevelPath, *CurrentLevelPath),
             nullptr, TEXT("LEVEL_NOT_LOADED"));
         return true;
       }
     }
-    
+
+    // Lighting-relevant level state (Lightmass quality/bounces/exposure, the
+    // precomputed-lighting toggles) lives on the level's AWorldSettings actor.
+    AWorldSettings* WorldSettings = TargetLevel->GetWorldSettings();
+    if (!WorldSettings) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Level has no WorldSettings actor"), nullptr,
+                             TEXT("NO_WORLD_SETTINGS"));
+      return true;
+    }
+
+    // Accept a dedicated lighting object (so callers can pass nested
+    // LightmassSettings), otherwise fall back to top-level payload fields.
+    TMap<FName, TSharedPtr<FJsonValue>> LightingToApply;
+    if (Payload.IsValid()) {
+      const TSharedPtr<FJsonObject>* LightingObj = nullptr;
+      if (Payload->TryGetObjectField(TEXT("lighting"), LightingObj) ||
+          Payload->TryGetObjectField(TEXT("lightingSettings"), LightingObj) ||
+          Payload->TryGetObjectField(TEXT("settings"), LightingObj) ||
+          Payload->TryGetObjectField(TEXT("properties"), LightingObj)) {
+        if (LightingObj && (*LightingObj).IsValid()) {
+          for (const auto& Pair : (*LightingObj)->Values) {
+            LightingToApply.Add(FName(*Pair.Key), Pair.Value);
+          }
+        }
+      } else {
+        static const TSet<FString> RoutingKeys = {
+            TEXT("levelPath"), TEXT("level_path"), TEXT("action"),
+            TEXT("subAction"), TEXT("sub_action")};
+        for (const auto& Pair : Payload->Values) {
+          if (!RoutingKeys.Contains(Pair.Key)) {
+            LightingToApply.Add(FName(*Pair.Key), Pair.Value);
+          }
+        }
+      }
+    }
+
+    if (LightingToApply.Num() == 0) {
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("No lighting settings provided to apply (expected a 'lighting' "
+               "object or lighting property fields, e.g. LightmassSettings)"),
+          nullptr, TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    WorldSettings->Modify();
+    TMap<FName, FString> ApplyErrors;
+    const int32 AppliedCount = McpPropertyReflection::ApplyJsonValuesToObject(
+        WorldSettings, LightingToApply, &ApplyErrors);
+
+    if (AppliedCount == 0) {
+      TSharedPtr<FJsonObject> ErrResult = McpHandlerUtils::CreateResultObject();
+      ErrResult->SetStringField(TEXT("levelPath"), CurrentLevelPath);
+      for (const auto& Err : ApplyErrors) {
+        ErrResult->SetStringField(Err.Key.ToString(), Err.Value);
+      }
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("No lighting settings could be applied (no matching properties on "
+               "AWorldSettings)"),
+          ErrResult, TEXT("PROPERTY_CONVERSION_FAILED"));
+      return true;
+    }
+
+    WorldSettings->PostEditChange();
+    WorldSettings->MarkPackageDirty();
+
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("levelPath"), CurrentLevelPath);
+    Result->SetNumberField(TEXT("appliedCount"), AppliedCount);
+    Result->SetNumberField(TEXT("requestedCount"), LightingToApply.Num());
     Result->SetBoolField(TEXT("lightingSet"), true);
-    
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Level lighting settings updated"), Result);
+    if (ApplyErrors.Num() > 0) {
+      TSharedPtr<FJsonObject> ErrObj = McpHandlerUtils::CreateResultObject();
+      for (const auto& Err : ApplyErrors) {
+        ErrObj->SetStringField(Err.Key.ToString(), Err.Value);
+      }
+      Result->SetObjectField(TEXT("skippedProperties"), ErrObj);
+    }
+    SendAutomationResponse(
+        RequestingSocket, RequestId, true,
+        FString::Printf(TEXT("Level lighting settings updated (%d of %d applied)"),
+                        AppliedCount, LightingToApply.Num()),
+        Result);
     return true;
   }
   if (EffectiveAction == TEXT("add_level_to_world")) {
@@ -2046,7 +3687,15 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
                              TEXT("levelPath required"), nullptr, TEXT("INVALID_ARGUMENT"));
       return true;
     }
-    
+
+    LevelPath = SanitizeProjectRelativePath(LevelPath);
+    if (LevelPath.IsEmpty()) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Invalid levelPath"), nullptr,
+                             TEXT("SECURITY_VIOLATION"));
+      return true;
+    }
+
     // Verify level package exists before adding to avoid false positives
     FString FilenameToCheck;
     bool bFileExists = false;
@@ -2087,6 +3736,20 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     if (Payload.IsValid()) {
       Payload->TryGetStringField(TEXT("levelPath"), LevelPath);
       if (LevelPath.IsEmpty()) Payload->TryGetStringField(TEXT("level_path"), LevelPath);
+    }
+
+    if (LevelPath.IsEmpty()) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("levelPath required"), nullptr, TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    LevelPath = SanitizeProjectRelativePath(LevelPath);
+    if (LevelPath.IsEmpty()) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Invalid levelPath"), nullptr,
+                             TEXT("SECURITY_VIOLATION"));
+      return true;
     }
     
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
@@ -2131,6 +3794,20 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       if (LevelPath.IsEmpty()) Payload->TryGetStringField(TEXT("level_path"), LevelPath);
       Payload->TryGetBoolField(TEXT("visible"), bVisible);
     }
+
+    if (LevelPath.IsEmpty()) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("levelPath required"), nullptr, TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    LevelPath = SanitizeProjectRelativePath(LevelPath);
+    if (LevelPath.IsEmpty()) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Invalid levelPath"), nullptr,
+                             TEXT("SECURITY_VIOLATION"));
+      return true;
+    }
     
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World) {
@@ -2169,6 +3846,20 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       if (LevelPath.IsEmpty()) Payload->TryGetStringField(TEXT("level_path"), LevelPath);
       Payload->TryGetBoolField(TEXT("locked"), bLocked);
     }
+
+    if (LevelPath.IsEmpty()) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("levelPath required"), nullptr, TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    LevelPath = SanitizeProjectRelativePath(LevelPath);
+    if (LevelPath.IsEmpty()) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Invalid levelPath"), nullptr,
+                             TEXT("SECURITY_VIOLATION"));
+      return true;
+    }
     
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World) {
@@ -2206,6 +3897,16 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     if (Payload.IsValid()) {
       Payload->TryGetStringField(TEXT("levelPath"), LevelPath);
       if (LevelPath.IsEmpty()) Payload->TryGetStringField(TEXT("level_path"), LevelPath);
+    }
+
+    if (!LevelPath.IsEmpty()) {
+      LevelPath = SanitizeProjectRelativePath(LevelPath);
+      if (LevelPath.IsEmpty()) {
+        SendAutomationResponse(RequestingSocket, RequestId, false,
+                               TEXT("Invalid levelPath"), nullptr,
+                               TEXT("SECURITY_VIOLATION"));
+        return true;
+      }
     }
     
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
@@ -2255,6 +3956,16 @@ TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     if (Payload.IsValid()) {
       Payload->TryGetStringField(TEXT("levelPath"), LevelPath);
       if (LevelPath.IsEmpty()) Payload->TryGetStringField(TEXT("level_path"), LevelPath);
+    }
+
+    if (!LevelPath.IsEmpty()) {
+      LevelPath = SanitizeProjectRelativePath(LevelPath);
+      if (LevelPath.IsEmpty()) {
+        SendAutomationResponse(RequestingSocket, RequestId, false,
+                               TEXT("Invalid levelPath"), nullptr,
+                               TEXT("SECURITY_VIOLATION"));
+        return true;
+      }
     }
     
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;

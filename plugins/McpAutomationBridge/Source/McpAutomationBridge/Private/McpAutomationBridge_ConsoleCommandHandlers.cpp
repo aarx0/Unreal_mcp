@@ -40,44 +40,125 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpConsoleHandlers, Log, All);
 namespace ConsoleCommandSecurity
 {
     // Commands that are blocked for security reasons
-    static const TArray<FString> BLOCKED_COMMANDS = {
+    static const TCHAR* const BLOCKED_COMMANDS[] = {
         TEXT("shutdown"),
         TEXT("quit"),
         TEXT("exit"),
+        TEXT("kill"),
         TEXT("crash"),
+        TEXT("r.gpucrash"),
+        TEXT("r.crash"),
+        TEXT("forcecrash"),
         TEXT("debugbreak"),
+        TEXT("buildpaths"),
+        TEXT("rebuildnavigation"),
         TEXT("recompileglobalshaders"),  // Can cause instability
         TEXT("deriveddatacache"),         // Can corrupt DDC
     };
     
-    // Commands that require explicit enable flag
-    static const TArray<FString> RESTRICTED_COMMANDS = {
+    // Destructive/process commands are blocked until an explicit allow-list exists.
+    static const TCHAR* const RESTRICTED_COMMANDS[] = {
         TEXT("delete"),       // Destructive
         TEXT("destroy"),      // Destructive
         TEXT("unrealbuildtool"), // Process spawning
         TEXT("ubt"),          // Process spawning
     };
+
+    static const TCHAR* const FORBIDDEN_COMMAND_NAMES[] = {
+        TEXT("rm"),
+        TEXT("del"),
+        TEXT("format"),
+        TEXT("copy"),
+        TEXT("move"),
+        TEXT("start"),
+    };
+
+    static const TCHAR* const FORBIDDEN_TOKENS[] = {
+        TEXT("import os"),
+        TEXT("import sys"),
+        TEXT("import subprocess"),
+        TEXT("subprocess."),
+        TEXT("os.system"),
+        TEXT("exec("),
+        TEXT("eval("),
+        TEXT("__import__"),
+        TEXT("with open"),
+        TEXT("open("),
+        TEXT("write("),
+        TEXT("read("),
+        TEXT("debug crash"),
+        TEXT("debug break"),
+        TEXT("assert false"),
+        TEXT("check(false)"),
+        TEXT("viewmode visualizebuffer basecolor"),
+        TEXT("viewmode visualizebuffer worldnormal"),
+        TEXT("obj garbage"),
+        TEXT("obj list"),
+        TEXT("memreport"),
+    };
+
+    static bool ContainsUnsafeSeparator(const FString& Command)
+    {
+        return Command.Contains(TEXT("\n")) ||
+               Command.Contains(TEXT("\r")) ||
+               Command.Contains(TEXT("&&")) ||
+               Command.Contains(TEXT("||")) ||
+               Command.Contains(TEXT(";")) ||
+               Command.Contains(TEXT("|")) ||
+               Command.Contains(TEXT("`"));
+    }
+
+    static bool IsListedCommandName(const FString& CommandName, const TCHAR* const* Names, int32 Count)
+    {
+        for (int32 Index = 0; Index < Count; ++Index)
+        {
+            if (CommandName.Equals(Names[Index], ESearchCase::IgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
     
     bool IsBlockedCommand(const FString& Command)
     {
-        FString LowerCommand = Command.ToLower();
+        FString LowerCommand = Command.TrimStartAndEnd().ToLower();
+        if (LowerCommand.IsEmpty())
+        {
+            return false;
+        }
+
+        if (ContainsUnsafeSeparator(LowerCommand))
+        {
+            return true;
+        }
         
         // Extract command name (first word)
-        FString CommandName;
-        int32 SpaceIndex;
-        if (LowerCommand.FindChar(' ', SpaceIndex))
+        TArray<FString> CommandParts;
+        LowerCommand.ParseIntoArrayWS(CommandParts);
+        if (CommandParts.Num() == 0)
         {
-            CommandName = LowerCommand.Left(SpaceIndex);
+            return false;
         }
-        else
+        const FString& CommandName = CommandParts[0];
+
+        if (CommandName.Equals(TEXT("py"), ESearchCase::IgnoreCase) ||
+            CommandName.Equals(TEXT("python"), ESearchCase::IgnoreCase))
         {
-            CommandName = LowerCommand;
+            return true;
         }
         
         // Check blocked list
-        for (const FString& Blocked : BLOCKED_COMMANDS)
+        if (IsListedCommandName(CommandName, BLOCKED_COMMANDS, UE_ARRAY_COUNT(BLOCKED_COMMANDS)) ||
+            IsListedCommandName(CommandName, RESTRICTED_COMMANDS, UE_ARRAY_COUNT(RESTRICTED_COMMANDS)) ||
+            IsListedCommandName(CommandName, FORBIDDEN_COMMAND_NAMES, UE_ARRAY_COUNT(FORBIDDEN_COMMAND_NAMES)))
         {
-            if (CommandName.Equals(Blocked, ESearchCase::IgnoreCase))
+            return true;
+        }
+
+        for (const TCHAR* Token : FORBIDDEN_TOKENS)
+        {
+            if (LowerCommand.Contains(Token))
             {
                 return true;
             }
@@ -95,7 +176,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
     FString LowerAction = Action.ToLower();
@@ -156,13 +237,30 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
         
         for (const TSharedPtr<FJsonValue>& CommandValue : *CommandsArray)
         {
-            if (!CommandValue.IsValid() || CommandValue->Type != EJson::String)
+            FString Command;
+            if (CommandValue.IsValid() && CommandValue->Type == EJson::String)
+            {
+                Command = CommandValue->AsString().TrimStartAndEnd();
+            }
+            else if (CommandValue.IsValid() && CommandValue->Type == EJson::Object)
+            {
+                const TSharedPtr<FJsonObject> CommandObject = CommandValue->AsObject();
+                if (CommandObject.IsValid())
+                {
+                    CommandObject->TryGetStringField(TEXT("command"), Command);
+                    if (Command.IsEmpty())
+                    {
+                        CommandObject->TryGetStringField(TEXT("cmd"), Command);
+                    }
+                    Command.TrimStartAndEndInline();
+                }
+            }
+            else
             {
                 FailedCount++;
                 continue;
             }
-            
-            FString Command = CommandValue->AsString().TrimStartAndEnd();
+
             if (Command.IsEmpty())
             {
                 continue;
@@ -180,14 +278,20 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
             // Execute the console command
             bool bSuccess = false;
             
-            // Try to execute via GEngine - Exec returns true if command was handled
-            if (GEngine)
+            // Try to execute via editor first; Exec returns true if command was handled.
+            if (GEditor)
+            {
+                bSuccess = GEditor->Exec(World, *Command);
+            }
+
+            if (!bSuccess && GEngine)
             {
                 bSuccess = GEngine->Exec(World, *Command);
-                if (bSuccess)
-                {
-                    ExecutedCount++;
-                }
+            }
+
+            if (bSuccess)
+            {
+                ExecutedCount++;
             }
             
             if (!bSuccess)
@@ -279,17 +383,26 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
             return true;
         }
         
-        // Execute the command
-        if (GEngine)
+        // Execute the command through the editor first, then engine fallback.
+        bool bSuccess = false;
+        if (GEditor)
         {
-            GEngine->Exec(World, *Command);
+            bSuccess = GEditor->Exec(World, *Command);
+        }
+
+        if (!bSuccess && GEngine)
+        {
+            bSuccess = GEngine->Exec(World, *Command);
         }
         
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("command"), Command);
+        Result->SetBoolField(TEXT("success"), bSuccess);
         
-        SendAutomationResponse(RequestingSocket, RequestId, true,
-            FString::Printf(TEXT("Command executed: %s"), *Command), Result);
+        SendAutomationResponse(RequestingSocket, RequestId, bSuccess,
+            bSuccess ? FString::Printf(TEXT("Command executed: %s"), *Command)
+                     : FString::Printf(TEXT("Command not executed: %s"), *Command),
+            Result, bSuccess ? FString() : TEXT("EXEC_FAILED"));
         
         return true;
     }

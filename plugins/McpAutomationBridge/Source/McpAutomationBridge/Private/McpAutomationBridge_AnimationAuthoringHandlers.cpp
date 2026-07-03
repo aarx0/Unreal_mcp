@@ -72,10 +72,20 @@
 #include "Factories/AnimMontageFactory.h"
 #include "Factories/AnimBlueprintFactory.h"
 #include "EditorAssetLibrary.h"
-#include "UObject/SavePackage.h"
 #include "Misc/PackageName.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/Kismet2NameValidators.h"
+// bind_anim_notify: event-graph authoring (notify -> BlueprintCallable function)
+#include "Kismet2/KismetEditorUtilities.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphPin.h"
+#include "EdGraphSchema_K2.h"
+#include "K2Node_CustomEvent.h"
+#include "K2Node_CallFunction.h"
+#include "K2Node_DynamicCast.h"
+#include "Animation/AnimInstance.h"
+#include "GameFramework/Pawn.h"
+#include "ScopedTransaction.h"
 
 // Blend Space factories
 #if __has_include("Factories/BlendSpaceFactoryNew.h") && __has_include("Factories/BlendSpaceFactory1D.h")
@@ -187,6 +197,9 @@
 // Animation Blueprint Graph
 #if __has_include("AnimationGraph.h")
 #include "AnimationGraph.h"
+#define MCP_HAS_ANIMATION_GRAPH 1
+#else
+#define MCP_HAS_ANIMATION_GRAPH 0
 #endif
 #if __has_include("AnimGraphNode_StateMachine.h")
 #include "AnimGraphNode_StateMachine.h"
@@ -283,9 +296,6 @@ namespace {
 
 // Use consolidated JSON helpers from McpAutomationBridgeHelpers.h
 // Note: These are macros to avoid ODR issues with the anonymous namespace
-#define GetNumberFieldAnimAuth GetJsonNumberField
-#define GetBoolFieldAnimAuth GetJsonBoolField
-#define GetStringFieldAnimAuth GetJsonStringField
 
 // Helper to normalize asset path
 static FString NormalizeAnimPath(const FString& Path)
@@ -354,9 +364,9 @@ static FVector GetVectorFromJsonAnim(const TSharedPtr<FJsonObject>& Obj)
         return FVector::ZeroVector;
     }
     return FVector(
-        GetNumberFieldAnimAuth(Obj, TEXT("x"), 0.0),
-        GetNumberFieldAnimAuth(Obj, TEXT("y"), 0.0),
-        GetNumberFieldAnimAuth(Obj, TEXT("z"), 0.0)
+        GetJsonNumberField(Obj, TEXT("x"), 0.0),
+        GetJsonNumberField(Obj, TEXT("y"), 0.0),
+        GetJsonNumberField(Obj, TEXT("z"), 0.0)
     );
 }
 
@@ -371,18 +381,18 @@ static FRotator GetRotatorFromJsonAnim(const TSharedPtr<FJsonObject>& Obj)
     if (Obj->HasField(TEXT("pitch")) || Obj->HasField(TEXT("yaw")) || Obj->HasField(TEXT("roll")))
     {
         return FRotator(
-            GetNumberFieldAnimAuth(Obj, TEXT("pitch"), 0.0),
-            GetNumberFieldAnimAuth(Obj, TEXT("yaw"), 0.0),
-            GetNumberFieldAnimAuth(Obj, TEXT("roll"), 0.0)
+            GetJsonNumberField(Obj, TEXT("pitch"), 0.0),
+            GetJsonNumberField(Obj, TEXT("yaw"), 0.0),
+            GetJsonNumberField(Obj, TEXT("roll"), 0.0)
         );
     }
     else if (Obj->HasField(TEXT("w")))
     {
         FQuat Quat(
-            GetNumberFieldAnimAuth(Obj, TEXT("x"), 0.0),
-            GetNumberFieldAnimAuth(Obj, TEXT("y"), 0.0),
-            GetNumberFieldAnimAuth(Obj, TEXT("z"), 0.0),
-            GetNumberFieldAnimAuth(Obj, TEXT("w"), 1.0)
+            GetJsonNumberField(Obj, TEXT("x"), 0.0),
+            GetJsonNumberField(Obj, TEXT("y"), 0.0),
+            GetJsonNumberField(Obj, TEXT("z"), 0.0),
+            GetJsonNumberField(Obj, TEXT("w"), 1.0)
         );
         return Quat.Rotator();
     }
@@ -550,31 +560,52 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 {
     TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
     
-    FString SubAction = GetStringFieldAnimAuth(Params, TEXT("subAction"), TEXT(""));
+    FString SubAction = GetJsonStringField(Params, TEXT("subAction"), TEXT(""));
     
     // ===== 10.1 Animation Sequences =====
     
     if (SubAction == TEXT("create_animation_sequence"))
     {
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")));
-        FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-        int32 NumFrames = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("numFrames"), 30));
-        int32 FrameRate = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frameRate"), 30));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
-        if (Name.IsEmpty())
-        {
-            ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
-        }
-        
-        USkeleton* Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+    // Schema advertises savePath; older callers pass path. Prefer savePath, fall back to path.
+    FString Path = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
+    if (Path.IsEmpty()) { Path = GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Animations")); }
+    Path = NormalizeAnimPath(Path);
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    int32 FrameRate = static_cast<int32>(GetJsonNumberField(Params, TEXT("frameRate"), 30));
+    // Schema exposes length (seconds); numFrames is an undocumented override.
+    int32 NumFrames = 30;
+    if (Params->HasField(TEXT("numFrames")))
+    {
+        NumFrames = static_cast<int32>(GetJsonNumberField(Params, TEXT("numFrames"), 30));
+    }
+    else if (Params->HasField(TEXT("length")))
+    {
+        NumFrames = FMath::Max(1, FMath::RoundToInt(GetJsonNumberField(Params, TEXT("length"), 1.0) * static_cast<double>(FrameRate)));
+    }
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+    if (FrameRate <= 0)
+    {
+        ANIM_ERROR_RESPONSE(TEXT("frameRate must be greater than 0"), TEXT("INVALID_FRAME_RATE"));
+    }
+
+    if (Name.IsEmpty())
+    {
+        ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
+    }
+
+    USkeleton* Skeleton = nullptr;
+    if (!SkeletonPath.IsEmpty())
+    {
+        Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
         if (!Skeleton)
         {
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeleton: %s"), *SkeletonPath), TEXT("SKELETON_NOT_FOUND"));
         }
-        
-        // Check if an asset already exists at the target path to prevent assertion failure
+    }
+
+    // Check if an asset already exists at the target path to prevent assertion failure
         FString ObjectPath = FString::Printf(TEXT("%s/%s"), *Path, *Name);
         if (UEditorAssetLibrary::DoesAssetExist(ObjectPath))
         {
@@ -648,10 +679,19 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("set_sequence_length"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        int32 NumFrames = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("numFrames"), 30));
-        int32 FrameRate = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frameRate"), 30));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        int32 FrameRate = static_cast<int32>(GetJsonNumberField(Params, TEXT("frameRate"), 30));
+        // Schema exposes length (seconds); numFrames is an undocumented override.
+        int32 NumFrames = 30;
+        if (Params->HasField(TEXT("numFrames")))
+        {
+            NumFrames = static_cast<int32>(GetJsonNumberField(Params, TEXT("numFrames"), 30));
+        }
+        else if (Params->HasField(TEXT("length")))
+        {
+            NumFrames = FMath::Max(1, FMath::RoundToInt(GetJsonNumberField(Params, TEXT("length"), 1.0) * static_cast<double>(FrameRate)));
+        }
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimSequence* Sequence = LoadAnimSequenceFromPath(AssetPath);
         if (!Sequence)
@@ -685,9 +725,9 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("add_bone_track"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString BoneName = GetStringFieldAnimAuth(Params, TEXT("boneName"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString BoneName = GetJsonStringField(Params, TEXT("boneName"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (BoneName.IsEmpty())
         {
@@ -736,7 +776,7 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
         // UE 5.1+ uses IAnimationDataController with IsValidBoneTrackName and AddBoneCurve
         IAnimationDataController& Controller = Sequence->GetController();
-        
+
         // Validate the controller model is available
         if (!Controller.GetModel())
         {
@@ -745,11 +785,9 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
                 TEXT("MODEL_NOT_AVAILABLE")
             );
         }
-        
-        PRAGMA_DISABLE_DEPRECATION_WARNINGS
-        const int32 ExistingTrackIndex = Controller.GetModel()->GetBoneTrackIndexByName(BoneFName);
-        PRAGMA_ENABLE_DEPRECATION_WARNINGS
-        if (ExistingTrackIndex == INDEX_NONE)
+
+        // Use IsValidBoneTrackName (non-deprecated) instead of GetBoneTrackIndexByName (deprecated since 5.2)
+        if (!Controller.GetModel()->IsValidBoneTrackName(BoneFName))
         {
             // AddBoneCurve returns bool - check the result
             const bool bAdded = Controller.AddBoneCurve(BoneFName);
@@ -761,12 +799,7 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
                 );
             }
 
-            // Verify the bone curve was actually added
-            // Note: GetBoneTrackIndexByName is deprecated in UE 5.2+ but still functional
-            PRAGMA_DISABLE_DEPRECATION_WARNINGS
-            const int32 AddedTrackIndex = Controller.GetModel()->GetBoneTrackIndexByName(BoneFName);
-            PRAGMA_ENABLE_DEPRECATION_WARNINGS
-            if (AddedTrackIndex == INDEX_NONE)
+            if (!Controller.GetModel()->IsValidBoneTrackName(BoneFName))
             {
                 ANIM_ERROR_RESPONSE(
                     FString::Printf(TEXT("Bone track '%s' was not found after AddBoneCurve succeeded - internal inconsistency"), *BoneName),
@@ -821,10 +854,10 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("set_bone_key"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString BoneName = GetStringFieldAnimAuth(Params, TEXT("boneName"), TEXT(""));
-        int32 Frame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frame"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString BoneName = GetJsonStringField(Params, TEXT("boneName"), TEXT(""));
+        int32 Frame = static_cast<int32>(GetJsonNumberField(Params, TEXT("frame"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         TSharedPtr<FJsonObject> LocationObj = Params->HasField(TEXT("location")) ? Params->GetObjectField(TEXT("location")) : nullptr;
         TSharedPtr<FJsonObject> RotationObj = Params->HasField(TEXT("rotation")) ? Params->GetObjectField(TEXT("rotation")) : nullptr;
@@ -841,6 +874,20 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load animation sequence: %s"), *AssetPath), TEXT("SEQUENCE_NOT_FOUND"));
         }
         
+        // Build transform key
+        FVector Location = LocationObj.IsValid() ? GetVectorFromJsonAnim(LocationObj) : FVector::ZeroVector;
+        FQuat Rotation = RotationObj.IsValid() ? GetRotatorFromJsonAnim(RotationObj).Quaternion() : FQuat::Identity;
+        FVector Scale = ScaleObj.IsValid() ? GetVectorFromJsonAnim(ScaleObj) : FVector::OneVector;
+
+        int32 TotalFrames = Sequence->GetDataModel()->GetNumberOfFrames();
+        if (Frame < 0 || Frame >= TotalFrames)
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Frame %d is out of range (animation has %d frames)"), Frame, TotalFrames),
+                TEXT("FRAME_OUT_OF_RANGE")
+            );
+        }
+
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
         // UE 5.1+ API
         IAnimationDataController& Controller = Sequence->GetController();
@@ -854,10 +901,8 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
             );
         }
 
-        PRAGMA_DISABLE_DEPRECATION_WARNINGS
-        int32 TrackIndex = Controller.GetModel()->GetBoneTrackIndexByName(BoneFName);
-        PRAGMA_ENABLE_DEPRECATION_WARNINGS
-        if (TrackIndex == INDEX_NONE)
+        // Use IsValidBoneTrackName (non-deprecated) instead of GetBoneTrackIndexByName (deprecated since 5.2)
+        if (!Controller.GetModel()->IsValidBoneTrackName(BoneFName))
         {
             const bool bAdded = Controller.AddBoneCurve(BoneFName);
             if (!bAdded)
@@ -868,35 +913,30 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
                 );
             }
 
-            PRAGMA_DISABLE_DEPRECATION_WARNINGS
-            TrackIndex = Controller.GetModel()->GetBoneTrackIndexByName(BoneFName);
-            PRAGMA_ENABLE_DEPRECATION_WARNINGS
+            // Verify the track was actually created after AddBoneCurve succeeded
+            if (!Controller.GetModel()->IsValidBoneTrackName(BoneFName))
+            {
+                ANIM_ERROR_RESPONSE(
+                    FString::Printf(TEXT("Bone track '%s' not found in animation sequence after AddBoneCurve. Add the track first using add_bone_track."), *BoneName),
+                    TEXT("BONE_TRACK_NOT_FOUND")
+                );
+            }
         }
 
-        // Verify bone track exists before setting keys
-        if (TrackIndex == INDEX_NONE)
+        // UpdateBoneTrackKeys preserves other frames; SetBoneTrackKeys would replace the entire track
+        FInt32Range KeyRange(Frame, Frame + 1);
+        if (!Controller.UpdateBoneTrackKeys(BoneFName, KeyRange, {Location}, {Rotation}, {Scale}))
         {
             ANIM_ERROR_RESPONSE(
-                FString::Printf(TEXT("Bone track '%s' not found in animation sequence. Add the track first using add_bone_track."), *BoneName),
-                TEXT("BONE_TRACK_NOT_FOUND")
+                FString::Printf(TEXT("Failed to set bone key at frame %d"), Frame),
+                TEXT("BONE_KEY_SET_FAILED")
             );
         }
-        
-        // Build transform key
-        FVector Location = LocationObj.IsValid() ? GetVectorFromJsonAnim(LocationObj) : FVector::ZeroVector;
-        FQuat Rotation = RotationObj.IsValid() ? GetRotatorFromJsonAnim(RotationObj).Quaternion() : FQuat::Identity;
-        FVector Scale = ScaleObj.IsValid() ? GetVectorFromJsonAnim(ScaleObj) : FVector::OneVector;
-        
-        FTransform Transform(Rotation, Location, Scale);
-        
-        // Set key at frame
-        FFrameNumber FrameNumber(Frame);
-        Controller.SetBoneTrackKeys(BoneFName, {Location}, {Rotation}, {Scale});
 #elif ENGINE_MAJOR_VERSION >= 5
         // UE 5.0 API - uses FindBoneTrackByName which returns a pointer
         IAnimationDataController& Controller = Sequence->GetController();
         FName BoneFName(*BoneName);
-        
+
         const FBoneAnimationTrack* Track = Controller.GetModel()->FindBoneTrackByName(BoneFName);
         if (Track == nullptr)
         {
@@ -917,12 +957,8 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
                 TEXT("BONE_TRACK_NOT_FOUND")
             );
         }
-        
-        FVector Location = LocationObj.IsValid() ? GetVectorFromJsonAnim(LocationObj) : FVector::ZeroVector;
-        FQuat Rotation = RotationObj.IsValid() ? GetRotatorFromJsonAnim(RotationObj).Quaternion() : FQuat::Identity;
-        FVector Scale = ScaleObj.IsValid() ? GetVectorFromJsonAnim(ScaleObj) : FVector::OneVector;
-        
-        FFrameNumber FrameNumber(Frame);
+
+        // UE 5.0 fallback: SetBoneTrackKeys replaces the entire track (no UpdateBoneTrackKeys available)
         Controller.SetBoneTrackKeys(BoneFName, {Location}, {Rotation}, {Scale});
 #endif
         
@@ -935,12 +971,12 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("set_curve_key"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString CurveName = GetStringFieldAnimAuth(Params, TEXT("curveName"), TEXT(""));
-        int32 Frame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frame"), 0));
-        float Value = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("value"), 0.0));
-        bool bCreateIfMissing = GetBoolFieldAnimAuth(Params, TEXT("createIfMissing"), true);
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString CurveName = GetJsonStringField(Params, TEXT("curveName"), TEXT(""));
+        int32 Frame = static_cast<int32>(GetJsonNumberField(Params, TEXT("frame"), 0));
+        float Value = static_cast<float>(GetJsonNumberField(Params, TEXT("value"), 0.0));
+        bool bCreateIfMissing = GetJsonBoolField(Params, TEXT("createIfMissing"), true);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (CurveName.IsEmpty())
         {
@@ -985,154 +1021,211 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
         return Response;
     }
 
-    if (SubAction == TEXT("add_notify"))
+if (SubAction == TEXT("add_notify"))
+{
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+    FString NotifyClass = GetJsonStringField(Params, TEXT("notifyClass"), TEXT(""));
+    int32 Frame = static_cast<int32>(GetJsonNumberField(Params, TEXT("frame"), 0));
+    int32 TrackIndex = static_cast<int32>(GetJsonNumberField(Params, TEXT("trackIndex"), 0));
+    FString NotifyName = GetJsonStringField(Params, TEXT("notifyName"), TEXT(""));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+    if (NotifyClass.IsEmpty() && NotifyName.IsEmpty())
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString NotifyClass = GetStringFieldAnimAuth(Params, TEXT("notifyClass"), TEXT("AnimNotify"));
-        int32 Frame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frame"), 0));
-        int32 TrackIndex = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("trackIndex"), 0));
-        FString NotifyName = GetStringFieldAnimAuth(Params, TEXT("notifyName"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
-        UAnimSequenceBase* AnimAsset = Cast<UAnimSequenceBase>(StaticLoadObject(UAnimSequenceBase::StaticClass(), nullptr, *AssetPath));
-        if (!AnimAsset)
-        {
-            ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load animation asset: %s"), *AssetPath), TEXT("ASSET_NOT_FOUND"));
-        }
-        
-        // Find notify class
+        ANIM_ERROR_RESPONSE(TEXT("At least one of notifyClass or notifyName is required"), TEXT("MISSING_NOTIFY_PARAMS"));
+    }
+
+    // Resolve notify class BEFORE modifying the asset
+    UClass* ResolvedNotifyClass = nullptr;
+    if (!NotifyClass.IsEmpty())
+    {
         FString FullClassName = NotifyClass;
         if (!FullClassName.StartsWith(TEXT("AnimNotify_")))
         {
             FullClassName = TEXT("AnimNotify_") + NotifyClass;
         }
-        
+
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-        UClass* NotifyUClass = FindFirstObject<UClass>(*FullClassName, EFindFirstObjectOptions::ExactClass);
+        ResolvedNotifyClass = FindFirstObject<UClass>(*FullClassName, EFindFirstObjectOptions::None);
 #else
-        // UE 5.0: Use ResolveClassByName instead of deprecated ANY_PACKAGE
-        UClass* NotifyUClass = ResolveClassByName(FullClassName);
+        ResolvedNotifyClass = ResolveClassByName(FullClassName);
 #endif
-        if (!NotifyUClass)
+        if (!ResolvedNotifyClass)
         {
-            NotifyUClass = UAnimNotify::StaticClass();
+#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
+            ResolvedNotifyClass = FindFirstObject<UClass>(*NotifyClass, EFindFirstObjectOptions::None);
+#else
+            ResolvedNotifyClass = ResolveClassByName(NotifyClass);
+#endif
         }
-        
-        // Validate that the class is not abstract - abstract classes cannot be instantiated
-        if (NotifyUClass && NotifyUClass->HasAnyClassFlags(CLASS_Abstract))
+
+        if (ResolvedNotifyClass && ResolvedNotifyClass->HasAnyClassFlags(CLASS_Abstract))
         {
             ANIM_ERROR_RESPONSE(
                 FString::Printf(TEXT("Cannot create AnimNotify: '%s' is an abstract class. Use a concrete subclass like AnimNotify_PlaySound or create a custom AnimNotify blueprint."), *FullClassName),
                 TEXT("ABSTRACT_CLASS_ERROR")
             );
         }
-        
-        // Calculate time from frame
-        float FrameRate = 30.0f;
+
+        if (!ResolvedNotifyClass)
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("AnimNotify class '%s' not found. Use a concrete subclass like AnimNotify_PlaySound or a custom AnimNotify blueprint."), *NotifyClass),
+                TEXT("CLASS_NOT_FOUND")
+            );
+        }
+    }
+
+    UAnimSequenceBase* AnimAsset = Cast<UAnimSequenceBase>(StaticLoadObject(UAnimSequenceBase::StaticClass(), nullptr, *AssetPath));
+    if (!AnimAsset)
+    {
+        ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load animation asset: %s"), *AssetPath), TEXT("ASSET_NOT_FOUND"));
+    }
+
+    // Calculate time from frame
+    float FrameRate = 30.0f;
 #if ENGINE_MAJOR_VERSION >= 5
-        if (UAnimSequence* Seq = Cast<UAnimSequence>(AnimAsset))
-        {
-            FrameRate = Seq->GetSamplingFrameRate().AsDecimal();
-        }
+    if (UAnimSequence* Seq = Cast<UAnimSequence>(AnimAsset))
+    {
+        FrameRate = Seq->GetSamplingFrameRate().AsDecimal();
+    }
 #endif
-        float TriggerTime = static_cast<float>(Frame) / FrameRate;
-        
-        // Create notify
-        UAnimNotify* NewNotify = NewObject<UAnimNotify>(AnimAsset, NotifyUClass);
-        if (NewNotify)
+    float TriggerTime = static_cast<float>(Frame) / FrameRate;
+
+    FAnimNotifyEvent& NotifyEvent = AnimAsset->Notifies.AddDefaulted_GetRef();
+    NotifyEvent.SetTime(TriggerTime);
+    NotifyEvent.TrackIndex = TrackIndex;
+
+    if (!NotifyName.IsEmpty())
+    {
+        NotifyEvent.NotifyName = FName(*NotifyName);
+    }
+
+    if (ResolvedNotifyClass)
+    {
+        UAnimNotify* NewNotify = NewObject<UAnimNotify>(AnimAsset, ResolvedNotifyClass);
+        if (!NewNotify)
         {
-            FAnimNotifyEvent& NotifyEvent = AnimAsset->Notifies.AddDefaulted_GetRef();
-            NotifyEvent.Notify = NewNotify;
-            NotifyEvent.TriggerTimeOffset = TriggerTime;
-            NotifyEvent.TrackIndex = TrackIndex;
-            
-            if (!NotifyName.IsEmpty())
-            {
-                NotifyEvent.NotifyName = FName(*NotifyName);
-            }
-            
-            AnimAsset->RefreshCacheData();
+            AnimAsset->Notifies.Pop();
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Failed to create AnimNotify instance of class '%s'"), *NotifyClass),
+                TEXT("INSTANTIATION_FAILED")
+            );
         }
-        
+        NotifyEvent.Notify = NewNotify;
+    }
+
+        AnimAsset->RefreshCacheData();
         SaveAnimAsset(AnimAsset, bSave);
 
         ANIM_SUCCESS_RESPONSE(TEXT("Notify added"));
         McpHandlerUtils::AddVerification(Response, AnimAsset);
         return Response;
+}
+
+if (SubAction == TEXT("add_notify_state"))
+{
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+    FString NotifyClass = GetJsonStringField(Params, TEXT("notifyClass"), TEXT(""));
+    int32 StartFrame = static_cast<int32>(GetJsonNumberField(Params, TEXT("startFrame"), 0));
+    int32 EndFrame = static_cast<int32>(GetJsonNumberField(Params, TEXT("endFrame"), 10));
+    int32 TrackIndex = static_cast<int32>(GetJsonNumberField(Params, TEXT("trackIndex"), 0));
+    FString NotifyName = GetJsonStringField(Params, TEXT("notifyName"), TEXT(""));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+    if (EndFrame < StartFrame)
+    {
+        ANIM_ERROR_RESPONSE(TEXT("endFrame must be greater than or equal to startFrame"), TEXT("INVALID_FRAME_RANGE"));
     }
 
-    if (SubAction == TEXT("add_notify_state"))
+    if (NotifyClass.IsEmpty() && NotifyName.IsEmpty())
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString NotifyClass = GetStringFieldAnimAuth(Params, TEXT("notifyClass"), TEXT("AnimNotifyState"));
-        int32 StartFrame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("startFrame"), 0));
-        int32 EndFrame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("endFrame"), 10));
-        int32 TrackIndex = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("trackIndex"), 0));
-        FString NotifyName = GetStringFieldAnimAuth(Params, TEXT("notifyName"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
-        UAnimSequenceBase* AnimAsset = Cast<UAnimSequenceBase>(StaticLoadObject(UAnimSequenceBase::StaticClass(), nullptr, *AssetPath));
-        if (!AnimAsset)
-        {
-            ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load animation asset: %s"), *AssetPath), TEXT("ASSET_NOT_FOUND"));
-        }
-        
-        // Find notify state class
+        ANIM_ERROR_RESPONSE(TEXT("At least one of notifyClass or notifyName is required"), TEXT("MISSING_NOTIFY_PARAMS"));
+    }
+
+    // Resolve notify state class BEFORE modifying the asset
+    UClass* ResolvedNotifyStateClass = nullptr;
+    if (!NotifyClass.IsEmpty())
+    {
         FString FullClassName = NotifyClass;
         if (!FullClassName.StartsWith(TEXT("AnimNotifyState_")))
         {
             FullClassName = TEXT("AnimNotifyState_") + NotifyClass;
         }
-        
+
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-        UClass* NotifyStateClass = FindFirstObject<UClass>(*FullClassName, EFindFirstObjectOptions::ExactClass);
+        ResolvedNotifyStateClass = FindFirstObject<UClass>(*FullClassName, EFindFirstObjectOptions::None);
 #else
-        // UE 5.0: Use ResolveClassByName instead of deprecated ANY_PACKAGE
-        UClass* NotifyStateClass = ResolveClassByName(FullClassName);
+        ResolvedNotifyStateClass = ResolveClassByName(FullClassName);
 #endif
-        if (!NotifyStateClass)
+        if (!ResolvedNotifyStateClass)
         {
-            NotifyStateClass = UAnimNotifyState::StaticClass();
+#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
+            ResolvedNotifyStateClass = FindFirstObject<UClass>(*NotifyClass, EFindFirstObjectOptions::None);
+#else
+            ResolvedNotifyStateClass = ResolveClassByName(NotifyClass);
+#endif
         }
-        
-        // Validate that the class is not abstract - abstract classes cannot be instantiated
-        if (NotifyStateClass && NotifyStateClass->HasAnyClassFlags(CLASS_Abstract))
+
+        if (ResolvedNotifyStateClass && ResolvedNotifyStateClass->HasAnyClassFlags(CLASS_Abstract))
         {
             ANIM_ERROR_RESPONSE(
                 FString::Printf(TEXT("Cannot create AnimNotifyState: '%s' is an abstract class. Use a concrete subclass like AnimNotifyState_PlayMontageNotify or create a custom AnimNotifyState blueprint."), *FullClassName),
                 TEXT("ABSTRACT_CLASS_ERROR")
             );
         }
-        
-        // Calculate times from frames
-        float FrameRate = 30.0f;
+
+        if (!ResolvedNotifyStateClass)
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("AnimNotifyState class '%s' not found. Use a concrete subclass like AnimNotifyState_PlayMontageNotify or a custom AnimNotifyState blueprint."), *NotifyClass),
+                TEXT("CLASS_NOT_FOUND")
+            );
+        }
+    }
+
+    UAnimSequenceBase* AnimAsset = Cast<UAnimSequenceBase>(StaticLoadObject(UAnimSequenceBase::StaticClass(), nullptr, *AssetPath));
+    if (!AnimAsset)
+    {
+        ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load animation asset: %s"), *AssetPath), TEXT("ASSET_NOT_FOUND"));
+    }
+
+    float FrameRate = 30.0f;
 #if ENGINE_MAJOR_VERSION >= 5
-        if (UAnimSequence* Seq = Cast<UAnimSequence>(AnimAsset))
-        {
-            FrameRate = Seq->GetSamplingFrameRate().AsDecimal();
-        }
+    if (UAnimSequence* Seq = Cast<UAnimSequence>(AnimAsset))
+    {
+        FrameRate = Seq->GetSamplingFrameRate().AsDecimal();
+    }
 #endif
-        float StartTime = static_cast<float>(StartFrame) / FrameRate;
-        float EndTime = static_cast<float>(EndFrame) / FrameRate;
-        float Duration = EndTime - StartTime;
-        
-        // Create notify state
-        UAnimNotifyState* NewNotifyState = NewObject<UAnimNotifyState>(AnimAsset, NotifyStateClass);
-        if (NewNotifyState)
+    float StartTime = static_cast<float>(StartFrame) / FrameRate;
+    float EndTime = static_cast<float>(EndFrame) / FrameRate;
+    float Duration = EndTime - StartTime;
+
+    FAnimNotifyEvent& NotifyEvent = AnimAsset->Notifies.AddDefaulted_GetRef();
+    NotifyEvent.SetTime(StartTime);
+    NotifyEvent.SetDuration(Duration);
+    NotifyEvent.TrackIndex = TrackIndex;
+
+    if (!NotifyName.IsEmpty())
+    {
+        NotifyEvent.NotifyName = FName(*NotifyName);
+    }
+
+    if (ResolvedNotifyStateClass)
+    {
+        UAnimNotifyState* NewNotifyState = NewObject<UAnimNotifyState>(AnimAsset, ResolvedNotifyStateClass);
+        if (!NewNotifyState)
         {
-            FAnimNotifyEvent& NotifyEvent = AnimAsset->Notifies.AddDefaulted_GetRef();
-            NotifyEvent.NotifyStateClass = NewNotifyState;
-            NotifyEvent.TriggerTimeOffset = StartTime;
-            NotifyEvent.SetDuration(Duration);
-            NotifyEvent.TrackIndex = TrackIndex;
-            
-            if (!NotifyName.IsEmpty())
-            {
-                NotifyEvent.NotifyName = FName(*NotifyName);
-            }
-            
-            AnimAsset->RefreshCacheData();
+            AnimAsset->Notifies.Pop();
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Failed to create AnimNotifyState instance of class '%s'"), *NotifyClass),
+                TEXT("INSTANTIATION_FAILED")
+            );
         }
+        NotifyEvent.NotifyStateClass = NewNotifyState;
+    }
+
+        AnimAsset->RefreshCacheData();
         
         SaveAnimAsset(AnimAsset, bSave);
 
@@ -1143,10 +1236,10 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("add_sync_marker"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString MarkerName = GetStringFieldAnimAuth(Params, TEXT("markerName"), TEXT(""));
-        int32 Frame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("frame"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString MarkerName = GetJsonStringField(Params, TEXT("markerName"), TEXT(""));
+        int32 Frame = static_cast<int32>(GetJsonNumberField(Params, TEXT("frame"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (MarkerName.IsEmpty())
         {
@@ -1183,11 +1276,11 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("set_root_motion_settings"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        bool bEnableRootMotion = GetBoolFieldAnimAuth(Params, TEXT("enableRootMotion"), true);
-        FString RootMotionRootLock = GetStringFieldAnimAuth(Params, TEXT("rootMotionRootLock"), TEXT("RefPose"));
-        bool bForceRootLock = GetBoolFieldAnimAuth(Params, TEXT("forceRootLock"), false);
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        bool bEnableRootMotion = GetJsonBoolField(Params, TEXT("enableRootMotion"), true);
+        FString RootMotionRootLock = GetJsonStringField(Params, TEXT("rootMotionRootLock"), TEXT("RefPose"));
+        bool bForceRootLock = GetJsonBoolField(Params, TEXT("forceRootLock"), false);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimSequence* Sequence = LoadAnimSequenceFromPath(AssetPath);
         if (!Sequence)
@@ -1221,12 +1314,12 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("set_additive_settings"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString AdditiveAnimType = GetStringFieldAnimAuth(Params, TEXT("additiveAnimType"), TEXT("NoAdditive"));
-        FString BasePoseType = GetStringFieldAnimAuth(Params, TEXT("basePoseType"), TEXT("RefPose"));
-        FString BasePoseAnimation = GetStringFieldAnimAuth(Params, TEXT("basePoseAnimation"), TEXT(""));
-        int32 BasePoseFrame = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("basePoseFrame"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString AdditiveAnimType = GetJsonStringField(Params, TEXT("additiveAnimType"), TEXT("NoAdditive"));
+        FString BasePoseType = GetJsonStringField(Params, TEXT("basePoseType"), TEXT("RefPose"));
+        FString BasePoseAnimation = GetJsonStringField(Params, TEXT("basePoseAnimation"), TEXT(""));
+        int32 BasePoseFrame = static_cast<int32>(GetJsonNumberField(Params, TEXT("basePoseFrame"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimSequence* Sequence = LoadAnimSequenceFromPath(AssetPath);
         if (!Sequence)
@@ -1284,24 +1377,48 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     if (SubAction == TEXT("create_montage"))
     {
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")));
-        FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-        FString SlotName = GetStringFieldAnimAuth(Params, TEXT("slotName"), TEXT("DefaultSlot"));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
-        if (Name.IsEmpty())
-        {
-            ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
-        }
-        
-        USkeleton* Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+    // Accept 'path' (legacy) and 'savePath' (the animation_physics schema's
+    // param name — previously ignored, so callers passing savePath silently
+    // got the /Game/Animations default). Mirrors the fixed
+    // create_widget_blueprint fallback chain.
+    FString RawPath = GetJsonStringField(Params, TEXT("path"), TEXT(""));
+    if (RawPath.IsEmpty())
+    {
+        RawPath = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
+    }
+    if (RawPath.IsEmpty())
+    {
+        RawPath = TEXT("/Game/Animations");
+    }
+    FString Path = NormalizeAnimPath(RawPath);
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    FString SlotName = GetJsonStringField(Params, TEXT("slotName"), TEXT("DefaultSlot"));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+    if (Name.IsEmpty())
+    {
+        ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
+    }
+
+    const bool bHasLength = Params->HasField(TEXT("length"));
+    const float Length = static_cast<float>(GetJsonNumberField(Params, TEXT("length"), 0.0));
+    if (bHasLength && Length <= 0.0f)
+    {
+        ANIM_ERROR_RESPONSE(TEXT("length must be a positive duration in seconds"), TEXT("INVALID_LENGTH"));
+    }
+
+    USkeleton* Skeleton = nullptr;
+    if (!SkeletonPath.IsEmpty())
+    {
+        Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
         if (!Skeleton)
         {
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeleton: %s"), *SkeletonPath), TEXT("SKELETON_NOT_FOUND"));
         }
-        
-        // Create package and asset directly to avoid UI dialogs
+    }
+
+    // Create package and asset directly to avoid UI dialogs
         FString PackagePath = Path / Name;
         UPackage* Package = CreatePackage(*PackagePath);
         if (!Package)
@@ -1319,14 +1436,50 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
         {
             ANIM_ERROR_RESPONSE(TEXT("Failed to create montage"), TEXT("CREATE_FAILED"));
         }
-        
-        // Add default slot
+
+        if (bHasLength)
+        {
+            NewMontage->SetCompositeLength(Length);
+            Response->SetNumberField(TEXT("length"), Length);
+        }
+
+        // UAnimMontage's constructor already seeds a 'DefaultSlot' track;
+        // rename it rather than appending a duplicate.
         if (!SlotName.IsEmpty())
         {
-            FSlotAnimationTrack& SlotTrack = NewMontage->SlotAnimTracks.AddDefaulted_GetRef();
-            SlotTrack.SlotName = FName(*SlotName);
+            const FName SlotFName(*SlotName);
+            bool bHasSlot = false;
+            for (const FSlotAnimationTrack& Track : NewMontage->SlotAnimTracks)
+            {
+                if (Track.SlotName == SlotFName)
+                {
+                    bHasSlot = true;
+                    break;
+                }
+            }
+            if (!bHasSlot)
+            {
+                if (NewMontage->SlotAnimTracks.Num() > 0)
+                {
+                    NewMontage->SlotAnimTracks[0].SlotName = SlotFName;
+                }
+                else
+                {
+                    NewMontage->SlotAnimTracks.AddDefaulted_GetRef().SlotName = SlotFName;
+                }
+            }
         }
-        
+
+        // The factory seeds a "Default" composite section but never calls
+        // Link() on it (LinkedMontage/LinkedSequence stay null) — the engine's
+        // own AddAnimCompositeSection links every section it adds. Without
+        // this, montage sections authored over the bridge needed manual
+        // reflection writes to become playable.
+        for (FCompositeSection& Section : NewMontage->CompositeSections)
+        {
+            Section.Link(NewMontage, Section.GetTime());
+        }
+
         SaveAnimAsset(NewMontage, bSave);
 
         FString FullPath = Path / Name;
@@ -1338,25 +1491,56 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("add_montage_section"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString SectionName = GetStringFieldAnimAuth(Params, TEXT("sectionName"), TEXT(""));
-        float StartTime = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("startTime"), 0.0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
+        // Accept assetPath, montagePath, and 'name' (the schema's only
+        // name-ish field — callers passed the montage path there and got
+        // MONTAGE_NOT_FOUND with an EMPTY path in the message).
+        FString RawAssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
+        if (RawAssetPath.IsEmpty())
+        {
+            RawAssetPath = GetJsonStringField(Params, TEXT("montagePath"), TEXT(""));
+        }
+        if (RawAssetPath.IsEmpty())
+        {
+            RawAssetPath = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        }
+        const FString AssetPath = NormalizeAnimPath(RawAssetPath);
+        FString SectionName = GetJsonStringField(Params, TEXT("sectionName"), TEXT(""));
+        // 'time' is the schema-advertised field; 'startTime' kept for
+        // compatibility with the handler's original contract.
+        float StartTime = static_cast<float>(GetJsonNumberField(
+            Params, TEXT("startTime"),
+            GetJsonNumberField(Params, TEXT("time"), 0.0)));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
         if (SectionName.IsEmpty())
         {
             ANIM_ERROR_RESPONSE(TEXT("sectionName is required"), TEXT("MISSING_SECTION_NAME"));
         }
-        
+        if (AssetPath.IsEmpty() || !AssetPath.StartsWith(TEXT("/")))
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Montage asset path required (got '%s') — pass assetPath"), *AssetPath),
+                TEXT("INVALID_ARGUMENT"));
+        }
+
         UAnimMontage* Montage = Cast<UAnimMontage>(StaticLoadObject(UAnimMontage::StaticClass(), nullptr, *AssetPath));
         if (!Montage)
         {
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load montage: %s"), *AssetPath), TEXT("MONTAGE_NOT_FOUND"));
         }
-        
-        // Add new section
+
+        // Add new section (fail fast on duplicates: AddAnimCompositeSection
+        // returns INDEX_NONE for an existing name — this used to report
+        // success "added at index -1").
+        Montage->Modify();
         int32 SectionIndex = Montage->AddAnimCompositeSection(FName(*SectionName), StartTime);
-        
+        if (SectionIndex == INDEX_NONE)
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Section '%s' already exists on %s"), *SectionName, *AssetPath),
+                TEXT("SECTION_EXISTS"));
+        }
+
         SaveAnimAsset(Montage, bSave);
 
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Section '%s' added at index %d"), *SectionName, SectionIndex));
@@ -1366,11 +1550,11 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("add_montage_slot"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString AnimationPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("animationPath"), TEXT("")));
-        FString SlotName = GetStringFieldAnimAuth(Params, TEXT("slotName"), TEXT("DefaultSlot"));
-        float StartTime = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("startTime"), 0.0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString AnimationPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("animationPath"), TEXT("")));
+        FString SlotName = GetJsonStringField(Params, TEXT("slotName"), TEXT("DefaultSlot"));
+        float StartTime = static_cast<float>(GetJsonNumberField(Params, TEXT("startTime"), 0.0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimMontage* Montage = Cast<UAnimMontage>(StaticLoadObject(UAnimMontage::StaticClass(), nullptr, *AssetPath));
         if (!Montage)
@@ -1424,9 +1608,9 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 
     if (SubAction == TEXT("set_section_timing"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString SectionName = GetStringFieldAnimAuth(Params, TEXT("sectionName"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString SectionName = GetJsonStringField(Params, TEXT("sectionName"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (SectionName.IsEmpty())
         {
@@ -1445,174 +1629,197 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Section not found: %s"), *SectionName), TEXT("SECTION_NOT_FOUND"));
         }
         
-        // Update section timing if startTime is provided
-        if (Params->HasField(TEXT("startTime")))
+        if (!Params->HasField(TEXT("startTime")))
         {
-            float StartTime = static_cast<float>(GetJsonNumberField(Params, TEXT("startTime")));
-            FCompositeSection& Section = Montage->CompositeSections[SectionIndex];
-            Section.SetTime(StartTime);
+            ANIM_ERROR_RESPONSE(TEXT("startTime is required"), TEXT("MISSING_TIME"));
         }
-        
+
+        const float StartTime = static_cast<float>(GetJsonNumberField(Params, TEXT("startTime")));
+        Montage->Modify();
+        FCompositeSection& Section = Montage->CompositeSections[SectionIndex];
+        Section.SetTime(StartTime);
+        Montage->PostEditChange();
+
         SaveAnimAsset(Montage, bSave);
 
+        Response->SetNumberField(TEXT("startTime"), StartTime);
         ANIM_SUCCESS_RESPONSE(TEXT("Section timing updated"));
         McpHandlerUtils::AddVerification(Response, Montage);
         return Response;
     }
 
-    if (SubAction == TEXT("add_montage_notify"))
+if (SubAction == TEXT("add_montage_notify"))
+{
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+    FString NotifyClass = GetJsonStringField(Params, TEXT("notifyClass"), TEXT(""));
+    float Time = static_cast<float>(GetJsonNumberField(Params, TEXT("time"), 0.0));
+    int32 TrackIndex = static_cast<int32>(GetJsonNumberField(Params, TEXT("trackIndex"), 0));
+    FString NotifyName = GetJsonStringField(Params, TEXT("notifyName"), TEXT(""));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+    if (NotifyClass.IsEmpty() && NotifyName.IsEmpty())
     {
-        // Similar to add_notify but for montages
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString NotifyClass = GetStringFieldAnimAuth(Params, TEXT("notifyClass"), TEXT("AnimNotify"));
-        float Time = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("time"), 0.0));
-        int32 TrackIndex = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("trackIndex"), 0));
-        FString NotifyName = GetStringFieldAnimAuth(Params, TEXT("notifyName"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
-        UAnimMontage* Montage = Cast<UAnimMontage>(StaticLoadObject(UAnimMontage::StaticClass(), nullptr, *AssetPath));
-        if (!Montage)
-        {
-            ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load montage: %s"), *AssetPath), TEXT("MONTAGE_NOT_FOUND"));
-        }
-        
-        // Find notify class
+        ANIM_ERROR_RESPONSE(TEXT("At least one of notifyClass or notifyName is required"), TEXT("MISSING_NOTIFY_PARAMS"));
+    }
+
+    // Resolve notify class BEFORE modifying the asset
+    UClass* ResolvedNotifyClass = nullptr;
+    if (!NotifyClass.IsEmpty())
+    {
         FString FullClassName = NotifyClass;
         if (!FullClassName.StartsWith(TEXT("AnimNotify_")))
         {
             FullClassName = TEXT("AnimNotify_") + NotifyClass;
         }
-        
+
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-        UClass* NotifyUClass = FindFirstObject<UClass>(*FullClassName, EFindFirstObjectOptions::ExactClass);
+        ResolvedNotifyClass = FindFirstObject<UClass>(*FullClassName, EFindFirstObjectOptions::None);
 #else
-        // UE 5.0: Use ResolveClassByName instead of deprecated ANY_PACKAGE
-        UClass* NotifyUClass = ResolveClassByName(FullClassName);
+        ResolvedNotifyClass = ResolveClassByName(FullClassName);
 #endif
-        if (!NotifyUClass)
+        if (!ResolvedNotifyClass)
         {
-            NotifyUClass = UAnimNotify::StaticClass();
+#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
+            ResolvedNotifyClass = FindFirstObject<UClass>(*NotifyClass, EFindFirstObjectOptions::None);
+#else
+            ResolvedNotifyClass = ResolveClassByName(NotifyClass);
+#endif
         }
-        
-        // Ensure notify track exists BEFORE creating the notify
-        // This prevents the ensure/debugbreak in RefreshCacheData() when validating notify track indices
-        // The engine's RefreshCacheData() uses WITH_EDITOR, so we use the same guard here
+
+        if (ResolvedNotifyClass && ResolvedNotifyClass->HasAnyClassFlags(CLASS_Abstract))
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Cannot create AnimNotify: '%s' is an abstract class. Use a concrete subclass like AnimNotify_PlaySound or create a custom AnimNotify blueprint."), *FullClassName),
+                TEXT("ABSTRACT_CLASS_ERROR")
+            );
+        }
+
+        if (!ResolvedNotifyClass)
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("AnimNotify class '%s' not found. Use a concrete subclass like AnimNotify_PlaySound or a custom AnimNotify blueprint."), *NotifyClass),
+                TEXT("CLASS_NOT_FOUND")
+            );
+        }
+    }
+
+    UAnimMontage* Montage = Cast<UAnimMontage>(StaticLoadObject(UAnimMontage::StaticClass(), nullptr, *AssetPath));
+    if (!Montage)
+    {
+        ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load montage: %s"), *AssetPath), TEXT("MONTAGE_NOT_FOUND"));
+    }
+
 #if WITH_EDITOR
-        if (TrackIndex >= 0)
+    if (TrackIndex >= 0)
+    {
+        while (!Montage->AnimNotifyTracks.IsValidIndex(TrackIndex))
         {
-            // Ensure we have enough tracks for the requested TrackIndex
-            // Use the engine's exact approach: FAnimNotifyTrack(Name, Color)
-            while (!Montage->AnimNotifyTracks.IsValidIndex(TrackIndex))
-            {
-                const int32 NewTrackIndex = Montage->AnimNotifyTracks.Add(
-                    FAnimNotifyTrack(*FString::FromInt(Montage->AnimNotifyTracks.Num() + 1), FLinearColor::White)
-                );
-            }
+            Montage->AnimNotifyTracks.Add(
+                FAnimNotifyTrack(*FString::FromInt(Montage->AnimNotifyTracks.Num() + 1), FLinearColor::White)
+            );
         }
+    }
 #endif
-        
-        // Create notify
-        UAnimNotify* NewNotify = NewObject<UAnimNotify>(Montage, NotifyUClass);
-        if (NewNotify)
+
+    FAnimNotifyEvent& NotifyEvent = Montage->Notifies.AddDefaulted_GetRef();
+    NotifyEvent.SetTime(Time);
+    NotifyEvent.TrackIndex = TrackIndex;
+
+    if (!NotifyName.IsEmpty())
+    {
+        NotifyEvent.NotifyName = FName(*NotifyName);
+    }
+
+    if (ResolvedNotifyClass)
+    {
+        UAnimNotify* NewNotify = NewObject<UAnimNotify>(Montage, ResolvedNotifyClass);
+        if (!NewNotify)
         {
-            FAnimNotifyEvent& NotifyEvent = Montage->Notifies.AddDefaulted_GetRef();
-            NotifyEvent.Notify = NewNotify;
-            NotifyEvent.TriggerTimeOffset = Time;
-            NotifyEvent.TrackIndex = TrackIndex;
-            
-            if (!NotifyName.IsEmpty())
-            {
-                NotifyEvent.NotifyName = FName(*NotifyName);
-            }
-            
-            Montage->RefreshCacheData();
+            Montage->Notifies.Pop();
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Failed to create AnimNotify instance of class '%s'"), *NotifyClass),
+                TEXT("INSTANTIATION_FAILED")
+            );
         }
-        
+        NotifyEvent.Notify = NewNotify;
+    }
+
+        Montage->RefreshCacheData();
         SaveAnimAsset(Montage, bSave);
 
         ANIM_SUCCESS_RESPONSE(TEXT("Montage notify added"));
         McpHandlerUtils::AddVerification(Response, Montage);
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("set_blend_in"))
+    if (SubAction == TEXT("set_blend_in") || SubAction == TEXT("set_blend_out"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        float BlendTime = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("blendTime"), 0.25));
-        FString BlendOption = GetStringFieldAnimAuth(Params, TEXT("blendOption"), TEXT("Linear"));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
+        const bool bBlendIn = SubAction == TEXT("set_blend_in");
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        // 'time' accepted as an alias of blendTime.
+        const bool bHasBlendTime = Params->HasField(TEXT("blendTime")) || Params->HasField(TEXT("time"));
+        float BlendTime = static_cast<float>(GetJsonNumberField(Params, TEXT("blendTime"),
+            GetJsonNumberField(Params, TEXT("time"), 0.25)));
+        FString BlendOption = GetJsonStringField(Params, TEXT("blendOption"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+        if (!bHasBlendTime && BlendOption.IsEmpty())
+        {
+            ANIM_ERROR_RESPONSE(TEXT("Pass blendTime (seconds; 'time' accepted) and/or blendOption (Linear, Cubic, Sinusoidal)"), TEXT("MISSING_BLEND_PARAMS"));
+        }
+
+        EAlphaBlendOption BlendOptionValue = EAlphaBlendOption::Linear;
+        if (!BlendOption.IsEmpty())
+        {
+            if (BlendOption == TEXT("Linear"))
+            {
+                BlendOptionValue = EAlphaBlendOption::Linear;
+            }
+            else if (BlendOption == TEXT("Cubic"))
+            {
+                BlendOptionValue = EAlphaBlendOption::Cubic;
+            }
+            else if (BlendOption == TEXT("Sinusoidal"))
+            {
+                BlendOptionValue = EAlphaBlendOption::Sinusoidal;
+            }
+            else
+            {
+                ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Unknown blendOption '%s' — use Linear, Cubic, or Sinusoidal"), *BlendOption), TEXT("INVALID_BLEND_OPTION"));
+            }
+        }
+
         UAnimMontage* Montage = Cast<UAnimMontage>(StaticLoadObject(UAnimMontage::StaticClass(), nullptr, *AssetPath));
         if (!Montage)
         {
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load montage: %s"), *AssetPath), TEXT("MONTAGE_NOT_FOUND"));
         }
-        
-        Montage->BlendIn.SetBlendTime(BlendTime);
-        
-        // Set blend option
-        if (BlendOption == TEXT("Cubic"))
+
+        FAlphaBlend& Blend = bBlendIn ? Montage->BlendIn : Montage->BlendOut;
+        if (bHasBlendTime)
         {
-            Montage->BlendIn.SetBlendOption(EAlphaBlendOption::Cubic);
+            Blend.SetBlendTime(BlendTime);
+            Response->SetNumberField(TEXT("blendTime"), BlendTime);
         }
-        else if (BlendOption == TEXT("Sinusoidal"))
+        if (!BlendOption.IsEmpty())
         {
-            Montage->BlendIn.SetBlendOption(EAlphaBlendOption::Sinusoidal);
+            Blend.SetBlendOption(BlendOptionValue);
+            Response->SetStringField(TEXT("blendOption"), BlendOption);
         }
-        else
-        {
-            Montage->BlendIn.SetBlendOption(EAlphaBlendOption::Linear);
-        }
-        
+
         SaveAnimAsset(Montage, bSave);
 
-        ANIM_SUCCESS_RESPONSE(TEXT("Blend in settings updated"));
-        McpHandlerUtils::AddVerification(Response, Montage);
-        return Response;
-    }
-
-    if (SubAction == TEXT("set_blend_out"))
-    {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        float BlendTime = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("blendTime"), 0.25));
-        FString BlendOption = GetStringFieldAnimAuth(Params, TEXT("blendOption"), TEXT("Linear"));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
-        UAnimMontage* Montage = Cast<UAnimMontage>(StaticLoadObject(UAnimMontage::StaticClass(), nullptr, *AssetPath));
-        if (!Montage)
-        {
-            ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load montage: %s"), *AssetPath), TEXT("MONTAGE_NOT_FOUND"));
-        }
-        
-        Montage->BlendOut.SetBlendTime(BlendTime);
-        
-        // Set blend option
-        if (BlendOption == TEXT("Cubic"))
-        {
-            Montage->BlendOut.SetBlendOption(EAlphaBlendOption::Cubic);
-        }
-        else if (BlendOption == TEXT("Sinusoidal"))
-        {
-            Montage->BlendOut.SetBlendOption(EAlphaBlendOption::Sinusoidal);
-        }
-        else
-        {
-            Montage->BlendOut.SetBlendOption(EAlphaBlendOption::Linear);
-        }
-        
-        SaveAnimAsset(Montage, bSave);
-
-        ANIM_SUCCESS_RESPONSE(TEXT("Blend out settings updated"));
+        ANIM_SUCCESS_RESPONSE(bBlendIn ? TEXT("Blend in settings updated") : TEXT("Blend out settings updated"));
         McpHandlerUtils::AddVerification(Response, Montage);
         return Response;
     }
 
     if (SubAction == TEXT("link_sections"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString FromSection = GetStringFieldAnimAuth(Params, TEXT("fromSection"), TEXT(""));
-        FString ToSection = GetStringFieldAnimAuth(Params, TEXT("toSection"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString FromSection = GetJsonStringField(Params, TEXT("fromSection"), TEXT(""));
+        FString ToSection = GetJsonStringField(Params, TEXT("toSection"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (FromSection.IsEmpty() || ToSection.IsEmpty())
         {
@@ -1645,26 +1852,48 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     if (SubAction == TEXT("create_blend_space_1d"))
     {
 #if MCP_HAS_BLENDSPACE_FACTORY
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")));
-        FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-        FString AxisName = GetStringFieldAnimAuth(Params, TEXT("axisName"), TEXT("Speed"));
-        float AxisMin = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("axisMin"), 0.0));
-        float AxisMax = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("axisMax"), 600.0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
-        if (Name.IsEmpty())
-        {
-            ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
-        }
-        
-        USkeleton* Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+    // Accept 'path' (legacy) and 'savePath' (the animation_physics schema's
+    // param name) — mirrors create_montage.
+    FString RawPath = GetJsonStringField(Params, TEXT("path"), TEXT(""));
+    if (RawPath.IsEmpty())
+    {
+        RawPath = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
+    }
+    if (RawPath.IsEmpty())
+    {
+        RawPath = TEXT("/Game/Animations");
+    }
+    FString Path = NormalizeAnimPath(RawPath);
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    FString AxisName = GetJsonStringField(Params, TEXT("axisName"), TEXT("Speed"));
+    float AxisMin = static_cast<float>(GetJsonNumberField(Params, TEXT("axisMin"), 0.0));
+    float AxisMax = static_cast<float>(GetJsonNumberField(Params, TEXT("axisMax"), 600.0));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+    if (Name.IsEmpty())
+    {
+        ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
+    }
+
+    USkeleton* Skeleton = nullptr;
+    if (!SkeletonPath.IsEmpty())
+    {
+        Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
         if (!Skeleton)
         {
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeleton: %s"), *SkeletonPath), TEXT("SKELETON_NOT_FOUND"));
         }
-        
-        // Check if an asset already exists at the target path to prevent modal dialog
+    }
+    // A Blend Space must target a skeleton; without one UBlendSpaceFactoryNew fails
+    // and we previously surfaced a generic "Failed to create blend space" — give a
+    // clear required-param error instead.
+    if (!Skeleton)
+    {
+        ANIM_ERROR_RESPONSE(TEXT("skeletonPath is required: a Blend Space targets a USkeleton. Pass skeletonPath to an existing skeleton asset."), TEXT("SKELETON_REQUIRED"));
+    }
+
+    // Check if an asset already exists at the target path to prevent modal dialog
         FString ObjectPath = FString::Printf(TEXT("%s/%s"), *Path, *Name);
         if (UEditorAssetLibrary::DoesAssetExist(ObjectPath))
         {
@@ -1748,29 +1977,51 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     if (SubAction == TEXT("create_blend_space_2d"))
     {
 #if MCP_HAS_BLENDSPACE_FACTORY
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")));
-        FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-        FString HorizontalAxisName = GetStringFieldAnimAuth(Params, TEXT("horizontalAxisName"), TEXT("Direction"));
-        float HorizontalMin = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("horizontalMin"), -180.0));
-        float HorizontalMax = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("horizontalMax"), 180.0));
-        FString VerticalAxisName = GetStringFieldAnimAuth(Params, TEXT("verticalAxisName"), TEXT("Speed"));
-        float VerticalMin = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("verticalMin"), 0.0));
-        float VerticalMax = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("verticalMax"), 600.0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
-        if (Name.IsEmpty())
-        {
-            ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
-        }
-        
-        USkeleton* Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+    // Accept 'path' (legacy) and 'savePath' (the animation_physics schema's
+    // param name) — mirrors create_montage.
+    FString RawPath = GetJsonStringField(Params, TEXT("path"), TEXT(""));
+    if (RawPath.IsEmpty())
+    {
+        RawPath = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
+    }
+    if (RawPath.IsEmpty())
+    {
+        RawPath = TEXT("/Game/Animations");
+    }
+    FString Path = NormalizeAnimPath(RawPath);
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    FString HorizontalAxisName = GetJsonStringField(Params, TEXT("horizontalAxisName"), TEXT("Direction"));
+    float HorizontalMin = static_cast<float>(GetJsonNumberField(Params, TEXT("horizontalMin"), -180.0));
+    float HorizontalMax = static_cast<float>(GetJsonNumberField(Params, TEXT("horizontalMax"), 180.0));
+    FString VerticalAxisName = GetJsonStringField(Params, TEXT("verticalAxisName"), TEXT("Speed"));
+    float VerticalMin = static_cast<float>(GetJsonNumberField(Params, TEXT("verticalMin"), 0.0));
+    float VerticalMax = static_cast<float>(GetJsonNumberField(Params, TEXT("verticalMax"), 600.0));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+    if (Name.IsEmpty())
+    {
+        ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
+    }
+
+    USkeleton* Skeleton = nullptr;
+    if (!SkeletonPath.IsEmpty())
+    {
+        Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
         if (!Skeleton)
         {
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeleton: %s"), *SkeletonPath), TEXT("SKELETON_NOT_FOUND"));
         }
-        
-        // Check if an asset already exists at the target path to prevent modal dialog
+    }
+    // A Blend Space must target a skeleton; without one UBlendSpaceFactoryNew fails
+    // and we previously surfaced a generic "Failed to create blend space 2D" — give
+    // a clear required-param error instead.
+    if (!Skeleton)
+    {
+        ANIM_ERROR_RESPONSE(TEXT("skeletonPath is required: a Blend Space targets a USkeleton. Pass skeletonPath to an existing skeleton asset."), TEXT("SKELETON_REQUIRED"));
+    }
+
+    // Check if an asset already exists at the target path to prevent modal dialog
         FString ObjectPath = FString::Printf(TEXT("%s/%s"), *Path, *Name);
         if (UEditorAssetLibrary::DoesAssetExist(ObjectPath))
         {
@@ -1861,9 +2112,9 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     if (SubAction == TEXT("add_blend_sample"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString AnimationPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("animationPath"), TEXT("")));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString AnimationPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("animationPath"), TEXT("")));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UBlendSpace* BlendSpace2D = Cast<UBlendSpace>(StaticLoadObject(UBlendSpace::StaticClass(), nullptr, *AssetPath));
         UBlendSpace1D* BlendSpace1D = Cast<UBlendSpace1D>(StaticLoadObject(UBlendSpace1D::StaticClass(), nullptr, *AssetPath));
@@ -1896,26 +2147,147 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
                 {
                     // 2D blend space
                     TSharedPtr<FJsonObject> SampleObj = SampleVal->AsObject();
-                    SampleValue.X = GetNumberFieldAnimAuth(SampleObj, TEXT("x"), 0.0);
-                    SampleValue.Y = GetNumberFieldAnimAuth(SampleObj, TEXT("y"), 0.0);
+                    SampleValue.X = GetJsonNumberField(SampleObj, TEXT("x"), 0.0);
+                    SampleValue.Y = GetJsonNumberField(SampleObj, TEXT("y"), 0.0);
                 }
             }
         }
         
         // Add sample
         BlendSpace->AddSample(Animation, SampleValue);
-        
+
+        // Wave 7+ #12: Trigger PostEditChange so grid rebuild + referencer
+        // notifications fire. Without this, BS internal cached grid stays
+        // stale and referencing ABPs may compile-warn "sample out of bounds".
+        BlendSpace->PostEditChange();
+
         SaveAnimAsset(BlendSpace, bSave);
-        
+
         ANIM_SUCCESS_RESPONSE(TEXT("Blend sample added"));
         return Response;
     }
-    
+
+    // Wave 7+ #12: explicit BS rebuild for cases where SampleData / BlendParameters
+    // were mutated via Python set_editor_property (raw memory write skips
+    // PostEditChange) or any other path that bypasses MCP's add_blend_sample.
+    // Optionally cascade-compile referencing AnimBlueprints so the user doesn't
+    // have to hunt them down manually.
+    if (SubAction == TEXT("force_rebuild_blend_space"))
+    {
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        bool bRebuildBlendParams = GetJsonBoolField(Params, TEXT("rebuildBlendParameters"), false);
+        bool bCompileReferencers = GetJsonBoolField(Params, TEXT("compileReferencers"), true);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+        UBlendSpace* BlendSpace2D = Cast<UBlendSpace>(StaticLoadObject(UBlendSpace::StaticClass(), nullptr, *AssetPath));
+        UBlendSpace1D* BlendSpace1D = Cast<UBlendSpace1D>(StaticLoadObject(UBlendSpace1D::StaticClass(), nullptr, *AssetPath));
+        UBlendSpace* BlendSpace = BlendSpace2D ? BlendSpace2D : BlendSpace1D;
+        if (!BlendSpace)
+        {
+            ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load blend space: %s"), *AssetPath), TEXT("BLENDSPACE_NOT_FOUND"));
+        }
+
+        // Step 1: drop invalid / out-of-range samples first
+        BlendSpace->ValidateSampleData();
+
+        // Step 2: trigger SampleData PostEditChange → drives grid + RuntimeBuilder rebuild
+        if (FProperty* SampleDataProp = BlendSpace->GetClass()->FindPropertyByName(TEXT("SampleData")))
+        {
+            FPropertyChangedEvent SampleEvent(SampleDataProp);
+            BlendSpace->PostEditChangeProperty(SampleEvent);
+        }
+
+        // Step 3 (optional): trigger BlendParameters PostEditChange (axis min/max changed)
+        if (bRebuildBlendParams)
+        {
+            if (FProperty* BPProp = BlendSpace->GetClass()->FindPropertyByName(TEXT("BlendParameters")))
+            {
+                FPropertyChangedEvent BPEvent(BPProp);
+                BlendSpace->PostEditChangeProperty(BPEvent);
+            }
+        }
+
+        BlendSpace->MarkPackageDirty();
+        // SaveAnimAsset returns true when bSave=false (no-op) or when the save
+        // succeeds. When bSave=true and the save actually fails, surface that
+        // to the caller rather than silently reporting success — the BS in
+        // memory is rebuilt but the on-disk asset is stale.
+        const bool bSaved = SaveAnimAsset(BlendSpace, bSave);
+        if (bSave && !bSaved)
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Blend space rebuilt in memory but failed to save asset: %s"), *AssetPath),
+                TEXT("BLENDSPACE_SAVE_FAILED"));
+        }
+
+        // Step 4 (optional): cascade-compile every AnimBlueprint referencing this BS.
+        // Track both successful and failed compiles so callers can distinguish
+        // "no referencers found" from "some referencers failed to compile" —
+        // the latter usually means the new BS shape broke the ABP's graph and
+        // needs author attention.
+        int32 CompiledCount = 0;
+        int32 FailedCount = 0;
+        TArray<TSharedPtr<FJsonValue>> CompiledArr;
+        TArray<TSharedPtr<FJsonValue>> FailedArr;
+        if (bCompileReferencers)
+        {
+            IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+            const FName BSPackageName = BlendSpace->GetOutermost()->GetFName();
+            TArray<FName> Referencers;
+            AR.GetReferencers(BSPackageName, Referencers,
+                              UE::AssetRegistry::EDependencyCategory::Package);
+
+            for (const FName& RefPkg : Referencers)
+            {
+                TArray<FAssetData> Assets;
+                AR.GetAssetsByPackageName(RefPkg, Assets);
+                for (const FAssetData& Data : Assets)
+                {
+                    if (Data.AssetClassPath == UAnimBlueprint::StaticClass()->GetClassPathName())
+                    {
+                        // Capture the soft path up front so a null GetAsset()
+                        // still gets reported as a load failure rather than
+                        // silently skipped.
+                        const FString RefPath = Data.GetObjectPathString();
+                        if (UAnimBlueprint* ABP = Cast<UAnimBlueprint>(Data.GetAsset()))
+                        {
+                            if (McpSafeCompileBlueprint(ABP))
+                            {
+                                ++CompiledCount;
+                                CompiledArr.Add(MakeShared<FJsonValueString>(ABP->GetPathName()));
+                            }
+                            else
+                            {
+                                ++FailedCount;
+                                FailedArr.Add(MakeShared<FJsonValueString>(ABP->GetPathName()));
+                            }
+                        }
+                        else
+                        {
+                            ++FailedCount;
+                            FailedArr.Add(MakeShared<FJsonValueString>(RefPath));
+                        }
+                    }
+                }
+            }
+        }
+
+        Response->SetStringField(TEXT("assetPath"), AssetPath);
+        Response->SetBoolField(TEXT("rebuiltBlendParameters"), bRebuildBlendParams);
+        Response->SetNumberField(TEXT("referencersCompiled"), CompiledCount);
+        Response->SetArrayField(TEXT("compiledAnimBlueprints"), CompiledArr);
+        Response->SetNumberField(TEXT("referencersFailed"), FailedCount);
+        Response->SetArrayField(TEXT("failedAnimBlueprints"), FailedArr);
+
+        ANIM_SUCCESS_RESPONSE(TEXT("Blend space rebuilt"));
+        return Response;
+    }
+
     if (SubAction == TEXT("set_axis_settings"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString Axis = GetStringFieldAnimAuth(Params, TEXT("axis"), TEXT("Horizontal"));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString Axis = GetJsonStringField(Params, TEXT("axis"), TEXT("Horizontal"));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UBlendSpace* BlendSpace2D = Cast<UBlendSpace>(StaticLoadObject(UBlendSpace::StaticClass(), nullptr, *AssetPath));
         UBlendSpace1D* BlendSpace1D = Cast<UBlendSpace1D>(StaticLoadObject(UBlendSpace1D::StaticClass(), nullptr, *AssetPath));
@@ -1932,35 +2304,80 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
         {
             AxisIndex = 1;
         }
-        
-        // Update axis settings - UE 5.7+ GetBlendParameter returns const ref
-        // We need to use Modify() pattern or just read and report the constraint
-        // For now, skip direct modification since BlendParameters is protected
-        // The creation flow above already sets defaults, this is for runtime update which
-        // may need different approach per UE version
-        
-        // Log info about what was requested but note it may not take effect in UE 5.7+
-        FString RequestedAxisName = GetStringFieldAnimAuth(Params, TEXT("axisName"), TEXT(""));
-        float RequestedMin = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("minValue"), 0.0));
-        float RequestedMax = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("maxValue"), 100.0));
-        int32 RequestedGridNum = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("gridDivisions"), 4));
-        
-        // Trigger PostEditChange to ensure any internal updates
-        BlendSpace->PostEditChange();
+
+        // A 1D blend space only has the horizontal axis (index 0); writing the
+        // vertical axis would be a semantic no-op the caller wouldn't see.
+        if (AxisIndex == 1 && BlendSpace1D != nullptr)
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Blend space '%s' is 1D and has no vertical axis"), *AssetPath),
+                TEXT("AXIS_OUT_OF_RANGE"));
+        }
+
+        // BlendParameters is protected; reach it via the same FProperty reflection
+        // used by create_blend_space_1d/2d. The property is a fixed FBlendParameter[3].
+        FProperty* BlendParamsProp = UBlendSpace::StaticClass()->FindPropertyByName(TEXT("BlendParameters"));
+        if (!BlendParamsProp)
+        {
+            ANIM_ERROR_RESPONSE(TEXT("BlendParameters property not found via reflection"), TEXT("REFLECTION_FAILED"));
+        }
+
+        FBlendParameter* BlendParamsPtr = BlendParamsProp->ContainerPtrToValuePtr<FBlendParameter>(BlendSpace);
+        if (!BlendParamsPtr)
+        {
+            ANIM_ERROR_RESPONSE(TEXT("Could not resolve BlendParameters storage"), TEXT("REFLECTION_FAILED"));
+        }
+
+        // Start from the existing axis so unspecified fields keep their value.
+        FBlendParameter Param = BlendParamsPtr[AxisIndex];
+        if (Params->HasField(TEXT("axisName")))
+        {
+            Param.DisplayName = GetJsonStringField(Params, TEXT("axisName"), Param.DisplayName);
+        }
+        if (Params->HasField(TEXT("minValue")))
+        {
+            Param.Min = static_cast<float>(GetJsonNumberField(Params, TEXT("minValue")));
+        }
+        if (Params->HasField(TEXT("maxValue")))
+        {
+            Param.Max = static_cast<float>(GetJsonNumberField(Params, TEXT("maxValue")));
+        }
+        if (Params->HasField(TEXT("gridDivisions")))
+        {
+            Param.GridNum = static_cast<int32>(GetJsonNumberField(Params, TEXT("gridDivisions")));
+        }
+
+        BlendSpace->Modify();
+        BlendParamsPtr[AxisIndex] = Param;
+
+        // Drive the axis-changed rebuild path explicitly so grid + samples revalidate.
+        FPropertyChangedEvent BPEvent(BlendParamsProp);
+        BlendSpace->PostEditChangeProperty(BPEvent);
         BlendSpace->MarkPackageDirty();
-        
-        SaveAnimAsset(BlendSpace, bSave);
-        
+
+        const bool bSaved = SaveAnimAsset(BlendSpace, bSave);
+        if (bSave && !bSaved)
+        {
+            ANIM_ERROR_RESPONSE(
+                FString::Printf(TEXT("Axis settings applied in memory but failed to save asset: %s"), *AssetPath),
+                TEXT("BLENDSPACE_SAVE_FAILED"));
+        }
+
+        Response->SetStringField(TEXT("axis"), Axis);
+        Response->SetStringField(TEXT("axisName"), Param.DisplayName);
+        Response->SetNumberField(TEXT("minValue"), Param.Min);
+        Response->SetNumberField(TEXT("maxValue"), Param.Max);
+        Response->SetNumberField(TEXT("gridDivisions"), Param.GridNum);
         ANIM_SUCCESS_RESPONSE(TEXT("Axis settings updated"));
         return Response;
     }
     
     if (SubAction == TEXT("set_interpolation_settings"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString InterpolationType = GetStringFieldAnimAuth(Params, TEXT("interpolationType"), TEXT("Lerp"));
-        float TargetWeightSpeed = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("targetWeightInterpolationSpeed"), 5.0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString InterpolationType = GetJsonStringField(Params, TEXT("interpolationType"), TEXT("Lerp"));
+        float TargetWeightSpeed = static_cast<float>(GetJsonNumberField(Params, TEXT("targetWeightInterpolationSpeed"), 5.0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UBlendSpace* BlendSpace2D = Cast<UBlendSpace>(StaticLoadObject(UBlendSpace::StaticClass(), nullptr, *AssetPath));
         UBlendSpace1D* BlendSpace1D = Cast<UBlendSpace1D>(StaticLoadObject(UBlendSpace1D::StaticClass(), nullptr, *AssetPath));
@@ -1982,23 +2399,30 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     if (SubAction == TEXT("create_aim_offset"))
     {
 #if MCP_HAS_BLENDSPACE_FACTORY
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")));
-        FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
-        if (Name.IsEmpty())
-        {
-            ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
-        }
-        
-        USkeleton* Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+    // Schema advertises savePath; older callers pass path. Prefer savePath, fall back to path.
+    FString Path = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
+    if (Path.IsEmpty()) { Path = GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Animations")); }
+    Path = NormalizeAnimPath(Path);
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+    if (Name.IsEmpty())
+    {
+        ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
+    }
+
+    USkeleton* Skeleton = nullptr;
+    if (!SkeletonPath.IsEmpty())
+    {
+        Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
         if (!Skeleton)
         {
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeleton: %s"), *SkeletonPath), TEXT("SKELETON_NOT_FOUND"));
         }
-        
-        // Create package and asset directly to avoid UI dialogs
+    }
+
+    // Create package and asset directly to avoid UI dialogs
         FString PackagePath = Path / Name;
         UPackage* Package = CreatePackage(*PackagePath);
         if (!Package)
@@ -2036,11 +2460,11 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     if (SubAction == TEXT("add_aim_offset_sample"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString AnimationPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("animationPath"), TEXT("")));
-        float Yaw = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("yaw"), 0.0));
-        float Pitch = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("pitch"), 0.0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString AnimationPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("animationPath"), TEXT("")));
+        float Yaw = static_cast<float>(GetJsonNumberField(Params, TEXT("yaw"), 0.0));
+        float Pitch = static_cast<float>(GetJsonNumberField(Params, TEXT("pitch"), 0.0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAimOffsetBlendSpace* AimOffset = Cast<UAimOffsetBlendSpace>(StaticLoadObject(UAimOffsetBlendSpace::StaticClass(), nullptr, *AssetPath));
         if (!AimOffset)
@@ -2085,26 +2509,39 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     // ===== 10.4 Animation Blueprints =====
     
-    if (SubAction == TEXT("create_anim_blueprint"))
+    // Accept the documented/advertised aliases too — the routing list and this
+    // file's header both name this `create_animation_blueprint`, but only
+    // `create_anim_blueprint` was handled, so the advertised names returned
+    // UNKNOWN_ACTION.
+    if (SubAction == TEXT("create_anim_blueprint") ||
+        SubAction == TEXT("create_animation_blueprint") ||
+        SubAction == TEXT("create_animation_bp"))
     {
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Blueprints")));
-        FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-        FString ParentClass = GetStringFieldAnimAuth(Params, TEXT("parentClass"), TEXT("AnimInstance"));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
-        if (Name.IsEmpty())
-        {
-            ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
-        }
-        
-        USkeleton* Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+    // Schema advertises savePath; older callers pass path. Prefer savePath, fall back to path.
+    FString Path = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
+    if (Path.IsEmpty()) { Path = GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Blueprints")); }
+    Path = NormalizeAnimPath(Path);
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    FString ParentClass = GetJsonStringField(Params, TEXT("parentClass"), TEXT("AnimInstance"));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+    if (Name.IsEmpty())
+    {
+        ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
+    }
+
+    USkeleton* Skeleton = nullptr;
+    if (!SkeletonPath.IsEmpty())
+    {
+        Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
         if (!Skeleton)
         {
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeleton: %s"), *SkeletonPath), TEXT("SKELETON_NOT_FOUND"));
         }
-        
-        // Check if an asset already exists at the target path to prevent assertion failure in Kismet2.cpp
+    }
+
+    // Check if an asset already exists at the target path to prevent assertion failure in Kismet2.cpp
         FString ObjectPath = FString::Printf(TEXT("%s/%s"), *Path, *Name);
         if (UEditorAssetLibrary::DoesAssetExist(ObjectPath))
         {
@@ -2194,17 +2631,29 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     if (SubAction == TEXT("add_state_machine"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString StateMachineName = GetStringFieldAnimAuth(Params, TEXT("stateMachineName"), TEXT(""));
-        int32 NodePosX = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 0));
-        int32 NodePosY = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
+        // The schema documents 'assetPath' and 'machineName' for these
+        // params; blueprintPath/stateMachineName are the original names.
+        FString RawBlueprintPath = GetJsonStringField(Params, TEXT("blueprintPath"), TEXT(""));
+        if (RawBlueprintPath.IsEmpty())
+        {
+            RawBlueprintPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
+        }
+        FString BlueprintPath = NormalizeAnimPath(RawBlueprintPath);
+        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"),
+            GetJsonStringField(Params, TEXT("machineName"), TEXT("")));
+        int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
+        int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
         if (StateMachineName.IsEmpty())
         {
-            ANIM_ERROR_RESPONSE(TEXT("stateMachineName is required"), TEXT("MISSING_STATE_MACHINE_NAME"));
+            ANIM_ERROR_RESPONSE(TEXT("stateMachineName (or machineName) is required"), TEXT("MISSING_STATE_MACHINE_NAME"));
         }
-        
+        if (BlueprintPath.IsEmpty())
+        {
+            ANIM_ERROR_RESPONSE(TEXT("blueprintPath (or assetPath) is required: pass the Anim Blueprint asset path"), TEXT("MISSING_BLUEPRINT_PATH"));
+        }
+
         // Try to find in-memory version first (may have unsaved changes from create_anim_blueprint)
         UAnimBlueprint* AnimBP = FindObject<UAnimBlueprint>(nullptr, *BlueprintPath);
         if (!AnimBP)
@@ -2241,7 +2690,7 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
         NodeCreator.Finalize();
         
         // Create the internal State Machine Graph using FBlueprintEditorUtils
-        UAnimationStateMachineGraph* InnerGraph = CastChecked<UAnimationStateMachineGraph>(
+        UAnimationStateMachineGraph* InnerGraph = Cast<UAnimationStateMachineGraph>(
             FBlueprintEditorUtils::CreateNewGraph(
                 AnimBP,
                 FName(*StateMachineName),
@@ -2249,13 +2698,21 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
                 UAnimationStateMachineSchema::StaticClass()
             )
         );
+        if (!InnerGraph)
+        {
+            ANIM_ERROR_RESPONSE(TEXT("Failed to create animation state machine graph"), TEXT("CREATE_GRAPH_FAILED"));
+        }
         
         // Link the State Machine Node to its internal graph
         SMNode->EditorStateMachineGraph = InnerGraph;
         InnerGraph->OwnerAnimGraphNode = SMNode;
         
         // Initialize Entry Node (required for State Machines)
-        const UAnimationStateMachineSchema* Schema = CastChecked<UAnimationStateMachineSchema>(InnerGraph->GetSchema());
+        const UAnimationStateMachineSchema* Schema = Cast<UAnimationStateMachineSchema>(InnerGraph->GetSchema());
+        if (!Schema)
+        {
+            ANIM_ERROR_RESPONSE(TEXT("Animation state machine graph has an invalid schema"), TEXT("INVALID_SCHEMA"));
+        }
         Schema->CreateDefaultNodesForGraph(*InnerGraph);
         
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
@@ -2274,18 +2731,28 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     if (SubAction == TEXT("add_state"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString StateMachineName = GetStringFieldAnimAuth(Params, TEXT("stateMachineName"), TEXT(""));
-        FString StateName = GetStringFieldAnimAuth(Params, TEXT("stateName"), TEXT(""));
-        int32 NodePosX = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 200));
-        int32 NodePosY = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
+        FString RawBlueprintPath = GetJsonStringField(Params, TEXT("blueprintPath"), TEXT(""));
+        if (RawBlueprintPath.IsEmpty())
+        {
+            RawBlueprintPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
+        }
+        FString BlueprintPath = NormalizeAnimPath(RawBlueprintPath);
+        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"),
+            GetJsonStringField(Params, TEXT("machineName"), TEXT("")));
+        FString StateName = GetJsonStringField(Params, TEXT("stateName"), TEXT(""));
+        int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 200));
+        int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
         if (StateName.IsEmpty())
         {
             ANIM_ERROR_RESPONSE(TEXT("stateName is required"), TEXT("MISSING_STATE_NAME"));
         }
-        
+        if (BlueprintPath.IsEmpty())
+        {
+            ANIM_ERROR_RESPONSE(TEXT("blueprintPath (or assetPath) is required: pass the Anim Blueprint asset path"), TEXT("MISSING_BLUEPRINT_PATH"));
+        }
+
         // Try to find in-memory version first (may have unsaved changes from add_state_machine)
         UAnimBlueprint* AnimBP = FindObject<UAnimBlueprint>(nullptr, *BlueprintPath);
         if (!AnimBP)
@@ -2414,18 +2881,28 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     if (SubAction == TEXT("add_transition"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString StateMachineName = GetStringFieldAnimAuth(Params, TEXT("stateMachineName"), TEXT(""));
-        FString FromState = GetStringFieldAnimAuth(Params, TEXT("fromState"), TEXT(""));
-        FString ToState = GetStringFieldAnimAuth(Params, TEXT("toState"), TEXT(""));
-        float CrossfadeDuration = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("crossfadeDuration"), 0.2));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
+        FString RawBlueprintPath = GetJsonStringField(Params, TEXT("blueprintPath"), TEXT(""));
+        if (RawBlueprintPath.IsEmpty())
+        {
+            RawBlueprintPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
+        }
+        FString BlueprintPath = NormalizeAnimPath(RawBlueprintPath);
+        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"),
+            GetJsonStringField(Params, TEXT("machineName"), TEXT("")));
+        FString FromState = GetJsonStringField(Params, TEXT("fromState"), TEXT(""));
+        FString ToState = GetJsonStringField(Params, TEXT("toState"), TEXT(""));
+        float CrossfadeDuration = static_cast<float>(GetJsonNumberField(Params, TEXT("crossfadeDuration"), 0.2));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
         if (FromState.IsEmpty() || ToState.IsEmpty())
         {
             ANIM_ERROR_RESPONSE(TEXT("fromState and toState are required"), TEXT("MISSING_STATES"));
         }
-        
+        if (BlueprintPath.IsEmpty())
+        {
+            ANIM_ERROR_RESPONSE(TEXT("blueprintPath (or assetPath) is required: pass the Anim Blueprint asset path"), TEXT("MISSING_BLUEPRINT_PATH"));
+        }
+
         // Try to find in-memory version first (may have unsaved changes from add_state)
         UAnimBlueprint* AnimBP = FindObject<UAnimBlueprint>(nullptr, *BlueprintPath);
         if (!AnimBP)
@@ -2549,16 +3026,27 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     if (SubAction == TEXT("set_transition_rules"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString StateMachineName = GetStringFieldAnimAuth(Params, TEXT("stateMachineName"), TEXT(""));
-        FString FromState = GetStringFieldAnimAuth(Params, TEXT("fromState"), TEXT(""));
-        FString ToState = GetStringFieldAnimAuth(Params, TEXT("toState"), TEXT(""));
-        float CrossfadeDuration = static_cast<float>(GetNumberFieldAnimAuth(Params, TEXT("crossfadeDuration"), -1.0));
-        int32 PriorityOrder = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("priorityOrder"), -1));
-        bool bAutomatic = GetBoolFieldAnimAuth(Params, TEXT("automaticRule"), false);
-        bool bBidirectional = GetBoolFieldAnimAuth(Params, TEXT("bidirectional"), false);
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
+        FString RawBlueprintPath = GetJsonStringField(Params, TEXT("blueprintPath"), TEXT(""));
+        if (RawBlueprintPath.IsEmpty())
+        {
+            RawBlueprintPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
+        }
+        FString BlueprintPath = NormalizeAnimPath(RawBlueprintPath);
+        FString StateMachineName = GetJsonStringField(Params, TEXT("stateMachineName"),
+            GetJsonStringField(Params, TEXT("machineName"), TEXT("")));
+        FString FromState = GetJsonStringField(Params, TEXT("fromState"), TEXT(""));
+        FString ToState = GetJsonStringField(Params, TEXT("toState"), TEXT(""));
+        float CrossfadeDuration = static_cast<float>(GetJsonNumberField(Params, TEXT("crossfadeDuration"), -1.0));
+        int32 PriorityOrder = static_cast<int32>(GetJsonNumberField(Params, TEXT("priorityOrder"), -1));
+        bool bAutomatic = GetJsonBoolField(Params, TEXT("automaticRule"), false);
+        bool bBidirectional = GetJsonBoolField(Params, TEXT("bidirectional"), false);
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+        if (BlueprintPath.IsEmpty())
+        {
+            ANIM_ERROR_RESPONSE(TEXT("blueprintPath (or assetPath) is required: pass the Anim Blueprint asset path"), TEXT("MISSING_BLUEPRINT_PATH"));
+        }
+
         // Try to find in-memory version first (may have unsaved changes)
         UAnimBlueprint* AnimBP = FindObject<UAnimBlueprint>(nullptr, *BlueprintPath);
         if (!AnimBP)
@@ -2638,12 +3126,12 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     if (SubAction == TEXT("add_blend_node"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString BlendType = GetStringFieldAnimAuth(Params, TEXT("blendType"), TEXT("TwoWayBlend"));
-        FString NodeName = GetStringFieldAnimAuth(Params, TEXT("nodeName"), TEXT(""));
-        int32 NodePosX = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 0));
-        int32 NodePosY = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString BlendType = GetJsonStringField(Params, TEXT("blendType"), TEXT("TwoWayBlend"));
+        FString NodeName = GetJsonStringField(Params, TEXT("nodeName"), TEXT(""));
+        int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
+        int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(StaticLoadObject(UAnimBlueprint::StaticClass(), nullptr, *BlueprintPath));
         if (!AnimBP)
@@ -2747,11 +3235,11 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     if (SubAction == TEXT("add_cached_pose"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString CacheName = GetStringFieldAnimAuth(Params, TEXT("cacheName"), TEXT(""));
-        int32 NodePosX = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 0));
-        int32 NodePosY = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString CacheName = GetJsonStringField(Params, TEXT("cacheName"), TEXT(""));
+        int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
+        int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (CacheName.IsEmpty())
         {
@@ -2795,12 +3283,12 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     if (SubAction == TEXT("add_slot_node"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString SlotName = GetStringFieldAnimAuth(Params, TEXT("slotName"), TEXT(""));
-        FString GroupName = GetStringFieldAnimAuth(Params, TEXT("groupName"), TEXT("DefaultGroup"));
-        int32 NodePosX = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 0));
-        int32 NodePosY = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString SlotName = GetJsonStringField(Params, TEXT("slotName"), TEXT(""));
+        FString GroupName = GetJsonStringField(Params, TEXT("groupName"), TEXT("DefaultGroup"));
+        int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
+        int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (SlotName.IsEmpty())
         {
@@ -2849,11 +3337,11 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     if (SubAction == TEXT("add_layered_blend_per_bone"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString BoneName = GetStringFieldAnimAuth(Params, TEXT("boneName"), TEXT(""));
-        int32 NodePosX = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionX"), 0));
-        int32 NodePosY = static_cast<int32>(GetNumberFieldAnimAuth(Params, TEXT("positionY"), 0));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString BoneName = GetJsonStringField(Params, TEXT("boneName"), TEXT(""));
+        int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
+        int32 NodePosY = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(StaticLoadObject(UAnimBlueprint::StaticClass(), nullptr, *BlueprintPath));
         if (!AnimBP)
@@ -2894,10 +3382,10 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     if (SubAction == TEXT("set_anim_graph_node_value"))
     {
-        FString BlueprintPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("blueprintPath"), TEXT("")));
-        FString NodeName = GetStringFieldAnimAuth(Params, TEXT("nodeName"), TEXT(""));
-        FString PropertyName = GetStringFieldAnimAuth(Params, TEXT("propertyName"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        FString NodeName = GetJsonStringField(Params, TEXT("nodeName"), TEXT(""));
+        FString PropertyName = GetJsonStringField(Params, TEXT("propertyName"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (NodeName.IsEmpty() || PropertyName.IsEmpty())
         {
@@ -3032,35 +3520,45 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 // ControlRig factory static methods (CreateNewControlRigAsset, CreateControlRigFromSkeletalMeshOrSkeleton)
 // are only available in UE 5.5+ where ControlRigBlueprintFactory.h is in Public folder
 #if MCP_HAS_CONTROLRIG_FACTORY && MCP_HAS_CONTROLRIG_BLUEPRINT && ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/ControlRigs")));
-        FString SkeletalMeshPath = GetStringFieldAnimAuth(Params, TEXT("skeletalMeshPath"), TEXT(""));
-        bool bModularRig = GetBoolFieldAnimAuth(Params, TEXT("modularRig"), false);
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
-        if (Name.IsEmpty())
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/ControlRigs")));
+        FString SkeletalMeshPath = GetJsonStringField(Params, TEXT("skeletalMeshPath"), TEXT(""));
+        FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+        bool bModularRig = GetJsonBoolField(Params, TEXT("modularRig"), false);
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+    if (Name.IsEmpty())
         {
             ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
         }
-        
+
         UControlRigBlueprint* ControlRigBP = nullptr;
         FString FullPath = Path / Name;
-        
-        // If skeletal mesh provided, create from it; otherwise create empty
+
+        UObject* SelectedObject = nullptr;
         if (!SkeletalMeshPath.IsEmpty())
         {
-            USkeletalMesh* SkeletalMesh = LoadSkeletalMeshFromPathAnim(SkeletalMeshPath);
-            if (!SkeletalMesh)
+            SelectedObject = LoadSkeletalMeshFromPathAnim(SkeletalMeshPath);
+            if (!SelectedObject)
             {
                 ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeletal mesh: %s"), *SkeletalMeshPath), TEXT("SKELETAL_MESH_NOT_FOUND"));
             }
-            
-            // Use static factory method to create from skeletal mesh (UE 5.5+ only)
-            ControlRigBP = UControlRigBlueprintFactory::CreateControlRigFromSkeletalMeshOrSkeleton(SkeletalMesh, bModularRig);
+        }
+        else if (!SkeletonPath.IsEmpty())
+        {
+            SelectedObject = LoadSkeletonFromPathAnim(SkeletonPath);
+            if (!SelectedObject)
+            {
+                ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeleton: %s"), *SkeletonPath), TEXT("SKELETON_NOT_FOUND"));
+            }
+        }
+
+        if (SelectedObject)
+        {
+            ControlRigBP = UControlRigBlueprintFactory::CreateControlRigFromSkeletalMeshOrSkeleton(SelectedObject, bModularRig);
         }
         else
         {
-            // Create empty control rig at specified path (UE 5.5+ only)
             ControlRigBP = UControlRigBlueprintFactory::CreateNewControlRigAsset(FullPath, bModularRig);
         }
         
@@ -3080,29 +3578,30 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
 #elif MCP_HAS_CONTROLRIG_BLUEPRINT
         // Factory static methods not available in UE 5.1-5.4 (header is in Private folder)
         // Use the Subsystem's CreateControlRigBlueprint method as fallback
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/ControlRigs")));
-        FString SkeletalMeshPath = GetStringFieldAnimAuth(Params, TEXT("skeletalMeshPath"), TEXT(""));
-        
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/ControlRigs")));
+        FString SkeletalMeshPath = GetJsonStringField(Params, TEXT("skeletalMeshPath"), TEXT(""));
+        FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+
         if (Name.IsEmpty())
         {
             ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
         }
-        
+
         FString FullPath = Path / Name;
-        
+
         // Create Control Rig Blueprint using FKismetEditorUtilities (works in all UE 5.x versions)
         FString FullPackageName = Path / Name;
-        
+
         // Create the package
         UPackage* Package = CreatePackage(*FullPackageName);
         if (!Package)
         {
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Failed to create package: %s"), *FullPackageName), TEXT("PACKAGE_CREATE_FAILED"));
         }
-        
+
         Package->FullyLoad();
-        
+
         // Create the Control Rig Blueprint using FKismetEditorUtilities
         UControlRigBlueprint* ControlRigBP = Cast<UControlRigBlueprint>(
             FKismetEditorUtilities::CreateBlueprint(
@@ -3118,17 +3617,21 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
                 UControlRigBlueprintGeneratedClass::StaticClass(),
 #endif
                 NAME_None));
-        
+
         if (!ControlRigBP)
         {
             ANIM_ERROR_RESPONSE(TEXT("Failed to create Control Rig Blueprint"), TEXT("CREATION_FAILED"));
         }
-        
-        // Set the target skeleton if provided (via skeletal mesh)
+
+        // Set the target skeleton if provided (via skeletal mesh or skeleton path)
         if (!SkeletalMeshPath.IsEmpty())
         {
             USkeletalMesh* SkeletalMesh = LoadSkeletalMeshFromPathAnim(SkeletalMeshPath);
-            if (SkeletalMesh && SkeletalMesh->GetSkeleton())
+            if (!SkeletalMesh)
+            {
+                ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeletal mesh: %s"), *SkeletalMeshPath), TEXT("SKELETAL_MESH_NOT_FOUND"));
+            }
+            if (SkeletalMesh->GetSkeleton())
             {
                 USkeletalMesh* PreviewMesh = SkeletalMesh->GetSkeleton()->GetPreviewMesh();
                 if (PreviewMesh)
@@ -3137,8 +3640,21 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
                 }
             }
         }
+        else if (!SkeletonPath.IsEmpty())
+        {
+            USkeleton* Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
+            if (!Skeleton)
+            {
+                ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeleton: %s"), *SkeletonPath), TEXT("SKELETON_NOT_FOUND"));
+            }
+            USkeletalMesh* PreviewMesh = Skeleton->GetPreviewMesh();
+            if (PreviewMesh)
+            {
+                ControlRigBP->SetPreviewMesh(PreviewMesh);
+            }
+        }
         
-        if (!SaveAnimAsset(ControlRigBP, GetBoolFieldAnimAuth(Params, TEXT("save"), true)))
+        if (!SaveAnimAsset(ControlRigBP, GetJsonBoolField(Params, TEXT("save"), true)))
         {
             ANIM_ERROR_RESPONSE(TEXT("Failed to save Control Rig Blueprint"), TEXT("SAVE_FAILED"));
         }
@@ -3155,16 +3671,18 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     if (SubAction == TEXT("add_control"))
     {
 #if MCP_HAS_CONTROLRIG
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString ControlName = GetStringFieldAnimAuth(Params, TEXT("controlName"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString ControlName = GetJsonStringField(Params, TEXT("controlName"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (ControlName.IsEmpty())
         {
             ANIM_ERROR_RESPONSE(TEXT("controlName is required"), TEXT("MISSING_CONTROL_NAME"));
         }
         
-        ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Control '%s' added (requires manual rig setup)"), *ControlName));
+        ANIM_ERROR_RESPONSE(
+            TEXT("add_control is handled by the animation_physics runtime authoring route; call animation_physics with action=add_control."),
+            TEXT("WRONG_HANDLER_ROUTE"));
 #else
         ANIM_ERROR_RESPONSE(TEXT("Control Rig module not available"), TEXT("NOT_SUPPORTED"));
 #endif
@@ -3174,10 +3692,12 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     if (SubAction == TEXT("add_rig_unit"))
     {
 #if MCP_HAS_CONTROLRIG
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString UnitType = GetStringFieldAnimAuth(Params, TEXT("unitType"), TEXT(""));
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString UnitType = GetJsonStringField(Params, TEXT("unitType"), TEXT(""));
         
-        ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Rig unit '%s' added (requires manual rig setup)"), *UnitType));
+        ANIM_ERROR_RESPONSE(
+            TEXT("add_rig_unit is handled by the animation_physics runtime authoring route; call animation_physics with action=add_rig_unit."),
+            TEXT("WRONG_HANDLER_ROUTE"));
 #else
         ANIM_ERROR_RESPONSE(TEXT("Control Rig module not available"), TEXT("NOT_SUPPORTED"));
 #endif
@@ -3187,7 +3707,9 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     if (SubAction == TEXT("connect_rig_elements"))
     {
 #if MCP_HAS_CONTROLRIG
-        ANIM_SUCCESS_RESPONSE(TEXT("Rig elements connected (requires manual rig setup)"));
+        ANIM_ERROR_RESPONSE(
+            TEXT("connect_rig_elements is handled by the animation_physics runtime authoring route; call animation_physics with action=connect_rig_elements."),
+            TEXT("WRONG_HANDLER_ROUTE"));
 #else
         ANIM_ERROR_RESPONSE(TEXT("Control Rig module not available"), TEXT("NOT_SUPPORTED"));
 #endif
@@ -3197,10 +3719,10 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     if (SubAction == TEXT("create_pose_library"))
     {
 #if MCP_HAS_POSEASSET
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Animations")));
-        FString SkeletonPath = GetStringFieldAnimAuth(Params, TEXT("skeletonPath"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Animations")));
+        FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (Name.IsEmpty())
         {
@@ -3213,9 +3735,9 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
             ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeleton: %s"), *SkeletonPath), TEXT("SKELETON_NOT_FOUND"));
         }
         
-        FString FullPath = Path / Name;
-        Response->SetStringField(TEXT("assetPath"), FullPath);
-        ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Pose library '%s' creation requires manual setup"), *Name));
+        ANIM_ERROR_RESPONSE(
+            TEXT("create_pose_library is handled by the animation_physics runtime authoring route; call animation_physics with action=create_pose_library."),
+            TEXT("WRONG_HANDLER_ROUTE"));
 #else
         ANIM_ERROR_RESPONSE(TEXT("Pose Asset not available in this engine version"), TEXT("NOT_SUPPORTED"));
 #endif
@@ -3224,85 +3746,101 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
     
     // ===== 10.6 Retargeting =====
     
-    if (SubAction == TEXT("create_ik_rig"))
-    {
+if (SubAction == TEXT("create_ik_rig"))
+{
 #if MCP_HAS_IKRIG_FACTORY && MCP_HAS_IKRIG
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Retargeting")));
-        FString SkeletalMeshPath = GetStringFieldAnimAuth(Params, TEXT("skeletalMeshPath"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
-        
-        if (Name.IsEmpty())
-        {
-            ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
-        }
-        
-// Use static factory method to create IK Rig (UE 5.1+) or fallback to NewObject (UE 5.0)
+    FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+    FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Retargeting")));
+    FString SkeletalMeshPath = GetJsonStringField(Params, TEXT("skeletalMeshPath"), TEXT(""));
+    FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
+    bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
+
+    if (Name.IsEmpty())
+    {
+        ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
+    }
+
+    // Use static factory method to create IK Rig (UE 5.1+) or fallback to NewObject (UE 5.0)
 #if MCP_HAS_IKRIG_CREATE_NEW_ASSET
-UIKRigDefinition* IKRig = MCP_IKRIG_CREATE_NEW_ASSET(Path, Name);
+    UIKRigDefinition* IKRig = MCP_IKRIG_CREATE_NEW_ASSET(Path, Name);
 #else
-// UE 5.0: Create using NewObject since CreateNewIKRigAsset doesn't exist
-UPackage* Package = CreatePackage(*FString(Path / Name));
-if (!Package)
-{
-ANIM_ERROR_RESPONSE(TEXT("Failed to create package for IK Rig"), TEXT("PACKAGE_FAILED"));
-}
-UIKRigDefinition* IKRig = NewObject<UIKRigDefinition>(Package, *Name, RF_Public | RF_Standalone);
-if (!IKRig)
-{
-ANIM_ERROR_RESPONSE(TEXT("Failed to create IK Rig asset"), TEXT("CREATION_FAILED"));
-}
-// Mark the package as needing save
-Package->MarkPackageDirty();
+    // UE 5.0: Create using NewObject since CreateNewIKRigAsset doesn't exist
+    UPackage* Package = CreatePackage(*FString(Path / Name));
+    if (!Package)
+    {
+        ANIM_ERROR_RESPONSE(TEXT("Failed to create package for IK Rig"), TEXT("PACKAGE_FAILED"));
+    }
+    UIKRigDefinition* IKRig = NewObject<UIKRigDefinition>(Package, *Name, RF_Public | RF_Standalone);
+    if (!IKRig)
+    {
+        ANIM_ERROR_RESPONSE(TEXT("Failed to create IK Rig asset"), TEXT("CREATION_FAILED"));
+    }
+    // Mark the package as needing save
+    Package->MarkPackageDirty();
 #endif
-        
-        if (!IKRig)
-        {
-            ANIM_ERROR_RESPONSE(TEXT("Failed to create IK Rig asset"), TEXT("CREATION_FAILED"));
-        }
-        
+
+    if (!IKRig)
+    {
+        ANIM_ERROR_RESPONSE(TEXT("Failed to create IK Rig asset"), TEXT("CREATION_FAILED"));
+    }
+
         // If skeletal mesh path provided, set the preview mesh
         if (!SkeletalMeshPath.IsEmpty())
         {
             USkeletalMesh* SkeletalMesh = LoadSkeletalMeshFromPathAnim(SkeletalMeshPath);
-            if (SkeletalMesh)
+            if (!SkeletalMesh)
             {
-                IKRig->SetPreviewMesh(SkeletalMesh);
+                ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeletal mesh: %s"), *SkeletalMeshPath), TEXT("SKELETAL_MESH_NOT_FOUND"));
             }
+            IKRig->SetPreviewMesh(SkeletalMesh);
         }
-        
-        if (!SaveAnimAsset(IKRig, bSave))
+        // Also support skeletonPath: load skeleton and set its preview mesh on the IK Rig
+        else if (!SkeletonPath.IsEmpty())
         {
-            ANIM_ERROR_RESPONSE(TEXT("Failed to save IK Rig asset"), TEXT("SAVE_FAILED"));
+            USkeleton* Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
+            if (!Skeleton)
+            {
+                ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeleton: %s"), *SkeletonPath), TEXT("SKELETON_NOT_FOUND"));
+            }
+            USkeletalMesh* PreviewMesh = Skeleton->GetPreviewMesh();
+            if (PreviewMesh)
+            {
+                IKRig->SetPreviewMesh(PreviewMesh);
+            }
+            Response->SetStringField(TEXT("skeletonPath"), Skeleton->GetPathName());
         }
-        
-        Response->SetStringField(TEXT("assetPath"), IKRig->GetPathName());
-        ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("IK Rig '%s' created successfully"), *Name));
-#elif MCP_HAS_IKRIG
-        // Factory not available, fall back to informative message
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Retargeting")));
-        FString FullPath = Path / Name;
-        Response->SetStringField(TEXT("assetPath"), FullPath);
-        ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("IK Rig '%s' creation requires IKRigEditor module"), *Name));
-#else
-        ANIM_ERROR_RESPONSE(TEXT("IK Rig module not available"), TEXT("NOT_SUPPORTED"));
-#endif
-        return Response;
+
+    if (!SaveAnimAsset(IKRig, bSave))
+    {
+        ANIM_ERROR_RESPONSE(TEXT("Failed to save IK Rig asset"), TEXT("SAVE_FAILED"));
     }
+
+    Response->SetStringField(TEXT("assetPath"), IKRig->GetPathName());
+    ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("IK Rig '%s' created successfully"), *Name));
+#elif MCP_HAS_IKRIG
+    ANIM_ERROR_RESPONSE(
+        TEXT("create_ik_rig requires the IKRigEditor factory module in this build"),
+        TEXT("IKRIG_FACTORY_UNAVAILABLE"));
+#else
+    ANIM_ERROR_RESPONSE(TEXT("IK Rig module not available"), TEXT("NOT_SUPPORTED"));
+#endif
+    return Response;
+}
     
     if (SubAction == TEXT("add_ik_chain"))
     {
 #if MCP_HAS_IKRIG
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString ChainName = GetStringFieldAnimAuth(Params, TEXT("chainName"), TEXT(""));
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString ChainName = GetJsonStringField(Params, TEXT("chainName"), TEXT(""));
         
         if (ChainName.IsEmpty())
         {
             ANIM_ERROR_RESPONSE(TEXT("chainName is required"), TEXT("MISSING_CHAIN_NAME"));
         }
         
-        ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("IK chain '%s' added (requires manual setup)"), *ChainName));
+        ANIM_ERROR_RESPONSE(
+            TEXT("add_ik_chain is handled by the animation_physics runtime authoring route; call animation_physics with action=add_ik_chain."),
+            TEXT("WRONG_HANDLER_ROUTE"));
 #else
         ANIM_ERROR_RESPONSE(TEXT("IK Rig module not available"), TEXT("NOT_SUPPORTED"));
 #endif
@@ -3312,11 +3850,11 @@ Package->MarkPackageDirty();
     if (SubAction == TEXT("create_ik_retargeter"))
     {
 #if MCP_HAS_IKRETARGET_FACTORY && MCP_HAS_IKRETARGETER
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Retargeting")));
-        FString SourceIKRigPath = GetStringFieldAnimAuth(Params, TEXT("sourceIKRigPath"), TEXT(""));
-        FString TargetIKRigPath = GetStringFieldAnimAuth(Params, TEXT("targetIKRigPath"), TEXT(""));
-        bool bSave = GetBoolFieldAnimAuth(Params, TEXT("save"), true);
+        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
+        FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Retargeting")));
+        FString SourceIKRigPath = GetJsonStringField(Params, TEXT("sourceIKRigPath"), TEXT(""));
+        FString TargetIKRigPath = GetJsonStringField(Params, TEXT("targetIKRigPath"), TEXT(""));
+        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
         if (Name.IsEmpty())
         {
@@ -3397,12 +3935,9 @@ Retargeter->TargetIKRigAsset = TargetRig;
         Response->SetStringField(TEXT("assetPath"), Retargeter->GetPathName());
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("IK Retargeter '%s' created successfully"), *Name));
 #elif MCP_HAS_IKRETARGETER
-        // Factory not available, fall back to informative message
-        FString Name = GetStringFieldAnimAuth(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("path"), TEXT("/Game/Retargeting")));
-        FString FullPath = Path / Name;
-        Response->SetStringField(TEXT("assetPath"), FullPath);
-        ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("IK Retargeter '%s' creation requires IKRigEditor module"), *Name));
+        ANIM_ERROR_RESPONSE(
+            TEXT("create_ik_retargeter requires the IKRigEditor factory module in this build"),
+            TEXT("IKRETARGET_FACTORY_UNAVAILABLE"));
 #else
         ANIM_ERROR_RESPONSE(TEXT("IK Retargeter module not available"), TEXT("NOT_SUPPORTED"));
 #endif
@@ -3412,9 +3947,9 @@ Retargeter->TargetIKRigAsset = TargetRig;
     if (SubAction == TEXT("set_retarget_chain_mapping"))
     {
 #if MCP_HAS_IKRETARGETER
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
-        FString SourceChain = GetStringFieldAnimAuth(Params, TEXT("sourceChain"), TEXT(""));
-        FString TargetChain = GetStringFieldAnimAuth(Params, TEXT("targetChain"), TEXT(""));
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        FString SourceChain = GetJsonStringField(Params, TEXT("sourceChain"), TEXT(""));
+        FString TargetChain = GetJsonStringField(Params, TEXT("targetChain"), TEXT(""));
         
         if (SourceChain.IsEmpty() || TargetChain.IsEmpty())
         {
@@ -3432,7 +3967,7 @@ Retargeter->TargetIKRigAsset = TargetRig;
     
     if (SubAction == TEXT("get_animation_info"))
     {
-        FString AssetPath = NormalizeAnimPath(GetStringFieldAnimAuth(Params, TEXT("assetPath"), TEXT("")));
+        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         
         UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
         if (!Asset)
@@ -3469,15 +4004,90 @@ Retargeter->TargetIKRigAsset = TargetRig;
             AnimInfo->SetNumberField(TEXT("numSections"), Montage->CompositeSections.Num());
             AnimInfo->SetNumberField(TEXT("numSlots"), Montage->SlotAnimTracks.Num());
             AnimInfo->SetNumberField(TEXT("numNotifies"), Montage->Notifies.Num());
+
+            // Blend in/out + auto-blend-out: the "snap on release" tuning lives here and was
+            // previously only reachable via execute_python.
+            AnimInfo->SetNumberField(TEXT("blendInTime"), Montage->BlendIn.GetBlendTime());
+            AnimInfo->SetNumberField(TEXT("blendOutTime"), Montage->BlendOut.GetBlendTime());
+            AnimInfo->SetBoolField(TEXT("autoBlendOut"), Montage->bEnableAutoBlendOut);
+
+            // Sections: name + start time + next-section link (the section graph).
+            TArray<TSharedPtr<FJsonValue>> SectionsArr;
+            for (const FCompositeSection& Sec : Montage->CompositeSections)
+            {
+                TSharedPtr<FJsonObject> SecObj = MakeShared<FJsonObject>();
+                SecObj->SetStringField(TEXT("name"), Sec.SectionName.ToString());
+                SecObj->SetNumberField(TEXT("startTime"), Sec.GetTime());
+                SecObj->SetStringField(TEXT("nextSection"), Sec.NextSectionName.ToString());
+                SectionsArr.Add(MakeShared<FJsonValueObject>(SecObj));
+            }
+            AnimInfo->SetArrayField(TEXT("sections"), SectionsArr);
+
+            // Slots + their anim segments (slot tracks are not Python-reflectable, so this
+            // is the only way over the bridge to see slot names and segment source anims).
+            TArray<TSharedPtr<FJsonValue>> SlotsArr;
+            for (const FSlotAnimationTrack& Slot : Montage->SlotAnimTracks)
+            {
+                TSharedPtr<FJsonObject> SlotObj = MakeShared<FJsonObject>();
+                SlotObj->SetStringField(TEXT("slotName"), Slot.SlotName.ToString());
+                TArray<TSharedPtr<FJsonValue>> SegsArr;
+                for (const FAnimSegment& Seg : Slot.AnimTrack.AnimSegments)
+                {
+                    TSharedPtr<FJsonObject> SegObj = MakeShared<FJsonObject>();
+                    const UAnimSequenceBase* Ref = Seg.GetAnimReference();
+                    SegObj->SetStringField(TEXT("anim"), Ref ? Ref->GetPathName() : TEXT(""));
+                    SegObj->SetNumberField(TEXT("startPos"), Seg.StartPos);
+                    SegObj->SetNumberField(TEXT("length"), Seg.GetLength());
+                    SegsArr.Add(MakeShared<FJsonValueObject>(SegObj));
+                }
+                SlotObj->SetArrayField(TEXT("segments"), SegsArr);
+                SlotsArr.Add(MakeShared<FJsonValueObject>(SlotObj));
+            }
+            AnimInfo->SetArrayField(TEXT("slots"), SlotsArr);
         }
         else if (UBlendSpace* BlendSpace = Cast<UBlendSpace>(Asset))
         {
-            AnimInfo->SetStringField(TEXT("assetType"), Cast<UBlendSpace1D>(Asset) ? TEXT("BlendSpace1D") : TEXT("BlendSpace2D"));
+            const bool bIs1D = Cast<UBlendSpace1D>(Asset) != nullptr;
+            AnimInfo->SetStringField(TEXT("assetType"), bIs1D ? TEXT("BlendSpace1D") : TEXT("BlendSpace2D"));
             if (BlendSpace->GetSkeleton())
             {
                 AnimInfo->SetStringField(TEXT("skeletonPath"), BlendSpace->GetSkeleton()->GetPathName());
             }
             AnimInfo->SetNumberField(TEXT("numSamples"), BlendSpace->GetBlendSamples().Num());
+
+            // Axes: index 2 of BlendParameters is never used by blend spaces, so
+            // emit only the dimensions this asset actually blends across.
+            TArray<TSharedPtr<FJsonValue>> AxesArr;
+            const int32 NumAxes = bIs1D ? 1 : 2;
+            for (int32 AxisIdx = 0; AxisIdx < NumAxes; ++AxisIdx)
+            {
+                const FBlendParameter& Param = BlendSpace->GetBlendParameter(AxisIdx);
+                TSharedPtr<FJsonObject> AxisObj = MakeShared<FJsonObject>();
+                AxisObj->SetStringField(TEXT("name"), Param.DisplayName);
+                AxisObj->SetNumberField(TEXT("min"), Param.Min);
+                AxisObj->SetNumberField(TEXT("max"), Param.Max);
+                AxisObj->SetNumberField(TEXT("gridDivisions"), Param.GridNum);
+                AxesArr.Add(MakeShared<FJsonValueObject>(AxisObj));
+            }
+            AnimInfo->SetArrayField(TEXT("axes"), AxesArr);
+
+            const TArray<FBlendSample>& BlendSamples = BlendSpace->GetBlendSamples();
+            constexpr int32 MaxSamples = 50;
+            TArray<TSharedPtr<FJsonValue>> SamplesArr;
+            for (int32 SampleIdx = 0; SampleIdx < BlendSamples.Num() && SampleIdx < MaxSamples; ++SampleIdx)
+            {
+                const FBlendSample& Sample = BlendSamples[SampleIdx];
+                TSharedPtr<FJsonObject> SampleObj = MakeShared<FJsonObject>();
+                SampleObj->SetStringField(TEXT("animation"), Sample.Animation ? Sample.Animation->GetPathName() : TEXT(""));
+                SampleObj->SetNumberField(TEXT("x"), Sample.SampleValue.X);
+                if (!bIs1D)
+                {
+                    SampleObj->SetNumberField(TEXT("y"), Sample.SampleValue.Y);
+                }
+                SamplesArr.Add(MakeShared<FJsonValueObject>(SampleObj));
+            }
+            AnimInfo->SetArrayField(TEXT("samples"), SamplesArr);
+            AnimInfo->SetBoolField(TEXT("samplesTruncated"), BlendSamples.Num() > MaxSamples);
         }
         else if (UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(Asset))
         {
@@ -3485,8 +4095,83 @@ Retargeter->TargetIKRigAsset = TargetRig;
             if (AnimBP->TargetSkeleton)
             {
                 AnimInfo->SetStringField(TEXT("skeletonPath"), AnimBP->TargetSkeleton->GetPathName());
+                AnimInfo->SetStringField(TEXT("targetSkeletonPath"), AnimBP->TargetSkeleton->GetPathName());
             }
             AnimInfo->SetStringField(TEXT("parentClass"), AnimBP->ParentClass ? AnimBP->ParentClass->GetName() : TEXT(""));
+
+#if MCP_HAS_ANIMATION_GRAPH
+            // Top-level anim graphs only (main AnimGraph + anim layer graphs); state/
+            // transition graphs live in node SubGraphs, not these arrays.
+            int32 AnimGraphCount = 0;
+            for (const UEdGraph* Graph : AnimBP->UbergraphPages)
+            {
+                if (Graph && Graph->IsA<UAnimationGraph>()) { ++AnimGraphCount; }
+            }
+            for (const UEdGraph* Graph : AnimBP->FunctionGraphs)
+            {
+                if (Graph && Graph->IsA<UAnimationGraph>()) { ++AnimGraphCount; }
+            }
+            AnimInfo->SetNumberField(TEXT("animGraphCount"), AnimGraphCount);
+#endif
+
+#if MCP_HAS_ANIM_STATE_MACHINE_GRAPH && MCP_HAS_ANIM_STATE_MACHINE_SCHEMA
+            // GetAllNodesOfClass walks SubGraphs too, so nested state machines are included.
+            TArray<UAnimGraphNode_StateMachine*> SMNodes;
+            FBlueprintEditorUtils::GetAllNodesOfClass<UAnimGraphNode_StateMachine>(AnimBP, SMNodes);
+            constexpr int32 MaxStateMachines = 20;
+            constexpr int32 MaxStatesPerMachine = 50;
+            TArray<TSharedPtr<FJsonValue>> SMArr;
+            for (int32 SMIdx = 0; SMIdx < SMNodes.Num() && SMIdx < MaxStateMachines; ++SMIdx)
+            {
+                UAnimGraphNode_StateMachine* SMNode = SMNodes[SMIdx];
+                if (!SMNode) { continue; }
+                TSharedPtr<FJsonObject> SMObj = MakeShared<FJsonObject>();
+                SMObj->SetStringField(TEXT("name"), SMNode->GetStateMachineName());
+
+                int32 NumStates = 0;
+                int32 NumTransitions = 0;
+                TArray<TSharedPtr<FJsonValue>> StatesArr;
+                TArray<TSharedPtr<FJsonValue>> TransitionsArr;
+                if (UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph))
+                {
+                    for (UEdGraphNode* Node : SMGraph->Nodes)
+                    {
+                        if (UAnimStateNode* StateNode = Cast<UAnimStateNode>(Node))
+                        {
+                            ++NumStates;
+                            if (StatesArr.Num() < MaxStatesPerMachine)
+                            {
+                                StatesArr.Add(MakeShared<FJsonValueString>(StateNode->GetStateName()));
+                            }
+                        }
+#if MCP_HAS_ANIM_STATE_TRANSITION
+                        else if (UAnimStateTransitionNode* Trans = Cast<UAnimStateTransitionNode>(Node))
+                        {
+                            ++NumTransitions;
+                            if (TransitionsArr.Num() < MaxStatesPerMachine)
+                            {
+                                UAnimStateNodeBase* PrevState = Trans->GetPreviousState();
+                                UAnimStateNodeBase* NextState = Trans->GetNextState();
+                                TSharedPtr<FJsonObject> TransObj = MakeShared<FJsonObject>();
+                                TransObj->SetStringField(TEXT("from"), PrevState ? PrevState->GetStateName() : TEXT(""));
+                                TransObj->SetStringField(TEXT("to"), NextState ? NextState->GetStateName() : TEXT(""));
+                                TransitionsArr.Add(MakeShared<FJsonValueObject>(TransObj));
+                            }
+                        }
+#endif
+                    }
+                }
+                SMObj->SetNumberField(TEXT("numStates"), NumStates);
+                SMObj->SetNumberField(TEXT("numTransitions"), NumTransitions);
+                SMObj->SetArrayField(TEXT("states"), StatesArr);
+                SMObj->SetArrayField(TEXT("transitions"), TransitionsArr);
+                SMObj->SetBoolField(TEXT("truncated"), NumStates > StatesArr.Num() || NumTransitions > TransitionsArr.Num());
+                SMArr.Add(MakeShared<FJsonValueObject>(SMObj));
+            }
+            AnimInfo->SetNumberField(TEXT("numStateMachines"), SMNodes.Num());
+            AnimInfo->SetArrayField(TEXT("stateMachines"), SMArr);
+            AnimInfo->SetBoolField(TEXT("stateMachinesTruncated"), SMNodes.Num() > MaxStateMachines);
+#endif
         }
         else
         {
@@ -3497,7 +4182,170 @@ Retargeter->TargetIKRigAsset = TargetRig;
         ANIM_SUCCESS_RESPONSE(TEXT("Animation info retrieved"));
         return Response;
     }
-    
+
+    // Wires a montage AnimNotify to a BlueprintCallable function: authors an
+    // AnimNotify_<NotifyName> custom event in the AnimBP EventGraph, then
+    // TryGetPawnOwner -> Cast<targetClass> -> call functionName on the result.
+    // A name-only montage notify dispatches by FindFunction("AnimNotify_"+name)
+    // on the AnimInstance (UAnimInstance::TriggerSingleAnimNotify), so the
+    // custom event name is load-bearing and must match the notify name.
+    if (SubAction == TEXT("bind_anim_notify"))
+    {
+        FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
+        if (BlueprintPath.IsEmpty())
+        {
+            BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
+        }
+        const FString NotifyName      = GetJsonStringField(Params, TEXT("notifyName"), TEXT(""));
+        const FString FunctionName    = GetJsonStringField(Params, TEXT("functionName"), TEXT(""));
+        const FString TargetClassName = GetJsonStringField(Params, TEXT("targetClass"), TEXT(""));
+        const bool bSave              = GetJsonBoolField(Params, TEXT("save"), true);
+        const int32 NodePosX          = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
+        const int32 NodePosY          = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionY"), 0));
+
+        if (BlueprintPath.IsEmpty()) { ANIM_ERROR_RESPONSE(TEXT("blueprintPath (or assetPath) is required"), TEXT("MISSING_BLUEPRINT_PATH")); }
+        if (NotifyName.IsEmpty())    { ANIM_ERROR_RESPONSE(TEXT("notifyName is required"), TEXT("MISSING_NOTIFY_NAME")); }
+        if (FunctionName.IsEmpty())  { ANIM_ERROR_RESPONSE(TEXT("functionName is required"), TEXT("MISSING_FUNCTION_NAME")); }
+
+        // StaticLoadObject returns the in-memory (possibly unsaved) AnimBP if already loaded.
+        UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(StaticLoadObject(UAnimBlueprint::StaticClass(), nullptr, *BlueprintPath));
+        if (!AnimBP) { ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load animation blueprint: %s"), *BlueprintPath), TEXT("ANIM_BP_NOT_FOUND")); }
+
+        // ResolveClassByName accepts /Game/... BP asset paths and /Script/... native names; defaults to the owner pawn.
+        UClass* TargetClass = APawn::StaticClass();
+        if (!TargetClassName.IsEmpty())
+        {
+            TargetClass = ResolveClassByName(TargetClassName);
+            if (!TargetClass) { ANIM_ERROR_RESPONSE(FString::Printf(TEXT("targetClass not found: %s"), *TargetClassName), TEXT("CLASS_NOT_FOUND")); }
+        }
+
+        UFunction* TargetFunc = TargetClass->FindFunctionByName(FName(*FunctionName));
+        if (!TargetFunc) { ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Function '%s' not found on class '%s'"), *FunctionName, *TargetClass->GetName()), TEXT("FUNCTION_NOT_FOUND")); }
+
+        UFunction* GetPawnFn = UAnimInstance::StaticClass()->FindFunctionByName(TEXT("TryGetPawnOwner"));
+        if (!GetPawnFn) { ANIM_ERROR_RESPONSE(TEXT("UAnimInstance::TryGetPawnOwner not found"), TEXT("ENGINE_FUNCTION_NOT_FOUND")); }
+
+        // The AnimBP EventGraph is a ubergraph named "EventGraph"; the AnimGraph (also a
+        // ubergraph) is "AnimGraph" and must not be used here.
+        UEdGraph* EventGraph = nullptr;
+        for (UEdGraph* G : AnimBP->UbergraphPages)
+        {
+            if (G && G->GetName() == TEXT("EventGraph")) { EventGraph = G; break; }
+        }
+        if (!EventGraph)
+        {
+            for (UEdGraph* G : AnimBP->UbergraphPages)
+            {
+                if (G && G->GetName() != TEXT("AnimGraph")) { EventGraph = G; break; }
+            }
+        }
+        if (!EventGraph) { ANIM_ERROR_RESPONSE(TEXT("Could not find an EventGraph in the AnimBlueprint"), TEXT("EVENT_GRAPH_NOT_FOUND")); }
+
+        const FString CustomEventName = FString::Printf(TEXT("AnimNotify_%s"), *NotifyName);
+
+        TArray<UK2Node_CustomEvent*> ExistingEvents;
+        FBlueprintEditorUtils::GetAllNodesOfClass<UK2Node_CustomEvent>(AnimBP, ExistingEvents);
+        for (UK2Node_CustomEvent* E : ExistingEvents)
+        {
+            if (E && E->CustomFunctionName == FName(*CustomEventName))
+            {
+                Response->SetBoolField(TEXT("existingAsset"), true);
+                Response->SetStringField(TEXT("customEvent"), CustomEventName);
+                ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("AnimNotify event '%s' already exists"), *CustomEventName));
+                return Response;
+            }
+        }
+
+        const FScopedTransaction Transaction(FText::FromString(TEXT("Bind Anim Notify")));
+        AnimBP->Modify();
+        EventGraph->Modify();
+
+        const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
+
+        UK2Node_CustomEvent* EventNode = nullptr;
+        {
+            FGraphNodeCreator<UK2Node_CustomEvent> Creator(*EventGraph);
+            EventNode = Creator.CreateNode(false);
+            EventNode->CustomFunctionName = FName(*CustomEventName);
+            EventNode->NodePosX = NodePosX;
+            EventNode->NodePosY = NodePosY;
+            Creator.Finalize();
+        }
+
+        // const BlueprintCallable -> pure node (return value only); handled robustly below.
+        UK2Node_CallFunction* GetOwnerNode = nullptr;
+        {
+            FGraphNodeCreator<UK2Node_CallFunction> Creator(*EventGraph);
+            GetOwnerNode = Creator.CreateNode(false);
+            GetOwnerNode->SetFromFunction(GetPawnFn);
+            GetOwnerNode->NodePosX = NodePosX + 260;
+            GetOwnerNode->NodePosY = NodePosY + 24;
+            Creator.Finalize();
+        }
+
+        // Default purity is impure -> has exec + valid/invalid-cast exec pins.
+        UK2Node_DynamicCast* CastNode = nullptr;
+        {
+            FGraphNodeCreator<UK2Node_DynamicCast> Creator(*EventGraph);
+            CastNode = Creator.CreateNode(false);
+            CastNode->TargetType = TargetClass;
+            CastNode->NodePosX = NodePosX + 540;
+            CastNode->NodePosY = NodePosY;
+            Creator.Finalize();
+        }
+
+        UK2Node_CallFunction* CallNode = nullptr;
+        {
+            FGraphNodeCreator<UK2Node_CallFunction> Creator(*EventGraph);
+            CallNode = Creator.CreateNode(false);
+            CallNode->SetFromFunction(TargetFunc);
+            CallNode->NodePosX = NodePosX + 860;
+            CallNode->NodePosY = NodePosY;
+            Creator.Finalize();
+        }
+
+        bool bWired = true;
+        auto Connect = [&](UEdGraphPin* A, UEdGraphPin* B) { bWired &= (A != nullptr && B != nullptr && K2Schema->TryCreateConnection(A, B)); };
+
+        UEdGraphPin* EventThen   = EventNode->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+        UEdGraphPin* OwnerReturn = GetOwnerNode->GetReturnValuePin();
+        UEdGraphPin* CastExecIn  = CastNode->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+        UEdGraphPin* CastSource  = CastNode->GetCastSourcePin();
+        UEdGraphPin* CastValid   = CastNode->GetValidCastPin();
+        UEdGraphPin* CastResult  = CastNode->GetCastResultPin();
+        UEdGraphPin* CallExecIn  = CallNode->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+        UEdGraphPin* CallSelf    = CallNode->FindPin(UEdGraphSchema_K2::PN_Self, EGPD_Input);
+
+        // Thread exec through the owner getter only if it is impure (has exec pins).
+        UEdGraphPin* OwnerExecIn = GetOwnerNode->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+        UEdGraphPin* OwnerThen   = GetOwnerNode->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+        if (OwnerExecIn && OwnerThen)
+        {
+            Connect(EventThen, OwnerExecIn);
+            Connect(OwnerThen, CastExecIn);
+        }
+        else
+        {
+            Connect(EventThen, CastExecIn);
+        }
+        Connect(OwnerReturn, CastSource);
+        Connect(CastValid, CallExecIn);
+        Connect(CastResult, CallSelf);
+
+        if (!bWired) { ANIM_ERROR_RESPONSE(TEXT("Failed to connect one or more pins (schema rejected a link)"), TEXT("CONNECTION_FAILED")); }
+
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
+        FKismetEditorUtilities::CompileBlueprint(AnimBP, EBlueprintCompileOptions::SkipGarbageCollection);
+        SaveAnimAsset(AnimBP, bSave);
+
+        Response->SetStringField(TEXT("customEvent"), CustomEventName);
+        Response->SetStringField(TEXT("targetClass"), TargetClass->GetName());
+        Response->SetStringField(TEXT("function"), FunctionName);
+        ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Bound notify '%s' -> %s::%s"), *NotifyName, *TargetClass->GetName(), *FunctionName));
+        McpHandlerUtils::AddVerification(Response, AnimBP);
+        return Response;
+    }
+
     // Unknown action
     Response->SetBoolField(TEXT("success"), false);
     Response->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown animation authoring action: %s"), *SubAction));
@@ -3509,7 +4357,7 @@ Retargeter->TargetIKRigAsset = TargetRig;
 bool UMcpAutomationBridgeSubsystem::HandleManageAnimationAuthoringAction(
     const FString& RequestId, const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Check if this is an animation authoring action
     if (Action != TEXT("manage_animation_authoring"))
@@ -3546,9 +4394,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAnimationAuthoringAction(
 #undef ANIM_ERROR_RESPONSE
 #undef ANIM_SUCCESS_RESPONSE
 
-#undef GetStringFieldAnimAuth
-#undef GetNumberFieldAnimAuth
-#undef GetBoolFieldAnimAuth
+#undef GetJsonStringField
+#undef GetJsonNumberField
+#undef GetJsonBoolField
 
 #endif // WITH_EDITOR
-

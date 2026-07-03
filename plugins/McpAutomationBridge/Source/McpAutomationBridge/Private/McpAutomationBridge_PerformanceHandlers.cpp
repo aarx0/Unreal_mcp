@@ -54,7 +54,20 @@
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "Components/StaticMeshComponent.h"
 #include "Dom/JsonObject.h"
+#include "Engine/StaticMeshActor.h"
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5
+#include "MeshMerge/MeshMergingSettings.h"
+#else
+#include "Engine/MeshMerging.h"
+#endif
+#include "MeshMergeModule.h"
+#include "IMeshMergeUtilities.h"
+#include "Misc/PackageName.h"
+#include "StaticMeshCompiler.h"
+#include "Containers/Ticker.h"
 
 // =============================================================================
 // Editor-Only Headers
@@ -65,17 +78,24 @@
 #include "ContentStreaming.h"
 #include "Editor/UnrealEd/Public/Editor.h"
 #include "EngineUtils.h"
+#include "FileHelpers.h"
 #include "HAL/FileManager.h"
-
-// Merge Actors Module
-#include "IMergeActorsModule.h"
-#include "IMergeActorsTool.h"
 
 // Gameplay & Level
 #include "Kismet/GameplayStatics.h"
 #include "LevelEditor.h"
 #include "ProfilingDebugging/ScopedTimers.h"
 #include "Subsystems/EditorActorSubsystem.h"
+#include "RenderTimer.h"          // GGameThreadTime / GRenderThreadTime / GRHIThreadTime (RENDERCORE_API)
+#include "DynamicRHI.h"           // RHIGetGPUFrameCycles (replaces deprecated GGPUFrameTime)
+#include "HAL/PlatformMemory.h"   // FPlatformMemory::GetStats
+#include "Misc/App.h"             // FApp::GetDeltaTime
+
+// GAverageFPS/GAverageMS are exported ENGINE_API but declared only inside
+// UnrealEngine.cpp (no public header), so we redeclare the externs here exactly
+// as the engine's own translation units do.
+extern ENGINE_API float GAverageFPS;
+extern ENGINE_API float GAverageMS;
 
 #endif // WITH_EDITOR
 
@@ -98,13 +118,29 @@
 bool UMcpAutomationBridgeSubsystem::HandlePerformanceAction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
-  const FString Lower = Action.ToLower();
-  if (!Lower.StartsWith(TEXT("generate_memory_report")) &&
+    FMcpResponseHandle RequestingSocket) {
+  const FString RequestAction = Action.ToLower();
+  FString Lower = RequestAction;
+  if (RequestAction == TEXT("manage_performance") && Payload.IsValid()) {
+    FString SubAction;
+    Payload->TryGetStringField(TEXT("subAction"), SubAction);
+    if (SubAction.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("action"), SubAction);
+    }
+    Lower = SubAction.ToLower();
+    Lower.ReplaceInline(TEXT("-"), TEXT("_"));
+    Lower.ReplaceInline(TEXT(" "), TEXT("_"));
+  }
+
+  if (RequestAction != TEXT("manage_performance") &&
+      !Lower.StartsWith(TEXT("generate_memory_report")) &&
       !Lower.StartsWith(TEXT("configure_texture_streaming")) &&
       !Lower.StartsWith(TEXT("merge_actors")) &&
       !Lower.StartsWith(TEXT("start_profiling")) &&
       !Lower.StartsWith(TEXT("stop_profiling")) &&
+      !Lower.StartsWith(TEXT("get_profile")) &&
+      !Lower.StartsWith(TEXT("capture_stats")) &&
+      !Lower.StartsWith(TEXT("get_perf_stats")) &&
       !Lower.StartsWith(TEXT("show_fps")) &&
       !Lower.StartsWith(TEXT("show_stats")) &&
       !Lower.StartsWith(TEXT("set_scalability")) &&
@@ -128,6 +164,13 @@ bool UMcpAutomationBridgeSubsystem::HandlePerformanceAction(
     SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Performance payload missing"),
                         TEXT("INVALID_PAYLOAD"));
+    return true;
+  }
+
+  if (Lower.IsEmpty()) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("manage_performance requires action or subAction"),
+                        TEXT("INVALID_ACTION"));
     return true;
   }
 
@@ -157,6 +200,50 @@ bool UMcpAutomationBridgeSubsystem::HandlePerformanceAction(
 
     SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Memory report generated"), nullptr);
+    return true;
+  }
+  // ===========================================================================
+  // get_profile - READ BACK live performance counters as JSON (no console file)
+  // ===========================================================================
+  // Unlike start/stop_profiling (which write a .ue4stats file to disk the agent
+  // can't consume), this returns the engine's running perf numbers directly so
+  // a caller can see FPS / frame timings / memory without leaving the bridge.
+  else if (Lower == TEXT("get_profile") || Lower == TEXT("capture_stats") ||
+           Lower == TEXT("get_perf_stats")) {
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+
+    // Frame rate / frame time (engine running averages, updated every frame).
+    Result->SetNumberField(TEXT("averageFPS"), GAverageFPS);
+    Result->SetNumberField(TEXT("averageFrameMs"), GAverageMS);
+    Result->SetNumberField(TEXT("deltaSeconds"), FApp::GetDeltaTime());
+    Result->SetNumberField(TEXT("frameNumber"), static_cast<double>(GFrameCounter));
+
+    // Per-thread timings (cycles -> ms). Meaningful while frames are rendering
+    // (editor viewport or PIE); a thread reads ~0 when idle/disabled.
+    TSharedPtr<FJsonObject> Timings = MakeShared<FJsonObject>();
+    Timings->SetNumberField(TEXT("gameThreadMs"), FPlatformTime::ToMilliseconds(GGameThreadTime));
+    Timings->SetNumberField(TEXT("renderThreadMs"), FPlatformTime::ToMilliseconds(GRenderThreadTime));
+    Timings->SetNumberField(TEXT("rhiThreadMs"), FPlatformTime::ToMilliseconds(GRHIThreadTime));
+    Timings->SetNumberField(TEXT("gpuMs"), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));
+    Result->SetObjectField(TEXT("frameTimingsMs"), Timings);
+
+    // Memory (bytes -> MB).
+    const FPlatformMemoryStats MemStats = FPlatformMemory::GetStats();
+    const double ToMB = 1.0 / (1024.0 * 1024.0);
+    TSharedPtr<FJsonObject> Mem = MakeShared<FJsonObject>();
+    Mem->SetNumberField(TEXT("usedPhysicalMB"), static_cast<double>(MemStats.UsedPhysical) * ToMB);
+    Mem->SetNumberField(TEXT("peakUsedPhysicalMB"), static_cast<double>(MemStats.PeakUsedPhysical) * ToMB);
+    Mem->SetNumberField(TEXT("usedVirtualMB"), static_cast<double>(MemStats.UsedVirtual) * ToMB);
+    Mem->SetNumberField(TEXT("availablePhysicalMB"), static_cast<double>(MemStats.AvailablePhysical) * ToMB);
+    Result->SetObjectField(TEXT("memory"), Mem);
+
+    Result->SetBoolField(TEXT("inPIE"), GEditor && GEditor->PlayWorld != nullptr);
+
+    SendAutomationResponse(
+        RequestingSocket, RequestId, true,
+        FString::Printf(TEXT("%.1f FPS (%.2f ms frame)"), GAverageFPS, GAverageMS),
+        Result);
     return true;
   }
   // ===========================================================================
@@ -405,12 +492,6 @@ bool UMcpAutomationBridgeSubsystem::HandlePerformanceAction(
   // merge_actors - Merge selected actors
   // ===========================================================================
   else if (Lower == TEXT("merge_actors")) {
-    // merge_actors: drive the editor's Merge Actors tools by selecting the
-    // requested actors in the current editor world and invoking
-    // IMergeActorsTool::RunMergeFromSelection(). This relies on the
-    // MergeActors module and registered tools, but never reports success
-    // unless a real merge was requested and executed.
-
     const TArray<TSharedPtr<FJsonValue>> *NamesArray = nullptr;
     if (!Payload->TryGetArrayField(TEXT("actors"), NamesArray) || !NamesArray ||
         NamesArray->Num() < 2) {
@@ -483,102 +564,166 @@ bool UMcpAutomationBridgeSubsystem::HandlePerformanceAction(
       return true;
     }
 
-    // Prepare selection for the Merge Actors tool
-    GEditor->SelectNone(true, true, false);
-    for (AActor *Actor : ActorsToMerge) {
-      if (Actor) {
-        GEditor->SelectActor(Actor, true, true, true);
-      }
+    FString RequestedPackageName;
+    Payload->TryGetStringField(TEXT("packageName"), RequestedPackageName);
+    if (RequestedPackageName.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("outputPath"), RequestedPackageName);
     }
-
-    IMergeActorsModule &MergeModule = IMergeActorsModule::Get();
-    TArray<IMergeActorsTool *> Tools;
-    MergeModule.GetRegisteredMergeActorsTools(Tools);
-
-    if (Tools.Num() == 0) {
-      SendAutomationResponse(
-          RequestingSocket, RequestId, false,
-          TEXT("No Merge Actors tools are registered in this editor"), nullptr,
-          TEXT("MERGE_TOOL_MISSING"));
+    if (RequestedPackageName.IsEmpty()) {
+      RequestedPackageName = FString::Printf(TEXT("/Game/MCPTest/MergedActors/SM_Merged_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+    }
+    if (!FPackageName::IsValidLongPackageName(RequestedPackageName)) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("merge_actors requires packageName/outputPath to be a valid long package name"),
+                             nullptr, TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
-    FString RequestedToolName;
-    Payload->TryGetStringField(TEXT("toolName"), RequestedToolName);
-    IMergeActorsTool *ChosenTool = nullptr;
+    FString MergeBasePackageName = RequestedPackageName;
+    const FString RequestedAssetName = FPackageName::GetShortName(RequestedPackageName);
+    if (RequestedAssetName.StartsWith(TEXT("SM_"))) {
+      const FString BaseAssetName = RequestedAssetName.RightChop(3);
+      if (!BaseAssetName.IsEmpty()) {
+        MergeBasePackageName = FPackageName::GetLongPackagePath(RequestedPackageName) / BaseAssetName;
+      }
+    }
 
-    // Prefer a tool whose display name matches the requested toolName
-    if (!RequestedToolName.IsEmpty()) {
-      for (IMergeActorsTool *Tool : Tools) {
-        if (!Tool) {
-          continue;
-        }
+    if (!FPackageName::IsValidLongPackageName(MergeBasePackageName)) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("merge_actors normalized packageName/outputPath to an invalid merge base package name"),
+                             nullptr, TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
 
-        const FText ToolNameText = Tool->GetToolNameText();
-        if (ToolNameText.ToString().Equals(RequestedToolName,
-                                           ESearchCase::IgnoreCase)) {
-          ChosenTool = Tool;
-          break;
+    TArray<UPrimitiveComponent *> ComponentsToMerge;
+    for (AActor *Actor : ActorsToMerge) {
+      if (!Actor) {
+        continue;
+      }
+      TArray<UStaticMeshComponent *> StaticMeshComponents;
+      Actor->GetComponents<UStaticMeshComponent>(StaticMeshComponents);
+      for (UStaticMeshComponent *Component : StaticMeshComponents) {
+        if (Component && Component->GetStaticMesh()) {
+          ComponentsToMerge.Add(Component);
         }
       }
     }
 
-    // Fallback: first tool that can merge from the current selection
-    if (!ChosenTool) {
-      for (IMergeActorsTool *Tool : Tools) {
-        if (Tool && Tool->CanMergeFromSelection()) {
-          ChosenTool = Tool;
-          break;
-        }
-      }
+    if (ComponentsToMerge.Num() < 2) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("merge_actors requires at least 2 static mesh components"),
+                             nullptr, TEXT("INVALID_ARGUMENT"));
+      return true;
     }
 
-    if (!ChosenTool) {
-      SendAutomationResponse(
-          RequestingSocket, RequestId, false,
-          TEXT("No Merge Actors tool can operate on the current selection"),
-          nullptr, TEXT("MERGE_TOOL_UNAVAILABLE"));
+    IMeshMergeModule &MeshMergeModule = FModuleManager::LoadModuleChecked<IMeshMergeModule>(TEXT("MeshMergeUtilities"));
+    const IMeshMergeUtilities &MeshMergeUtilities = MeshMergeModule.GetUtilities();
+
+    FMeshMergingSettings MergeSettings;
+    MergeSettings.bMergeMaterials = false;
+    MergeSettings.bGenerateLightMapUV = true;
+    MergeSettings.bBakeVertexDataToMesh = true;
+    MergeSettings.bMergePhysicsData = true;
+    MergeSettings.LODSelectionType = EMeshLODSelectionType::AllLODs;
+    MergeSettings.TargetLightMapResolution = 64;
+
+    TArray<UObject *> AssetsToSync;
+    FVector MergedActorLocation = FVector::ZeroVector;
+    const float ScreenAreaSize = TNumericLimits<float>::Max();
+    MeshMergeUtilities.MergeComponentsToStaticMesh(
+        ComponentsToMerge, World, MergeSettings, nullptr, nullptr, MergeBasePackageName,
+        AssetsToSync, MergedActorLocation, ScreenAreaSize, true);
+
+    UStaticMesh *MergedMesh = nullptr;
+    for (UObject *Asset : AssetsToSync) {
+      if (!Asset) {
+        continue;
+      }
+      if (UStaticMesh *StaticMesh = Cast<UStaticMesh>(Asset)) {
+        MergedMesh = StaticMesh;
+      }
+      FAssetRegistryModule::AssetCreated(Asset);
+      Asset->MarkPackageDirty();
+    }
+
+    if (!MergedMesh) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Actor merge produced no static mesh asset"),
+                             nullptr, TEXT("MERGE_FAILED"));
+      return true;
+    }
+
+    TArray<UStaticMesh *> MeshesToFinish;
+    MeshesToFinish.Add(MergedMesh);
+    FStaticMeshCompilingManager::Get().FinishCompilation(MeshesToFinish);
+    FlushRenderingCommands();
+
+    MergedMesh->SetFlags(RF_Public | RF_Standalone);
+    MergedMesh->ClearFlags(RF_Transient);
+    MergedMesh->MarkPackageDirty();
+    FAssetRegistryModule::AssetCreated(MergedMesh);
+
+    bool bSaved = false;
+    if (UPackage *MergedPackage = MergedMesh->GetOutermost()) {
+      MergedPackage->ClearFlags(RF_Transient);
+      MergedPackage->SetDirtyFlag(true);
+
+      bSaved = McpSafeAssetSave(MergedMesh);
+
+      if (bSaved) {
+        TArray<FString> PathsToScan;
+        PathsToScan.Add(FPaths::GetPath(MergedPackage->GetName()));
+        FAssetRegistryModule &AssetRegistryModule =
+            FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+        AssetRegistryModule.Get().ScanPathsSynchronous(PathsToScan, false);
+      }
+    }
+    if (!bSaved) {
+      TSharedPtr<FJsonObject> Failure = McpHandlerUtils::CreateResultObject();
+      Failure->SetStringField(TEXT("requestedPackageName"), RequestedPackageName);
+      Failure->SetStringField(TEXT("mergeBasePackageName"), MergeBasePackageName);
+      Failure->SetStringField(TEXT("actualPackageName"), MergedMesh->GetOutermost()->GetName());
+      Failure->SetStringField(TEXT("assetPath"), MergedMesh->GetPathName());
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                              TEXT("Merged static mesh was created but could not be saved"),
+                              Failure, TEXT("SAVE_FAILED"));
       return true;
     }
 
     bool bReplaceSources = false;
-    if (Payload->TryGetBoolField(TEXT("replaceSourceActors"),
-                                 bReplaceSources)) {
-      ChosenTool->SetReplaceSourceActors(bReplaceSources);
-    }
-
-    if (!ChosenTool->CanMergeFromSelection()) {
-      SendAutomationResponse(
-          RequestingSocket, RequestId, false,
-          TEXT("Merge operation is not valid for the current selection"),
-          nullptr, TEXT("MERGE_NOT_POSSIBLE"));
-      return true;
-    }
-
-    const FString DefaultPackageName = ChosenTool->GetDefaultPackageName();
-    const bool bMerged = ChosenTool->RunMergeFromSelection();
-    if (!bMerged) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("Actor merge operation failed"), nullptr,
-                             TEXT("MERGE_FAILED"));
-      return true;
+    Payload->TryGetBoolField(TEXT("replaceSourceActors"), bReplaceSources);
+    if (bReplaceSources) {
+      for (AActor *Actor : ActorsToMerge) {
+        if (Actor) {
+          Actor->Destroy();
+        }
+      }
     }
 
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetNumberField(TEXT("mergedActorCount"), ActorsToMerge.Num());
-    Resp->SetBoolField(TEXT("replaceSourceActors"),
-                       ChosenTool->GetReplaceSourceActors());
-    if (!DefaultPackageName.IsEmpty()) {
-      Resp->SetStringField(TEXT("defaultPackageName"), DefaultPackageName);
-    }
+    Resp->SetNumberField(TEXT("mergedComponentCount"), ComponentsToMerge.Num());
+    Resp->SetBoolField(TEXT("replaceSourceActors"), bReplaceSources);
+    Resp->SetStringField(TEXT("requestedPackageName"), RequestedPackageName);
+    Resp->SetStringField(TEXT("mergeBasePackageName"), MergeBasePackageName);
+    Resp->SetStringField(TEXT("packageName"), MergedMesh->GetOutermost()->GetName());
+    Resp->SetStringField(TEXT("assetPath"), MergedMesh->GetPathName());
+    Resp->SetBoolField(TEXT("saved"), bSaved);
 
-    // Add verification for the first source actor (merge tool operates on selection)
+    TArray<TSharedPtr<FJsonValue>> AssetPaths;
+    for (UObject *Asset : AssetsToSync) {
+      if (Asset) {
+        AssetPaths.Add(MakeShared<FJsonValueString>(Asset->GetPathName()));
+      }
+    }
+    Resp->SetArrayField(TEXT("assets"), AssetPaths);
+
     if (ActorsToMerge.Num() > 0 && ActorsToMerge[0]) {
       McpHandlerUtils::AddVerification(Resp, ActorsToMerge[0]);
     }
 
     SendAutomationResponse(RequestingSocket, RequestId, true,
-                           TEXT("Actors merged using Merge Actors tool"), Resp,
+                           TEXT("Actors merged to static mesh"), Resp,
                            FString());
     return true;
   }
@@ -588,6 +733,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerformanceAction(
   else if (Lower == TEXT("run_benchmark")) {
     double Duration = 60.0;
     Payload->TryGetNumberField(TEXT("duration"), Duration);
+    const double BenchmarkDuration = FMath::Max(0.0, Duration);
 
     FString BenchmarkType = TEXT("all");
     Payload->TryGetStringField(TEXT("type"), BenchmarkType);
@@ -599,19 +745,74 @@ bool UMcpAutomationBridgeSubsystem::HandlePerformanceAction(
         return true;
     }
 
-    GEngine->Exec(GEditor->GetEditorWorldContext().World(),
-                  TEXT("stat startfile"));
+    UWorld* World = GEditor->GetEditorWorldContext().World();
+    if (!GEngine || !World)
+    {
+        SendAutomationError(RequestingSocket, RequestId, TEXT("Editor world not available"), TEXT("NO_WORLD"));
+        return true;
+    }
 
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetNumberField(TEXT("duration"), Duration);
-    Resp->SetStringField(TEXT("type"), BenchmarkType);
-    Resp->SetStringField(TEXT("status"), TEXT("started"));
+    const ERequestOrigin ResponseOrigin = CurrentRequestOrigin;
+    GEngine->Exec(World, TEXT("stat startfile"));
 
-    SendAutomationResponse(
-        RequestingSocket, RequestId, true,
-        FString::Printf(TEXT("Benchmark started (type: %s, duration: %.0fs)"),
-                        *BenchmarkType, Duration),
-        Resp);
+    if (BenchmarkType.Equals(TEXT("gpu"), ESearchCase::IgnoreCase) ||
+        BenchmarkType.Equals(TEXT("all"), ESearchCase::IgnoreCase))
+    {
+      GEngine->Exec(World, TEXT("profilegpu"));
+    }
+
+    SendProgressUpdate(
+        RequestId,
+        0.0f,
+        FString::Printf(TEXT("Benchmark running for %.0fs"), BenchmarkDuration),
+        true,
+        ResponseOrigin);
+
+    TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakThis(this);
+    FTSTicker::GetCoreTicker().AddTicker(
+        FTickerDelegate::CreateLambda(
+            [WeakThis, RequestingSocket, RequestId, BenchmarkType, BenchmarkDuration, ResponseOrigin](float) {
+              UMcpAutomationBridgeSubsystem* Subsystem = WeakThis.Get();
+              if (!Subsystem)
+              {
+                return false;
+              }
+
+              if (!GEditor || !GEngine)
+              {
+                Subsystem->SendAutomationResponse(
+                    RequestingSocket, RequestId, false,
+                    TEXT("Editor not available while completing benchmark"),
+                    nullptr, TEXT("NO_EDITOR"), ResponseOrigin);
+                return false;
+              }
+
+              UWorld* StopWorld = GEditor->GetEditorWorldContext().World();
+              if (!StopWorld)
+              {
+                Subsystem->SendAutomationResponse(
+                    RequestingSocket, RequestId, false,
+                    TEXT("Editor world not available while completing benchmark"),
+                    nullptr, TEXT("NO_WORLD"), ResponseOrigin);
+                return false;
+              }
+
+              GEngine->Exec(StopWorld, TEXT("stat stopfile"));
+              GEngine->Exec(StopWorld, TEXT("stat none"));
+
+              TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+              Resp->SetNumberField(TEXT("duration"), BenchmarkDuration);
+              Resp->SetStringField(TEXT("type"), BenchmarkType);
+              Resp->SetStringField(TEXT("status"), TEXT("completed"));
+
+              Subsystem->SendAutomationResponse(
+                  RequestingSocket, RequestId, true,
+                  FString::Printf(TEXT("Benchmark completed (type: %s, duration: %.0fs)"),
+                                  *BenchmarkType, BenchmarkDuration),
+                  Resp, FString(), ResponseOrigin);
+              return false;
+            }),
+        static_cast<float>(BenchmarkDuration));
     return true;
   }
   // ===========================================================================

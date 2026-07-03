@@ -70,6 +70,7 @@
 #include "NiagaraActor.h"
 #include "NiagaraComponent.h"
 #include "NiagaraEmitter.h"
+#include "NiagaraEmitterHandle.h"
 #include "NiagaraParameterCollection.h"
 #include "NiagaraSystem.h"
 
@@ -90,6 +91,20 @@
 #include "ViewModels/Stack/NiagaraStackGraphUtilities.h"
 #endif
 
+#if __has_include("NiagaraEmitterFactoryNew.h") && !(ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 0)
+#include "NiagaraEmitterFactoryNew.h"
+#define MCP_HAS_NIAGARA_EMITTER_FACTORY_NEW 1
+#else
+#define MCP_HAS_NIAGARA_EMITTER_FACTORY_NEW 0
+#endif
+
+#if __has_include("NiagaraSystemFactoryNew.h") && !(ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 0)
+#include "NiagaraSystemFactoryNew.h"
+#define MCP_HAS_NIAGARA_SYSTEM_FACTORY_NEW 1
+#else
+#define MCP_HAS_NIAGARA_SYSTEM_FACTORY_NEW 0
+#endif
+
 #endif // WITH_EDITOR
 
 // =============================================================================
@@ -108,7 +123,7 @@
 bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraSystem(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("create_niagara_system"), ESearchCase::IgnoreCase)) {
     return false;
@@ -137,6 +152,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraSystem(
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
+  const bool bSave = GetJsonBoolField(Payload, TEXT("save"), true);
 
   // Check for Niagara plugin availability via module system
   // Previous check for asset existence failed even when Niagara was enabled
@@ -171,6 +187,12 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraSystem(
   UNiagaraSystem *NiagaraSystem = NewObject<UNiagaraSystem>(Package, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
   if (NiagaraSystem)
   {
+#if MCP_HAS_NIAGARA_SYSTEM_FACTORY_NEW
+    if (!FModuleManager::Get().IsModuleLoaded(TEXT("NiagaraEditor"))) {
+      FModuleManager::Get().LoadModule(TEXT("NiagaraEditor"));
+    }
+    UNiagaraSystemFactoryNew::InitializeSystem(NiagaraSystem, true);
+#else
     // Initialize system scripts
     UNiagaraScript* SystemSpawnScript = NiagaraSystem->GetSystemSpawnScript();
     UNiagaraScript* SystemUpdateScript = NiagaraSystem->GetSystemUpdateScript();
@@ -186,11 +208,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraSystem(
       SystemSpawnScript->SetLatestSource(SystemScriptSource);
       SystemUpdateScript->SetLatestSource(SystemScriptSource);
     }
+#endif
     
     // Add default emitter with proper GraphSource initialization
     UNiagaraEmitter *NewEmitter = NewObject<UNiagaraEmitter>(NiagaraSystem, FName(TEXT("DefaultEmitter")), RF_Transactional);
     if (NewEmitter)
     {
+#if MCP_HAS_NIAGARA_EMITTER_FACTORY_NEW
+      if (!FModuleManager::Get().IsModuleLoaded(TEXT("NiagaraEditor"))) {
+        FModuleManager::Get().LoadModule(TEXT("NiagaraEditor"));
+      }
+      UNiagaraEmitterFactoryNew::InitializeEmitter(NewEmitter, true);
+      NewEmitter->SetUniqueEmitterName(TEXT("DefaultEmitter"));
+#else
       // Create script source and graph for emitter
       UNiagaraScriptSource* EmitterSource = NewObject<UNiagaraScriptSource>(NewEmitter, NAME_None, RF_Transactional);
       if (EmitterSource)
@@ -237,12 +267,25 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraSystem(
         }
 #endif
       }
+#endif
       
       // AddEmitterHandle: UE 5.0 uses 2 params, UE 5.1+ uses 3 params (with FGuid)
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 0
       NiagaraSystem->AddEmitterHandle(*NewEmitter, FName(TEXT("DefaultEmitter")));
 #else
-      NiagaraSystem->AddEmitterHandle(*NewEmitter, FName(TEXT("DefaultEmitter")), FGuid::NewGuid());
+      NewEmitter->CheckVersionDataAvailable();
+      const FGuid EmitterVersion = NewEmitter->GetExposedVersion().VersionGuid;
+      FVersionedNiagaraEmitterData* EmitterData = NewEmitter->GetEmitterData(EmitterVersion);
+      if (!EmitterData || !EmitterData->GraphSource)
+      {
+        SendAutomationError(RequestingSocket, RequestId,
+                            TEXT("Failed to initialize default Niagara emitter graph source"),
+                            TEXT("NIAGARA_EMITTER_INIT_FAILED"));
+        return true;
+      }
+
+      FNiagaraEmitterHandle NewHandle(*NewEmitter, EmitterVersion);
+      NiagaraSystem->AddEmitterHandleDirect(NewHandle);
 #endif
     }
   }
@@ -255,7 +298,9 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraSystem(
   }
   
   FAssetRegistryModule::AssetCreated(NiagaraSystem);
-  McpSafeAssetSave(NiagaraSystem);
+  if (bSave) {
+    McpSafeAssetSave(NiagaraSystem);
+  }
 
   if (!NiagaraSystem) {
     SendAutomationError(RequestingSocket, RequestId,
@@ -295,7 +340,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraSystem(
 bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraEmitter(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("create_niagara_emitter"), ESearchCase::IgnoreCase)) {
     return false;
@@ -324,6 +369,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraEmitter(
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
+  const bool bSave = GetJsonBoolField(Payload, TEXT("save"), true);
 
   // Check for Niagara plugin availability via module system
   if (!FModuleManager::Get().IsModuleLoaded(TEXT("Niagara"))) {
@@ -362,6 +408,13 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraEmitter(
   
   // Initialize emitter with GraphSource to prevent crashes
   {
+#if MCP_HAS_NIAGARA_EMITTER_FACTORY_NEW
+    if (!FModuleManager::Get().IsModuleLoaded(TEXT("NiagaraEditor"))) {
+      FModuleManager::Get().LoadModule(TEXT("NiagaraEditor"));
+    }
+    UNiagaraEmitterFactoryNew::InitializeEmitter(NiagaraEmitter, true);
+    NiagaraEmitter->SetUniqueEmitterName(EmitterName);
+#else
     // Create script source and graph
     UNiagaraScriptSource* EmitterSource = NewObject<UNiagaraScriptSource>(NiagaraEmitter, NAME_None, RF_Transactional);
     if (EmitterSource)
@@ -408,10 +461,13 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraEmitter(
       }
 #endif
     }
+#endif
   }
   
   FAssetRegistryModule::AssetCreated(NiagaraEmitter);
-  McpSafeAssetSave(NiagaraEmitter);
+  if (bSave) {
+    McpSafeAssetSave(NiagaraEmitter);
+  }
 
   if (!NiagaraEmitter) {
     SendAutomationError(RequestingSocket, RequestId,
@@ -451,7 +507,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraEmitter(
 bool UMcpAutomationBridgeSubsystem::HandleSpawnNiagaraActor(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("spawn_niagara_actor"), ESearchCase::IgnoreCase)) {
     return false;
@@ -566,7 +622,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSpawnNiagaraActor(
 bool UMcpAutomationBridgeSubsystem::HandleModifyNiagaraParameter(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("modify_niagara_parameter"),
                     ESearchCase::IgnoreCase)) {
@@ -737,7 +793,7 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyNiagaraParameter(
 bool UMcpAutomationBridgeSubsystem::HandleCreateNiagaraRibbon(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
   if (!Lower.Equals(TEXT("create_niagara_ribbon"), ESearchCase::IgnoreCase)) {
     return false;

@@ -47,7 +47,6 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
-#include "UObject/SavePackage.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Engine/SimpleConstructionScript.h"
@@ -87,7 +86,7 @@ static UPackage* CreateValidatedAssetPackage(const FString& Path, const FString&
 // Legacy helper for backward compatibility - validates internally
 static UPackage* CreateAssetPackage(const FString& Path, const FString& Name) {
   FString PackagePath = Path.IsEmpty() ? TEXT("/Game/Items") : Path;
-  
+
   // Normalize and validate
   FString PackageName;
   FString PathError;
@@ -96,8 +95,50 @@ static UPackage* CreateAssetPackage(const FString& Path, const FString& Name) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Warning, TEXT("CreateAssetPackage: %s"), *PathError);
     return nullptr;
   }
-  
+
   return CreatePackage(*PackageName);
+}
+
+// Writes each key to a matching native UPROPERTY via reflection; unmatched keys
+// fall back to the UMcpGenericDataAsset string property bag (which holds
+// string/number/bool values only), so no requested key is silently dropped.
+static void ApplyItemPropertiesToAsset(UObject* ItemAsset,
+                                       const TSharedPtr<FJsonObject>& PropertiesObj,
+                                       TArray<FString>& ModifiedProperties,
+                                       TArray<FString>& StoredInPropertyBag,
+                                       TArray<FString>& FailedProperties) {
+  if (!ItemAsset || !PropertiesObj.IsValid()) {
+    return;
+  }
+
+  for (const auto& Pair : PropertiesObj->Values) {
+    const FString PropertyName(*Pair.Key);
+    const TSharedPtr<FJsonValue>& PropertyValue = Pair.Value;
+
+    FProperty* Prop = ItemAsset->GetClass()->FindPropertyByName(*PropertyName);
+    if (Prop) {
+      FString ApplyError;
+      if (ApplyJsonValueToProperty(ItemAsset, Prop, PropertyValue, ApplyError)) {
+        ModifiedProperties.Add(PropertyName);
+      } else {
+        FailedProperties.Add(FString::Printf(TEXT("%s: %s"), *PropertyName, *ApplyError));
+      }
+      continue;
+    }
+
+    UMcpGenericDataAsset* GenericAsset = Cast<UMcpGenericDataAsset>(ItemAsset);
+    FString StringValue;
+    if (GenericAsset && PropertyValue.IsValid() && PropertyValue->TryGetString(StringValue)) {
+      GenericAsset->Properties.Add(PropertyName, StringValue);
+      StoredInPropertyBag.Add(PropertyName);
+    } else if (GenericAsset) {
+      FailedProperties.Add(FString::Printf(
+          TEXT("%s: not a native property, and only string/number/bool values can be stored in the string property bag"),
+          *PropertyName));
+    } else {
+      FailedProperties.Add(FString::Printf(TEXT("%s: Property not found"), *PropertyName));
+    }
+  }
 }
 
 // ============================================================================
@@ -106,7 +147,7 @@ static UPackage* CreateAssetPackage(const FString& Path, const FString& Name) {
 bool UMcpAutomationBridgeSubsystem::HandleManageInventoryAction(
     const FString& RequestId, const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   // Only handle manage_inventory action
   if (Action != TEXT("manage_inventory")) {
     return false;
@@ -145,6 +186,15 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInventoryAction(
         NewObject<UMcpGenericDataAsset>(Package, FName(*SanitizedName), RF_Public | RF_Standalone);
 
     if (ItemAsset) {
+      const TSharedPtr<FJsonObject>* PropertiesObj = nullptr;
+      TArray<FString> ModifiedProperties;
+      TArray<FString> StoredInPropertyBag;
+      TArray<FString> FailedProperties;
+      if (Payload->TryGetObjectField(TEXT("properties"), PropertiesObj) && PropertiesObj && (*PropertiesObj).IsValid()) {
+        ApplyItemPropertiesToAsset(ItemAsset, *PropertiesObj, ModifiedProperties,
+                                   StoredInPropertyBag, FailedProperties);
+      }
+
       ItemAsset->MarkPackageDirty();
       FAssetRegistryModule::AssetCreated(ItemAsset);
 
@@ -152,8 +202,31 @@ bool UMcpAutomationBridgeSubsystem::HandleManageInventoryAction(
         McpSafeAssetSave(ItemAsset);
       }
 
-TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("assetName"), SanitizedName);
+      if (PropertiesObj && (*PropertiesObj).IsValid()) {
+        TArray<TSharedPtr<FJsonValue>> ModifiedArr;
+        for (const FString& PropName : ModifiedProperties) {
+          ModifiedArr.Add(MakeShared<FJsonValueString>(PropName));
+        }
+        Result->SetArrayField(TEXT("modifiedProperties"), ModifiedArr);
+
+        if (StoredInPropertyBag.Num() > 0) {
+          TArray<TSharedPtr<FJsonValue>> BagArr;
+          for (const FString& PropName : StoredInPropertyBag) {
+            BagArr.Add(MakeShared<FJsonValueString>(PropName));
+          }
+          Result->SetArrayField(TEXT("storedInPropertyBag"), BagArr);
+        }
+
+        if (FailedProperties.Num() > 0) {
+          TArray<TSharedPtr<FJsonValue>> FailedArr;
+          for (const FString& Err : FailedProperties) {
+            FailedArr.Add(MakeShared<FJsonValueString>(Err));
+          }
+          Result->SetArrayField(TEXT("failedProperties"), FailedArr);
+        }
+      }
       McpHandlerUtils::AddVerification(Result, ItemAsset);
       SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Item data asset created"), Result);
@@ -190,27 +263,12 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     // Get properties object from payload
     const TSharedPtr<FJsonObject>* PropertiesObj = nullptr;
     TArray<FString> ModifiedProperties;
+    TArray<FString> StoredInPropertyBag;
     TArray<FString> FailedProperties;
 
     if (Payload->TryGetObjectField(TEXT("properties"), PropertiesObj) && PropertiesObj && (*PropertiesObj).IsValid()) {
-      // Iterate through all properties in the JSON and apply them via reflection
-      for (const auto& Pair : (*PropertiesObj)->Values) {
-        const FString& PropertyName = Pair.Key;
-        const TSharedPtr<FJsonValue>& PropertyValue = Pair.Value;
-
-        // Find the property on the item asset class
-        FProperty* Prop = ItemAsset->GetClass()->FindPropertyByName(*PropertyName);
-        if (Prop) {
-          FString ApplyError;
-          if (ApplyJsonValueToProperty(ItemAsset, Prop, PropertyValue, ApplyError)) {
-            ModifiedProperties.Add(PropertyName);
-          } else {
-            FailedProperties.Add(FString::Printf(TEXT("%s: %s"), *PropertyName, *ApplyError));
-          }
-        } else {
-          FailedProperties.Add(FString::Printf(TEXT("%s: Property not found"), *PropertyName));
-        }
-      }
+      ApplyItemPropertiesToAsset(ItemAsset, *PropertiesObj, ModifiedProperties,
+                                 StoredInPropertyBag, FailedProperties);
     }
 
     ItemAsset->MarkPackageDirty();
@@ -219,9 +277,9 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       McpSafeAssetSave(ItemAsset);
     }
 
-TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetBoolField(TEXT("modified"), ModifiedProperties.Num() > 0);
-    Result->SetNumberField(TEXT("propertiesModified"), ModifiedProperties.Num());
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    Result->SetBoolField(TEXT("modified"), ModifiedProperties.Num() + StoredInPropertyBag.Num() > 0);
+    Result->SetNumberField(TEXT("propertiesModified"), ModifiedProperties.Num() + StoredInPropertyBag.Num());
     McpHandlerUtils::AddVerification(Result, ItemAsset);
 
     TArray<TSharedPtr<FJsonValue>> ModifiedArr;
@@ -229,6 +287,14 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       ModifiedArr.Add(MakeShared<FJsonValueString>(Name));
     }
     Result->SetArrayField(TEXT("modifiedProperties"), ModifiedArr);
+
+    if (StoredInPropertyBag.Num() > 0) {
+      TArray<TSharedPtr<FJsonValue>> BagArr;
+      for (const FString& Name : StoredInPropertyBag) {
+        BagArr.Add(MakeShared<FJsonValueString>(Name));
+      }
+      Result->SetArrayField(TEXT("storedInPropertyBag"), BagArr);
+    }
 
     if (FailedProperties.Num() > 0) {
       TArray<TSharedPtr<FJsonValue>> FailedArr;
@@ -422,11 +488,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       // Add MaxWeight float variable
       FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("MaxWeight"), FloatType);
 
-      FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-        if (GetPayloadBool(Payload, TEXT("save"), true)) {
-          McpSafeAssetSave(Blueprint);
-        }
+      McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("componentName"), ComponentName);
@@ -497,14 +559,22 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       if (!bExists) {
         FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("MaxSlots"), IntType);
       }
+      // Compile so the new MaxSlots property lands on the CDO, then write the requested value —
+      // otherwise the variable stays at its type-default 0 instead of slotCount (silent no-op).
+      McpSafeCompileBlueprint(Blueprint);
+      if (Blueprint->GeneratedClass) {
+        if (UObject* FreshCDO = Blueprint->GeneratedClass->GetDefaultObject()) {
+          if (FProperty* MaxSlotsProp = FreshCDO->GetClass()->FindPropertyByName(TEXT("MaxSlots"))) {
+            TSharedPtr<FJsonValue> SlotValue = MakeShared<FJsonValueNumber>(static_cast<double>(SlotCount));
+            FString ApplyError;
+            ApplyJsonValueToProperty(FreshCDO, MaxSlotsProp, SlotValue, ApplyError);
+          }
+        }
+      }
       bConfigured = true;
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetNumberField(TEXT("slotCount"), SlotCount);
@@ -600,30 +670,18 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    // Mark as expected functions to implement in Blueprint
-    TArray<FString> FunctionStubs = {
-      TEXT("AddItem"),
-      TEXT("RemoveItem"),
-      TEXT("GetItemCount"),
-      TEXT("HasItem"),
-      TEXT("TransferItem")
-    };
+    // NOTE: this action adds the helper variables + event-dispatcher delegates above (real work). It does
+    // NOT create the AddItem/RemoveItem/etc. UFunctions — authoring function graphs is a separate step
+    // (add_function). Report only what was actually added; do not list fake "(implement in Blueprint)"
+    // entries that imply functions exist.
 
-    for (const FString& FuncName : FunctionStubs) {
-      FunctionsAdded.Add(MakeShared<FJsonValueString>(FuncName + TEXT(" (implement in Blueprint)")));
-    }
-
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetArrayField(TEXT("functionsAdded"), FunctionsAdded);
+    Result->SetArrayField(TEXT("dispatchersAdded"), FunctionsAdded);
     Result->SetArrayField(TEXT("variablesAdded"), VariablesAdded);
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetStringField(TEXT("note"), TEXT("Helper variables and event dispatchers added. Implement function logic in Blueprint graph using these variables."));
+    Result->SetStringField(TEXT("note"), TEXT("Added helper variables and event-dispatcher delegates only. No UFunctions were created — author AddItem/RemoveItem/etc. with add_function, then implement their logic in the Blueprint graph."));
 
     SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Inventory functions added"), Result);
@@ -683,11 +741,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetArrayField(TEXT("eventsAdded"), EventsAdded);
@@ -771,11 +825,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("replicated"), bReplicated);
@@ -846,12 +896,8 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         }
       }
 
-      FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(NewBlueprint);
       FAssetRegistryModule::AssetCreated(NewBlueprint);
-
-      if (GetPayloadBool(Payload, TEXT("save"), true)) {
-        McpSafeAssetSave(NewBlueprint);
-      }
+      McpFinalizeBlueprint(NewBlueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("pickupPath"), Package->GetName());
@@ -942,11 +988,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("pickupPath"), PickupPath);
@@ -1013,6 +1055,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("RespawnTime"), FloatType);
     }
 
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+
     // Set default values on the CDO if available
     if (Blueprint->GeneratedClass) {
       UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
@@ -1033,11 +1079,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("pickupPath"), PickupPath);
@@ -1121,6 +1163,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+
     // Set default values on the CDO if available
     if (Blueprint->GeneratedClass) {
       UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
@@ -1136,11 +1182,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("pickupPath"), PickupPath);
@@ -1231,11 +1273,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
           FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("SlotNames"), NameArrayType);
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-        if (GetPayloadBool(Payload, TEXT("save"), true)) {
-          McpSafeAssetSave(Blueprint);
-        }
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("componentName"), ComponentName);
@@ -1335,11 +1373,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("EquippedItems"), SoftObjectArrayType);
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1420,6 +1454,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+
     // Set default values on CDO if available
     if (Blueprint->GeneratedClass) {
       UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
@@ -1447,11 +1485,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("statModifiersConfigured"), GetPayloadBool(Payload, TEXT("statModifiers"), true));
@@ -1550,30 +1584,17 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    // Mark as expected functions to implement in Blueprint
-    TArray<FString> FunctionStubs = {
-      TEXT("EquipItem"),
-      TEXT("UnequipItem"),
-      TEXT("GetEquippedItem"),
-      TEXT("CanEquip"),
-      TEXT("SwapEquipment")
-    };
+    // Adds the helper variables + event-dispatcher delegates above (real work). It does NOT create the
+    // EquipItem/UnequipItem/etc. UFunctions — that is a separate step (add_function). Report only what was
+    // actually added; do not list fake "(implement in Blueprint)" entries that imply functions exist.
 
-    for (const FString& FuncName : FunctionStubs) {
-      FunctionsAdded.Add(MakeShared<FJsonValueString>(FuncName + TEXT(" (implement in Blueprint)")));
-    }
-
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetArrayField(TEXT("functionsAdded"), FunctionsAdded);
+    Result->SetArrayField(TEXT("dispatchersAdded"), FunctionsAdded);
     Result->SetArrayField(TEXT("variablesAdded"), VariablesAdded);
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetStringField(TEXT("note"), TEXT("Helper variables and event dispatchers added. Implement function logic in Blueprint graph."));
+    Result->SetStringField(TEXT("note"), TEXT("Added helper variables and event-dispatcher delegates only. No UFunctions were created — author EquipItem/UnequipItem/etc. with add_function, then implement their logic in the Blueprint graph."));
 
     SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Equipment functions added"), Result);
@@ -1649,6 +1670,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+
     // Set default values on CDO if available
     if (Blueprint->GeneratedClass) {
       UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
@@ -1669,11 +1694,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("attachToSocket"), bAttachToSocket);
@@ -1784,8 +1805,15 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         bEntryAdded = false;
       }
     } else {
-      // For generic data assets without proper array properties
-      bEntryAdded = false;
+      // For generic MCP data assets, persist the entry in the extensible property map.
+      const int32 GenericEntryIndex = LootTable->Properties.Num();
+      const FString EntryKey = FString::Printf(TEXT("LootEntry_%d"), GenericEntryIndex);
+      const FString EntryValue = FString::Printf(
+          TEXT("ItemPath=%s;Weight=%s;MinQuantity=%d;MaxQuantity=%d"),
+          *ItemPath, *FString::SanitizeFloat(Weight), MinQuantity, MaxQuantity);
+      LootTable->Properties.Add(EntryKey, EntryValue);
+      EntryIndex = GenericEntryIndex;
+      bEntryAdded = true;
     }
 
     LootTable->MarkPackageDirty();
@@ -1803,7 +1831,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetNumberField(TEXT("entryIndex"), EntryIndex);
     Result->SetBoolField(TEXT("added"), bEntryAdded);
     if (!EntriesProp) {
-      Result->SetStringField(TEXT("note"), TEXT("LootEntries property not found. Ensure your loot table class has a LootEntries or Entries array property."));
+      Result->SetStringField(TEXT("storage"), TEXT("Properties"));
     }
     SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Loot entry added"), Result);
@@ -1899,6 +1927,10 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       AddedVars.Add(MakeShared<FJsonValueString>(TEXT("OnLootDropped")));
     }
 
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+
     // Set default values on CDO if available
     if (Blueprint->GeneratedClass) {
       UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
@@ -1926,11 +1958,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("actorPath"), ActorPath);
@@ -2064,6 +2092,13 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         NewObject<UMcpGenericDataAsset>(Package, FName(*Name), RF_Public | RF_Standalone);
 
     if (RecipeAsset) {
+      const int32 OutputQuantity =
+          static_cast<int32>(GetPayloadNumber(Payload, TEXT("outputQuantity"), 1));
+      const double CraftTime = GetPayloadNumber(Payload, TEXT("craftTime"), 1.0);
+      RecipeAsset->Properties.Add(TEXT("OutputItemPath"), OutputItemPath);
+      RecipeAsset->Properties.Add(TEXT("OutputQuantity"), FString::FromInt(OutputQuantity));
+      RecipeAsset->Properties.Add(TEXT("CraftTime"), FString::SanitizeFloat(CraftTime));
+
       RecipeAsset->MarkPackageDirty();
       FAssetRegistryModule::AssetCreated(RecipeAsset);
 
@@ -2074,10 +2109,9 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("recipePath"), Package->GetName());
       Result->SetStringField(TEXT("outputItemPath"), OutputItemPath);
-      Result->SetNumberField(TEXT("outputQuantity"),
-                             GetPayloadNumber(Payload, TEXT("outputQuantity"), 1));
-      Result->SetNumberField(TEXT("craftTime"),
-                             GetPayloadNumber(Payload, TEXT("craftTime"), 1.0));
+      Result->SetNumberField(TEXT("outputQuantity"), OutputQuantity);
+      Result->SetNumberField(TEXT("craftTime"), CraftTime);
+      Result->SetStringField(TEXT("storage"), TEXT("Properties"));
       SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Crafting recipe created"), Result);
     } else {
@@ -2098,13 +2132,33 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       return true;
     }
 
+    UObject* RecipeAsset = StaticLoadObject(UDataAsset::StaticClass(), nullptr, *RecipePath);
+    UMcpGenericDataAsset* GenericRecipe = Cast<UMcpGenericDataAsset>(RecipeAsset);
+
+    if (!GenericRecipe) {
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(TEXT("Recipe not found or unsupported asset type: %s"), *RecipePath),
+          TEXT("ASSET_NOT_FOUND"));
+      return true;
+    }
+
+    const int32 RequiredLevel = static_cast<int32>(GetPayloadNumber(Payload, TEXT("requiredLevel"), 0));
+    const FString RequiredStation = GetPayloadString(Payload, TEXT("requiredStation"), TEXT("None"));
+    GenericRecipe->Properties.Add(TEXT("RequiredLevel"), FString::FromInt(RequiredLevel));
+    GenericRecipe->Properties.Add(TEXT("RequiredStation"), RequiredStation);
+    GenericRecipe->MarkPackageDirty();
+
+    if (GetPayloadBool(Payload, TEXT("save"), false)) {
+      McpSafeAssetSave(GenericRecipe);
+    }
+
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("recipePath"), RecipePath);
-    Result->SetNumberField(TEXT("requiredLevel"),
-                           GetPayloadNumber(Payload, TEXT("requiredLevel"), 0));
-    Result->SetStringField(TEXT("requiredStation"),
-                           GetPayloadString(Payload, TEXT("requiredStation"), TEXT("None")));
+    Result->SetNumberField(TEXT("requiredLevel"), RequiredLevel);
+    Result->SetStringField(TEXT("requiredStation"), RequiredStation);
     Result->SetBoolField(TEXT("configured"), true);
+    Result->SetNumberField(TEXT("propertiesModified"), 2);
     SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Recipe requirements configured"), Result);
     return true;
@@ -2154,12 +2208,8 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         }
       }
 
-      FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(StationBlueprint);
       FAssetRegistryModule::AssetCreated(StationBlueprint);
-
-        if (GetPayloadBool(Payload, TEXT("save"), true)) {
-          McpSafeAssetSave(StationBlueprint);
-        }
+      McpFinalizeBlueprint(StationBlueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("stationPath"), Package->GetName());
@@ -2269,11 +2319,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
           }
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-        if (GetPayloadBool(Payload, TEXT("save"), true)) {
-          McpSafeAssetSave(Blueprint);
-        }
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("componentName"), ComponentName);
@@ -2356,6 +2402,17 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
+    if (ModifiedProps.Num() == 0) {
+      if (UMcpGenericDataAsset* GenericItem = Cast<UMcpGenericDataAsset>(ItemAsset)) {
+        GenericItem->Properties.Add(TEXT("bStackable"), bStackable ? TEXT("true") : TEXT("false"));
+        GenericItem->Properties.Add(TEXT("MaxStackSize"), FString::FromInt(MaxStackSize));
+        GenericItem->Properties.Add(TEXT("bUniqueItem"), bUniqueItems ? TEXT("true") : TEXT("false"));
+        ModifiedProps.Add(TEXT("Properties.bStackable"));
+        ModifiedProps.Add(TEXT("Properties.MaxStackSize"));
+        ModifiedProps.Add(TEXT("Properties.bUniqueItem"));
+      }
+    }
+
     ItemAsset->MarkPackageDirty();
 
     if (GetPayloadBool(Payload, TEXT("save"), false)) {
@@ -2373,7 +2430,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       ModArr.Add(MakeShared<FJsonValueString>(Prop));
     }
     Result->SetArrayField(TEXT("modifiedProperties"), ModArr);
-    Result->SetBoolField(TEXT("configured"), true);
+    Result->SetBoolField(TEXT("configured"), ModifiedProps.Num() > 0);
 
     if (ModifiedProps.Num() == 0) {
       Result->SetStringField(TEXT("note"), TEXT("No stacking properties found. Ensure your item class has bStackable, MaxStackSize, or StackLimit properties."));
@@ -2427,6 +2484,14 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
           IconPropertyName = PropName;
           break;
         }
+      }
+    }
+
+    if (!bIconSet) {
+      if (UMcpGenericDataAsset* GenericItem = Cast<UMcpGenericDataAsset>(ItemAsset)) {
+        GenericItem->Properties.Add(TEXT("IconPath"), IconPath);
+        bIconSet = true;
+        IconPropertyName = TEXT("Properties.IconPath");
       }
     }
 
@@ -2499,8 +2564,17 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         bIngredientAdded = false;
       }
     } else {
-      // For generic data assets without proper array properties
-      bIngredientAdded = false;
+      if (UMcpGenericDataAsset* GenericRecipe = Cast<UMcpGenericDataAsset>(RecipeAsset)) {
+        const int32 GenericIngredientIndex = GenericRecipe->Properties.Num();
+        const FString IngredientKey = FString::Printf(TEXT("Ingredient_%d"), GenericIngredientIndex);
+        const FString IngredientValue = FString::Printf(
+            TEXT("ItemPath=%s;Quantity=%d"), *IngredientItemPath, Quantity);
+        GenericRecipe->Properties.Add(IngredientKey, IngredientValue);
+        IngredientIndex = GenericIngredientIndex;
+        bIngredientAdded = true;
+      } else {
+        bIngredientAdded = false;
+      }
     }
 
     RecipeAsset->MarkPackageDirty();
@@ -2516,7 +2590,9 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetNumberField(TEXT("ingredientIndex"), IngredientIndex);
     Result->SetBoolField(TEXT("added"), bIngredientAdded);
 
-    if (!IngredientsProp) {
+    if (!IngredientsProp && bIngredientAdded) {
+      Result->SetStringField(TEXT("storage"), TEXT("Properties"));
+    } else if (!IngredientsProp) {
       Result->SetStringField(TEXT("note"), TEXT("Ingredients property not found. Ensure your recipe class has an Ingredients, RequiredItems, or InputItems array."));
     }
 
@@ -2617,8 +2693,11 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
 
     double MaxWeight = GetPayloadNumber(Payload, TEXT("maxWeight"), 100.0);
     bool bEnableWeight = GetPayloadBool(Payload, TEXT("enableWeight"), true);
-    bool bEncumberanceSystem = GetPayloadBool(Payload, TEXT("encumberanceSystem"), false);
-    double EncumberanceThreshold = GetPayloadNumber(Payload, TEXT("encumberanceThreshold"), 0.75);
+    // 'encumberance' (sic) spellings accepted for back-compat with older clients.
+    bool bEncumbranceSystem = GetPayloadBool(Payload, TEXT("encumbranceSystem"),
+        GetPayloadBool(Payload, TEXT("encumberanceSystem"), false));
+    double EncumbranceThreshold = GetPayloadNumber(Payload, TEXT("encumbranceThreshold"),
+        GetPayloadNumber(Payload, TEXT("encumberanceThreshold"), 0.75));
 
     FEdGraphPinType FloatType;
     FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
@@ -2632,8 +2711,8 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       TPair<FName, FEdGraphPinType>(TEXT("MaxCarryWeight"), FloatType),
       TPair<FName, FEdGraphPinType>(TEXT("CurrentCarryWeight"), FloatType),
       TPair<FName, FEdGraphPinType>(TEXT("bWeightEnabled"), BoolType),
-      TPair<FName, FEdGraphPinType>(TEXT("bUseEncumberance"), BoolType),
-      TPair<FName, FEdGraphPinType>(TEXT("EncumberanceThreshold"), FloatType),
+      TPair<FName, FEdGraphPinType>(TEXT("bUseEncumbrance"), BoolType),
+      TPair<FName, FEdGraphPinType>(TEXT("EncumbranceThreshold"), FloatType),
       TPair<FName, FEdGraphPinType>(TEXT("WeightMultiplier"), FloatType)
     };
 
@@ -2659,15 +2738,19 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
 
     bool bEventExists = false;
     for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("OnEncumberanceChanged")) {
+      if (Var.VarName == TEXT("OnEncumbranceChanged")) {
         bEventExists = true;
         break;
       }
     }
     if (!bEventExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("OnEncumberanceChanged"), DelegateType);
-      AddedVars.Add(MakeShared<FJsonValueString>(TEXT("OnEncumberanceChanged")));
+      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("OnEncumbranceChanged"), DelegateType);
+      AddedVars.Add(MakeShared<FJsonValueString>(TEXT("OnEncumbranceChanged")));
     }
+
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
 
     // Set default values on CDO if available
     if (Blueprint->GeneratedClass) {
@@ -2687,34 +2770,30 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
           ApplyJsonValueToProperty(CDO, EnableProp, BoolVal, ApplyError);
         }
 
-        FProperty* EncumProp = CDO->GetClass()->FindPropertyByName(TEXT("bUseEncumberance"));
+        FProperty* EncumProp = CDO->GetClass()->FindPropertyByName(TEXT("bUseEncumbrance"));
         if (EncumProp) {
-          TSharedPtr<FJsonValue> BoolVal = MakeShared<FJsonValueBoolean>(bEncumberanceSystem);
+          TSharedPtr<FJsonValue> BoolVal = MakeShared<FJsonValueBoolean>(bEncumbranceSystem);
           FString ApplyError;
           ApplyJsonValueToProperty(CDO, EncumProp, BoolVal, ApplyError);
         }
 
-        FProperty* ThreshProp = CDO->GetClass()->FindPropertyByName(TEXT("EncumberanceThreshold"));
+        FProperty* ThreshProp = CDO->GetClass()->FindPropertyByName(TEXT("EncumbranceThreshold"));
         if (ThreshProp) {
-          TSharedPtr<FJsonValue> FloatVal = MakeShared<FJsonValueNumber>(EncumberanceThreshold);
+          TSharedPtr<FJsonValue> FloatVal = MakeShared<FJsonValueNumber>(EncumbranceThreshold);
           FString ApplyError;
           ApplyJsonValueToProperty(CDO, ThreshProp, FloatVal, ApplyError);
         }
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetNumberField(TEXT("maxWeight"), MaxWeight);
     Result->SetBoolField(TEXT("enableWeight"), bEnableWeight);
-    Result->SetBoolField(TEXT("encumberanceSystem"), bEncumberanceSystem);
-    Result->SetNumberField(TEXT("encumberanceThreshold"), EncumberanceThreshold);
+    Result->SetBoolField(TEXT("encumbranceSystem"), bEncumbranceSystem);
+    Result->SetNumberField(TEXT("encumbranceThreshold"), EncumbranceThreshold);
     Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
     Result->SetBoolField(TEXT("configured"), true);
 
@@ -2821,11 +2900,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    if (GetPayloadBool(Payload, TEXT("save"), true)) {
-      McpSafeAssetSave(Blueprint);
-    }
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("stationPath"), StationPath);
@@ -2866,6 +2941,31 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    auto AddGenericProperties = [](TSharedPtr<FJsonObject> TargetResult, UObject* Asset) {
+      UMcpGenericDataAsset* GenericAsset = Cast<UMcpGenericDataAsset>(Asset);
+
+      // Native UPROPERTY values — the same set set_item_properties writes.
+      TSharedPtr<FJsonObject> NativeObject = MakeShared<FJsonObject>();
+      for (TFieldIterator<FProperty> It(Asset->GetClass()); It; ++It) {
+        FProperty* Prop = *It;
+        if (GenericAsset && Prop->GetFName() == TEXT("Properties")) {
+          continue;  // the string bag, reported as "properties" below
+        }
+        TSharedPtr<FJsonValue> Value = ExportPropertyToJsonValue(Asset, Prop);
+        NativeObject->SetField(Prop->GetName(),
+                               Value.IsValid() ? Value : MakeShared<FJsonValueNull>());
+      }
+      TargetResult->SetObjectField(TEXT("nativeProperties"), NativeObject);
+
+      if (GenericAsset) {
+        TSharedPtr<FJsonObject> PropertiesObject = MakeShared<FJsonObject>();
+        for (const TPair<FString, FString>& Pair : GenericAsset->Properties) {
+          PropertiesObject->SetStringField(Pair.Key, Pair.Value);
+        }
+        TargetResult->SetObjectField(TEXT("properties"), PropertiesObject);
+        TargetResult->SetNumberField(TEXT("propertyCount"), GenericAsset->Properties.Num());
+      }
+    };
 
     if (!BlueprintPath.IsEmpty()) {
       UBlueprint* Blueprint = Cast<UBlueprint>(
@@ -2878,7 +2978,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
       Result->SetStringField(TEXT("assetType"), TEXT("Blueprint"));
       Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-      Result->SetStringField(TEXT("className"), Blueprint->GeneratedClass->GetName());
+      Result->SetStringField(TEXT("className"), Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetName() : FString(TEXT("(uncompiled)")));
 
       // Check for inventory/equipment components
       USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
@@ -2907,6 +3007,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("assetType"), TEXT("Item"));
       Result->SetStringField(TEXT("itemPath"), ItemPath);
       Result->SetStringField(TEXT("className"), ItemAsset->GetClass()->GetName());
+      AddGenericProperties(Result, ItemAsset);
     } else if (!LootTablePath.IsEmpty()) {
       UObject* LootTableAsset = StaticLoadObject(UDataAsset::StaticClass(), nullptr, *LootTablePath);
       if (!LootTableAsset) {
@@ -2917,6 +3018,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
       Result->SetStringField(TEXT("assetType"), TEXT("LootTable"));
       Result->SetStringField(TEXT("lootTablePath"), LootTablePath);
+      AddGenericProperties(Result, LootTableAsset);
     } else if (!RecipePath.IsEmpty()) {
       UObject* RecipeAsset = StaticLoadObject(UDataAsset::StaticClass(), nullptr, *RecipePath);
       if (!RecipeAsset) {
@@ -2927,6 +3029,7 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       }
       Result->SetStringField(TEXT("assetType"), TEXT("Recipe"));
       Result->SetStringField(TEXT("recipePath"), RecipePath);
+      AddGenericProperties(Result, RecipeAsset);
     } else if (!PickupPath.IsEmpty()) {
       UBlueprint* PickupBlueprint = Cast<UBlueprint>(
           StaticLoadObject(UBlueprint::StaticClass(), nullptr, *PickupPath));
@@ -2959,4 +3062,3 @@ TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
 #undef GetPayloadString
 #undef GetPayloadNumber
 #undef GetPayloadBool
-

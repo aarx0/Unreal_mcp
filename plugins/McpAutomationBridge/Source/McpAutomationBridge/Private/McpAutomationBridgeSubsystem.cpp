@@ -1,23 +1,66 @@
-// Ensure the subsystem type and bridge socket types are available
-// Include helpers first to ensure MCP_HAS_CONTROLRIG_FACTORY is properly defined
-// before McpAutomationBridgeSubsystem.h sets default values
+// Ensure the subsystem type and bridge socket helpers are available before the
+// generated subsystem header pulls in UE version-dependent declarations.
 #if WITH_EDITOR
 #include "McpAutomationBridgeHelpers.h"
 #endif
 
 #include "McpAutomationBridgeSubsystem.h"
+#include "MCP/McpNativeTransport.h"
+#include "MCP/McpConsolidatedActionRouting.h"
+#include "MCP/McpStartupValidation.h"
+#include "HAL/PlatformTLS.h"
+#include "Interfaces/IPluginManager.h"
+#include "Misc/AutomationTest.h" // OnTestEndEvent unbind in Deinitialize (TDD runner)
 
 // =============================================================================
 // FMcpRequestErrorDevice - Custom log device for per-request error capture
 // =============================================================================
+
+static constexpr int32 MaxCapturedRequestMessages = 32;
+static constexpr int32 MaxCapturedRequestMessageChars = 1024;
+
+static bool IsKnownBenignMcpCompilerWarning(const FString& Message)
+{
+    // GAS cooldown effect that grants no tags — cosmetic compiler warning.
+    if (Message.Contains(TEXT("CooldownGameplayEffectClass"), ESearchCase::IgnoreCase) &&
+        (Message.Contains(TEXT("no tags"), ESearchCase::IgnoreCase) ||
+         Message.Contains(TEXT("grant any tags"), ESearchCase::IgnoreCase) ||
+         Message.Contains(TEXT("grants no tag"), ESearchCase::IgnoreCase) ||
+         Message.Contains(TEXT("granting no tag"), ESearchCase::IgnoreCase)))
+    {
+        return true;
+    }
+    // Self-healing WidgetBlueprint variable->GUID ensure: a stale variable-GUID entry for
+    // a removed widget can trip a handled ensure on the next compile, which the compiler
+    // then prunes itself. The asset is fine — don't surface it as ENGINE_ERROR. (The
+    // remove_widget root fix prevents it; this is defense-in-depth for other paths.)
+    if (Message.Contains(TEXT("SeenVariableNames"), ESearchCase::IgnoreCase) ||
+        Message.Contains(TEXT("was deleted but still has a GUID"), ESearchCase::IgnoreCase))
+    {
+        return true;
+    }
+    // Editor-scripting utilities (UEditorAssetLibrary et al.) refuse to run
+    // during PIE via EditorScriptingHelpers::CheckIfInEditorAndPIE(), which
+    // logs this line at Error severity and bails. Bridge call paths have
+    // PIE-safe fallbacks (LoadObject/FindObject/AssetRegistry); when the
+    // fallback also fails the handler surfaces its own specific error, and
+    // this guard only promotes on SUCCESS — so suppressing the line never
+    // hides a real failure. (Captured form: "[LogUtils] The Editor is
+    // currently in a play mode." — match without prefix/period.)
+    if (Message.Contains(TEXT("The Editor is currently in a play mode"), ESearchCase::IgnoreCase))
+    {
+        return true;
+    }
+    return false;
+}
 
 /**
  * Custom output device that captures errors and warnings during request processing.
  * This is temporarily attached to GLog during handler execution to detect
  * engine-level errors (like ensure failures) that don't propagate as exceptions.
  * 
- * Note: Uses the subsystem's shared capture with mutex-protected access since
- * GLog may route messages from worker threads.
+ * Note: Uses the subsystem's shared capture with mutex-protected access and
+ * only records messages from the request thread that enabled capture.
  */
 class FMcpRequestErrorDevice : public FOutputDevice
 {
@@ -29,28 +72,94 @@ public:
 
     virtual void Serialize(const TCHAR* V, ELogVerbosity::Type Verbosity, const FName& Category) override
     {
-        // Only capture Error and Warning verbosity
-        if (Verbosity == ELogVerbosity::Error || Verbosity == ELogVerbosity::Warning)
+        if (!Subsystem)
         {
-            if (!Subsystem)
-            {
-                return;
-            }
-            
+            return;
+        }
+
+        const bool bIsErrorOrWarning =
+            (Verbosity == ELogVerbosity::Error || Verbosity == ELogVerbosity::Warning);
+
+        auto& Capture = Subsystem->CurrentErrorCapture;
+
+        // Lock-free fast path: the editor logs a high volume of non-Error/Warning lines,
+        // almost always with no request capture active -- skip those without touching the
+        // mutex. Error/Warning lines are rare enough to always take the slow path, and a
+        // non-Error line while a capture IS active still needs the lock (to close an open
+        // handled-ensure block). A stale relaxed read only risks skipping a block-close at
+        // the very edges of capture start/stop, which is harmless.
+        if (!bIsErrorOrWarning &&
+            !Capture.bActive.load(std::memory_order_relaxed))
+        {
+            return;
+        }
+
+        // Thread-safe access to shared capture
+        FScopeLock Lock(&Subsystem->ErrorCaptureMutex);
+        if (!Capture.bActive ||
+            Capture.CapturingThreadId != FPlatformTLS::GetCurrentThreadId())
+        {
+            return;
+        }
+
+        // A "Handled ensure" prints a multi-line dump -- a header, the condition, the
+        // message, "Stack:", then ~25 "[Callstack]" frames -- and the engine logs EVERY
+        // line at Error verbosity even though it caught and recovered from the ensure.
+        // None of those lines should fail the tool call: a handled ensure is a soft
+        // assertion, not an operation failure (a real failure surfaces as a handler
+        // returning false or a non-ensure Error). So we track the dump as a block: it
+        // opens on the marker line and closes as soon as a normal (non-Error/Warning)
+        // line is logged, i.e. logging has moved on. Bounding it this way means a genuine
+        // Error logged after the dump is still caught.
+        if (!bIsErrorOrWarning)
+        {
+            // Normal logging resumed -> any handled-ensure dump has ended.
+            Capture.bInHandledEnsureBlock = false;
+            return; // we only record Error/Warning
+        }
+
+        if (Verbosity == ELogVerbosity::Error &&
+            FCString::Strstr(V, TEXT("=== Handled ensure")) != nullptr)
+        {
+            Capture.bInHandledEnsureBlock = true;
+        }
+
+        {
             FString Message = FString::Printf(TEXT("[%s] %s"), *Category.ToString(), V);
-            
-            // Thread-safe access to shared capture
-            FScopeLock Lock(&Subsystem->ErrorCaptureMutex);
-            auto& Capture = Subsystem->CurrentErrorCapture;
-            
-            if (Verbosity == ELogVerbosity::Error)
+            if (Message.Len() > MaxCapturedRequestMessageChars)
             {
-                Capture.ErrorMessages.Add(Message);
+                Message = Message.Left(MaxCapturedRequestMessageChars) + TEXT("[TRUNCATED]");
+            }
+
+            const bool bTreatAsWarning =
+                Verbosity == ELogVerbosity::Warning ||
+                Capture.bInHandledEnsureBlock ||
+                IsKnownBenignMcpCompilerWarning(Message);
+
+            if (!bTreatAsWarning)
+            {
+                ++Capture.ErrorCount;
+                if (Capture.ErrorMessages.Num() < MaxCapturedRequestMessages)
+                {
+                    Capture.ErrorMessages.Add(Message);
+                }
+                else
+                {
+                    Capture.bErrorMessagesTruncated = true;
+                }
                 Capture.bHasErrors = true;
             }
             else
             {
-                Capture.WarningMessages.Add(Message);
+                ++Capture.WarningCount;
+                if (Capture.WarningMessages.Num() < MaxCapturedRequestMessages)
+                {
+                    Capture.WarningMessages.Add(Message);
+                }
+                else
+                {
+                    Capture.bWarningMessagesTruncated = true;
+                }
                 Capture.bHasWarnings = true;
             }
         }
@@ -60,18 +169,26 @@ public:
         // captures errors and warnings without suppressing normal logging.
     }
 
+    virtual bool CanBeUsedOnAnyThread() const override
+    {
+        return true;
+    }
+
+    virtual bool CanBeUsedOnMultipleThreads() const override
+    {
+        return true;
+    }
+
 private:
     UMcpAutomationBridgeSubsystem* Subsystem = nullptr;
 };
 #include "Dom/JsonObject.h"
 #include "Async/TaskGraphInterfaces.h"
 #include "Async/Async.h"
-#include "HAL/PlatformFilemanager.h"
+#include "HAL/PlatformFileManager.h"
 #include "HAL/PlatformTime.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeSettings.h"
-#include "McpBridgeWebSocket.h"
-#include "McpConnectionManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
@@ -87,9 +204,6 @@ private:
 // Define the subsystem log category declared in the public header.
 DEFINE_LOG_CATEGORY(LogMcpAutomationBridgeSubsystem);
 
-// Sanitize incoming text for logging: replace control characters with
-// '?' and truncate long messages so logs remain readable and do not
-// attempt to render unprintable glyphs in the editor which can spam
 /**
  * @brief Produces a log-safe copy of a string by replacing control characters
  * and truncating long input.
@@ -116,6 +230,172 @@ static inline FString SanitizeForLog(const FString &In) {
   }
   if (Out.Len() > 512)
     Out = Out.Left(512) + TEXT("[TRUNCATED]");
+  return Out;
+}
+
+static inline bool IsAllowedUnrealMountPrefixAt(
+    const FString &Value, int32 Index, const TCHAR *Mount) {
+  const int32 MountLen = FCString::Strlen(Mount);
+  if (Index + MountLen > Value.Len()) {
+    return false;
+  }
+
+  if (!Value.Mid(Index, MountLen).Equals(Mount, ESearchCase::CaseSensitive)) {
+    return false;
+  }
+
+  const int32 AfterMount = Index + MountLen;
+  return AfterMount == Value.Len() || Value[AfterMount] == '/';
+}
+
+static inline bool IsAllowedUnrealMountPath(const FString &Value, int32 Index) {
+  // /Script and /Temp are object-path roots, not content mounts, so they are
+  // not in QueryRootContentPaths.
+  if (IsAllowedUnrealMountPrefixAt(Value, Index, TEXT("/Script")) ||
+      IsAllowedUnrealMountPrefixAt(Value, Index, TEXT("/Temp"))) {
+    return true;
+  }
+  // Every registered content mount (/Game, /Engine, plugin mounts). Queried
+  // per call, not cached: plugin mounts can register after startup, and the
+  // input side accepts them (IsValidLongPackageName), so redacting them here
+  // would mangle legitimate asset paths in error messages.
+  TArray<FString> RootPaths;
+  FPackageName::QueryRootContentPaths(RootPaths);
+  for (const FString &Root : RootPaths) {
+    FString Mount = Root;
+    Mount.RemoveFromEnd(TEXT("/"));
+    if (IsAllowedUnrealMountPrefixAt(Value, Index, *Mount)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static inline bool IsResponsePathChar(TCHAR C) {
+  return FChar::IsAlnum(C) || C == '/' || C == '\\' || C == '.' ||
+         C == '_' || C == '-' || C == ':' || C == '(' || C == ')' ||
+         C == '+' || C == '~' || C == ' ';
+}
+
+static inline bool IsUnrealMountPathChar(TCHAR C) {
+  return FChar::IsAlnum(C) || C == '/' || C == '.' || C == '_' ||
+         C == '-' || C == ':';
+}
+
+static FString RedactFilesystemPathsForResponse(const FString &Input) {
+  // A '/' starts a redactable Unix path only at a token boundary with a path
+  // segment following it: prose like "decorators/services use add_subnode" or
+  // "set_default / set_asset_property" is not a filesystem path.
+  const auto IsTokenChar = [](TCHAR C) {
+    return FChar::IsAlnum(C) || C == '_' || C == '.' || C == '-';
+  };
+  FString Output;
+  Output.Reserve(Input.Len());
+
+  for (int32 Index = 0; Index < Input.Len();) {
+    const bool bAllowedUnrealPath = Input[Index] == '/' &&
+                                    IsAllowedUnrealMountPath(Input, Index);
+    const bool bUnixPath = Input[Index] == '/' && !bAllowedUnrealPath &&
+                           (Index == 0 || !IsTokenChar(Input[Index - 1])) &&
+                           Index + 1 < Input.Len() &&
+                           IsTokenChar(Input[Index + 1]);
+    const bool bWindowsPath = Index + 2 < Input.Len() &&
+                              FChar::IsAlpha(Input[Index]) &&
+                              Input[Index + 1] == ':' &&
+                              (Input[Index + 2] == '/' || Input[Index + 2] == '\\');
+    const bool bUncPath = Index + 1 < Input.Len() &&
+                          Input[Index] == '\\' && Input[Index + 1] == '\\';
+
+    if (bAllowedUnrealPath) {
+      while (Index < Input.Len() && IsUnrealMountPathChar(Input[Index])) {
+        Output.AppendChar(Input[Index]);
+        ++Index;
+      }
+      continue;
+    }
+
+    if (bUnixPath || bWindowsPath || bUncPath) {
+      Output += TEXT("[path redacted]");
+      while (Index < Input.Len() && IsResponsePathChar(Input[Index])) {
+        ++Index;
+      }
+      continue;
+    }
+
+    Output.AppendChar(Input[Index]);
+    ++Index;
+  }
+
+  return Output;
+}
+
+static void RedactFollowingValueForResponse(FString &Text, const FString &Marker) {
+  const auto IsValueDelimiter = [](TCHAR C) {
+    return C == ';' || C == '&' || C == ',' || C == '\r' || C == '\n';
+  };
+  const auto IsHeaderDelimiter = [](TCHAR C) {
+    return C == ';' || C == '&' || C == '\r' || C == '\n';
+  };
+
+  int32 SearchStart = 0;
+  while (SearchStart < Text.Len()) {
+    const int32 MarkerIndex = Text.Find(
+        Marker, ESearchCase::IgnoreCase, ESearchDir::FromStart, SearchStart);
+    if (MarkerIndex == INDEX_NONE) {
+      return;
+    }
+
+    const int32 ValueStart = MarkerIndex + Marker.Len();
+    const bool bAllowWhitespaceInValue = Marker.EndsWith(TEXT(":"));
+    int32 ValueEnd = ValueStart;
+    if (bAllowWhitespaceInValue) {
+      while (ValueEnd < Text.Len() && FChar::IsWhitespace(Text[ValueEnd]) &&
+             Text[ValueEnd] != '\r' && Text[ValueEnd] != '\n') {
+        ++ValueEnd;
+      }
+      while (ValueEnd < Text.Len() && !IsHeaderDelimiter(Text[ValueEnd])) {
+        ++ValueEnd;
+      }
+    } else {
+      while (ValueEnd < Text.Len() && !IsValueDelimiter(Text[ValueEnd]) &&
+             !FChar::IsWhitespace(Text[ValueEnd])) {
+        ++ValueEnd;
+      }
+    }
+
+    Text = Text.Left(ValueStart) + TEXT("[redacted]") + Text.Mid(ValueEnd);
+    SearchStart = ValueStart + 10;
+  }
+}
+
+static void RedactSecretMarkersForResponse(FString &Out) {
+  RedactFollowingValueForResponse(Out, TEXT("token="));
+  RedactFollowingValueForResponse(Out, TEXT("capabilitytoken="));
+  RedactFollowingValueForResponse(Out, TEXT("password="));
+  RedactFollowingValueForResponse(Out, TEXT("secret="));
+  RedactFollowingValueForResponse(Out, TEXT("api_key="));
+  RedactFollowingValueForResponse(Out, TEXT("apikey="));
+  RedactFollowingValueForResponse(Out, TEXT("authorization:"));
+  RedactFollowingValueForResponse(Out, TEXT("bearer "));
+}
+
+// For engine-captured log lines quoted into responses; these can carry
+// absolute filesystem paths, so paths outside content mounts are redacted.
+static FString SanitizeEngineErrorForResponse(const FString &In) {
+  FString Out = RedactFilesystemPathsForResponse(SanitizeForLog(In));
+  RedactSecretMarkersForResponse(Out);
+
+  if (Out.Len() > 512) {
+    Out = Out.Left(512) + TEXT("[TRUNCATED]");
+  }
+  return Out;
+}
+
+// For handler-authored error messages: no path redaction — guidance routinely
+// names action/param tokens and content paths the caller needs verbatim.
+static FString SanitizeHandlerMessageForResponse(const FString &In) {
+  FString Out = SanitizeForLog(In);
+  RedactSecretMarkersForResponse(Out);
   return Out;
 }
 
@@ -151,30 +431,59 @@ void UMcpAutomationBridgeSubsystem::Initialize(
   UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
          TEXT("McpAutomationBridgeSubsystem initializing."));
 
-  // Create and initialize the connection manager
-  ConnectionManager = MakeShared<FMcpConnectionManager>();
-  ConnectionManager->Initialize(GetDefault<UMcpAutomationBridgeSettings>());
-
-  // Bind message received delegate
-  ConnectionManager->SetOnMessageReceived(
-      FMcpMessageReceivedCallback::CreateWeakLambda(
-          this, [this](const FString &RequestId, const FString &Action,
-                       const TSharedPtr<FJsonObject> &Payload,
-                       TSharedPtr<FMcpBridgeWebSocket> Socket) {
-            ProcessAutomationRequest(RequestId, Action, Payload, Socket);
-          }));
+  // WebSocket transport removed — pull-only / native HTTP (see docs/pull-architecture.md).
+  // FMcpConnectionManager (listener, heartbeat ticker, reconnect, telemetry, push) is
+  // deleted; FMcpBridgeWebSocket remains only as the inert response-handle type used in
+  // handler signatures (always nullptr on HTTP).
 
   // Initialize the handler registry
   InitializeHandlers();
 
-  // Start the connection manager
-  ConnectionManager->Start();
+  const auto* Settings = GetDefault<UMcpAutomationBridgeSettings>();
+  const bool bBridgeEnabled = Settings && Settings->bEnableNativeMCP;
 
-  // Register Ticker
+  // Register the log capture ring so get_log/tail_log can report "what just
+  // happened" retrospectively (no prior subscribe needed). Bounded + cheap
+  // append; see McpAutomationBridge_LogHandlers.cpp. Gated on the transport:
+  // with the bridge off nothing can read the ring, so don't tax every log
+  // line in ordinary editor sessions.
+  if (bBridgeEnabled && GLog && !LogCaptureDevice.IsValid()) {
+    LogRing.SetNum(LogRingCapacity);
+    LogCaptureDevice = MakeLogCaptureDevice();
+    GLog->AddOutputDevice(LogCaptureDevice.Get());
+  }
+
+  // Native MCP Streamable HTTP transport (opt-in)
+  {
+    if (bBridgeEnabled)
+    {
+      // Find plugin directory for loading tool schemas
+      FString PluginDir;
+      TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("McpAutomationBridge"));
+      if (Plugin.IsValid())
+      {
+        PluginDir = Plugin->GetBaseDir();
+      }
+
+      NativeTransport = MakeShared<FMcpNativeTransport>(this);
+      if (!NativeTransport->Start(Settings->NativeMCPPort, PluginDir, Settings->bLoadAllToolsOnStart,
+                                  Settings->NativeMCPInstructions,
+                                  Settings->ListenHost, Settings->bAllowNonLoopback))
+      {
+        UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
+               TEXT("Failed to start Native MCP server on port %d"), Settings->NativeMCPPort);
+        NativeTransport.Reset();
+      }
+    }
+  }
+
+  // Register Ticker. Automation requests are drained here, after the engine
+  // world tick has completed, so map transitions do not run from arbitrary
+  // GameThread task-graph points inside active tick groups.
   TickHandle = FTSTicker::GetCoreTicker().AddTicker(
       FTickerDelegate::CreateUObject(this,
                                      &UMcpAutomationBridgeSubsystem::Tick),
-      0.1f // Tick every 0.1s is sufficient for automation queue processing
+      0.0f
   );
 
   UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
@@ -200,6 +509,12 @@ void UMcpAutomationBridgeSubsystem::Deinitialize() {
     TickHandle.Reset();
   }
 
+  // Unbind the automation test-end capture delegate (lazy-bound on first run_tests).
+  if (AutomationTestEndHandle.IsValid()) {
+    FAutomationTestFramework::Get().OnTestEndEvent.Remove(AutomationTestEndHandle);
+    AutomationTestEndHandle.Reset();
+  }
+
   // Skip verbose logging during commandlet mode since we didn't fully
   // initialize
   if (!IsRunningCommandlet()) {
@@ -207,10 +522,13 @@ void UMcpAutomationBridgeSubsystem::Deinitialize() {
            TEXT("McpAutomationBridgeSubsystem deinitializing."));
   }
 
-  if (ConnectionManager.IsValid()) {
-    ConnectionManager->Stop();
-    ConnectionManager.Reset();
+  if (NativeTransport)
+  {
+    NativeTransport->Shutdown();
+    NativeTransport.Reset();
   }
+
+  // (WebSocket ConnectionManager removed — nothing to stop)
 
   if (LogCaptureDevice.IsValid()) {
     if (GLog)
@@ -220,6 +538,7 @@ void UMcpAutomationBridgeSubsystem::Deinitialize() {
 
   // Clean up RequestErrorDevice to prevent dangling pointer in GLog
   if (RequestErrorDevice.IsValid()) {
+    FScopeLock Lock(&ErrorCaptureMutex);
     if (GLog)
       GLog->RemoveOutputDevice(RequestErrorDevice.Get());
     RequestErrorDevice.Reset();
@@ -236,8 +555,8 @@ void UMcpAutomationBridgeSubsystem::Deinitialize() {
  * sockets, `false` otherwise.
  */
 bool UMcpAutomationBridgeSubsystem::IsBridgeActive() const {
-  return ConnectionManager.IsValid() &&
-         ConnectionManager->GetActiveSocketCount() > 0;
+  // WebSocket transport removed; the native HTTP transport is the live bridge.
+  return NativeTransport.IsValid() && NativeTransport->IsRunning();
 }
 
 /**
@@ -251,13 +570,9 @@ bool UMcpAutomationBridgeSubsystem::IsBridgeActive() const {
  */
 EMcpAutomationBridgeState
 UMcpAutomationBridgeSubsystem::GetBridgeState() const {
-  if (ConnectionManager.IsValid()) {
-    if (ConnectionManager->GetActiveSocketCount() > 0) {
-      return EMcpAutomationBridgeState::Connected;
-    }
-    if (ConnectionManager->IsReconnectPending()) {
-      return EMcpAutomationBridgeState::Connecting;
-    }
+  // WebSocket transport removed; reflect the native HTTP transport instead.
+  if (NativeTransport.IsValid() && NativeTransport->IsRunning()) {
+    return EMcpAutomationBridgeState::Connected;
   }
   return EMcpAutomationBridgeState::Disconnected;
 }
@@ -273,16 +588,20 @@ UMcpAutomationBridgeSubsystem::FRequestErrorCapture& UMcpAutomationBridgeSubsyst
 
 void UMcpAutomationBridgeSubsystem::BeginErrorCapture()
 {
-    // Clear any previous capture state (thread-safe)
-    FScopeLock Lock(&ErrorCaptureMutex);
-    CurrentErrorCapture.Reset();
-    
     // Create and attach the error capture device if not already
     if (!RequestErrorDevice.IsValid())
     {
         RequestErrorDevice = MakeShared<FMcpRequestErrorDevice>(this);
     }
-    
+
+    {
+        // Clear any previous capture state (thread-safe)
+        FScopeLock Lock(&ErrorCaptureMutex);
+        CurrentErrorCapture.Reset();
+        CurrentErrorCapture.CapturingThreadId = FPlatformTLS::GetCurrentThreadId();
+        CurrentErrorCapture.bActive = true;
+    }
+
     // Attach to GLog to capture errors
     if (GLog && RequestErrorDevice.IsValid())
     {
@@ -300,17 +619,54 @@ TArray<FString> UMcpAutomationBridgeSubsystem::EndErrorCapture()
     
     // Get captured errors (thread-safe)
     FScopeLock Lock(&ErrorCaptureMutex);
-    
+
     TArray<FString> AllMessages;
-    AllMessages.Append(CurrentErrorCapture.ErrorMessages);
-    AllMessages.Append(CurrentErrorCapture.WarningMessages);
+    AllMessages.Reserve(CurrentErrorCapture.ErrorMessages.Num() +
+                        CurrentErrorCapture.WarningMessages.Num());
+    for (const FString& ErrorMessage : CurrentErrorCapture.ErrorMessages)
+    {
+        AllMessages.Add(SanitizeEngineErrorForResponse(ErrorMessage));
+    }
+    for (const FString& WarningMessage : CurrentErrorCapture.WarningMessages)
+    {
+        AllMessages.Add(SanitizeEngineErrorForResponse(WarningMessage));
+    }
+    CurrentErrorCapture.bActive = false;
+    CurrentErrorCapture.CapturingThreadId = 0;
     
     return AllMessages;
 }
 
+void UMcpAutomationBridgeSubsystem::ClearCapturedErrors()
+{
+    FScopeLock Lock(&ErrorCaptureMutex);
+    CurrentErrorCapture.ErrorMessages.Empty();
+    CurrentErrorCapture.WarningMessages.Empty();
+    CurrentErrorCapture.ErrorCount = 0;
+    CurrentErrorCapture.WarningCount = 0;
+    CurrentErrorCapture.bErrorMessagesTruncated = false;
+    CurrentErrorCapture.bWarningMessagesTruncated = false;
+    CurrentErrorCapture.bHasErrors = false;
+    CurrentErrorCapture.bHasWarnings = false;
+    // Leaves bActive / CapturingThreadId intact so capture continues afterwards.
+}
+
 bool UMcpAutomationBridgeSubsystem::HasCapturedErrors() const
 {
+    FScopeLock Lock(&ErrorCaptureMutex);
     return CurrentErrorCapture.bHasErrors.load();
+}
+
+TArray<FString> UMcpAutomationBridgeSubsystem::GetCapturedErrorMessages() const
+{
+    FScopeLock Lock(&ErrorCaptureMutex);
+    TArray<FString> SanitizedMessages;
+    SanitizedMessages.Reserve(CurrentErrorCapture.ErrorMessages.Num());
+    for (const FString& ErrorMessage : CurrentErrorCapture.ErrorMessages)
+    {
+        SanitizedMessages.Add(SanitizeEngineErrorForResponse(ErrorMessage));
+    }
+    return SanitizedMessages;
 }
 
 /**
@@ -321,9 +677,8 @@ bool UMcpAutomationBridgeSubsystem::HasCapturedErrors() const
  * `false` otherwise.
  */
 bool UMcpAutomationBridgeSubsystem::SendRawMessage(const FString &Message) {
-  if (ConnectionManager.IsValid()) {
-    return ConnectionManager->SendRawMessage(Message);
-  }
+  // WebSocket transport removed.
+  (void)Message;
   return false;
 }
 
@@ -339,13 +694,41 @@ bool UMcpAutomationBridgeSubsystem::SendRawMessage(const FString &Message) {
  * @return true to remain registered and continue receiving ticks.
  */
 bool UMcpAutomationBridgeSubsystem::Tick(float DeltaTime) {
-  // Check if we have pending requests that were deferred due to unsafe engine
-  // states
-  if (bPendingRequestsScheduled && !GIsSavingPackage &&
-      !IsGarbageCollecting() && !IsAsyncLoading()) {
+  // Drain pending requests only outside unsafe engine states.
+  if (!GIsSavingPackage && !IsGarbageCollecting() && !IsAsyncLoading()) {
     ProcessPendingAutomationRequests();
+    // Advance any in-progress automation test run one step per frame
+    // (system_control run_tests / get_test_results). No-op when idle.
+    TickAutomationTestRun();
+  }
+  // Cleanup stale HTTP pending requests (5 minute timeout)
+  if (NativeTransport)
+  {
+    NativeTransport->CleanupStaleRequests();
   }
   return true;
+}
+
+void UMcpAutomationBridgeSubsystem::QueueAutomationRequest(
+    const FString &RequestId, const FString &Action,
+    const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket,
+    ERequestOrigin Origin) {
+  FPendingAutomationRequest Pending;
+  Pending.RequestId = RequestId;
+  Pending.Action = Action;
+  Pending.Payload = Payload;
+  Pending.RequestingSocket = RequestingSocket;
+  Pending.Origin = Origin;
+
+  {
+    FScopeLock Lock(&PendingAutomationRequestsMutex);
+    PendingAutomationRequests.Add(MoveTemp(Pending));
+  }
+
+  UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
+         TEXT("Queued automation request for core ticker: RequestId=%s action=%s"),
+         *RequestId, *Action);
 }
 
 // The in-file implementation of ProcessAutomationRequest was intentionally
@@ -365,16 +748,109 @@ bool UMcpAutomationBridgeSubsystem::Tick(float DeltaTime) {
  * response.
  * @param Result Optional JSON object containing result data; may be null.
  * @param ErrorCode Error code string to include when `bSuccess` is `false`.
+ *
+ * Successful handler responses are converted to ENGINE_ERROR failures when
+ * Unreal logged errors during the active automation request. This keeps tool
+ * results aligned with the editor log instead of reporting success for a
+ * request whose handler triggered engine errors.
  */
 
 void UMcpAutomationBridgeSubsystem::SendAutomationResponse(
-    TSharedPtr<FMcpBridgeWebSocket> TargetSocket, const FString &RequestId,
+    FMcpResponseHandle TargetSocket, const FString &RequestId,
     const bool bSuccess, const FString &Message,
-    const TSharedPtr<FJsonObject> &Result, const FString &ErrorCode) {
-  if (ConnectionManager.IsValid()) {
-    ConnectionManager->SendAutomationResponse(TargetSocket, RequestId, bSuccess,
-                                              Message, Result, ErrorCode);
+    const TSharedPtr<FJsonObject> &Result, const FString &ErrorCode,
+    ERequestOrigin Origin) {
+  bool bEffectiveSuccess = bSuccess;
+  FString EffectiveMessage = Message;
+  FString EffectiveErrorCode = ErrorCode;
+  TSharedPtr<FJsonObject> EffectiveResult = Result;
+
+  if (bSuccess && bProcessingAutomationRequest)
+  {
+    TArray<FString> CapturedErrors;
+    int32 TotalCapturedErrorCount = 0;
+    bool bCapturedErrorsTruncated = false;
+    {
+      FScopeLock Lock(&ErrorCaptureMutex);
+      if (CurrentErrorCapture.bHasErrors.load())
+      {
+        CapturedErrors = CurrentErrorCapture.ErrorMessages;
+        TotalCapturedErrorCount = CurrentErrorCapture.ErrorCount;
+        bCapturedErrorsTruncated = CurrentErrorCapture.bErrorMessagesTruncated;
+      }
+    }
+
+    if (CapturedErrors.Num() > 0)
+    {
+      bEffectiveSuccess = false;
+      EffectiveErrorCode = TEXT("ENGINE_ERROR");
+      const FString FirstError = SanitizeEngineErrorForResponse(CapturedErrors[0]);
+      EffectiveMessage = FString::Printf(
+          TEXT("Handler reported success but Unreal logged errors: %s"),
+          *FirstError.Left(240));
+
+      TSharedPtr<FJsonObject> AugmentedResult = MakeShared<FJsonObject>();
+      if (Result.IsValid())
+      {
+        for (const auto &Pair : Result->Values)
+        {
+          AugmentedResult->SetField(Pair.Key, Pair.Value);
+        }
+      }
+
+      TArray<TSharedPtr<FJsonValue>> ErrorValues;
+      const int32 MaxErrorsInResponse = 3;
+      const int32 ErrorResponseCount = FMath::Min(CapturedErrors.Num(), MaxErrorsInResponse);
+      for (int32 ErrorIndex = 0; ErrorIndex < ErrorResponseCount; ++ErrorIndex)
+      {
+        ErrorValues.Add(MakeShared<FJsonValueString>(
+            SanitizeEngineErrorForResponse(CapturedErrors[ErrorIndex])));
+      }
+      AugmentedResult->SetBoolField(TEXT("success"), false);
+      AugmentedResult->SetNumberField(TEXT("engineErrorCount"), TotalCapturedErrorCount);
+      AugmentedResult->SetArrayField(TEXT("engineErrors"), ErrorValues);
+      if (bCapturedErrorsTruncated || CapturedErrors.Num() > MaxErrorsInResponse)
+      {
+        AugmentedResult->SetBoolField(TEXT("engineErrorsTruncated"), true);
+      }
+
+      TSharedPtr<FJsonObject> ErrorObj = MakeShared<FJsonObject>();
+      ErrorObj->SetStringField(TEXT("code"), EffectiveErrorCode);
+      ErrorObj->SetStringField(TEXT("message"), EffectiveMessage);
+      AugmentedResult->SetObjectField(TEXT("error"), ErrorObj);
+      EffectiveResult = AugmentedResult;
+    }
   }
+
+  if (!bEffectiveSuccess)
+  {
+    EffectiveMessage = SanitizeHandlerMessageForResponse(EffectiveMessage);
+  }
+
+  // When handlers omit Origin (default Unspecified), use the stored
+  // CurrentRequestOrigin from the active ProcessAutomationRequest call. A live
+  // native pending request is authoritative when even that is stale.
+  ERequestOrigin EffectiveOrigin = (Origin == ERequestOrigin::Unspecified)
+      ? CurrentRequestOrigin : Origin;
+  if (Origin == ERequestOrigin::Unspecified && NativeTransport &&
+      NativeTransport->HasPendingRequest(RequestId))
+  {
+    EffectiveOrigin = ERequestOrigin::NativeHTTP;
+  }
+  if (EffectiveOrigin == ERequestOrigin::NativeHTTP && NativeTransport)
+  {
+    if (!NativeTransport->CompletePendingRequest(RequestId, bEffectiveSuccess, EffectiveMessage, EffectiveResult, EffectiveErrorCode))
+    {
+      UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
+        TEXT("Native HTTP response for %s dropped — request already expired or unknown"),
+        *RequestId);
+    }
+    return;
+  }
+  UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
+    TEXT("Response for %s has no route (origin unresolved, no pending native "
+         "request) and was dropped."),
+    *RequestId);
 }
 
 /**
@@ -392,7 +868,7 @@ void UMcpAutomationBridgeSubsystem::SendAutomationResponse(
  * is used if empty.
  */
 void UMcpAutomationBridgeSubsystem::SendAutomationError(
-    TSharedPtr<FMcpBridgeWebSocket> TargetSocket, const FString &RequestId,
+    FMcpResponseHandle TargetSocket, const FString &RequestId,
     const FString &Message, const FString &ErrorCode) {
   const FString ResolvedError =
       ErrorCode.IsEmpty() ? TEXT("AUTOMATION_ERROR") : ErrorCode;
@@ -404,22 +880,22 @@ void UMcpAutomationBridgeSubsystem::SendAutomationError(
 }
 
 /**
- * @brief Send a progress update during long-running operations.
+ * @brief Progress hook for long-running handlers.
  *
- * Sends a progress_update message to the MCP server to extend the request
- * timeout and provide status feedback. This prevents timeout errors when
- * UE is actively working on a task.
- *
- * @param RequestId The request ID being tracked
- * @param Percent Optional progress percent (0-100), use negative to omit
- * @param Message Optional status message describing current operation
- * @param bStillWorking True if operation is still in progress
+ * No-op under the pull-only transport: there is no server->client channel to stream
+ * progress on, and (per the MCP spec) progress notifications would not extend the
+ * client's wall-clock timeout anyway. Kept as a stable entry point so long-running
+ * handlers can report progress without guarding every call site -- if a streaming
+ * channel is ever reintroduced, this is the single place to wire it up.
  */
 void UMcpAutomationBridgeSubsystem::SendProgressUpdate(
-    const FString &RequestId, float Percent, const FString &Message, bool bStillWorking) {
-  if (ConnectionManager.IsValid()) {
-    ConnectionManager->SendProgressUpdate(RequestId, Percent, Message, bStillWorking);
-  }
+    const FString &RequestId, float Percent, const FString &Message, bool bStillWorking,
+    ERequestOrigin Origin) {
+  (void)RequestId;
+  (void)Percent;
+  (void)Message;
+  (void)bStillWorking;
+  (void)Origin;
 }
 
 /**
@@ -437,27 +913,39 @@ void UMcpAutomationBridgeSubsystem::SendProgressUpdate(
 void UMcpAutomationBridgeSubsystem::RecordAutomationTelemetry(
     const FString &RequestId, const bool bSuccess, const FString &Message,
     const FString &ErrorCode) {
-  if (ConnectionManager.IsValid()) {
-    ConnectionManager->RecordAutomationTelemetry(RequestId, bSuccess, Message,
-                                                 ErrorCode);
-  }
+  // WebSocket transport removed; telemetry was WS-only.
+  (void)RequestId; (void)bSuccess; (void)Message; (void)ErrorCode;
 }
 
 /**
  * @brief Registers an automation action handler for the given action string.
  *
- * If a non-empty handler is provided, stores it under Action (replacing any
- * existing handler for the same key). If Handler is null/invalid, the call is a
- * no-op.
+ * Null handlers and duplicate action keys are programmer errors: both are
+ * logged as errors and ensure, so a bad registration is visible at editor boot
+ * instead of surfacing as UNKNOWN_ACTION (or the wrong handler) at request
+ * time. A duplicate key keeps the first registration.
  *
  * @param Action The action identifier string used to look up the handler.
  * @param Handler Callable invoked when the specified action is requested.
  */
 void UMcpAutomationBridgeSubsystem::RegisterHandler(
     const FString &Action, FAutomationHandler Handler) {
-  if (Handler) {
-    AutomationHandlers.Add(Action, Handler);
+  if (!Handler) {
+    UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
+           TEXT("RegisterHandler: null handler for action '%s' ignored."),
+           *Action);
+    ensureMsgf(false, TEXT("Null automation handler for '%s'"), *Action);
+    return;
   }
+  if (AutomationHandlers.Contains(Action)) {
+    UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
+           TEXT("RegisterHandler: action '%s' registered twice; keeping the "
+                "first handler."),
+           *Action);
+    ensureMsgf(false, TEXT("Duplicate automation handler for '%s'"), *Action);
+    return;
+  }
+  AutomationHandlers.Add(Action, Handler);
 }
 
 /**
@@ -476,812 +964,233 @@ void UMcpAutomationBridgeSubsystem::RegisterHandler(
  * "clear_debug_shapes") so those actions dispatch directly to the intended
  * handler.
  */
+// MCP_REGISTER_HANDLER collapses the trivial forwarding-lambda registration boilerplate
+// (an action name -> a member handler taking the same 4 args). The multi-branch routers
+// (manage_blueprint, manage_asset, system_control, ...) that inspect the sub-action before
+// dispatching are registered longhand below.
+#define MCP_REGISTER_HANDLER(ActionName, HandlerFn) \
+  RegisterHandler(TEXT(ActionName), \
+                  [this](const FString &R, const FString &A, \
+                         const TSharedPtr<FJsonObject> &P, \
+                         FMcpResponseHandle S) { \
+                    return HandlerFn(R, A, P, S); \
+                  })
+
 void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
-  // Core & Properties
-  RegisterHandler(TEXT("execute_editor_function"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleExecuteEditorFunction(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("set_object_property"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleSetObjectProperty(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("get_object_property"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleGetObjectProperty(R, A, P, S);
-                  });
-
-  // Containers (Arrays, Maps, Sets)
-  RegisterHandler(TEXT("array_append"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleArrayAppend(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("array_remove"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleArrayRemove(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("array_insert"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleArrayInsert(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("array_get_element"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleArrayGetElement(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("array_set_element"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleArraySetElement(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("array_clear"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleArrayClear(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("map_set_value"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleMapSetValue(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("map_get_value"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleMapGetValue(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("map_remove_key"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleMapRemoveKey(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("map_has_key"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleMapHasKey(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("map_get_keys"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleMapGetKeys(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("map_clear"), [this](const FString &R, const FString &A,
-                                            const TSharedPtr<FJsonObject> &P,
-                                            TSharedPtr<FMcpBridgeWebSocket> S) {
-    return HandleMapClear(R, A, P, S);
-  });
-
-  RegisterHandler(TEXT("set_add"), [this](const FString &R, const FString &A,
-                                          const TSharedPtr<FJsonObject> &P,
-                                          TSharedPtr<FMcpBridgeWebSocket> S) {
-    return HandleSetAdd(R, A, P, S);
-  });
-  RegisterHandler(TEXT("set_remove"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleSetRemove(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("set_contains"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleSetContains(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("set_clear"), [this](const FString &R, const FString &A,
-                                            const TSharedPtr<FJsonObject> &P,
-                                            TSharedPtr<FMcpBridgeWebSocket> S) {
-    return HandleSetClear(R, A, P, S);
-  });
-
-  // Asset Dependency
-  RegisterHandler(TEXT("get_asset_references"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleGetAssetReferences(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("get_asset_dependencies"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleGetAssetDependencies(R, A, P, S);
-                  });
-
-  // Asset Workflow
-  RegisterHandler(TEXT("fixup_redirectors"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleFixupRedirectors(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("source_control_checkout"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleSourceControlCheckout(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("source_control_submit"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleSourceControlSubmit(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("bulk_rename_assets"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleBulkRenameAssets(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("bulk_delete_assets"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleBulkDeleteAssets(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("generate_thumbnail"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleGenerateThumbnail(R, A, P, S);
-                  });
-
-  // Landscape
-  RegisterHandler(TEXT("create_landscape"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleCreateLandscape(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("create_procedural_terrain"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleCreateProceduralTerrain(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("create_landscape_grass_type"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleCreateLandscapeGrassType(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("sculpt_landscape"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleSculptLandscape(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("set_landscape_material"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleSetLandscapeMaterial(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("edit_landscape"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleEditLandscape(R, A, P, S);
-                  });
-
-  // Foliage
-  RegisterHandler(TEXT("add_foliage_type"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleAddFoliageType(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("create_procedural_foliage"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleCreateProceduralFoliage(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("paint_foliage"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandlePaintFoliage(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("add_foliage_instances"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleAddFoliageInstances(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("remove_foliage"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleRemoveFoliage(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("get_foliage_instances"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleGetFoliageInstances(R, A, P, S);
-                  });
-
-  // Niagara
-  RegisterHandler(TEXT("create_niagara_system"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleCreateNiagaraSystem(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("create_niagara_ribbon"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleCreateNiagaraRibbon(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("create_niagara_emitter"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleCreateNiagaraEmitter(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("spawn_niagara_actor"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleSpawnNiagaraActor(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("modify_niagara_parameter"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleModifyNiagaraParameter(R, A, P, S);
-                  });
-
-  // Animation
-  RegisterHandler(TEXT("create_anim_blueprint"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleCreateAnimBlueprint(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("play_anim_montage"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandlePlayAnimMontage(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("setup_ragdoll"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleSetupRagdoll(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("activate_ragdoll"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleActivateRagdoll(R, A, P, S);
-                  });
-
-  // Material Graph
-  RegisterHandler(TEXT("add_material_texture_sample"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleAddMaterialTextureSample(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("add_material_expression"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleAddMaterialExpression(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("create_material_nodes"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleCreateMaterialNodes(R, A, P, S);
-                  });
-
-  // Sequencer
-  RegisterHandler(TEXT("add_sequencer_keyframe"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleAddSequencerKeyframe(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("manage_sequencer_track"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageSequencerTrack(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("add_camera_track"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleAddCameraTrack(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("add_animation_track"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleAddAnimationTrack(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("add_transform_track"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleAddTransformTrack(R, A, P, S);
-                  });
-
-  // UI & Environment
-  RegisterHandler(TEXT("manage_ui"), [this](const FString &R, const FString &A,
-                                            const TSharedPtr<FJsonObject> &P,
-                                            TSharedPtr<FMcpBridgeWebSocket> S) {
-    return HandleUiAction(R, A, P, S);
-  });
-  RegisterHandler(TEXT("control_environment"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleControlEnvironmentAction(R, A, P, S);
-                  });
+  // Only the 22 canonical MCP tool names are registered: the transport
+  // dispatches by tool name alone, so any other key is unreachable. The
+  // legacy per-action registrations from the Node-server era were removed
+  // 2026-07-02.
   RegisterHandler(TEXT("build_environment"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
+                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
+                    if (McpConsolidatedActions::IsLightingAction(SubAction)) {
+                      return HandleLightingAction(R, TEXT("manage_lighting"), P, S);
+                    }
+                    if (McpConsolidatedActions::IsSplineAction(SubAction)) {
+                      return HandleManageSplinesAction(R, TEXT("manage_splines"), P, S);
+                    }
                     return HandleBuildEnvironmentAction(R, A, P, S);
                   });
 
   // Tools & System
-  RegisterHandler(TEXT("console_command"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleConsoleCommandAction(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("batch_console_commands"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleExecuteEditorFunction(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("inspect"), [this](const FString &R, const FString &A,
-                                          const TSharedPtr<FJsonObject> &P,
-                                          TSharedPtr<FMcpBridgeWebSocket> S) {
-    return HandleInspectAction(R, A, P, S);
-  });
+  MCP_REGISTER_HANDLER("inspect", HandleInspectAction);
   RegisterHandler(TEXT("system_control"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
+                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
+                    if (McpConsolidatedActions::IsPerformanceAction(SubAction)) {
+                      return HandlePerformanceAction(R, TEXT("manage_performance"), P, S);
+                    }
+                    // Schema/router drift repairs: these sub-actions are
+                    // advertised by the system_control schema but their real
+                    // implementations live behind other canonical action
+                    // names — re-dispatch like the Performance branch above.
+                    // (The old linear chain that used to catch fall-throughs
+                    // is gone; anything not routed here dies in
+                    // HandleSystemControlAction's entry gate.)
+                    if (SubAction == TEXT("screenshot") ||
+                        SubAction == TEXT("create_widget") ||
+                        SubAction == TEXT("add_widget_child") ||
+                        SubAction == TEXT("get_project_settings") ||
+                        SubAction == TEXT("set_project_setting")) {
+                      return HandleUiAction(R, A, P, S);
+                    }
+                    if (SubAction == TEXT("console_command") ||
+                        SubAction == TEXT("execute_command")) {
+                      // Same path control_editor uses; inherits the console
+                      // security blocklist.
+                      return HandleConsoleCommandAction(
+                          R, TEXT("console_command"), P, S);
+                    }
+                    if (SubAction == TEXT("set_cvar")) {
+                      // set_cvar was advertised with key/value params but had
+                      // no handler anywhere. Compose a console command and
+                      // reuse the audited console path.
+                      FString Key, Value;
+                      P->TryGetStringField(TEXT("key"), Key);
+                      P->TryGetStringField(TEXT("value"), Value);
+                      if (Key.IsEmpty()) {
+                        SendAutomationError(
+                            S, R,
+                            TEXT("set_cvar requires 'key' (and usually "
+                                 "'value')."),
+                            TEXT("INVALID_ARGUMENT"));
+                        return true;
+                      }
+                      TSharedPtr<FJsonObject> CmdPayload = MakeShared<FJsonObject>();
+                      CmdPayload->SetStringField(
+                          TEXT("command"),
+                          Value.IsEmpty()
+                              ? Key
+                              : FString::Printf(TEXT("%s %s"), *Key, *Value));
+                      return HandleConsoleCommandAction(
+                          R, TEXT("console_command"), CmdPayload, S);
+                    }
+                    if (SubAction == TEXT("subscribe") ||
+                        SubAction == TEXT("unsubscribe") ||
+                        SubAction == TEXT("get_log") ||
+                        SubAction == TEXT("tail_log") ||
+                        SubAction == TEXT("clear_log")) {
+                      return HandleLogAction(R, TEXT("manage_logs"), P, S);
+                    }
+                    if (SubAction == TEXT("spawn_category")) {
+                      return HandleDebugAction(R, TEXT("manage_debug"), P, S);
+                    }
+                    if (SubAction == TEXT("lumen_update_scene")) {
+                      return HandleRenderAction(R, TEXT("manage_render"), P, S);
+                    }
                     return HandleSystemControlAction(R, A, P, S);
                   });
-  RegisterHandler(TEXT("manage_blueprint_graph"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleBlueprintGraphAction(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("list_blueprints"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleListBlueprints(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("manage_world_partition"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleWorldPartitionAction(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("manage_render"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleRenderAction(R, A, P, S);
-                  });
 
-  RegisterHandler(TEXT("manage_input"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleInputAction(R, A, P, S);
-                  });
+  MCP_REGISTER_HANDLER("control_actor", HandleControlActorAction);
+  MCP_REGISTER_HANDLER("control_editor", HandleControlEditorAction);
 
-  RegisterHandler(TEXT("control_actor"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleControlActorAction(R, A, P, S);
-                  });
+  MCP_REGISTER_HANDLER("manage_level", HandleLevelAction);
 
-  RegisterHandler(TEXT("manage_level"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleLevelAction(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("manage_sequence"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleSequenceAction(R, A, P, S);
-                  });
+  MCP_REGISTER_HANDLER("manage_sequence", HandleSequenceAction);
 
   RegisterHandler(TEXT("manage_asset"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
+                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
+                    if (McpConsolidatedActions::IsMaterialAuthoringAction(SubAction)) {
+                      return HandleManageMaterialAuthoringAction(
+                          R, TEXT("manage_material_authoring"), P, S);
+                    }
+                    if (McpConsolidatedActions::IsTextureAction(SubAction)) {
+                      return HandleManageTextureAction(R, TEXT("manage_texture"), P, S);
+                    }
                     return HandleAssetAction(R, A, P, S);
                   });
 
-  // CRITICAL: Register asset_query for O(1) dispatch - fixes timeout issues
-  // This handler processes search_assets, find_by_tag, get_source_control_state, etc.
-  RegisterHandler(TEXT("asset_query"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleAssetQueryAction(R, A, P, S);
-                  });
-
-  // Direct action aliases for common asset_query subActions
-  // These allow TS to call executeAutomationRequest('search_assets', {...}) directly
-  RegisterHandler(TEXT("search_assets"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleSearchAssets(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("find_by_tag"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleFindByTag(R, A, P, S);
-                  });
-
-  // Direct action aliases for manage_asset subActions that TS calls directly
-  // These allow O(1) dispatch for GPU-heavy and common operations
-  RegisterHandler(TEXT("generate_lods"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleGenerateLODs(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("create_thumbnail"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleGenerateThumbnail(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("get_source_control_state"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleGetSourceControlState(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("manage_material_authoring"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageMaterialAuthoringAction(R, A, P, S);
-                  });
-
-  // === Missing registrations for Phase 35+ tools ===
   RegisterHandler(TEXT("manage_blueprint"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
+                    FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
+                    // Common UI actions are checked BEFORE widget-authoring so they
+                    // route to the deletable CommonUI translation unit and never
+                    // enter the large HandleManageWidgetAuthoringAction function.
+                    if (McpConsolidatedActions::IsCommonUiAction(SubAction)) {
+                      return HandleCommonUiAction(R, TEXT("manage_common_ui"), P, S);
+                    }
+                    if (McpConsolidatedActions::IsWidgetAuthoringAction(SubAction)) {
+                      return HandleManageWidgetAuthoringAction(
+                          R, TEXT("manage_widget_authoring"), P, S);
+                    }
+                    if (McpConsolidatedActions::IsBlueprintGraphAction(SubAction)) {
+                      return HandleBlueprintGraphAction(R, A, P, S);
+                    }
                     return HandleBlueprintAction(R, A, P, S);
                   });
 
-  RegisterHandler(TEXT("manage_geometry"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleGeometryAction(R, A, P, S);
-                  });
+  MCP_REGISTER_HANDLER("manage_geometry", HandleGeometryAction);
 
-  RegisterHandler(TEXT("manage_skeleton"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageSkeleton(R, A, P, S);
-                  });
+  MCP_REGISTER_HANDLER("manage_gas", HandleManageGASAction);
 
-  RegisterHandler(TEXT("manage_texture"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageTextureAction(R, A, P, S);
-                  });
+  MCP_REGISTER_HANDLER("manage_character", HandleManageCharacterAction);
 
-  RegisterHandler(TEXT("manage_gas"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageGASAction(R, A, P, S);
-                  });
+  MCP_REGISTER_HANDLER("manage_combat", HandleManageCombatAction);
 
-  RegisterHandler(TEXT("manage_character"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageCharacterAction(R, A, P, S);
-                  });
+  MCP_REGISTER_HANDLER("manage_ai", HandleManageAIAction);
 
-  RegisterHandler(TEXT("manage_combat"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageCombatAction(R, A, P, S);
-                  });
+  MCP_REGISTER_HANDLER("manage_inventory", HandleManageInventoryAction);
 
-  RegisterHandler(TEXT("manage_ai"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageAIAction(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("manage_inventory"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageInventoryAction(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("manage_interaction"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageInteractionAction(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("manage_widget_authoring"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageWidgetAuthoringAction(R, A, P, S);
-                  });
+  MCP_REGISTER_HANDLER("manage_interaction", HandleManageInteractionAction);
 
   RegisterHandler(TEXT("manage_networking"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
+                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
+                    if (McpConsolidatedActions::IsInputAction(SubAction)) {
+                      return HandleInputAction(R, TEXT("manage_input"), P, S);
+                    }
+                    if (McpConsolidatedActions::IsGameFrameworkAction(SubAction)) {
+                      return HandleManageGameFrameworkAction(
+                          R, TEXT("manage_game_framework"), P, S);
+                    }
+                    if (McpConsolidatedActions::IsSessionAction(SubAction)) {
+                      return HandleManageSessionsAction(R, TEXT("manage_sessions"), P, S);
+                    }
                     return HandleManageNetworkingAction(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("manage_splines"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageSplinesAction(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("manage_pipeline"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandlePipelineAction(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("manage_behavior_tree"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleBehaviorTreeAction(R, A, P, S);
                   });
 
   RegisterHandler(TEXT("manage_audio"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleAudioAction(R, A, P, S);
+                         FMcpResponseHandle S) {
+                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
+                    if (McpConsolidatedActions::IsAudioAuthoringAction(SubAction)) {
+                      const TSharedPtr<FJsonObject> RoutedPayload =
+                          McpConsolidatedActions::WithPayloadSubAction(P, SubAction);
+                      return HandleManageAudioAuthoringAction(
+                          R, TEXT("manage_audio_authoring"), RoutedPayload, S);
+                    }
+                    // HandleAudioAction's entry gate matches on the sub-action
+                    // prefix, not the tool name; passing A ("manage_audio") fails
+                    // the gate and the request would go unrouted.
+                    return HandleAudioAction(R, SubAction, P, S);
                   });
 
-  // Audio authoring - uses subAction field (different from manage_audio which uses action)
-  RegisterHandler(TEXT("manage_audio_authoring"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageAudioAuthoringAction(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("manage_lighting"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleLightingAction(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("manage_physics"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleAnimationPhysicsAction(R, A, P, S);
-                  });
-
-  // Animation physics alias - TS uses 'animation_physics' as the tool name
   RegisterHandler(TEXT("animation_physics"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
+                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
+                    if (McpConsolidatedActions::IsAnimationAuthoringAction(SubAction)) {
+                      const TSharedPtr<FJsonObject> RoutedPayload =
+                          McpConsolidatedActions::WithPayloadSubAction(P, SubAction);
+                      return HandleManageAnimationAuthoringAction(
+                          R, TEXT("manage_animation_authoring"), RoutedPayload, S);
+                    }
+                    if (McpConsolidatedActions::IsSkeletonAction(SubAction)) {
+                      return HandleManageSkeleton(R, TEXT("manage_skeleton"), P, S);
+                    }
                     return HandleAnimationPhysicsAction(R, A, P, S);
                   });
 
-  // Animation authoring - uses subAction field (different from animation_physics which uses action)
-  RegisterHandler(TEXT("manage_animation_authoring"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageAnimationAuthoringAction(R, A, P, S);
-                  });
+  MCP_REGISTER_HANDLER("manage_effect", HandleEffectAction);
 
-  RegisterHandler(TEXT("manage_effect"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleEffectAction(R, A, P, S);
-                  });
-
-  // Common effect aliases used by the Node server; registering them here keeps
-  // dispatch O(1) and avoids relying on the late handler chain.
-  RegisterHandler(TEXT("create_effect"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleEffectAction(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("clear_debug_shapes"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleEffectAction(R, A, P, S);
-                  });
-
-  RegisterHandler(TEXT("manage_performance"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandlePerformanceAction(R, A, P, S);
-                  });
-
-  // Phase 21: Game Framework
-  RegisterHandler(TEXT("manage_game_framework"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageGameFrameworkAction(R, A, P, S);
-                  });
-
-  // Phase 22: Sessions & Local Multiplayer
-  RegisterHandler(TEXT("manage_sessions"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageSessionsAction(R, A, P, S);
-                  });
-
-  // Phase 23: Level Structure
   RegisterHandler(TEXT("manage_level_structure"),
                   [this](const FString &R, const FString &A,
                          const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
+                         FMcpResponseHandle S) {
+                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
+                    if (McpConsolidatedActions::IsVolumeAction(SubAction)) {
+                      return HandleManageVolumesAction(R, TEXT("manage_volumes"), P, S);
+                    }
                     return HandleManageLevelStructureAction(R, A, P, S);
                   });
 
-  // Phase 24: Volumes & Zones
-  RegisterHandler(TEXT("manage_volumes"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageVolumesAction(R, A, P, S);
-                  });
+#undef MCP_REGISTER_HANDLER
 
-  // Phase 25: Navigation System
-  RegisterHandler(TEXT("manage_navigation"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleManageNavigationAction(R, A, P, S);
-                  });
-
-  // Phase 27: Misc (camera, viewport, bookmarks, post-process, networking helpers)
-  RegisterHandler(TEXT("manage_misc"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleMiscAction(R, A, P, S);
-                  });
-
-  // Direct action aliases for misc handlers
-  // Note: create_post_process_volume is handled via manage_volumes tool
-  RegisterHandler(TEXT("create_camera"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleMiscAction(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("set_camera_fov"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleMiscAction(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("set_viewport_resolution"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleMiscAction(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("set_game_speed"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleMiscAction(R, A, P, S);
-                  });
-  RegisterHandler(TEXT("create_bookmark"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-                    return HandleMiscAction(R, A, P, S);
-                  });
-
-  // PIE State Handler - for checking Play-In-Editor state
-  RegisterHandler(TEXT("check_pie_state"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         TSharedPtr<FMcpBridgeWebSocket> S) {
-#if WITH_EDITOR
-                    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-                    bool bIsInPIE = false;
-                    FString PieState = TEXT("stopped");
-                    
-                    if (GEditor && GEditor->PlayWorld) {
-                      bIsInPIE = true;
-                      if (GEditor->PlayWorld->IsPaused()) {
-                        PieState = TEXT("paused");
-                      } else {
-                        PieState = TEXT("playing");
-                      }
-                    }
-                    
-                    Result->SetBoolField(TEXT("isInPIE"), bIsInPIE);
-                    Result->SetStringField(TEXT("pieState"), PieState);
-                    
-                    SendAutomationResponse(S, R, true, 
-                        bIsInPIE ? TEXT("PIE is active") : TEXT("PIE is not active"),
-                        Result);
-                    return true;
-#else
-                    SendAutomationError(S, R, TEXT("PIE state check requires editor build"), TEXT("NOT_AVAILABLE"));
-                    return true;
-#endif
-                  });
+  McpStartupValidation::ValidateActionRouting();
 }
 
 // Drain and process any automation requests that were enqueued while the
@@ -1302,22 +1211,22 @@ void UMcpAutomationBridgeSubsystem::ProcessPendingAutomationRequests() {
     return;
   }
 
-  TArray<FPendingAutomationRequest> LocalQueue;
+  // One request per tick: the core ticker calls this every frame, so a burst
+  // of queued requests spreads across frames instead of stacking all their
+  // handler runtimes into one editor stall. Requests re-queued mid-dispatch
+  // (reentrancy/GC guards) land at the back and retry next tick.
+  FPendingAutomationRequest Req;
   {
     FScopeLock Lock(&PendingAutomationRequestsMutex);
     if (PendingAutomationRequests.Num() == 0) {
-      bPendingRequestsScheduled = false;
       return;
     }
-    LocalQueue = MoveTemp(PendingAutomationRequests);
-    PendingAutomationRequests.Empty();
-    bPendingRequestsScheduled = false;
+    Req = MoveTemp(PendingAutomationRequests[0]);
+    PendingAutomationRequests.RemoveAt(0);
   }
 
-  for (const FPendingAutomationRequest &Req : LocalQueue) {
-    ProcessAutomationRequest(Req.RequestId, Req.Action, Req.Payload,
-                             Req.RequestingSocket);
-  }
+  ProcessAutomationRequest(Req.RequestId, Req.Action, Req.Payload,
+                           Req.RequestingSocket, Req.Origin);
 }
 
 // ============================================================================
@@ -1351,22 +1260,31 @@ bool UMcpAutomationBridgeSubsystem::ExecuteEditorCommands(
   }
 
   for (const FString &Command : Commands) {
-    if (Command.IsEmpty()) {
+    const FString TrimmedCommand = Command.TrimStartAndEnd();
+    if (TrimmedCommand.IsEmpty()) {
       continue;
+    }
+
+    if (McpContainsUnsafeCommandSeparator(TrimmedCommand)) {
+      OutErrorMessage = FString::Printf(
+          TEXT("Rejected unsafe editor command: %s"), *TrimmedCommand);
+      UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
+             TEXT("ExecuteEditorCommands: %s"), *OutErrorMessage);
+      return false;
     }
 
     // Execute the command via GEditor
     // Note: GEditor->Exec returns true if the command was handled
-    if (!GEditor->Exec(EditorWorld, *Command)) {
+    if (!GEditor->Exec(EditorWorld, *TrimmedCommand)) {
       OutErrorMessage =
-          FString::Printf(TEXT("Failed to execute command: %s"), *Command);
+          FString::Printf(TEXT("Failed to execute command: %s"), *TrimmedCommand);
       UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
              TEXT("ExecuteEditorCommands: %s"), *OutErrorMessage);
       return false;
     }
 
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
-           TEXT("ExecuteEditorCommands: Executed '%s'"), *Command);
+           TEXT("ExecuteEditorCommands: Executed '%s'"), *TrimmedCommand);
   }
 
   return true;

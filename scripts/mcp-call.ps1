@@ -1,0 +1,83 @@
+<#
+.SYNOPSIS
+  Minimal MCP Streamable-HTTP client for the McpAutomationBridge (port 3123).
+  Does the initialize handshake, then one tools/call, and prints the tool result.
+
+.PARAMETER Arguments
+  Tool arguments as a hashtable. In-process use only: a hashtable cannot cross
+  a `pwsh -File` process boundary (it stringifies and fails to bind) — use
+  -ArgumentsJson there.
+
+.PARAMETER ArgumentsJson
+  Tool arguments as a JSON object string. Works across process boundaries.
+
+.EXAMPLE
+  # In-process (same pwsh session)
+  ./mcp-call.ps1 -Tool system_control -Arguments @{ action='list_tests'; filter='McpBridge.SelfTest' }
+
+.EXAMPLE
+  # Separate process
+  pwsh -File scripts/mcp-call.ps1 -Tool system_control -ArgumentsJson '{"action":"run_tests","filter":"McpBridge.SelfTest"}'
+#>
+param(
+    [string]$Tool = 'system_control',
+    [hashtable]$Arguments,
+    [string]$ArgumentsJson,
+    [string]$Url = 'http://127.0.0.1:3123/mcp',
+    [int]$TimeoutSec = 180
+)
+$ErrorActionPreference = 'Stop'
+
+if ($PSBoundParameters.ContainsKey('Arguments') -and $PSBoundParameters.ContainsKey('ArgumentsJson')) {
+    throw 'Pass -Arguments or -ArgumentsJson, not both'
+}
+if ($PSBoundParameters.ContainsKey('ArgumentsJson')) {
+    $Arguments = ConvertFrom-Json -InputObject $ArgumentsJson -AsHashtable
+}
+if ($null -eq $Arguments) {
+    throw "Tool arguments required: -Arguments @{...} (in-process) or -ArgumentsJson '{...}' (across a process boundary, e.g. pwsh -File)"
+}
+$accept = 'application/json, text/event-stream'
+
+# 1) initialize -> session id in Mcp-Session-Id response header
+$initBody = @{
+    jsonrpc = '2.0'; id = 1; method = 'initialize'
+    params  = @{ protocolVersion = '2025-06-18'; capabilities = @{}; clientInfo = @{ name = 'mcp-call.ps1'; version = '1.0' } }
+} | ConvertTo-Json -Depth 12
+$init = Invoke-WebRequest -Uri $Url -Method Post -Body $initBody -ContentType 'application/json' -Headers @{ Accept = $accept } -TimeoutSec $TimeoutSec
+$sid = $init.Headers['Mcp-Session-Id']
+if ($sid -is [array]) { $sid = $sid[0] }
+if (-not $sid) { throw "No Mcp-Session-Id returned from initialize" }
+
+# 2) tools/call
+$callBody = @{
+    jsonrpc = '2.0'; id = 2; method = 'tools/call'
+    params  = @{ name = $Tool; arguments = $Arguments }
+} | ConvertTo-Json -Depth 12
+$resp = Invoke-WebRequest -Uri $Url -Method Post -Body $callBody -ContentType 'application/json' `
+    -Headers @{ Accept = $accept; 'Mcp-Session-Id' = $sid } -TimeoutSec $TimeoutSec
+
+# Body may be a JSON-RPC envelope or an SSE frame ("data: {...}"). Normalize.
+$raw = $resp.Content
+$jsonText = $raw
+if ($raw -match '^\s*data:\s*(.+)$') { $jsonText = ($Matches[1]) }
+
+try {
+    $env = $jsonText | ConvertFrom-Json
+    # Tool result text is "message\n\n{json data}" (see FMcpJsonRpc::BuildToolResult).
+    $inner = $env.result.content | Where-Object { $_.type -eq 'text' } | Select-Object -First 1
+    if ($inner -and $inner.text) {
+        $txt = $inner.text
+        # Emit just the JSON data portion (after the blank line) so callers can
+        # ConvertFrom-Json directly; fall back to the whole text if none.
+        $idx = $txt.IndexOf("`n`n")
+        if ($idx -ge 0) { Write-Output $txt.Substring($idx + 2) }
+        else { Write-Output $txt }
+    }
+    else {
+        Write-Output $jsonText
+    }
+}
+catch {
+    Write-Output $raw
+}

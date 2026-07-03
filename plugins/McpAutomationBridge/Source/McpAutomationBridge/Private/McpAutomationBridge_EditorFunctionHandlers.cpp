@@ -51,7 +51,7 @@
 // =============================================================================
 // SECURITY NOTES:
 // -----------------------------------------------------------------------------
-// - Console commands are NOT validated here (handled at higher level)
+// - Console commands delegate to HandleConsoleCommandAction for validation
 // - Asset paths should be validated by calling handlers
 // - Subsystem calls use reflection - ensure target is safe
 //
@@ -157,12 +157,11 @@
 bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket) {
+    FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
-  // Accept either the generic execute_editor_function action or the
-  // more specific execute_console_command action. This allows the
-  // server to use native console commands for health checks and diagnostics.
-  // Also accept batch_console_commands for batch command execution.
+  // Accept either the generic execute_editor_function action or console-command
+  // compatibility aliases. Console aliases immediately delegate to the central
+  // command handler so they cannot bypass command validation.
   if (!Lower.Equals(TEXT("execute_editor_function"), ESearchCase::IgnoreCase) &&
       !Lower.Contains(TEXT("execute_editor_function")) &&
       !Lower.Equals(TEXT("execute_console_command")) &&
@@ -178,214 +177,36 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     return true;
   }
 
-  // Handle native console command action first — console commands
-  // carry a top-level `command` (or params.command) and should not
-  // be treated as a generic execute_editor_function requiring a
-  // functionName field.
+  // Handle native console command action first. Console commands carry a
+  // top-level `command` or nested params.command and must not fall through to
+  // generic execute_editor_function dispatch.
   if (Lower.Equals(TEXT("execute_console_command")) ||
       Lower.Contains(TEXT("execute_console_command"))) {
-    // Accept either a top-level 'command' string or nested params.command
-    FString Cmd;
-    if (!Payload->TryGetStringField(TEXT("command"), Cmd)) {
+    TSharedPtr<FJsonObject> RoutedPayload = Payload;
+    FString NestedCommand;
+    FString TopLevelCommand;
+    if (!Payload->TryGetStringField(TEXT("command"), TopLevelCommand)) {
       const TSharedPtr<FJsonObject> *ParamsPtr = nullptr;
       if (Payload->TryGetObjectField(TEXT("params"), ParamsPtr) && ParamsPtr &&
           (*ParamsPtr).IsValid()) {
-        (*ParamsPtr)->TryGetStringField(TEXT("command"), Cmd);
-      }
-    }
-    if (Cmd.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId, TEXT("command required"),
-                          TEXT("INVALID_ARGUMENT"));
-      return true;
-    }
-
-    if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("Editor not available"), nullptr,
-                             TEXT("EDITOR_NOT_AVAILABLE"));
-      return true;
-    }
-
-    bool bExecCalled = false;
-    bool bOk = false;
-
-    // Prefer executing with a valid editor world context where possible to
-    // avoid assertions inside engine helpers that require a proper world
-    // (e.g. when running Open/Map commands).
-    UWorld *TargetWorld = nullptr;
-#if WITH_EDITOR
-    if (GEditor) {
-      if (UUnrealEditorSubsystem *UES =
-              GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>()) {
-        TargetWorld = UES->GetEditorWorld();
-      }
-      if (!TargetWorld) {
-        TargetWorld = GEditor->GetEditorWorldContext().World();
-      }
-    }
-#endif
-
-    if (GEditor && TargetWorld) {
-      bOk = GEditor->Exec(TargetWorld, *Cmd);
-      bExecCalled = true;
-    }
-
-    // Fallback: try all known engine world contexts if the editor world
-    // did not handle the command successfully.
-    if (!bOk && GEngine) {
-      for (const FWorldContext &Ctx : GEngine->GetWorldContexts()) {
-        UWorld *World = Ctx.World();
-        if (!World)
-          continue;
-        const bool bWorldOk = GEngine->Exec(World, *Cmd);
-        bExecCalled = bExecCalled || bWorldOk;
-        if (bWorldOk) {
-          bOk = true;
-          break;
-        }
+        (*ParamsPtr)->TryGetStringField(TEXT("command"), NestedCommand);
       }
     }
 
-    // If we could not find any valid world to execute against, avoid
-    // invoking the engine command path entirely and return a structured
-    // error instead of risking an assertion.
-    if (!bExecCalled && !TargetWorld) {
-      TSharedPtr<FJsonObject> Out = McpHandlerUtils::CreateResultObject();
-      Out->SetStringField(TEXT("command"), Cmd);
-      Out->SetBoolField(TEXT("success"), false);
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("Editor world not available for command"),
-                             Out, TEXT("EDITOR_WORLD_NOT_AVAILABLE"));
-      return true;
+    if (!NestedCommand.IsEmpty()) {
+      RoutedPayload = MakeShared<FJsonObject>();
+      RoutedPayload->SetStringField(TEXT("command"), NestedCommand);
     }
 
-    TSharedPtr<FJsonObject> Out = McpHandlerUtils::CreateResultObject();
-    Out->SetStringField(TEXT("command"), Cmd);
-    Out->SetBoolField(TEXT("success"), bOk);
-    SendAutomationResponse(RequestingSocket, RequestId, bOk,
-                           bOk ? TEXT("Command executed")
-                               : TEXT("Command not executed"),
-                           Out, bOk ? FString() : TEXT("EXEC_FAILED"));
-    return true;
+    return HandleConsoleCommandAction(RequestId, TEXT("console_command"),
+                                      RoutedPayload, RequestingSocket);
   }
 
-  // Handle batch_console_commands - execute multiple commands in a single request
-  // This eliminates the WebSocket round-trip overhead for each command
+  // Handle batch_console_commands through the central validated handler.
   if (Lower.Equals(TEXT("batch_console_commands")) ||
       Lower.Contains(TEXT("batch_console_commands"))) {
-    const TArray<TSharedPtr<FJsonValue>>* CmdArray = nullptr;
-    if (!Payload->TryGetArrayField(TEXT("commands"), CmdArray) || !CmdArray) {
-      SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("commands array required"),
-                          TEXT("INVALID_ARGUMENT"));
-      return true;
-    }
-
-    if (CmdArray->Num() == 0) {
-      TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-      Out->SetNumberField(TEXT("executedCount"), 0);
-      Out->SetArrayField(TEXT("results"), TArray<TSharedPtr<FJsonValue>>());
-      SendAutomationResponse(RequestingSocket, RequestId, true,
-                             TEXT("No commands to execute"), Out);
-      return true;
-    }
-
-    if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("Editor not available"), nullptr,
-                             TEXT("EDITOR_NOT_AVAILABLE"));
-      return true;
-    }
-
-    // Get target world for execution
-    UWorld* TargetWorld = nullptr;
-#if WITH_EDITOR
-    if (GEditor) {
-      if (UUnrealEditorSubsystem* UES =
-              GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>()) {
-        TargetWorld = UES->GetEditorWorld();
-      }
-      if (!TargetWorld) {
-        TargetWorld = GEditor->GetEditorWorldContext().World();
-      }
-    }
-#endif
-
-    if (!TargetWorld && !GEngine) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("No valid world context for command execution"),
-                             nullptr, TEXT("NO_WORLD_CONTEXT"));
-      return true;
-    }
-
-    int32 ExecutedCount = 0;
-    int32 FailedCount = 0;
-    TArray<TSharedPtr<FJsonValue>> Results;
-    Results.Reserve(CmdArray->Num());
-
-    for (const TSharedPtr<FJsonValue>& CmdValue : *CmdArray) {
-      FString Cmd;
-      if (CmdValue->Type == EJson::String) {
-        Cmd = CmdValue->AsString();
-      } else if (CmdValue->Type == EJson::Object) {
-        const TSharedPtr<FJsonObject> CmdObj = CmdValue->AsObject();
-        if (CmdObj.IsValid()) {
-          CmdObj->TryGetStringField(TEXT("command"), Cmd);
-          if (Cmd.IsEmpty()) {
-            CmdObj->TryGetStringField(TEXT("cmd"), Cmd);
-          }
-        }
-      }
-
-      if (Cmd.IsEmpty()) {
-        TSharedPtr<FJsonObject> ResultEntry = MakeShared<FJsonObject>();
-        ResultEntry->SetBoolField(TEXT("success"), false);
-        ResultEntry->SetStringField(TEXT("error"), TEXT("Empty command"));
-        Results.Add(MakeShared<FJsonValueObject>(ResultEntry));
-        FailedCount++;
-        continue;
-      }
-
-      bool bCmdOk = false;
-
-      // Execute command
-      if (TargetWorld && GEditor) {
-        bCmdOk = GEditor->Exec(TargetWorld, *Cmd);
-      } else if (GEngine) {
-        for (const FWorldContext& Ctx : GEngine->GetWorldContexts()) {
-          UWorld* World = Ctx.World();
-          if (!World) continue;
-          if (GEngine->Exec(World, *Cmd)) {
-            bCmdOk = true;
-            break;
-          }
-        }
-      }
-
-      TSharedPtr<FJsonObject> ResultEntry = MakeShared<FJsonObject>();
-      ResultEntry->SetStringField(TEXT("command"), Cmd);
-      ResultEntry->SetBoolField(TEXT("success"), bCmdOk);
-      Results.Add(MakeShared<FJsonValueObject>(ResultEntry));
-
-      if (bCmdOk) {
-        ExecutedCount++;
-      } else {
-        FailedCount++;
-      }
-    }
-
-    TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetNumberField(TEXT("totalCommands"), CmdArray->Num());
-    Out->SetNumberField(TEXT("executedCount"), ExecutedCount);
-    Out->SetNumberField(TEXT("failedCount"), FailedCount);
-    Out->SetArrayField(TEXT("results"), Results);
-    Out->SetBoolField(TEXT("success"), FailedCount == 0);
-
-    SendAutomationResponse(RequestingSocket, RequestId, FailedCount == 0,
-                           FString::Printf(TEXT("Executed %d/%d commands"),
-                                          ExecutedCount, CmdArray->Num()),
-                           Out, FailedCount > 0 ? TEXT("PARTIAL_FAILURE") : FString());
-    return true;
+    return HandleConsoleCommandAction(RequestId, TEXT("batch_console_commands"),
+                                      Payload, RequestingSocket);
   }
 
   // For other execute_editor_function cases require functionName
@@ -399,17 +220,6 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
   }
 
   const FString FN = FunctionName.ToUpper();
-  // Accept either a top-level 'command' string or nested params.command
-  FString Cmd;
-  if (!Payload->TryGetStringField(TEXT("command"), Cmd)) {
-    const TSharedPtr<FJsonObject> *ParamsPtr = nullptr;
-    if (Payload->TryGetObjectField(TEXT("params"), ParamsPtr) && ParamsPtr &&
-        (*ParamsPtr).IsValid()) {
-      (*ParamsPtr)->TryGetStringField(TEXT("command"), Cmd);
-    }
-  }
-  // (Console handling moved earlier)
-
 #if WITH_EDITOR
 
   // =========================================================================
@@ -832,11 +642,19 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     }
 
     bool bSaved = false;
+    // SaveCurrentLevel can pop a blocking modal on an untitled / unsaved / read-only
+    // level (e.g. "save as?" or a write-failure prompt). On the bridge's game thread
+    // that starves every subsequent MCP call until a human dismisses it. Force
+    // unattended so the prompt returns its default answer (no UI) — a genuine failure
+    // then surfaces as the quiet false reported below, never a hung editor.
+    const bool bPrevUnattended = GIsRunningUnattendedScript;
+    GIsRunningUnattendedScript = true;
 #if __has_include("EditorLoadingAndSavingUtils.h")
     bSaved = UEditorLoadingAndSavingUtils::SaveCurrentLevel();
 #elif __has_include("FileHelpers.h")
     bSaved = FEditorFileUtils::SaveCurrentLevel();
 #endif
+    GIsRunningUnattendedScript = bPrevUnattended;
 
     TSharedPtr<FJsonObject> Out = McpHandlerUtils::CreateResultObject();
     Out->SetBoolField(TEXT("success"), bSaved);
@@ -1142,6 +960,17 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
       SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Failed to instantiate factory"), nullptr,
                              TEXT("FACTORY_CREATION_FAILED"));
+      return true;
+    }
+
+    // Pre-check: CreateAsset pops an "overwrite?" modal on a path collision, which freezes a
+    // headless bridge (force-kill required). Fail fast on an existing path instead. This is the
+    // generic/most-abusable creation path, so guarding it protects every factory-based create.
+    const FString CreateAssetObjectPath = FString::Printf(TEXT("%s/%s"), *PackagePath, *AssetName);
+    if (UEditorAssetLibrary::DoesAssetExist(CreateAssetObjectPath)) {
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             FString::Printf(TEXT("Asset already exists: %s"), *CreateAssetObjectPath),
+                             nullptr, TEXT("ALREADY_EXISTS"));
       return true;
     }
 

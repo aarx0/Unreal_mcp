@@ -61,6 +61,99 @@
 
 #endif
 
+namespace
+{
+#if WITH_EDITOR
+/** Converts an optional input key name into an FKey for mapping-specific operations. */
+FKey McpInputKeyFromName(const FString& KeyName)
+{
+    return KeyName.IsEmpty() ? FKey() : FKey(FName(*KeyName));
+}
+
+/** Echoes valueType using the schema's string names so readbacks round-trip as inputs. */
+FString McpInputActionValueTypeToString(EInputActionValueType ValueType)
+{
+    switch (ValueType)
+    {
+    case EInputActionValueType::Boolean: return TEXT("Boolean");
+    case EInputActionValueType::Axis1D:  return TEXT("Axis1D");
+    case EInputActionValueType::Axis2D:  return TEXT("Axis2D");
+    case EInputActionValueType::Axis3D:  return TEXT("Axis3D");
+    }
+    checkNoEntry();
+    return TEXT("Boolean");
+}
+
+/** Adds verified mapping readback for an action after key-specific edits. */
+void AddInputMappingSummary(
+    TSharedPtr<FJsonObject> Result,
+    const UInputMappingContext* Context,
+    const UInputAction* InAction)
+{
+    TArray<TSharedPtr<FJsonValue>> Mappings;
+    for (const FEnhancedActionKeyMapping& Mapping : Context->GetMappings())
+    {
+        if (Mapping.Action != InAction)
+        {
+            continue;
+        }
+
+        TSharedPtr<FJsonObject> MappingObject = MakeShared<FJsonObject>();
+        MappingObject->SetStringField(TEXT("key"), Mapping.Key.ToString());
+        MappingObject->SetNumberField(TEXT("modifierCount"), Mapping.Modifiers.Num());
+        MappingObject->SetNumberField(TEXT("triggerCount"), Mapping.Triggers.Num());
+        Mappings.Add(MakeShared<FJsonValueObject>(MappingObject));
+    }
+
+    Result->SetNumberField(TEXT("mappingCount"), Mappings.Num());
+    Result->SetArrayField(TEXT("mappings"), Mappings);
+}
+
+/** Creates the requested Enhanced Input modifier using compatibility fallbacks across UE 5.x. */
+UInputModifier* CreateInputModifierForType(const FString& ModifierType, UObject* Outer)
+{
+    if (ModifierType == TEXT("DeadZone") || ModifierType == TEXT("InputModifierDeadZone"))
+    {
+        return NewObject<UInputModifierDeadZone>(Outer);
+    }
+    if (ModifierType == TEXT("SmoothDelta") || ModifierType == TEXT("InputModifierSmoothDelta"))
+    {
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
+        return NewObject<UInputModifierSmoothDelta>(Outer);
+#else
+        return NewObject<UInputModifierSmooth>(Outer);
+#endif
+    }
+    if (ModifierType == TEXT("SwizzleInputAxis") || ModifierType == TEXT("InputModifierSwizzleAxis"))
+    {
+        return NewObject<UInputModifierSwizzleAxis>(Outer);
+    }
+    if (ModifierType == TEXT("Negate") || ModifierType == TEXT("InputModifierNegate"))
+    {
+        return NewObject<UInputModifierNegate>(Outer);
+    }
+    if (ModifierType == TEXT("Scalar") || ModifierType == TEXT("InputModifierScalar"))
+    {
+        return NewObject<UInputModifierScalar>(Outer);
+    }
+    if (ModifierType == TEXT("ScaleByDeltaTime") || ModifierType == TEXT("InputModifierScaleByDeltaTime"))
+    {
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+        return NewObject<UInputModifierScaleByDeltaTime>(Outer);
+#else
+        return NewObject<UInputModifierScalar>(Outer);
+#endif
+    }
+    if (ModifierType == TEXT("ToWorldSpace") || ModifierType == TEXT("InputModifierToWorldSpace"))
+    {
+        return NewObject<UInputModifierToWorldSpace>(Outer);
+    }
+
+    return nullptr;
+}
+#endif
+}
+
 // =============================================================================
 // Handler Implementation
 // =============================================================================
@@ -69,7 +162,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     // Validate action
     if (Action != TEXT("manage_input"))
@@ -150,12 +243,63 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
             return true;
         }
 
+        // Optional ValueType — UInputAction defaults to Boolean; an axis IA otherwise
+        // needs a separate set_asset_property hop (undiscoverable). Parse + validate
+        // BEFORE creating so a bad value fails fast (no half-made asset).
+        EInputActionValueType ParsedValueType = EInputActionValueType::Boolean;
+        bool bHasValueType = false;
+        {
+            FString ValueTypeStr;
+            if (Payload->TryGetStringField(TEXT("valueType"), ValueTypeStr) &&
+                !ValueTypeStr.TrimStartAndEnd().IsEmpty())
+            {
+                bHasValueType = true;
+                const FString V = ValueTypeStr.TrimStartAndEnd();
+                if (V.Equals(TEXT("Boolean"), ESearchCase::IgnoreCase) || V.Equals(TEXT("Bool"), ESearchCase::IgnoreCase))
+                    ParsedValueType = EInputActionValueType::Boolean;
+                else if (V.Equals(TEXT("Axis1D"), ESearchCase::IgnoreCase) || V.Equals(TEXT("Float"), ESearchCase::IgnoreCase) || V.Equals(TEXT("1D"), ESearchCase::IgnoreCase))
+                    ParsedValueType = EInputActionValueType::Axis1D;
+                else if (V.Equals(TEXT("Axis2D"), ESearchCase::IgnoreCase) || V.Equals(TEXT("Vector2D"), ESearchCase::IgnoreCase) || V.Equals(TEXT("2D"), ESearchCase::IgnoreCase))
+                    ParsedValueType = EInputActionValueType::Axis2D;
+                else if (V.Equals(TEXT("Axis3D"), ESearchCase::IgnoreCase) || V.Equals(TEXT("Vector"), ESearchCase::IgnoreCase) || V.Equals(TEXT("3D"), ESearchCase::IgnoreCase))
+                    ParsedValueType = EInputActionValueType::Axis3D;
+                else
+                {
+                    SendAutomationError(RequestingSocket, RequestId,
+                        FString::Printf(TEXT("Invalid valueType '%s' (expected Boolean|Axis1D|Axis2D|Axis3D)"), *ValueTypeStr),
+                        TEXT("INVALID_VALUE"));
+                    return true;
+                }
+            }
+        }
+
         const FString FullPath = FString::Printf(TEXT("%s/%s"), *SanitizedPath, *Name);
         if (UEditorAssetLibrary::DoesAssetExist(FullPath))
         {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Asset already exists at %s"), *FullPath),
-                TEXT("ASSET_EXISTS"));
+            UInputAction* ExistingAction = Cast<UInputAction>(UEditorAssetLibrary::LoadAsset(FullPath));
+            if (!ExistingAction)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Asset already exists at %s but is not an InputAction"), *FullPath),
+                    TEXT("ASSET_TYPE_MISMATCH"));
+                return true;
+            }
+
+            // Idempotent: if valueType was given, ensure the existing IA matches it.
+            if (bHasValueType && ExistingAction->ValueType != ParsedValueType)
+            {
+                ExistingAction->Modify();
+                ExistingAction->ValueType = ParsedValueType;
+                SaveLoadedAssetThrottled(ExistingAction, -1.0, true);
+            }
+
+            TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+            Result->SetStringField(TEXT("assetPath"), ExistingAction->GetPathName());
+            Result->SetStringField(TEXT("valueType"), McpInputActionValueTypeToString(ExistingAction->ValueType));
+            McpHandlerUtils::AddVerification(Result, ExistingAction);
+
+            SendAutomationResponse(RequestingSocket, RequestId, true,
+                TEXT("Input Action already exists."), Result);
             return true;
         }
 
@@ -168,10 +312,19 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
 
         if (NewAsset)
         {
+            UInputAction* CreatedAction = Cast<UInputAction>(NewAsset);
+            if (bHasValueType && CreatedAction)
+            {
+                CreatedAction->ValueType = ParsedValueType;
+            }
             SaveLoadedAssetThrottled(NewAsset, -1.0, true);
 
             TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
             Result->SetStringField(TEXT("assetPath"), NewAsset->GetPathName());
+            if (CreatedAction)
+            {
+                Result->SetStringField(TEXT("valueType"), McpInputActionValueTypeToString(CreatedAction->ValueType));
+            }
             McpHandlerUtils::AddVerification(Result, NewAsset);
 
             SendAutomationResponse(RequestingSocket, RequestId, true,
@@ -225,9 +378,21 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
         const FString FullPath = FString::Printf(TEXT("%s/%s"), *SanitizedPath, *Name);
         if (UEditorAssetLibrary::DoesAssetExist(FullPath))
         {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Asset already exists at %s"), *FullPath),
-                TEXT("ASSET_EXISTS"));
+            UInputMappingContext* ExistingContext = Cast<UInputMappingContext>(UEditorAssetLibrary::LoadAsset(FullPath));
+            if (!ExistingContext)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Asset already exists at %s but is not an InputMappingContext"), *FullPath),
+                    TEXT("ASSET_TYPE_MISMATCH"));
+                return true;
+            }
+
+            TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+            Result->SetStringField(TEXT("assetPath"), ExistingContext->GetPathName());
+            McpHandlerUtils::AddVerification(Result, ExistingContext);
+
+            SendAutomationResponse(RequestingSocket, RequestId, true,
+                TEXT("Input Mapping Context already exists."), Result);
             return true;
         }
 
@@ -305,6 +470,11 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
             return true;
         }
 
+        // Modify() before mutating the mapping array so the transaction/dirty
+        // tracking matches set_input_modifier (and the DefaultKeyMappings dirty
+        // trap right next door) — MapKey dirties internally today, but relying
+        // on that is the inconsistency this aligns.
+        Context->Modify();
         Context->MapKey(InAction, Key);
         SaveLoadedAssetThrottled(Context, -1.0, true);
 
@@ -332,6 +502,9 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
         FString ActionPath;
         Payload->TryGetStringField(TEXT("actionPath"), ActionPath);
 
+        FString KeyName;
+        Payload->TryGetStringField(TEXT("key"), KeyName);
+
         // Validate and sanitize paths
         FString SanitizedContextPath = SanitizeProjectRelativePath(ContextPath);
         FString SanitizedActionPath = SanitizeProjectRelativePath(ActionPath);
@@ -358,16 +531,35 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
             return true;
         }
 
-        // Collect keys to remove
+        FKey RequestedKey = McpInputKeyFromName(KeyName);
+        const bool bHasSpecificKey = !KeyName.IsEmpty();
+        if (bHasSpecificKey && !RequestedKey.IsValid())
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Invalid key name: %s"), *KeyName), TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
+
+        // Collect matching keys before mutating the mapping array.
         TArray<FKey> KeysToRemove;
         for (const FEnhancedActionKeyMapping& Mapping : Context->GetMappings())
         {
-            if (Mapping.Action == InAction)
+            if (Mapping.Action == InAction && (!bHasSpecificKey || Mapping.Key == RequestedKey))
             {
                 KeysToRemove.Add(Mapping.Key);
             }
         }
 
+        if (bHasSpecificKey && KeysToRemove.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Mapping not found for action '%s' and key '%s'."),
+                    *SanitizedActionPath, *KeyName),
+                TEXT("NOT_FOUND"));
+            return true;
+        }
+
+        Context->Modify();
         for (const FKey& KeyToRemove : KeysToRemove)
         {
             Context->UnmapKey(InAction, KeyToRemove);
@@ -378,6 +570,10 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("contextPath"), SanitizedContextPath);
         Result->SetStringField(TEXT("actionPath"), SanitizedActionPath);
+        if (bHasSpecificKey)
+        {
+            Result->SetStringField(TEXT("key"), KeyName);
+        }
         Result->SetNumberField(TEXT("keysRemoved"), KeysToRemove.Num());
 
         TArray<TSharedPtr<FJsonValue>> RemovedKeys;
@@ -386,12 +582,15 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
             RemovedKeys.Add(MakeShared<FJsonValueString>(Key.ToString()));
         }
         Result->SetArrayField(TEXT("removedKeys"), RemovedKeys);
+        AddInputMappingSummary(Result, Context, InAction);
 
         AddAssetVerificationNested(Result, TEXT("contextVerification"), Context);
         AddAssetVerificationNested(Result, TEXT("actionVerification"), InAction);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true,
-            TEXT("Mappings removed for action."), Result);
+        const FString SuccessMessage = bHasSpecificKey
+            ? FString::Printf(TEXT("Mapping removed for action key: %s"), *KeyName)
+            : TEXT("Mappings removed for action.");
+        SendAutomationResponse(RequestingSocket, RequestId, true, SuccessMessage, Result);
         return true;
     }
 
@@ -479,19 +678,50 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
             return true;
         }
 
-        // Add the trigger to the action
-        InAction->Triggers.Add(NewTrigger);
+        // Triggers.Add is append-only — a plain re-run stacks duplicates of the same
+        // class. Default to idempotent (skip if this trigger class is already present);
+        // replace:true clears all triggers first for a clean full re-author.
+        bool bReplace = false;
+        Payload->TryGetBoolField(TEXT("replace"), bReplace);
 
-        SaveLoadedAssetThrottled(InAction, -1.0, true);
+        InAction->Modify();
+        bool bAlreadyPresent = false;
+        if (bReplace)
+        {
+            InAction->Triggers.Empty();
+        }
+        else
+        {
+            for (const UInputTrigger* Existing : InAction->Triggers)
+            {
+                if (Existing && Existing->GetClass() == NewTrigger->GetClass())
+                {
+                    bAlreadyPresent = true;
+                    break;
+                }
+            }
+        }
+
+        if (!bAlreadyPresent)
+        {
+            InAction->Triggers.Add(NewTrigger);
+            SaveLoadedAssetThrottled(InAction, -1.0, true);
+        }
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("actionPath"), SanitizedActionPath);
         Result->SetStringField(TEXT("triggerType"), TriggerType);
-        Result->SetBoolField(TEXT("triggerSet"), true);
+        Result->SetBoolField(TEXT("triggerSet"), !bAlreadyPresent);
+        Result->SetBoolField(TEXT("alreadyPresent"), bAlreadyPresent);
+        Result->SetBoolField(TEXT("replaced"), bReplace);
+        Result->SetNumberField(TEXT("triggerCount"), InAction->Triggers.Num());
         McpHandlerUtils::AddVerification(Result, InAction);
 
         SendAutomationResponse(RequestingSocket, RequestId, true,
-            FString::Printf(TEXT("Trigger '%s' configured on action."), *TriggerType), Result);
+            bAlreadyPresent
+                ? FString::Printf(TEXT("Trigger '%s' already present (idempotent); pass replace:true to re-author."), *TriggerType)
+                : FString::Printf(TEXT("Trigger '%s' configured on action."), *TriggerType),
+            Result);
         return true;
     }
 
@@ -500,11 +730,26 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
     // -------------------------------------------------------------------------
     if (SubAction == TEXT("set_input_modifier"))
     {
+        FString ContextPath;
+        Payload->TryGetStringField(TEXT("contextPath"), ContextPath);
+
         FString ActionPath;
         Payload->TryGetStringField(TEXT("actionPath"), ActionPath);
 
+        FString KeyName;
+        Payload->TryGetStringField(TEXT("key"), KeyName);
+
         FString ModifierType;
         Payload->TryGetStringField(TEXT("modifierType"), ModifierType);
+
+        const bool bTargetMapping = !ContextPath.IsEmpty() || !KeyName.IsEmpty();
+        if (bTargetMapping && (ContextPath.IsEmpty() || KeyName.IsEmpty()))
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("contextPath and key are both required when setting a modifier on a specific mapping."),
+                TEXT("INVALID_ARGUMENT"));
+            return true;
+        }
 
         FString SanitizedActionPath = SanitizeProjectRelativePath(ActionPath);
         if (SanitizedActionPath.IsEmpty())
@@ -526,52 +771,63 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
             return true;
         }
 
-        // Create the appropriate modifier based on type
-        UInputModifier* NewModifier = nullptr;
-        
-        // Map common modifier type names to their classes
-        if (ModifierType == TEXT("DeadZone") || ModifierType == TEXT("InputModifierDeadZone"))
+        UObject* ModifierOuter = InAction;
+        UInputMappingContext* Context = nullptr;
+        FString SanitizedContextPath;
+        FEnhancedActionKeyMapping* TargetMapping = nullptr;
+        FKey RequestedKey = McpInputKeyFromName(KeyName);
+
+        if (bTargetMapping)
         {
-            NewModifier = NewObject<UInputModifierDeadZone>(InAction);
+            if (!RequestedKey.IsValid())
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Invalid key name: %s"), *KeyName), TEXT("INVALID_ARGUMENT"));
+                return true;
+            }
+
+            SanitizedContextPath = SanitizeProjectRelativePath(ContextPath);
+            if (SanitizedContextPath.IsEmpty())
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Invalid context path: '%s' contains traversal or invalid characters."), *ContextPath),
+                    TEXT("INVALID_PATH"));
+                return true;
+            }
+
+            Context = Cast<UInputMappingContext>(UEditorAssetLibrary::LoadAsset(SanitizedContextPath));
+            if (!Context)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Context not found: %s"), *SanitizedContextPath),
+                    TEXT("NOT_FOUND"));
+                return true;
+            }
+
+            const int32 MappingCount = Context->GetMappings().Num();
+            for (int32 MappingIndex = 0; MappingIndex < MappingCount; ++MappingIndex)
+            {
+                FEnhancedActionKeyMapping& Mapping = Context->GetMapping(MappingIndex);
+                if (Mapping.Action == InAction && Mapping.Key == RequestedKey)
+                {
+                    TargetMapping = &Mapping;
+                    break;
+                }
+            }
+
+            if (!TargetMapping)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Mapping not found for action '%s' and key '%s'."),
+                        *SanitizedActionPath, *KeyName),
+                    TEXT("NOT_FOUND"));
+                return true;
+            }
+
+            ModifierOuter = Context;
         }
-        else if (ModifierType == TEXT("SmoothDelta") || ModifierType == TEXT("InputModifierSmoothDelta"))
-        {
-            // UInputModifierSmoothDelta was added in UE 5.4
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
-            NewModifier = NewObject<UInputModifierSmoothDelta>(InAction);
-#else
-            // Fallback for UE 5.0-5.3: Use UInputModifierSmooth as closest equivalent
-            NewModifier = NewObject<UInputModifierSmooth>(InAction);
-#endif
-        }
-        else if (ModifierType == TEXT("SwizzleInputAxis") || ModifierType == TEXT("InputModifierSwizzleAxis"))
-        {
-            NewModifier = NewObject<UInputModifierSwizzleAxis>(InAction);
-        }
-        else if (ModifierType == TEXT("Negate") || ModifierType == TEXT("InputModifierNegate"))
-        {
-            NewModifier = NewObject<UInputModifierNegate>(InAction);
-        }
-        else if (ModifierType == TEXT("Scalar") || ModifierType == TEXT("InputModifierScalar"))
-        {
-            NewModifier = NewObject<UInputModifierScalar>(InAction);
-        }
-        else if (ModifierType == TEXT("ScaleByDeltaTime") || ModifierType == TEXT("InputModifierScaleByDeltaTime"))
-        {
-            // UInputModifierScaleByDeltaTime was added in UE 5.1
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
-            NewModifier = NewObject<UInputModifierScaleByDeltaTime>(InAction);
-#else
-            // UE 5.0 fallback: Use UInputModifierScalar as closest equivalent
-            // Note: This doesn't actually scale by delta time, but prevents compile error
-            NewModifier = NewObject<UInputModifierScalar>(InAction);
-#endif
-        }
-        else if (ModifierType == TEXT("ToWorldSpace") || ModifierType == TEXT("InputModifierToWorldSpace"))
-        {
-            NewModifier = NewObject<UInputModifierToWorldSpace>(InAction);
-        }
-        
+
+        UInputModifier* NewModifier = CreateInputModifierForType(ModifierType, ModifierOuter);
         if (!NewModifier)
         {
             SendAutomationError(RequestingSocket, RequestId,
@@ -580,16 +836,37 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
             return true;
         }
 
-        // Add the modifier to the action
-        InAction->Modifiers.Add(NewModifier);
-        
-        SaveLoadedAssetThrottled(InAction, -1.0, true);
+        if (TargetMapping)
+        {
+            Context->Modify();
+            TargetMapping->Modifiers.Add(NewModifier);
+            SaveLoadedAssetThrottled(Context, -1.0, true);
+        }
+        else
+        {
+            InAction->Modify();
+            InAction->Modifiers.Add(NewModifier);
+            SaveLoadedAssetThrottled(InAction, -1.0, true);
+        }
 
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("actionPath"), SanitizedActionPath);
         Result->SetStringField(TEXT("modifierType"), ModifierType);
         Result->SetBoolField(TEXT("modifierSet"), true);
-        McpHandlerUtils::AddVerification(Result, InAction);
+        Result->SetStringField(TEXT("target"), TargetMapping ? TEXT("mapping") : TEXT("action"));
+        if (TargetMapping)
+        {
+            Result->SetStringField(TEXT("contextPath"), SanitizedContextPath);
+            Result->SetStringField(TEXT("key"), KeyName);
+            Result->SetNumberField(TEXT("mappingModifierCount"), TargetMapping->Modifiers.Num());
+            AddInputMappingSummary(Result, Context, InAction);
+            AddAssetVerificationNested(Result, TEXT("contextVerification"), Context);
+            AddAssetVerificationNested(Result, TEXT("actionVerification"), InAction);
+        }
+        else
+        {
+            McpHandlerUtils::AddVerification(Result, InAction);
+        }
 
         SendAutomationResponse(RequestingSocket, RequestId, true,
             FString::Printf(TEXT("Modifier '%s' configured on action."), *ModifierType), Result);
@@ -684,11 +961,17 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
     {
         FString AssetPath;
         Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
+        if (AssetPath.IsEmpty())
+        {
+            // manage_networking (which re-dispatches input actions) exposes blueprintPath,
+            // not assetPath — accept it as a fallback so get_input_info is reachable that way.
+            Payload->TryGetStringField(TEXT("blueprintPath"), AssetPath);
+        }
 
         if (AssetPath.IsEmpty())
         {
             SendAutomationError(RequestingSocket, RequestId,
-                TEXT("assetPath is required."), TEXT("INVALID_ARGUMENT"));
+                TEXT("assetPath (or blueprintPath) is required."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
 
@@ -719,13 +1002,42 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
         if (UInputAction* InputAction = Cast<UInputAction>(Asset))
         {
             Result->SetStringField(TEXT("type"), TEXT("InputAction"));
-            Result->SetStringField(TEXT("valueType"), FString::FromInt((int32)InputAction->ValueType));
+            Result->SetStringField(TEXT("valueType"), McpInputActionValueTypeToString(InputAction->ValueType));
             Result->SetBoolField(TEXT("consumeInput"), InputAction->bConsumeInput);
+            // The IA's OWN triggers (class names) — set_input_trigger writes these, but
+            // only IMC mappings carried a triggerCount, so the trigger *class* was
+            // un-confirmable via the bridge. List them here.
+            TArray<TSharedPtr<FJsonValue>> TriggersArr;
+            for (const UInputTrigger* Trigger : InputAction->Triggers)
+            {
+                if (Trigger)
+                {
+                    TriggersArr.Add(MakeShared<FJsonValueString>(Trigger->GetClass()->GetName()));
+                }
+            }
+            Result->SetArrayField(TEXT("triggers"), TriggersArr);
+            Result->SetNumberField(TEXT("triggerCount"), InputAction->Triggers.Num());
         }
         else if (UInputMappingContext* Context = Cast<UInputMappingContext>(Asset))
         {
             Result->SetStringField(TEXT("type"), TEXT("InputMappingContext"));
-            Result->SetNumberField(TEXT("mappingCount"), Context->GetMappings().Num());
+            const TArray<FEnhancedActionKeyMapping>& Mappings = Context->GetMappings();
+            Result->SetNumberField(TEXT("mappingCount"), Mappings.Num());
+            // List each action->key binding. GetMappings() is the canonical accessor and reads
+            // the live storage even when the raw 'Mappings' UPROPERTY reflects empty (UE5.7
+            // keeps the data in the nested DefaultKeyMappings struct) — so no poking that struct.
+            TArray<TSharedPtr<FJsonValue>> MappingsArr;
+            for (const FEnhancedActionKeyMapping& M : Mappings)
+            {
+                TSharedPtr<FJsonObject> MObj = MakeShared<FJsonObject>();
+                MObj->SetStringField(TEXT("action"), M.Action ? M.Action->GetPathName() : TEXT(""));
+                MObj->SetStringField(TEXT("actionName"), M.Action ? M.Action->GetName() : TEXT(""));
+                MObj->SetStringField(TEXT("key"), M.Key.GetFName().ToString());
+                MObj->SetNumberField(TEXT("triggerCount"), M.Triggers.Num());
+                MObj->SetNumberField(TEXT("modifierCount"), M.Modifiers.Num());
+                MappingsArr.Add(MakeShared<FJsonValueObject>(MObj));
+            }
+            Result->SetArrayField(TEXT("mappings"), MappingsArr);
         }
 
         McpHandlerUtils::AddVerification(Result, Asset);

@@ -81,7 +81,7 @@
 //
 //   - set_replicated_using
 //     Payload:  { blueprintPath, propertyName, repNotifyFunc }
-//     Response: { success, message, assetVerification }
+//     Response: { success, repNotifyFunctionCreated, message, assetVerification }
 //
 //   - configure_push_model
 //     Payload:  { blueprintPath, usePushModel? }
@@ -140,7 +140,6 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
-#include "McpBridgeWebSocket.h"
 #include "Misc/EngineVersionComparison.h"
 
 // ---- Editor Includes ----
@@ -390,7 +389,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    TSharedPtr<FMcpBridgeWebSocket> RequestingSocket)
+    FMcpResponseHandle RequestingSocket)
 {
     using namespace NetworkingHelpers;
 
@@ -469,7 +468,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
 
         // Mark blueprint modified
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Property %s replication set to %s"), *PropertyName, bReplicated ? TEXT("true") : TEXT("false")));
@@ -526,8 +525,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Replication condition set to %s"), *Condition));
@@ -588,7 +586,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
 #endif
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Net update frequency set to %.1f (min: %.1f)"), NetUpdateFrequency, MinNetUpdateFrequency));
@@ -628,7 +626,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Net priority set to %.2f"), NetPriority));
@@ -669,7 +667,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Net dormancy set to %s"), *Dormancy));
@@ -723,7 +721,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetBoolField(TEXT("spatiallyLoaded"), bSpatiallyLoaded);
@@ -813,8 +811,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
             }
 
             Blueprint->Modify();
-            FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-            McpSafeCompileBlueprint(Blueprint);
+            McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
             ResultJson->SetBoolField(TEXT("success"), true);
             ResultJson->SetStringField(TEXT("functionName"), FunctionName);
@@ -899,8 +896,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetBoolField(TEXT("withValidation"), bWithValidation);
@@ -978,8 +974,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetBoolField(TEXT("reliable"), bReliable);
@@ -1027,6 +1022,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         if (!OwnerActorName.IsEmpty())
         {
             Owner = NetworkingHelpers::FindActorByName(World, OwnerActorName);
+            if (!Owner)
+            {
+                SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Owner actor '%s' not found"), *OwnerActorName), TEXT("OWNER_NOT_FOUND"));
+                return true;
+            }
         }
 
         Actor->SetOwner(Owner);
@@ -1085,8 +1085,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         if (bAnyModified)
         {
             Blueprint->Modify();
-            FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-            McpSafeCompileBlueprint(Blueprint);
+            McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
         }
 
         ResultJson->SetBoolField(TEXT("success"), true);
@@ -1239,7 +1238,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
 #endif
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Net cull distance squared set to %.0f"), NetCullDistanceSquared));
@@ -1279,7 +1278,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Always relevant set to %s"), bAlwaysRelevant ? TEXT("true") : TEXT("false")));
@@ -1319,7 +1318,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Only relevant to owner set to %s"), bOnlyRelevantToOwner ? TEXT("true") : TEXT("false")));
@@ -1369,7 +1368,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetBoolField(TEXT("customSerialization"), bCustomSerialization);
@@ -1386,9 +1385,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
     // ----- set_replicated_using -----
     // Sets a RepNotify function on a Blueprint variable. Enables CPF_Net and
     // CPF_RepNotify flags on the property and assigns the RepNotifyFunc name.
+    // Creates an empty function graph for the notify handler when none exists,
+    // so the variable never references a missing function.
     //
     // Payload:  { blueprintPath: string, propertyName: string, repNotifyFunc: string }
-    // Response: { success: bool, message: string, assetVerification }
+    // Response: { success: bool, repNotifyFunctionCreated: bool, message: string, assetVerification }
     if (SubAction == TEXT("set_replicated_using"))
     {
         FString BlueprintPath = GetStringField(Payload, TEXT("blueprintPath"));
@@ -1408,15 +1409,12 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
             return true;
         }
 
-        // Find the variable description and set RepNotify function
+        // Verify the variable exists before touching the blueprint
         bool bFound = false;
-        for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+        for (const FBPVariableDescription& VarDesc : Blueprint->NewVariables)
         {
             if (VarDesc.VarName == FName(*PropertyName))
             {
-                // Ensure property is replicated
-                VarDesc.PropertyFlags |= CPF_Net | CPF_RepNotify;
-                VarDesc.RepNotifyFunc = FName(*RepNotifyFunc);
                 bFound = true;
                 break;
             }
@@ -1428,12 +1426,56 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
             return true;
         }
 
+        // Ensure the notify function exists (own graph or inherited); create a stub otherwise
+        const FName RepNotifyFName(*RepNotifyFunc);
+        bool bFunctionExists = Blueprint->GeneratedClass && Blueprint->GeneratedClass->FindFunctionByName(RepNotifyFName) != nullptr;
+        if (!bFunctionExists)
+        {
+            for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+            {
+                if (Graph && Graph->GetFName() == RepNotifyFName)
+                {
+                    bFunctionExists = true;
+                    break;
+                }
+            }
+        }
+
+        bool bCreatedStub = false;
+        if (!bFunctionExists)
+        {
+            UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
+                Blueprint,
+                RepNotifyFName,
+                UEdGraph::StaticClass(),
+                UEdGraphSchema_K2::StaticClass()
+            );
+            if (!NewGraph)
+            {
+                SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Failed to create RepNotify function graph '%s'"), *RepNotifyFunc), TEXT("CREATE_FAILED"));
+                return true;
+            }
+            FBlueprintEditorUtils::AddFunctionGraph<UFunction>(Blueprint, NewGraph, false, static_cast<UFunction*>(nullptr));
+            bCreatedStub = true;
+        }
+
+        // Ensure property is replicated with the notify assigned
+        for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+        {
+            if (VarDesc.VarName == FName(*PropertyName))
+            {
+                VarDesc.PropertyFlags |= CPF_Net | CPF_RepNotify;
+                VarDesc.RepNotifyFunc = RepNotifyFName;
+                break;
+            }
+        }
+
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/bCreatedStub, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
-        ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("ReplicatedUsing set to %s for property %s"), *RepNotifyFunc, *PropertyName));
+        ResultJson->SetBoolField(TEXT("repNotifyFunctionCreated"), bCreatedStub);
+        ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("ReplicatedUsing set to %s for property %s (%s)"), *RepNotifyFunc, *PropertyName, bCreatedStub ? TEXT("function stub created") : TEXT("function already existed")));
         McpHandlerUtils::AddVerification(ResultJson, Blueprint);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("ReplicatedUsing configured"), ResultJson);
         return true;
@@ -1488,8 +1530,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         if (bAnyModified)
         {
             Blueprint->Modify();
-            FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-            McpSafeCompileBlueprint(Blueprint);
+            McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
         }
 
         ResultJson->SetBoolField(TEXT("success"), true);
@@ -1549,7 +1590,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetBoolField(TEXT("enablePrediction"), bEnablePrediction);
@@ -1599,7 +1640,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetNumberField(TEXT("correctionThreshold"), CorrectionThreshold);
@@ -1683,8 +1724,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-        McpSafeCompileBlueprint(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), bSuccess);
         ResultJson->SetStringField(TEXT("variableName"), VarName);
@@ -1731,7 +1771,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), TEXT("Movement prediction configured"));
@@ -1839,7 +1879,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("role"), Role);
@@ -1881,7 +1921,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
         }
 
         Blueprint->Modify();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Replicate movement set to %s"), bReplicateMovement ? TEXT("true") : TEXT("false")));
@@ -1898,6 +1938,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
     // Retrieves comprehensive networking configuration for a Blueprint CDO or
     // a live actor in the world. Returns replication settings, relevancy flags,
     // net update frequency, dormancy, roles, and authority status.
+    // For Blueprints additionally returns:
+    //   classDefaults: { bReplicates, bReplicateMovement, bNetLoadOnClient, bNetUseOwnerRelevancy }
+    //   perProperty:   [{ name, replicated, condition, repNotifyFunc|null }] (+ perPropertyTruncated)
+    //   rpcFunctions:  [{ name, type: Server|Client|NetMulticast, reliable }] (+ rpcFunctionsTruncated)
     //
     // Version notes:
     //   UE 5.0:   Net frequency/cull distance values returned as 0.0
@@ -1945,7 +1989,83 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNetworkingAction(
 #endif
                 NetworkingInfo->SetNumberField(TEXT("netPriority"), CDO->NetPriority);
                 NetworkingInfo->SetStringField(TEXT("netDormancy"), NetDormancyToString(CDO->NetDormancy));
+
+                TSharedPtr<FJsonObject> ClassDefaults = MakeShared<FJsonObject>();
+                ClassDefaults->SetBoolField(TEXT("bReplicates"), CDO->GetIsReplicated());
+                ClassDefaults->SetBoolField(TEXT("bReplicateMovement"), CDO->IsReplicatingMovement());
+                ClassDefaults->SetBoolField(TEXT("bNetLoadOnClient"), CDO->bNetLoadOnClient != 0);
+                ClassDefaults->SetBoolField(TEXT("bNetUseOwnerRelevancy"), CDO->bNetUseOwnerRelevancy != 0);
+                NetworkingInfo->SetObjectField(TEXT("classDefaults"), ClassDefaults);
             }
+
+            constexpr int32 MaxListedEntries = 100;
+
+            // Per-variable replication state comes from the authored
+            // FBPVariableDescription, which survives recompiles (unlike flags
+            // poked directly onto compiled FProperties).
+            const UEnum* LifetimeConditionEnum = StaticEnum<ELifetimeCondition>();
+            TArray<TSharedPtr<FJsonValue>> PerProperty;
+            for (const FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+            {
+                if (PerProperty.Num() >= MaxListedEntries)
+                {
+                    break;
+                }
+                TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+                Entry->SetStringField(TEXT("name"), VarDesc.VarName.ToString());
+                Entry->SetBoolField(TEXT("replicated"), (VarDesc.PropertyFlags & CPF_Net) != 0);
+                Entry->SetStringField(TEXT("condition"), LifetimeConditionEnum->GetNameStringByValue(static_cast<int64>(VarDesc.ReplicationCondition.GetValue())));
+                if (VarDesc.RepNotifyFunc.IsNone())
+                {
+                    Entry->SetField(TEXT("repNotifyFunc"), MakeShared<FJsonValueNull>());
+                }
+                else
+                {
+                    Entry->SetStringField(TEXT("repNotifyFunc"), VarDesc.RepNotifyFunc.ToString());
+                }
+                PerProperty.Add(MakeShared<FJsonValueObject>(Entry));
+            }
+            NetworkingInfo->SetArrayField(TEXT("perProperty"), PerProperty);
+            NetworkingInfo->SetBoolField(TEXT("perPropertyTruncated"), Blueprint->NewVariables.Num() > MaxListedEntries);
+
+            TArray<TSharedPtr<FJsonValue>> RpcFunctions;
+            bool bRpcFunctionsTruncated = false;
+            for (UEdGraph* FunctionGraph : Blueprint->FunctionGraphs)
+            {
+                if (!FunctionGraph)
+                {
+                    continue;
+                }
+                TArray<UK2Node_FunctionEntry*> EntryNodes;
+                FunctionGraph->GetNodesOfClass<UK2Node_FunctionEntry>(EntryNodes);
+                if (EntryNodes.Num() == 0)
+                {
+                    continue;
+                }
+                // GetFunctionFlags merges the compiled UFunction's flags with the
+                // entry node's authored ExtraFlags, so uncompiled edits are visible.
+                const int32 FunctionFlags = EntryNodes[0]->GetFunctionFlags();
+                if ((FunctionFlags & FUNC_Net) == 0)
+                {
+                    continue;
+                }
+                if (RpcFunctions.Num() >= MaxListedEntries)
+                {
+                    bRpcFunctionsTruncated = true;
+                    break;
+                }
+                FString RpcType = TEXT("Unknown");
+                if (FunctionFlags & FUNC_NetServer) RpcType = TEXT("Server");
+                else if (FunctionFlags & FUNC_NetClient) RpcType = TEXT("Client");
+                else if (FunctionFlags & FUNC_NetMulticast) RpcType = TEXT("NetMulticast");
+                TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+                Entry->SetStringField(TEXT("name"), FunctionGraph->GetName());
+                Entry->SetStringField(TEXT("type"), RpcType);
+                Entry->SetBoolField(TEXT("reliable"), (FunctionFlags & FUNC_NetReliable) != 0);
+                RpcFunctions.Add(MakeShared<FJsonValueObject>(Entry));
+            }
+            NetworkingInfo->SetArrayField(TEXT("rpcFunctions"), RpcFunctions);
+            NetworkingInfo->SetBoolField(TEXT("rpcFunctionsTruncated"), bRpcFunctionsTruncated);
         }
         else if (!ActorName.IsEmpty())
         {
