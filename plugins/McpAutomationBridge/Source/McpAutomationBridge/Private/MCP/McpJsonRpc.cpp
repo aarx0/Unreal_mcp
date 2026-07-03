@@ -108,21 +108,18 @@ TSharedPtr<FJsonObject> FMcpJsonRpc::BuildToolResult(
 	if (bSuccess)
 	{
 		Text = Message;
-		if (Data.IsValid())
-		{
-			Text += TEXT("\n\n") + JsonToString(Data);
-		}
+	}
+	else if (ErrorCode.IsEmpty())
+	{
+		Text = FString::Printf(TEXT("Error: %s"), *Message);
 	}
 	else
 	{
-		if (ErrorCode.IsEmpty())
-		{
-			Text = FString::Printf(TEXT("Error: %s"), *Message);
-		}
-		else
-		{
-			Text = FString::Printf(TEXT("Error [%s]: %s"), *ErrorCode, *Message);
-		}
+		Text = FString::Printf(TEXT("Error [%s]: %s"), *ErrorCode, *Message);
+	}
+	if (Data.IsValid())
+	{
+		Text += TEXT("\n\n") + JsonToString(Data);
 	}
 
 	auto TextContent = MakeShared<FJsonObject>();
@@ -132,6 +129,22 @@ TSharedPtr<FJsonObject> FMcpJsonRpc::BuildToolResult(
 
 	Result->SetArrayField(TEXT("content"), Content);
 	Result->SetBoolField(TEXT("isError"), !bSuccess);
+
+	// Uniform envelope so typed clients need not parse the text block. `data`
+	// holds the handler's result object verbatim — never spread to the top
+	// level, where handler keys would collide with the envelope's.
+	auto Structured = MakeShared<FJsonObject>();
+	Structured->SetBoolField(TEXT("success"), bSuccess);
+	Structured->SetStringField(TEXT("message"), Message);
+	if (!bSuccess && !ErrorCode.IsEmpty())
+	{
+		Structured->SetStringField(TEXT("errorCode"), ErrorCode);
+	}
+	if (Data.IsValid())
+	{
+		Structured->SetObjectField(TEXT("data"), Data);
+	}
+	Result->SetObjectField(TEXT("structuredContent"), Structured);
 
 	return Result;
 }

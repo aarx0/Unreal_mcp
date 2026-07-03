@@ -48,7 +48,12 @@ public:
 	/** Build a JSON-RPC 2.0 error response string. */
 	static FString BuildError(const TSharedPtr<FJsonValue>& Id, int32 Code, const FString& Message);
 
-	/** Build an MCP tool result object (content array + isError). */
+	/**
+	 * Build an MCP tool result object: content[] text + isError + a
+	 * structuredContent envelope {success, message, errorCode?, data?}.
+	 * Data is serialized into the text block on success AND failure — the
+	 * text is the only part many clients surface, so details must ride it.
+	 */
 	static TSharedPtr<FJsonObject> BuildToolResult(
 		bool bSuccess, const FString& Message,
 		const TSharedPtr<FJsonObject>& Data = nullptr,

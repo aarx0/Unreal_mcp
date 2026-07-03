@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Tool-result contract: failure details + structuredContent (2026-07-03)
+
+- **Failure responses carry the handler's details object** — `BuildToolResult` serialized the result JSON into the text block only on success; failures collapsed to a bare `Error [CODE]: message`, dropping validation specifics, per-item outcomes, and the ENGINE_ERROR guard's `engineErrors` array (assembled since the guard shipped, never reached a client). Failures now append the details JSON exactly like successes; the first line is unchanged, so existing clients see strictly more.
+- **`structuredContent` envelope on every tool result** — `{success, message, errorCode?, data?}` alongside `content[]`/`isError` (F7 review remainder). The handler result rides `data` verbatim rather than being spread at the top level, so handler keys can't collide with the envelope's. Typed clients get machine-readable outcomes without parsing the text block; text-only clients are unaffected.
+- The `live_coding_compile`/`get_build_status` success-contract (completion states ride `success:true` with the outcome in the body) stands on its own merits — a failed *build* is a successful *status report* — but no longer exists to dodge the transport dropping details.
+
 ### Small-bug batch (2026-07-03)
 
 - **`add_montage_notify` PlayMontageNotify NAME_None** — all three notify-creation sites now set the notify *object's* `NotifyName` (reflection; the montage On-Notify delegates broadcast the object member, not the event's). The routed `add_montage_notify` branch was a third creation site the first fix pass missed — caught by the live repro reading back `None`.

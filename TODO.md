@@ -31,8 +31,13 @@ as they land.
 > action string (fixup_redirectors/bulk_*/source-control/find_by_tag never worked via the
 > native gate); system_control's screenshot/create_widget/add_widget_child/
 > get_project_settings/set_project_setting were schema-advertised but unroutable.
-> Still open from the review: structuredContent emission + error-code constants header +
-> alias freeze (F7); per-action scaffoldOnly response markers; widget recipe
+> **structuredContent emission (F7) SHIPPED 2026-07-03:** every tool result carries a
+> `structuredContent` envelope `{success, message, errorCode?, data?}`, and failure
+> responses now serialize the handler's details object into the text block just like
+> successes (the old shape dropped it — the ENGINE_ERROR guard's `engineErrors` array had
+> never actually reached a client).
+> Still open from the review: error-code constants header (Aaron-deferred, light version
+> only) + alias freeze (F7); per-action scaffoldOnly response markers; widget recipe
 > swap-on-success + broader transaction coverage (F8); replace ~14 blind
 > FPlatformProcess::Sleep stability delays; serialize responses on the write thread;
 > shutdown drain hard cap; module split (step 10, deferred by design); and

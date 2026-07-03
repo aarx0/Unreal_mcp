@@ -30,14 +30,12 @@ MCP/
 - `DELETE /mcp` tears down an initialized session.
 - `initialize` creates the session and returns protocol version, `capabilities.tools.listChanged` (false), server info, and optional instructions.
 - Requests after initialization require `Mcp-Session-Id`.
-- No progress streaming (pull-only): `SendProgressUpdate` is a no-op. Tool results are MCP `content[]` plus `isError`.
+- No progress streaming (pull-only): `SendProgressUpdate` is a no-op. Tool results are MCP `content[]` + `isError` + a `structuredContent` envelope `{success, message, errorCode?, data?}`; the handler's result object rides the text block on success AND failure (`BuildToolResult`).
 
 ## TOOL CONVENTIONS
 - Tools self-register statically with `MCP_REGISTER_TOOL`.
 - Registry accepts only canonical parent tools: do not expose child/legacy tool names.
-- Pattern A dispatch returns the parent tool name from `GetDispatchAction()` and lets handlers read sub-actions.
-- Pattern B returns an empty dispatch action and extracts the sub-action from the configured argument field.
-- Normalize older `subAction` payloads only where current handlers require it.
+- Every tool dispatches by its own name; handlers read the sub-action from the payload (`action`, mirrored to `subAction` by the transport).
 - `manage_tools` is intercepted locally by the native dynamic tool manager.
 - `manage_tools`, `inspect`, and the `core` category are protected from disablement.
 
