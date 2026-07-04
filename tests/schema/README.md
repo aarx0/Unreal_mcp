@@ -35,10 +35,12 @@ pwsh -File tests/schema/param-reconciliation-test.ps1 -UpdateAllowlist # re-pin
 Freshness check for `McpActionParamTable.h` — the generated per-action accepted-param
 table (schemas declare params per TOOL; the table records which params each ACTION's
 handler branch actually reads, attributed by brace scope; see
-`scripts/generate-action-param-table.ps1`). The transport uses it to flag params sent
-to an action that never reads them (warn-first; promoted to rejection once the
-warnings prove quiet). Attribution is fail-permissive: a missed read can only
-suppress a warning, never invent one.
+`scripts/generate-action-param-table.ps1`). The transport REJECTS params sent to an
+action that never reads them (`INVALID_PARAMS` with the accepted list;
+`bypassParamCheck:true` downgrades to response-visible `paramWarnings` when the table
+itself is suspected stale — then fix the generator and regenerate). Attribution is
+fail-permissive: a missed read can only suppress detection, never flag a param the
+table knows about.
 
 ```powershell
 pwsh -File tests/schema/action-param-table-test.ps1          # check

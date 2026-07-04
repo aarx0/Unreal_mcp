@@ -1436,12 +1436,17 @@ void FMcpNativeTransport::HandleToolsCall(
 		return;
 	}
 
-	// Per-action param check, warn-first (the table is generated from handler
-	// source by scripts/generate-action-param-table.ps1). Schemas declare
-	// params per TOOL, so a param sent to an action that never reads it sails
-	// through the schema check and is silently ignored — the biggest remaining
-	// silent-no-op class. Promote to INVALID_PARAMS once the warnings prove
-	// quiet, same evidence gate the required/enum rejection passed.
+	// Per-action param check (the table is generated from handler source by
+	// scripts/generate-action-param-table.ps1). Schemas declare params per
+	// TOOL, so a param sent to an action that never reads it sails through
+	// the schema check and is silently ignored — the biggest remaining
+	// silent-no-op class. Violations REJECT: the caller is an LLM, and a
+	// named, explained refusal gets fixed in one turn while a silent ignore
+	// never surfaces. Because a stale table can only be corrected with a
+	// regenerate + rebuild, the error names the escape hatch
+	// (bypassParamCheck:true → proceed, findings ride the response as
+	// paramWarnings) and routes the fix back to the repo.
+	TArray<FString> BypassedParamWarnings;
 	if (Arguments.IsValid())
 	{
 		FString ActionValue;
@@ -1451,18 +1456,68 @@ void FMcpNativeTransport::HandleToolsCall(
 					McpActionParams::FindActionParams(ToolName, ActionValue))
 			{
 				const TSet<FString>& Shared = McpActionParams::GlobalSharedParams();
+				TArray<FString> ForeignParams;
 				for (const auto& Pair : Arguments->Values)
 				{
-					if (Pair.Key == TEXT("action") || Pair.Key == TEXT("subAction"))
+					if (Pair.Key == TEXT("action") || Pair.Key == TEXT("subAction") ||
+						Pair.Key == TEXT("bypassParamCheck"))
 					{
 						continue;
 					}
 					if (!ActionSet->Contains(Pair.Key) && !Shared.Contains(Pair.Key))
 					{
-						UE_LOG(LogMcpNativeTransport, Warning,
-							TEXT("%s.%s: param '%s' is not read by this action (per-action table, warn-first)"),
-							*ToolName, *ActionValue, *Pair.Key);
+						ForeignParams.Add(Pair.Key);
 					}
+				}
+				if (ForeignParams.Num() > 0)
+				{
+					TArray<FString> Accepted = ActionSet->Array();
+					Accepted.Sort();
+					constexpr int32 MaxListed = 30;
+					FString AcceptedStr = FString::Join(
+						TArray<FString>(Accepted.GetData(), FMath::Min(Accepted.Num(), MaxListed)), TEXT(", "));
+					if (Accepted.Num() > MaxListed)
+					{
+						AcceptedStr += FString::Printf(TEXT(" (+%d more)"), Accepted.Num() - MaxListed);
+					}
+
+					bool bBypass = false;
+					Arguments->TryGetBoolField(TEXT("bypassParamCheck"), bBypass);
+					if (!bBypass)
+					{
+						const FString Message = FString::Printf(
+							TEXT("%s.%s does not read: %s. Params this action reads: %s (plus cross-cutting params). ")
+							TEXT("Remove or rename the unread param(s). If the handler source DOES read them, the ")
+							TEXT("generated action-param table is stale: retry with bypassParamCheck:true to proceed ")
+							TEXT("now, and report the miss (fork TODO.md) so scripts/generate-action-param-table.ps1 ")
+							TEXT("gets fixed."),
+							*ToolName, *ActionValue, *FString::Join(ForeignParams, TEXT(", ")), *AcceptedStr);
+						UE_LOG(LogMcpNativeTransport, Warning,
+							TEXT("tools/call rejected (per-action params): %s.%s: %s"),
+							*ToolName, *ActionValue, *FString::Join(ForeignParams, TEXT(", ")));
+						TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
+						TArray<TSharedPtr<FJsonValue>> ForeignJson, AcceptedJson;
+						for (const FString& P : ForeignParams) { ForeignJson.Add(MakeShared<FJsonValueString>(P)); }
+						for (const FString& P : Accepted) { AcceptedJson.Add(MakeShared<FJsonValueString>(P)); }
+						Details->SetArrayField(TEXT("unreadParams"), ForeignJson);
+						Details->SetArrayField(TEXT("acceptedParams"), AcceptedJson);
+						TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
+							false, Message, Details, TEXT("INVALID_PARAMS"));
+						FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
+						SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
+						ClientSocket->Close();
+						if (SocketSub) SocketSub->DestroySocket(ClientSocket);
+						return;
+					}
+					for (const FString& P : ForeignParams)
+					{
+						BypassedParamWarnings.Add(FString::Printf(
+							TEXT("param '%s' is not read by %s.%s (per-action table; bypassed)"),
+							*P, *ToolName, *ActionValue));
+					}
+					UE_LOG(LogMcpNativeTransport, Warning,
+						TEXT("per-action param check BYPASSED: %s.%s: %s — if these are real reads, fix the table"),
+						*ToolName, *ActionValue, *FString::Join(ForeignParams, TEXT(", ")));
 				}
 			}
 		}
@@ -1547,6 +1602,7 @@ void FMcpNativeTransport::HandleToolsCall(
 		Conn->ToolName = ToolName;
 		Conn->SessionId = SessionId;
 		Conn->CorsOrigin = CorsOrigin;
+		Conn->ParamWarnings = MoveTemp(BypassedParamWarnings);
 		PendingConnections.Add(RequestId, Conn);
 	}
 
@@ -1629,6 +1685,34 @@ bool FMcpNativeTransport::CompletePendingRequest(
 	{
 		TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
 			bCapturedSuccess, Message, Result, ErrorCode);
+		// Findings from a bypassed per-action param check ride the response so
+		// the caller sees exactly what was flagged (text + envelope).
+		if (Conn->ParamWarnings.Num() > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> WarnJson;
+			for (const FString& W : Conn->ParamWarnings)
+			{
+				WarnJson.Add(MakeShared<FJsonValueString>(W));
+			}
+			const TSharedPtr<FJsonObject>* Structured = nullptr;
+			if (ToolResult->TryGetObjectField(TEXT("structuredContent"), Structured))
+			{
+				(*Structured)->SetArrayField(TEXT("paramWarnings"), WarnJson);
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Content = nullptr;
+			if (ToolResult->TryGetArrayField(TEXT("content"), Content) && Content->Num() > 0)
+			{
+				TSharedPtr<FJsonObject> TextObj = (*Content)[0]->AsObject();
+				if (TextObj.IsValid())
+				{
+					FString Text;
+					TextObj->TryGetStringField(TEXT("text"), Text);
+					Text += TEXT("\n\nParam warnings:\n- ") +
+						FString::Join(Conn->ParamWarnings, TEXT("\n- "));
+					TextObj->SetStringField(TEXT("text"), Text);
+				}
+			}
+		}
 		const FString ResponseBody = FMcpJsonRpc::BuildResponse(Conn->JsonRpcId, ToolResult);
 
 		bool bWroteResponse = false;

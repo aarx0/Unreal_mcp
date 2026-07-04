@@ -87,6 +87,10 @@ private:
 		FString ToolName;
 		FString SessionId;   // for touching ActiveSessions
 		FString CorsOrigin;  // preserved from the request for the response headers
+		// Per-action param-check findings under bypassParamCheck:true — merged
+		// into the response envelope so the caller sees what was flagged.
+		// Written once at park time, read by the response writer after; no lock.
+		TArray<FString> ParamWarnings;
 		FCriticalSection WriteMutex;  // protects the socket write
 	};
 

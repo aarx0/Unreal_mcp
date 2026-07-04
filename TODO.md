@@ -85,8 +85,11 @@ IS declared for the widget/common creates on this tool).
 >   **Phase 1 SHIPPED 2026-07-03 (Aaron's "declare params per command, validate in one
 >   place"):** generated per-action param table (945 entries, brace-scope attribution
 >   from handler source, freshness-tested) + transport warn-first check for params the
->   called action never reads. NEXT: (a) flip to INVALID_PARAMS rejection once warnings
->   prove quiet on real sessions; (b) Phase 2 = the apply-session receipt
+>   called action never reads. ~~(a) flip to rejection~~ DONE 2026-07-04 same session
+>   (Aaron: LLM callers fix a named refusal in one turn; log-only warnings were invisible
+>   to them anyway) — INVALID_PARAMS + acceptedParams list + bypassParamCheck:true
+>   downgrade (findings ride the response as paramWarnings; bypass logged) since a stale
+>   table needs a rebuild to fix. NEXT: (b) Phase 2 = the apply-session receipt
 >   (appliedProperties/ignoredParams via a shared collector in McpHandlerUtils) for
 >   what only the engine call can know — scope shrinks to runtime/target-dependent
 >   ignores now that wrong-action params are caught centrally; (c) generator coverage
