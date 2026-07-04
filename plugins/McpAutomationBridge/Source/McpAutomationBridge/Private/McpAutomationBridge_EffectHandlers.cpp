@@ -923,8 +923,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectAction(
 #endif
     }
 
-    // Handle niagara sub-action (delegates to existing spawn_niagara logic)
-    if (LowerSub == TEXT("niagara") || LowerSub == TEXT("spawn_niagara")) {
+    if (LowerSub == TEXT("spawn_niagara")) {
       // Reuse logic below
     } else if (LowerSub.Equals(TEXT("set_niagara_parameter"))) {
       FString SystemName;
@@ -1512,7 +1511,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectAction(
     FString Sub;
     LocalPayload->TryGetStringField(TEXT("action"), Sub);
     FString LowerSub = Sub.ToLower();
-    if (LowerSub == TEXT("niagara") || LowerSub == TEXT("spawn_niagara"))
+    if (LowerSub == TEXT("spawn_niagara"))
       bSpawnNiagara = true;
     // If SubAction is empty and Action is create_effect, we fallthrough to
     // legacy behavior below

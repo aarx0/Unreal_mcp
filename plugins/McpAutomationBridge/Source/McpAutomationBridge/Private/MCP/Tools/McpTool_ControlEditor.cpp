@@ -22,7 +22,7 @@ public:
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
 		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), McpConsolidatedActions::ControlEditor(), TEXT("Editor action. screenshot/take_screenshot captures the active "
+			.StringEnum(TEXT("action"), McpConsolidatedActions::ControlEditor(), TEXT("Editor action. screenshot captures the active "
 				"viewport synchronously; the PNG is written to the returned "
 				"absolute 'path' before the call returns, so it can be read back "
 				"immediately to evaluate the result."))

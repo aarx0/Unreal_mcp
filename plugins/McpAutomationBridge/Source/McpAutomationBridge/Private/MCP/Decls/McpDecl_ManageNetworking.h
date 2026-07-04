@@ -58,7 +58,6 @@ inline const FMcpParamDecl P_ManageNetworking_43[] = { { TEXT("assetPath"), EMcp
 inline const FMcpParamDecl P_ManageNetworking_44[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageNetworking_46[] = { { TEXT("serverName"), EMcpParamKind::String, false }, { TEXT("mapName"), EMcpParamKind::String, true }, { TEXT("maxPlayers"), EMcpParamKind::Number, false }, { TEXT("travelOptions"), EMcpParamKind::String, false }, { TEXT("executeTravel"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_ManageNetworking_47[] = { { TEXT("serverAddress"), EMcpParamKind::String, true }, { TEXT("serverPort"), EMcpParamKind::Number, false }, { TEXT("serverPassword"), EMcpParamKind::String, false }, { TEXT("travelOptions"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ManageNetworking_48[] = { { TEXT("contextPath"), EMcpParamKind::String, true }, { TEXT("actionPath"), EMcpParamKind::String, true }, { TEXT("key"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_ManageNetworking_49[] = { { TEXT("playerName"), EMcpParamKind::String, false }, { TEXT("targetPlayerId"), EMcpParamKind::String, false }, { TEXT("muted"), EMcpParamKind::Bool, false }, { TEXT("localPlayerNum"), EMcpParamKind::Number, false }, { TEXT("systemWide"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_ManageNetworking_50[] = { { TEXT("playerIndex"), EMcpParamKind::Number, true } };
 inline const FMcpParamDecl P_ManageNetworking_51[] = { { TEXT("contextPath"), EMcpParamKind::String, true }, { TEXT("actionPath"), EMcpParamKind::String, true }, { TEXT("key"), EMcpParamKind::String, false } };
@@ -134,7 +133,6 @@ inline const FMcpCallDecl GManageNetworking[] =
 	{ TEXT("manage_networking"), TEXT("get_sessions_info"), {}, EMcpCallFlags::None },
 	{ TEXT("manage_networking"), TEXT("host_lan_server"), P_ManageNetworking_46, EMcpCallFlags::None },
 	{ TEXT("manage_networking"), TEXT("join_lan_server"), P_ManageNetworking_47, EMcpCallFlags::None },
-	{ TEXT("manage_networking"), TEXT("map_input_action"), P_ManageNetworking_48, EMcpCallFlags::None },
 	{ TEXT("manage_networking"), TEXT("mute_player"), P_ManageNetworking_49, EMcpCallFlags::None },
 	{ TEXT("manage_networking"), TEXT("remove_local_player"), P_ManageNetworking_50, EMcpCallFlags::None },
 	{ TEXT("manage_networking"), TEXT("remove_mapping"), P_ManageNetworking_51, EMcpCallFlags::None },

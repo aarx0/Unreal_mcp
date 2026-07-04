@@ -1159,7 +1159,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
     Payload->TryGetStringField(TEXT("action"), SubAction);
     const FString LowerSub = SubAction.ToLower();
 
-    if (LowerSub == TEXT("load") || LowerSub == TEXT("load_level")) {
+    if (LowerSub == TEXT("load")) {
       // Map to Open command
       FString LevelPath;
       Payload->TryGetStringField(TEXT("levelPath"), LevelPath);
@@ -1368,10 +1368,9 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
 #else
       return false;
 #endif
-    } else if (LowerSub == TEXT("save") || LowerSub == TEXT("save_level")) {
+    } else if (LowerSub == TEXT("save")) {
       EffectiveAction = TEXT("save_current_level");
-    } else if (LowerSub == TEXT("save_as") ||
-               LowerSub == TEXT("save_level_as")) {
+    } else if (LowerSub == TEXT("save_as")) {
       EffectiveAction = TEXT("save_level_as");
     } else if (LowerSub == TEXT("create_level")) {
       EffectiveAction = TEXT("create_new_level");
@@ -1397,7 +1396,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
       EffectiveAction = TEXT("import_level");
     } else if (LowerSub == TEXT("add_sublevel")) {
       EffectiveAction = TEXT("add_sublevel");
-    } else if (LowerSub == TEXT("delete") || LowerSub == TEXT("delete_level")) {
+    } else if (LowerSub == TEXT("delete")) {
       EffectiveAction = TEXT("delete_level");
     } else if (LowerSub == TEXT("rename") || LowerSub == TEXT("rename_level")) {
       EffectiveAction = TEXT("rename_level");
@@ -1407,7 +1406,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
       EffectiveAction = TEXT("get_level_info");
     } else if (LowerSub == TEXT("delete_levels")) {
       EffectiveAction = TEXT("delete_level");
-    } else if (LowerSub == TEXT("unload") || LowerSub == TEXT("unload_level")) {
+    } else if (LowerSub == TEXT("unload")) {
       EffectiveAction = TEXT("stream_level");
       bForceStreamUnload = true;
     } else if (LowerSub == TEXT("get_level_info")) {

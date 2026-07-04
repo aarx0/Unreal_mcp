@@ -880,6 +880,19 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] 2026-07-04h — Dead handler-only names + hidden unadvertised functionality (follow-up sweep)
+The de-alias inventory (scratchpad alias-inventory.ps1, 2026-07-04) surfaced ~150 names in
+handler conditions that no schema advertises. Three sub-classes needing different handling:
+(1) genuinely dead spellings (`add_row`, `call_function`, `list_assets`, `destroy`-era
+leftovers) — delete from conditions after proving no rewrite produces them; (2) inventory
+false positives — suffixed variables (`NodeTypeLower ==`) and value comparisons (texture
+filter names) need a word-boundary regex, and dynamically-built prefixes
+(`TEXT("sequence_") + action`, audio_*) make prefix-family names LIVE despite looking dead;
+(3) hidden working functionality — geometry/skeleton/texture actions (append_vertex,
+add_socket, import_texture, create_cube_texture...) that are implemented but never
+advertised: decide advertise-or-delete per family, ideally as part of that family's
+FMcpCall classing. Do NOT delete anything in class (2)/(3) without the classing context.
+
 ### [ ] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 Nobody uses it: the only real client (agent sessions) never enables/disables tools in
 practice — its sole appearance in months of dogfooding was the audit incident where its
@@ -910,6 +923,16 @@ errors: [MapCheck] World references spatially loaded actor ...Portal_Hum_Trigger
 — the post-op fail-loudly guard treats the level's own MapCheck warnings as handler errors.
 The load succeeded. Same benign-noise-as-error class as the SourceControl-line false-fail
 (fixed 2026-06-x); guard should ignore `[MapCheck]` lines (they describe content, not the op).
+
+### [ ] 2026-07-04i — `animation_physics` create-anim-blueprint has a SHADOWED duplicate implementation (dead code)
+Same class as 2026-07-04b. The live path is HandleManageAnimationAuthoringAction
+(AnimationAuthoringHandlers.cpp:2554, CreatePackage + UAnimBlueprintFactory). A second,
+DIFFERENT implementation sits unreachable inside HandleAnimationPhysicsAction:
+AnimationHandlers.cpp:576 (`create_animation_bp` inline block, AssetToolsModule::CreateAsset
+path) and :3785 (stub delegating to HandleCreateAnimBlueprint, whose own gate at :4427 has no
+other caller). Unreachable because IsAnimationAuthoringAction intercepts the names upstream
+(Subsystem.cpp:1200). Verified by the de-alias fleet 2026-07-04. Fix = delete both blocks +
+HandleCreateAnimBlueprint; falls out free when animation_physics is classed.
 
 ### [ ] 2026-07-04b — `manage_effect bind_parameter_to_source` has a SHADOWED duplicate implementation
 `McpAutomationBridge_NiagaraAuthoringHandlers.cpp:2232` is the live path (probe error text

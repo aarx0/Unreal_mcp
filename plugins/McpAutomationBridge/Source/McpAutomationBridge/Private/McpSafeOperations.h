@@ -588,7 +588,7 @@ inline bool McpSafeLevelSave(ULevel* Level, const FString& FullPath, int32 MaxRe
     // Perform the actual save
     // CRITICAL FIX: Always use FEditorFileUtils::SaveLevel instead of UEditorLoadingAndSavingUtils::SaveMap.
     // UEditorLoadingAndSavingUtils::SaveMap saves to a new package but doesn't update the world's outer
-    // package name. This causes "World Memory Leaks" crashes when load_level is called because
+    // package name. This causes "World Memory Leaks" crashes on the next level load because
     // McpSafeLoadMap doesn't recognize the saved level as the current level (package name mismatch).
     // FEditorFileUtils::SaveLevel properly updates the world's package to match the save path.
     // Force unattended around the save itself: SaveLevel shares the same interactive

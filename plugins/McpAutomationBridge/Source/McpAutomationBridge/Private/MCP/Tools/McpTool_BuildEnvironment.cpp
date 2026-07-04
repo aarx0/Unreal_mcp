@@ -51,7 +51,7 @@ public:
 			})
 			.String(TEXT("materialPath"), TEXT("Material asset path."))
 			.String(TEXT("landscapePath"),
-				TEXT("sculpt_landscape/modify_heightmap/paint_landscape_layer/"
+				TEXT("sculpt/modify_heightmap/paint_landscape/"
 					"set_landscape_material: landscape asset/actor path (alternative "
 					"to landscapeName)."))
 			.Integer(TEXT("componentsX"),
@@ -71,7 +71,7 @@ public:
 			}, TEXT("modify_heightmap: how to apply heightData/strength (default: "
 				"set). 'add' is accepted as an alias of 'raise'."))
 			.Object(TEXT("region"),
-				TEXT("modify_heightmap/paint_landscape_layer: sub-region to affect "
+				TEXT("modify_heightmap/paint_landscape: sub-region to affect "
 					"(minX, minY, maxX, maxY); defaults to top-level minX/minY/"
 					"maxX/maxY."),
 				[](FMcpSchemaBuilder& S) {
@@ -79,18 +79,18 @@ public:
 					.Number(TEXT("maxX")).Number(TEXT("maxY"));
 			})
 			.Bool(TEXT("skipFlush"),
-				TEXT("modify_heightmap/sculpt_landscape/paint_landscape_layer: "
+				TEXT("modify_heightmap/sculpt/paint_landscape: "
 					"skip the GPU flush for batched edits."))
 			.StringEnum(TEXT("toolMode"), {
 				TEXT("Raise"),
 				TEXT("Lower"),
 				TEXT("Flatten")
-			}, TEXT("sculpt_landscape: sculpt tool (default: Raise). Alias of "
+			}, TEXT("sculpt: sculpt tool (default: Raise). Alias of "
 				"'tool'."))
 			.Number(TEXT("brushRadius"),
-				TEXT("sculpt_landscape: brush radius (alias: radius)."))
+				TEXT("sculpt: brush radius (alias: radius)."))
 			.Number(TEXT("brushFalloff"),
-				TEXT("sculpt_landscape: brush falloff (alias: falloff)."))
+				TEXT("sculpt: brush falloff (alias: falloff)."))
 			.String(TEXT("tool"), TEXT(""))
 			.Number(TEXT("radius"), TEXT(""))
 			.Number(TEXT("strength"), TEXT(""))
@@ -138,7 +138,7 @@ public:
 			.Number(TEXT("hour"), TEXT(""))
 			.Number(TEXT("intensity"), TEXT(""))
 			.String(TEXT("lightClass"),
-				TEXT("spawn_light/create_light/create_dynamic_light: light actor "
+				TEXT("create_light: light actor "
 					"class (e.g. PointLight); alias of lightType/type."))
 			.StringEnum(TEXT("lightType"), {
 				TEXT("point"),
@@ -146,24 +146,24 @@ public:
 				TEXT("spot"),
 				TEXT("rect"),
 				TEXT("sky")
-			}, TEXT("spawn_light/create_light/create_dynamic_light: light type "
+			}, TEXT("create_light: light type "
 				"shorthand."))
 			.String(TEXT("type"),
-				TEXT("spawn_light/create_light/create_dynamic_light: alias of "
+				TEXT("create_light: alias of "
 					"lightType."))
 			.FreeformObject(TEXT("properties"),
-				TEXT("spawn_light: light component overrides (intensity, color, "
+				TEXT("create_light: light component overrides (intensity, color, "
 					"castShadows, useAsAtmosphereSunLight, attenuationRadius, "
 					"innerConeAngle, outerConeAngle, sourceWidth, sourceHeight)."))
 			.StringEnum(TEXT("sourceType"), {
 				TEXT("SpecifiedCubemap"),
 				TEXT("CapturedScene")
-			}, TEXT("spawn_sky_light/create_sky_light: sky light capture source."))
+			}, TEXT("create_sky_light: sky light capture source."))
 			.String(TEXT("cubemapPath"),
-				TEXT("spawn_sky_light/create_sky_light: cubemap asset path when "
+				TEXT("create_sky_light: cubemap asset path when "
 					"sourceType is SpecifiedCubemap."))
 			.Bool(TEXT("recapture"),
-				TEXT("spawn_sky_light/create_sky_light/ensure_single_sky_light: "
+				TEXT("create_sky_light/ensure_single_sky_light: "
 					"recapture the scene into the sky light."))
 			.Object(TEXT("size"),
 				TEXT("create_lightmass_volume: volume size (x, y, z)."),

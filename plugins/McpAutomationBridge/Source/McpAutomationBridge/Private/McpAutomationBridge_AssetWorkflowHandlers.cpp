@@ -327,15 +327,15 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetAction(
   // Asset Operations
   if (Lower == TEXT("import"))
     return HandleImportAsset(RequestId, Payload, RequestingSocket);
-  if (Lower == TEXT("duplicate") || Lower == TEXT("duplicate_asset"))
+  if (Lower == TEXT("duplicate"))
     return HandleDuplicateAsset(RequestId, Payload, RequestingSocket);
-  if (Lower == TEXT("rename") || Lower == TEXT("rename_asset"))
+  if (Lower == TEXT("rename"))
     return HandleRenameAsset(RequestId, Payload, RequestingSocket);
-  if (Lower == TEXT("move") || Lower == TEXT("move_asset"))
+  if (Lower == TEXT("move"))
     return HandleMoveAsset(RequestId, Payload, RequestingSocket);
-  if (Lower == TEXT("delete") || Lower == TEXT("delete_asset") || Lower == TEXT("delete_assets"))
+  if (Lower == TEXT("delete"))
     return HandleDeleteAssets(RequestId, Payload, RequestingSocket);
-  if (Lower == TEXT("save") || Lower == TEXT("save_asset"))
+  if (Lower == TEXT("save"))
     return HandleSaveAssetStatic(this, RequestId, Payload, RequestingSocket);
   if (Lower == TEXT("save_all"))
     return HandleControlEditorSaveAll(RequestId, Payload, RequestingSocket);

@@ -51,8 +51,9 @@ subdirectory is shown.
 | `manage_tools` | — | `FMcpDynamicToolManager::HandleAction` @ MCP/McpDynamicToolManager.cpp — intercepted in MCP/McpNativeTransport.cpp before the handler registry; never reaches `InitializeHandlers` routing |
 
 `system_control` note — its lambda also re-dispatches specific core actions before
-the fallthrough: `console_command`/`execute_command`/`set_cvar` →
-`HandleConsoleCommandAction` @ ConsoleCommandHandlers.cpp;
+the fallthrough: `execute_command`/`set_cvar` →
+`HandleConsoleCommandAction` @ ConsoleCommandHandlers.cpp (the handler's internal
+canonical name is `console_command`);
 `subscribe`/`unsubscribe`/`get_log`/`tail_log`/`clear_log` → `HandleLogAction` @
 LogHandlers.cpp; `spawn_category` → `HandleDebugAction` @ DebugHandlers.cpp;
 `lumen_update_scene` → `HandleRenderAction` @ RenderHandlers.cpp;

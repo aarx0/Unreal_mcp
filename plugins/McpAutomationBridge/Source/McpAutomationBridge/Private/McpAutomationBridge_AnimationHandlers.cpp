@@ -2519,8 +2519,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimationPhysicsAction(
                            TargetSkeleton->GetPathName());
       }
     }
-  } else if (LowerSub == TEXT("play_montage") ||
-             LowerSub == TEXT("play_anim_montage")) {
+  } else if (LowerSub == TEXT("play_montage")) {
     // Dispatch to the dedicated handler, but force the action name to what it
     // expects
     return HandlePlayAnimMontage(RequestId, TEXT("play_anim_montage"), Payload,

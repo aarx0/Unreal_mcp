@@ -95,7 +95,7 @@ public:
 			.String(TEXT("basePoseType"), TEXT("set_additive_settings: base pose type (default RefPose)."))
 			.String(TEXT("basePoseAnimation"), TEXT("set_additive_settings: base pose animation asset path."))
 			.Number(TEXT("basePoseFrame"), TEXT("set_additive_settings: base pose frame index."))
-			.String(TEXT("montagePath"), TEXT("play_anim_montage: montage to play; add_montage_section: montage to edit ('assetPath'/'name' accepted as fallback)."))
+			.String(TEXT("montagePath"), TEXT("play_montage: montage to play; add_montage_section: montage to edit ('assetPath'/'name' accepted as fallback)."))
 			.String(TEXT("animationPath"), TEXT("add_montage_slot/add_blend_sample/add_aim_offset_sample: animation sequence asset path."))
 			.String(TEXT("fromSection"), TEXT("link_sections: section to link from."))
 			.String(TEXT("toSection"), TEXT("link_sections: section to link to."))

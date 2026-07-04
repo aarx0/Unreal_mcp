@@ -57,9 +57,9 @@ inline bool ContainsAction(const TArray<FString>& Actions, const FString& Action
 inline const TArray<FString>& ManageAssetCore()
 {
 	static const TArray<FString> Actions = {
-		TEXT("list"), TEXT("import"), TEXT("duplicate"), TEXT("duplicate_asset"),
-		TEXT("rename"), TEXT("rename_asset"), TEXT("move"), TEXT("move_asset"),
-		TEXT("delete"), TEXT("delete_asset"), TEXT("delete_assets"),
+		TEXT("list"), TEXT("import"), TEXT("duplicate"), 
+		TEXT("rename"), TEXT("move"), 
+		TEXT("delete"), 
 		TEXT("create_folder"), TEXT("search_assets"), TEXT("get_dependencies"),
 		TEXT("get_referencers"), TEXT("get_asset_properties"), TEXT("set_asset_property"),
 		TEXT("get_source_control_state"), TEXT("analyze_graph"),
@@ -75,7 +75,7 @@ inline const TArray<FString>& ManageAssetCore()
 		TEXT("get_material_stats"), TEXT("nanite_rebuild_mesh"),
 		TEXT("bulk_rename"), TEXT("bulk_delete"),
 		TEXT("source_control_checkout"), TEXT("source_control_submit"),
-		TEXT("save"), TEXT("save_asset"), TEXT("save_all")
+		TEXT("save"), TEXT("save_all")
 	};
 	return Actions;
 }
@@ -256,13 +256,13 @@ inline TArray<FString> ManageBlueprint()
 inline const TArray<FString>& BuildEnvironmentCore()
 {
 	static const TArray<FString> Actions = {
-		TEXT("create_landscape"), TEXT("sculpt"), TEXT("sculpt_landscape"),
+		TEXT("create_landscape"), TEXT("sculpt"),
 		TEXT("add_foliage"), TEXT("paint_foliage"),
 		TEXT("create_procedural_terrain"),
 		TEXT("create_procedural_foliage"),
 		TEXT("add_foliage_instances"), TEXT("get_foliage_instances"),
 		TEXT("remove_foliage"), TEXT("paint_landscape"),
-		TEXT("paint_landscape_layer"), TEXT("modify_heightmap"),
+		TEXT("modify_heightmap"),
 		TEXT("set_landscape_material"), TEXT("create_landscape_grass_type"),
 		TEXT("generate_lods"), TEXT("bake_lightmap"),
 		TEXT("export_snapshot"), TEXT("import_snapshot"), TEXT("delete"),
@@ -275,10 +275,10 @@ inline const TArray<FString>& BuildEnvironmentCore()
 inline const TArray<FString>& Lighting()
 {
 	static const TArray<FString> Actions = {
-		TEXT("spawn_light"), TEXT("create_light"), TEXT("spawn_sky_light"),
-		TEXT("create_sky_light"), TEXT("ensure_single_sky_light"),
+		TEXT("create_light"), TEXT("create_sky_light"),
+		TEXT("ensure_single_sky_light"),
 		TEXT("create_lightmass_volume"),
-		TEXT("create_lighting_enabled_level"), TEXT("create_dynamic_light"),
+		TEXT("create_lighting_enabled_level"), 
 		TEXT("setup_global_illumination"), TEXT("configure_shadows"),
 		TEXT("set_exposure"), TEXT("set_ambient_occlusion"),
 		TEXT("setup_volumetric_fog"), TEXT("build_lighting"),
@@ -322,7 +322,7 @@ inline const TArray<FString>& AnimationPhysicsCore()
 		TEXT("create_procedural_anim"), TEXT("create_state_machine"),
 		TEXT("setup_ik"), TEXT("create_pose_library"),
 		TEXT("create_animation_asset"), TEXT("play_montage"),
-		TEXT("play_anim_montage"), TEXT("setup_ragdoll"),
+		TEXT("setup_ragdoll"),
 		TEXT("activate_ragdoll"), TEXT("configure_vehicle"),
 		TEXT("setup_physics_simulation"), TEXT("setup_retargeting"),
 		TEXT("cleanup")
@@ -345,8 +345,8 @@ inline const TArray<FString>& AnimationAuthoring()
 		TEXT("add_blend_sample"), TEXT("force_rebuild_blend_space"),
 		TEXT("set_axis_settings"), TEXT("set_interpolation_settings"),
 		TEXT("create_aim_offset"), TEXT("add_aim_offset_sample"),
-		TEXT("create_anim_blueprint"), TEXT("create_animation_bp"),
-		TEXT("create_animation_blueprint"), TEXT("add_state_machine"),
+		TEXT("create_anim_blueprint"), 
+		TEXT("add_state_machine"),
 		TEXT("add_state"), TEXT("add_transition"),
 		TEXT("set_transition_rules"), TEXT("add_blend_node"),
 		TEXT("add_cached_pose"), TEXT("add_slot_node"),
@@ -441,12 +441,13 @@ inline const TArray<FString>& SystemControlCore()
 	// NO handler anywhere — profile, set_quality, set_resolution,
 	// set_fullscreen, play_sound, show_widget, validate_assets. They died at
 	// HandleUiAction's NOT_IMPLEMENTED catch-all; re-add only together with a
-	// real implementation. console_command/execute_command/set_cvar/
-	// subscribe/unsubscribe/spawn_category/lumen_update_scene are now routed
-	// in the system_control registry lambda (McpAutomationBridgeSubsystem.cpp).
+	// real implementation. execute_command/set_cvar/subscribe/unsubscribe/
+	// spawn_category/lumen_update_scene are routed in the system_control
+	// registry lambda (McpAutomationBridgeSubsystem.cpp), which re-dispatches
+	// command execution under the internal literal "console_command".
 	static const TArray<FString> Actions = {
 		TEXT("screenshot"),
-		TEXT("execute_command"), TEXT("console_command"), TEXT("run_ubt"),
+		TEXT("execute_command"), TEXT("run_ubt"),
 		TEXT("get_build_status"),
 		TEXT("run_tests"), TEXT("list_tests"), TEXT("get_test_results"),
 		TEXT("generate_test_stub"),
@@ -466,7 +467,7 @@ inline const TArray<FString>& Performance()
 {
 	static const TArray<FString> Actions = {
 		TEXT("start_profiling"), TEXT("stop_profiling"),
-		TEXT("get_profile"), TEXT("capture_stats"), TEXT("get_perf_stats"),
+		TEXT("get_perf_stats"),
 		TEXT("run_benchmark"), TEXT("show_fps"), TEXT("show_stats"),
 		TEXT("generate_memory_report"), TEXT("set_scalability"),
 		TEXT("set_resolution_scale"), TEXT("set_vsync"),
@@ -514,7 +515,7 @@ inline const TArray<FString>& Input()
 {
 	static const TArray<FString> Actions = {
 		TEXT("create_input_action"), TEXT("create_input_mapping_context"),
-		TEXT("add_mapping"), TEXT("remove_mapping"), TEXT("map_input_action"),
+		TEXT("add_mapping"), TEXT("remove_mapping"),
 		TEXT("set_input_trigger"), TEXT("set_input_modifier"),
 		TEXT("enable_input_mapping"), TEXT("disable_input_action"),
 		TEXT("get_input_info")
@@ -687,24 +688,22 @@ inline TArray<FString> ManageAI()
 inline const TArray<FString>& ControlActor()
 {
 	static const TArray<FString> Actions = {
-		TEXT("spawn"), TEXT("spawn_actor"), TEXT("spawn_blueprint"),
-		TEXT("delete"), TEXT("destroy_actor"), TEXT("delete_by_tag"),
+		TEXT("spawn"), TEXT("spawn_blueprint"),
+		TEXT("delete"), TEXT("delete_by_tag"),
 		TEXT("duplicate"), TEXT("apply_force"), TEXT("set_transform"),
-		TEXT("teleport_actor"), TEXT("set_actor_location"),
-		TEXT("set_actor_rotation"), TEXT("set_actor_scale"),
-		TEXT("set_actor_transform"), TEXT("get_transform"),
-		TEXT("get_actor_transform"), TEXT("set_visibility"),
-		TEXT("set_actor_visible"), TEXT("add_component"),
-		TEXT("remove_component"), TEXT("set_component_properties"),
+		TEXT("get_transform"),
+		TEXT("set_visibility"),
+		TEXT("add_component"),
+		TEXT("remove_component"), 
 		TEXT("set_component_property"), TEXT("get_component_property"),
-		TEXT("get_components"), TEXT("get_actor_components"),
+		TEXT("get_components"), 
 		TEXT("get_actor_bounds"), TEXT("add_tag"), TEXT("remove_tag"),
-		TEXT("find_by_tag"), TEXT("find_actors_by_tag"), TEXT("find_by_name"),
-		TEXT("find_actors_by_name"), TEXT("find_by_class"),
-		TEXT("find_actors_by_class"), TEXT("list"),
+		TEXT("find_by_tag"), TEXT("find_by_name"),
+		TEXT("find_by_class"),
+		TEXT("list"),
 		TEXT("set_blueprint_variables"), TEXT("create_snapshot"),
-		TEXT("attach"), TEXT("attach_actor"), TEXT("detach"),
-		TEXT("detach_actor"), TEXT("set_actor_collision"),
+		TEXT("attach"), TEXT("detach"),
+		TEXT("set_actor_collision"),
 		TEXT("call_actor_function")
 	};
 	return Actions;
@@ -714,14 +713,14 @@ inline TArray<FString> ControlActorUnion() { return ControlActor(); }
 inline const TArray<FString>& ControlEditor()
 {
 	static const TArray<FString> Actions = {
-		TEXT("play"), TEXT("stop"), TEXT("stop_pie"), TEXT("pause"),
+		TEXT("play"), TEXT("stop"), TEXT("pause"),
 		TEXT("resume"), TEXT("eject"), TEXT("possess"),
 		TEXT("set_game_speed"), TEXT("set_fixed_delta_time"),
-		TEXT("set_camera"), TEXT("set_camera_position"),
-		TEXT("set_viewport_camera"), TEXT("set_camera_fov"),
+		TEXT("set_camera"), 
+		TEXT("set_camera_fov"),
 		TEXT("set_view_mode"),
-		TEXT("console_command"), TEXT("execute_command"),
-		TEXT("screenshot"), TEXT("take_screenshot"), TEXT("step_frame"),
+		TEXT("execute_command"),
+		TEXT("screenshot"), TEXT("step_frame"),
 		TEXT("single_frame_step"), TEXT("start_recording"),
 		TEXT("stop_recording"), TEXT("create_bookmark"),
 		TEXT("jump_to_bookmark"), TEXT("set_preferences"),
@@ -763,12 +762,12 @@ inline TArray<FString> InspectUnion() { return Inspect(); }
 inline const TArray<FString>& ManageLevel()
 {
 	static const TArray<FString> Actions = {
-		TEXT("load"), TEXT("load_level"), TEXT("save"), TEXT("save_level"),
-		TEXT("save_as"), TEXT("save_level_as"), TEXT("stream"),
-		TEXT("unload"), TEXT("unload_level"), TEXT("create_level"),
+		TEXT("load"), TEXT("save"), 
+		TEXT("save_as"), TEXT("stream"),
+		TEXT("unload"), TEXT("create_level"),
 		TEXT("create_light"), TEXT("build_lighting"), TEXT("set_metadata"),
 		TEXT("export_level"), TEXT("import_level"), TEXT("list_levels"),
-		TEXT("get_summary"), TEXT("delete"), TEXT("delete_level"),
+		TEXT("get_summary"), TEXT("delete"), 
 		TEXT("validate_level"), TEXT("add_sublevel"), TEXT("rename_level"),
 		TEXT("duplicate_level"), TEXT("get_current_level")
 	};
@@ -835,7 +834,7 @@ inline TArray<FString> ManageGeometryUnion() { return ManageGeometry(); }
 inline const TArray<FString>& ManageEffect()
 {
 	static const TArray<FString> Actions = {
-		TEXT("particle"), TEXT("niagara"), TEXT("debug_shape"),
+		TEXT("particle"), TEXT("debug_shape"),
 		TEXT("spawn_niagara"), TEXT("create_dynamic_light"),
 		TEXT("create_niagara_system"), TEXT("create_niagara_emitter"),
 		TEXT("create_volumetric_fog"), TEXT("create_particle_trail"),

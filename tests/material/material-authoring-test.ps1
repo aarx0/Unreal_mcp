@@ -113,7 +113,7 @@ try {
 finally {
   $allGone = $true
   foreach ($p in @($ScratchPath, $BadPath)) {
-    try { $d = Mcp 'manage_asset' @{ action='delete_asset'; assetPath=$p }; if ($d.existsAfter -ne $false) { $allGone = $false } }
+    try { $d = Mcp 'manage_asset' @{ action='delete'; assetPath=$p }; if ($d.existsAfter -ne $false) { $allGone = $false } }
     catch { Write-Host "  WARN  cleanup failed for $p" -ForegroundColor Yellow; $allGone = $false }
   }
   Assert $allGone 'cleanup (scratch assets removed)'

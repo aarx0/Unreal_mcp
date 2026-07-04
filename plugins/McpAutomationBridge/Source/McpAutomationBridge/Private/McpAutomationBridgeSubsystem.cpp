@@ -1053,10 +1053,10 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                         SubAction == TEXT("set_project_setting")) {
                       return HandleUiAction(R, A, P, S);
                     }
-                    if (SubAction == TEXT("console_command") ||
-                        SubAction == TEXT("execute_command")) {
+                    if (SubAction == TEXT("execute_command")) {
                       // Same path control_editor uses; inherits the console
-                      // security blocklist.
+                      // security blocklist. "console_command" is the handler's
+                      // internal canonical name.
                       return HandleConsoleCommandAction(
                           R, TEXT("console_command"), P, S);
                     }

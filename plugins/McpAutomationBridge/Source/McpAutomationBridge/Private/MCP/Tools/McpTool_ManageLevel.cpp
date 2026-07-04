@@ -23,7 +23,7 @@ public:
 		return FMcpSchemaBuilder()
 			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageLevel(), TEXT("Action"))
 			.String(TEXT("levelPath"), TEXT("Level asset path."))
-			.Bool(TEXT("saveDirtyPackages"), TEXT("load/load_level: save dirty world/content "
+			.Bool(TEXT("saveDirtyPackages"), TEXT("load: save dirty world/content "
 				"packages before loading (required in headless/unattended mode)."))
 			.String(TEXT("assetPath"), TEXT("Asset path for metadata or validation aliases."))
 			.String(TEXT("levelName"), TEXT(""))

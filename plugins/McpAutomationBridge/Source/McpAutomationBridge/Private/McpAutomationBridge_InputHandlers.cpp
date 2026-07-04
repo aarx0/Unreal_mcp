@@ -12,7 +12,6 @@
 //   - create_input_mapping_context: Create UInputMappingContext asset
 //   - add_mapping: Add key mapping to context
 //   - remove_mapping: Remove key mapping from context
-//   - map_input_action: Alias for add_mapping
 //   - set_input_trigger: Configure trigger on input action
 //   - set_input_modifier: Configure modifier on input action
 //   - enable_input_mapping: Enable mapping context at runtime
@@ -423,9 +422,9 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
     }
 
     // -------------------------------------------------------------------------
-    // add_mapping / map_input_action: Add key mapping to context
+    // add_mapping: Add key mapping to context
     // -------------------------------------------------------------------------
-    if (SubAction == TEXT("add_mapping") || SubAction == TEXT("map_input_action"))
+    if (SubAction == TEXT("add_mapping"))
     {
         FString ContextPath;
         Payload->TryGetStringField(TEXT("contextPath"), ContextPath);
@@ -486,8 +485,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAction(
         AddAssetVerificationNested(Result, TEXT("actionVerification"), InAction);
 
         SendAutomationResponse(RequestingSocket, RequestId, true,
-            SubAction == TEXT("map_input_action") ? 
-            TEXT("Input action mapped to key.") : TEXT("Mapping added."), Result);
+            TEXT("Mapping added."), Result);
         return true;
     }
 

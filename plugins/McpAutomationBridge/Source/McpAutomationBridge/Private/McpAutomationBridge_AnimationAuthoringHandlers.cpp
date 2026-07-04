@@ -2547,13 +2547,7 @@ if (SubAction == TEXT("add_montage_notify"))
     
     // ===== 10.4 Animation Blueprints =====
     
-    // Accept the documented/advertised aliases too — the routing list and this
-    // file's header both name this `create_animation_blueprint`, but only
-    // `create_anim_blueprint` was handled, so the advertised names returned
-    // UNKNOWN_ACTION.
-    if (SubAction == TEXT("create_anim_blueprint") ||
-        SubAction == TEXT("create_animation_blueprint") ||
-        SubAction == TEXT("create_animation_bp"))
+    if (SubAction == TEXT("create_anim_blueprint"))
     {
     FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
     // Schema advertises savePath; older callers pass path. Prefer savePath, fall back to path.

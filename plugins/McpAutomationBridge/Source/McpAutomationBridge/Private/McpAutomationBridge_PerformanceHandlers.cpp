@@ -138,8 +138,6 @@ bool UMcpAutomationBridgeSubsystem::HandlePerformanceAction(
       !Lower.StartsWith(TEXT("merge_actors")) &&
       !Lower.StartsWith(TEXT("start_profiling")) &&
       !Lower.StartsWith(TEXT("stop_profiling")) &&
-      !Lower.StartsWith(TEXT("get_profile")) &&
-      !Lower.StartsWith(TEXT("capture_stats")) &&
       !Lower.StartsWith(TEXT("get_perf_stats")) &&
       !Lower.StartsWith(TEXT("show_fps")) &&
       !Lower.StartsWith(TEXT("show_stats")) &&
@@ -203,13 +201,12 @@ bool UMcpAutomationBridgeSubsystem::HandlePerformanceAction(
     return true;
   }
   // ===========================================================================
-  // get_profile - READ BACK live performance counters as JSON (no console file)
+  // get_perf_stats - READ BACK live performance counters as JSON
   // ===========================================================================
   // Unlike start/stop_profiling (which write a .ue4stats file to disk the agent
   // can't consume), this returns the engine's running perf numbers directly so
   // a caller can see FPS / frame timings / memory without leaving the bridge.
-  else if (Lower == TEXT("get_profile") || Lower == TEXT("capture_stats") ||
-           Lower == TEXT("get_perf_stats")) {
+  else if (Lower == TEXT("get_perf_stats")) {
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
     Result->SetBoolField(TEXT("success"), true);
 

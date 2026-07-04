@@ -18,7 +18,6 @@ inline const FMcpParamDecl P_SystemControl_5[] = { { TEXT("enabled"), EMcpParamK
 inline const FMcpParamDecl P_SystemControl_6[] = { { TEXT("enabled"), EMcpParamKind::Bool, false }, { TEXT("slop"), EMcpParamKind::Number, false }, { TEXT("minScreenRadius"), EMcpParamKind::Number, false } };
 inline const FMcpParamDecl P_SystemControl_7[] = { { TEXT("functionName"), EMcpParamKind::String, true }, { TEXT("enabled"), EMcpParamKind::Bool, false }, { TEXT("poolSize"), EMcpParamKind::Number, false }, { TEXT("boostPlayerLocation"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_SystemControl_8[] = { { TEXT("enabled"), EMcpParamKind::Bool, false }, { TEXT("cellSize"), EMcpParamKind::Number, false }, { TEXT("loadingRange"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SystemControl_9[] = { { TEXT("command"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_SystemControl_10[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("widgetType"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_SystemControl_11[] = { { TEXT("enabled"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_SystemControl_13[] = { { TEXT("code"), EMcpParamKind::String, false }, { TEXT("file"), EMcpParamKind::String, false }, { TEXT("allowModalApis"), EMcpParamKind::Bool, false } };
@@ -54,14 +53,12 @@ inline const FMcpCallDecl GSystemControl[] =
 {
 	{ TEXT("system_control"), TEXT("add_widget_child"), P_SystemControl_0, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("apply_baseline_settings"), P_SystemControl_1, EMcpCallFlags::None },
-	{ TEXT("system_control"), TEXT("capture_stats"), {}, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("clear_log"), {}, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("configure_lod"), P_SystemControl_4, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("configure_nanite"), P_SystemControl_5, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("configure_occlusion_culling"), P_SystemControl_6, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("configure_texture_streaming"), P_SystemControl_7, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("configure_world_partition"), P_SystemControl_8, EMcpCallFlags::None },
-	{ TEXT("system_control"), TEXT("console_command"), P_SystemControl_9, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("create_widget"), P_SystemControl_10, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("enable_gpu_timing"), P_SystemControl_11, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("execute_command"), P_SystemControl_D0, EMcpCallFlags::None },
@@ -71,7 +68,6 @@ inline const FMcpCallDecl GSystemControl[] =
 	{ TEXT("system_control"), TEXT("get_build_status"), P_SystemControl_16, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("get_log"), P_SystemControl_17, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("get_perf_stats"), {}, EMcpCallFlags::None },
-	{ TEXT("system_control"), TEXT("get_profile"), {}, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("get_project_settings"), P_SystemControl_20, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("get_test_results"), P_SystemControl_21, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("list_tests"), P_SystemControl_22, EMcpCallFlags::None },

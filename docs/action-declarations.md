@@ -85,5 +85,13 @@ assorted valid traffic = zero per-action rejections.
    with a rewritten `subAction` handed back to string matching. When a family
    is classed, its payload-rewriting delegation sites convert to direct calls
    and the internal action names they targeted die with the chain.
+6. **One name per action — no advertised aliases** (agreed 2026-07-04, shipped
+   same day). The de-alias pass deleted 45 alias spellings (34 fleet-verified
+   groups; `delete`/`delete_asset`/`delete_assets` → `delete`, bare verb wins
+   when the tool supplies the noun). Internal canonical literals that rewrites
+   still target (`play_anim_montage`, `save_level_as`, `console_command`,
+   `spawn_light`, `stream_level`) survive inside handlers only and die at
+   classing. `bake_lightmap` vs `build_lighting` turned out to be two different
+   implementations, not aliases — both kept, decls corrected.
    Declarations do not attempt runtime-outcome truth (that is the apply-receipt
    work — see the dogfood TODO).

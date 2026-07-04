@@ -504,13 +504,12 @@ bool UMcpAutomationBridgeSubsystem::HandleBuildEnvironmentAction(
     // =========================================================================
     // Landscape Operations (dispatch to dedicated handlers)
     // =========================================================================
-    else if (LowerSub == TEXT("paint_landscape") ||
-             LowerSub == TEXT("paint_landscape_layer"))
+    else if (LowerSub == TEXT("paint_landscape"))
     {
         return HandlePaintLandscapeLayer(RequestId, TEXT("paint_landscape_layer"),
                                          Payload, RequestingSocket);
     }
-    else if (LowerSub == TEXT("sculpt_landscape") || LowerSub == TEXT("sculpt"))
+    else if (LowerSub == TEXT("sculpt"))
     {
         return HandleSculptLandscape(RequestId, TEXT("sculpt_landscape"), Payload,
                                      RequestingSocket);

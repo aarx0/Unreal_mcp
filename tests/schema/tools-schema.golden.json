@@ -15,7 +15,6 @@
             "create_pose_library",
             "create_animation_asset",
             "play_montage",
-            "play_anim_montage",
             "setup_ragdoll",
             "activate_ragdoll",
             "configure_vehicle",
@@ -50,8 +49,6 @@
             "create_aim_offset",
             "add_aim_offset_sample",
             "create_anim_blueprint",
-            "create_animation_bp",
-            "create_animation_blueprint",
             "add_state_machine",
             "add_state",
             "add_transition",
@@ -448,7 +445,7 @@
           "type": "boolean"
         },
         "montagePath": {
-          "description": "play_anim_montage: montage to play; add_montage_section: montage to edit ('assetPath'/'name' accepted as fallback).",
+          "description": "play_montage: montage to play; add_montage_section: montage to edit ('assetPath'/'name' accepted as fallback).",
           "type": "string"
         },
         "morphTargetName": {
@@ -848,7 +845,6 @@
           "enum": [
             "create_landscape",
             "sculpt",
-            "sculpt_landscape",
             "add_foliage",
             "paint_foliage",
             "create_procedural_terrain",
@@ -857,7 +853,6 @@
             "get_foliage_instances",
             "remove_foliage",
             "paint_landscape",
-            "paint_landscape_layer",
             "modify_heightmap",
             "set_landscape_material",
             "create_landscape_grass_type",
@@ -869,14 +864,11 @@
             "create_sky_sphere",
             "set_time_of_day",
             "create_fog_volume",
-            "spawn_light",
             "create_light",
-            "spawn_sky_light",
             "create_sky_light",
             "ensure_single_sky_light",
             "create_lightmass_volume",
             "create_lighting_enabled_level",
-            "create_dynamic_light",
             "setup_global_illumination",
             "configure_shadows",
             "set_exposure",
@@ -957,11 +949,11 @@
         },
         "bounds": {},
         "brushFalloff": {
-          "description": "sculpt_landscape: brush falloff (alias: falloff).",
+          "description": "sculpt: brush falloff (alias: falloff).",
           "type": "number"
         },
         "brushRadius": {
-          "description": "sculpt_landscape: brush radius (alias: radius).",
+          "description": "sculpt: brush radius (alias: radius).",
           "type": "number"
         },
         "compensationValue": {
@@ -996,7 +988,7 @@
           "type": "number"
         },
         "cubemapPath": {
-          "description": "spawn_sky_light/create_sky_light: cubemap asset path when sourceType is SpecifiedCubemap.",
+          "description": "create_sky_light: cubemap asset path when sourceType is SpecifiedCubemap.",
           "type": "string"
         },
         "cullDistance": {
@@ -1067,7 +1059,7 @@
           "type": "string"
         },
         "landscapePath": {
-          "description": "sculpt_landscape/modify_heightmap/paint_landscape_layer/set_landscape_material: landscape asset/actor path (alternative to landscapeName).",
+          "description": "sculpt/modify_heightmap/paint_landscape/set_landscape_material: landscape asset/actor path (alternative to landscapeName).",
           "type": "string"
         },
         "layerName": {
@@ -1089,11 +1081,11 @@
           "type": "object"
         },
         "lightClass": {
-          "description": "spawn_light/create_light/create_dynamic_light: light actor class (e.g. PointLight); alias of lightType/type.",
+          "description": "create_light: light actor class (e.g. PointLight); alias of lightType/type.",
           "type": "string"
         },
         "lightType": {
-          "description": "spawn_light/create_light/create_dynamic_light: light type shorthand.",
+          "description": "create_light: light type shorthand.",
           "enum": [
             "point",
             "directional",
@@ -1272,7 +1264,7 @@
           "type": "object"
         },
         "properties": {
-          "description": "spawn_light: light component overrides (intensity, color, castShadows, useAsAtmosphereSunLight, attenuationRadius, innerConeAngle, outerConeAngle, sourceWidth, sourceHeight)."
+          "description": "create_light: light component overrides (intensity, color, castShadows, useAsAtmosphereSunLight, attenuationRadius, innerConeAngle, outerConeAngle, sourceWidth, sourceHeight)."
         },
         "quadsPerComponent": {
           "description": "create_landscape: quads per component (alias: quadsPerSection/sectionSize).",
@@ -1307,11 +1299,11 @@
           "type": "boolean"
         },
         "recapture": {
-          "description": "spawn_sky_light/create_sky_light/ensure_single_sky_light: recapture the scene into the sky light.",
+          "description": "create_sky_light/ensure_single_sky_light: recapture the scene into the sky light.",
           "type": "boolean"
         },
         "region": {
-          "description": "modify_heightmap/paint_landscape_layer: sub-region to affect (minX, minY, maxX, maxY); defaults to top-level minX/minY/maxX/maxY.",
+          "description": "modify_heightmap/paint_landscape: sub-region to affect (minX, minY, maxX, maxY); defaults to top-level minX/minY/maxX/maxY.",
           "properties": {
             "maxX": {
               "type": "number"
@@ -1386,11 +1378,11 @@
           "type": "number"
         },
         "skipFlush": {
-          "description": "modify_heightmap/sculpt_landscape/paint_landscape_layer: skip the GPU flush for batched edits.",
+          "description": "modify_heightmap/sculpt/paint_landscape: skip the GPU flush for batched edits.",
           "type": "boolean"
         },
         "sourceType": {
-          "description": "spawn_sky_light/create_sky_light: sky light capture source.",
+          "description": "create_sky_light: sky light capture source.",
           "enum": [
             "SpecifiedCubemap",
             "CapturedScene"
@@ -1431,7 +1423,7 @@
           "type": "string"
         },
         "toolMode": {
-          "description": "sculpt_landscape: sculpt tool (default: Raise). Alias of 'tool'.",
+          "description": "sculpt: sculpt tool (default: Raise). Alias of 'tool'.",
           "enum": [
             "Raise",
             "Lower",
@@ -1446,7 +1438,7 @@
           "type": "array"
         },
         "type": {
-          "description": "spawn_light/create_light/create_dynamic_light: alias of lightType.",
+          "description": "create_light: alias of lightType.",
           "type": "string"
         },
         "updateNormals": {
@@ -1488,46 +1480,30 @@
           "description": "Action",
           "enum": [
             "spawn",
-            "spawn_actor",
             "spawn_blueprint",
             "delete",
-            "destroy_actor",
             "delete_by_tag",
             "duplicate",
             "apply_force",
             "set_transform",
-            "teleport_actor",
-            "set_actor_location",
-            "set_actor_rotation",
-            "set_actor_scale",
-            "set_actor_transform",
             "get_transform",
-            "get_actor_transform",
             "set_visibility",
-            "set_actor_visible",
             "add_component",
             "remove_component",
-            "set_component_properties",
             "set_component_property",
             "get_component_property",
             "get_components",
-            "get_actor_components",
             "get_actor_bounds",
             "add_tag",
             "remove_tag",
             "find_by_tag",
-            "find_actors_by_tag",
             "find_by_name",
-            "find_actors_by_name",
             "find_by_class",
-            "find_actors_by_class",
             "list",
             "set_blueprint_variables",
             "create_snapshot",
             "attach",
-            "attach_actor",
             "detach",
-            "detach_actor",
             "set_actor_collision",
             "call_actor_function"
           ],
@@ -1625,7 +1601,7 @@
           "type": "object"
         },
         "matchType": {
-          "description": "find_by_tag/find_actors_by_tag: match mode, 'exact' (default) or 'contains'.",
+          "description": "find_by_tag: match mode, 'exact' (default) or 'contains'.",
           "type": "string"
         },
         "meshPath": {
@@ -1723,11 +1699,10 @@
     "inputSchema": {
       "properties": {
         "action": {
-          "description": "Editor action. screenshot/take_screenshot captures the active viewport synchronously; the PNG is written to the returned absolute 'path' before the call returns, so it can be read back immediately to evaluate the result.",
+          "description": "Editor action. screenshot captures the active viewport synchronously; the PNG is written to the returned absolute 'path' before the call returns, so it can be read back immediately to evaluate the result.",
           "enum": [
             "play",
             "stop",
-            "stop_pie",
             "pause",
             "resume",
             "eject",
@@ -1735,14 +1710,10 @@
             "set_game_speed",
             "set_fixed_delta_time",
             "set_camera",
-            "set_camera_position",
-            "set_viewport_camera",
             "set_camera_fov",
             "set_view_mode",
-            "console_command",
             "execute_command",
             "screenshot",
-            "take_screenshot",
             "step_frame",
             "single_frame_step",
             "start_recording",
@@ -2869,14 +2840,9 @@
             "list",
             "import",
             "duplicate",
-            "duplicate_asset",
             "rename",
-            "rename_asset",
             "move",
-            "move_asset",
             "delete",
-            "delete_asset",
-            "delete_assets",
             "create_folder",
             "search_assets",
             "get_dependencies",
@@ -2913,7 +2879,6 @@
             "source_control_checkout",
             "source_control_submit",
             "save",
-            "save_asset",
             "save_all",
             "create_material",
             "set_blend_mode",
@@ -6251,7 +6216,6 @@
           "description": "Effect/Niagara action to perform.",
           "enum": [
             "particle",
-            "niagara",
             "debug_shape",
             "spawn_niagara",
             "create_dynamic_light",
@@ -8347,14 +8311,10 @@
           "description": "Action",
           "enum": [
             "load",
-            "load_level",
             "save",
-            "save_level",
             "save_as",
-            "save_level_as",
             "stream",
             "unload",
-            "unload_level",
             "create_level",
             "create_light",
             "build_lighting",
@@ -8364,7 +8324,6 @@
             "list_levels",
             "get_summary",
             "delete",
-            "delete_level",
             "validate_level",
             "add_sublevel",
             "rename_level",
@@ -8486,7 +8445,7 @@
           "type": "object"
         },
         "saveDirtyPackages": {
-          "description": "load/load_level: save dirty world/content packages before loading (required in headless/unattended mode).",
+          "description": "load: save dirty world/content packages before loading (required in headless/unattended mode).",
           "type": "boolean"
         },
         "savePath": {
@@ -9066,7 +9025,6 @@
             "create_input_mapping_context",
             "add_mapping",
             "remove_mapping",
-            "map_input_action",
             "set_input_trigger",
             "set_input_modifier",
             "enable_input_mapping",
@@ -9864,7 +9822,6 @@
           "enum": [
             "screenshot",
             "execute_command",
-            "console_command",
             "run_ubt",
             "get_build_status",
             "run_tests",
@@ -9888,8 +9845,6 @@
             "live_coding_compile",
             "start_profiling",
             "stop_profiling",
-            "get_profile",
-            "capture_stats",
             "get_perf_stats",
             "run_benchmark",
             "show_fps",

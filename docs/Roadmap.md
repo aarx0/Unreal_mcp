@@ -26,7 +26,7 @@ This roadmap outlines the comprehensive development plan for expanding the Unrea
 
 - [x] **Sequencer**: Full control over Level Sequences (create, play, tracks, keys, bindings).
 - [x] **Audio**: Create SoundCues, play sounds, set mixes (`create_sound_cue`, `play_sound_at_location`).
-- [x] **Landscape**: Sculpting, painting layers, modifying heightmaps (`sculpt_landscape`, `paint_landscape_layer`).
+- [x] **Landscape**: Sculpting, painting layers, modifying heightmaps (`sculpt`, `paint_landscape`).
 - [x] **Foliage**: Painting foliage instances and procedural spawning (`paint_foliage`).
 
 ## Phase 4: System & Developer Experience (Completed)
@@ -1168,8 +1168,8 @@ The following phases represent the comprehensive expansion to enable **full proj
 ### 28.1 Landscape (Expanded)
 - [x] `create_landscape`
 - [ ] `import_heightmap`, `export_heightmap`
-- [x] `sculpt_landscape` (raise, lower, smooth, flatten, erosion)
-- [x] `paint_landscape_layer`
+- [x] `sculpt` (raise, lower, smooth, flatten, erosion)
+- [x] `paint_landscape`
 - [ ] `create_landscape_layer_info`
 - [ ] `configure_landscape_material`
 - [x] `create_landscape_grass_type`

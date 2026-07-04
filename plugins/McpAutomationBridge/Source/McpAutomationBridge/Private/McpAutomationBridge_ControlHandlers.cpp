@@ -2,35 +2,8 @@
 // McpAutomationBridge_ControlHandlers.cpp
 // =============================================================================
 // Editor control, viewport, PIE, camera, and actor manipulation handlers.
-//
-// HANDLERS (64 actions):
-//   Editor Control:
-//     - start_pie, stop_pie, pause_pie, resume_pie, is_pie_active
-//     - get_pie_info, set_pie_mode
-//
-//   Camera & Viewport:
-//     - set_camera_view, get_camera_view, focus_viewport_on_actor
-//     - set_viewport_view_mode, get_viewport_screenshot, capture_screenshot
-//     - set_viewport_layout, get_active_viewport_info
-//
-//   Actor Control:
-//     - spawn_actor, delete_actor, duplicate_actor, get_actors
-//     - set_actor_transform, get_actor_transform, set_actor_location
-//     - set_actor_rotation, set_actor_scale, apply_physics
-//     - set_actor_tags, add_actor_tag, remove_actor_tag
-//     - attach_actor, detach_actor, teleport_actor
-//
-//   Component Operations:
-//     - add_component, remove_component, get_components
-//     - set_component_property, get_component_property
-//
-//   Selection:
-//     - select_actor, deselect_actor, clear_selection, get_selected_actors
-//     - select_components, get_selected_components
-//
-//   Debug:
-//     - draw_debug_line, draw_debug_sphere, draw_debug_box
-//     - draw_debug_arrow, clear_debug_drawings
+// Dispatch gates: HandleControlActorAction / HandleControlEditorAction below —
+// the gates are the action list; a prose copy here would only rot.
 //
 // REFACTORING NOTES:
 //   - Uses McpVersionCompatibility.h for UE 5.0-5.7 API abstraction
@@ -2760,57 +2733,45 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorAction(
     return true;
   }
 
-  if (LowerSub == TEXT("spawn") || LowerSub == TEXT("spawn_actor"))
+  if (LowerSub == TEXT("spawn"))
     return HandleControlActorSpawn(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("spawn_blueprint"))
     return HandleControlActorSpawnBlueprint(RequestId, Payload,
                                             RequestingSocket);
-  if (LowerSub == TEXT("delete") || LowerSub == TEXT("remove") ||
-      LowerSub == TEXT("destroy_actor"))
+  if (LowerSub == TEXT("delete") || LowerSub == TEXT("remove"))
     return HandleControlActorDelete(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("apply_force") ||
       LowerSub == TEXT("apply_force_to_actor"))
     return HandleControlActorApplyForce(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("set_transform") ||
-      LowerSub == TEXT("set_actor_transform") ||
-      LowerSub == TEXT("teleport_actor") ||
-      LowerSub == TEXT("set_actor_location") ||
-      LowerSub == TEXT("set_actor_rotation") ||
-      LowerSub == TEXT("set_actor_scale"))
+  if (LowerSub == TEXT("set_transform"))
     return HandleControlActorSetTransform(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("get_transform") ||
-      LowerSub == TEXT("get_actor_transform"))
+  if (LowerSub == TEXT("get_transform"))
     return HandleControlActorGetTransform(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("set_visibility") ||
-      LowerSub == TEXT("set_actor_visible") ||
       LowerSub == TEXT("set_actor_visibility"))
     return HandleControlActorSetVisibility(RequestId, Payload,
                                            RequestingSocket);
   if (LowerSub == TEXT("add_component"))
     return HandleControlActorAddComponent(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("set_component_properties") ||
-      LowerSub == TEXT("set_component_property"))
+  if (LowerSub == TEXT("set_component_property"))
     return HandleControlActorSetComponentProperties(RequestId, Payload,
                                                     RequestingSocket);
-  if (LowerSub == TEXT("get_components") ||
-      LowerSub == TEXT("get_actor_components"))
+  if (LowerSub == TEXT("get_components"))
     return HandleControlActorGetComponents(RequestId, Payload,
                                            RequestingSocket);
   if (LowerSub == TEXT("duplicate"))
     return HandleControlActorDuplicate(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("attach") || LowerSub == TEXT("attach_actor"))
+  if (LowerSub == TEXT("attach"))
     return HandleControlActorAttach(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("detach") || LowerSub == TEXT("detach_actor"))
+  if (LowerSub == TEXT("detach"))
     return HandleControlActorDetach(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("find_by_tag") ||
-      LowerSub == TEXT("find_actors_by_tag")) // schema-advertised alias, like
-                                              // find_actors_by_name/_class
+  if (LowerSub == TEXT("find_by_tag"))
     return HandleControlActorFindByTag(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("add_tag"))
     return HandleControlActorAddTag(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("remove_tag"))
     return HandleControlActorRemoveTag(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("find_by_name") || LowerSub == TEXT("find_actors_by_name"))
+  if (LowerSub == TEXT("find_by_name"))
     return HandleControlActorFindByName(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("delete_by_tag"))
     return HandleControlActorDeleteByTag(RequestId, Payload, RequestingSocket);
@@ -2835,7 +2796,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorAction(
   if (LowerSub == TEXT("get") || LowerSub == TEXT("get_actor") ||
       LowerSub == TEXT("get_actor_by_name"))
     return HandleControlActorGet(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("find_by_class") || LowerSub == TEXT("find_actors_by_class"))
+  if (LowerSub == TEXT("find_by_class"))
     return HandleControlActorFindByClass(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("remove_component"))
     return HandleControlActorRemoveComponent(RequestId, Payload, RequestingSocket);
@@ -3296,7 +3257,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorAction(
 
   if (LowerSub == TEXT("play"))
     return HandleControlEditorPlay(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("stop") || LowerSub == TEXT("stop_pie"))
+  if (LowerSub == TEXT("stop"))
     return HandleControlEditorStop(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("eject"))
     return HandleControlEditorEject(RequestId, Payload, RequestingSocket);
@@ -3304,9 +3265,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorAction(
     return HandleControlEditorPossess(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("focus_actor"))
     return HandleControlEditorFocusActor(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("set_camera") ||
-      LowerSub == TEXT("set_camera_position") ||
-      LowerSub == TEXT("set_viewport_camera"))
+  if (LowerSub == TEXT("set_camera"))
     return HandleControlEditorSetCamera(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("set_view_mode"))
     return HandleControlEditorSetViewMode(RequestId, Payload, RequestingSocket);
@@ -3316,13 +3275,13 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorAction(
     return HandleControlEditorSetGameSpeed(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("open_asset"))
     return HandleControlEditorOpenAsset(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("screenshot") || LowerSub == TEXT("take_screenshot"))
+  if (LowerSub == TEXT("screenshot"))
     return HandleControlEditorScreenshot(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("pause"))
     return HandleControlEditorPause(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("resume"))
     return HandleControlEditorResume(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("console_command") || LowerSub == TEXT("execute_command"))
+  if (LowerSub == TEXT("execute_command"))
     return HandleControlEditorConsoleCommand(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("step_frame"))
     return HandleControlEditorStepFrame(RequestId, Payload, RequestingSocket);

@@ -4,7 +4,7 @@
 // Lighting and Rendering Environment Handlers for MCP Automation Bridge.
 //
 // This file implements the following handlers:
-// - manage_lighting (spawn_light, create_light, create_dynamic_light)
+// - manage_lighting (spawn_light, create_light)
 // - spawn_sky_light / create_sky_light
 // - build_lighting / bake_lightmap
 // - ensure_single_sky_light
@@ -111,7 +111,6 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingAction(
     const FString Lower = EffectiveAction.ToLower();
     const bool bKnownLightingAction =
         Lower.StartsWith(TEXT("spawn_light")) ||
-        Lower.StartsWith(TEXT("spawn_sky_light")) ||
         Lower.StartsWith(TEXT("create_sky_light")) ||
         Lower.StartsWith(TEXT("create_light")) ||
         Lower.StartsWith(TEXT("build_lighting")) ||
@@ -119,7 +118,6 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingAction(
         Lower.StartsWith(TEXT("ensure_single_sky_light")) ||
         Lower.StartsWith(TEXT("create_lighting_enabled_level")) ||
         Lower.StartsWith(TEXT("create_lightmass_volume")) ||
-        Lower.StartsWith(TEXT("create_dynamic_light")) ||
         Lower.StartsWith(TEXT("setup_volumetric_fog")) ||
         Lower.StartsWith(TEXT("setup_global_illumination")) ||
         Lower.StartsWith(TEXT("configure_shadows")) ||
@@ -209,14 +207,14 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingAction(
     }
 
     // =========================================================================
-    // spawn_light / create_light / create_dynamic_light
+    // spawn_light (internal, from manage_level create_light) / create_light
     // =========================================================================
     // Spawns a light actor with configurable properties:
     // - lightClass/lightType/type: Light class name
     // - location/rotation: Transform
     // - properties: intensity, color, castShadows, type-specific settings
     // -------------------------------------------------------------------------
-    if (Lower == TEXT("spawn_light") || Lower == TEXT("create_light") || Lower == TEXT("create_dynamic_light"))
+    if (Lower == TEXT("spawn_light") || Lower == TEXT("create_light"))
     {
         FString LightClassStr;
 
@@ -619,7 +617,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingAction(
     // =========================================================================
     // Spawns a SkyLight actor with optional cubemap support
     // -------------------------------------------------------------------------
-    else if (Lower == TEXT("spawn_sky_light") || Lower == TEXT("create_sky_light"))
+    else if (Lower == TEXT("create_sky_light"))
     {
         // Default location to a reasonable height for sky lights
         FVector Location = FVector(0.0f, 0.0f, 500.0f);
