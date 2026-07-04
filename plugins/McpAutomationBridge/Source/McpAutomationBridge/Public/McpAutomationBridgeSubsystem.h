@@ -733,10 +733,6 @@ private:
   HandleManageSequencerTrack(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
-  bool
-  HandleCreateAnimBlueprint(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
   // Niagara system handlers
   bool
   HandleCreateNiagaraSystem(const FString &RequestId, const FString &Action,

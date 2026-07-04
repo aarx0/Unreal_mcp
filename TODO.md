@@ -880,18 +880,26 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
-### [ ] 2026-07-04h — Dead handler-only names + hidden unadvertised functionality (follow-up sweep)
-The de-alias inventory (scratchpad alias-inventory.ps1, 2026-07-04) surfaced ~150 names in
-handler conditions that no schema advertises. Three sub-classes needing different handling:
-(1) genuinely dead spellings (`add_row`, `call_function`, `list_assets`, `destroy`-era
-leftovers) — delete from conditions after proving no rewrite produces them; (2) inventory
-false positives — suffixed variables (`NodeTypeLower ==`) and value comparisons (texture
-filter names) need a word-boundary regex, and dynamically-built prefixes
-(`TEXT("sequence_") + action`, audio_*) make prefix-family names LIVE despite looking dead;
-(3) hidden working functionality — geometry/skeleton/texture actions (append_vertex,
-add_socket, import_texture, create_cube_texture...) that are implemented but never
-advertised: decide advertise-or-delete per family, ideally as part of that family's
-FMcpCall classing. Do NOT delete anything in class (2)/(3) without the classing context.
+### [x] 2026-07-04j — action/subAction mismatch bypassed schema-enum validation
+**FIXED same day (found during the 04h sweep).** The transport mirrors `action`<->`subAction`
+when one is missing, but when a client sent BOTH, `subAction` was never validated: it is
+exempt from the decl param check (envelope key) and absent from the published schema
+(unknown keys are log-only). Handlers that dispatch on `subAction`/`LowerSub` would run a
+value the enum gate never saw — `{action:'get_info', subAction:'add_socket'}` reached
+unadvertised code. Fix: both-present-but-different now rejects INVALID_PARAMS ("send
+'action' only"). This is what makes "not in the enum = externally unreachable" actually
+true for the 04h dead-name proofs.
+
+### [~] 2026-07-04h — Dead handler-only names + hidden unadvertised functionality (follow-up sweep)
+**SWEEP EXECUTED 2026-07-04** (full report: docs/dead-name-sweep-2026-07-04.md). Inventory
+v2 (word-boundary vars, per-comparison attribution, +NativeSubAction) → 126 candidates;
+22 classify agents + adversarial refuters → **53 dead deleted** (0 refuted; every one had a
+verified advertised sibling reaching the same code — audio_* prefix family, data-table row
+aliases, control_actor leftovers, skeleton/GAS/foliage/level arms), **1 live** protected
+(`console_command`), 6 false positives. REMAINING (this entry stays open for it): the
+**66 hidden** implemented-but-unadvertised names — advertise-or-delete per family at that
+family's classing; per-name evidence + recommended dispositions in the report. Do NOT
+delete hidden entries without the classing context.
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,
@@ -927,27 +935,27 @@ errors: [MapCheck] World references spatially loaded actor ...Portal_Hum_Trigger
 The load succeeded. Same benign-noise-as-error class as the SourceControl-line false-fail
 (fixed 2026-06-x); guard should ignore `[MapCheck]` lines (they describe content, not the op).
 
-### [ ] 2026-07-04i — `animation_physics` create-anim-blueprint has a SHADOWED duplicate implementation (dead code)
-Same class as 2026-07-04b. The live path is HandleManageAnimationAuthoringAction
-(AnimationAuthoringHandlers.cpp:2554, CreatePackage + UAnimBlueprintFactory). A second,
-DIFFERENT implementation sits unreachable inside HandleAnimationPhysicsAction:
-AnimationHandlers.cpp:576 (`create_animation_bp` inline block, AssetToolsModule::CreateAsset
-path) and :3785 (stub delegating to HandleCreateAnimBlueprint, whose own gate at :4427 has no
-other caller). Unreachable because IsAnimationAuthoringAction intercepts the names upstream
-(Subsystem.cpp:1200). Verified by the de-alias fleet 2026-07-04. Fix = delete both blocks +
-HandleCreateAnimBlueprint; falls out free when animation_physics is classed.
+### [x] 2026-07-04i — `animation_physics` create-anim-blueprint has a SHADOWED duplicate implementation (dead code)
+**CLOSED 2026-07-04 (dead-name sweep commit).** Deleted all three sites: the
+`create_animation_bp` inline block (AssetToolsModule::CreateAsset path), the
+`create_anim_blueprint` delegation stub, and the orphaned HandleCreateAnimBlueprint
+(+ header declaration). The live path remains HandleManageAnimationAuthoringAction
+(AnimationAuthoringHandlers.cpp, CreatePackage + UAnimBlueprintFactory), which
+IsAnimationAuthoringAction routes to upstream. Verified by the de-alias fleet and
+re-verified by the sweep's classify+refute agents.
 
-### [ ] 2026-07-04b — `manage_effect bind_parameter_to_source` has a SHADOWED duplicate implementation
-`McpAutomationBridge_NiagaraAuthoringHandlers.cpp:2232` is the live path (probe error text
-`Missing 'systemPath'.` matches it verbatim; reads parameterName+sourceBinding+parameterType).
-`McpAutomationBridge_EffectHandlers.cpp:2761` implements the SAME action a second time
-(reads sourceType/sourceName, replies "Parameter bound (name=%s to %s.%s)") and never
-receives dispatch. Found 2026-07-04 when the decl lint flagged both files' reads for one
-action. Fix = delete the dead EffectHandlers branch (deletion doctrine); while there, sweep
-the neighbouring numbered Niagara-module branches (27 ParameterValue, 29
-enable_gpu_simulation, ...) — the whole block smells like a pre-NiagaraAuthoring relic and
-other branches may be equally unreachable. Decl truth follows the live path; the dead reads
-are pinned in `tests/schema/action-decl-lint-allowlist.txt`.
+### [x] 2026-07-04b — `manage_effect bind_parameter_to_source` has a SHADOWED duplicate implementation
+**CLOSED 2026-07-04 (dead-name sweep commit).** The "while there, sweep the neighbours"
+hunch was right and then some: a dedicated 30-branch audit proved EVERY branch of the
+EffectHandlers numbered Niagara-module block (add_spawn_rate_module ... add_simulation_stage,
+bind_parameter_to_source among them) was BOTH unreachable (IsNiagaraAuthoringSubAction
+intercepts all 30 names upstream to the live NiagaraAuthoringHandlers implementations) AND
+a lying stub — loaded the asset, discarded the parsed params, replied success without
+performing the operation (branch 1 said so in its own comment: "validates inputs and
+reports success for the operation intent"). Deleted wholesale (~886 lines incl. the two
+block-local lambdas). The live path (NiagaraAuthoringHandlers.cpp:2232 for
+bind_parameter_to_source) is untouched; decls already followed it. The stale dead-read
+pins in `tests/schema/action-decl-lint-allowlist.txt` were removed with the code.
 
 ### [ ] 2026-07-04c — `manage_asset` texture ops reject their own routing envelope (`Invalid parameter: action`)
 `adjust_levels`/`blur`/`desaturate`/`invert`/`set_streaming_priority` argless → `Error

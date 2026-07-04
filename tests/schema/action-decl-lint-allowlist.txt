@@ -193,7 +193,3 @@ inspect.inspect_cdo.actorName
 inspect.inspect_cdo.name
 inspect.inspect_cdo.objectPath
 manage_ai.add_composite_node.nodeClass
-# Dead-branch reads: EffectHandlers.cpp:2761 bind_parameter_to_source is shadowed by the
-# live NiagaraAuthoringHandlers.cpp:2232 implementation (probe error text matches the latter).
-manage_effect.bind_parameter_to_source.sourceType
-manage_effect.bind_parameter_to_source.sourceName

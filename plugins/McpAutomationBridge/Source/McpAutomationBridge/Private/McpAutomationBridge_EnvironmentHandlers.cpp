@@ -490,7 +490,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBuildEnvironmentAction(
                                              TEXT("create_procedural_terrain"),
                                              Payload, RequestingSocket);
     }
-    else if (LowerSub == TEXT("add_foliage_type") || LowerSub == TEXT("add_foliage"))
+    else if (LowerSub == TEXT("add_foliage"))
     {
         return HandleAddFoliageType(RequestId, TEXT("add_foliage_type"),
                                     Payload, RequestingSocket);

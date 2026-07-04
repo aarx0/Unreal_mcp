@@ -7865,9 +7865,6 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryAction(
     // Spline-based Operations
     if (SubAction == TEXT("extrude_along_spline")) return HandleExtrudeAlongSpline(this, RequestId, Payload, RequestingSocket);
 
-    // Aliases
-    if (SubAction == TEXT("difference")) return HandleBooleanSubtract(this, RequestId, Payload, RequestingSocket);
-
     // Edge Operations
     if (SubAction == TEXT("edge_split")) return HandleEdgeSplit(this, RequestId, Payload, RequestingSocket);
 

@@ -1404,8 +1404,6 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
       EffectiveAction = TEXT("duplicate_level");
     } else if (LowerSub == TEXT("get_summary")) {
       EffectiveAction = TEXT("get_level_info");
-    } else if (LowerSub == TEXT("delete_levels")) {
-      EffectiveAction = TEXT("delete_level");
     } else if (LowerSub == TEXT("unload")) {
       EffectiveAction = TEXT("stream_level");
       bForceStreamUnload = true;

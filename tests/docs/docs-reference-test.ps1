@@ -40,6 +40,7 @@ $skipDocs = @(
     '^docs/architecture-review-\d{4}'
     '^docs/dogfood-audit-\d{4}'
     '^docs/hardening-\d{4}'
+    '^docs/dead-name-sweep-\d{4}'
     '^docs/transport-mid-call-drop-problem\.md$'
 )
 

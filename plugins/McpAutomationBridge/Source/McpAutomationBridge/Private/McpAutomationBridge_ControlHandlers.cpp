@@ -2738,17 +2738,15 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorAction(
   if (LowerSub == TEXT("spawn_blueprint"))
     return HandleControlActorSpawnBlueprint(RequestId, Payload,
                                             RequestingSocket);
-  if (LowerSub == TEXT("delete") || LowerSub == TEXT("remove"))
+  if (LowerSub == TEXT("delete"))
     return HandleControlActorDelete(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("apply_force") ||
-      LowerSub == TEXT("apply_force_to_actor"))
+  if (LowerSub == TEXT("apply_force"))
     return HandleControlActorApplyForce(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("set_transform"))
     return HandleControlActorSetTransform(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("get_transform"))
     return HandleControlActorGetTransform(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("set_visibility") ||
-      LowerSub == TEXT("set_actor_visibility"))
+  if (LowerSub == TEXT("set_visibility"))
     return HandleControlActorSetVisibility(RequestId, Payload,
                                            RequestingSocket);
   if (LowerSub == TEXT("add_component"))
@@ -2791,7 +2789,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorAction(
                                             RequestingSocket);
   if (LowerSub == TEXT("get_metadata"))
     return HandleControlActorGetMetadata(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("list") || LowerSub == TEXT("list_actors") || LowerSub == TEXT("list_objects"))
+  if (LowerSub == TEXT("list") || LowerSub == TEXT("list_objects"))
     return HandleControlActorList(RequestId, Payload, RequestingSocket);
   if (LowerSub == TEXT("get") || LowerSub == TEXT("get_actor") ||
       LowerSub == TEXT("get_actor_by_name"))
@@ -2806,9 +2804,9 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorAction(
     return HandleSetObjectProperty(RequestId, TEXT("set_object_property"), Payload, RequestingSocket);
   if (LowerSub == TEXT("get_property"))
     return HandleGetObjectProperty(RequestId, TEXT("get_object_property"), Payload, RequestingSocket);
-  if (LowerSub == TEXT("set_collision") || LowerSub == TEXT("set_actor_collision"))
+  if (LowerSub == TEXT("set_actor_collision"))
     return HandleControlActorSetCollision(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("call_function") || LowerSub == TEXT("call_actor_function"))
+  if (LowerSub == TEXT("call_actor_function"))
     return HandleControlActorCallFunction(RequestId, Payload, RequestingSocket);
 
   SendStandardErrorResponse(

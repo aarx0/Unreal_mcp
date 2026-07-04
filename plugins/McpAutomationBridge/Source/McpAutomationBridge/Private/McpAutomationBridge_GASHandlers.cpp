@@ -3007,7 +3007,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageGASAction(
     // get_attribute - read a LIVE actor's GAS attribute value during PIE. This is the
     // verify-loop keystone for combat: enter PIE, act, then assert (e.g. Health dropped).
     // Reads the runtime ASC, NOT an asset CDO (that's get_gas_info).
-    if (SubAction == TEXT("get_attribute") || SubAction == TEXT("get_attribute_value"))
+    if (SubAction == TEXT("get_attribute"))
     {
         UWorld* PieWorld = (GEditor && GEditor->PlayWorld) ? GEditor->PlayWorld.Get() : nullptr;
         if (!PieWorld)

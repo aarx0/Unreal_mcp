@@ -8,7 +8,7 @@
 //     - import, duplicate, rename, move, delete, exists, list, search_assets
 //     - create_folder, create_material, create_material_instance
 //     - get_dependencies, get_asset_graph, set_tags, set_metadata, get_metadata
-//     - validate, generate_report, generate_thumbnail, get_material_stats
+//     - validate, generate_report, create_thumbnail, get_material_stats
 //
 //   Material Authoring:
 //     - add_material_node, connect_material_pins, remove_material_node
@@ -347,13 +347,10 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetAction(
     return HandleCreateMaterialInstance(RequestId, Payload, RequestingSocket);
   if (Lower == TEXT("create_data_table"))
     return HandleCreateDataTable(RequestId, Payload, RequestingSocket);
-  if (Lower == TEXT("add_data_table_row") || Lower == TEXT("add_row") ||
-      Lower == TEXT("edit_data_table_row") || Lower == TEXT("edit_row") ||
-      Lower == TEXT("update_data_table_row") || Lower == TEXT("update_row") ||
-      Lower == TEXT("remove_data_table_row") || Lower == TEXT("remove_row") ||
-      Lower == TEXT("delete_row") || Lower == TEXT("get_data_table_rows") ||
-      Lower == TEXT("get_rows") || Lower == TEXT("import_data_table") ||
-      Lower == TEXT("import_rows"))
+  if (Lower == TEXT("add_data_table_row") ||
+      Lower == TEXT("edit_data_table_row") ||
+      Lower == TEXT("remove_data_table_row") ||
+      Lower == TEXT("get_data_table_rows") || Lower == TEXT("import_data_table"))
     return HandleDataTableRowOp(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("create_render_target"))
     return HandleManageTextureAction(RequestId, TEXT("manage_texture"), Payload, RequestingSocket);
@@ -375,11 +372,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetAction(
     return HandleGetMetadata(RequestId, Payload, RequestingSocket);
   if (Lower == TEXT("validate"))
     return HandleValidateAsset(RequestId, Payload, RequestingSocket);
-  if (Lower == TEXT("list") || Lower == TEXT("list_assets"))
+  if (Lower == TEXT("list"))
     return HandleListAssets(RequestId, Payload, RequestingSocket);
   if (Lower == TEXT("generate_report"))
     return HandleGenerateReport(RequestId, Payload, RequestingSocket);
-  if (Lower == TEXT("create_thumbnail") || Lower == TEXT("generate_thumbnail"))
+  if (Lower == TEXT("create_thumbnail"))
     return HandleGenerateThumbnail(RequestId, Lower, Payload, RequestingSocket);
   if (Lower == TEXT("add_material_parameter"))
     return HandleAddMaterialParameter(RequestId, Payload, RequestingSocket);
@@ -1286,14 +1283,13 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
   const FString Lower = Action.ToLower();
-  if (!Lower.Equals(TEXT("generate_thumbnail"), ESearchCase::IgnoreCase) &&
-      !Lower.Equals(TEXT("create_thumbnail"), ESearchCase::IgnoreCase)) {
+  if (!Lower.Equals(TEXT("create_thumbnail"), ESearchCase::IgnoreCase)) {
     return false;
   }
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
     SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("generate_thumbnail payload missing"),
+                        TEXT("create_thumbnail payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
   }
@@ -1459,7 +1455,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
   return true;
 #else
   SendAutomationResponse(RequestingSocket, RequestId, false,
-                         TEXT("generate_thumbnail requires editor build"),
+                         TEXT("create_thumbnail requires editor build"),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
@@ -3685,19 +3681,11 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
-  const bool bAdd =
-      SubAction == TEXT("add_data_table_row") || SubAction == TEXT("add_row");
-  const bool bEdit = SubAction == TEXT("edit_data_table_row") ||
-                     SubAction == TEXT("edit_row") ||
-                     SubAction == TEXT("update_data_table_row") ||
-                     SubAction == TEXT("update_row");
-  const bool bRemove = SubAction == TEXT("remove_data_table_row") ||
-                       SubAction == TEXT("remove_row") ||
-                       SubAction == TEXT("delete_row");
-  const bool bGet = SubAction == TEXT("get_data_table_rows") ||
-                    SubAction == TEXT("get_rows");
-  const bool bImport = SubAction == TEXT("import_data_table") ||
-                       SubAction == TEXT("import_rows");
+  const bool bAdd = SubAction == TEXT("add_data_table_row");
+  const bool bEdit = SubAction == TEXT("edit_data_table_row");
+  const bool bRemove = SubAction == TEXT("remove_data_table_row");
+  const bool bGet = SubAction == TEXT("get_data_table_rows");
+  const bool bImport = SubAction == TEXT("import_data_table");
 
   FString Err;
   UDataTable *DT = McpLoadDataTableArg(Payload, Err);

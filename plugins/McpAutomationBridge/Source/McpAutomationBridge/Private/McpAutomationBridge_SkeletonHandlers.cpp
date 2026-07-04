@@ -3139,11 +3139,11 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     {
         return HandleListSockets(RequestId, Payload, RequestingSocket);
     }
-    else if (SubAction == TEXT("create_socket") || SubAction == TEXT("add_socket"))
+    else if (SubAction == TEXT("create_socket"))
     {
         return HandleCreateSocket(RequestId, Payload, RequestingSocket);
     }
-    else if (SubAction == TEXT("configure_socket") || SubAction == TEXT("modify_socket"))
+    else if (SubAction == TEXT("configure_socket"))
     {
         return HandleConfigureSocket(RequestId, Payload, RequestingSocket);
     }
@@ -3164,7 +3164,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
     {
         return HandleAddPhysicsBody(RequestId, Payload, RequestingSocket);
     }
-    else if (SubAction == TEXT("configure_physics_body") || SubAction == TEXT("modify_physics_body"))
+    else if (SubAction == TEXT("configure_physics_body"))
     {
         return HandleConfigurePhysicsBody(RequestId, Payload, RequestingSocket);
     }
@@ -3897,12 +3897,6 @@ bool UMcpAutomationBridgeSubsystem::HandleManageSkeleton(
         SendAutomationError(RequestingSocket, RequestId, TEXT("mirror_weights requires editor mode"), TEXT("NOT_EDITOR"));
         return true;
 #endif
-    }
-    // set_physics_constraint - Alias for add_physics_constraint/configure_constraint_limits
-    else if (SubAction == TEXT("set_physics_constraint"))
-    {
-        // Delegate to add_physics_constraint which handles both creation and modification
-        return HandleAddPhysicsConstraint(RequestId, Payload, RequestingSocket);
     }
     // preview_physics - explicit editor-only unsupported response
     else if (SubAction == TEXT("preview_physics"))

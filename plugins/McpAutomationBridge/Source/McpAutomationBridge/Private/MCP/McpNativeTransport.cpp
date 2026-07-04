@@ -1223,19 +1223,37 @@ void FMcpNativeTransport::HandleToolsCall(
 
 	// Normalize action/subAction both ways BEFORE validation: some handlers
 	// read "subAction", and a legacy subAction-only payload must not be
-	// rejected for a missing required "action".
+	// rejected for a missing required "action". Both present but different is
+	// rejected: only 'action' gets the schema-enum check, and handlers that
+	// dispatch on 'subAction' would otherwise run a value validation never saw.
 	if (Arguments.IsValid())
 	{
 		FString ActionVal;
-		if (!Arguments->HasField(TEXT("subAction")) &&
-			Arguments->TryGetStringField(TEXT("action"), ActionVal))
+		FString SubActionVal;
+		const bool bHasAction = Arguments->TryGetStringField(TEXT("action"), ActionVal);
+		const bool bHasSubAction = Arguments->TryGetStringField(TEXT("subAction"), SubActionVal);
+		if (bHasAction && bHasSubAction && !SubActionVal.Equals(ActionVal, ESearchCase::IgnoreCase))
+		{
+			TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
+				false,
+				FString::Printf(
+					TEXT("'action' ('%s') and 'subAction' ('%s') disagree. They are the same "
+					     "field (the server mirrors one to the other); send 'action' only."),
+					*ActionVal, *SubActionVal),
+				nullptr, TEXT("INVALID_PARAMS"));
+			FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
+			SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
+			ClientSocket->Close();
+			if (SocketSub) SocketSub->DestroySocket(ClientSocket);
+			return;
+		}
+		if (bHasAction && !bHasSubAction)
 		{
 			Arguments->SetStringField(TEXT("subAction"), ActionVal);
 		}
-		else if (!Arguments->HasField(TEXT("action")) &&
-				 Arguments->TryGetStringField(TEXT("subAction"), ActionVal))
+		else if (bHasSubAction && !bHasAction)
 		{
-			Arguments->SetStringField(TEXT("action"), ActionVal);
+			Arguments->SetStringField(TEXT("action"), SubActionVal);
 		}
 	}
 
