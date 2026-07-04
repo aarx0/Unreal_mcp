@@ -2,7 +2,7 @@
 # Regenerate: pwsh -File tests/schema/action-decl-lint.ps1 -UpdateAllowlist
 # An entry is either a read on a path the declaration deliberately excludes
 # (dead branch, alias resolved elsewhere) or a real decl gap to fix instead of pinning.
-# Bootstrap seed (2026-07-04): all entries below are parser brace-scope mis-attributions
+# Bootstrap seed (2026-07-04): entries below are parser brace-scope mis-attributions
 # (one read site charged to >2 actions via skewed brace ranges) — not decl gaps.
 # Verified by site-grouping during the fleet bootstrap; burn down opportunistically.
 
@@ -12,7 +12,6 @@ control_editor.jump_to_bookmark.assetPath
 control_editor.possess.assetPath
 control_editor.screenshot.assetPath
 control_editor.set_camera_fov.assetPath
-control_editor.set_camera_position.assetPath
 control_editor.set_camera.assetPath
 control_editor.set_editor_mode.assetPath
 control_editor.set_fixed_delta_time.assetPath
@@ -21,7 +20,6 @@ control_editor.set_game_view.assetPath
 control_editor.set_immersive_mode.assetPath
 control_editor.set_preferences.assetPath
 control_editor.set_view_mode.assetPath
-control_editor.set_viewport_camera.assetPath
 control_editor.set_viewport_realtime.assetPath
 control_editor.simulate_input.assetPath
 control_editor.start_recording.assetPath
@@ -63,8 +61,6 @@ manage_asset.create_material_instance.checkoutFiles
 manage_asset.create_material_instance.directoryPath
 manage_asset.create_material.checkoutFiles
 manage_asset.create_material.directoryPath
-manage_asset.create_render_target.checkoutFiles
-manage_asset.create_render_target.directoryPath
 manage_asset.delete.checkoutFiles
 manage_asset.delete.directoryPath
 manage_asset.duplicate.checkoutFiles
@@ -137,8 +133,6 @@ manage_asset.rename.path
 manage_asset.reset_instance_parameters.checkoutFiles
 manage_asset.reset_instance_parameters.directoryPath
 manage_asset.reset_instance_parameters.path
-manage_asset.search_assets.checkoutFiles
-manage_asset.search_assets.directoryPath
 manage_asset.set_asset_property.checkoutFiles
 manage_asset.set_asset_property.directoryPath
 manage_asset.set_asset_property.path

@@ -18,6 +18,7 @@ inline const FMcpParamDecl P_SystemControl_5[] = { { TEXT("enabled"), EMcpParamK
 inline const FMcpParamDecl P_SystemControl_6[] = { { TEXT("enabled"), EMcpParamKind::Bool, false }, { TEXT("slop"), EMcpParamKind::Number, false }, { TEXT("minScreenRadius"), EMcpParamKind::Number, false } };
 inline const FMcpParamDecl P_SystemControl_7[] = { { TEXT("functionName"), EMcpParamKind::String, true }, { TEXT("enabled"), EMcpParamKind::Bool, false }, { TEXT("poolSize"), EMcpParamKind::Number, false }, { TEXT("boostPlayerLocation"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_SystemControl_8[] = { { TEXT("enabled"), EMcpParamKind::Bool, false }, { TEXT("cellSize"), EMcpParamKind::Number, false }, { TEXT("loadingRange"), EMcpParamKind::Number, false } };
+inline const FMcpParamDecl P_SystemControl_9[] = { { TEXT("command"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_SystemControl_10[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("widgetType"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_SystemControl_11[] = { { TEXT("enabled"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_SystemControl_13[] = { { TEXT("code"), EMcpParamKind::String, false }, { TEXT("file"), EMcpParamKind::String, false }, { TEXT("allowModalApis"), EMcpParamKind::Bool, false } };
@@ -44,6 +45,7 @@ inline const FMcpParamDecl P_SystemControl_38[] = { { TEXT("enabled"), EMcpParam
 inline const FMcpParamDecl P_SystemControl_39[] = { { TEXT("category"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_SystemControl_40[] = { { TEXT("categoryName"), EMcpParamKind::String, false }, { TEXT("category"), EMcpParamKind::String, false }, { TEXT("enabled"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_SystemControl_42[] = { { TEXT("channels"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_SystemControl_45[] = { { TEXT("count"), EMcpParamKind::Number, false }, { TEXT("sinceSeq"), EMcpParamKind::Number, false }, { TEXT("verbosity"), EMcpParamKind::String, false }, { TEXT("category"), EMcpParamKind::String, false }, { TEXT("contains"), EMcpParamKind::String, false } };
 
 inline const FMcpCallDecl GSystemControl[] =
 {
@@ -56,7 +58,7 @@ inline const FMcpCallDecl GSystemControl[] =
 	{ TEXT("system_control"), TEXT("configure_occlusion_culling"), P_SystemControl_6, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("configure_texture_streaming"), P_SystemControl_7, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("configure_world_partition"), P_SystemControl_8, EMcpCallFlags::None },
-	{ TEXT("system_control"), TEXT("console_command"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("system_control"), TEXT("console_command"), P_SystemControl_9, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("create_widget"), P_SystemControl_10, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("enable_gpu_timing"), P_SystemControl_11, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("execute_command"), {}, EMcpCallFlags::UnverifiedDecl },
@@ -89,10 +91,10 @@ inline const FMcpCallDecl GSystemControl[] =
 	{ TEXT("system_control"), TEXT("show_stats"), P_SystemControl_39, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("spawn_category"), P_SystemControl_40, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("start_profiling"), {}, EMcpCallFlags::UnverifiedDecl },
-	{ TEXT("system_control"), TEXT("start_session"), P_SystemControl_42, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("system_control"), TEXT("start_session"), P_SystemControl_42, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("stop_profiling"), {}, EMcpCallFlags::UnverifiedDecl },
 	{ TEXT("system_control"), TEXT("subscribe"), {}, EMcpCallFlags::UnverifiedDecl },
-	{ TEXT("system_control"), TEXT("tail_log"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("system_control"), TEXT("tail_log"), P_SystemControl_45, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("unsubscribe"), {}, EMcpCallFlags::UnverifiedDecl },
 };
 }

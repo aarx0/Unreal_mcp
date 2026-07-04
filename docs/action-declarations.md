@@ -40,16 +40,25 @@ parser survives only as a lint.
   MUST be classes; legacy actions are shims (declaration + legacy family
   dispatch) that convert per-family, opportunistically.
 
-## Bootstrap state (2026-07-04)
+## Bootstrap state (2026-07-04, after the attribution burn-down)
 
-1171 declarations registered at boot. 1035 fleet-verified; 136 `UnverifiedDecl`
-(validation skips them). The biggest unverified class: actions whose handler
-dispatches on an INTERNAL name that collides with another tool's advertised
-action (`manage_asset.delete_asset` → internal `delete`, which `build_environment`
-also advertises) — the registration-gate translation maps are the fix (follow-up
-in TODO). The lint's bootstrap allowlist pins 151 parser brace-scope
-mis-attributions. Pre-ship false-positive sweep: material battery 18/18 +
-full ui-nav suite + assorted calls = zero per-action rejections on valid traffic.
+1171 declarations registered at boot; **1064 verified (91%)**, 107 `UnverifiedDecl`
+(validation skips them — never enforce unattributed truth). The burn-down pass
+resolved the alias-group class (handlers comparing several names in one
+condition — `delete || delete_asset || delete_assets` — synthesized from
+same-brace-range marker groups), the cross-file-delegation class (any
+high-confidence contributor verifies a merged entry), and the
+internal-name-only files (file→tool affinity seeded from filenames;
+`manage_tools` hand-authored — it lives in the transport, which the fleet
+never read). A live probe of all remaining unverified actions found exactly
+**2 dead** (`control_editor.set_viewport_resolution`,
+`manage_sequence.set_metadata` — advertised, no code path; implement-or-delete
+in TODO); the other 105 are implemented but dispatched through mechanisms
+neither the fleet's file-scoped prompts nor the parser attribute yet (mixed
+utility files, function-per-action dispatch). The lint's bootstrap allowlist
+pins 145 parser brace-scope mis-attributions. False-positive sweep: material
+battery 18/18 + full ui-nav suite + assorted calls = zero per-action
+rejections on valid traffic.
 
 ## Migration rules (agreed 2026-07-04)
 

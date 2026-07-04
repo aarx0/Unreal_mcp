@@ -93,13 +93,19 @@ IS declared for the widget/common creates on this tool).
 >   ~~Parsed table as source of truth~~ REPLACED 2026-07-04 (Aaron: declarations are
 >   authored data, parsers don't produce truth): fleet-authored McpDecl_*.h (1171 decls,
 >   FMcpCallRegistry, FMcpCall base for classed actions) — see docs/action-declarations.md.
->   Registry follow-ups: (i) attribute the 136 UnverifiedDecl actions — biggest class is
->   internal dispatch names colliding with another tool's advertised action
->   (manage_asset.delete_asset → internal `delete`); fix = extract the registration-gate
->   translation maps; (ii) burn down the lint's 151 brace-skew pins; (iii) enforce
->   bRequired after its own evidence pass; (iv) pilot family classed as FMcpCall
->   (manage_sequence or manage_networking), family dispatch chain deleted same commit;
->   (v) Stage 3: derive published schemas from declarations, delete the hand-built bags.
+>   ~~(i) attribute UnverifiedDecl actions~~ BURN-DOWN PASS 2026-07-04: 209→107 flagged
+>   (alias-group synthesis from same-brace-range markers — the `delete||delete_asset`
+>   class; any-high-contributor confidence merge; filename→tool affinity seeding;
+>   manage_tools hand-authored). Live probe of the 107: exactly 2 DEAD
+>   (control_editor.set_viewport_resolution, manage_sequence.set_metadata — advertised,
+>   no code path; implement or delete from schema), 105 alive-but-unattributed (mixed
+>   utility files like Environment/Property/Ui/FocusInput, function-per-action dispatch)
+>   — safe skips, burn down when touching those families.
+>   Remaining registry follow-ups: (ii) burn down the lint's 145 brace-skew pins;
+>   (iii) enforce bRequired after its own evidence pass; (iv) pilot family classed as
+>   FMcpCall (manage_sequence or manage_networking), family dispatch chain deleted same
+>   commit; (v) Stage 3: derive published schemas from declarations, delete the
+>   hand-built bags.
 >   NEXT: (b) Phase 2 = the apply-session receipt
 >   (appliedProperties/ignoredParams via a shared collector in McpHandlerUtils) for
 >   what only the engine call can know — scope shrinks to runtime/target-dependent
