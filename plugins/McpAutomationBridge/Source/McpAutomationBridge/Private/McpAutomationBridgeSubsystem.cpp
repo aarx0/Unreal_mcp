@@ -60,6 +60,13 @@ static bool IsKnownBenignMcpCompilerWarning(const FString& Message)
     {
         return true;
     }
+    // MapCheck diagnostics logged at Error severity during level loads (e.g.
+    // "[MapCheck] World references spatially loaded actor ..."). They describe
+    // the loaded content, not the operation — the load itself succeeded.
+    if (Message.Contains(TEXT("[MapCheck]")))
+    {
+        return true;
+    }
     return false;
 }
 

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Small-bug batch: texture envelope reject, create_light fail-fast, MapCheck false-fail (2026-07-04)
+
+- **Texture ops no longer reject their own envelope** (TODO 04c): every per-branch ValidParams allowlist admits the mirrored `action` key (they predated the action/subAction bidirectional mirror), and an empty required path now says `assetPath required` instead of blaming "traversal or invalid characters" on a string that was simply absent.
+- **`manage_level create_light` requires `location`** (TODO 04d): an argless call previously spawned a default PointLight at origin silently — a fail-fast violation that mutated the level. Both implementations gate now (the manage_level rewrite in LevelHandlers and the full spawn_light in LightingHandlers — a duplicate-implementation pair noted for dedup at manage_level's classing).
+- **`[MapCheck]` diagnostics are benign to the post-op guard** (TODO 04f): loading a level whose content carries MapCheck warnings no longer converts a successful load into ENGINE_ERROR; MapCheck lines describe the content, not the operation.
+
 ### manage_sequence classed — second FMcpCall family (2026-07-04)
 
 - **32 classes in `MCP/Calls/McpCalls_ManageSequence.cpp`; the `sequence_*` manufactured-name family is extinct.** The legacy dispatcher prefixed every payload sub-action with `sequence_` and string-matched the result — 32 internal names no schema ever advertised, the largest surviving block of runtime-manufactured dispatch names from the de-alias postmortem. Chain, prefix machinery, shim decl header (`McpDecl_ManageSequence.h`), and handler-map registration all died with this conversion. The shim decls were already true per-action contracts (no mega-bags), so the classing transfers them verbatim — but now with authored flags: `RequiresEditor` on all but pure-reflection `list_track_types`, `Mutating` on the 21 writers (the shim rows carried `None` throughout).

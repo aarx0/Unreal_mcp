@@ -360,7 +360,7 @@ TSharedPtr<FJsonObject> UMcpAutomationBridgeSubsystem::HandleManageTextureAction
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("name"), TEXT("path"), TEXT("noiseType"),
+            TEXT("subAction"), TEXT("action"), TEXT("name"), TEXT("path"), TEXT("noiseType"),
             TEXT("width"), TEXT("height"), TEXT("scale"), TEXT("octaves"),
             TEXT("persistence"), TEXT("lacunarity"), TEXT("seed"),
             TEXT("seamless"), TEXT("hdr"), TEXT("save")
@@ -480,7 +480,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("name"), TEXT("path"), TEXT("gradientType"),
+            TEXT("subAction"), TEXT("action"), TEXT("name"), TEXT("path"), TEXT("gradientType"),
             TEXT("width"), TEXT("height"), TEXT("angle"), TEXT("centerX"),
             TEXT("centerY"), TEXT("radius"), TEXT("hdr"), TEXT("save"),
             TEXT("startColor"), TEXT("endColor")
@@ -634,7 +634,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("name"), TEXT("path"), TEXT("patternType"),
+            TEXT("subAction"), TEXT("action"), TEXT("name"), TEXT("path"), TEXT("patternType"),
             TEXT("width"), TEXT("height"), TEXT("tilesX"), TEXT("tilesY"),
             TEXT("lineWidth"), TEXT("brickRatio"), TEXT("offset"), TEXT("save"),
             TEXT("primaryColor"), TEXT("secondaryColor")
@@ -804,7 +804,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("sourceTexture"), TEXT("name"), TEXT("path"),
+            TEXT("subAction"), TEXT("action"), TEXT("sourceTexture"), TEXT("name"), TEXT("path"),
             TEXT("strength"), TEXT("algorithm"), TEXT("flipY"), TEXT("save"),
             TEXT("channelMode")
         };
@@ -824,7 +824,9 @@ Response->SetBoolField(TEXT("success"), true);
         FString SanitizedSource = SanitizeProjectRelativePath(SourceTexture);
         if (SanitizedSource.IsEmpty())
         {
-            TEXTURE_ERROR_RESPONSE(TEXT("Invalid sourceTexture: contains traversal or invalid characters"));
+            TEXTURE_ERROR_RESPONSE(SourceTexture.IsEmpty()
+                ? TEXT("sourceTexture required")
+                : TEXT("Invalid sourceTexture: contains traversal or invalid characters"));
         }
         SourceTexture = SanitizedSource;
         
@@ -1034,7 +1036,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("assetPath"), TEXT("compressionSettings"), TEXT("save")
+            TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("compressionSettings"), TEXT("save")
         };
         for (const auto& Field : Params->Values)
         {
@@ -1050,7 +1052,9 @@ Response->SetBoolField(TEXT("success"), true);
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
         if (SanitizedAssetPath.IsEmpty())
         {
-            TEXTURE_ERROR_RESPONSE(TEXT("Invalid assetPath: contains traversal or invalid characters"));
+            TEXTURE_ERROR_RESPONSE(AssetPath.IsEmpty()
+                ? TEXT("assetPath required")
+                : TEXT("Invalid assetPath: contains traversal or invalid characters"));
         }
         AssetPath = SanitizedAssetPath;
         
@@ -1104,7 +1108,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("assetPath"), TEXT("textureGroup"), TEXT("save")
+            TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("textureGroup"), TEXT("save")
         };
         for (const auto& Field : Params->Values)
         {
@@ -1120,7 +1124,9 @@ Response->SetBoolField(TEXT("success"), true);
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
         if (SanitizedAssetPath.IsEmpty())
         {
-            TEXTURE_ERROR_RESPONSE(TEXT("Invalid assetPath: contains traversal or invalid characters"));
+            TEXTURE_ERROR_RESPONSE(AssetPath.IsEmpty()
+                ? TEXT("assetPath required")
+                : TEXT("Invalid assetPath: contains traversal or invalid characters"));
         }
         AssetPath = SanitizedAssetPath;
         
@@ -1174,7 +1180,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("assetPath"), TEXT("lodBias"), TEXT("save")
+            TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("lodBias"), TEXT("save")
         };
         for (const auto& Field : Params->Values)
         {
@@ -1190,7 +1196,9 @@ Response->SetBoolField(TEXT("success"), true);
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
         if (SanitizedAssetPath.IsEmpty())
         {
-            TEXTURE_ERROR_RESPONSE(TEXT("Invalid assetPath: contains traversal or invalid characters"));
+            TEXTURE_ERROR_RESPONSE(AssetPath.IsEmpty()
+                ? TEXT("assetPath required")
+                : TEXT("Invalid assetPath: contains traversal or invalid characters"));
         }
         AssetPath = SanitizedAssetPath;
         
@@ -1230,7 +1238,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("assetPath"), TEXT("virtualTextureStreaming"), TEXT("tileSize"), TEXT("tileBorderSize"), TEXT("save")
+            TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("virtualTextureStreaming"), TEXT("tileSize"), TEXT("tileBorderSize"), TEXT("save")
         };
         for (const auto& Field : Params->Values)
         {
@@ -1246,7 +1254,9 @@ Response->SetBoolField(TEXT("success"), true);
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
         if (SanitizedAssetPath.IsEmpty())
         {
-            TEXTURE_ERROR_RESPONSE(TEXT("Invalid assetPath: contains traversal or invalid characters"));
+            TEXTURE_ERROR_RESPONSE(AssetPath.IsEmpty()
+                ? TEXT("assetPath required")
+                : TEXT("Invalid assetPath: contains traversal or invalid characters"));
         }
         AssetPath = SanitizedAssetPath;
         
@@ -1291,7 +1301,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("assetPath"), TEXT("neverStream"), TEXT("streamingPriority"), TEXT("save")
+            TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("neverStream"), TEXT("streamingPriority"), TEXT("save")
         };
         for (const auto& Field : Params->Values)
         {
@@ -1307,7 +1317,9 @@ Response->SetBoolField(TEXT("success"), true);
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
         if (SanitizedAssetPath.IsEmpty())
         {
-            TEXTURE_ERROR_RESPONSE(TEXT("Invalid assetPath: contains traversal or invalid characters"));
+            TEXTURE_ERROR_RESPONSE(AssetPath.IsEmpty()
+                ? TEXT("assetPath required")
+                : TEXT("Invalid assetPath: contains traversal or invalid characters"));
         }
         AssetPath = SanitizedAssetPath;
         
@@ -1346,7 +1358,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("assetPath")
+            TEXT("subAction"), TEXT("action"), TEXT("assetPath")
         };
         for (const auto& Field : Params->Values)
         {
@@ -1362,7 +1374,9 @@ Response->SetBoolField(TEXT("success"), true);
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
         if (SanitizedAssetPath.IsEmpty())
         {
-            TEXTURE_ERROR_RESPONSE(TEXT("Invalid assetPath: contains traversal or invalid characters"));
+            TEXTURE_ERROR_RESPONSE(AssetPath.IsEmpty()
+                ? TEXT("assetPath required")
+                : TEXT("Invalid assetPath: contains traversal or invalid characters"));
         }
         AssetPath = SanitizedAssetPath;
         
@@ -1420,7 +1434,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("sourcePath"), TEXT("name"), TEXT("path"),
+            TEXT("subAction"), TEXT("action"), TEXT("sourcePath"), TEXT("name"), TEXT("path"),
             TEXT("newWidth"), TEXT("newHeight"), TEXT("filterMethod"), TEXT("save")
         };
         for (const auto& Field : Params->Values)
@@ -1439,7 +1453,9 @@ Response->SetBoolField(TEXT("success"), true);
         FString SanitizedSource = SanitizeProjectRelativePath(SourcePath);
         if (SanitizedSource.IsEmpty())
         {
-            TEXTURE_ERROR_RESPONSE(TEXT("Invalid sourcePath: contains traversal or invalid characters"));
+            TEXTURE_ERROR_RESPONSE(SourcePath.IsEmpty()
+                ? TEXT("sourcePath required")
+                : TEXT("Invalid sourcePath: contains traversal or invalid characters"));
         }
         SourcePath = SanitizedSource;
         
@@ -1661,7 +1677,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("assetPath"), TEXT("inPlace"), TEXT("name"), TEXT("path"), TEXT("save"),
+            TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("inPlace"), TEXT("name"), TEXT("path"), TEXT("save"),
             TEXT("invertAlpha"), TEXT("channel"), TEXT("outputPath")
         };
         for (const auto& Field : Params->Values)
@@ -1678,7 +1694,9 @@ Response->SetBoolField(TEXT("success"), true);
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
         if (SanitizedAssetPath.IsEmpty())
         {
-            TEXTURE_ERROR_RESPONSE(TEXT("Invalid assetPath: contains traversal or invalid characters"));
+            TEXTURE_ERROR_RESPONSE(AssetPath.IsEmpty()
+                ? TEXT("assetPath required")
+                : TEXT("Invalid assetPath: contains traversal or invalid characters"));
         }
         AssetPath = SanitizedAssetPath;
         
@@ -1783,7 +1801,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("assetPath"), TEXT("amount"), TEXT("inPlace"),
+            TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("amount"), TEXT("inPlace"),
             TEXT("name"), TEXT("path"), TEXT("save"), TEXT("method"), TEXT("outputPath")
         };
         for (const auto& Field : Params->Values)
@@ -1800,7 +1818,9 @@ Response->SetBoolField(TEXT("success"), true);
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
         if (SanitizedAssetPath.IsEmpty())
         {
-            TEXTURE_ERROR_RESPONSE(TEXT("Invalid assetPath: contains traversal or invalid characters"));
+            TEXTURE_ERROR_RESPONSE(AssetPath.IsEmpty()
+                ? TEXT("assetPath required")
+                : TEXT("Invalid assetPath: contains traversal or invalid characters"));
         }
         AssetPath = SanitizedAssetPath;
         
@@ -1903,7 +1923,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("assetPath"), TEXT("inBlack"), TEXT("inWhite"),
+            TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("inBlack"), TEXT("inWhite"),
             TEXT("gamma"), TEXT("outBlack"), TEXT("outWhite"), TEXT("inPlace"), TEXT("save")
         };
         for (const auto& Field : Params->Values)
@@ -1920,7 +1940,9 @@ Response->SetBoolField(TEXT("success"), true);
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
         if (SanitizedAssetPath.IsEmpty())
         {
-            TEXTURE_ERROR_RESPONSE(TEXT("Invalid assetPath: contains traversal or invalid characters"));
+            TEXTURE_ERROR_RESPONSE(AssetPath.IsEmpty()
+                ? TEXT("assetPath required")
+                : TEXT("Invalid assetPath: contains traversal or invalid characters"));
         }
         AssetPath = SanitizedAssetPath;
         
@@ -1995,7 +2017,7 @@ Response->SetBoolField(TEXT("success"), true);
     {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
-            TEXT("subAction"), TEXT("assetPath"), TEXT("radius"), TEXT("blurType"),
+            TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("radius"), TEXT("blurType"),
             TEXT("outputPath"), TEXT("save")
         };
         for (const auto& Field : Params->Values)
@@ -2012,7 +2034,9 @@ Response->SetBoolField(TEXT("success"), true);
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
         if (SanitizedAssetPath.IsEmpty())
         {
-            TEXTURE_ERROR_RESPONSE(TEXT("Invalid assetPath: contains traversal or invalid characters"));
+            TEXTURE_ERROR_RESPONSE(AssetPath.IsEmpty()
+                ? TEXT("assetPath required")
+                : TEXT("Invalid assetPath: contains traversal or invalid characters"));
         }
         AssetPath = SanitizedAssetPath;
         

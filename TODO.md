@@ -928,12 +928,11 @@ REMAINING: control_editor's union-bag entries (P_ControlEditor_* duplicates) —
 treatment when that family is classed, or an action-scoped agent pass sooner if a false
 reject surfaces.
 
-### [ ] 2026-07-04f — `manage_level load` reports ENGINE_ERROR for a pre-existing MapCheck content warning
-Loading HubWorld returns `Error [ENGINE_ERROR]: Handler reported success but Unreal logged
-errors: [MapCheck] World references spatially loaded actor ...Portal_Hum_Trigger_Forest`
-— the post-op fail-loudly guard treats the level's own MapCheck warnings as handler errors.
-The load succeeded. Same benign-noise-as-error class as the SourceControl-line false-fail
-(fixed 2026-06-x); guard should ignore `[MapCheck]` lines (they describe content, not the op).
+### [x] 2026-07-04f — `manage_level load` reports ENGINE_ERROR for a pre-existing MapCheck content warning
+**CLOSED 2026-07-04.** `[MapCheck]` lines are classified benign by the post-op guard
+(IsKnownBenignMcpCompilerWarning) — they describe the loaded content, not the operation,
+same class as the SourceControl-line false-fail. Repro'd live: load HubWorld (with its
+Portal_Hum_Trigger_Forest MapCheck warning) returns "Level loaded", no ENGINE_ERROR.
 
 ### [x] 2026-07-04i — `animation_physics` create-anim-blueprint has a SHADOWED duplicate implementation (dead code)
 **CLOSED 2026-07-04 (dead-name sweep commit).** Deleted all three sites: the
@@ -957,17 +956,23 @@ block-local lambdas). The live path (NiagaraAuthoringHandlers.cpp:2232 for
 bind_parameter_to_source) is untouched; decls already followed it. The stale dead-read
 pins in `tests/schema/action-decl-lint-allowlist.txt` were removed with the code.
 
-### [ ] 2026-07-04c — `manage_asset` texture ops reject their own routing envelope (`Invalid parameter: action`)
-`adjust_levels`/`blur`/`desaturate`/`invert`/`set_streaming_priority` argless → `Error
-[TEXTURE_ERROR]: Invalid parameter: action` — the texture param validator strict-rejects
-unknown payload keys and chokes on the envelope's own `action` field before ever saying
-what's actually missing (`assetPath`). Error should name the real gap; validator should
-ignore envelope keys.
+### [x] 2026-07-04c — `manage_asset` texture ops reject their own routing envelope (`Invalid parameter: action`)
+**CLOSED 2026-07-04.** Every per-branch ValidParams allowlist now admits the mirrored
+`action` envelope key (they listed only `subAction`; the 04j bidirectional mirror made
+`action` always present), and empty required paths say "assetPath required" — an empty
+string previously fell through SanitizeProjectRelativePath and got blamed as "traversal
+or invalid characters". Argless adjust_levels/invert now name the real gap; junk params
+still reject at the transport with the declared list.
 
-### [ ] 2026-07-04d — `manage_level create_light` with zero params silently spawns a default PointLight at origin
-Fail-fast violation found by the argless probe (it mutated the level). `lightType` defaults
-to "Point", location/rotation default to origin. Should require at least a location (or an
-explicit confirmation param) before mutating the world.
+### [x] 2026-07-04d — `manage_level create_light` with zero params silently spawns a default PointLight at origin
+**CLOSED 2026-07-04.** `location` is required before either implementation mutates the
+level: argless → MISSING_PARAMETER, zero actors spawned (verified by before/after
+find_by_class); explicit location still spawns. FOUND WHILE FIXING: create_light has TWO
+implementations — manage_level's branch (LevelHandlers.cpp) rewrites the payload to
+`execute_editor_function SPAWN_ACTOR_AT_LOCATION` and never reaches the full spawn_light
+implementation in LightingHandlers.cpp (intensity/color/shadows/sky support). Both now
+gate on location; the dedup belongs to manage_level's classing (rule 5 converts the
+rewrite to a typed call — pick the LightingHandlers implementation then).
 
 ### [x] 2026-07-02b — Intermittent spurious `TOOL_DISABLED` on `manage_networking` (fresh-session flake)
 **CLOSED 2026-07-03.** Root cause was the audit's own tools-agent mutating the then-GLOBAL

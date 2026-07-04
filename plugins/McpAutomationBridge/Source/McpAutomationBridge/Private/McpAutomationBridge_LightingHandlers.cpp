@@ -347,12 +347,11 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingAction(
             *LightClassStr, *LightClass->GetName(), *LightClass->GetPathName());
 
         // ---------------------------------------------------------------------
-        // Parse Location (default to reasonable height above ground)
+        // Parse Location — required: an argless call must not mutate the level.
         // ---------------------------------------------------------------------
-        FVector Location = FVector(0.0f, 0.0f, 300.0f);
+        FVector Location = FVector::ZeroVector;
         const TSharedPtr<FJsonObject> *LocPtr;
-        bool bHasExplicitLocation = Payload->TryGetObjectField(TEXT("location"), LocPtr);
-        if (bHasExplicitLocation)
+        if (Payload->TryGetObjectField(TEXT("location"), LocPtr))
         {
             Location.X = GetJsonNumberField((*LocPtr), TEXT("x"));
             Location.Y = GetJsonNumberField((*LocPtr), TEXT("y"));
@@ -360,8 +359,10 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingAction(
         }
         else
         {
-            UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
-                TEXT("spawn_light: No location provided, using default (0, 0, 300)"));
+            SendAutomationError(RequestingSocket, RequestId,
+                TEXT("create_light requires 'location' ({x,y,z}) before it will spawn into the level"),
+                TEXT("MISSING_PARAMETER"));
+            return true;
         }
 
         // ---------------------------------------------------------------------

@@ -2274,9 +2274,20 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
     return true;
   }
   if (EffectiveAction == TEXT("spawn_light")) {
+    // location is required: an argless call must not mutate the level.
+    const TSharedPtr<FJsonObject> *L = nullptr;
+    if (!Payload.IsValid() ||
+        !Payload->TryGetObjectField(TEXT("location"), L) || !L ||
+        !(*L).IsValid()) {
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          TEXT("create_light requires 'location' ({x,y,z}) before it will "
+               "spawn into the level"),
+          TEXT("MISSING_PARAMETER"));
+      return true;
+    }
     FString LightType = TEXT("Point");
-    if (Payload.IsValid())
-      Payload->TryGetStringField(TEXT("lightType"), LightType);
+    Payload->TryGetStringField(TEXT("lightType"), LightType);
     const FString LT = LightType.ToLower();
     FString ClassName;
     if (LT == TEXT("directional"))
@@ -2288,11 +2299,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
     else
       ClassName = TEXT("PointLight");
     TSharedPtr<FJsonObject> Params = McpHandlerUtils::CreateResultObject();
-    if (Payload.IsValid()) {
-      const TSharedPtr<FJsonObject> *L = nullptr;
-      if (Payload->TryGetObjectField(TEXT("location"), L) && L &&
-          (*L).IsValid())
-        Params->SetObjectField(TEXT("location"), *L);
+    Params->SetObjectField(TEXT("location"), *L);
+    {
       const TSharedPtr<FJsonObject> *R = nullptr;
       if (Payload->TryGetObjectField(TEXT("rotation"), R) && R &&
           (*R).IsValid())
