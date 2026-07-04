@@ -2,6 +2,7 @@
 #include "MCP/McpJsonRpc.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpToolDefinition.h"
+#include "MCP/McpActionParamTable.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeSettings.h"
 #include "Misc/Guid.h"
@@ -1433,6 +1434,38 @@ void FMcpNativeTransport::HandleToolsCall(
 		ClientSocket->Close();
 		if (SocketSub) SocketSub->DestroySocket(ClientSocket);
 		return;
+	}
+
+	// Per-action param check, warn-first (the table is generated from handler
+	// source by scripts/generate-action-param-table.ps1). Schemas declare
+	// params per TOOL, so a param sent to an action that never reads it sails
+	// through the schema check and is silently ignored — the biggest remaining
+	// silent-no-op class. Promote to INVALID_PARAMS once the warnings prove
+	// quiet, same evidence gate the required/enum rejection passed.
+	if (Arguments.IsValid())
+	{
+		FString ActionValue;
+		if (Arguments->TryGetStringField(TEXT("action"), ActionValue))
+		{
+			if (const TSet<FString>* ActionSet =
+					McpActionParams::FindActionParams(ToolName, ActionValue))
+			{
+				const TSet<FString>& Shared = McpActionParams::GlobalSharedParams();
+				for (const auto& Pair : Arguments->Values)
+				{
+					if (Pair.Key == TEXT("action") || Pair.Key == TEXT("subAction"))
+					{
+						continue;
+					}
+					if (!ActionSet->Contains(Pair.Key) && !Shared.Contains(Pair.Key))
+					{
+						UE_LOG(LogMcpNativeTransport, Warning,
+							TEXT("%s.%s: param '%s' is not read by this action (per-action table, warn-first)"),
+							*ToolName, *ActionValue, *Pair.Key);
+					}
+				}
+			}
+		}
 	}
 
 	// Unknown names get UNKNOWN_TOOL, not TOOL_DISABLED: a manage_tools enable

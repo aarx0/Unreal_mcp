@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Per-action param registry (2026-07-03, warn-first)
+
+- **Params sent to an action that never reads them are now detected** — the largest remaining silent-no-op class. Schemas declare params per *tool* (~150 in `manage_blueprint`'s flat bag), so `fromState` sent to `create_node` passed every existing check and was silently ignored. A generated table (`McpActionParamTable.h`, 945 tool.action entries) records which params each action's handler branch actually reads, and the transport flags violations — **warn-first**, promoted to `INVALID_PARAMS` rejection once the log evidence proves the table trustworthy (the same gate the required/enum rejection passed).
+- **The table is generated, not hand-written:** `scripts/generate-action-param-table.ps1` parses handler source — action-comparison branch markers segment each file by brace scope, payload reads inside a branch belong to that action, prologue reads are file-shared, reads in files without branches (shared helpers, function-per-action handlers) are global-shared. Attribution is fail-permissive by construction: a missed read can only suppress a warning, never invent one. Tool→action truth comes from the schema golden. `tests/schema/action-param-table-test.ps1` regenerates and diffs so the checked-in table cannot drift from handler source (battery member #5).
+- Emitted as constant-initialized C arrays — an `initializer_list` aggregate or one 945-call initializer function trips MSVC C4883 (function too large to optimize) at this entry count.
+
 ### Blind-sleep triage (2026-07-03)
 
 - **All 19 `FPlatformProcess::Sleep` sites classified; 14 game-thread stalls eliminated.** The core insight: a game-thread sleep runs no engine ticks, so every "let the engine settle/process/stabilize" delay was provably doing nothing — the engine *can't* settle while the handler sleeps. Survivors: 3 socket-thread polls/backoffs in the transport (legitimate cross-thread waits, one with game-thread task pumping) and 2 failure-path-only backoffs (level-save file-visibility retry ladder, folder-delete retry).

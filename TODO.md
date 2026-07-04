@@ -82,6 +82,21 @@ IS declared for the widget/common creates on this tool).
 > - **Global response policy:** every mutating handler returns `appliedProperties`/`ignoredParams`
 >   and errors when zero requested changes applied — done in the domains touched above,
 >   not yet a repo-wide convention (overlaps F7 scaffoldOnly markers).
+>   **Phase 1 SHIPPED 2026-07-03 (Aaron's "declare params per command, validate in one
+>   place"):** generated per-action param table (945 entries, brace-scope attribution
+>   from handler source, freshness-tested) + transport warn-first check for params the
+>   called action never reads. NEXT: (a) flip to INVALID_PARAMS rejection once warnings
+>   prove quiet on real sessions; (b) Phase 2 = the apply-session receipt
+>   (appliedProperties/ignoredParams via a shared collector in McpHandlerUtils) for
+>   what only the engine call can know — scope shrinks to runtime/target-dependent
+>   ignores now that wrong-action params are caught centrally; (c) generator coverage
+>   upgrade: single-line dispatch (`if (X == TEXT("a")) return HandleA(...);` — the
+>   whole manage_geometry create family, manage_level.set_level_visibility) yields no
+>   entry today (validator skips those actions, fail-permissive); attribute the called
+>   function's body reads to the action. 14-entry spot-check found + fixed 2 live
+>   false-warning paths pre-ship: Params-named payload receivers (set_bone_key
+>   `frame`), GAS alias-loop keys (attributeSetPath/effectPath/cuePath → curated
+>   global-shared).
 > - ~~Schema-from-handler reconciliation test~~ SHIPPED 2026-07-02:
 >   `tests/schema/param-reconciliation-test.ps1` (offline static, both directions, ~3s;
 >   `-UpdateAllowlist` re-pins). It immediately found **~40 more dead schema params**

@@ -29,3 +29,18 @@ each pin documents why (e.g. regex-invisible indirect reads through helpers).
 pwsh -File tests/schema/param-reconciliation-test.ps1                  # check
 pwsh -File tests/schema/param-reconciliation-test.ps1 -UpdateAllowlist # re-pin
 ```
+
+## action-param-table-test.ps1
+
+Freshness check for `McpActionParamTable.h` — the generated per-action accepted-param
+table (schemas declare params per TOOL; the table records which params each ACTION's
+handler branch actually reads, attributed by brace scope; see
+`scripts/generate-action-param-table.ps1`). The transport uses it to flag params sent
+to an action that never reads them (warn-first; promoted to rejection once the
+warnings prove quiet). Attribution is fail-permissive: a missed read can only
+suppress a warning, never invent one.
+
+```powershell
+pwsh -File tests/schema/action-param-table-test.ps1          # check
+pwsh -File tests/schema/action-param-table-test.ps1 -Update  # regenerate after handler changes
+```
