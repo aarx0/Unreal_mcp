@@ -19,6 +19,7 @@
 
 #include "CoreMinimal.h"
 #include "Containers/Map.h"
+#include "McpAutomationBridgeGlobals.h"
 
 enum class EMcpParamKind : uint8
 {
@@ -39,6 +40,9 @@ enum class EMcpCallFlags : uint8
 	// (dead action, unreachable dispatch). Validation SKIPS these — loudly,
 	// via the lint — instead of rejecting on made-up truth.
 	UnverifiedDecl = 1 << 1,
+	// Needs a live GEditor; Execute() rejects (EDITOR_NOT_AVAILABLE /
+	// NOT_IMPLEMENTED outside editor builds) before Run() sees the call.
+	RequiresEditor = 1 << 2,
 };
 ENUM_CLASS_FLAGS(EMcpCallFlags)
 
@@ -59,19 +63,27 @@ struct FMcpCallDecl
 
 /**
  * Base class for fully-migrated actions (the CLASS backing kind).
- * Subclasses co-locate their declaration and implementation; Execute() will
- * grow the shared pipeline (validate -> Run -> receipt) as the pilot family
- * lands. Signature mirrors the legacy family handlers so a branch converts
- * mechanically.
+ * Subclasses co-locate their declaration and implementation. Execute() is the
+ * shared pipeline (envelope checks -> Run; the apply-receipt grows here);
+ * Run() mirrors the legacy family handlers so a branch converts mechanically.
  */
 class FMcpCall
 {
 public:
 	virtual ~FMcpCall() = default;
 	virtual const FMcpCallDecl& GetDecl() const = 0;
+
+	/** Shared pipeline. Returns true when the call was consumed (a response was sent). */
+	bool Execute(class UMcpAutomationBridgeSubsystem& Subsystem,
+	             const FString& RequestId,
+	             const TSharedPtr<class FJsonObject>& Payload,
+	             FMcpResponseHandle ResponseHandle);
+
+protected:
 	virtual bool Run(class UMcpAutomationBridgeSubsystem& Subsystem,
 	                 const FString& RequestId,
-	                 const TSharedPtr<class FJsonObject>& Payload) = 0;
+	                 const TSharedPtr<class FJsonObject>& Payload,
+	                 FMcpResponseHandle ResponseHandle) = 0;
 };
 
 class FMcpCallRegistry

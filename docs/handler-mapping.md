@@ -36,7 +36,7 @@ subdirectory is shown.
 | `manage_level_structure` | Volumes → `HandleManageVolumesAction` | `HandleManageLevelStructureAction` @ LevelStructureHandlers.cpp |
 | `manage_audio` | AudioAuthoring → `HandleManageAudioAuthoringAction` | `HandleAudioAction` @ AudioHandlers.cpp |
 | `manage_ai` | — (BehaviorTree/Navigation membership is tested *inside* the handler, not the lambda) | `HandleManageAIAction` @ AIHandlers.cpp |
-| `control_actor` | — | `HandleControlActorAction` @ ControlHandlers.cpp |
+| `control_actor` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ControlActor.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleControlActor*` functions in ControlHandlers.cpp) |
 | `control_editor` | — | `HandleControlEditorAction` @ ControlHandlers.cpp |
 | `inspect` | — | `HandleInspectAction` @ EnvironmentHandlers.cpp |
 | `manage_level` | — | `HandleLevelAction` @ LevelHandlers.cpp |
@@ -98,7 +98,7 @@ Core (fallthrough) lists:
 | `ManageNetworkingCore` | `HandleManageNetworkingAction` @ NetworkingHandlers.cpp |
 | `ManageLevelStructureCore` | `HandleManageLevelStructureAction` @ LevelStructureHandlers.cpp |
 | `ManageAICore` | `HandleManageAIAction` @ AIHandlers.cpp |
-| `ControlActor` | `HandleControlActorAction` @ ControlHandlers.cpp |
+| `ControlActor` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ControlActor.cpp |
 | `ControlEditor` | `HandleControlEditorAction` @ ControlHandlers.cpp |
 | `Inspect` | `HandleInspectAction` @ EnvironmentHandlers.cpp |
 | `ManageLevel` | `HandleLevelAction` @ LevelHandlers.cpp |

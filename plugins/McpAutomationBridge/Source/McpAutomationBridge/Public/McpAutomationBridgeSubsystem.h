@@ -511,10 +511,7 @@ private:
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
   // Actor/editor control actions implemented by the plugin
-  bool
-  HandleControlActorAction(const FString &RequestId, const FString &Action,
-                           const TSharedPtr<FJsonObject> &Payload,
-                           FMcpResponseHandle RequestingSocket);
+  // (control_actor's dispatch chain was classed away — MCP/Calls/)
   bool
   HandleControlEditorAction(const FString &RequestId, const FString &Action,
                             const TSharedPtr<FJsonObject> &Payload,
@@ -1191,7 +1188,10 @@ private:
   // Control handlers
   AActor *FindActorByName(const FString &Target, bool bExactMatchOnly = false);
 
-  // Control Actor Subhandlers
+  // Control Actor Subhandlers — public so the control_actor FMcpCall classes
+  // (Private/MCP/Calls/) can delegate, until the module split de-members the
+  // implementations off the subsystem.
+public:
   bool HandleControlActorSpawn(const FString &RequestId,
                                const TSharedPtr<FJsonObject> &Payload,
                                FMcpResponseHandle Socket);
@@ -1216,6 +1216,8 @@ private:
   bool HandleControlActorAddComponent(const FString &RequestId,
                                       const TSharedPtr<FJsonObject> &Payload,
                                       FMcpResponseHandle Socket);
+
+private:
   bool HandleSequenceAddSection(const FString &RequestId,
                                 const TSharedPtr<FJsonObject> &Payload,
                                 FMcpResponseHandle Socket);
@@ -1238,6 +1240,7 @@ private:
                                  const TSharedPtr<FJsonObject> &Payload,
                                  FMcpResponseHandle Socket);
 
+public:
   bool HandleControlActorSetComponentProperties(
       const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle Socket);
@@ -1277,9 +1280,6 @@ private:
   bool HandleControlActorList(const FString &RequestId,
                               const TSharedPtr<FJsonObject> &Payload,
                               FMcpResponseHandle Socket);
-  bool HandleControlActorGet(const FString &RequestId,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle Socket);
   bool
   HandleControlActorRestoreSnapshot(const FString &RequestId,
                                     const TSharedPtr<FJsonObject> &Payload,
@@ -1310,6 +1310,7 @@ private:
                                       const TSharedPtr<FJsonObject> &Payload,
                                       FMcpResponseHandle Socket);
 
+private:
   // Control Editor Subhandlers
   bool HandleControlEditorPlay(const FString &RequestId,
                                const TSharedPtr<FJsonObject> &Payload,

@@ -39,6 +39,20 @@ parser survives only as a lint.
   implementation co-located, Chromium-ExtensionFunction-style). New actions
   MUST be classes; legacy actions are shims (declaration + legacy family
   dispatch) that convert per-family, opportunistically.
+  `Execute()` is the shared pipeline (payload-null check, `RequiresEditor`
+  gate → `Run()`); `ProcessAutomationRequest` consults `FindCall(tool,
+  action)` before the legacy handler map, so classed actions win per-action
+  while the rest of a family stays shimmed.
+- **First classed family: `control_actor` (2026-07-04,
+  `Private/MCP/Calls/McpCalls_ControlActor.cpp`).** 27 classes; each carries
+  its true per-action contract (the bootstrap's 33-param mega-bag unions died
+  here — TODO 04e resolved for this family); `Run()` delegates to the
+  subsystem's dedicated handlers until the module split de-members those
+  bodies. The family's string-dispatch chain, its shim decl header, and its
+  handler-map registration were deleted the same commit; `inspect`'s
+  actor-action forwarding converted from payload re-dispatch to typed direct
+  calls (migration rule 5 in practice). Classed decls are lint-visible via
+  the `// LINT-TOOL:` marker convention in `MCP/Calls/`.
 
 ## Bootstrap state (2026-07-04, complete)
 

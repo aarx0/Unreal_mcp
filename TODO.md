@@ -913,20 +913,19 @@ then-global state broke sibling sessions (fixed with per-session overlays, which
 tool exercised). The one defensible use-case (schema-payload slimming for context-tight
 clients) doesn't apply to us.
 
-### [ ] 2026-07-04e — Bootstrap "mega-bag" decls are a FALSE-REJECT class (one instance fixed, sweep pending)
+### [~] 2026-07-04e — Bootstrap "mega-bag" decls are a FALSE-REJECT class (control_actor resolved via classing)
 The original file-scoped fleet gave ~16 control_actor actions (and several control_editor
 ones) IDENTICAL 33-param union arrays — brace-skew over-merge. Union bags are over-permissive
 (fail to reject junk) but the dangerous direction is the opposite: `call_actor_function`'s
-bag was missing `functionName`/`arguments` (those reads live inside the dedicated
-`HandleControlActorCallFunction`, ControlHandlers.cpp:2615, reached by single-line dispatch
-that neither the bootstrap parser nor the lint attributes), so the transport FALSE-REJECTED
-the ui-nav driver's TogglePause call. Found 2026-07-04 only because the pause specs went red;
-the driver was swallowing call errors (`| Out-Null`, fixed same day: `Invoke-Tool` now throws
-on `isError`). FIXED for call_actor_function (decl = actorName*/functionName*/componentName/
-arguments). SWEEP PENDING: every decl entry pointing at a shared mega-bag array whose action
-dispatches to a dedicated Handle* function is suspect — same action-scoped-agent treatment as
-the deep pass, or resolve via pilot FMcpCall classing (control_actor is now the best pilot
-candidate precisely because its decls are the worst).
+bag was missing `functionName`/`arguments` (reads inside the dedicated handler that
+single-line dispatch hides from parser and lint), so the transport FALSE-REJECTED the
+ui-nav driver's TogglePause call (found 2026-07-04; driver `| Out-Null` swallowing fixed
+same day). **control_actor RESOLVED 2026-07-04 by the FMcpCall pilot**: all 27 actions
+carry true per-action contracts derived from their dedicated handlers (agent-traced +
+junk-param rejection live-verified — get_actor_bounds now declares 1 param, was 33).
+REMAINING: control_editor's union-bag entries (P_ControlEditor_* duplicates) — same
+treatment when that family is classed, or an action-scoped agent pass sooner if a false
+reject surfaces.
 
 ### [ ] 2026-07-04f — `manage_level load` reports ENGINE_ERROR for a pre-existing MapCheck content warning
 Loading HubWorld returns `Error [ENGINE_ERROR]: Handler reported success but Unreal logged

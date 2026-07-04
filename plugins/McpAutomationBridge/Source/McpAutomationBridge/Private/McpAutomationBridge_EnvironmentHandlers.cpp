@@ -1637,7 +1637,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
  *   - find_by_tag: Find actors by tag
  *   - inspect_class: Inspect a class by name
  * 
- * Actor Actions (delegated to HandleControlActorAction):
+ * Actor Actions (typed dispatch to the shared actor handlers):
  *   - get_components, get_component_property, set_component_property
  *   - get_metadata, add_tag, create_snapshot, restore_snapshot
  *   - export, delete_object, get_bounding_box, set_property, get_property
@@ -1851,7 +1851,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectAction(
         LowerSubAction.Equals(TEXT("runtime_report")) ||
         LowerSubAction.Equals(TEXT("pie_report"));
 
-    // Actor actions (delegated to HandleControlActorAction)
+    // Actor actions (typed dispatch to the shared actor handlers below)
     const bool bIsActorAction =
         LowerSubAction.Equals(TEXT("get_components")) ||
         LowerSubAction.Equals(TEXT("get_component_property")) ||
@@ -1898,12 +1898,40 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectAction(
                 Payload->SetStringField(TEXT("objectPath"), ActorAlias);
             }
         }
-        else if (LowerSubAction.Equals(TEXT("delete_object")))
-        {
-            Payload->SetStringField(TEXT("action"), TEXT("delete"));
-        }
 
-        return HandleControlActorAction(RequestId, TEXT("control_actor"), Payload, RequestingSocket);
+        // Typed dispatch to the shared actor handlers (control_actor's own
+        // dispatch chain was classed away; migration rule 5 — no payload
+        // rewrites back into string dispatch).
+        if (!GEditor)
+        {
+            SendAutomationError(RequestingSocket, RequestId,
+                                TEXT("Editor not available"),
+                                TEXT("EDITOR_NOT_AVAILABLE"));
+            return true;
+        }
+        if (LowerSubAction.Equals(TEXT("get_components")))
+            return HandleControlActorGetComponents(RequestId, Payload, RequestingSocket);
+        if (LowerSubAction.Equals(TEXT("get_component_property")))
+            return HandleControlActorGetComponentProperty(RequestId, Payload, RequestingSocket);
+        if (LowerSubAction.Equals(TEXT("set_component_property")))
+            return HandleControlActorSetComponentProperties(RequestId, Payload, RequestingSocket);
+        if (LowerSubAction.Equals(TEXT("get_metadata")))
+            return HandleControlActorGetMetadata(RequestId, Payload, RequestingSocket);
+        if (LowerSubAction.Equals(TEXT("add_tag")))
+            return HandleControlActorAddTag(RequestId, Payload, RequestingSocket);
+        if (LowerSubAction.Equals(TEXT("create_snapshot")))
+            return HandleControlActorCreateSnapshot(RequestId, Payload, RequestingSocket);
+        if (LowerSubAction.Equals(TEXT("restore_snapshot")))
+            return HandleControlActorRestoreSnapshot(RequestId, Payload, RequestingSocket);
+        if (LowerSubAction.Equals(TEXT("export")))
+            return HandleControlActorExport(RequestId, Payload, RequestingSocket);
+        if (LowerSubAction.Equals(TEXT("delete_object")))
+            return HandleControlActorDelete(RequestId, Payload, RequestingSocket);
+        if (LowerSubAction.Equals(TEXT("get_bounding_box")))
+            return HandleControlActorGetBoundingBox(RequestId, Payload, RequestingSocket);
+        if (LowerSubAction.Equals(TEXT("set_property")))
+            return HandleSetObjectProperty(RequestId, TEXT("set_object_property"), Payload, RequestingSocket);
+        return HandleGetObjectProperty(RequestId, TEXT("get_object_property"), Payload, RequestingSocket);
     }
 
     // -------------------------------------------------------------------------

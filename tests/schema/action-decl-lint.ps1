@@ -45,6 +45,28 @@ foreach ($f in Get-ChildItem $declsDir -Filter 'McpDecl_*.h') {
     if ($m.Groups[4].Value -eq 'EMcpCallFlags::UnverifiedDecl') { [void]$unverified.Add($key) }
   }
 }
+# Classed families: decls live with their FMcpCall classes (MCP/Calls/). Each
+# McpCalls_*.cpp carries a '// LINT-TOOL: <tool>' marker; its param arrays use
+# the same FMcpParamDecl shape, and per-action rows are MCP_*_CALL macro
+# invocations: MCP_X_CALL(ClassSuffix, "action", ParamsArray, Handler, Flags).
+$callsDir = Join-Path $srcRoot 'MCP/Calls'
+if (Test-Path $callsDir) {
+  foreach ($f in Get-ChildItem $callsDir -Filter 'McpCalls_*.cpp') {
+    $text = Get-Content $f.FullName -Raw
+    $toolM = [regex]::Match($text, '//\s*LINT-TOOL:\s*([a-z_]+)')
+    if (-not $toolM.Success) { throw "$($f.Name): missing '// LINT-TOOL: <tool>' marker" }
+    $tool = $toolM.Groups[1].Value
+    $arrays = @{}
+    foreach ($m in [regex]::Matches($text, 'inline const FMcpParamDecl (\w+)\[\] = \{(.*?)\};')) {
+      $arrays[$m.Groups[1].Value] = @([regex]::Matches($m.Groups[2].Value, '\{ TEXT\("([^"]+)"\)') | ForEach-Object { $_.Groups[1].Value })
+    }
+    foreach ($m in [regex]::Matches($text, 'MCP_\w+_CALL\(\s*\w+\s*,\s*"([^"]+)"\s*,\s*(\w+)\s*,')) {
+      $key = "$tool.$($m.Groups[1].Value)"
+      $arrRef = $m.Groups[2].Value
+      $declParams[$key] = if ($arrays.ContainsKey($arrRef)) { $arrays[$arrRef] } else { @() }
+    }
+  }
+}
 if ($declParams.Count -lt 500) { throw "decl parse produced only $($declParams.Count) entries - format change?" }
 
 # --- golden: action name -> tools (for attribution) ---

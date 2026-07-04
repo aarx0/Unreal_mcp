@@ -1,6 +1,7 @@
 #include "Async/Async.h"
 #include "Dom/JsonObject.h"
 #include "HAL/PlatformTime.h"
+#include "MCP/McpCallRegistry.h"
 #include "MCP/McpNativeTransport.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeHelpers.h"
@@ -157,6 +158,48 @@ void UMcpAutomationBridgeSubsystem::ProcessAutomationRequest(
       // delivered reliably
       // (WebSocket socket-registration removed — pull-only / HTTP)
 
+      // A consuming handler must have responded or declared the deferral
+      // via MarkRequestDeferred: handlers execute synchronously (the
+      // AsyncTask re-queue completions were inlined), so an undeclared
+      // still-parked request here is a handler bug. Fail it now instead
+      // of leaving the client to the 300s reaper.
+      auto FailIfSilentlyConsumed = [&]() {
+        const bool bDeclaredDeferred = DeferredRequestIds.Remove(RequestId) > 0;
+        if (!bDeclaredDeferred && Origin == ERequestOrigin::NativeHTTP &&
+            NativeTransport && NativeTransport->HasPendingRequest(RequestId)) {
+          UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
+                 TEXT("Handler for action '%s' consumed RequestId=%s without "
+                      "sending a response."),
+                 *Action, *RequestId);
+          SendAutomationError(
+              RequestingSocket, RequestId,
+              FString::Printf(TEXT("Handler for '%s' consumed the request "
+                                   "without sending a response."),
+                              *Action),
+              TEXT("HANDLER_NO_RESPONSE"));
+        }
+      };
+
+      // ---------------------------------------------------------
+      // Classed actions (FMcpCall) win over the legacy family handlers —
+      // the strangler-fig path (docs/action-declarations.md). The registry
+      // key is (tool, payload action); lookups are case-insensitive like
+      // every legacy dispatch comparison.
+      // ---------------------------------------------------------
+      FString PayloadAction;
+      if (Payload.IsValid()) {
+        Payload->TryGetStringField(TEXT("action"), PayloadAction);
+      }
+      if (FMcpCall *Call = FMcpCallRegistry::Get().FindCall(Action, PayloadAction)) {
+        const FString CallLabel = Action + TEXT(".") + PayloadAction;
+        if (HandleAndLog(*CallLabel, [&]() {
+              return Call->Execute(*this, RequestId, Payload, RequestingSocket);
+            })) {
+          FailIfSilentlyConsumed();
+          return;
+        }
+      }
+
       // ---------------------------------------------------------
       // Single dispatch: the handler registry (O(1)). Every action is
       // registered in InitializeHandlers(); a miss — or a registered handler
@@ -167,25 +210,7 @@ void UMcpAutomationBridgeSubsystem::ProcessAutomationRequest(
         if (HandleAndLog(*Action, [&]() {
               return (*Handler)(RequestId, Action, Payload, RequestingSocket);
             })) {
-          // A consuming handler must have responded or declared the deferral
-          // via MarkRequestDeferred: handlers execute synchronously (the
-          // AsyncTask re-queue completions were inlined), so an undeclared
-          // still-parked request here is a handler bug. Fail it now instead
-          // of leaving the client to the 300s reaper.
-          const bool bDeclaredDeferred = DeferredRequestIds.Remove(RequestId) > 0;
-          if (!bDeclaredDeferred && Origin == ERequestOrigin::NativeHTTP &&
-              NativeTransport && NativeTransport->HasPendingRequest(RequestId)) {
-            UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
-                   TEXT("Handler for action '%s' consumed RequestId=%s without "
-                        "sending a response."),
-                   *Action, *RequestId);
-            SendAutomationError(
-                RequestingSocket, RequestId,
-                FString::Printf(TEXT("Handler for '%s' consumed the request "
-                                     "without sending a response."),
-                                *Action),
-                TEXT("HANDLER_NO_RESPONSE"));
-          }
+          FailIfSilentlyConsumed();
           return;
         }
       }

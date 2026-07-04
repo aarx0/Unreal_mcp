@@ -200,6 +200,7 @@ private:
 #include "McpAutomationBridgeSettings.h"
 #include "Editor/EditorPerformanceSettings.h"  // bridge uncaps background tick throttling
 #include "MCP/Decls/McpDeclRegistration.h"     // action-declaration registry bootstrap
+#include "MCP/Calls/McpCalls.h"                // classed-family registration
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
@@ -477,8 +478,10 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       }
 
       // The action-declaration registry must exist before the transport can
-      // validate its first tools/call.
+      // validate its first tools/call. Classed families register alongside
+      // the shim declarations (their decls come from the class instances).
       McpRegisterAllActionDecls();
+      McpRegisterControlActorCalls();
       UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
              TEXT("Registered %d action declarations"),
              FMcpCallRegistry::Get().NumDecls());
@@ -1100,7 +1103,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                     return HandleSystemControlAction(R, A, P, S);
                   });
 
-  MCP_REGISTER_HANDLER("control_actor", HandleControlActorAction);
+  // control_actor is fully classed (MCP/Calls/McpCalls_ControlActor.cpp) —
+  // dispatch reaches its FMcpCall instances via the registry, not this map.
   MCP_REGISTER_HANDLER("control_editor", HandleControlEditorAction);
 
   MCP_REGISTER_HANDLER("manage_level", HandleLevelAction);

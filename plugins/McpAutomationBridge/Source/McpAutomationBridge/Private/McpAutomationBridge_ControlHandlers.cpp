@@ -2,8 +2,9 @@
 // McpAutomationBridge_ControlHandlers.cpp
 // =============================================================================
 // Editor control, viewport, PIE, camera, and actor manipulation handlers.
-// Dispatch gates: HandleControlActorAction / HandleControlEditorAction below —
-// the gates are the action list; a prose copy here would only rot.
+// control_actor dispatch lives in MCP/Calls/McpCalls_ControlActor.cpp (classed);
+// control_editor's gate is HandleControlEditorAction below — the gate is the
+// action list; a prose copy here would only rot.
 //
 // REFACTORING NOTES:
 //   - Uses McpVersionCompatibility.h for UE 5.0-5.7 API abstraction
@@ -2701,125 +2702,6 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorCallFunction(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleControlActorAction(
-    const FString &RequestId, const FString &Action,
-    const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
-  const FString Lower = Action.ToLower();
-  if (!Lower.Equals(TEXT("control_actor"), ESearchCase::IgnoreCase) &&
-      !Lower.StartsWith(TEXT("control_actor")))
-    return false;
-  if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("control_actor payload missing."),
-                        TEXT("INVALID_PAYLOAD"));
-    return true;
-  }
-
-  FString SubAction;
-  Payload->TryGetStringField(TEXT("action"), SubAction);
-  const FString LowerSub = SubAction.ToLower();
-
-
-#if WITH_EDITOR
-  if (!GEditor) {
-    SendStandardErrorResponse(this, RequestingSocket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
-    return true;
-  }
-  if (!GEditor->GetEditorSubsystem<UEditorActorSubsystem>()) {
-    SendStandardErrorResponse(this, RequestingSocket, RequestId, TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"),
-                              TEXT("EditorActorSubsystem not available"), nullptr);
-    return true;
-  }
-
-  if (LowerSub == TEXT("spawn"))
-    return HandleControlActorSpawn(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("spawn_blueprint"))
-    return HandleControlActorSpawnBlueprint(RequestId, Payload,
-                                            RequestingSocket);
-  if (LowerSub == TEXT("delete"))
-    return HandleControlActorDelete(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("apply_force"))
-    return HandleControlActorApplyForce(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("set_transform"))
-    return HandleControlActorSetTransform(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("get_transform"))
-    return HandleControlActorGetTransform(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("set_visibility"))
-    return HandleControlActorSetVisibility(RequestId, Payload,
-                                           RequestingSocket);
-  if (LowerSub == TEXT("add_component"))
-    return HandleControlActorAddComponent(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("set_component_property"))
-    return HandleControlActorSetComponentProperties(RequestId, Payload,
-                                                    RequestingSocket);
-  if (LowerSub == TEXT("get_components"))
-    return HandleControlActorGetComponents(RequestId, Payload,
-                                           RequestingSocket);
-  if (LowerSub == TEXT("duplicate"))
-    return HandleControlActorDuplicate(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("attach"))
-    return HandleControlActorAttach(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("detach"))
-    return HandleControlActorDetach(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("find_by_tag"))
-    return HandleControlActorFindByTag(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("add_tag"))
-    return HandleControlActorAddTag(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("remove_tag"))
-    return HandleControlActorRemoveTag(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("find_by_name"))
-    return HandleControlActorFindByName(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("delete_by_tag"))
-    return HandleControlActorDeleteByTag(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("set_blueprint_variables"))
-    return HandleControlActorSetBlueprintVariables(RequestId, Payload,
-                                                   RequestingSocket);
-  if (LowerSub == TEXT("create_snapshot"))
-    return HandleControlActorCreateSnapshot(RequestId, Payload,
-                                            RequestingSocket);
-  if (LowerSub == TEXT("restore_snapshot"))
-    return HandleControlActorRestoreSnapshot(RequestId, Payload,
-                                             RequestingSocket);
-  if (LowerSub == TEXT("export"))
-    return HandleControlActorExport(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("get_bounding_box") || LowerSub == TEXT("get_actor_bounds"))
-    return HandleControlActorGetBoundingBox(RequestId, Payload,
-                                            RequestingSocket);
-  if (LowerSub == TEXT("get_metadata"))
-    return HandleControlActorGetMetadata(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("list") || LowerSub == TEXT("list_objects"))
-    return HandleControlActorList(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("get") || LowerSub == TEXT("get_actor") ||
-      LowerSub == TEXT("get_actor_by_name"))
-    return HandleControlActorGet(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("find_by_class"))
-    return HandleControlActorFindByClass(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("remove_component"))
-    return HandleControlActorRemoveComponent(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("get_component_property"))
-    return HandleControlActorGetComponentProperty(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("set_property"))
-    return HandleSetObjectProperty(RequestId, TEXT("set_object_property"), Payload, RequestingSocket);
-  if (LowerSub == TEXT("get_property"))
-    return HandleGetObjectProperty(RequestId, TEXT("get_object_property"), Payload, RequestingSocket);
-  if (LowerSub == TEXT("set_actor_collision"))
-    return HandleControlActorSetCollision(RequestId, Payload, RequestingSocket);
-  if (LowerSub == TEXT("call_actor_function"))
-    return HandleControlActorCallFunction(RequestId, Payload, RequestingSocket);
-
-  SendStandardErrorResponse(
-      this, RequestingSocket, RequestId, TEXT("UNKNOWN_ACTION"),
-      FString::Printf(TEXT("Unknown actor control action: %s"), *LowerSub), nullptr);
-  return true;
-#else
-  SendStandardErrorResponse(this, RequestingSocket, RequestId, TEXT("NOT_IMPLEMENTED"),
-                            TEXT("Actor control requires editor build."), nullptr);
-  return true;
-#endif
-}
-
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorPlay(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
@@ -4877,58 +4759,6 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorList(
   if (!Filter.IsEmpty())
     Data->SetStringField(TEXT("filter"), Filter);
   SendAutomationResponse(Socket, RequestId, true, TEXT("Actors listed"), Data);
-  return true;
-#else
-  return false;
-#endif
-}
-
-bool UMcpAutomationBridgeSubsystem::HandleControlActorGet(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
-#if WITH_EDITOR
-  FString TargetName;
-  Payload->TryGetStringField(TEXT("actorName"), TargetName);
-  if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(this, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
-    return true;
-  }
-
-  AActor *Found = FindActorByName(TargetName);
-  if (!Found) {
-    SendStandardErrorResponse(this, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
-    return true;
-  }
-
-  const FTransform Current = Found->GetActorTransform();
-  TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
-  Data->SetStringField(TEXT("name"), Found->GetName());
-  Data->SetStringField(TEXT("label"), Found->GetActorLabel());
-  Data->SetStringField(TEXT("path"), Found->GetPathName());
-  Data->SetStringField(TEXT("class"), Found->GetClass()
-                                          ? Found->GetClass()->GetPathName()
-                                          : TEXT(""));
-
-  TArray<TSharedPtr<FJsonValue>> TagsArray;
-  for (const FName &Tag : Found->Tags) {
-    TagsArray.Add(MakeShared<FJsonValueString>(Tag.ToString()));
-  }
-  Data->SetArrayField(TEXT("tags"), TagsArray);
-
-  auto MakeArray = [](const FVector &Vec) -> TArray<TSharedPtr<FJsonValue>> {
-    TArray<TSharedPtr<FJsonValue>> Arr;
-    Arr.Add(MakeShared<FJsonValueNumber>(Vec.X));
-    Arr.Add(MakeShared<FJsonValueNumber>(Vec.Y));
-    Arr.Add(MakeShared<FJsonValueNumber>(Vec.Z));
-    return Arr;
-  };
-  Data->SetArrayField(TEXT("location"), MakeArray(Current.GetLocation()));
-  Data->SetArrayField(TEXT("scale"), MakeArray(Current.GetScale3D()));
-
-  SendStandardSuccessResponse(this, Socket, RequestId, TEXT("Actor retrieved"),
-                              Data);
   return true;
 #else
   return false;
