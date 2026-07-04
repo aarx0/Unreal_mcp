@@ -9776,44 +9776,6 @@
   },
   {
     "category": "core",
-    "description": "Dynamic MCP tool management, scoped to YOUR session: enable/disable tools and categories at runtime without affecting other connected sessions (reset or reconnect restores server defaults). Actions: list_tools, list_categories, enable_tools, disable_tools, enable_category, disable_category, get_status, reset.",
-    "inputSchema": {
-      "properties": {
-        "action": {
-          "description": "list_tools: show all tools with status. list_categories: show categories. enable/disable_tools: toggle specific tools. enable/disable_category: toggle category. get_status: current state. reset: restore defaults.",
-          "enum": [
-            "list_tools",
-            "list_categories",
-            "enable_tools",
-            "disable_tools",
-            "enable_category",
-            "disable_category",
-            "get_status",
-            "reset"
-          ],
-          "type": "string"
-        },
-        "category": {
-          "description": "Category name to enable/disable (core, world, gameplay, utility, all)",
-          "type": "string"
-        },
-        "tools": {
-          "description": "Tool names to enable/disable",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "action"
-      ],
-      "type": "object"
-    },
-    "name": "manage_tools"
-  },
-  {
-    "category": "core",
     "description": "Run profiling, set quality/CVars, execute console commands, execute Python scripts, run UBT, and manage widgets.",
     "inputSchema": {
       "properties": {

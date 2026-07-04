@@ -52,7 +52,7 @@ FMcpNativeTransport::~FMcpNativeTransport()
 	Shutdown();
 }
 
-bool FMcpNativeTransport::Start(int32 Port, const FString& PluginDir, bool bLoadAllTools,
+bool FMcpNativeTransport::Start(int32 Port, const FString& PluginDir,
 	const FString& InUserInstructions, const FString& InListenHost, bool bInAllowNonLoopback)
 {
 	if (Port <= 0 || Port > 65535)
@@ -122,13 +122,9 @@ bool FMcpNativeTransport::Start(int32 Port, const FString& PluginDir, bool bLoad
 		}
 	}
 
-	// Initialize dynamic tool manager from self-describing C++ tool registry
-	{
-		FMcpToolRegistry& Registry = FMcpToolRegistry::Get();
-		UE_LOG(LogMcpNativeTransport, Log,
-			TEXT("Tool registry: %d self-describing tools registered"), Registry.GetToolCount());
-		ToolManager.Initialize(Registry, bLoadAllTools);
-	}
+	UE_LOG(LogMcpNativeTransport, Log,
+		TEXT("Tool registry: %d self-describing tools registered"),
+		FMcpToolRegistry::Get().GetToolCount());
 
 	// Create stop event and launch accept thread
 	StopEvent = FPlatformProcess::GetSynchEventFromPool(true);
@@ -554,7 +550,6 @@ void FMcpNativeTransport::HandleConnection(FSocket* ClientSocket)
 						*HttpReq.SessionId, ActiveSessions.Num());
 				}
 			}
-			ToolManager.DropSession(HttpReq.SessionId);
 		}
 		SendHttpResponse(ClientSocket, 200, TEXT("text/plain"), FString(), {}, HttpReq.Origin);
 		ClientSocket->Close();
@@ -656,7 +651,7 @@ void FMcpNativeTransport::HandleConnection(FSocket* ClientSocket)
 
 	if (Rpc.Method == TEXT("tools/list"))
 	{
-		FString ResponseBody = HandleToolsList(Rpc.Id, HttpReq.SessionId);
+		FString ResponseBody = HandleToolsList(Rpc.Id);
 		SendHttpResponse(ClientSocket, 200, TEXT("application/json"), ResponseBody, {}, HttpReq.Origin);
 		ClientSocket->Close();
 		SocketSub->DestroySocket(ClientSocket);
@@ -1120,9 +1115,7 @@ FString FMcpNativeTransport::HandleInitialize(
 
 	auto Capabilities = MakeShared<FJsonObject>();
 	auto ToolsCap = MakeShared<FJsonObject>();
-	// Pull-only: no server->client push, so manage_tools enable/disable emits no
-	// list_changed notification — clients see tool-set changes only on their next
-	// tools/list fetch (for clients that list once at connect, a reconnect).
+	// Pull-only, and the tool set is fixed for the server's lifetime.
 	ToolsCap->SetBoolField(TEXT("listChanged"), false);
 	Capabilities->SetObjectField(TEXT("tools"), ToolsCap);
 	Result->SetObjectField(TEXT("capabilities"), Capabilities);
@@ -1156,10 +1149,9 @@ FString FMcpNativeTransport::HandleInitialize(
 
 // ─── Tools List ─────────────────────────────────────────────────────────────
 
-FString FMcpNativeTransport::HandleToolsList(const TSharedPtr<FJsonValue>& Id, const FString& SessionId)
+FString FMcpNativeTransport::HandleToolsList(const TSharedPtr<FJsonValue>& Id)
 {
-	TSet<FString> EnabledTools = ToolManager.GetEnabledToolNames(SessionId);
-	TSharedPtr<FJsonObject> ToolsList = FMcpToolRegistry::Get().GetFilteredToolsResponse(EnabledTools);
+	TSharedPtr<FJsonObject> ToolsList = FMcpToolRegistry::Get().GetToolsResponse();
 
 	if (ToolsList.IsValid())
 	{
@@ -1227,60 +1219,6 @@ void FMcpNativeTransport::HandleToolsCall(
 	if (!Arguments.IsValid())
 	{
 		Arguments = MakeShared<FJsonObject>();
-	}
-
-	// Intercept manage_tools — handle locally (one-shot, no SSE)
-	if (ToolName == TEXT("manage_tools"))
-	{
-		FString Action;
-		Arguments->TryGetStringField(TEXT("action"), Action);
-		TSharedPtr<FJsonObject> Result = ToolManager.HandleAction(Action, Arguments, SessionId);
-		bool bActionSuccess = false;
-		if (Result.IsValid()) { Result->TryGetBoolField(TEXT("success"), bActionSuccess); }
-		FString ActionMessage = TEXT("OK");
-		if (Result.IsValid())
-		{
-			if (!bActionSuccess)
-			{
-				Result->TryGetStringField(TEXT("error"), ActionMessage);
-			}
-			else
-			{
-				// Partial outcomes (unknown names, protected tools) must be visible in
-				// the summary line, not just buried in the payload.
-				auto AppendNames = [&Result, &ActionMessage](const TCHAR* Field, const TCHAR* Label)
-				{
-					const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
-					if (Result->TryGetArrayField(Field, Arr) && Arr && Arr->Num() > 0)
-					{
-						TArray<FString> Names;
-						for (const TSharedPtr<FJsonValue>& V : *Arr)
-						{
-							FString S;
-							if (V->TryGetString(S)) { Names.Add(S); }
-						}
-						ActionMessage += FString::Printf(TEXT(" %s: %s."), Label, *FString::Join(Names, TEXT(", ")));
-					}
-				};
-				AppendNames(TEXT("notFound"), TEXT("Not found"));
-				AppendNames(TEXT("protected"), TEXT("Protected (unchanged)"));
-				if (Action == TEXT("enable_tools") || Action == TEXT("disable_tools") ||
-					Action == TEXT("enable_category") || Action == TEXT("disable_category") ||
-					Action == TEXT("reset"))
-				{
-					ActionMessage += TEXT(" Changes apply to THIS session only, effective "
-						"immediately for tools/call; other sessions are unaffected. Clients "
-						"that cache tools/list must re-list to see them.");
-				}
-			}
-		}
-		TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
-			bActionSuccess, ActionMessage, Result);
-		FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
-		SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
-		ClientSocket->Close();
-		if (SocketSub) SocketSub->DestroySocket(ClientSocket);
-		return;
 	}
 
 	// Normalize action/subAction both ways BEFORE validation: some handlers
@@ -1538,49 +1476,12 @@ void FMcpNativeTransport::HandleToolsCall(
 		}
 	}
 
-	// Unknown names get UNKNOWN_TOOL, not TOOL_DISABLED: a manage_tools enable
-	// cannot fix a typo, and steering a client toward one masks the real error.
 	if (!FMcpToolRegistry::Get().FindTool(ToolName))
 	{
 		TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
 			false,
 			FString::Printf(TEXT("Unknown tool '%s'. Use tools/list to see available tools."), *ToolName),
 			nullptr, TEXT("UNKNOWN_TOOL"));
-		FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
-		SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
-		ClientSocket->Close();
-		if (SocketSub) SocketSub->DestroySocket(ClientSocket);
-		return;
-	}
-
-	// Enforce tool enabled check — tools/list filters, tools/call must also enforce.
-	// Enablement is per-session: a disabled tool here can only be this
-	// session's own earlier manage_tools call (or server defaults) — never a
-	// concurrent session's doing.
-	if (!ToolManager.IsToolEnabled(ToolName, SessionId))
-	{
-		FString Message = FString::Printf(
-			TEXT("Tool '%s' is not enabled for this session. Enable it with manage_tools "
-			     "{action:'enable_tools', tools:['%s']} (or {action:'reset'} to restore "
-			     "server defaults) and retry"),
-			*ToolName, *ToolName);
-		FString LastMutationAction;
-		double LastMutationSecondsAgo = 0.0;
-		if (ToolManager.GetLastMutation(SessionId, LastMutationAction, LastMutationSecondsAgo))
-		{
-			Message += FString::Printf(TEXT(" (this session's last manage_tools change: '%s' %.0fs ago)"),
-				*LastMutationAction, LastMutationSecondsAgo);
-		}
-		Message += TEXT(".");
-		UE_LOG(LogMcpNativeTransport, Warning,
-			TEXT("tools/call rejected: '%s' disabled (session=%s%s)"),
-			*ToolName,
-			SessionId.IsEmpty() ? TEXT("<no-session>") : *SessionId,
-			LastMutationAction.IsEmpty() ? TEXT("")
-				: *FString::Printf(TEXT(", last manage_tools change: '%s' %.0fs ago"),
-					*LastMutationAction, LastMutationSecondsAgo));
-		TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
-			false, Message, nullptr, TEXT("TOOL_DISABLED"));
 		FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
 		SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
 		ClientSocket->Close();
@@ -1831,10 +1732,6 @@ void FMcpNativeTransport::CleanupStaleRequests()
 					*SessionId, SessionTimeoutSeconds / 60.0, ActiveSessions.Num());
 			}
 		}
-		for (const FString& SessionId : ExpiredSessions)
-		{
-			ToolManager.DropSession(SessionId);
-		}
 	}
 
 	// (notification-stream cleanup + keepalive removed — pull-only transport)
@@ -1863,7 +1760,6 @@ FMcpNativeTransport::ESessionValidationResult FMcpNativeTransport::ValidateSessi
 	if (Now - *LastActivity > SessionTimeoutSeconds)
 	{
 		ActiveSessions.Remove(SessionId);
-		ToolManager.DropSession(SessionId);
 		OutError = TEXT("Invalid or expired session ID");
 		return ESessionValidationResult::Invalid;
 	}

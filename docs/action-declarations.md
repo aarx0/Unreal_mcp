@@ -50,8 +50,8 @@ Reached in three same-day passes:
 2. **Attribution burn-down** — alias-group synthesis (handlers comparing
    several names in one condition — `delete || delete_asset || delete_assets`),
    any-high-confidence-contributor merge, filename→tool affinity seeding,
-   `manage_tools` hand-authored (it lives in the transport, which the fleet
-   never read): 1064 verified (91%). A live argless probe of the remaining 107
+   `manage_tools` hand-authored (it lived in the transport, which the fleet
+   never read; the whole tool was removed 2026-07-04): 1064 verified (91%). A live argless probe of the remaining 107
    found exactly 2 dead and 105 alive.
 3. **Deep attribution** — 13 *action-scoped* agents (the inverse of pass 1:
    given the action list plus the live probe responses as ground truth, trace

@@ -893,14 +893,17 @@ add_socket, import_texture, create_cube_texture...) that are implemented but nev
 advertised: decide advertise-or-delete per family, ideally as part of that family's
 FMcpCall classing. Do NOT delete anything in class (2)/(3) without the classing context.
 
-### [ ] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
-Nobody uses it: the only real client (agent sessions) never enables/disables tools in
+### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
+**CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,
+McpDynamicToolManager (+ per-session overlay machinery and both DropSession expiry hooks),
+McpDecl_ManageTools.h, routing entries, the tools/call intercept, the TOOL_DISABLED gate,
+tools/list filtering (now serves the full registry), and the bLoadAllToolsOnStart setting.
+22 tools → 21; 1124 decls → 1116.
+Nobody used it: the only real client (agent sessions) never enables/disables tools in
 practice — its sole appearance in months of dogfooding was the audit incident where its
 then-global state broke sibling sessions (fixed with per-session overlays, which only this
-tool exercises). The one defensible use-case (schema-payload slimming for context-tight
-clients) doesn't apply to us. Removal = the tool definition, McpDynamicToolManager overlay
-machinery, hand-authored McpDecl_ManageTools.h, session-enablement tests; 22 tools → 21.
-Own commit; confirm with Aaron before landing since it deletes an advertised tool.
+tool exercised). The one defensible use-case (schema-payload slimming for context-tight
+clients) doesn't apply to us.
 
 ### [ ] 2026-07-04e — Bootstrap "mega-bag" decls are a FALSE-REJECT class (one instance fixed, sweep pending)
 The original file-scoped fleet gave ~16 control_actor actions (and several control_editor

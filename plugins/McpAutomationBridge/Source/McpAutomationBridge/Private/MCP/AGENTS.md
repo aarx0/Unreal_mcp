@@ -8,10 +8,9 @@ MCP/
 |-- McpNativeTransport.cpp/.h     # raw socket HTTP transport (pull-only) and JSON-RPC handling
 |-- McpJsonRpc.cpp/.h             # JSON-RPC response/error helpers
 |-- McpToolRegistry.cpp/.h        # canonical self-describing tool registry
-|-- McpDynamicToolManager.cpp/.h  # runtime enable/disable and protected tools
 |-- McpSchemaBuilder.cpp/.h       # JSON schema builder DSL
 |-- McpToolDefinition.h           # base class and dispatch patterns
-`-- Tools/McpTool_*.cpp           # 22 self-registering tool definitions
+`-- Tools/McpTool_*.cpp           # 21 self-registering tool definitions
 ```
 
 ## WHERE TO LOOK
@@ -21,8 +20,7 @@ MCP/
 | Change JSON-RPC shape | `McpJsonRpc.*` | Centralize result/error envelope formatting |
 | Add native tool metadata | `Tools/McpTool_*.cpp` | Subclass `FMcpToolDefinition` and use `MCP_REGISTER_TOOL` |
 | Change schema construction | `McpSchemaBuilder.*` | Keep schema JSON generated through builder helpers |
-| Change tool filtering | `McpDynamicToolManager.*` | Core-only/default-all behavior, protected tools/categories |
-| Change canonical list | `McpToolRegistry.cpp` | Only 22 parent tool names are accepted |
+| Change canonical list | `McpToolRegistry.cpp` | Only 21 parent tool names are accepted |
 
 ## TRANSPORT CONVENTIONS
 - `GET /mcp` returns 405 Method Not Allowed (pull-only — no notification stream).
@@ -36,8 +34,7 @@ MCP/
 - Tools self-register statically with `MCP_REGISTER_TOOL`.
 - Registry accepts only canonical parent tools: do not expose child/legacy tool names.
 - Every tool dispatches by its own name; handlers read the sub-action from the payload (`action`, mirrored to `subAction` by the transport).
-- `manage_tools` is intercepted locally by the native dynamic tool manager.
-- `manage_tools`, `inspect`, and the `core` category are protected from disablement.
+- The tool set is fixed at compile time; there is no runtime enable/disable.
 
 ## SECURITY AND LIFECYCLE
 - Binding is loopback-only unless plugin settings explicitly allow non-loopback.

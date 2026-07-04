@@ -3,7 +3,6 @@
 #include "CoreMinimal.h"
 #include "HAL/Runnable.h"
 #include "Dom/JsonValue.h"
-#include "MCP/McpDynamicToolManager.h"
 #include <atomic>
 
 class UMcpAutomationBridgeSubsystem;
@@ -26,7 +25,7 @@ public:
 	~FMcpNativeTransport();
 
 	/** Start HTTP server on given host:port. Returns false on failure. */
-	bool Start(int32 Port, const FString& PluginDir, bool bLoadAllTools = false,
+	bool Start(int32 Port, const FString& PluginDir,
 		const FString& InUserInstructions = TEXT(""),
 		const FString& InListenHost = TEXT("127.0.0.1"),
 		bool bInAllowNonLoopback = false);
@@ -38,7 +37,6 @@ public:
 	bool IsRunning() const { return Thread != nullptr && !bStopping.load(); }
 	int32 GetListenPort() const { return ListenPort; }
 	int32 GetActiveSessionCount() const;
-	int32 GetEnabledToolCount() const { return ToolManager.GetEnabledToolNames().Num(); }
 	int32 GetTotalToolCount() const;
 
 	/**
@@ -120,7 +118,7 @@ private:
 	// JSON-RPC method handlers (return response body string)
 	FString HandleInitialize(const TSharedPtr<FJsonObject>& Params,
 		const TSharedPtr<FJsonValue>& Id, FString& OutSessionId);
-	FString HandleToolsList(const TSharedPtr<FJsonValue>& Id, const FString& SessionId);
+	FString HandleToolsList(const TSharedPtr<FJsonValue>& Id);
 	void HandleToolsCall(const TSharedPtr<FJsonObject>& Params,
 		const TSharedPtr<FJsonValue>& Id, FSocket* ClientSocket,
 		const FString& SessionId, const FString& CorsOrigin);
@@ -131,7 +129,6 @@ private:
 	void TouchSession(const FString& SessionId);
 
 	UMcpAutomationBridgeSubsystem* Subsystem;
-	FMcpDynamicToolManager ToolManager;
 	int32 ListenPort = 0;
 
 	// Server identity & instructions (loaded from server-info.json + settings)

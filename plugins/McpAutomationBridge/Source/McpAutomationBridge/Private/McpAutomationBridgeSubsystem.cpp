@@ -484,7 +484,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
              FMcpCallRegistry::Get().NumDecls());
 
       NativeTransport = MakeShared<FMcpNativeTransport>(this);
-      if (!NativeTransport->Start(Settings->NativeMCPPort, PluginDir, Settings->bLoadAllToolsOnStart,
+      if (!NativeTransport->Start(Settings->NativeMCPPort, PluginDir,
                                   Settings->NativeMCPInstructions,
                                   Settings->ListenHost, Settings->bAllowNonLoopback))
       {

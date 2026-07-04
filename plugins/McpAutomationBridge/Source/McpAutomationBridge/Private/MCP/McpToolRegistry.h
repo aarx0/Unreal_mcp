@@ -41,10 +41,9 @@ public:
 	int32 GetToolCount() const { return Tools.Num(); }
 
 	/**
-	 * Build the tools/list response filtered to enabled tools.
-	 * Caches per-tool JSON objects on first call.
+	 * Build the tools/list response. Caches per-tool JSON objects on first call.
 	 */
-	TSharedPtr<FJsonObject> GetFilteredToolsResponse(const TSet<FString>& EnabledTools);
+	TSharedPtr<FJsonObject> GetToolsResponse();
 
 private:
 	FMcpToolRegistry() = default;
@@ -52,7 +51,7 @@ private:
 	TArray<FMcpToolDefinition*> Tools;
 	TMap<FString, FMcpToolDefinition*> ToolsByName;
 
-	// Cached per-tool JSON schemas (built lazily on first GetFilteredToolsResponse)
+	// Cached per-tool JSON schemas (built lazily on first GetToolsResponse)
 	TMap<FString, TSharedPtr<FJsonObject>> CachedToolSchemas;
 	bool bCacheValid = false;
 	mutable FCriticalSection CacheMutex;  // protects CachedToolSchemas + bCacheValid

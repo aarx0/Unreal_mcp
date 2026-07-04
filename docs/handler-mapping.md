@@ -48,7 +48,6 @@ subdirectory is shown.
 | `manage_combat` | — | `HandleManageCombatAction` @ CombatHandlers.cpp |
 | `manage_inventory` | — | `HandleManageInventoryAction` @ InventoryHandlers.cpp |
 | `manage_interaction` | — | `HandleManageInteractionAction` @ InteractionHandlers.cpp |
-| `manage_tools` | — | `FMcpDynamicToolManager::HandleAction` @ MCP/McpDynamicToolManager.cpp — intercepted in MCP/McpNativeTransport.cpp before the handler registry; never reaches `InitializeHandlers` routing |
 
 `system_control` note — its lambda also re-dispatches specific core actions before
 the fallthrough: `execute_command`/`set_cvar` →
@@ -111,7 +110,6 @@ Core (fallthrough) lists:
 | `ManageCombat` | `HandleManageCombatAction` @ CombatHandlers.cpp |
 | `ManageInventory` | `HandleManageInventoryAction` @ InventoryHandlers.cpp |
 | `ManageInteraction` | `HandleManageInteractionAction` @ InteractionHandlers.cpp |
-| `ManageToolsActions` | `FMcpDynamicToolManager::HandleAction` @ MCP/McpDynamicToolManager.cpp |
 
 The union builders (`ManageAsset()`, `ManageBlueprint()`, …, `*Union()`) are schema
 enums only — they own no actions.

@@ -88,6 +88,10 @@ This roadmap outlines the comprehensive development plan for expanding the Unrea
 - [x] Client capability detection via `mcp-client-capabilities` package
 - [x] Backward compatibility: clients without `listChanged` support get ALL tools
 
+> Fork note (2026-07-04): `manage_tools` and the dynamic tool manager were REMOVED.
+> Months of dogfooding never used runtime enable/disable, and the per-session overlay
+> machinery was pure carrying cost. The tool set is fixed at 21.
+
 ---
 
 ### Phase 53: Strategic Tool Merging (Complete)

@@ -9,7 +9,6 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpToolRegistry, Log, All);
 const TSet<FString>& FMcpToolRegistry::GetCanonicalToolNames()
 {
 	static const TSet<FString> CanonicalToolNames = {
-		TEXT("manage_tools"),
 		TEXT("manage_asset"),
 		TEXT("manage_blueprint"),
 		TEXT("control_actor"),
@@ -141,27 +140,23 @@ TSharedPtr<FJsonObject> FMcpToolRegistry::BuildToolJson(FMcpToolDefinition* Tool
 	return ToolObj;
 }
 
-TSharedPtr<FJsonObject> FMcpToolRegistry::GetFilteredToolsResponse(
-	const TSet<FString>& EnabledTools)
+TSharedPtr<FJsonObject> FMcpToolRegistry::GetToolsResponse()
 {
 	FScopeLock Lock(&CacheMutex);
 	EnsureCache();
 
-	TArray<TSharedPtr<FJsonValue>> FilteredTools;
-	FilteredTools.Reserve(EnabledTools.Num());
+	TArray<TSharedPtr<FJsonValue>> ToolValues;
+	ToolValues.Reserve(Tools.Num());
 
 	for (const FMcpToolDefinition* Tool : Tools)
 	{
-		if (EnabledTools.Contains(Tool->GetName()))
+		if (const auto* Cached = CachedToolSchemas.Find(Tool->GetName()))
 		{
-			if (const auto* Cached = CachedToolSchemas.Find(Tool->GetName()))
-			{
-				FilteredTools.Add(MakeShared<FJsonValueObject>(*Cached));
-			}
+			ToolValues.Add(MakeShared<FJsonValueObject>(*Cached));
 		}
 	}
 
 	auto Result = MakeShared<FJsonObject>();
-	Result->SetArrayField(TEXT("tools"), FilteredTools);
+	Result->SetArrayField(TEXT("tools"), ToolValues);
 	return Result;
 }

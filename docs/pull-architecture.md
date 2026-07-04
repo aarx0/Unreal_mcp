@@ -83,11 +83,8 @@ dispatch, and keepalives. One request still yields exactly one plain HTTP respon
 
 What stays in `CleanupStaleRequests`: only the **session-expiry** sweep (if sessions are kept).
 Sessions (`ActiveSessions` + `ValidateSession` + `Mcp-Session-Id`) are independent of the notification
-stream. They are no longer pure spec-compliance residue: the per-session `manage_tools` enablement
-overlay (`FMcpDynamicToolManager`) is keyed by SessionId, and both expiry paths
-(`CleanupStaleRequests` sweep, `ValidateSession` eviction) clear it via `DropSession()` — so the
-activity-touching logic now defines per-session tool-enablement lifetime and can't be trimmed
-casually.
+stream and carry no per-session state beyond the activity timestamp (the `manage_tools` enablement
+overlay that once rode on them was removed with that tool, 2026-07-04).
 
 ### ADD — idempotency (10 unsafe action families)
 

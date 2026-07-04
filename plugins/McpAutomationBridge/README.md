@@ -31,8 +31,7 @@ external bridge process.
 | **UI** | Widget Blueprints, Common UI authoring, focus/nav introspection & drive |
 | **System** | Console commands, UBT, Live Coding, tests, logs, project settings, Python execution |
 
-**200+ automation actions** across 22 canonical MCP tools. `manage_tools` can enable/disable
-tools at runtime, scoped to your MCP session — other connected clients are unaffected.
+**200+ automation actions** across 21 canonical MCP tools.
 
 ---
 
@@ -155,7 +154,6 @@ Configure in **Edit → Project Settings → Plugins → MCP Automation Bridge**
 - **Listen Host**: bind address (default: 127.0.0.1)
 - **Allow Non-Loopback**: enable LAN access (security consideration)
 - **Require Capability Token**: enforce `X-MCP-Capability-Token` authentication
-- **Load All Tools on Start**: all 22 canonical tools at startup vs. the core set (default: on)
 - **Native MCP Instructions**: custom instructions served to AI clients
 
 ---

@@ -1002,18 +1002,6 @@ inline const TArray<FString>& ManageInteraction()
 }
 inline TArray<FString> ManageInteractionUnion() { return ManageInteraction(); }
 
-// Named *Actions to avoid reading as the manage_tools tool itself.
-inline const TArray<FString>& ManageToolsActions()
-{
-	static const TArray<FString> Actions = {
-		TEXT("list_tools"), TEXT("list_categories"), TEXT("enable_tools"),
-		TEXT("disable_tools"), TEXT("enable_category"),
-		TEXT("disable_category"), TEXT("get_status"), TEXT("reset")
-	};
-	return Actions;
-}
-inline TArray<FString> ManageToolsUnion() { return ManageToolsActions(); }
-
 inline bool IsMaterialAuthoringAction(const FString& Action) { return ContainsAction(MaterialAuthoring(), Action); }
 inline bool IsTextureAction(const FString& Action) { return ContainsAction(Texture(), Action); }
 inline bool IsBlueprintGraphAction(const FString& Action) { return ContainsAction(BlueprintGraph(), Action); }
@@ -1095,7 +1083,6 @@ inline const TArray<FMcpToolRouting>& GetToolRoutingTable()
 		{ TEXT("manage_combat"), {}, &ManageCombat, &ManageCombatUnion },
 		{ TEXT("manage_inventory"), {}, &ManageInventory, &ManageInventoryUnion },
 		{ TEXT("manage_interaction"), {}, &ManageInteraction, &ManageInteractionUnion },
-		{ TEXT("manage_tools"), {}, &ManageToolsActions, &ManageToolsUnion },
 	};
 	return Table;
 }
