@@ -3182,9 +3182,6 @@
           "description": "create_material_function: show in the Material Function Library picker (default true).",
           "type": "boolean"
         },
-        "expressionClass": {
-          "type": "string"
-        },
         "expressionIndex": {
           "description": "ID of the node.",
           "type": "string"
@@ -3415,12 +3412,6 @@
         "nodeName": {
           "description": "Name identifier.",
           "type": "string"
-        },
-        "nodes": {
-          "items": {
-            "type": "object"
-          },
-          "type": "array"
         },
         "nodeType": {
           "type": "string"

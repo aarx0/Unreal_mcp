@@ -12,6 +12,12 @@ pwsh -File tests/schema/schema-snapshot-test.ps1               # compare
 pwsh -File tests/schema/schema-snapshot-test.ps1 -UpdateGolden # re-pin after a deliberate change
 ```
 
+**Live-Coding trap:** tool schemas are cached at registration, so after a schema edit
+applied via `live_coding_compile` the live `tools/list` still serves the OLD schema —
+`-UpdateGolden` then silently re-pins the stale one (caught 2026-07-03: a param removal
+"passed" until the next cold boot rebuilt the cache and the golden mismatched). Re-pin
+only against a cold-booted editor running a full rebuild of the schema change.
+
 ## param-reconciliation-test.ps1
 
 Offline (no editor) static check of schemas vs. handler source, both directions: schema params no

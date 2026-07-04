@@ -43,14 +43,30 @@ as they land.
 > ownership contract documented on SendAutomationResponse); the "three material handlers
 > ignoring save:false" were DEAD CODE (zero call sites) — deleted 509 lines; the live
 > FinalizeMaterialHost path already honored save.
+> **Blind-sleep triage SHIPPED 2026-07-03:** all 19 sites classified, 14 game-thread
+> stalls eliminated (game-thread sleeps run no engine ticks — every "settle" delay was
+> a no-op); PIE-stop poll → synchronous EndPlayMap (old loop always spun 1s and exited
+> with PIE still up), async-load poll → blocking FlushAsyncLoading, pre-LoadMap deferred
+> GC flag → immediate CollectGarbage, add_sublevel sleep → FlushLevelStreaming; survivors
+> = 3 socket-thread polls + 2 failure-path backoffs. add_variable+compile 2.3× faster;
+> level ops shed ~250ms fixed. Deletes barely moved — their cost is ForceDeleteObjects'
+> internal GC, not sleeps.
 > Still open from the review: error-code constants header (Aaron-deferred, light version
 > only) + alias freeze (F7); per-action scaffoldOnly response markers (folds into the
 > appliedProperties convention); widget recipe swap-on-success + broader transaction
-> coverage (F8); blind-sleep triage (20 sites: 3 socket-thread polls, 4 LevelHandlers
-> game-thread stalls, 13 McpSafeOperations.h — game-thread sleeps can't wait for engine
-> ticks, each is delete/condition-poll/engine-flush); shutdown drain hard cap; module
+> coverage (F8); shutdown drain hard cap; module
 > split (step 10, deferred by design — the real surgery is de-membering handlers off the
 > subsystem god object; cleanest first slice is extracting Private/MCP/ as its own module).
+
+### [ ] 2026-07-03 — `manage_blueprint create_blueprint` ignores `path`, sprays to /Game root
+Found during the sleep-triage benchmark: `create_blueprint {name:'BP_Bench', path:'/Game/ZZ_McpScratch'}`
+silently created `/Game/BP_Bench` — the schema documents `savePath` for this action and the handler
+never reads `path`, so the destination fell through to the /Game root (the audit's
+hardcoded-destination class; the creates fixed then got path/savePath/folder aliases, create_blueprint
+was missed). `add_variable` still resolved it by name, so the miss stays invisible until a delete or
+a browse. Fix: accept `path`/`folder` as savePath aliases on create/create_blueprint (or reject when
+an undeclared destination param is present — the INVALID_PARAMS layer can't catch it because `path`
+IS declared for the widget/common creates on this tool).
 
 > **Dogfood/UX audit (2026-07-02):** 16 agents exercised all 22 tools live as schema-only
 > first-time users — 471 calls, 112 findings, report in

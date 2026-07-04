@@ -1048,8 +1048,9 @@ static UWorld* McpSafeNewMap(bool bForceNewMap = true, UMcpAutomationBridgeSubsy
             Subsystem->SendProgressUpdate(RequestId, 65.0f, TEXT("Completed tick cleanup"));
         }
         
-        // STEP 10: Give the engine a moment to process cleanup
-        FPlatformProcess::Sleep(0.10f); // 100ms delay for full cleanup
+        // STEP 10: Cleanup above is synchronous (tick unregister, GC, blocking
+        // render flushes) — nothing progresses during a game-thread sleep, so
+        // the old 100ms "full cleanup" delay here bought nothing.
     }
     
     // STEP 11: Now safe to create new map
@@ -1108,11 +1109,9 @@ static UWorld* McpSafeNewMap(bool bForceNewMap = true, UMcpAutomationBridgeSubsy
         // STEP 14: REMOVED - Calling StartFrame triggers assertion if TickCompletionEvents is not empty
         // The new world's actors already have ticking disabled from Step 12, so no tick functions
         // should be registered. We skip the StartFrame/EndFrame cycle to avoid the assertion.
-        // Instead, we rely on Step 15's additional delay for stability.
-        
-        // STEP 15: Additional delay to ensure engine is stable
-        FPlatformProcess::Sleep(0.10f); // Increased from 0.05f for better stability
-        
+        // (A "stability delay" that used to sit here ran no engine work — the
+        // next real tick happens after this handler returns.)
+
         // Progress update: complete
         if (Subsystem && !RequestId.IsEmpty())
         {
@@ -2072,10 +2071,9 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
           AssetRegistry.ScanFilesSynchronous(FilesToScan, true);
         }
         
-        // Wait for Asset Registry to process
-        FlushRenderingCommands();
-        FPlatformProcess::Sleep(0.05f);
-        
+        // (ScanFilesSynchronous above is synchronous — the registry already
+        // knows the file; no wait needed.)
+
         // CRITICAL FIX: Reload the saved level to ensure the world has the correct package name.
         // UEditorLoadingAndSavingUtils::SaveMap() saves to disk but doesn't update the world's
         // outer package. This causes "World Memory Leaks" crashes when load_level is called
@@ -2744,13 +2742,12 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAction(
     ULevelStreaming *NewLevel = UEditorLevelUtils::AddLevelToWorld(
         World, *SubLevelPath, StreamingClass);
     if (NewLevel) {
-      // CRITICAL FIX: Verify the streaming level can actually be loaded
+      // CRITICAL FIX: Verify the streaming level can actually be loaded.
       // AddLevelToWorld() creates the streaming level object but doesn't verify
-      // the level file exists. Check if the level loaded successfully.
-      // Give the engine a moment to attempt loading
-      FlushRenderingCommands();
-      FPlatformProcess::Sleep(0.1f);
-      
+      // the level file exists. Level streaming advances on world tick — which a
+      // game-thread sleep never runs — so pump it to completion synchronously.
+      World->FlushLevelStreaming();
+
       // Check if the level is actually loaded or pending load
       // If the level file doesn't exist, GetLoadedLevel() will be null and
       // the streaming state will not be pending

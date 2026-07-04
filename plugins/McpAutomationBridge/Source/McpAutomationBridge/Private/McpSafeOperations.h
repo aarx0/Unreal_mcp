@@ -571,11 +571,10 @@ inline bool McpSafeLevelSave(ULevel* Level, const FString& FullPath, int32 MaxRe
         }
     }
 
-    // CRITICAL: Flush rendering commands to prevent Intel driver race condition
+    // CRITICAL: Flush rendering commands to prevent Intel driver race condition.
+    // The call blocks until the render thread drains — package saving is
+    // CPU-side, so no further settle time exists to wait for.
     FlushRenderingCommands();
-
-    // Small delay after flush to ensure GPU is completely idle
-    FPlatformProcess::Sleep(0.050f); // 50ms wait
 
     FString SaveFilename;
     if (!FPackageName::TryConvertLongPackageNameToFilename(PackagePath, SaveFilename,
@@ -615,10 +614,11 @@ inline bool McpSafeLevelSave(ULevel* Level, const FString& FullPath, int32 MaxRe
             const int32 ActualRetries = FMath::Clamp(MaxRetries, 1, 10);
             const float RetryDelays[] = { 0.05f, 0.10f, 0.25f, 0.50f, 1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 3.5f };
 
-            for (int32 Retry = 0; Retry < ActualRetries; ++Retry)
+            // Check BEFORE sleeping: SaveLevel's file I/O is synchronous, so
+            // the file is normally visible immediately — the delays are
+            // failure-path backoff only (slow or network-backed folders).
+            for (int32 Retry = 0; Retry <= ActualRetries; ++Retry)
             {
-                FPlatformProcess::Sleep(RetryDelays[Retry]);
-
                 if (IFileManager::Get().FileExists(*VerifyFilename) ||
                     IFileManager::Get().FileExists(*AbsoluteVerifyFilename))
                 {
@@ -633,23 +633,11 @@ inline bool McpSafeLevelSave(ULevel* Level, const FString& FullPath, int32 MaxRe
                         TEXT("McpSafeLevelSave: Package exists in UE system: %s"), *PackagePath);
                     return true;
                 }
-            }
 
-            FlushRenderingCommands();
-            FPlatformProcess::Sleep(0.5f);
-            if (IFileManager::Get().FileExists(*VerifyFilename) ||
-                IFileManager::Get().FileExists(*AbsoluteVerifyFilename))
-            {
-                UE_LOG(LogMcpSafeOperations, Log,
-                    TEXT("McpSafeLevelSave: Successfully saved level after final flush: %s"), *PackagePath);
-                return true;
-            }
-
-            if (FPackageName::DoesPackageExist(PackagePath))
-            {
-                UE_LOG(LogMcpSafeOperations, Log,
-                    TEXT("McpSafeLevelSave: Package exists in UE system after final flush: %s"), *PackagePath);
-                return true;
+                if (Retry < ActualRetries)
+                {
+                    FPlatformProcess::Sleep(RetryDelays[Retry]);
+                }
             }
 
             UE_LOG(LogMcpSafeOperations, Error,
@@ -699,32 +687,23 @@ inline bool McpSafeLoadMap(const FString& MapPath, bool bForceCleanup = true)
         return false;
     }
 
-    // CRITICAL: Wait for any async loading to complete
-    int32 AsyncWaitCount = 0;
-    while (IsAsyncLoading() && AsyncWaitCount < 100)
-    {
-        FlushAsyncLoading();
-        FPlatformProcess::Sleep(0.01f);
-        AsyncWaitCount++;
-    }
-    if (AsyncWaitCount > 0)
+    // CRITICAL: Wait for any async loading to complete. FlushAsyncLoading
+    // blocks until every pending async load finishes — no poll loop needed.
+    if (IsAsyncLoading())
     {
         UE_LOG(LogMcpSafeOperations, Log,
-            TEXT("McpSafeLoadMap: Waited %d frames for async loading to complete"), AsyncWaitCount);
+            TEXT("McpSafeLoadMap: Flushing in-flight async loading before map load"));
+        FlushAsyncLoading();
     }
 
-    // CRITICAL: Stop PIE if active
+    // CRITICAL: Stop PIE if active. RequestEndPlayMap is serviced on the NEXT
+    // editor tick, which cannot run while this handler holds the game thread —
+    // the old poll+sleep loop here always spun its full second and exited with
+    // PIE still up. EndPlayMap is the immediate synchronous teardown.
     if (GEditor->PlayWorld)
     {
         UE_LOG(LogMcpSafeOperations, Log, TEXT("McpSafeLoadMap: Stopping active PIE session before loading map"));
-        GEditor->RequestEndPlayMap();
-        int32 PieWaitCount = 0;
-        while (GEditor->PlayWorld && PieWaitCount < 100)
-        {
-            FlushRenderingCommands();
-            FPlatformProcess::Sleep(0.01f);
-            PieWaitCount++;
-        }
+        GEditor->EndPlayMap();
         FlushRenderingCommands();
     }
 
@@ -777,9 +756,11 @@ inline bool McpSafeLoadMap(const FString& MapPath, bool bForceCleanup = true)
 #endif
 
         FlushRenderingCommands();
-        GEditor->ForceGarbageCollection(true);
-        FlushRenderingCommands();
-        FPlatformProcess::Sleep(0.05f);
+        // Immediate GC: ForceGarbageCollection only sets a next-tick flag (a
+        // no-op while this handler holds the game thread), and LoadMap needs
+        // the old world's references actually released NOW to avoid the
+        // World-Memory-Leaks fatal.
+        CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, true);
 
         UE_LOG(LogMcpSafeOperations, Log,
             TEXT("McpSafeLoadMap: Minimal cleanup completed before map load"));
@@ -1114,23 +1095,17 @@ inline void McpQuiesceAllState()
     }
 #endif
 
-    // STEP 2: Flush rendering commands to ensure GPU is idle
+    // STEP 2: Flush rendering commands (blocks until the render thread drains;
+    // a game-thread sleep runs no "pending UI/editor operations", so there is
+    // nothing further to wait for here)
     FlushRenderingCommands();
 
-    // STEP 3: Small delay to allow any pending UI/editor operations to complete
-    FPlatformProcess::Sleep(0.016f); // ~1 frame at 60fps
-
-    // STEP 4: Flush again after delay
-    FlushRenderingCommands();
-
-    // STEP 5: Force garbage collection to clean up any stale references
+    // STEP 3: Schedule a full GC purge for the next editor tick (deferred by
+    // design — it runs between requests, off this call's latency)
     if (GEditor)
     {
         GEditor->ForceGarbageCollection(true);
     }
-
-    // STEP 6: Final flush to process GC cleanup
-    FlushRenderingCommands();
 
     UE_LOG(LogMcpSafeOperations, Log, TEXT("McpQuiesceAllState: Editor quiesce completed"));
 }
@@ -1347,22 +1322,11 @@ inline void McpQuiesceBeforeBatchDelete(TArray<UObject*>& BatchObjects)
     // STEP 2: Batch-specific compilation barrier
     McpFinishCompilationForBatch(BatchObjects, TEXT("pre-delete"));
 
-    // STEP 3: Flush rendering commands
-    FlushRenderingCommands();
-
-    // STEP 4: Small delay for editor state to settle
-    FPlatformProcess::Sleep(0.016f);
-
-    // STEP 5: Flush again
-    FlushRenderingCommands();
-
-    // STEP 6: Force garbage collection to clean up editor references
-    if (GEditor)
-    {
-        GEditor->ForceGarbageCollection(true);
-    }
-
-    // STEP 7: Final flush
+    // STEP 3: Flush rendering commands (blocking). The delay + re-flush +
+    // deferred-GC-flag that used to follow were no-ops for the delete itself:
+    // a game-thread sleep runs no editor work, and ForceGarbageCollection only
+    // schedules a purge for the NEXT tick — it cannot clean references before
+    // ForceDeleteObjects runs (which handles reference replacement itself).
     FlushRenderingCommands();
 
     UE_LOG(LogMcpSafeOperations, Log,
@@ -1388,22 +1352,18 @@ inline void McpQuiesceAfterBatchDelete(const TArray<UObject*>& BatchObjects)
         TEXT("McpQuiesceAfterBatchDelete: Starting post-delete quiesce for %d objects"),
         BatchObjects.Num());
 
-    // STEP 1: Flush rendering commands to process destruction
+    // STEP 1: Flush rendering commands to process destruction (blocks until
+    // the render thread drains — destruction is complete when it returns)
     FlushRenderingCommands();
 
-    // STEP 2: Small delay for destruction to complete
-    FPlatformProcess::Sleep(0.016f);
-
-    // STEP 3: Flush again
-    FlushRenderingCommands();
-
-    // STEP 4: Force garbage collection to clean up deleted object references
+    // STEP 2: Schedule a full GC purge for the next editor tick to clean up
+    // deleted object references (deferred by design — runs between requests)
     if (GEditor)
     {
         GEditor->ForceGarbageCollection(true);
     }
 
-    // STEP 5: Final flush
+    // STEP 3: Final flush
     // NOTE: We do NOT call FinishAllCompilation() here because:
     // 1. It can trigger compilation of assets that reference deleted objects
     // 2. After ForceGarbageCollection, any pending compilations may have stale refs
@@ -1488,15 +1448,11 @@ GEditor->SelectNone(false, true, false);
 }
 #endif
 
-    // STEP 3: Flush rendering commands and wait for editor state to settle.
-    // DO NOT modify internal AnimBlueprint state here - ForceDeleteObjects
-    // needs that state intact for proper generated-class teardown.
-    FlushRenderingCommands();
-
-    // Small delay to allow async editor cleanup
-    FPlatformProcess::Sleep(0.050f); // 50ms wait
-
-    // Final flush
+    // STEP 3: Flush rendering commands. CloseAllEditorsForAsset and the
+    // deselection above are synchronous, and the flush blocks until the
+    // render thread drains — there is no async editor cleanup a game-thread
+    // sleep could wait for. DO NOT modify internal AnimBlueprint state here -
+    // ForceDeleteObjects needs that state intact for proper teardown.
     FlushRenderingCommands();
 
     UE_LOG(LogMcpSafeOperations, Log,
@@ -1712,14 +1668,12 @@ inline int32 DeleteAnimationRigClusterOrdered(const TArray<FAssetData>& ClusterA
         GEditor->SelectNone(false, true, false);
     }
 
-    // Flush and GC to clean up any stale references
+    // Flush (blocking) and schedule a next-tick GC purge for stale references
     FlushRenderingCommands();
     if (GEditor)
     {
         GEditor->ForceGarbageCollection(true);
     }
-    FlushRenderingCommands();
-    FPlatformProcess::Sleep(0.1f);
 
     // STEP 2: Identify in-memory-only assets first. Those need package unload;
     // file-backed assets stay on the engine-owned force-delete path and are NOT batch-unloaded.
@@ -2540,12 +2494,8 @@ RiskyAnimationAssets.Num(), SafeAssets.Num(), WorldAssets.Num());
 
             if (PlatformFile.DirectoryExists(*LocalPath))
             {
-                FlushRenderingCommands();
-                if (GEditor)
-                {
-                    GEditor->ForceGarbageCollection(true);
-                }
-                FlushRenderingCommands();
+                // Failure-path backoff before one retry. (Render flushes and
+                // deferred GC flags can't release file handles — dropped.)
                 FPlatformProcess::Sleep(0.05f);
 
                 PlatformFile.DeleteDirectoryRecursively(*LocalPath);
