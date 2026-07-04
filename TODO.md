@@ -89,7 +89,18 @@ IS declared for the widget/common creates on this tool).
 >   (Aaron: LLM callers fix a named refusal in one turn; log-only warnings were invisible
 >   to them anyway) — INVALID_PARAMS + acceptedParams list + bypassParamCheck:true
 >   downgrade (findings ride the response as paramWarnings; bypass logged) since a stale
->   table needs a rebuild to fix. NEXT: (b) Phase 2 = the apply-session receipt
+>   table needs a rebuild to fix.
+>   ~~Parsed table as source of truth~~ REPLACED 2026-07-04 (Aaron: declarations are
+>   authored data, parsers don't produce truth): fleet-authored McpDecl_*.h (1171 decls,
+>   FMcpCallRegistry, FMcpCall base for classed actions) — see docs/action-declarations.md.
+>   Registry follow-ups: (i) attribute the 136 UnverifiedDecl actions — biggest class is
+>   internal dispatch names colliding with another tool's advertised action
+>   (manage_asset.delete_asset → internal `delete`); fix = extract the registration-gate
+>   translation maps; (ii) burn down the lint's 151 brace-skew pins; (iii) enforce
+>   bRequired after its own evidence pass; (iv) pilot family classed as FMcpCall
+>   (manage_sequence or manage_networking), family dispatch chain deleted same commit;
+>   (v) Stage 3: derive published schemas from declarations, delete the hand-built bags.
+>   NEXT: (b) Phase 2 = the apply-session receipt
 >   (appliedProperties/ignoredParams via a shared collector in McpHandlerUtils) for
 >   what only the engine call can know — scope shrinks to runtime/target-dependent
 >   ignores now that wrong-action params are caught centrally; (c) generator coverage

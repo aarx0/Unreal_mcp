@@ -2,7 +2,7 @@
 #include "MCP/McpJsonRpc.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpToolDefinition.h"
-#include "MCP/McpActionParamTable.h"
+#include "MCP/McpCallRegistry.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeSettings.h"
 #include "Misc/Guid.h"
@@ -1436,26 +1436,26 @@ void FMcpNativeTransport::HandleToolsCall(
 		return;
 	}
 
-	// Per-action param check (the table is generated from handler source by
-	// scripts/generate-action-param-table.ps1). Schemas declare params per
-	// TOOL, so a param sent to an action that never reads it sails through
-	// the schema check and is silently ignored — the biggest remaining
-	// silent-no-op class. Violations REJECT: the caller is an LLM, and a
-	// named, explained refusal gets fixed in one turn while a silent ignore
-	// never surfaces. Because a stale table can only be corrected with a
-	// regenerate + rebuild, the error names the escape hatch
+	// Per-action param check against the declaration registry (McpDecl_*.h —
+	// the server's authored contract; see docs/action-declarations.md).
+	// Schemas declare params per TOOL, so a param sent to an action that
+	// never reads it sails through the schema check and is silently ignored —
+	// the biggest remaining silent-no-op class. Violations REJECT: the caller
+	// is an LLM, and a named, explained refusal gets fixed in one turn while
+	// a silent ignore never surfaces. Because a wrong declaration can only be
+	// corrected with an edit + rebuild, the error names the escape hatch
 	// (bypassParamCheck:true → proceed, findings ride the response as
-	// paramWarnings) and routes the fix back to the repo.
+	// paramWarnings) and routes the fix back to the repo. UnverifiedDecl
+	// entries are skipped — validation never runs on unattributed truth.
 	TArray<FString> BypassedParamWarnings;
 	if (Arguments.IsValid())
 	{
 		FString ActionValue;
 		if (Arguments->TryGetStringField(TEXT("action"), ActionValue))
 		{
-			if (const TSet<FString>* ActionSet =
-					McpActionParams::FindActionParams(ToolName, ActionValue))
+			const FMcpCallDecl* Decl = FMcpCallRegistry::Get().FindDecl(ToolName, ActionValue);
+			if (Decl && !EnumHasAnyFlags(Decl->Flags, EMcpCallFlags::UnverifiedDecl))
 			{
-				const TSet<FString>& Shared = McpActionParams::GlobalSharedParams();
 				TArray<FString> ForeignParams;
 				for (const auto& Pair : Arguments->Values)
 				{
@@ -1464,14 +1464,27 @@ void FMcpNativeTransport::HandleToolsCall(
 					{
 						continue;
 					}
-					if (!ActionSet->Contains(Pair.Key) && !Shared.Contains(Pair.Key))
+					bool bDeclared = false;
+					for (const FMcpParamDecl& Param : Decl->Params)
+					{
+						if (Pair.Key == Param.Name)
+						{
+							bDeclared = true;
+							break;
+						}
+					}
+					if (!bDeclared)
 					{
 						ForeignParams.Add(Pair.Key);
 					}
 				}
 				if (ForeignParams.Num() > 0)
 				{
-					TArray<FString> Accepted = ActionSet->Array();
+					TArray<FString> Accepted;
+					for (const FMcpParamDecl& Param : Decl->Params)
+					{
+						Accepted.Add(Param.Name);
+					}
 					Accepted.Sort();
 					constexpr int32 MaxListed = 30;
 					FString AcceptedStr = FString::Join(
@@ -1486,11 +1499,10 @@ void FMcpNativeTransport::HandleToolsCall(
 					if (!bBypass)
 					{
 						const FString Message = FString::Printf(
-							TEXT("%s.%s does not read: %s. Params this action reads: %s (plus cross-cutting params). ")
+							TEXT("%s.%s does not read: %s. Params this action reads: %s. ")
 							TEXT("Remove or rename the unread param(s). If the handler source DOES read them, the ")
-							TEXT("generated action-param table is stale: retry with bypassParamCheck:true to proceed ")
-							TEXT("now, and report the miss (fork TODO.md) so scripts/generate-action-param-table.ps1 ")
-							TEXT("gets fixed."),
+							TEXT("action's declaration is wrong: retry with bypassParamCheck:true to proceed ")
+							TEXT("now, and report the miss (fork TODO.md) so its McpDecl_*.h entry gets fixed."),
 							*ToolName, *ActionValue, *FString::Join(ForeignParams, TEXT(", ")), *AcceptedStr);
 						UE_LOG(LogMcpNativeTransport, Warning,
 							TEXT("tools/call rejected (per-action params): %s.%s: %s"),

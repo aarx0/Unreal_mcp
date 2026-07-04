@@ -199,6 +199,7 @@ private:
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeSettings.h"
 #include "Editor/EditorPerformanceSettings.h"  // bridge uncaps background tick throttling
+#include "MCP/Decls/McpDeclRegistration.h"     // action-declaration registry bootstrap
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
@@ -474,6 +475,13 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       {
         PluginDir = Plugin->GetBaseDir();
       }
+
+      // The action-declaration registry must exist before the transport can
+      // validate its first tools/call.
+      McpRegisterAllActionDecls();
+      UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
+             TEXT("Registered %d action declarations"),
+             FMcpCallRegistry::Get().NumDecls());
 
       NativeTransport = MakeShared<FMcpNativeTransport>(this);
       if (!NativeTransport->Start(Settings->NativeMCPPort, PluginDir, Settings->bLoadAllToolsOnStart,

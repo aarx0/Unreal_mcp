@@ -30,19 +30,18 @@ pwsh -File tests/schema/param-reconciliation-test.ps1                  # check
 pwsh -File tests/schema/param-reconciliation-test.ps1 -UpdateAllowlist # re-pin
 ```
 
-## action-param-table-test.ps1
+## action-decl-lint.ps1
 
-Freshness check for `McpActionParamTable.h` — the generated per-action accepted-param
-table (schemas declare params per TOOL; the table records which params each ACTION's
-handler branch actually reads, attributed by brace scope; see
-`scripts/generate-action-param-table.ps1`). The transport REJECTS params sent to an
-action that never reads them (`INVALID_PARAMS` with the accepted list;
-`bypassParamCheck:true` downgrades to response-visible `paramWarnings` when the table
-itself is suspected stale — then fix the generator and regenerate). Attribution is
-fail-permissive: a missed read can only suppress detection, never flag a param the
-table knows about.
+Handler source vs the authored action declarations (`Private/MCP/Decls/McpDecl_*.h`
+— the server's per-action contract; see `docs/action-declarations.md`). Statically
+re-derives branch-local payload reads (brace-scope attribution — the machinery that
+used to *generate* the deleted parsed table, demoted to a drift detector) and fails
+when a handler branch reads a param its action's declaration doesn't list. One
+directional by design: the fleet-authored declarations legitimately contain reads
+this parser can't see. `action-decl-lint-allowlist.txt` pins the bootstrap's known
+parser mis-attributions.
 
 ```powershell
-pwsh -File tests/schema/action-param-table-test.ps1          # check
-pwsh -File tests/schema/action-param-table-test.ps1 -Update  # regenerate after handler changes
+pwsh -File tests/schema/action-decl-lint.ps1                  # check
+pwsh -File tests/schema/action-decl-lint.ps1 -UpdateAllowlist # re-pin after review
 ```

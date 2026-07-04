@@ -1,0 +1,265 @@
+// Action declarations for manage_asset — the server's contract: which params
+// each action reads, and which are required. Fleet-authored from handler
+// source (three-witness cross-check, 2026-07-04), hand-maintained since:
+// adding an action = adding its declaration here (the boot validation and
+// tests/schema/action-decl-lint.ps1 enforce both directions).
+// UnverifiedDecl = no reachable read path was attributable; validation skips
+// those actions and the lint nags until someone verifies or removes them.
+#pragma once
+
+#include "MCP/McpCallRegistry.h"
+
+namespace McpDecls
+{
+inline const FMcpParamDecl P_ManageAsset_0[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("code"), EMcpParamKind::String, true }, { TEXT("outputType"), EMcpParamKind::String, false }, { TEXT("description"), EMcpParamKind::String, false }, { TEXT("inputs"), EMcpParamKind::Array, false }, { TEXT("additionalOutputs"), EMcpParamKind::Array, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_1[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("dataTablePath"), EMcpParamKind::String, true }, { TEXT("tablePath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("rowName"), EMcpParamKind::String, true }, { TEXT("rowData"), EMcpParamKind::Any, false } };
+inline const FMcpParamDecl P_ManageAsset_2[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_3[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("inputName"), EMcpParamKind::String, true }, { TEXT("inputType"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("functionPath"), EMcpParamKind::Any, false } };
+inline const FMcpParamDecl P_ManageAsset_4[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("inputName"), EMcpParamKind::String, true }, { TEXT("inputType"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_5[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_6[] = { { TEXT("layerName"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("materialPath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("hardness"), EMcpParamKind::Number, false }, { TEXT("physicalMaterialPath"), EMcpParamKind::String, false }, { TEXT("noWeightBlend"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_7[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("nodeType"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("materialPath"), EMcpParamKind::String, true }, { TEXT("posX"), EMcpParamKind::Number, false }, { TEXT("posY"), EMcpParamKind::Number, false }, { TEXT("value"), EMcpParamKind::Number, false }, { TEXT("color"), EMcpParamKind::Object, false }, { TEXT("texturePath"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_8[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, true }, { TEXT("type"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Any, false } };
+inline const FMcpParamDecl P_ManageAsset_9[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("operation"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_10[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_11[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_12[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_13[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_14[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_15[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("defaultValue"), EMcpParamKind::Number, false }, { TEXT("group"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_16[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("defaultValue"), EMcpParamKind::Bool, false }, { TEXT("group"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_17[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_18[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("coordinateIndex"), EMcpParamKind::Number, false }, { TEXT("uTiling"), EMcpParamKind::Number, false }, { TEXT("vTiling"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_19[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("texturePath"), EMcpParamKind::String, false }, { TEXT("parameterName"), EMcpParamKind::String, false }, { TEXT("samplerType"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_20[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("group"), EMcpParamKind::String, false }, { TEXT("defaultValue"), EMcpParamKind::Object, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_21[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_22[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_23[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_24[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("inPlace"), EMcpParamKind::Bool, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("inputR"), EMcpParamKind::Array, false }, { TEXT("outputR"), EMcpParamKind::Array, false }, { TEXT("inputG"), EMcpParamKind::Array, false }, { TEXT("outputG"), EMcpParamKind::Array, false }, { TEXT("inputB"), EMcpParamKind::Array, false }, { TEXT("outputB"), EMcpParamKind::Array, false }, { TEXT("input"), EMcpParamKind::Array, false }, { TEXT("output"), EMcpParamKind::Array, false } };
+inline const FMcpParamDecl P_ManageAsset_25[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("inBlack"), EMcpParamKind::Number, false }, { TEXT("inWhite"), EMcpParamKind::Number, false }, { TEXT("gamma"), EMcpParamKind::Number, false }, { TEXT("outBlack"), EMcpParamKind::Number, false }, { TEXT("outWhite"), EMcpParamKind::Number, false }, { TEXT("inPlace"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_26[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("materialPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_27[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_28[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("radius"), EMcpParamKind::Number, false }, { TEXT("blurType"), EMcpParamKind::String, false }, { TEXT("outputPath"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_29[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("pinName"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("materialPath"), EMcpParamKind::String, true }, { TEXT("expressionIndex"), EMcpParamKind::Number, false }, { TEXT("inputName"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_30[] = { { TEXT("showConfirmation"), EMcpParamKind::Bool, false }, { TEXT("fixupRedirectors"), EMcpParamKind::Bool, false }, { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("folderPath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("pattern"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_31[] = { { TEXT("prefix"), EMcpParamKind::String, false }, { TEXT("suffix"), EMcpParamKind::String, false }, { TEXT("searchText"), EMcpParamKind::String, false }, { TEXT("replaceText"), EMcpParamKind::String, false }, { TEXT("checkoutFiles"), EMcpParamKind::Bool, false }, { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("folderPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_32[] = { { TEXT("texturePath"), EMcpParamKind::String, true }, { TEXT("channel"), EMcpParamKind::String, false }, { TEXT("outputPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_33[] = { { TEXT("redTexture"), EMcpParamKind::String, false }, { TEXT("greenTexture"), EMcpParamKind::String, false }, { TEXT("blueTexture"), EMcpParamKind::String, false }, { TEXT("alphaTexture"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_34[] = { { TEXT("baseTexture"), EMcpParamKind::String, true }, { TEXT("overlayTexture"), EMcpParamKind::String, false }, { TEXT("blendTexture"), EMcpParamKind::String, false }, { TEXT("blendMode"), EMcpParamKind::String, false }, { TEXT("opacity"), EMcpParamKind::Number, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_35[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("waitForShaders"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_36[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("materialPath"), EMcpParamKind::String, false }, { TEXT("layers"), EMcpParamKind::Array, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_37[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("virtualTextureStreaming"), EMcpParamKind::Bool, false }, { TEXT("tileSize"), EMcpParamKind::Number, false }, { TEXT("tileBorderSize"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_38[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("sourceNodeId"), EMcpParamKind::String, true }, { TEXT("targetNodeId"), EMcpParamKind::String, false }, { TEXT("inputName"), EMcpParamKind::String, false }, { TEXT("sourcePin"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("materialPath"), EMcpParamKind::String, true }, { TEXT("fromExpression"), EMcpParamKind::Number, false }, { TEXT("toExpression"), EMcpParamKind::Number, false }, { TEXT("targetPin"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_39[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("sourceNodeId"), EMcpParamKind::String, true }, { TEXT("targetNodeId"), EMcpParamKind::String, false }, { TEXT("inputName"), EMcpParamKind::String, false }, { TEXT("sourcePin"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_40[] = { { TEXT("meshPath"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("width"), EMcpParamKind::Number, false }, { TEXT("height"), EMcpParamKind::Number, false }, { TEXT("sampleCount"), EMcpParamKind::Number, false }, { TEXT("rayDistance"), EMcpParamKind::Number, false }, { TEXT("bias"), EMcpParamKind::Number, false }, { TEXT("uvChannel"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_41[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("rowStruct"), EMcpParamKind::String, true }, { TEXT("rowStructPath"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_42[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_43[] = { { TEXT("path"), EMcpParamKind::String, true }, { TEXT("directoryPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_44[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("gradientType"), EMcpParamKind::String, false }, { TEXT("width"), EMcpParamKind::Number, false }, { TEXT("height"), EMcpParamKind::Number, false }, { TEXT("angle"), EMcpParamKind::Number, false }, { TEXT("centerX"), EMcpParamKind::Number, false }, { TEXT("centerY"), EMcpParamKind::Number, false }, { TEXT("radius"), EMcpParamKind::Number, false }, { TEXT("hdr"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("startColor"), EMcpParamKind::Object, false }, { TEXT("endColor"), EMcpParamKind::Object, false } };
+inline const FMcpParamDecl P_ManageAsset_45[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_46[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("materialDomain"), EMcpParamKind::String, false }, { TEXT("blendMode"), EMcpParamKind::String, false }, { TEXT("shadingModel"), EMcpParamKind::String, false }, { TEXT("twoSided"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("properties"), EMcpParamKind::Object, false } };
+inline const FMcpParamDecl P_ManageAsset_47[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("description"), EMcpParamKind::String, false }, { TEXT("exposeToLibrary"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_48[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("parentMaterial"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("parameters"), EMcpParamKind::Object, false } };
+inline const FMcpParamDecl P_ManageAsset_49[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("noiseType"), EMcpParamKind::String, false }, { TEXT("width"), EMcpParamKind::Number, false }, { TEXT("height"), EMcpParamKind::Number, false }, { TEXT("scale"), EMcpParamKind::Number, false }, { TEXT("octaves"), EMcpParamKind::Number, false }, { TEXT("persistence"), EMcpParamKind::Number, false }, { TEXT("lacunarity"), EMcpParamKind::Number, false }, { TEXT("seed"), EMcpParamKind::Number, false }, { TEXT("seamless"), EMcpParamKind::Bool, false }, { TEXT("hdr"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_50[] = { { TEXT("sourceTexture"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("strength"), EMcpParamKind::Number, false }, { TEXT("algorithm"), EMcpParamKind::String, false }, { TEXT("flipY"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("channelMode"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_51[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("patternType"), EMcpParamKind::String, false }, { TEXT("width"), EMcpParamKind::Number, false }, { TEXT("height"), EMcpParamKind::Number, false }, { TEXT("tilesX"), EMcpParamKind::Number, false }, { TEXT("tilesY"), EMcpParamKind::Number, false }, { TEXT("lineWidth"), EMcpParamKind::Number, false }, { TEXT("brickRatio"), EMcpParamKind::Number, false }, { TEXT("offset"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("primaryColor"), EMcpParamKind::Object, false }, { TEXT("secondaryColor"), EMcpParamKind::Object, false } };
+inline const FMcpParamDecl P_ManageAsset_52[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_53[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("width"), EMcpParamKind::Number, false }, { TEXT("height"), EMcpParamKind::Number, false }, { TEXT("format"), EMcpParamKind::String, false }, { TEXT("packagePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("renderTargetPath"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_55[] = { { TEXT("paths"), EMcpParamKind::Array, true }, { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_58[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("nodeIds"), EMcpParamKind::Array, false } };
+inline const FMcpParamDecl P_ManageAsset_59[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("amount"), EMcpParamKind::Number, false }, { TEXT("inPlace"), EMcpParamKind::Bool, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("method"), EMcpParamKind::String, false }, { TEXT("outputPath"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_60[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("pinName"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_61[] = { { TEXT("sourcePath"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("newName"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_63[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("dataTablePath"), EMcpParamKind::String, true }, { TEXT("tablePath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("rowName"), EMcpParamKind::String, true }, { TEXT("rowData"), EMcpParamKind::Any, false } };
+inline const FMcpParamDecl P_ManageAsset_64[] = { { TEXT("functionName"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("params"), EMcpParamKind::Object, true }, { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false }, { TEXT("assetPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_65[] = { { TEXT("tag"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("maxResults"), EMcpParamKind::Number, false }, { TEXT("searchActors"), EMcpParamKind::Bool, false }, { TEXT("searchComponents"), EMcpParamKind::Bool, false }, { TEXT("searchAssets"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_66[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeType"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_67[] = { { TEXT("directoryPath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("checkoutFiles"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_68[] = { { TEXT("landscapePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("assetPaths"), EMcpParamKind::Array, false }, { TEXT("assets"), EMcpParamKind::Array, false }, { TEXT("lodCount"), EMcpParamKind::Number, false }, { TEXT("numLODs"), EMcpParamKind::Number, false }, { TEXT("reductionSettings"), EMcpParamKind::Object, false } };
+inline const FMcpParamDecl P_ManageAsset_69[] = { { TEXT("directory"), EMcpParamKind::String, false }, { TEXT("reportType"), EMcpParamKind::String, false }, { TEXT("outputPath"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_70[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("maxDepth"), EMcpParamKind::Number, false } };
+inline const FMcpParamDecl P_ManageAsset_71[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("includeTransient"), EMcpParamKind::Bool, false }, { TEXT("propertyName"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_72[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("orphansOnly"), EMcpParamKind::Bool, false }, { TEXT("nodeId"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_73[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("dataTablePath"), EMcpParamKind::String, true }, { TEXT("tablePath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_74[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("includeSoftDependencies"), EMcpParamKind::Bool, false }, { TEXT("recursive"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_75[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_76[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("filter"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("nodeIds"), EMcpParamKind::Array, false } };
+inline const FMcpParamDecl P_ManageAsset_77[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("nodeId"), EMcpParamKind::String, true }, { TEXT("materialPath"), EMcpParamKind::String, true }, { TEXT("expressionIndex"), EMcpParamKind::Number, false } };
+inline const FMcpParamDecl P_ManageAsset_78[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_79[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_80[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("startNodeId"), EMcpParamKind::String, true }, { TEXT("endNodeId"), EMcpParamKind::String, false }, { TEXT("endPin"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_81[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, true }, { TEXT("direction"), EMcpParamKind::String, false }, { TEXT("depth"), EMcpParamKind::Number, false }, { TEXT("upstream"), EMcpParamKind::Bool, false }, { TEXT("downstream"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_82[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_83[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_84[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("assetPaths"), EMcpParamKind::Array, true } };
+inline const FMcpParamDecl P_ManageAsset_85[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_86[] = { { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("sourcePath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_87[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("dataTablePath"), EMcpParamKind::String, true }, { TEXT("tablePath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("sourceText"), EMcpParamKind::String, true }, { TEXT("csv"), EMcpParamKind::String, true }, { TEXT("json"), EMcpParamKind::String, true }, { TEXT("content"), EMcpParamKind::String, true }, { TEXT("format"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_88[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("inPlace"), EMcpParamKind::Bool, false }, { TEXT("invertAlpha"), EMcpParamKind::Bool, false }, { TEXT("channel"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("outputPath"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_89[] = { { TEXT("filter"), EMcpParamKind::Object, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("directory"), EMcpParamKind::String, false }, { TEXT("directoryPath"), EMcpParamKind::String, false }, { TEXT("recursive"), EMcpParamKind::Bool, false }, { TEXT("recursivePaths"), EMcpParamKind::Bool, false }, { TEXT("pagination"), EMcpParamKind::Object, false }, { TEXT("depth"), EMcpParamKind::Number, false } };
+inline const FMcpParamDecl P_ManageAsset_90[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_91[] = { { TEXT("sourcePath"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("newName"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_93[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("meshPath"), EMcpParamKind::String, true }, { TEXT("enableNanite"), EMcpParamKind::Bool, false }, { TEXT("preserveArea"), EMcpParamKind::Bool, false }, { TEXT("trianglePercent"), EMcpParamKind::Number, false }, { TEXT("fallbackPercent"), EMcpParamKind::Number, false } };
+inline const FMcpParamDecl P_ManageAsset_94[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("waitForShaders"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("materialPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_95[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("dataTablePath"), EMcpParamKind::String, true }, { TEXT("tablePath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("rowName"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_96[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("nodeId"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("materialPath"), EMcpParamKind::String, true }, { TEXT("expressionIndex"), EMcpParamKind::Number, false } };
+inline const FMcpParamDecl P_ManageAsset_97[] = { { TEXT("sourcePath"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("newName"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_99[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_100[] = { { TEXT("sourcePath"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("newWidth"), EMcpParamKind::Number, false }, { TEXT("newHeight"), EMcpParamKind::Number, false }, { TEXT("filterMethod"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_104[] = { { TEXT("classNames"), EMcpParamKind::Array, false }, { TEXT("packagePaths"), EMcpParamKind::Array, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("searchText"), EMcpParamKind::String, false }, { TEXT("recursivePaths"), EMcpParamKind::Bool, false }, { TEXT("recursiveClasses"), EMcpParamKind::Bool, false }, { TEXT("offset"), EMcpParamKind::Number, false }, { TEXT("limit"), EMcpParamKind::Number, false } };
+inline const FMcpParamDecl P_ManageAsset_105[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("propertyName"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Any, true } };
+inline const FMcpParamDecl P_ManageAsset_106[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("blendMode"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_107[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("compressionSettings"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_108[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("lodBias"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_109[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("materialDomain"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_110[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("parameterType"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_111[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("metadata"), EMcpParamKind::Object, false } };
+inline const FMcpParamDecl P_ManageAsset_112[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Number, false }, { TEXT("r"), EMcpParamKind::Number, false }, { TEXT("g"), EMcpParamKind::Number, false }, { TEXT("b"), EMcpParamKind::Number, false }, { TEXT("a"), EMcpParamKind::Number, false }, { TEXT("constA"), EMcpParamKind::Number, false }, { TEXT("constB"), EMcpParamKind::Number, false } };
+inline const FMcpParamDecl P_ManageAsset_113[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_114[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("shadingModel"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_115[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_116[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("neverStream"), EMcpParamKind::Bool, false }, { TEXT("streamingPriority"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_117[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("tags"), EMcpParamKind::Array, false } };
+inline const FMcpParamDecl P_ManageAsset_118[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("textureGroup"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_119[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("texturePath"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_120[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("twoSided"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_121[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Object, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_122[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("amount"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_123[] = { { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("assetPath"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageAsset_124[] = { { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("description"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAsset_125[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, true }, { TEXT("code"), EMcpParamKind::String, false }, { TEXT("description"), EMcpParamKind::String, false }, { TEXT("outputType"), EMcpParamKind::String, false }, { TEXT("inputs"), EMcpParamKind::Array, false }, { TEXT("additionalOutputs"), EMcpParamKind::Array, false } };
+inline const FMcpParamDecl P_ManageAsset_126[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("functionPath"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageAsset_127[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
+
+inline const FMcpCallDecl GManageAsset[] =
+{
+	{ TEXT("manage_asset"), TEXT("add_custom_expression"), P_ManageAsset_0, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_data_table_row"), P_ManageAsset_1, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_fresnel"), P_ManageAsset_2, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_function_input"), P_ManageAsset_3, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_function_output"), P_ManageAsset_4, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_if"), P_ManageAsset_5, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_landscape_layer"), P_ManageAsset_6, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_material_node"), P_ManageAsset_7, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_material_parameter"), P_ManageAsset_8, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_math_node"), P_ManageAsset_9, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_noise"), P_ManageAsset_10, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_panner"), P_ManageAsset_11, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_pixel_depth"), P_ManageAsset_12, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_reflection_vector"), P_ManageAsset_13, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_rotator"), P_ManageAsset_14, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_scalar_parameter"), P_ManageAsset_15, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_static_switch_parameter"), P_ManageAsset_16, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_switch"), P_ManageAsset_17, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_texture_coordinate"), P_ManageAsset_18, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_texture_sample"), P_ManageAsset_19, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_vector_parameter"), P_ManageAsset_20, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_vertex_normal"), P_ManageAsset_21, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_voronoi"), P_ManageAsset_22, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("add_world_position"), P_ManageAsset_23, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("adjust_curves"), P_ManageAsset_24, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("adjust_levels"), P_ManageAsset_25, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("analyze_graph"), P_ManageAsset_26, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("arrange_graph"), P_ManageAsset_27, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("blur"), P_ManageAsset_28, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("break_material_connections"), P_ManageAsset_29, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("bulk_delete"), P_ManageAsset_30, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("bulk_rename"), P_ManageAsset_31, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("channel_extract"), P_ManageAsset_32, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("channel_pack"), P_ManageAsset_33, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("combine_textures"), P_ManageAsset_34, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("compile_material"), P_ManageAsset_35, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("configure_layer_blend"), P_ManageAsset_36, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("configure_virtual_texture"), P_ManageAsset_37, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("connect_material_pins"), P_ManageAsset_38, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("connect_nodes"), P_ManageAsset_39, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_ao_from_mesh"), P_ManageAsset_40, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_data_table"), P_ManageAsset_41, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_decal_material"), P_ManageAsset_42, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_folder"), P_ManageAsset_43, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_gradient_texture"), P_ManageAsset_44, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_landscape_material"), P_ManageAsset_45, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_material"), P_ManageAsset_46, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_material_function"), P_ManageAsset_47, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_material_instance"), P_ManageAsset_48, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_noise_texture"), P_ManageAsset_49, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_normal_from_height"), P_ManageAsset_50, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_pattern_texture"), P_ManageAsset_51, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_post_process_material"), P_ManageAsset_52, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_render_target"), P_ManageAsset_53, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("create_thumbnail"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("delete"), P_ManageAsset_55, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("delete_asset"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("delete_assets"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("delete_node"), P_ManageAsset_58, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("desaturate"), P_ManageAsset_59, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("disconnect_nodes"), P_ManageAsset_60, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("duplicate"), P_ManageAsset_61, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("duplicate_asset"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("edit_data_table_row"), P_ManageAsset_63, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("exists"), P_ManageAsset_64, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("find_by_tag"), P_ManageAsset_65, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("find_node"), P_ManageAsset_66, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("fixup_redirectors"), P_ManageAsset_67, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("generate_lods"), P_ManageAsset_68, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("generate_report"), P_ManageAsset_69, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_asset_graph"), P_ManageAsset_70, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_asset_properties"), P_ManageAsset_71, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_connected_subgraph"), P_ManageAsset_72, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_data_table_rows"), P_ManageAsset_73, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_dependencies"), P_ManageAsset_74, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_material_function_info"), P_ManageAsset_75, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_material_info"), P_ManageAsset_76, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_material_node_details"), P_ManageAsset_77, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_material_stats"), P_ManageAsset_78, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_metadata"), P_ManageAsset_79, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_node_chain"), P_ManageAsset_80, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_node_connections"), P_ManageAsset_81, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_node_properties"), P_ManageAsset_82, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_referencers"), P_ManageAsset_83, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_source_control_state"), P_ManageAsset_84, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("get_texture_info"), P_ManageAsset_85, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("import"), P_ManageAsset_86, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("import_data_table"), P_ManageAsset_87, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("invert"), P_ManageAsset_88, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("list"), P_ManageAsset_89, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("list_instances"), P_ManageAsset_90, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("move"), P_ManageAsset_91, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("move_asset"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("nanite_rebuild_mesh"), P_ManageAsset_93, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("rebuild_material"), P_ManageAsset_94, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("remove_data_table_row"), P_ManageAsset_95, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("remove_material_node"), P_ManageAsset_96, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("rename"), P_ManageAsset_97, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("rename_asset"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("reset_instance_parameters"), P_ManageAsset_99, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("resize_texture"), P_ManageAsset_100, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("save"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("save_all"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("save_asset"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("search_assets"), P_ManageAsset_104, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_asset_property"), P_ManageAsset_105, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_blend_mode"), P_ManageAsset_106, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_compression_settings"), P_ManageAsset_107, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_lod_bias"), P_ManageAsset_108, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_material_domain"), P_ManageAsset_109, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_material_parameter"), P_ManageAsset_110, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_metadata"), P_ManageAsset_111, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_node_value"), P_ManageAsset_112, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_scalar_parameter_value"), P_ManageAsset_113, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_shading_model"), P_ManageAsset_114, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_static_switch_parameter_value"), P_ManageAsset_115, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_streaming_priority"), P_ManageAsset_116, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_asset"), TEXT("set_tags"), P_ManageAsset_117, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_texture_group"), P_ManageAsset_118, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_texture_parameter_value"), P_ManageAsset_119, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_two_sided"), P_ManageAsset_120, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("set_vector_parameter_value"), P_ManageAsset_121, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("sharpen"), P_ManageAsset_122, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("source_control_checkout"), P_ManageAsset_123, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("source_control_submit"), P_ManageAsset_124, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("update_custom_expression"), P_ManageAsset_125, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("use_material_function"), P_ManageAsset_126, EMcpCallFlags::None },
+	{ TEXT("manage_asset"), TEXT("validate"), P_ManageAsset_127, EMcpCallFlags::None },
+};
+}
