@@ -880,6 +880,15 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
+Nobody uses it: the only real client (agent sessions) never enables/disables tools in
+practice — its sole appearance in months of dogfooding was the audit incident where its
+then-global state broke sibling sessions (fixed with per-session overlays, which only this
+tool exercises). The one defensible use-case (schema-payload slimming for context-tight
+clients) doesn't apply to us. Removal = the tool definition, McpDynamicToolManager overlay
+machinery, hand-authored McpDecl_ManageTools.h, session-enablement tests; 22 tools → 21.
+Own commit; confirm with Aaron before landing since it deletes an advertised tool.
+
 ### [ ] 2026-07-04e — Bootstrap "mega-bag" decls are a FALSE-REJECT class (one instance fixed, sweep pending)
 The original file-scoped fleet gave ~16 control_actor actions (and several control_editor
 ones) IDENTICAL 33-param union arrays — brace-skew over-merge. Union bags are over-permissive

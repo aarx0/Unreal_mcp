@@ -80,5 +80,10 @@ assorted valid traffic = zero per-action rejections.
    own evidence pass (the fleet's required flags are the least-verified part
    of the bootstrap).
 4. **Client never defines the contract**; it receives it via `tools/list`.
+5. **Classes never re-enter the dispatcher** (agreed 2026-07-04). Cross-action
+   reuse is a typed shared function both classes call — never a cloned payload
+   with a rewritten `subAction` handed back to string matching. When a family
+   is classed, its payload-rewriting delegation sites convert to direct calls
+   and the internal action names they targeted die with the chain.
    Declarations do not attempt runtime-outcome truth (that is the apply-receipt
    work — see the dogfood TODO).
