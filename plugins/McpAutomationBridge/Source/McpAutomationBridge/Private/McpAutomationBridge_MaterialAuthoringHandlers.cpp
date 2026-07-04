@@ -9,8 +9,8 @@
  * HANDLERS BY CATEGORY:
  * ---------------------
  * 8.1  Material Creation    - create_material, create_material_instance, create_material_function
- * 8.2  Expression Nodes     - add_expression, remove_expression, connect_expressions,
- *                              disconnect_expressions, get_expression_info
+ * 8.2  Expression Nodes     - add_texture_sample, add_texture_coordinate (full action
+ *                              list: McpConsolidatedActionRouting.h MaterialAuthoring)
  * 8.3  Material Properties  - set_material_property, set_material_shading_model,
  *                              set_material_blend_mode, set_material_two_sided
  * 8.4  Parameters           - add_scalar_parameter, add_vector_parameter, add_texture_parameter,

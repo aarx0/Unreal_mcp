@@ -124,6 +124,11 @@ public:
   // handlers that receive a UMcpAutomationBridgeSubsystem* (e.g. static
   // blueprint helper routines). They were previously declared private which
   // prevented those helpers from invoking them via a 'Self' pointer.
+  //
+  // OWNERSHIP: the Result object is handed off by this call — it is
+  // serialized on a worker thread after the call returns, so callers must
+  // not mutate it (or anything reachable from it) afterwards. The universal
+  // `SendAutomationResponse(...); return true;` shape satisfies this.
   void SendAutomationResponse(FMcpResponseHandle TargetSocket,
                               const FString &RequestId,
                               bool bSuccess, const FString &Message,
@@ -732,10 +737,6 @@ private:
   HandleCreateAnimBlueprint(const FString &RequestId, const FString &Action,
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle RequestingSocket);
-  bool
-  HandleCreateMaterialNodes(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
   // Niagara system handlers
   bool
   HandleCreateNiagaraSystem(const FString &RequestId, const FString &Action,
@@ -767,15 +768,6 @@ private:
   bool HandleActivateRagdoll(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
-  // Material graph handlers
-  bool HandleAddMaterialTextureSample(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool
-  HandleAddMaterialExpression(const FString &RequestId, const FString &Action,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle RequestingSocket);
   // Sequencer track handlers
   bool HandleAddCameraTrack(const FString &RequestId, const FString &Action,
                             const TSharedPtr<FJsonObject> &Payload,

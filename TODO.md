@@ -36,13 +36,21 @@ as they land.
 > responses now serialize the handler's details object into the text block just like
 > successes (the old shape dropped it — the ENGINE_ERROR guard's `engineErrors` array had
 > never actually reached a client).
+> **Quick wins SHIPPED 2026-07-03:** schema validation promoted warn→reject
+> (INVALID_PARAMS + near-miss suggestions; gate was 5 warnings across 11 sessions, all
+> genuinely wrong calls; action/subAction mirror bidirectionally before validation);
+> responses serialize on the write thread (zero post-send Result mutations by audit —
+> ownership contract documented on SendAutomationResponse); the "three material handlers
+> ignoring save:false" were DEAD CODE (zero call sites) — deleted 509 lines; the live
+> FinalizeMaterialHost path already honored save.
 > Still open from the review: error-code constants header (Aaron-deferred, light version
-> only) + alias freeze (F7); per-action scaffoldOnly response markers; widget recipe
-> swap-on-success + broader transaction coverage (F8); replace ~14 blind
-> FPlatformProcess::Sleep stability delays; serialize responses on the write thread;
-> shutdown drain hard cap; module split (step 10, deferred by design); and
-> HandleAddMaterialTextureSample/AddMaterialExpression/CreateMaterialNodes still save
-> unconditionally (ignore save:false).
+> only) + alias freeze (F7); per-action scaffoldOnly response markers (folds into the
+> appliedProperties convention); widget recipe swap-on-success + broader transaction
+> coverage (F8); blind-sleep triage (20 sites: 3 socket-thread polls, 4 LevelHandlers
+> game-thread stalls, 13 McpSafeOperations.h — game-thread sleeps can't wait for engine
+> ticks, each is delete/condition-poll/engine-flush); shutdown drain hard cap; module
+> split (step 10, deferred by design — the real surgery is de-membering handlers off the
+> subsystem god object; cleanest first slice is extracting Private/MCP/ as its own module).
 
 > **Dogfood/UX audit (2026-07-02):** 16 agents exercised all 22 tools live as schema-only
 > first-time users — 471 calls, 112 findings, report in

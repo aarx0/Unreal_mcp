@@ -1282,24 +1282,42 @@ void FMcpNativeTransport::HandleToolsCall(
 		return;
 	}
 
-	// Warn-first argument validation against the published schema (arch review
-	// F7). The server historically never checked its own schema; a misspelled
-	// enum value silently matched no handler branch and returned success.
-	// Log-only so no existing client behavior changes; promote required/enum
-	// violations to INVALID_PARAMS rejections once the warnings prove quiet.
-	// Unknown top-level keys stay log-only forever: handlers legitimately read
-	// params the schema doesn't declare.
-	auto WarnOnSchemaViolations = [](const FString& InToolName, const TSharedPtr<FJsonObject>& InArguments)
+	// Normalize action/subAction both ways BEFORE validation: some handlers
+	// read "subAction", and a legacy subAction-only payload must not be
+	// rejected for a missing required "action".
+	if (Arguments.IsValid())
 	{
+		FString ActionVal;
+		if (!Arguments->HasField(TEXT("subAction")) &&
+			Arguments->TryGetStringField(TEXT("action"), ActionVal))
+		{
+			Arguments->SetStringField(TEXT("subAction"), ActionVal);
+		}
+		else if (!Arguments->HasField(TEXT("action")) &&
+				 Arguments->TryGetStringField(TEXT("subAction"), ActionVal))
+		{
+			Arguments->SetStringField(TEXT("action"), ActionVal);
+		}
+	}
+
+	// Argument validation against the published schema (arch review F7).
+	// Shipped warn-first 2026-07-02; promoted to INVALID_PARAMS rejection
+	// 2026-07-03 after the warnings proved quiet (11 editor sessions, hundreds
+	// of calls, 5 warnings — every one a genuinely wrong call). Required-arg
+	// and enum violations reject; unknown top-level keys stay log-only
+	// forever: handlers legitimately read params the schema doesn't declare.
+	auto CollectSchemaViolations = [](const FString& InToolName, const TSharedPtr<FJsonObject>& InArguments) -> TArray<FString>
+	{
+		TArray<FString> Violations;
 		FMcpToolDefinition* Def = FMcpToolRegistry::Get().FindTool(InToolName);
 		if (!Def || !InArguments.IsValid())
 		{
-			return;
+			return Violations;
 		}
 		const TSharedPtr<FJsonObject> Schema = Def->BuildInputSchema();
 		if (!Schema.IsValid())
 		{
-			return;
+			return Violations;
 		}
 		const TSharedPtr<FJsonObject>* Props = nullptr;
 		Schema->TryGetObjectField(TEXT("properties"), Props);
@@ -1312,15 +1330,14 @@ void FMcpNativeTransport::HandleToolsCall(
 				FString Name;
 				if (R->TryGetString(Name) && !InArguments->HasField(Name))
 				{
-					UE_LOG(LogMcpNativeTransport, Warning,
-						TEXT("%s: required argument '%s' missing"), *InToolName, *Name);
+					Violations.Add(FString::Printf(TEXT("required argument '%s' is missing"), *Name));
 				}
 			}
 		}
 
 		if (!Props)
 		{
-			return;
+			return Violations;
 		}
 		for (const auto& Pair : InArguments->Values)
 		{
@@ -1347,14 +1364,76 @@ void FMcpNativeTransport::HandleToolsCall(
 				}
 				if (!bFound)
 				{
-					UE_LOG(LogMcpNativeTransport, Warning,
-						TEXT("%s: argument '%s' value '%s' is not in the schema enum"),
-						*InToolName, *Pair.Key, *Value);
+					// Suggest near-misses: enum values sharing any 3+ char
+					// token of the rejected value (small enums list fully).
+					TArray<FString> AllValues;
+					for (const TSharedPtr<FJsonValue>& E : *EnumArr)
+					{
+						FString EnumValue;
+						if (E->TryGetString(EnumValue))
+						{
+							AllValues.Add(EnumValue);
+						}
+					}
+					FString Hint;
+					if (AllValues.Num() <= 15)
+					{
+						Hint = FString::Printf(TEXT(" (allowed: %s)"), *FString::Join(AllValues, TEXT(", ")));
+					}
+					else
+					{
+						TArray<FString> Tokens;
+						Value.ParseIntoArray(Tokens, TEXT("_"));
+						TArray<FString> Suggestions;
+						for (const FString& EnumValue : AllValues)
+						{
+							for (const FString& Token : Tokens)
+							{
+								if (Token.Len() >= 3 && EnumValue.Contains(Token, ESearchCase::IgnoreCase))
+								{
+									Suggestions.AddUnique(EnumValue);
+									break;
+								}
+							}
+							if (Suggestions.Num() >= 6)
+							{
+								break;
+							}
+						}
+						Hint = Suggestions.Num() > 0
+							? FString::Printf(TEXT(" (did you mean: %s?)"), *FString::Join(Suggestions, TEXT(", ")))
+							: FString::Printf(TEXT(" (%d allowed values — see the tool schema)"), AllValues.Num());
+					}
+					Violations.Add(FString::Printf(TEXT("argument '%s' value '%s' is not in the schema enum%s"),
+						*Pair.Key, *Value, *Hint));
 				}
 			}
 		}
+		return Violations;
 	};
-	WarnOnSchemaViolations(ToolName, Arguments);
+	const TArray<FString> SchemaViolations = CollectSchemaViolations(ToolName, Arguments);
+	if (SchemaViolations.Num() > 0)
+	{
+		UE_LOG(LogMcpNativeTransport, Warning,
+			TEXT("tools/call rejected (INVALID_PARAMS): %s: %s"),
+			*ToolName, *FString::Join(SchemaViolations, TEXT("; ")));
+		TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> ViolationsJson;
+		for (const FString& V : SchemaViolations)
+		{
+			ViolationsJson.Add(MakeShared<FJsonValueString>(V));
+		}
+		Details->SetArrayField(TEXT("violations"), ViolationsJson);
+		TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
+			false,
+			FString::Printf(TEXT("%s: %s"), *ToolName, *FString::Join(SchemaViolations, TEXT("; "))),
+			Details, TEXT("INVALID_PARAMS"));
+		FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
+		SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
+		ClientSocket->Close();
+		if (SocketSub) SocketSub->DestroySocket(ClientSocket);
+		return;
+	}
 
 	// Unknown names get UNKNOWN_TOOL, not TOOL_DISABLED: a manage_tools enable
 	// cannot fix a typo, and steering a client toward one masks the real error.
@@ -1458,16 +1537,8 @@ void FMcpNativeTransport::HandleToolsCall(
 
 	// Every tool dispatches by its own name; the handler reads the sub-action
 	// from the payload (Pattern B tool-definition dispatch was removed unused).
+	// action/subAction were mirrored bidirectionally before schema validation.
 	const FString DispatchAction = ToolName;
-
-	// Normalize: some handlers read "subAction" instead of "action".
-	// Ensure both fields exist so handlers find the value regardless of field name.
-	if (!Arguments->HasField(TEXT("subAction")) && Arguments->HasField(TEXT("action")))
-	{
-		FString ActionVal;
-		Arguments->TryGetStringField(TEXT("action"), ActionVal);
-		Arguments->SetStringField(TEXT("subAction"), ActionVal);
-	}
 
 	// Dispatch through the subsystem queue. The queue is drained by the core
 	// ticker after world ticking, which is required for safe map transitions.
@@ -1507,12 +1578,12 @@ bool FMcpNativeTransport::CompletePendingRequest(
 		return true;  // Already cleaned up
 	}
 
-	// Build final JSON-RPC result (cheap, no I/O)
-	TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
-		bSuccess, Message, Result, ErrorCode);
-	FString ResponseBody = FMcpJsonRpc::BuildResponse(Conn->JsonRpcId, ToolResult);
-
-	// Offload blocking write + close to thread pool so GameThread is not blocked
+	// Serialize AND write on the thread pool: for fat results (multi-hundred-
+	// node graph dumps, schema listings) JSON serialization is the expensive
+	// half, and the game thread needs neither. Safe because the Result object
+	// is handed off at the SendAutomationResponse call — audited 2026-07-03:
+	// every send site passes a function-local it never touches again. That
+	// handoff is the documented ownership contract (see the declaration).
 	FString CapturedRequestId = RequestId;
 	FString CapturedToolName = Conn->ToolName;
 	FString CapturedSessionId = Conn->SessionId;
@@ -1520,9 +1591,13 @@ bool FMcpNativeTransport::CompletePendingRequest(
 	PendingAsyncWrites.fetch_add(1);
 
 	Async(EAsyncExecution::ThreadPool,
-		[this, Conn, ResponseBody = MoveTemp(ResponseBody),
+		[this, Conn, Message, Result, ErrorCode,
 		 CapturedRequestId, CapturedToolName, CapturedSessionId, bCapturedSuccess]()
 	{
+		TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
+			bCapturedSuccess, Message, Result, ErrorCode);
+		const FString ResponseBody = FMcpJsonRpc::BuildResponse(Conn->JsonRpcId, ToolResult);
+
 		bool bWroteResponse = false;
 		{
 			FScopeLock WriteLock(&Conn->WriteMutex);
