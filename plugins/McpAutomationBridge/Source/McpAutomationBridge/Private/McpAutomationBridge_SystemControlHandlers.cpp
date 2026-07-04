@@ -730,10 +730,176 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
                            Result);
     return true;
   } else if (Lower == TEXT("run_tests")) {
+    FString Suite;
+    Payload->TryGetStringField(TEXT("suite"), Suite);
+    if (Suite.Equals(TEXT("ui-nav"), ESearchCase::IgnoreCase)) {
+      // External spec suite, run_ubt-style fire-and-poll: launch the checked-in
+      // PowerShell runner detached (it drives THIS bridge over HTTP — its
+      // play/nav/assert calls arrive as ordinary serialized requests, so a
+      // blocking in-handler runner would deadlock against PIE ticks) and poll
+      // with get_test_results. Requires pwsh on PATH and an otherwise idle
+      // editor (Slate focus determinism — see tests/ui-nav/README.md).
+      if (ActiveExternalTestRun.IsValid() && !ActiveExternalTestRun->bFinished &&
+          FPlatformProcess::IsProcRunning(ActiveExternalTestRun->ProcHandle)) {
+        TSharedPtr<FJsonObject> Busy = MakeShared<FJsonObject>();
+        Busy->SetStringField(TEXT("runId"), ActiveExternalTestRun->RunId);
+        SendAutomationResponse(
+            RequestingSocket, RequestId, false,
+            FString::Printf(TEXT("A ui-nav run is already in progress (runId=%s). "
+                                 "Poll get_test_results until it completes."),
+                            *ActiveExternalTestRun->RunId),
+            Busy, TEXT("RUN_IN_PROGRESS"));
+        return true;
+      }
+      if (ActiveAutomationRun.IsValid() && !ActiveAutomationRun->bComplete) {
+        SendAutomationError(
+            RequestingSocket, RequestId,
+            FString::Printf(TEXT("An automation test run is in progress (runId=%s); "
+                                 "ui-nav specs need the editor to themselves."),
+                            *ActiveAutomationRun->RunId),
+            TEXT("RUN_IN_PROGRESS"));
+        return true;
+      }
+
+      // Runner + specs live at the fork repo root, two levels above the
+      // plugin dir (<repo>/plugins/McpAutomationBridge).
+      TSharedPtr<IPlugin> Plugin =
+          IPluginManager::Get().FindPlugin(TEXT("McpAutomationBridge"));
+      if (!Plugin.IsValid()) {
+        SendAutomationError(RequestingSocket, RequestId,
+                            TEXT("Could not resolve the McpAutomationBridge plugin dir."),
+                            TEXT("NO_PLUGIN_DIR"));
+        return true;
+      }
+      FString RepoRoot = FPaths::ConvertRelativePathToFull(
+          Plugin->GetBaseDir() / TEXT("../.."));
+      FPaths::CollapseRelativeDirectories(RepoRoot);
+      const FString RunnerPath = RepoRoot / TEXT("scripts/ui-nav-test.ps1");
+      const FString SpecsDir = RepoRoot / TEXT("tests/ui-nav");
+      if (!FPaths::FileExists(RunnerPath)) {
+        SendAutomationError(
+            RequestingSocket, RequestId,
+            FString::Printf(TEXT("ui-nav runner not found at: %s"), *RunnerPath),
+            TEXT("RUNNER_NOT_FOUND"));
+        return true;
+      }
+
+      TArray<FString> AvailableSpecs;
+      IFileManager::Get().FindFiles(AvailableSpecs, *(SpecsDir / TEXT("*.json")), true, false);
+      AvailableSpecs.Sort();
+
+      FString SpecParam;
+      Payload->TryGetStringField(TEXT("spec"), SpecParam);
+      SpecParam.TrimStartAndEndInline();
+      TArray<FString> SpecFiles;
+      if (SpecParam.IsEmpty()) {
+        SpecFiles = AvailableSpecs;
+      } else {
+        FString WantFile = FPaths::GetCleanFilename(SpecParam);
+        if (!WantFile.EndsWith(TEXT(".json"))) {
+          WantFile += TEXT(".json");
+        }
+        if (AvailableSpecs.Contains(WantFile)) {
+          SpecFiles.Add(WantFile);
+        }
+      }
+      if (SpecFiles.Num() == 0) {
+        SendAutomationError(
+            RequestingSocket, RequestId,
+            FString::Printf(TEXT("No ui-nav spec matched '%s'. Available: %s"),
+                            *SpecParam, *FString::Join(AvailableSpecs, TEXT(", "))),
+            TEXT("SPEC_NOT_FOUND"));
+        return true;
+      }
+
+      const FString RunId = FString::Printf(
+          TEXT("uinav_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(12));
+      const FString LogDir =
+          FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("McpTests"));
+      IFileManager::Get().MakeDirectory(*LogDir, true);
+      const FString RunLogPath = LogDir / (RunId + TEXT(".log"));
+
+      // A generated driver script sidesteps cmd.exe→pwsh -Command quoting.
+      // Each spec runs in its own nested pwsh so one spec's throw (step error)
+      // can't abort the rest of the suite; exit code = failed spec count.
+      FString Driver;
+      Driver += TEXT("$fails = 0\n");
+      for (const FString& SpecFile : SpecFiles) {
+        const FString SpecFull = FPaths::ConvertRelativePathToFull(SpecsDir / SpecFile);
+        Driver += FString::Printf(TEXT("Write-Output \"### SPEC: %s\"\n"), *SpecFile);
+        Driver += FString::Printf(
+            TEXT("& pwsh -NoProfile -ExecutionPolicy Bypass -File '%s' -Spec '%s'\n"),
+            *RunnerPath, *SpecFull);
+        Driver += TEXT("if ($LASTEXITCODE -ne 0) { $fails++ }\n");
+      }
+      Driver += TEXT("exit $fails\n");
+      const FString DriverPath = LogDir / (RunId + TEXT("_driver.ps1"));
+      if (!FFileHelper::SaveStringToFile(Driver, *DriverPath,
+                                         FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)) {
+        SendAutomationError(RequestingSocket, RequestId,
+                            FString::Printf(TEXT("Could not write driver script: %s"), *DriverPath),
+                            TEXT("FILE_WRITE_FAILED"));
+        return true;
+      }
+
+      const FString ShellParams = FString::Printf(
+          TEXT("/d /s /c \"\"pwsh\" -NoProfile -ExecutionPolicy Bypass -File \"%s\" > \"%s\" 2>&1\""),
+          *DriverPath, *RunLogPath);
+      uint32 ProcessId = 0;
+      FProcHandle ProcessHandle = FPlatformProcess::CreateProc(
+          TEXT("cmd.exe"), *ShellParams,
+          true, true, true, &ProcessId, 0, nullptr, nullptr);
+      if (!ProcessHandle.IsValid()) {
+        SendAutomationError(RequestingSocket, RequestId,
+                            TEXT("Failed to launch the ui-nav runner process (is pwsh installed?)"),
+                            TEXT("PROCESS_LAUNCH_FAILED"));
+        return true;
+      }
+
+      TSharedPtr<FMcpExternalTestRun> Run = MakeShared<FMcpExternalTestRun>();
+      Run->RunId = RunId;
+      Run->Suite = TEXT("ui-nav");
+      Run->SpecFiles = SpecFiles;
+      Run->LogPath = RunLogPath;
+      Run->ProcHandle = ProcessHandle;
+      Run->ProcessId = ProcessId;
+      Run->StartTime = FPlatformTime::Seconds();
+      ActiveExternalTestRun = Run;
+
+      TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+      Result->SetStringField(TEXT("runId"), RunId);
+      Result->SetStringField(TEXT("suite"), TEXT("ui-nav"));
+      Result->SetStringField(TEXT("status"), TEXT("running"));
+      Result->SetNumberField(TEXT("specsTotal"), SpecFiles.Num());
+      TArray<TSharedPtr<FJsonValue>> SpecsJson;
+      for (const FString& S : SpecFiles) {
+        SpecsJson.Add(MakeShared<FJsonValueString>(S));
+      }
+      Result->SetArrayField(TEXT("specs"), SpecsJson);
+      Result->SetStringField(TEXT("logPath"), RunLogPath);
+      SendAutomationResponse(
+          RequestingSocket, RequestId, true,
+          FString::Printf(TEXT("Started ui-nav suite (%d spec(s)). Poll get_test_results "
+                               "with runId=%s. Keep the editor idle while it runs."),
+                          SpecFiles.Num(), *RunId),
+          Result);
+      return true;
+    }
+
     // Real TDD runner. Builds a queue of matching tests and returns immediately;
     // the subsystem Tick() drives one ExecuteLatentCommands step per frame via
     // TickAutomationTestRun() so latent/functional tests run over real frames and
     // never block this request handler. Poll results with get_test_results.
+    if (ActiveExternalTestRun.IsValid() && !ActiveExternalTestRun->bFinished &&
+        FPlatformProcess::IsProcRunning(ActiveExternalTestRun->ProcHandle)) {
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(TEXT("A ui-nav run is in progress (runId=%s); it drives PIE and "
+                               "needs the editor to itself."),
+                          *ActiveExternalTestRun->RunId),
+          TEXT("RUN_IN_PROGRESS"));
+      return true;
+    }
     if (ActiveAutomationRun.IsValid() && !ActiveAutomationRun->bComplete) {
       TSharedPtr<FJsonObject> Busy = MakeShared<FJsonObject>();
       Busy->SetStringField(TEXT("runId"), ActiveAutomationRun->RunId);
@@ -833,6 +999,117 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
         Result);
     return true;
   } else if (Lower == TEXT("get_test_results")) {
+    FString WantRunId;
+    Payload->TryGetStringField(TEXT("runId"), WantRunId);
+    WantRunId.TrimStartAndEndInline();
+
+    // ui-nav suite poll: explicit uinav runId, or no runId with no automation
+    // run to fall back to. Polls the detached runner process and parses its
+    // log (### SPEC / [FAIL] / RESULT lines).
+    if (ActiveExternalTestRun.IsValid() &&
+        (WantRunId == ActiveExternalTestRun->RunId ||
+         (WantRunId.IsEmpty() && !ActiveAutomationRun.IsValid()))) {
+      TSharedPtr<FMcpExternalTestRun> Run = ActiveExternalTestRun;
+      if (!Run->bFinished && !FPlatformProcess::IsProcRunning(Run->ProcHandle)) {
+        Run->bFinished = true;
+        int32 Code = -1;
+        if (FPlatformProcess::GetProcReturnCode(Run->ProcHandle, &Code)) {
+          Run->ReturnCode = Code;
+        }
+        FPlatformProcess::CloseProc(Run->ProcHandle);
+      }
+
+      // The redirecting shell still holds the log open while running.
+      FString LogContent;
+      FFileHelper::LoadFileToString(LogContent, *Run->LogPath,
+                                    FFileHelper::EHashOptions::None,
+                                    FILEREAD_AllowWrite);
+      TArray<FString> Lines;
+      LogContent.ParseIntoArrayLines(Lines);
+
+      TArray<TSharedPtr<FJsonValue>> SpecsJson;
+      TSharedPtr<FJsonObject> CurrentSpec;
+      TArray<TSharedPtr<FJsonValue>> CurrentFailures;
+      int32 SpecsCompleted = 0, SpecsFailed = 0, TotalPassed = 0, TotalFailed = 0;
+      auto FlushSpec = [&]() {
+        if (CurrentSpec.IsValid()) {
+          CurrentSpec->SetArrayField(TEXT("failures"), CurrentFailures);
+          SpecsJson.Add(MakeShared<FJsonValueObject>(CurrentSpec));
+        }
+        CurrentSpec.Reset();
+        CurrentFailures.Reset();
+      };
+      for (const FString& RawLine : Lines) {
+        FString Line = RawLine.TrimStartAndEnd();
+        if (Line.StartsWith(TEXT("### SPEC: "))) {
+          FlushSpec();
+          CurrentSpec = MakeShared<FJsonObject>();
+          CurrentSpec->SetStringField(TEXT("spec"), Line.RightChop(10));
+          CurrentSpec->SetStringField(TEXT("status"), TEXT("running"));
+        } else if (Line.StartsWith(TEXT("[FAIL]")) && CurrentSpec.IsValid()) {
+          CurrentFailures.Add(MakeShared<FJsonValueString>(Line));
+        } else if (Line.StartsWith(TEXT("RESULT: ")) && CurrentSpec.IsValid()) {
+          // "RESULT: N passed, M failed"
+          FRegexPattern ResultPattern(TEXT("RESULT: (\\d+) passed, (\\d+) failed"));
+          FRegexMatcher Matcher(ResultPattern, Line);
+          if (Matcher.FindNext()) {
+            const int32 Passed = FCString::Atoi(*Matcher.GetCaptureGroup(1));
+            const int32 Failed = FCString::Atoi(*Matcher.GetCaptureGroup(2));
+            CurrentSpec->SetNumberField(TEXT("passed"), Passed);
+            CurrentSpec->SetNumberField(TEXT("failed"), Failed);
+            CurrentSpec->SetStringField(TEXT("status"),
+                                        Failed == 0 ? TEXT("passed") : TEXT("failed"));
+            TotalPassed += Passed;
+            TotalFailed += Failed;
+            ++SpecsCompleted;
+            if (Failed > 0) {
+              ++SpecsFailed;
+            }
+          }
+        }
+      }
+      FlushSpec();
+
+      TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+      Result->SetStringField(TEXT("runId"), Run->RunId);
+      Result->SetStringField(TEXT("suite"), Run->Suite);
+      Result->SetStringField(TEXT("status"),
+                             Run->bFinished ? TEXT("complete") : TEXT("running"));
+      Result->SetNumberField(TEXT("specsTotal"), Run->SpecFiles.Num());
+      Result->SetNumberField(TEXT("specsCompleted"), SpecsCompleted);
+      Result->SetNumberField(TEXT("assertionsPassed"), TotalPassed);
+      Result->SetNumberField(TEXT("assertionsFailed"), TotalFailed);
+      Result->SetArrayField(TEXT("specs"), SpecsJson);
+      Result->SetNumberField(TEXT("elapsedSeconds"),
+                             FPlatformTime::Seconds() - Run->StartTime);
+      Result->SetStringField(TEXT("logPath"), Run->LogPath);
+      if (Run->bFinished) {
+        Result->SetNumberField(TEXT("returnCode"), Run->ReturnCode);
+        // Exit code = failed spec count; a launch/runner failure (e.g. pwsh
+        // missing → 9009, runner threw before RESULT) shows a nonzero code
+        // with no parsed specs — surface the tail so the caller sees why.
+        if (Run->ReturnCode != 0 || SpecsCompleted < Run->SpecFiles.Num()) {
+          const int32 TailStart = FMath::Max(0, Lines.Num() - 20);
+          TArray<TSharedPtr<FJsonValue>> Tail;
+          for (int32 i = TailStart; i < Lines.Num(); ++i) {
+            Tail.Add(MakeShared<FJsonValueString>(Lines[i]));
+          }
+          Result->SetArrayField(TEXT("logTail"), Tail);
+        }
+      }
+
+      const FString Msg =
+          Run->bFinished
+              ? FString::Printf(TEXT("ui-nav run complete: %d/%d spec(s) passed "
+                                     "(%d assertions passed, %d failed)."),
+                                SpecsCompleted - SpecsFailed,
+                                Run->SpecFiles.Num(), TotalPassed, TotalFailed)
+              : FString::Printf(TEXT("ui-nav run in progress: %d/%d spec(s) complete."),
+                                SpecsCompleted, Run->SpecFiles.Num());
+      SendAutomationResponse(RequestingSocket, RequestId, true, Msg, Result);
+      return true;
+    }
+
     // Poll the active/last automation run. Returns status running|complete plus
     // per-test results once finished.
     if (!ActiveAutomationRun.IsValid()) {
@@ -841,10 +1118,6 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
                           TEXT("NO_ACTIVE_RUN"));
       return true;
     }
-
-    FString WantRunId;
-    Payload->TryGetStringField(TEXT("runId"), WantRunId);
-    WantRunId.TrimStartAndEndInline();
     if (!WantRunId.IsEmpty() && WantRunId != ActiveAutomationRun->RunId) {
       SendAutomationError(
           RequestingSocket, RequestId,

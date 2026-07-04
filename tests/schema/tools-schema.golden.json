@@ -10127,6 +10127,14 @@
           "description": "configure_occlusion_culling: r.OcclusionSlop.",
           "type": "number"
         },
+        "spec": {
+          "description": "run_tests suite:\"ui-nav\": single spec to run, by name or filename (e.g. \"pause_menu\"); omit to run every spec in tests/ui-nav.",
+          "type": "string"
+        },
+        "suite": {
+          "description": "run_tests: \"ui-nav\" runs the checked-in CommonUI focus/nav spec suite (tests/ui-nav) via the external pwsh runner, fire-and-poll like run_ubt; omit for engine automation tests. Needs pwsh on PATH and an idle editor.",
+          "type": "string"
+        },
         "target": {
           "description": "run_ubt: build target (e.g. MyProjectEditor). Non-blocking: returns a buildId immediately; poll get_build_status.",
           "type": "string"

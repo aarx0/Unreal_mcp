@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ui-nav suite runs through the bridge (2026-07-03)
+
+- **`run_tests suite:"ui-nav"`** runs the checked-in CommonUI focus/nav regression specs (`tests/ui-nav/*.json`, optional `spec` to pick one) from any MCP client — no shell access needed. Fire-and-poll like `run_ubt`: the bridge launches the external pwsh runner detached (a blocking in-handler runner would deadlock against its own bridge calls and PIE ticks) with output to `Saved/McpTests/<runId>.log`, and **`get_test_results`** polls the process and parses per-spec pass/fail counts, `[FAIL]` assertion lines, and a log tail on abnormal exits. Mutual busy-checks with engine automation runs (both drive the editor). Unknown specs error with the available list.
+- First full run through the new path immediately caught a real nav regression: both pause specs fail (`TogglePause` pushes `WBP_PauseScreen_C` but activation-time desired focus never applies — focus stays on the game viewport) while `main_menu`/`options_roundtrip` pass 16/16 — pausing *over the HubWorld main menu* is a state that didn't exist when the suite was green (2026-06-09). Logged in the game backlog; game-or-spec fix is a design call.
+
 ### Widget property value readback (2026-07-03)
 
 - **`get_widget_info` + `widgetName` returns property values** — the last hole in the readback-depth list: authored widget values (TextBlock text, fill percent, visibility, font) were unverifiable without hand-building `inspect` subobject paths. The response carries the widget's reflected properties (every exportable one, or just `propertyNames[]` — explicitly null when a named property doesn't exist on that class), its exact `objectPath` for `inspect get_property`/`set_property` follow-ups, and `slotClass`. Unknown `widgetName` errors with the tree's actual widget names. Verified live: `add_text_block` text + fontSize round-trip on a scratch widget, sub-widget-class null semantics, and WBP_HUD bar reads.

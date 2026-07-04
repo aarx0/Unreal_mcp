@@ -41,6 +41,8 @@ public:
 			.String(TEXT("test"), TEXT("Exact/partial test name to run (run_tests; alias for filter)."))
 			.Number(TEXT("maxTests"), TEXT("Max tests to queue for run_tests (1-500, default 50)."))
 			.String(TEXT("runId"), TEXT("Run identifier returned by run_tests; pass to get_test_results."))
+			.String(TEXT("suite"), TEXT("run_tests: \"ui-nav\" runs the checked-in CommonUI focus/nav spec suite (tests/ui-nav) via the external pwsh runner, fire-and-poll like run_ubt; omit for engine automation tests. Needs pwsh on PATH and an idle editor."))
+			.String(TEXT("spec"), TEXT("run_tests suite:\"ui-nav\": single spec to run, by name or filename (e.g. \"pause_menu\"); omit to run every spec in tests/ui-nav."))
 			.String(TEXT("testName"), TEXT("generate_test_stub: the registered test path, e.g. 'Combat.DamageApplies' (also the run_tests filter)."))
 			.String(TEXT("testType"), TEXT("generate_test_stub: simple (default) | complex (parameterized) | latent (multi-frame)."))
 			.String(TEXT("className"), TEXT("generate_test_stub: C++ class symbol (default derived from testName, e.g. FCombatDamageAppliesTest)."))

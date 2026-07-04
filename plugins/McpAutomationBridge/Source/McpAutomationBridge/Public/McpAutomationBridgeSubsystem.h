@@ -397,6 +397,25 @@ public:
   TMap<FString, FMcpUbtBuildJob> UbtBuildJobs;
   FString LastUbtBuildId;
 
+  // ---- External spec-suite run (run_tests suite:"ui-nav") -----------------
+  // The detached runner process drives THIS bridge over HTTP (play/nav/assert
+  // steps arrive as ordinary requests) while get_test_results polls the
+  // process + log — same fire-and-poll shape as run_ubt. Game-thread only;
+  // one external run at a time.
+  struct FMcpExternalTestRun
+  {
+    FString RunId;
+    FString Suite;
+    TArray<FString> SpecFiles;
+    FString LogPath;
+    FProcHandle ProcHandle;
+    uint32 ProcessId = 0;
+    double StartTime = 0.0;
+    bool bFinished = false;
+    int32 ReturnCode = -1;
+  };
+  TSharedPtr<FMcpExternalTestRun> ActiveExternalTestRun;
+
 private:
   TMap<FString, FAutomationHandler> AutomationHandlers;
   void InitializeHandlers();

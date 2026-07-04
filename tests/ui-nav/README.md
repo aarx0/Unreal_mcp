@@ -12,6 +12,14 @@ pwsh -File scripts/ui-nav-test.ps1 -Spec tests/ui-nav/pause_menu.json
 ```
 Exits non-zero if any assertion fails. Spec format is documented in the runner's header.
 
+Or from any MCP client, fire-and-poll (the bridge launches the same runner detached;
+its step calls arrive back over HTTP — keep the editor otherwise idle):
+```
+system_control { action:"run_tests", suite:"ui-nav" }            // all specs
+system_control { action:"run_tests", suite:"ui-nav", spec:"pause_menu" }
+system_control { action:"get_test_results", runId:"uinav_..." }  // per-spec pass/fail + failures
+```
+
 ## Status: deterministic (focus-stabilized) — usable as a gate
 
 1. **Observe assertions** (`inPie`, `stackContains`/`stackDepth`) are deterministic and
