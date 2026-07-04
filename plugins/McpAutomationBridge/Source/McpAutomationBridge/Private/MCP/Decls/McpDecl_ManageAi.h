@@ -13,20 +13,16 @@ namespace McpDecls
 {
 inline const FMcpParamDecl P_ManageAi_0[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_ManageAi_1[] = { { TEXT("blackboardPath"), EMcpParamKind::String, true }, { TEXT("keyName"), EMcpParamKind::String, false }, { TEXT("keyType"), EMcpParamKind::String, false }, { TEXT("baseObjectClass"), EMcpParamKind::String, false }, { TEXT("isInstanceSynced"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ManageAi_2[] = { { TEXT("compositeType"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ManageAi_3[] = { { TEXT("parentNodeId"), EMcpParamKind::String, true }, { TEXT("decoratorType"), EMcpParamKind::String, true }, { TEXT("nodeClass"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageAi_4[] = { { TEXT("queryPath"), EMcpParamKind::String, true }, { TEXT("contextType"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageAi_5[] = { { TEXT("queryPath"), EMcpParamKind::String, true }, { TEXT("generatorType"), EMcpParamKind::String, true }, { TEXT("generatorSettings"), EMcpParamKind::Object, false } };
 inline const FMcpParamDecl P_ManageAi_6[] = { { TEXT("queryPath"), EMcpParamKind::String, true }, { TEXT("testType"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_ManageAi_7[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("configPath"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("spawnCount"), EMcpParamKind::Number, false } };
 inline const FMcpParamDecl P_ManageAi_8[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("nodeType"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("parentNodeId"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::Any, false }, { TEXT("save"), EMcpParamKind::Any, false } };
-inline const FMcpParamDecl P_ManageAi_9[] = { { TEXT("parentNodeId"), EMcpParamKind::String, true }, { TEXT("serviceType"), EMcpParamKind::String, true }, { TEXT("nodeClass"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageAi_10[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("definitionPath"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageAi_11[] = { { TEXT("definitionPath"), EMcpParamKind::String, true }, { TEXT("offset"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("enabled"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_ManageAi_12[] = { { TEXT("stateTreePath"), EMcpParamKind::String, true }, { TEXT("stateName"), EMcpParamKind::String, true }, { TEXT("parentStateName"), EMcpParamKind::String, false }, { TEXT("stateType"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageAi_13[] = { { TEXT("stateTreePath"), EMcpParamKind::String, true }, { TEXT("fromState"), EMcpParamKind::String, true }, { TEXT("toState"), EMcpParamKind::String, true }, { TEXT("triggerType"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageAi_14[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("parentNodeId"), EMcpParamKind::String, true }, { TEXT("subnodeType"), EMcpParamKind::String, true }, { TEXT("nodeClass"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ManageAi_15[] = { { TEXT("taskType"), EMcpParamKind::String, true }, { TEXT("nodeClass"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageAi_16[] = { { TEXT("controllerPath"), EMcpParamKind::String, true }, { TEXT("behaviorTreePath"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_ManageAi_17[] = { { TEXT("controllerPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("blackboardPath"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_ManageAi_18[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("pinName"), EMcpParamKind::String, false }, { TEXT("expressionIndex"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
@@ -46,7 +42,6 @@ inline const FMcpParamDecl P_ManageAi_31[] = { { TEXT("queryPath"), EMcpParamKin
 inline const FMcpParamDecl P_ManageAi_32[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("parentNodeId"), EMcpParamKind::String, false }, { TEXT("childNodeId"), EMcpParamKind::String, false }, { TEXT("fromExpression"), EMcpParamKind::Any, false }, { TEXT("inputName"), EMcpParamKind::Any, false }, { TEXT("save"), EMcpParamKind::Any, false }, { TEXT("sourceNodeId"), EMcpParamKind::Any, false }, { TEXT("targetNodeId"), EMcpParamKind::Any, false }, { TEXT("toExpression"), EMcpParamKind::Any, false } };
 inline const FMcpParamDecl P_ManageAi_33[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blackboardPath"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageAi_34[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ManageAi_35[] = { { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageAi_36[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageAi_37[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageAi_38[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false } };
@@ -73,24 +68,30 @@ inline const FMcpParamDecl P_ManageAi_58[] = { { TEXT("blueprintPath"), EMcpPara
 inline const FMcpParamDecl P_ManageAi_59[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("controllerPath"), EMcpParamKind::String, false }, { TEXT("enableSight"), EMcpParamKind::Bool, false }, { TEXT("sightRadius"), EMcpParamKind::Number, false }, { TEXT("loseSightRadius"), EMcpParamKind::Number, false }, { TEXT("peripheralVisionAngle"), EMcpParamKind::Number, false }, { TEXT("enableHearing"), EMcpParamKind::Bool, false }, { TEXT("hearingRange"), EMcpParamKind::Number, false }, { TEXT("enableDamage"), EMcpParamKind::Bool, false }, { TEXT("dominantSense"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageAi_60[] = { { TEXT("controllerPath"), EMcpParamKind::String, true } };
 
+inline const FMcpParamDecl P_ManageAi_D0[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blackboardPath"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAi_D1[] = { { TEXT("compositeType"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("parentNodeId"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAi_D2[] = { { TEXT("taskType"), EMcpParamKind::String, true }, { TEXT("nodeClass"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("parentNodeId"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAi_D3[] = { { TEXT("parentNodeId"), EMcpParamKind::String, true }, { TEXT("decoratorType"), EMcpParamKind::String, true }, { TEXT("nodeClass"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageAi_D4[] = { { TEXT("parentNodeId"), EMcpParamKind::String, true }, { TEXT("serviceType"), EMcpParamKind::String, true }, { TEXT("nodeClass"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false } };
+
 inline const FMcpCallDecl GManageAi[] =
 {
 	{ TEXT("manage_ai"), TEXT("add_ai_perception_component"), P_ManageAi_0, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("add_blackboard_key"), P_ManageAi_1, EMcpCallFlags::None },
-	{ TEXT("manage_ai"), TEXT("add_composite_node"), P_ManageAi_2, EMcpCallFlags::UnverifiedDecl },
-	{ TEXT("manage_ai"), TEXT("add_decorator"), P_ManageAi_3, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_ai"), TEXT("add_composite_node"), P_ManageAi_D1, EMcpCallFlags::None },
+	{ TEXT("manage_ai"), TEXT("add_decorator"), P_ManageAi_D3, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("add_eqs_context"), P_ManageAi_4, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("add_eqs_generator"), P_ManageAi_5, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("add_eqs_test"), P_ManageAi_6, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("add_mass_spawner"), P_ManageAi_7, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("add_node"), P_ManageAi_8, EMcpCallFlags::None },
-	{ TEXT("manage_ai"), TEXT("add_service"), P_ManageAi_9, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_ai"), TEXT("add_service"), P_ManageAi_D4, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("add_smart_object_component"), P_ManageAi_10, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("add_smart_object_slot"), P_ManageAi_11, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("add_state_tree_state"), P_ManageAi_12, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("add_state_tree_transition"), P_ManageAi_13, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("add_subnode"), P_ManageAi_14, EMcpCallFlags::None },
-	{ TEXT("manage_ai"), TEXT("add_task_node"), P_ManageAi_15, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_ai"), TEXT("add_task_node"), P_ManageAi_D2, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("assign_behavior_tree"), P_ManageAi_16, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("assign_blackboard"), P_ManageAi_17, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("break_connections"), P_ManageAi_18, EMcpCallFlags::None },
@@ -110,7 +111,7 @@ inline const FMcpCallDecl GManageAi[] =
 	{ TEXT("manage_ai"), TEXT("connect_nodes"), P_ManageAi_32, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("create"), P_ManageAi_33, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("create_ai_controller"), P_ManageAi_34, EMcpCallFlags::None },
-	{ TEXT("manage_ai"), TEXT("create_behavior_tree"), P_ManageAi_35, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_ai"), TEXT("create_behavior_tree"), P_ManageAi_D0, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("create_blackboard"), P_ManageAi_36, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("create_blackboard_asset"), P_ManageAi_37, EMcpCallFlags::None },
 	{ TEXT("manage_ai"), TEXT("create_eqs_query"), P_ManageAi_38, EMcpCallFlags::None },

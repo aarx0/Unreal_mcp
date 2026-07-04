@@ -40,7 +40,6 @@ inline const FMcpParamDecl P_ManageEffect_28[] = { { TEXT("name"), EMcpParamKind
 inline const FMcpParamDecl P_ManageEffect_29[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("systemPath"), EMcpParamKind::String, true }, { TEXT("emitterPath"), EMcpParamKind::String, false }, { TEXT("emitterName"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("parameterType"), EMcpParamKind::String, false }, { TEXT("moduleName"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageEffect_30[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("systemPath"), EMcpParamKind::String, true }, { TEXT("emitterPath"), EMcpParamKind::String, false }, { TEXT("emitterName"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("velocity"), EMcpParamKind::Object, false }, { TEXT("velocityMode"), EMcpParamKind::String, false }, { TEXT("moduleName"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageEffect_31[] = { { TEXT("systemName"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("deltaTime"), EMcpParamKind::Number, false }, { TEXT("steps"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_ManageEffect_32[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("systemPath"), EMcpParamKind::String, true }, { TEXT("emitterPath"), EMcpParamKind::String, false }, { TEXT("emitterName"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("sourceBinding"), EMcpParamKind::String, true }, { TEXT("parameterType"), EMcpParamKind::String, false }, { TEXT("moduleName"), EMcpParamKind::String, false }, { TEXT("sourceType"), EMcpParamKind::String, false }, { TEXT("sourceName"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageEffect_33[] = { { TEXT("filter"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageEffect_35[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("systemPath"), EMcpParamKind::String, true }, { TEXT("emitterPath"), EMcpParamKind::String, false }, { TEXT("emitterName"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("eventName"), EMcpParamKind::String, true }, { TEXT("eventPayload"), EMcpParamKind::Array, false }, { TEXT("moduleName"), EMcpParamKind::String, false }, { TEXT("payloadVariables"), EMcpParamKind::Array, false } };
 inline const FMcpParamDecl P_ManageEffect_37[] = { { TEXT("location"), EMcpParamKind::Any, true }, { TEXT("lightName"), EMcpParamKind::String, false }, { TEXT("lightType"), EMcpParamKind::String, false }, { TEXT("intensity"), EMcpParamKind::Number, false }, { TEXT("color"), EMcpParamKind::Any, false }, { TEXT("pulse"), EMcpParamKind::Object, false } };
@@ -63,10 +62,18 @@ inline const FMcpParamDecl P_ManageEffect_56[] = { { TEXT("name"), EMcpParamKind
 inline const FMcpParamDecl P_ManageEffect_57[] = { { TEXT("systemPath"), EMcpParamKind::String, true }, { TEXT("location"), EMcpParamKind::Any, false }, { TEXT("rotation"), EMcpParamKind::Array, false }, { TEXT("scale"), EMcpParamKind::Any, false }, { TEXT("autoDestroy"), EMcpParamKind::Bool, false }, { TEXT("attachToActor"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageEffect_58[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("systemPath"), EMcpParamKind::String, true }, { TEXT("emitterPath"), EMcpParamKind::String, false }, { TEXT("emitterName"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
 
+inline const FMcpParamDecl P_ManageEffect_D0[] = { { TEXT("systemName"), EMcpParamKind::String, false }, { TEXT("reset"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageEffect_D1[] = { { TEXT("systemName"), EMcpParamKind::String, false }, { TEXT("reset"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_ManageEffect_D2[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("emitterName"), EMcpParamKind::String, false }, { TEXT("scriptType"), EMcpParamKind::String, false }, { TEXT("modulePath"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageEffect_D3[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("systemPath"), EMcpParamKind::String, true }, { TEXT("emitterPath"), EMcpParamKind::String, false }, { TEXT("emitterName"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("sourceBinding"), EMcpParamKind::String, true }, { TEXT("parameterType"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageEffect_D4[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("emitterName"), EMcpParamKind::String, false }, { TEXT("scriptType"), EMcpParamKind::String, false }, { TEXT("autoConnect"), EMcpParamKind::Bool, false }, { TEXT("sourceNodeId"), EMcpParamKind::String, false }, { TEXT("sourcePinName"), EMcpParamKind::String, false }, { TEXT("targetNodeId"), EMcpParamKind::String, false }, { TEXT("targetPinName"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageEffect_D5[] = { { TEXT("systemName"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false } };
+inline const FMcpParamDecl P_ManageEffect_D6[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("emitterName"), EMcpParamKind::String, false }, { TEXT("scriptType"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, false } };
+
 inline const FMcpCallDecl GManageEffect[] =
 {
-	{ TEXT("manage_effect"), TEXT("activate"), {}, EMcpCallFlags::UnverifiedDecl },
-	{ TEXT("manage_effect"), TEXT("activate_effect"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_effect"), TEXT("activate"), P_ManageEffect_D0, EMcpCallFlags::None },
+	{ TEXT("manage_effect"), TEXT("activate_effect"), P_ManageEffect_D1, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("activate_niagara"), P_ManageEffect_2, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("add_acceleration_module"), P_ManageEffect_3, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("add_audio_spectrum_data_interface"), P_ManageEffect_4, EMcpCallFlags::None },
@@ -82,7 +89,7 @@ inline const FMcpCallDecl GManageEffect[] =
 	{ TEXT("manage_effect"), TEXT("add_kill_particles_module"), P_ManageEffect_14, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("add_light_renderer_module"), P_ManageEffect_15, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("add_mesh_renderer_module"), P_ManageEffect_16, EMcpCallFlags::None },
-	{ TEXT("manage_effect"), TEXT("add_niagara_module"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_effect"), TEXT("add_niagara_module"), P_ManageEffect_D2, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("add_particle_state_module"), P_ManageEffect_18, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("add_ribbon_renderer_module"), P_ManageEffect_19, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("add_simulation_stage"), P_ManageEffect_20, EMcpCallFlags::None },
@@ -97,11 +104,11 @@ inline const FMcpCallDecl GManageEffect[] =
 	{ TEXT("manage_effect"), TEXT("add_user_parameter"), P_ManageEffect_29, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("add_velocity_module"), P_ManageEffect_30, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("advance_simulation"), P_ManageEffect_31, EMcpCallFlags::None },
-	{ TEXT("manage_effect"), TEXT("bind_parameter_to_source"), P_ManageEffect_32, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_effect"), TEXT("bind_parameter_to_source"), P_ManageEffect_D3, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("cleanup"), P_ManageEffect_33, EMcpCallFlags::None },
-	{ TEXT("manage_effect"), TEXT("clear_debug_shapes"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_effect"), TEXT("clear_debug_shapes"), {}, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("configure_event_payload"), P_ManageEffect_35, EMcpCallFlags::None },
-	{ TEXT("manage_effect"), TEXT("connect_niagara_pins"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_effect"), TEXT("connect_niagara_pins"), P_ManageEffect_D4, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("create_dynamic_light"), P_ManageEffect_37, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("create_environment_effect"), P_ManageEffect_38, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("create_impact_effect"), P_ManageEffect_39, EMcpCallFlags::None },
@@ -110,15 +117,15 @@ inline const FMcpCallDecl GManageEffect[] =
 	{ TEXT("manage_effect"), TEXT("create_niagara_system"), P_ManageEffect_42, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("create_particle_trail"), P_ManageEffect_43, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("create_volumetric_fog"), P_ManageEffect_44, EMcpCallFlags::None },
-	{ TEXT("manage_effect"), TEXT("deactivate"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_effect"), TEXT("deactivate"), P_ManageEffect_D5, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("deactivate_niagara"), P_ManageEffect_46, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("debug_shape"), P_ManageEffect_47, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("enable_gpu_simulation"), P_ManageEffect_48, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("get_niagara_info"), P_ManageEffect_49, EMcpCallFlags::None },
-	{ TEXT("manage_effect"), TEXT("list_debug_shapes"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_effect"), TEXT("list_debug_shapes"), {}, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("niagara"), P_ManageEffect_51, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("particle"), P_ManageEffect_52, EMcpCallFlags::None },
-	{ TEXT("manage_effect"), TEXT("remove_niagara_node"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_effect"), TEXT("remove_niagara_node"), P_ManageEffect_D6, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("set_emitter_properties"), P_ManageEffect_54, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("set_niagara_parameter"), P_ManageEffect_55, EMcpCallFlags::None },
 	{ TEXT("manage_effect"), TEXT("set_parameter_value"), P_ManageEffect_56, EMcpCallFlags::None },

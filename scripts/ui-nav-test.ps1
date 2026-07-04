@@ -63,6 +63,10 @@ function Invoke-Tool {
     $envObj = $txt | ConvertFrom-Json
     $inner = $envObj.result.content | Where-Object { $_.type -eq 'text' } | Select-Object -First 1
     $t = if ($inner) { $inner.text } else { $txt }
+    if ($envObj.result.isError) {
+        $firstLine = ($t -split "`n")[0]
+        throw "MCP call failed: $Tool $($ToolArgs.action) -> $firstLine"
+    }
     $idx = $t.IndexOf("`n`n")
     $data = if ($idx -ge 0) { $t.Substring($idx + 2) } else { $t }
     return [pscustomobject]@{ text = $t; data = $data }

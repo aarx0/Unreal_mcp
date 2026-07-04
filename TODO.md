@@ -96,12 +96,17 @@ IS declared for the widget/common creates on this tool).
 >   ~~(i) attribute UnverifiedDecl actions~~ BURN-DOWN PASS 2026-07-04: 209→107 flagged
 >   (alias-group synthesis from same-brace-range markers — the `delete||delete_asset`
 >   class; any-high-contributor confidence merge; filename→tool affinity seeding;
->   manage_tools hand-authored). Live probe of the 107: exactly 2 DEAD
->   (control_editor.set_viewport_resolution, manage_sequence.set_metadata — advertised,
->   no code path; implement or delete from schema), 105 alive-but-unattributed (mixed
->   utility files like Environment/Property/Ui/FocusInput, function-per-action dispatch)
->   — safe skips, burn down when touching those families.
->   Remaining registry follow-ups: (ii) burn down the lint's 145 brace-skew pins;
+>   manage_tools hand-authored). Live probe of the 107: exactly 2 DEAD, 105 alive.
+>   ~~the last 107~~ DEEP-ATTRIBUTION PASS 2026-07-04 later same day: **0 UnverifiedDecl
+>   remain — 100% of 1169 decls enforced.** 13 action-scoped Sonnet agents (inverse of
+>   the file-scoped bootstrap: given the action list + live probe error lines as ground
+>   truth, traced dispatch to the implementing function) attributed all 105; the 2 dead
+>   actions (control_editor.set_viewport_resolution, manage_sequence.set_metadata) were
+>   DELETED from routing enums + decls. Lint two-witness pass caught 1 agent
+>   hallucination (bind_parameter_to_source sourceBinding — which turned out to be the
+>   LIVE contract; the "correction" I nearly shipped was from a shadowed dead branch,
+>   see bug 2026-07-04b) and 2 alt-group required-flag slips (sculpt, set_component_property).
+>   Remaining registry follow-ups: (ii) burn down the lint's 187 brace-skew/dead-branch pins;
 >   (iii) enforce bRequired after its own evidence pass; (iv) pilot family classed as
 >   FMcpCall (manage_sequence or manage_networking), family dispatch chain deleted same
 >   commit; (v) Stage 3: derive published schemas from declarations, delete the
@@ -874,6 +879,52 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 ---
 
 ## Bugs (found while using the bridge — track, fix when convenient)
+
+### [ ] 2026-07-04e — Bootstrap "mega-bag" decls are a FALSE-REJECT class (one instance fixed, sweep pending)
+The original file-scoped fleet gave ~16 control_actor actions (and several control_editor
+ones) IDENTICAL 33-param union arrays — brace-skew over-merge. Union bags are over-permissive
+(fail to reject junk) but the dangerous direction is the opposite: `call_actor_function`'s
+bag was missing `functionName`/`arguments` (those reads live inside the dedicated
+`HandleControlActorCallFunction`, ControlHandlers.cpp:2615, reached by single-line dispatch
+that neither the bootstrap parser nor the lint attributes), so the transport FALSE-REJECTED
+the ui-nav driver's TogglePause call. Found 2026-07-04 only because the pause specs went red;
+the driver was swallowing call errors (`| Out-Null`, fixed same day: `Invoke-Tool` now throws
+on `isError`). FIXED for call_actor_function (decl = actorName*/functionName*/componentName/
+arguments). SWEEP PENDING: every decl entry pointing at a shared mega-bag array whose action
+dispatches to a dedicated Handle* function is suspect — same action-scoped-agent treatment as
+the deep pass, or resolve via pilot FMcpCall classing (control_actor is now the best pilot
+candidate precisely because its decls are the worst).
+
+### [ ] 2026-07-04f — `manage_level load` reports ENGINE_ERROR for a pre-existing MapCheck content warning
+Loading HubWorld returns `Error [ENGINE_ERROR]: Handler reported success but Unreal logged
+errors: [MapCheck] World references spatially loaded actor ...Portal_Hum_Trigger_Forest`
+— the post-op fail-loudly guard treats the level's own MapCheck warnings as handler errors.
+The load succeeded. Same benign-noise-as-error class as the SourceControl-line false-fail
+(fixed 2026-06-x); guard should ignore `[MapCheck]` lines (they describe content, not the op).
+
+### [ ] 2026-07-04b — `manage_effect bind_parameter_to_source` has a SHADOWED duplicate implementation
+`McpAutomationBridge_NiagaraAuthoringHandlers.cpp:2232` is the live path (probe error text
+`Missing 'systemPath'.` matches it verbatim; reads parameterName+sourceBinding+parameterType).
+`McpAutomationBridge_EffectHandlers.cpp:2761` implements the SAME action a second time
+(reads sourceType/sourceName, replies "Parameter bound (name=%s to %s.%s)") and never
+receives dispatch. Found 2026-07-04 when the decl lint flagged both files' reads for one
+action. Fix = delete the dead EffectHandlers branch (deletion doctrine); while there, sweep
+the neighbouring numbered Niagara-module branches (27 ParameterValue, 29
+enable_gpu_simulation, ...) — the whole block smells like a pre-NiagaraAuthoring relic and
+other branches may be equally unreachable. Decl truth follows the live path; the dead reads
+are pinned in `tests/schema/action-decl-lint-allowlist.txt`.
+
+### [ ] 2026-07-04c — `manage_asset` texture ops reject their own routing envelope (`Invalid parameter: action`)
+`adjust_levels`/`blur`/`desaturate`/`invert`/`set_streaming_priority` argless → `Error
+[TEXTURE_ERROR]: Invalid parameter: action` — the texture param validator strict-rejects
+unknown payload keys and chokes on the envelope's own `action` field before ever saying
+what's actually missing (`assetPath`). Error should name the real gap; validator should
+ignore envelope keys.
+
+### [ ] 2026-07-04d — `manage_level create_light` with zero params silently spawns a default PointLight at origin
+Fail-fast violation found by the argless probe (it mutated the level). `lightType` defaults
+to "Point", location/rotation default to origin. Should require at least a location (or an
+explicit confirmation param) before mutating the world.
 
 ### [x] 2026-07-02b — Intermittent spurious `TOOL_DISABLED` on `manage_networking` (fresh-session flake)
 **CLOSED 2026-07-03.** Root cause was the audit's own tools-agent mutating the then-GLOBAL

@@ -40,25 +40,33 @@ parser survives only as a lint.
   MUST be classes; legacy actions are shims (declaration + legacy family
   dispatch) that convert per-family, opportunistically.
 
-## Bootstrap state (2026-07-04, after the attribution burn-down)
+## Bootstrap state (2026-07-04, complete)
 
-1171 declarations registered at boot; **1064 verified (91%)**, 107 `UnverifiedDecl`
-(validation skips them — never enforce unattributed truth). The burn-down pass
-resolved the alias-group class (handlers comparing several names in one
-condition — `delete || delete_asset || delete_assets` — synthesized from
-same-brace-range marker groups), the cross-file-delegation class (any
-high-confidence contributor verifies a merged entry), and the
-internal-name-only files (file→tool affinity seeded from filenames;
-`manage_tools` hand-authored — it lives in the transport, which the fleet
-never read). A live probe of all remaining unverified actions found exactly
-**2 dead** (`control_editor.set_viewport_resolution`,
-`manage_sequence.set_metadata` — advertised, no code path; implement-or-delete
-in TODO); the other 105 are implemented but dispatched through mechanisms
-neither the fleet's file-scoped prompts nor the parser attribute yet (mixed
-utility files, function-per-action dispatch). The lint's bootstrap allowlist
-pins 145 parser brace-scope mis-attributions. False-positive sweep: material
-battery 18/18 + full ui-nav suite + assorted calls = zero per-action
-rejections on valid traffic.
+**1169 declarations registered at boot; all 1169 verified and enforced (100%).**
+Reached in three same-day passes:
+
+1. **Fleet bootstrap** — 57 file-scoped agents + three-witness cross-check:
+   1171 decls, 962 verified (82%).
+2. **Attribution burn-down** — alias-group synthesis (handlers comparing
+   several names in one condition — `delete || delete_asset || delete_assets`),
+   any-high-confidence-contributor merge, filename→tool affinity seeding,
+   `manage_tools` hand-authored (it lives in the transport, which the fleet
+   never read): 1064 verified (91%). A live argless probe of the remaining 107
+   found exactly 2 dead and 105 alive.
+3. **Deep attribution** — 13 *action-scoped* agents (the inverse of pass 1:
+   given the action list plus the live probe responses as ground truth, trace
+   dispatch to the implementing function across files): all 105 verified. The
+   2 dead actions (`control_editor.set_viewport_resolution`,
+   `manage_sequence.set_metadata` — advertised, no code path) were **deleted**
+   from the routing enums and declarations. The decl lint acted as second
+   witness and caught one agent trace pointed at a *shadowed duplicate
+   implementation* of `bind_parameter_to_source` (TODO bug 2026-07-04b) plus
+   two alt-group required-flag slips.
+
+The lint allowlist pins 187 non-gap findings (parser brace-scope
+mis-attributions, shared-dispatcher prologue reads, dead-branch reads).
+False-positive sweeps after each pass: material battery + full ui-nav suite +
+assorted valid traffic = zero per-action rejections.
 
 ## Migration rules (agreed 2026-07-04)
 

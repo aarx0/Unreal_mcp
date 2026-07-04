@@ -131,7 +131,7 @@ inline const FMcpCallDecl GManageNetworking[] =
 	{ TEXT("manage_networking"), TEXT("get_game_framework_info"), P_ManageNetworking_42, EMcpCallFlags::None },
 	{ TEXT("manage_networking"), TEXT("get_input_info"), P_ManageNetworking_43, EMcpCallFlags::None },
 	{ TEXT("manage_networking"), TEXT("get_networking_info"), P_ManageNetworking_44, EMcpCallFlags::None },
-	{ TEXT("manage_networking"), TEXT("get_sessions_info"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_networking"), TEXT("get_sessions_info"), {}, EMcpCallFlags::None },
 	{ TEXT("manage_networking"), TEXT("host_lan_server"), P_ManageNetworking_46, EMcpCallFlags::None },
 	{ TEXT("manage_networking"), TEXT("join_lan_server"), P_ManageNetworking_47, EMcpCallFlags::None },
 	{ TEXT("manage_networking"), TEXT("map_input_action"), P_ManageNetworking_48, EMcpCallFlags::None },

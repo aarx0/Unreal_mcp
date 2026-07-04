@@ -67,9 +67,14 @@ inline const FMcpParamDecl P_BuildEnvironment_57[] = { { TEXT("viewDistance"), E
 inline const FMcpParamDecl P_BuildEnvironment_58[] = { { TEXT("lightType"), EMcpParamKind::String, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("lightClass"), EMcpParamKind::String, false }, { TEXT("type"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("properties"), EMcpParamKind::Object, false } };
 inline const FMcpParamDecl P_BuildEnvironment_59[] = { { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("sourceType"), EMcpParamKind::String, false }, { TEXT("cubemapPath"), EMcpParamKind::String, false }, { TEXT("intensity"), EMcpParamKind::Number, false }, { TEXT("recapture"), EMcpParamKind::Bool, false } };
 
+inline const FMcpParamDecl P_BuildEnvironment_D0[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("meshPath"), EMcpParamKind::String, true }, { TEXT("density"), EMcpParamKind::Number, false }, { TEXT("minScale"), EMcpParamKind::Number, false }, { TEXT("maxScale"), EMcpParamKind::Number, false }, { TEXT("alignToNormal"), EMcpParamKind::Bool, false }, { TEXT("randomYaw"), EMcpParamKind::Bool, false }, { TEXT("cullDistance"), EMcpParamKind::Number, false } };
+inline const FMcpParamDecl P_BuildEnvironment_D1[] = { { TEXT("landscapePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("assetPaths"), EMcpParamKind::Array, false }, { TEXT("assets"), EMcpParamKind::Array, false }, { TEXT("lodCount"), EMcpParamKind::Number, false }, { TEXT("numLODs"), EMcpParamKind::Number, false }, { TEXT("reductionSettings"), EMcpParamKind::Object, false } };
+inline const FMcpParamDecl P_BuildEnvironment_D2[] = { { TEXT("landscapePath"), EMcpParamKind::String, false }, { TEXT("landscapeName"), EMcpParamKind::String, false }, { TEXT("layerName"), EMcpParamKind::String, true }, { TEXT("region"), EMcpParamKind::Object, false }, { TEXT("minX"), EMcpParamKind::Number, false }, { TEXT("minY"), EMcpParamKind::Number, false }, { TEXT("maxX"), EMcpParamKind::Number, false }, { TEXT("maxY"), EMcpParamKind::Number, false }, { TEXT("strength"), EMcpParamKind::Number, false }, { TEXT("skipFlush"), EMcpParamKind::Bool, false } };
+inline const FMcpParamDecl P_BuildEnvironment_D3[] = { { TEXT("landscapePath"), EMcpParamKind::String, false }, { TEXT("landscapeName"), EMcpParamKind::String, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("position"), EMcpParamKind::Object, false }, { TEXT("toolMode"), EMcpParamKind::String, false }, { TEXT("tool"), EMcpParamKind::String, false }, { TEXT("brushRadius"), EMcpParamKind::Number, false }, { TEXT("radius"), EMcpParamKind::Number, false }, { TEXT("brushFalloff"), EMcpParamKind::Number, false }, { TEXT("falloff"), EMcpParamKind::Number, false }, { TEXT("strength"), EMcpParamKind::Number, false }, { TEXT("skipFlush"), EMcpParamKind::Bool, false } };
+
 inline const FMcpCallDecl GBuildEnvironment[] =
 {
-	{ TEXT("build_environment"), TEXT("add_foliage"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("build_environment"), TEXT("add_foliage"), P_BuildEnvironment_D0, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("add_foliage_instances"), P_BuildEnvironment_1, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("add_spline_point"), P_BuildEnvironment_2, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("bake_lightmap"), P_BuildEnvironment_3, EMcpCallFlags::None },
@@ -100,19 +105,19 @@ inline const FMcpCallDecl GBuildEnvironment[] =
 	{ TEXT("build_environment"), TEXT("delete"), P_BuildEnvironment_28, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("ensure_single_sky_light"), P_BuildEnvironment_29, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("export_snapshot"), P_BuildEnvironment_30, EMcpCallFlags::None },
-	{ TEXT("build_environment"), TEXT("generate_lods"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("build_environment"), TEXT("generate_lods"), P_BuildEnvironment_D1, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("get_foliage_instances"), P_BuildEnvironment_32, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("get_splines_info"), P_BuildEnvironment_33, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("import_snapshot"), P_BuildEnvironment_34, EMcpCallFlags::None },
-	{ TEXT("build_environment"), TEXT("list_light_types"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("build_environment"), TEXT("list_light_types"), {}, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("modify_heightmap"), P_BuildEnvironment_36, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("paint_foliage"), P_BuildEnvironment_37, EMcpCallFlags::None },
-	{ TEXT("build_environment"), TEXT("paint_landscape"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("build_environment"), TEXT("paint_landscape"), P_BuildEnvironment_D2, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("paint_landscape_layer"), P_BuildEnvironment_39, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("remove_foliage"), P_BuildEnvironment_40, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("remove_spline_point"), P_BuildEnvironment_41, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("scatter_meshes_along_spline"), P_BuildEnvironment_42, EMcpCallFlags::None },
-	{ TEXT("build_environment"), TEXT("sculpt"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("build_environment"), TEXT("sculpt"), P_BuildEnvironment_D3, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("sculpt_landscape"), P_BuildEnvironment_44, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("set_ambient_occlusion"), P_BuildEnvironment_45, EMcpCallFlags::None },
 	{ TEXT("build_environment"), TEXT("set_exposure"), P_BuildEnvironment_46, EMcpCallFlags::None },

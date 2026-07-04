@@ -1493,17 +1493,20 @@ void FMcpNativeTransport::HandleToolsCall(
 					{
 						AcceptedStr += FString::Printf(TEXT(" (+%d more)"), Accepted.Num() - MaxListed);
 					}
+					const FString AcceptedClause = Accepted.Num() > 0
+						? FString::Printf(TEXT("Params this action reads: %s."), *AcceptedStr)
+						: TEXT("This action takes no params besides 'action' itself.");
 
 					bool bBypass = false;
 					Arguments->TryGetBoolField(TEXT("bypassParamCheck"), bBypass);
 					if (!bBypass)
 					{
 						const FString Message = FString::Printf(
-							TEXT("%s.%s does not read: %s. Params this action reads: %s. ")
+							TEXT("%s.%s does not read: %s. %s ")
 							TEXT("Remove or rename the unread param(s). If the handler source DOES read them, the ")
 							TEXT("action's declaration is wrong: retry with bypassParamCheck:true to proceed ")
 							TEXT("now, and report the miss (fork TODO.md) so its McpDecl_*.h entry gets fixed."),
-							*ToolName, *ActionValue, *FString::Join(ForeignParams, TEXT(", ")), *AcceptedStr);
+							*ToolName, *ActionValue, *FString::Join(ForeignParams, TEXT(", ")), *AcceptedClause);
 						UE_LOG(LogMcpNativeTransport, Warning,
 							TEXT("tools/call rejected (per-action params): %s.%s: %s"),
 							*ToolName, *ActionValue, *FString::Join(ForeignParams, TEXT(", ")));

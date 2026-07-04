@@ -23,7 +23,6 @@ inline const FMcpParamDecl P_ManageBlueprint_8[] = { { TEXT("widgetPath"), EMcpP
 inline const FMcpParamDecl P_ManageBlueprint_9[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("buttonClass"), EMcpParamKind::String, true }, { TEXT("slotName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("parentSlot"), EMcpParamKind::String, false }, { TEXT("styleClass"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageBlueprint_10[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("slotName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("parentSlot"), EMcpParamKind::String, false }, { TEXT("text"), EMcpParamKind::String, false }, { TEXT("styleClass"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageBlueprint_11[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("slotName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ManageBlueprint_12[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("componentType"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageBlueprint_13[] = { { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false } };
 inline const FMcpParamDecl P_ManageBlueprint_14[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("parentName"), EMcpParamKind::String, false }, { TEXT("size"), EMcpParamKind::Number, false } };
 inline const FMcpParamDecl P_ManageBlueprint_15[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("slotName"), EMcpParamKind::String, false } };
@@ -99,7 +98,6 @@ inline const FMcpParamDecl P_ManageBlueprint_90[] = { { TEXT("widgetPath"), EMcp
 inline const FMcpParamDecl P_ManageBlueprint_93[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("graphName"), EMcpParamKind::String, false }, { TEXT("includePinLinks"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_ManageBlueprint_94[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("graphName"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, true }, { TEXT("expressionIndex"), EMcpParamKind::Number, false } };
 inline const FMcpParamDecl P_ManageBlueprint_95[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("graphName"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, true }, { TEXT("pinName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ManageBlueprint_96[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false } };
 inline const FMcpParamDecl P_ManageBlueprint_97[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("graphName"), EMcpParamKind::String, false }, { TEXT("fromState"), EMcpParamKind::String, false }, { TEXT("toState"), EMcpParamKind::String, false }, { TEXT("transitionName"), EMcpParamKind::String, false }, { TEXT("stateMachine"), EMcpParamKind::String, false }, { TEXT("transitionIndex"), EMcpParamKind::Number, false } };
 inline const FMcpParamDecl P_ManageBlueprint_98[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("widgetName"), EMcpParamKind::String, false }, { TEXT("propertyNames"), EMcpParamKind::Array, false } };
 inline const FMcpParamDecl P_ManageBlueprint_99[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("slotName"), EMcpParamKind::String, true } };
@@ -143,8 +141,17 @@ inline const FMcpParamDecl P_ManageBlueprint_139[] = { { TEXT("widgetPath"), EMc
 inline const FMcpParamDecl P_ManageBlueprint_140[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("targetWidget"), EMcpParamKind::String, true }, { TEXT("property"), EMcpParamKind::String, true }, { TEXT("functionName"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageBlueprint_141[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("parentClass"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_ManageBlueprint_142[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("slotName"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("widgetName"), EMcpParamKind::String, false }, { TEXT("zOrder"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_ManageBlueprint_143[] = { { TEXT("widgetPath"), EMcpParamKind::String, false }, { TEXT("widgetId"), EMcpParamKind::String, false }, { TEXT("message"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ManageBlueprint_144[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("panelType"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false } };
+
+inline const FMcpParamDecl P_ManageBlueprint_D0[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("componentType"), EMcpParamKind::String, true }, { TEXT("componentName"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageBlueprint_D1[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false }, { TEXT("blueprintType"), EMcpParamKind::String, false }, { TEXT("waitForCompletion"), EMcpParamKind::Bool, false }, { TEXT("properties"), EMcpParamKind::Object, false } };
+inline const FMcpParamDecl P_ManageBlueprint_D2[] = { { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false } };
+inline const FMcpParamDecl P_ManageBlueprint_D3[] = { { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false }, { TEXT("propertyName"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_ManageBlueprint_D4[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false } };
+inline const FMcpParamDecl P_ManageBlueprint_D5[] = { { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false } };
+inline const FMcpParamDecl P_ManageBlueprint_D6[] = { { TEXT("blueprint_path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("component_name"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("property_name"), EMcpParamKind::String, false }, { TEXT("propertyName"), EMcpParamKind::String, false }, { TEXT("property_value"), EMcpParamKind::Any, false }, { TEXT("value"), EMcpParamKind::Any, false } };
+inline const FMcpParamDecl P_ManageBlueprint_D7[] = { { TEXT("blueprint_path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("component_name"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("location"), EMcpParamKind::Any, false }, { TEXT("rotation"), EMcpParamKind::Any, false }, { TEXT("scale"), EMcpParamKind::Any, false } };
+inline const FMcpParamDecl P_ManageBlueprint_D8[] = { { TEXT("widgetPath"), EMcpParamKind::String, false }, { TEXT("widgetId"), EMcpParamKind::String, false }, { TEXT("message"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false } };
 
 inline const FMcpCallDecl GManageBlueprint[] =
 {
@@ -160,7 +167,7 @@ inline const FMcpCallDecl GManageBlueprint[] =
 	{ TEXT("manage_blueprint"), TEXT("add_common_button"), P_ManageBlueprint_9, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("add_common_text"), P_ManageBlueprint_10, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("add_compass"), P_ManageBlueprint_11, EMcpCallFlags::None },
-	{ TEXT("manage_blueprint"), TEXT("add_component"), P_ManageBlueprint_12, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_blueprint"), TEXT("add_component"), P_ManageBlueprint_D0, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("add_construction_script"), P_ManageBlueprint_13, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("add_crosshair"), P_ManageBlueprint_14, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("add_damage_indicator"), P_ManageBlueprint_15, EMcpCallFlags::None },
@@ -199,22 +206,22 @@ inline const FMcpCallDecl GManageBlueprint[] =
 	{ TEXT("manage_blueprint"), TEXT("add_wrap_box"), P_ManageBlueprint_48, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("apply_style_to_widget"), P_ManageBlueprint_49, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("arrange_graph"), P_ManageBlueprint_50, EMcpCallFlags::None },
-	{ TEXT("manage_blueprint"), TEXT("bind_color"), {}, EMcpCallFlags::UnverifiedDecl },
-	{ TEXT("manage_blueprint"), TEXT("bind_enabled"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_blueprint"), TEXT("bind_color"), {}, EMcpCallFlags::None },
+	{ TEXT("manage_blueprint"), TEXT("bind_enabled"), {}, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("bind_event_to_delegate"), P_ManageBlueprint_53, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("bind_localized_text"), P_ManageBlueprint_54, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("bind_on_clicked"), P_ManageBlueprint_55, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("bind_on_hovered"), P_ManageBlueprint_56, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("bind_on_value_changed"), P_ManageBlueprint_57, EMcpCallFlags::None },
-	{ TEXT("manage_blueprint"), TEXT("bind_text"), {}, EMcpCallFlags::UnverifiedDecl },
-	{ TEXT("manage_blueprint"), TEXT("bind_visibility"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_blueprint"), TEXT("bind_text"), {}, EMcpCallFlags::None },
+	{ TEXT("manage_blueprint"), TEXT("bind_visibility"), {}, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("blueprint_get_default"), P_ManageBlueprint_60, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("blueprint_list_functions"), P_ManageBlueprint_61, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("break_pin_links"), P_ManageBlueprint_62, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("compile"), P_ManageBlueprint_63, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("connect_pins"), P_ManageBlueprint_64, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("create"), P_ManageBlueprint_65, EMcpCallFlags::None },
-	{ TEXT("manage_blueprint"), TEXT("create_blueprint"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_blueprint"), TEXT("create_blueprint"), P_ManageBlueprint_D1, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("create_common_button_style"), P_ManageBlueprint_67, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("create_common_text_style"), P_ManageBlueprint_68, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("create_credits_screen"), P_ManageBlueprint_69, EMcpCallFlags::None },
@@ -225,7 +232,7 @@ inline const FMcpCallDecl GManageBlueprint[] =
 	{ TEXT("manage_blueprint"), TEXT("create_main_menu"), P_ManageBlueprint_74, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("create_node"), P_ManageBlueprint_75, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("create_pause_menu"), P_ManageBlueprint_76, EMcpCallFlags::None },
-	{ TEXT("manage_blueprint"), TEXT("create_property_binding"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_blueprint"), TEXT("create_property_binding"), {}, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("create_radial_menu"), P_ManageBlueprint_78, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("create_reroute_node"), P_ManageBlueprint_79, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("create_settings_menu"), P_ManageBlueprint_80, EMcpCallFlags::None },
@@ -239,17 +246,17 @@ inline const FMcpCallDecl GManageBlueprint[] =
 	{ TEXT("manage_blueprint"), TEXT("ensure_exists"), P_ManageBlueprint_88, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("get"), P_ManageBlueprint_89, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("get_animation_info"), P_ManageBlueprint_90, EMcpCallFlags::None },
-	{ TEXT("manage_blueprint"), TEXT("get_blueprint"), {}, EMcpCallFlags::UnverifiedDecl },
-	{ TEXT("manage_blueprint"), TEXT("get_default"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_blueprint"), TEXT("get_blueprint"), P_ManageBlueprint_D2, EMcpCallFlags::None },
+	{ TEXT("manage_blueprint"), TEXT("get_default"), P_ManageBlueprint_D3, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("get_graph_details"), P_ManageBlueprint_93, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("get_node_details"), P_ManageBlueprint_94, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("get_pin_details"), P_ManageBlueprint_95, EMcpCallFlags::None },
-	{ TEXT("manage_blueprint"), TEXT("get_scs"), P_ManageBlueprint_96, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_blueprint"), TEXT("get_scs"), P_ManageBlueprint_D4, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("get_transition_rule_graph"), P_ManageBlueprint_97, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("get_widget_info"), P_ManageBlueprint_98, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("get_widget_slot_info"), P_ManageBlueprint_99, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("list_animbp_graphs"), P_ManageBlueprint_100, EMcpCallFlags::None },
-	{ TEXT("manage_blueprint"), TEXT("list_functions"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_blueprint"), TEXT("list_functions"), P_ManageBlueprint_D5, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("list_node_types"), P_ManageBlueprint_102, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("modify_scs"), P_ManageBlueprint_103, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("preview_widget"), P_ManageBlueprint_104, EMcpCallFlags::None },
@@ -282,8 +289,8 @@ inline const FMcpCallDecl GManageBlueprint[] =
 	{ TEXT("manage_blueprint"), TEXT("set_pin_default_value"), P_ManageBlueprint_131, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("set_position"), P_ManageBlueprint_132, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("set_render_transform"), P_ManageBlueprint_133, EMcpCallFlags::None },
-	{ TEXT("manage_blueprint"), TEXT("set_scs_property"), {}, EMcpCallFlags::UnverifiedDecl },
-	{ TEXT("manage_blueprint"), TEXT("set_scs_transform"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_blueprint"), TEXT("set_scs_property"), P_ManageBlueprint_D6, EMcpCallFlags::None },
+	{ TEXT("manage_blueprint"), TEXT("set_scs_transform"), P_ManageBlueprint_D7, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("set_size"), P_ManageBlueprint_136, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("set_style"), P_ManageBlueprint_137, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("set_variable_metadata"), P_ManageBlueprint_138, EMcpCallFlags::None },
@@ -291,7 +298,7 @@ inline const FMcpCallDecl GManageBlueprint[] =
 	{ TEXT("manage_blueprint"), TEXT("set_widget_binding"), P_ManageBlueprint_140, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("set_widget_parent_class"), P_ManageBlueprint_141, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("set_z_order"), P_ManageBlueprint_142, EMcpCallFlags::None },
-	{ TEXT("manage_blueprint"), TEXT("show_widget"), P_ManageBlueprint_143, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_blueprint"), TEXT("show_widget"), P_ManageBlueprint_D8, EMcpCallFlags::None },
 	{ TEXT("manage_blueprint"), TEXT("wrap_root"), P_ManageBlueprint_144, EMcpCallFlags::None },
 };
 }

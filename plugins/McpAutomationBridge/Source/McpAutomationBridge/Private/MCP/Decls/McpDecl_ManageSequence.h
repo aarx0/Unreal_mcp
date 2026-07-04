@@ -11,7 +11,6 @@
 
 namespace McpDecls
 {
-inline const FMcpParamDecl P_ManageSequence_0[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_ManageSequence_1[] = { { TEXT("actorNames"), EMcpParamKind::Array, true }, { TEXT("path"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_ManageSequence_2[] = { { TEXT("path"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_ManageSequence_3[] = { { TEXT("path"), EMcpParamKind::String, true }, { TEXT("bindingId"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("property"), EMcpParamKind::String, false }, { TEXT("frame"), EMcpParamKind::Number, true }, { TEXT("value"), EMcpParamKind::Any, false } };
@@ -42,9 +41,11 @@ inline const FMcpParamDecl P_ManageSequence_30[] = { { TEXT("start"), EMcpParamK
 inline const FMcpParamDecl P_ManageSequence_31[] = { { TEXT("path"), EMcpParamKind::String, true }, { TEXT("start"), EMcpParamKind::Number, false }, { TEXT("end"), EMcpParamKind::Number, false } };
 inline const FMcpParamDecl P_ManageSequence_32[] = { { TEXT("path"), EMcpParamKind::String, true } };
 
+inline const FMcpParamDecl P_ManageSequence_D0[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false } };
+
 inline const FMcpCallDecl GManageSequence[] =
 {
-	{ TEXT("manage_sequence"), TEXT("add_actor"), P_ManageSequence_0, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_sequence"), TEXT("add_actor"), P_ManageSequence_D0, EMcpCallFlags::None },
 	{ TEXT("manage_sequence"), TEXT("add_actors"), P_ManageSequence_1, EMcpCallFlags::None },
 	{ TEXT("manage_sequence"), TEXT("add_camera"), P_ManageSequence_2, EMcpCallFlags::None },
 	{ TEXT("manage_sequence"), TEXT("add_keyframe"), P_ManageSequence_3, EMcpCallFlags::None },
@@ -57,8 +58,8 @@ inline const FMcpCallDecl GManageSequence[] =
 	{ TEXT("manage_sequence"), TEXT("get_bindings"), P_ManageSequence_10, EMcpCallFlags::None },
 	{ TEXT("manage_sequence"), TEXT("get_metadata"), P_ManageSequence_11, EMcpCallFlags::None },
 	{ TEXT("manage_sequence"), TEXT("get_properties"), P_ManageSequence_12, EMcpCallFlags::None },
-	{ TEXT("manage_sequence"), TEXT("list"), {}, EMcpCallFlags::UnverifiedDecl },
-	{ TEXT("manage_sequence"), TEXT("list_track_types"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_sequence"), TEXT("list"), {}, EMcpCallFlags::None },
+	{ TEXT("manage_sequence"), TEXT("list_track_types"), {}, EMcpCallFlags::None },
 	{ TEXT("manage_sequence"), TEXT("list_tracks"), P_ManageSequence_15, EMcpCallFlags::None },
 	{ TEXT("manage_sequence"), TEXT("open"), P_ManageSequence_16, EMcpCallFlags::None },
 	{ TEXT("manage_sequence"), TEXT("pause"), P_ManageSequence_17, EMcpCallFlags::None },
@@ -67,7 +68,6 @@ inline const FMcpCallDecl GManageSequence[] =
 	{ TEXT("manage_sequence"), TEXT("remove_track"), P_ManageSequence_20, EMcpCallFlags::None },
 	{ TEXT("manage_sequence"), TEXT("rename"), P_ManageSequence_21, EMcpCallFlags::None },
 	{ TEXT("manage_sequence"), TEXT("set_display_rate"), P_ManageSequence_22, EMcpCallFlags::None },
-	{ TEXT("manage_sequence"), TEXT("set_metadata"), {}, EMcpCallFlags::UnverifiedDecl },
 	{ TEXT("manage_sequence"), TEXT("set_playback_speed"), P_ManageSequence_24, EMcpCallFlags::None },
 	{ TEXT("manage_sequence"), TEXT("set_properties"), P_ManageSequence_25, EMcpCallFlags::None },
 	{ TEXT("manage_sequence"), TEXT("set_tick_resolution"), P_ManageSequence_26, EMcpCallFlags::None },

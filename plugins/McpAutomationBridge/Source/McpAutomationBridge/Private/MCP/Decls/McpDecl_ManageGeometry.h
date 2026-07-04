@@ -87,6 +87,8 @@ inline const FMcpParamDecl P_ManageGeometry_73[] = { { TEXT("actorName"), EMcpPa
 inline const FMcpParamDecl P_ManageGeometry_74[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("uvChannel"), EMcpParamKind::Number, false } };
 inline const FMcpParamDecl P_ManageGeometry_75[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("tolerance"), EMcpParamKind::Number, false }, { TEXT("weldDistance"), EMcpParamKind::Number, false } };
 
+inline const FMcpParamDecl P_ManageGeometry_D0[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("tolerance"), EMcpParamKind::Number, false }, { TEXT("compact"), EMcpParamKind::Bool, false } };
+
 inline const FMcpCallDecl GManageGeometry[] =
 {
 	{ TEXT("manage_geometry"), TEXT("array_linear"), P_ManageGeometry_0, EMcpCallFlags::None },
@@ -132,7 +134,7 @@ inline const FMcpCallDecl GManageGeometry[] =
 	{ TEXT("manage_geometry"), TEXT("lattice_deform"), P_ManageGeometry_40, EMcpCallFlags::None },
 	{ TEXT("manage_geometry"), TEXT("loft"), P_ManageGeometry_41, EMcpCallFlags::None },
 	{ TEXT("manage_geometry"), TEXT("loop_cut"), P_ManageGeometry_42, EMcpCallFlags::None },
-	{ TEXT("manage_geometry"), TEXT("merge_vertices"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("manage_geometry"), TEXT("merge_vertices"), P_ManageGeometry_D0, EMcpCallFlags::None },
 	{ TEXT("manage_geometry"), TEXT("mirror"), P_ManageGeometry_44, EMcpCallFlags::None },
 	{ TEXT("manage_geometry"), TEXT("noise_deform"), P_ManageGeometry_45, EMcpCallFlags::None },
 	{ TEXT("manage_geometry"), TEXT("offset_faces"), P_ManageGeometry_46, EMcpCallFlags::None },

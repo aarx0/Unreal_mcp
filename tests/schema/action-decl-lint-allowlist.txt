@@ -151,3 +151,49 @@ manage_asset.source_control_submit.path
 manage_asset.validate.checkoutFiles
 manage_asset.validate.directoryPath
 manage_asset.validate.path
+# Deep-attribution pass (2026-07-04): shared-dispatcher prologue reads and cross-branch
+# brace charges on the newly verified 105 — same skew class as the bootstrap seed.
+control_editor.eject.assetPath
+control_editor.hide_stats.assetPath
+control_editor.pause.assetPath
+control_editor.play.assetPath
+control_editor.redo.assetPath
+control_editor.resume.assetPath
+control_editor.save_all.assetPath
+control_editor.show_stats.assetPath
+control_editor.step_frame.assetPath
+control_editor.stop_recording.assetPath
+control_editor.stop.assetPath
+control_editor.undo.assetPath
+inspect.get_editor_settings.actorName
+inspect.get_editor_settings.name
+inspect.get_editor_settings.objectPath
+inspect.get_memory_stats.actorName
+inspect.get_memory_stats.name
+inspect.get_memory_stats.objectPath
+inspect.get_performance_stats.actorName
+inspect.get_performance_stats.name
+inspect.get_performance_stats.objectPath
+inspect.get_project_settings.actorName
+inspect.get_project_settings.name
+inspect.get_project_settings.objectPath
+inspect.get_scene_stats.actorName
+inspect.get_scene_stats.name
+inspect.get_scene_stats.objectPath
+inspect.get_selected_actors.actorName
+inspect.get_selected_actors.name
+inspect.get_selected_actors.objectPath
+inspect.get_viewport_info.actorName
+inspect.get_viewport_info.name
+inspect.get_viewport_info.objectPath
+inspect.get_world_settings.actorName
+inspect.get_world_settings.name
+inspect.get_world_settings.objectPath
+inspect.inspect_cdo.actorName
+inspect.inspect_cdo.name
+inspect.inspect_cdo.objectPath
+manage_ai.add_composite_node.nodeClass
+# Dead-branch reads: EffectHandlers.cpp:2761 bind_parameter_to_source is shadowed by the
+# live NiagaraAuthoringHandlers.cpp:2232 implementation (probe error text matches the latter).
+manage_effect.bind_parameter_to_source.sourceType
+manage_effect.bind_parameter_to_source.sourceName

@@ -47,12 +47,15 @@ inline const FMcpParamDecl P_SystemControl_40[] = { { TEXT("categoryName"), EMcp
 inline const FMcpParamDecl P_SystemControl_42[] = { { TEXT("channels"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_SystemControl_45[] = { { TEXT("count"), EMcpParamKind::Number, false }, { TEXT("sinceSeq"), EMcpParamKind::Number, false }, { TEXT("verbosity"), EMcpParamKind::String, false }, { TEXT("category"), EMcpParamKind::String, false }, { TEXT("contains"), EMcpParamKind::String, false } };
 
+inline const FMcpParamDecl P_SystemControl_D0[] = { { TEXT("command"), EMcpParamKind::String, true } };
+inline const FMcpParamDecl P_SystemControl_D1[] = { { TEXT("key"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::String, false } };
+
 inline const FMcpCallDecl GSystemControl[] =
 {
 	{ TEXT("system_control"), TEXT("add_widget_child"), P_SystemControl_0, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("apply_baseline_settings"), P_SystemControl_1, EMcpCallFlags::None },
-	{ TEXT("system_control"), TEXT("capture_stats"), {}, EMcpCallFlags::UnverifiedDecl },
-	{ TEXT("system_control"), TEXT("clear_log"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("system_control"), TEXT("capture_stats"), {}, EMcpCallFlags::None },
+	{ TEXT("system_control"), TEXT("clear_log"), {}, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("configure_lod"), P_SystemControl_4, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("configure_nanite"), P_SystemControl_5, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("configure_occlusion_culling"), P_SystemControl_6, EMcpCallFlags::None },
@@ -61,19 +64,19 @@ inline const FMcpCallDecl GSystemControl[] =
 	{ TEXT("system_control"), TEXT("console_command"), P_SystemControl_9, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("create_widget"), P_SystemControl_10, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("enable_gpu_timing"), P_SystemControl_11, EMcpCallFlags::None },
-	{ TEXT("system_control"), TEXT("execute_command"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("system_control"), TEXT("execute_command"), P_SystemControl_D0, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("execute_python"), P_SystemControl_13, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("generate_memory_report"), P_SystemControl_14, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("generate_test_stub"), P_SystemControl_15, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("get_build_status"), P_SystemControl_16, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("get_log"), P_SystemControl_17, EMcpCallFlags::None },
-	{ TEXT("system_control"), TEXT("get_perf_stats"), {}, EMcpCallFlags::UnverifiedDecl },
-	{ TEXT("system_control"), TEXT("get_profile"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("system_control"), TEXT("get_perf_stats"), {}, EMcpCallFlags::None },
+	{ TEXT("system_control"), TEXT("get_profile"), {}, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("get_project_settings"), P_SystemControl_20, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("get_test_results"), P_SystemControl_21, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("list_tests"), P_SystemControl_22, EMcpCallFlags::None },
-	{ TEXT("system_control"), TEXT("live_coding_compile"), {}, EMcpCallFlags::UnverifiedDecl },
-	{ TEXT("system_control"), TEXT("lumen_update_scene"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("system_control"), TEXT("live_coding_compile"), {}, EMcpCallFlags::None },
+	{ TEXT("system_control"), TEXT("lumen_update_scene"), {}, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("merge_actors"), P_SystemControl_25, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("optimize_draw_calls"), P_SystemControl_26, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("optimize_shaders"), P_SystemControl_27, EMcpCallFlags::None },
@@ -81,7 +84,7 @@ inline const FMcpCallDecl GSystemControl[] =
 	{ TEXT("system_control"), TEXT("run_tests"), P_SystemControl_29, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("run_ubt"), P_SystemControl_30, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("screenshot"), P_SystemControl_31, EMcpCallFlags::None },
-	{ TEXT("system_control"), TEXT("set_cvar"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("system_control"), TEXT("set_cvar"), P_SystemControl_D1, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("set_frame_rate_limit"), P_SystemControl_33, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("set_project_setting"), P_SystemControl_34, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("set_resolution_scale"), P_SystemControl_35, EMcpCallFlags::None },
@@ -90,11 +93,11 @@ inline const FMcpCallDecl GSystemControl[] =
 	{ TEXT("system_control"), TEXT("show_fps"), P_SystemControl_38, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("show_stats"), P_SystemControl_39, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("spawn_category"), P_SystemControl_40, EMcpCallFlags::None },
-	{ TEXT("system_control"), TEXT("start_profiling"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("system_control"), TEXT("start_profiling"), {}, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("start_session"), P_SystemControl_42, EMcpCallFlags::None },
-	{ TEXT("system_control"), TEXT("stop_profiling"), {}, EMcpCallFlags::UnverifiedDecl },
-	{ TEXT("system_control"), TEXT("subscribe"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("system_control"), TEXT("stop_profiling"), {}, EMcpCallFlags::None },
+	{ TEXT("system_control"), TEXT("subscribe"), {}, EMcpCallFlags::None },
 	{ TEXT("system_control"), TEXT("tail_log"), P_SystemControl_45, EMcpCallFlags::None },
-	{ TEXT("system_control"), TEXT("unsubscribe"), {}, EMcpCallFlags::UnverifiedDecl },
+	{ TEXT("system_control"), TEXT("unsubscribe"), {}, EMcpCallFlags::None },
 };
 }
