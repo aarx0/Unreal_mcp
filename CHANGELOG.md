@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### manage_sequence classed — second FMcpCall family (2026-07-04)
+
+- **32 classes in `MCP/Calls/McpCalls_ManageSequence.cpp`; the `sequence_*` manufactured-name family is extinct.** The legacy dispatcher prefixed every payload sub-action with `sequence_` and string-matched the result — 32 internal names no schema ever advertised, the largest surviving block of runtime-manufactured dispatch names from the de-alias postmortem. Chain, prefix machinery, shim decl header (`McpDecl_ManageSequence.h`), and handler-map registration all died with this conversion. The shim decls were already true per-action contracts (no mega-bags), so the classing transfers them verbatim — but now with authored flags: `RequiresEditor` on all but pure-reflection `list_track_types`, `Mutating` on the 21 writers (the shim rows carried `None` throughout).
+- **Four actions had no functions — their bodies lived inline in the dispatcher** (`list_track_types`, `add_track`, `list_tracks`, `set_work_range`); extracted to dedicated `HandleSequence*` members, error texts updated from the dead internal names to the advertised ones. Scoping found zero cross-file delegation in either direction and zero hidden/dead names for this family (the sweep's per-family ledger confirms), so no rule-5 conversions were needed. Dead-code bonus: `EnsureSequenceEntry` + `GSequenceRegistry` (orphaned prologue infrastructure, no callers) deleted.
+- Lint: `MCP_*_CALL` parsing now accepts `{}` as the params argument for zero-param actions.
+
 ### control_actor classed — the FMcpCall pilot family (2026-07-04)
 
 - **The strangler-fig migration has its first fully-classed family.** `ProcessAutomationRequest` now consults the call registry before the legacy handler map (classed actions win per-action; everything else falls through unchanged), and `FMcpCall::Execute()` is the shared pipeline: payload-null check and a new `RequiresEditor` flag carry what the old chain prologue did, then `Run()` — which mirrors the legacy handler signature, so conversion is delegation, not rewrite. control_actor's 27 advertised actions each became a class co-locating implementation with its **true param contract**: the bootstrap's 33-param mega-bag unions (the false-reject class from TODO 04e, `call_actor_function`'s bag among them) are resolved for this family — `get_actor_bounds` declares one param now, not 33.

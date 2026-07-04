@@ -43,16 +43,24 @@ parser survives only as a lint.
   gate → `Run()`); `ProcessAutomationRequest` consults `FindCall(tool,
   action)` before the legacy handler map, so classed actions win per-action
   while the rest of a family stays shimmed.
-- **First classed family: `control_actor` (2026-07-04,
-  `Private/MCP/Calls/McpCalls_ControlActor.cpp`).** 27 classes; each carries
-  its true per-action contract (the bootstrap's 33-param mega-bag unions died
-  here — TODO 04e resolved for this family); `Run()` delegates to the
-  subsystem's dedicated handlers until the module split de-members those
-  bodies. The family's string-dispatch chain, its shim decl header, and its
-  handler-map registration were deleted the same commit; `inspect`'s
-  actor-action forwarding converted from payload re-dispatch to typed direct
-  calls (migration rule 5 in practice). Classed decls are lint-visible via
-  the `// LINT-TOOL:` marker convention in `MCP/Calls/`.
+- **Classed families** (each deleted its string-dispatch chain, shim decl
+  header, and handler-map registration in its landing commit; classed decls
+  are lint-visible via the `// LINT-TOOL:` marker convention in `MCP/Calls/`):
+  - **`control_actor` (2026-07-04, the pilot,
+    `Private/MCP/Calls/McpCalls_ControlActor.cpp`).** 27 classes; each carries
+    its true per-action contract (the bootstrap's 33-param mega-bag unions died
+    here — TODO 04e resolved for this family); `Run()` delegates to the
+    subsystem's dedicated handlers until the module split de-members those
+    bodies. `inspect`'s actor-action forwarding converted from payload
+    re-dispatch to typed direct calls (migration rule 5 in practice).
+  - **`manage_sequence` (2026-07-04,
+    `Private/MCP/Calls/McpCalls_ManageSequence.cpp`).** 32 classes; the
+    dispatcher's 32 internally-manufactured `sequence_*` names died with the
+    chain (the last of that prefix family), and its four inline-only bodies
+    (`list_track_types`, `add_track`, `list_tracks`, `set_work_range`) were
+    extracted to dedicated members. Flags are authored per action here —
+    `RequiresEditor` everywhere except pure-reflection `list_track_types`,
+    `Mutating` on writers — where the shim decls carried `None`.
 
 ## Bootstrap state (2026-07-04, complete)
 

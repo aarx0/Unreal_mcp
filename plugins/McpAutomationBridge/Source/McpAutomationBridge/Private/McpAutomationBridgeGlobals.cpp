@@ -9,7 +9,6 @@ double GBlueprintCreateStaleTimeoutSec = 60.0;
 TSet<FString> GBlueprintBusySet;
 TMap<FString, TSharedPtr<FJsonObject>> GBlueprintRegistry;
 
-TMap<FString, TSharedPtr<FJsonObject>> GSequenceRegistry;
 FString GCurrentSequencePath;
 
 TMap<FString, TSharedPtr<FJsonObject>> GNiagaraRegistry;

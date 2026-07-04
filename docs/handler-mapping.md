@@ -40,7 +40,7 @@ subdirectory is shown.
 | `control_editor` | — | `HandleControlEditorAction` @ ControlHandlers.cpp |
 | `inspect` | — | `HandleInspectAction` @ EnvironmentHandlers.cpp |
 | `manage_level` | — | `HandleLevelAction` @ LevelHandlers.cpp |
-| `manage_sequence` | — | `HandleSequenceAction` @ SequenceHandlers.cpp |
+| `manage_sequence` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleSequence*` functions in SequenceHandlers.cpp) |
 | `manage_geometry` | — | `HandleGeometryAction` @ GeometryHandlers.cpp |
 | `manage_effect` | — | `HandleEffectAction` @ EffectHandlers.cpp |
 | `manage_gas` | — | `HandleManageGASAction` @ GASHandlers.cpp |
@@ -102,7 +102,7 @@ Core (fallthrough) lists:
 | `ControlEditor` | `HandleControlEditorAction` @ ControlHandlers.cpp |
 | `Inspect` | `HandleInspectAction` @ EnvironmentHandlers.cpp |
 | `ManageLevel` | `HandleLevelAction` @ LevelHandlers.cpp |
-| `ManageSequence` | `HandleSequenceAction` @ SequenceHandlers.cpp |
+| `ManageSequence` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp |
 | `ManageGeometry` | `HandleGeometryAction` @ GeometryHandlers.cpp |
 | `ManageEffect` | `HandleEffectAction` @ EffectHandlers.cpp |
 | `ManageGAS` | `HandleManageGASAction` @ GASHandlers.cpp |

@@ -534,9 +534,7 @@ private:
   bool HandleBlueprintAction(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
-  bool HandleSequenceAction(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
+  // manage_sequence is classed — see MCP/Calls/McpCalls_ManageSequence.cpp.
   bool HandleInputAction(const FString &RequestId, const FString &Action,
                          const TSharedPtr<FJsonObject> &Payload,
                          FMcpResponseHandle RequestingSocket);
@@ -1118,9 +1116,11 @@ private:
 
   // Sequence helpers
   FString ResolveSequencePath(const TSharedPtr<FJsonObject> &Payload);
-  TSharedPtr<FJsonObject> EnsureSequenceEntry(const FString &SeqPath);
 
-  // Individual sequence action handlers
+  // manage_sequence subhandlers — public so the manage_sequence FMcpCall
+  // classes (Private/MCP/Calls/) can delegate, until the module split
+  // de-members the implementations off the subsystem.
+public:
   bool HandleSequenceCreate(const FString &RequestId,
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle Socket);
@@ -1184,7 +1184,20 @@ private:
   bool HandleSequenceAddKeyframe(const FString &RequestId,
                                  const TSharedPtr<FJsonObject> &Payload,
                                  FMcpResponseHandle Socket);
+  bool HandleSequenceAddTrack(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandleSequenceListTracks(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandleSequenceListTrackTypes(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleSequenceSetWorkRange(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
 
+private:
   // Control handlers
   AActor *FindActorByName(const FString &Target, bool bExactMatchOnly = false);
 
@@ -1217,7 +1230,7 @@ public:
                                       const TSharedPtr<FJsonObject> &Payload,
                                       FMcpResponseHandle Socket);
 
-private:
+  // (manage_sequence subhandlers, continued — same transitional public block)
   bool HandleSequenceAddSection(const FString &RequestId,
                                 const TSharedPtr<FJsonObject> &Payload,
                                 FMcpResponseHandle Socket);

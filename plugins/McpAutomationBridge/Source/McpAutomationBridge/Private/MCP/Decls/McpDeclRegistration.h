@@ -12,7 +12,6 @@
 #include "MCP/Decls/McpDecl_ManageBlueprint.h"
 #include "MCP/Decls/McpDecl_ManageCombat.h"
 #include "MCP/Decls/McpDecl_ManageAsset.h"
-#include "MCP/Decls/McpDecl_ManageSequence.h"
 #include "MCP/Decls/McpDecl_AnimationPhysics.h"
 #include "MCP/Decls/McpDecl_ManageEffect.h"
 #include "MCP/Decls/McpDecl_ManageGas.h"
@@ -37,7 +36,8 @@ inline void McpRegisterAllActionDecls()
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageBlueprint);
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageCombat);
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageAsset);
-	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageSequence);
+	// manage_sequence: classed (MCP/Calls/McpCalls_ManageSequence.cpp) — decls
+	// register with the call instances via McpRegisterManageSequenceCalls().
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GAnimationPhysics);
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageEffect);
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageGas);

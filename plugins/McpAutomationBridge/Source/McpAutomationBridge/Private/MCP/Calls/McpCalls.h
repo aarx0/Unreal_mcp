@@ -4,3 +4,4 @@
 #pragma once
 
 void McpRegisterControlActorCalls();
+void McpRegisterManageSequenceCalls();

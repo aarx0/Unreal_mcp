@@ -482,6 +482,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       // the shim declarations (their decls come from the class instances).
       McpRegisterAllActionDecls();
       McpRegisterControlActorCalls();
+      McpRegisterManageSequenceCalls();
       UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
              TEXT("Registered %d action declarations"),
              FMcpCallRegistry::Get().NumDecls());
@@ -1109,7 +1110,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
 
   MCP_REGISTER_HANDLER("manage_level", HandleLevelAction);
 
-  MCP_REGISTER_HANDLER("manage_sequence", HandleSequenceAction);
+  // manage_sequence is fully classed (MCP/Calls/McpCalls_ManageSequence.cpp) —
+  // dispatch reaches its FMcpCall instances via the registry, not this map.
 
   RegisterHandler(TEXT("manage_asset"),
                   [this](const FString &R, const FString &A,

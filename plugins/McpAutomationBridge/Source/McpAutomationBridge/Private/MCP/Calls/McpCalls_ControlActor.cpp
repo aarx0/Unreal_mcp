@@ -7,7 +7,9 @@
 #include "MCP/McpCallRegistry.h"
 #include "McpAutomationBridgeSubsystem.h"
 
-namespace McpCalls
+// Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
+// so file-scope param arrays would collide across families otherwise.
+namespace McpCalls::ControlActor
 {
 
 // ─── Param contracts ─────────────────────────────────────────────────────────
@@ -92,11 +94,11 @@ MCP_CA_CALL(CallActorFunction, "call_actor_function", P_CallActorFunction, Handl
 
 #undef MCP_CA_CALL
 
-} // namespace McpCalls
+} // namespace McpCalls::ControlActor
 
 void McpRegisterControlActorCalls()
 {
-	using namespace McpCalls;
+	using namespace McpCalls::ControlActor;
 	FMcpCallRegistry& Registry = FMcpCallRegistry::Get();
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlActor_Spawn>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlActor_SpawnBlueprint>());

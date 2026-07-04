@@ -106,11 +106,12 @@ IS declared for the widget/common creates on this tool).
 >   hallucination (bind_parameter_to_source sourceBinding — which turned out to be the
 >   LIVE contract; the "correction" I nearly shipped was from a shadowed dead branch,
 >   see bug 2026-07-04b) and 2 alt-group required-flag slips (sculpt, set_component_property).
->   Remaining registry follow-ups: (ii) burn down the lint's 187 brace-skew/dead-branch pins;
->   (iii) enforce bRequired after its own evidence pass; (iv) pilot family classed as
->   FMcpCall (manage_sequence or manage_networking), family dispatch chain deleted same
->   commit; (v) Stage 3: derive published schemas from declarations, delete the
->   hand-built bags.
+>   Remaining registry follow-ups: (ii) burn down the lint's brace-skew/dead-branch pins;
+>   (iii) enforce bRequired after its own evidence pass; ~~(iv) pilot family classing~~
+>   DONE 2026-07-04: control_actor (27 classes, pilot) AND manage_sequence (32 classes,
+>   killed the sequence_* manufactured literals) both classed, chains + shim headers
+>   deleted same commit; next families opportunistically; (v) Stage 3: derive published
+>   schemas from declarations, delete the hand-built bags.
 >   NEXT: (b) Phase 2 = the apply-session receipt
 >   (appliedProperties/ignoredParams via a shared collector in McpHandlerUtils) for
 >   what only the engine call can know — scope shrinks to runtime/target-dependent

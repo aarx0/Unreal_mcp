@@ -28,7 +28,6 @@ extern double GBlueprintCreateStaleTimeoutSec;
 extern TSet<FString> GBlueprintBusySet;
 extern TMap<FString, TSharedPtr<FJsonObject>> GBlueprintRegistry;
 
-extern TMap<FString, TSharedPtr<FJsonObject>> GSequenceRegistry;
 extern FString GCurrentSequencePath;
 
 // Lightweight registry used for created Niagara systems when running in
