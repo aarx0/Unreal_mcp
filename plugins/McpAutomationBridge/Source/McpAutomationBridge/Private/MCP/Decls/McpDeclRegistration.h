@@ -5,7 +5,6 @@
 #include "MCP/Decls/McpDecl_ManageLevelStructure.h"
 #include "MCP/Decls/McpDecl_ManageAi.h"
 #include "MCP/Decls/McpDecl_ManageLevel.h"
-#include "MCP/Decls/McpDecl_ControlEditor.h"
 #include "MCP/Decls/McpDecl_ManageCharacter.h"
 #include "MCP/Decls/McpDecl_ManageInteraction.h"
 #include "MCP/Decls/McpDecl_ManageAudio.h"
@@ -27,7 +26,8 @@ inline void McpRegisterAllActionDecls()
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageLevelStructure);
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageAi);
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageLevel);
-	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GControlEditor);
+	// control_editor: classed (MCP/Calls/McpCalls_ControlEditor.cpp) — decls
+	// register with the call instances via McpRegisterControlEditorCalls().
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageCharacter);
 	// control_actor: classed (MCP/Calls/McpCalls_ControlActor.cpp) — decls
 	// register with the call instances via McpRegisterControlActorCalls().

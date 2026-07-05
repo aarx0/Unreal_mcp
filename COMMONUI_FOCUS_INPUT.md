@@ -16,7 +16,8 @@ Two actions, both in one self-contained TU (`McpAutomationBridge_FocusInputHandl
   `direction` (Up/Down/Left/Right/Accept/Back/Next/Previous) + `device` (gamepad default /
   keyboard) or explicit `key`; delivers the nav key via `FSlateApplication::ProcessKeyDownEvent`
   (faithful — runs CommonUI's input preprocessor + nav config like a real pad), then returns
-  the post-nav snapshot + `focusChanged`. Wired next to `simulate_input` in `HandleControlEditorAction`.
+  the post-nav snapshot + `focusChanged`. Registered as a classed `control_editor` action
+  (MCP/Calls/McpCalls_ControlEditor.cpp), like `simulate_input`.
 
 ### API corrections vs the design below (verified against UE 5.7 headers)
 - ❌ `UCommonUIActionRouterBase::DebugDumpRootList` is **NOT public** — it lives on a private

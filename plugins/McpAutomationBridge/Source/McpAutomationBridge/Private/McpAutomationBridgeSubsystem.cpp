@@ -489,6 +489,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       // the shim declarations (their decls come from the class instances).
       McpRegisterAllActionDecls();
       McpRegisterControlActorCalls();
+      McpRegisterControlEditorCalls();
       McpRegisterManageSequenceCalls();
       UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
              TEXT("Registered %d action declarations"),
@@ -1111,9 +1112,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                     return HandleSystemControlAction(R, A, P, S);
                   });
 
-  // control_actor is fully classed (MCP/Calls/McpCalls_ControlActor.cpp) —
-  // dispatch reaches its FMcpCall instances via the registry, not this map.
-  MCP_REGISTER_HANDLER("control_editor", HandleControlEditorAction);
+  // control_actor and control_editor are fully classed (MCP/Calls/) —
+  // dispatch reaches their FMcpCall instances via the registry, not this map.
 
   MCP_REGISTER_HANDLER("manage_level", HandleLevelAction);
 

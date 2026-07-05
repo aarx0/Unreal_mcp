@@ -914,19 +914,20 @@ then-global state broke sibling sessions (fixed with per-session overlays, which
 tool exercised). The one defensible use-case (schema-payload slimming for context-tight
 clients) doesn't apply to us.
 
-### [~] 2026-07-04e — Bootstrap "mega-bag" decls are a FALSE-REJECT class (control_actor resolved via classing)
+### [x] 2026-07-04e — Bootstrap "mega-bag" decls are a FALSE-REJECT class (CLOSED: both families classed)
 The original file-scoped fleet gave ~16 control_actor actions (and several control_editor
 ones) IDENTICAL 33-param union arrays — brace-skew over-merge. Union bags are over-permissive
 (fail to reject junk) but the dangerous direction is the opposite: `call_actor_function`'s
 bag was missing `functionName`/`arguments` (reads inside the dedicated handler that
 single-line dispatch hides from parser and lint), so the transport FALSE-REJECTED the
 ui-nav driver's TogglePause call (found 2026-07-04; driver `| Out-Null` swallowing fixed
-same day). **control_actor RESOLVED 2026-07-04 by the FMcpCall pilot**: all 27 actions
-carry true per-action contracts derived from their dedicated handlers (agent-traced +
-junk-param rejection live-verified — get_actor_bounds now declares 1 param, was 33).
-REMAINING: control_editor's union-bag entries (P_ControlEditor_* duplicates) — same
-treatment when that family is classed, or an action-scoped agent pass sooner if a false
-reject surfaces.
+same day). **control_actor RESOLVED by the FMcpCall pilot** (27 true contracts,
+junk-reject live-verified). **control_editor RESOLVED at its classing same day**: its two
+byte-identical 30-param bags were worse than over-permissive — `execute_command`'s bag
+required `assetPath`+`mode` (never read) and OMITTED `command` (its one real, required
+param), and `single_frame_step`'s true contract is empty; four more rows carried bogus
+params copied from other actions (`possess` had `functionName*`/`actor_name*`). All 35
+re-authored from handler reads. No mega-bag decls remain anywhere (grep P_ dupes: clean).
 
 ### [x] 2026-07-04f — `manage_level load` reports ENGINE_ERROR for a pre-existing MapCheck content warning
 **CLOSED 2026-07-04.** `[MapCheck]` lines are classified benign by the post-op guard

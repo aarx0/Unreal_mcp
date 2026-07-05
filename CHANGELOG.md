@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### control_editor classed — third FMcpCall family; TODO 04e closed (2026-07-04)
+
+- **35 classes in `MCP/Calls/McpCalls_ControlEditor.cpp` (34 handlers — `step_frame`/`single_frame_step` share one), and the last mega-bag declarations are gone.** The shim decls for this family were the 04e false-reject class at its worst: `execute_command` and `single_frame_step` carried byte-identical 30-param union arrays that *required* `assetPath` and `mode` (params neither handler reads) while `execute_command`'s one real required param — `command` — wasn't in the bag at all. Four more rows were contaminated (`possess` demanded `functionName`/`actor_name` copied from control_actor's `call_actor_function`; `screenshot`/`simulate_input`/`simulate_nav` declared params their handlers never read). All 35 contracts are re-authored from the handler bodies' actual payload reads, with `RequiresEditor` on every action (the shim rows said `None` throughout) and `Mutating` on `undo`/`redo`/`save_all`/`execute_command`.
+- **Dispatch-side this was the cleanest family yet**: zero inline bodies to extract, no alias OR-arms, no cross-file payload re-dispatch in either direction. The chain, its handler-map registration, and `McpDecl_ControlEditor.h` died with the conversion. `manage_asset.save_all`'s direct call into `HandleControlEditorSaveAll` is unaffected (typed member call, not dispatch). The `console_command` internal literal survives inside `HandleControlEditorConsoleCommand`'s direct delegation to the console handler — it dies when system_control is classed.
+- PIE-only preconditions (`pause`/`possess`/`simulate_nav`/…) remain handler-enforced; the `RequiresEditor` flag only covers GEditor existing.
+
 ### Small-bug batch: texture envelope reject, create_light fail-fast, MapCheck false-fail (2026-07-04)
 
 - **Texture ops no longer reject their own envelope** (TODO 04c): every per-branch ValidParams allowlist admits the mirrored `action` key (they predated the action/subAction bidirectional mirror), and an empty required path now says `assetPath required` instead of blaming "traversal or invalid characters" on a string that was simply absent.

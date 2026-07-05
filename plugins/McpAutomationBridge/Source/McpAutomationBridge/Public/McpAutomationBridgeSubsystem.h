@@ -510,12 +510,8 @@ private:
   HandleGetAssetDependencies(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
-  // Actor/editor control actions implemented by the plugin
-  // (control_actor's dispatch chain was classed away — MCP/Calls/)
-  bool
-  HandleControlEditorAction(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
+  // control_actor and control_editor dispatch chains were classed away —
+  // see MCP/Calls/.
   // Level and lighting helpers (top-level actions)
   bool HandleLevelAction(const FString &RequestId, const FString &Action,
                          const TSharedPtr<FJsonObject> &Payload,
@@ -1323,8 +1319,9 @@ public:
                                       const TSharedPtr<FJsonObject> &Payload,
                                       FMcpResponseHandle Socket);
 
-private:
-  // Control Editor Subhandlers
+  // Control Editor Subhandlers — public so the control_editor FMcpCall
+  // classes (Private/MCP/Calls/) can delegate, until the module split
+  // de-members the implementations off the subsystem.
   bool HandleControlEditorPlay(const FString &RequestId,
                                const TSharedPtr<FJsonObject> &Payload,
                                FMcpResponseHandle Socket);
@@ -1432,6 +1429,7 @@ private:
                                     const TSharedPtr<FJsonObject> &Payload,
                                     FMcpResponseHandle Socket);
 
+private:
   // Asset handlers
   bool HandleImportAsset(const FString &RequestId,
                          const TSharedPtr<FJsonObject> &Payload,

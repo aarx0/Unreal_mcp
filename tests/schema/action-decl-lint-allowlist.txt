@@ -2,37 +2,49 @@
 # Regenerate: pwsh -File tests/schema/action-decl-lint.ps1 -UpdateAllowlist
 # An entry is either a read on a path the declaration deliberately excludes
 # (dead branch, alias resolved elsewhere) or a real decl gap to fix instead of pinning.
-# Bootstrap seed (2026-07-04): entries below are parser brace-scope mis-attributions
-# (one read site charged to >2 actions via skewed brace ranges) — not decl gaps.
-# Verified by site-grouping during the fleet bootstrap; burn down opportunistically.
 
-control_editor.create_bookmark.assetPath
-control_editor.focus_actor.assetPath
-control_editor.jump_to_bookmark.assetPath
-control_editor.possess.assetPath
-control_editor.screenshot.assetPath
-control_editor.set_camera_fov.assetPath
-control_editor.set_camera.assetPath
-control_editor.set_editor_mode.assetPath
-control_editor.set_fixed_delta_time.assetPath
-control_editor.set_game_speed.assetPath
-control_editor.set_game_view.assetPath
-control_editor.set_immersive_mode.assetPath
-control_editor.set_preferences.assetPath
-control_editor.set_view_mode.assetPath
-control_editor.set_viewport_realtime.assetPath
-control_editor.simulate_input.assetPath
-control_editor.start_recording.assetPath
+control_editor.screenshot.path
+control_editor.screenshot.returnBase64
+control_editor.simulate_input.eventType
+control_editor.simulate_input.keyName
 inspect.find_by_class.actorName
 inspect.find_by_class.name
 inspect.find_by_class.objectPath
 inspect.find_by_tag.actorName
 inspect.find_by_tag.name
 inspect.find_by_tag.objectPath
+inspect.get_editor_settings.actorName
+inspect.get_editor_settings.name
+inspect.get_editor_settings.objectPath
+inspect.get_memory_stats.actorName
+inspect.get_memory_stats.name
+inspect.get_memory_stats.objectPath
+inspect.get_performance_stats.actorName
+inspect.get_performance_stats.name
+inspect.get_performance_stats.objectPath
+inspect.get_project_settings.actorName
+inspect.get_project_settings.name
+inspect.get_project_settings.objectPath
+inspect.get_scene_stats.actorName
+inspect.get_scene_stats.name
+inspect.get_scene_stats.objectPath
+inspect.get_selected_actors.actorName
+inspect.get_selected_actors.name
+inspect.get_selected_actors.objectPath
+inspect.get_viewport_info.actorName
+inspect.get_viewport_info.name
+inspect.get_viewport_info.objectPath
+inspect.get_world_settings.actorName
+inspect.get_world_settings.name
+inspect.get_world_settings.objectPath
+inspect.inspect_cdo.actorName
+inspect.inspect_cdo.name
+inspect.inspect_cdo.objectPath
 inspect.inspect_class.actorName
 inspect.inspect_class.name
 inspect.inspect_class.objectPath
 inspect.runtime_report.objectPath
+manage_ai.add_composite_node.nodeClass
 manage_asset.add_data_table_row.checkoutFiles
 manage_asset.add_data_table_row.directoryPath
 manage_asset.add_material_node.checkoutFiles
@@ -151,45 +163,3 @@ manage_asset.source_control_submit.path
 manage_asset.validate.checkoutFiles
 manage_asset.validate.directoryPath
 manage_asset.validate.path
-# Deep-attribution pass (2026-07-04): shared-dispatcher prologue reads and cross-branch
-# brace charges on the newly verified 105 — same skew class as the bootstrap seed.
-control_editor.eject.assetPath
-control_editor.hide_stats.assetPath
-control_editor.pause.assetPath
-control_editor.play.assetPath
-control_editor.redo.assetPath
-control_editor.resume.assetPath
-control_editor.save_all.assetPath
-control_editor.show_stats.assetPath
-control_editor.step_frame.assetPath
-control_editor.stop_recording.assetPath
-control_editor.stop.assetPath
-control_editor.undo.assetPath
-inspect.get_editor_settings.actorName
-inspect.get_editor_settings.name
-inspect.get_editor_settings.objectPath
-inspect.get_memory_stats.actorName
-inspect.get_memory_stats.name
-inspect.get_memory_stats.objectPath
-inspect.get_performance_stats.actorName
-inspect.get_performance_stats.name
-inspect.get_performance_stats.objectPath
-inspect.get_project_settings.actorName
-inspect.get_project_settings.name
-inspect.get_project_settings.objectPath
-inspect.get_scene_stats.actorName
-inspect.get_scene_stats.name
-inspect.get_scene_stats.objectPath
-inspect.get_selected_actors.actorName
-inspect.get_selected_actors.name
-inspect.get_selected_actors.objectPath
-inspect.get_viewport_info.actorName
-inspect.get_viewport_info.name
-inspect.get_viewport_info.objectPath
-inspect.get_world_settings.actorName
-inspect.get_world_settings.name
-inspect.get_world_settings.objectPath
-inspect.inspect_cdo.actorName
-inspect.inspect_cdo.name
-inspect.inspect_cdo.objectPath
-manage_ai.add_composite_node.nodeClass

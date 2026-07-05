@@ -61,6 +61,18 @@ parser survives only as a lint.
     extracted to dedicated members. Flags are authored per action here —
     `RequiresEditor` everywhere except pure-reflection `list_track_types`,
     `Mutating` on writers — where the shim decls carried `None`.
+  - **`control_editor` (2026-07-04,
+    `Private/MCP/Calls/McpCalls_ControlEditor.cpp`).** 35 classes (34 handlers —
+    `step_frame`/`single_frame_step` share one); this closed TODO 04e for good:
+    the shim decls carried two identical 30-param mega-bag unions
+    (`execute_command`, whose true contract is `command*` — a param the bag
+    didn't even contain — and `single_frame_step`, whose true contract is
+    empty) plus four contaminated rows (`possess`, `screenshot`,
+    `simulate_input`, `simulate_nav`). All 35 contracts re-authored from the
+    handler bodies' actual reads. `RequiresEditor` on all; `Mutating` on
+    `undo`/`redo`/`save_all`/`execute_command`. PIE-only preconditions
+    (pause/possess/simulate_nav/…) stay handler-enforced — the flag only
+    covers GEditor existing.
 
 ## Bootstrap state (2026-07-04, complete)
 
