@@ -44,7 +44,7 @@ subdirectory is shown.
 | `manage_geometry` | — | `HandleGeometryAction` @ GeometryHandlers.cpp |
 | `manage_effect` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageEffect.cpp (dispatched from the call registry before the handler map; implementations are the `HandleEffect*` members + `CreateNiagaraEffect` @ EffectHandlers.cpp, `HandleManageNiagaraAuthoringAction` @ NiagaraAuthoringHandlers.cpp for the 36 authoring actions, and `HandleNiagaraGraphAction` @ NiagaraGraphHandlers.cpp for the three graph actions) |
 | `manage_gas` | — | `HandleManageGASAction` @ GASHandlers.cpp |
-| `manage_character` | — | `HandleManageCharacterAction` @ CharacterHandlers.cpp |
+| `manage_character` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCharacter.cpp (dispatched from the call registry before the handler map; implementations are the `HandleCharacter*` members @ CharacterHandlers.cpp) |
 | `manage_combat` | — | `HandleManageCombatAction` @ CombatHandlers.cpp |
 | `manage_inventory` | — | `HandleManageInventoryAction` @ InventoryHandlers.cpp |
 | `manage_interaction` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInteraction.cpp (dispatched from the call registry before the handler map; implementations are the `HandleInteraction*` members @ InteractionHandlers.cpp) |
@@ -113,7 +113,7 @@ Core (fallthrough) lists:
 | `ManageGeometry` | `HandleGeometryAction` @ GeometryHandlers.cpp |
 | `ManageEffect` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageEffect.cpp (implementations spread across EffectHandlers.cpp, NiagaraAuthoringHandlers.cpp, NiagaraGraphHandlers.cpp) |
 | `ManageGAS` | `HandleManageGASAction` @ GASHandlers.cpp |
-| `ManageCharacter` | `HandleManageCharacterAction` @ CharacterHandlers.cpp |
+| `ManageCharacter` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCharacter.cpp (implementations are the `HandleCharacter*` members @ CharacterHandlers.cpp) |
 | `ManageCombat` | `HandleManageCombatAction` @ CombatHandlers.cpp |
 | `ManageInventory` | `HandleManageInventoryAction` @ InventoryHandlers.cpp |
 | `ManageInteraction` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInteraction.cpp (implementations are the `HandleInteraction*` members @ InteractionHandlers.cpp) |

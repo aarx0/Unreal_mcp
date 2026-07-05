@@ -182,11 +182,30 @@ parser survives only as a lint.
     scaffold filter/response variables without writing defaults — deepening
     or retiring them is a product decision logged in TODO.md. Contracts
     ported verbatim from the shim rows (all re-verified against the extracted
-    bodies); known skew kept as-authored: the configure door/switch/chest
-    property rows require their primary path spelling while the handler also
-    accepts the optional `blueprintPath` fallback, so the required flag
-    false-rejects a fallback-only call. `RequiresEditor` on all 22; `Mutating`
+    bodies), with one decl fix shipped at classing: the configure
+    door/switch/chest property rows had required their primary path spelling
+    although each handler also accepts the `blueprintPath` fallback — both
+    spellings are optional now, with the at-least-one requirement
+    handler-enforced. `RequiresEditor` on all 22; `Mutating`
     on everything except the reader, `get_interaction_info`.
+  - **`manage_character` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_ManageCharacter.cpp`).** 27 classes; the
+    dispatcher had zero dedicated handler functions — all 27 bodies were
+    inline branches, extracted verbatim to `HandleCharacter*` members
+    (CharacterHandlers.cpp). The chain's whole-handler `#if !WITH_EDITOR`
+    stub is replicated per member (same message and code), and the prologue's
+    common name/path/blueprintPath reads moved into the members that use
+    them: `create_character_blueprint` keeps `name`/`path` (default
+    `/Game`), the other 26 keep `blueprintPath`. No cross-file delegation in
+    either direction, no hidden or dead names (no sweep-ledger entries).
+    Contracts ported verbatim from the shim rows — the cleanest of the small
+    families: required flags faithful (`blueprintPath` on the 26
+    configure/set/setup rows, `name` on `create_character_blueprint`), no
+    mega-bags, no one-of collisions. The prologue spellings a body does not
+    read (`name`/`path` on the 26, `blueprintPath` on create) stay
+    declared-optional so payloads the family accepts today keep validating.
+    `RequiresEditor` on all 27; `Mutating` on everything except the reader,
+    `get_character_info`.
 
 ## Bootstrap state (2026-07-04, complete)
 

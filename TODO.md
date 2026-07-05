@@ -932,7 +932,8 @@ add_module/connect_pins/remove_node only); it stays ledgered for a future
 advertise-or-delete decision. manage_interaction's classing (2026-07-05) likewise
 closed nothing — no ledgered entries (the file's Section 6/7 dead dispatch was swept
 2026-07-03); its five advertised-but-shallow scaffolds are a separate open entry
-above (deepen-or-retire, 2026-07-05).
+above (deepen-or-retire, 2026-07-05). manage_character's classing (2026-07-05) also
+closed nothing — the ledger has no CharacterHandlers entries.
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,
