@@ -1049,11 +1049,79 @@ private:
       const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);
-  // Phase 18: Interaction System handlers
-  bool HandleManageInteractionAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
+  // manage_interaction is classed — see MCP/Calls/McpCalls_ManageInteraction.cpp.
+  // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
+  // can delegate, until the module split de-members the implementations off
+  // the subsystem.
+public:
+  bool HandleInteractionCreateComponent(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleInteractionConfigureTrace(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleInteractionConfigureWidget(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleInteractionAddEvents(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleInteractionCreateInteractableInterface(const FString &RequestId,
+                                                    const TSharedPtr<FJsonObject> &Payload,
+                                                    FMcpResponseHandle Socket);
+  bool HandleInteractionCreateDoorActor(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleInteractionConfigureDoorProperties(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle Socket);
+  bool HandleInteractionCreateSwitchActor(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleInteractionConfigureSwitchProperties(const FString &RequestId,
+                                                  const TSharedPtr<FJsonObject> &Payload,
+                                                  FMcpResponseHandle Socket);
+  bool HandleInteractionCreateChestActor(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleInteractionConfigureChestProperties(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle Socket);
+  bool HandleInteractionCreateLeverActor(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleInteractionSetupDestructibleMesh(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle Socket);
+  bool HandleInteractionAddDestructionComponent(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle Socket);
+  bool HandleInteractionCreateTriggerActor(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+  bool HandleInteractionConfigureTriggerEvents(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle Socket);
+  bool HandleInteractionConfigureDestructionLevels(const FString &RequestId,
+                                                   const TSharedPtr<FJsonObject> &Payload,
+                                                   FMcpResponseHandle Socket);
+  bool HandleInteractionConfigureDestructionEffects(const FString &RequestId,
+                                                    const TSharedPtr<FJsonObject> &Payload,
+                                                    FMcpResponseHandle Socket);
+  bool HandleInteractionConfigureDestructionDamage(const FString &RequestId,
+                                                   const TSharedPtr<FJsonObject> &Payload,
+                                                   FMcpResponseHandle Socket);
+  bool HandleInteractionConfigureTriggerFilter(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle Socket);
+  bool HandleInteractionConfigureTriggerResponse(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle Socket);
+  bool HandleInteractionGetInfo(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+
+private:
   // Phase 19: Widget Authoring System handlers
   bool HandleManageWidgetAuthoringAction(
       const FString &RequestId, const FString &Action,

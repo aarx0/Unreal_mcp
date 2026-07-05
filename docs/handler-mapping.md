@@ -47,7 +47,7 @@ subdirectory is shown.
 | `manage_character` | — | `HandleManageCharacterAction` @ CharacterHandlers.cpp |
 | `manage_combat` | — | `HandleManageCombatAction` @ CombatHandlers.cpp |
 | `manage_inventory` | — | `HandleManageInventoryAction` @ InventoryHandlers.cpp |
-| `manage_interaction` | — | `HandleManageInteractionAction` @ InteractionHandlers.cpp |
+| `manage_interaction` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInteraction.cpp (dispatched from the call registry before the handler map; implementations are the `HandleInteraction*` members @ InteractionHandlers.cpp) |
 
 `system_control` note — the family is classed; the registration lambda that used
 to re-dispatch per action is gone. Per-class delegation: the 21 Performance
@@ -116,7 +116,7 @@ Core (fallthrough) lists:
 | `ManageCharacter` | `HandleManageCharacterAction` @ CharacterHandlers.cpp |
 | `ManageCombat` | `HandleManageCombatAction` @ CombatHandlers.cpp |
 | `ManageInventory` | `HandleManageInventoryAction` @ InventoryHandlers.cpp |
-| `ManageInteraction` | `HandleManageInteractionAction` @ InteractionHandlers.cpp |
+| `ManageInteraction` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInteraction.cpp (implementations are the `HandleInteraction*` members @ InteractionHandlers.cpp) |
 
 The union builders (`ManageAsset()`, `ManageBlueprint()`, …, `*Union()`) are schema
 enums only — they own no actions.

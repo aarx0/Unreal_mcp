@@ -58,6 +58,19 @@ as they land.
 > split (step 10, deferred by design — the real surgery is de-membering handlers off the
 > subsystem god object; cleanest first slice is extracting Private/MCP/ as its own module).
 
+### [ ] 2026-07-05 — manage_interaction's five scaffold actions: deepen or retire (Aaron's call)
+Preserved as-is at the family's classing (McpCalls_ManageInteraction.cpp — bodies moved
+verbatim, deliberately not deepened there): `configure_destruction_levels`/
+`configure_destruction_effects`/`configure_destruction_damage` accept only `actorName`,
+resolve the actor, `Modify()`, and record an `MCP_Destruction*Configured` marker tag —
+the same shape as `setup_destructible_mesh` — and `configure_trigger_filter`/
+`configure_trigger_response` accept only `triggerPath` and scaffold their variables
+(RequiredActorTag/bFilterByActorTag, TriggerResponseType/TriggerResponseDelay) with no
+way to pass values. All five answer success, so a green response reads as a real
+configuration (the dogfood audit's silent-success class, tag-writer flavor). Options:
+deepen to real writes (destruction params, filter/response defaults + params to carry
+them), or retire the names from the schema. Schema surface is Aaron's decision.
+
 ### [ ] 2026-07-03 — `manage_blueprint create_blueprint` ignores `path`, sprays to /Game root
 Found during the sleep-triage benchmark: `create_blueprint {name:'BP_Bench', path:'/Game/ZZ_McpScratch'}`
 silently created `/Game/BP_Bench` — the schema documents `savePath` for this action and the handler
@@ -916,7 +929,10 @@ deletion (04b), and the one Niagara-adjacent ledger entry — NiagaraGraphHandle
 `set_parameter` @436, a hidden exposed-user-parameter setter — is unreachable
 through manage_effect's surface (the graph delegates rewrite subAction to
 add_module/connect_pins/remove_node only); it stays ledgered for a future
-advertise-or-delete decision.
+advertise-or-delete decision. manage_interaction's classing (2026-07-05) likewise
+closed nothing — no ledgered entries (the file's Section 6/7 dead dispatch was swept
+2026-07-03); its five advertised-but-shallow scaffolds are a separate open entry
+above (deepen-or-retire, 2026-07-05).
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,

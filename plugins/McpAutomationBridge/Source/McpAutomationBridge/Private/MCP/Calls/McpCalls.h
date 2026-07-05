@@ -7,6 +7,7 @@ void McpRegisterControlActorCalls();
 void McpRegisterControlEditorCalls();
 void McpRegisterInspectCalls();
 void McpRegisterManageEffectCalls();
+void McpRegisterManageInteractionCalls();
 void McpRegisterManageLevelCalls();
 void McpRegisterManageSequenceCalls();
 void McpRegisterSystemControlCalls();

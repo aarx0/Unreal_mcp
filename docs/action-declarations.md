@@ -168,6 +168,25 @@ parser survives only as a lint.
     are `get_niagara_info`, `validate_niagara_system`, `list_debug_shapes`,
     and the transient debug-draw trio (`debug_shape`, `particle`,
     `clear_debug_shapes`).
+  - **`manage_interaction` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_ManageInteraction.cpp`).** 22 classes; the
+    dispatcher had zero dedicated handler functions — all 22 bodies were
+    inline branches, extracted verbatim to `HandleInteraction*` members
+    (InteractionHandlers.cpp; the five column-0-indented branches from an
+    earlier sweep were re-indented to member style, whitespace only). No
+    cross-file delegation in either direction, no hidden or dead names. Five
+    actions are shallow scaffolds preserved as-is at classing: the
+    `configure_destruction_levels`/`effects`/`damage` trio (plus
+    `setup_destructible_mesh`) only writes an `MCP_Destruction*Configured`
+    marker tag on the actor, and `configure_trigger_filter`/`response` only
+    scaffold filter/response variables without writing defaults — deepening
+    or retiring them is a product decision logged in TODO.md. Contracts
+    ported verbatim from the shim rows (all re-verified against the extracted
+    bodies); known skew kept as-authored: the configure door/switch/chest
+    property rows require their primary path spelling while the handler also
+    accepts the optional `blueprintPath` fallback, so the required flag
+    false-rejects a fallback-only call. `RequiresEditor` on all 22; `Mutating`
+    on everything except the reader, `get_interaction_info`.
 
 ## Bootstrap state (2026-07-04, complete)
 
