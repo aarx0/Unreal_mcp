@@ -252,6 +252,39 @@ parser survives only as a lint.
     `RequiresEditor` anywhere — the TU is not editor-gated, and flagging
     would newly reject GEditor-less runs the shim served; `Mutating` on
     everything except the reader, `get_inventory_info`.
+  - **`manage_gas` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_ManageGas.cpp`).** 31 classes; the
+    dispatcher had zero dedicated handler functions — all 31 advertised
+    bodies were inline branches, extracted verbatim to `HandleGas*`
+    members (GASHandlers.cpp). The chain's whole-handler gate is richer
+    than combat/character's and is replicated per member: the three-way
+    `#if !WITH_EDITOR` (EDITOR_ONLY) / `#elif !MCP_HAS_GAS`
+    (GAS_NOT_AVAILABLE) preprocessor stub pair plus the runtime
+    GameplayAbilities module-loaded check (GAS_PLUGIN_NOT_ENABLED) —
+    the TU's seven MCP_HAS_GAS occurrences resolve to one helpers block
+    and one whole-dispatcher gate, so the per-member gate is uniform by
+    evidence. Prologue reads moved into the members that use them: the
+    five creators keep `name`/`path` (default `/Game`), 21 members keep
+    the `blueprintPath` read with its
+    attributeSetPath/effectPath/abilityPath/cuePath alias-fallback loop,
+    `add_tag_to_asset`/`get_gas_info` keep `assetPath`, and
+    `get_attribute`/`create_ability_set`/`add_ability` read no prologue
+    spelling. One hidden name deleted and ledgered: `grant_ability`
+    (transport-dead honest-error branch; advertise candidate parked for
+    Aaron — see the dead-name-sweep ledger); the sweep's
+    `get_attribute_value` dead disjunct was already gone at HEAD
+    (deleted 2874d066). Decl burn-down — 24 of 31 rows fixed: the 21
+    rows that required `blueprintPath` were contaminated (the
+    dispatcher resolves it through the four alias spellings, so all
+    five are optional now, at-least-one handler-enforced), and three
+    one-of contracts were declared all-required — `add_tag_to_asset`'s
+    tag/tagName, `add_ability`'s abilityPath/abilityClass (`setPath`
+    stays required), `create_ability_set`'s setPath/assetPath — each
+    now both-optional with the one-of handler-enforced. The prologue
+    spellings a body does not read stay declared-optional so payloads
+    the family accepts today keep validating. `RequiresEditor` on all
+    31 (the TU is whole-handler editor-gated); `Mutating` on everything
+    except the readers, `get_attribute` and `get_gas_info`.
 
 ## Bootstrap state (2026-07-04, complete)
 

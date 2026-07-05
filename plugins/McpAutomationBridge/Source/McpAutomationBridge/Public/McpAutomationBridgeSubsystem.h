@@ -1024,11 +1024,106 @@ public:
       FMcpResponseHandle RequestingSocket);
 
 private:
-  // Phase 13: GAS (Gameplay Ability System) handlers
-  bool HandleManageGASAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
+  // manage_gas is classed — see MCP/Calls/McpCalls_ManageGas.cpp.
+  // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
+  // can delegate, until the module split de-members the implementations off
+  // the subsystem.
+public:
+  bool HandleGasAddAbilitySystemComponent(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleGasConfigureAsc(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             FMcpResponseHandle Socket);
+  bool HandleGasCreateAttributeSet(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleGasAddAttribute(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             FMcpResponseHandle Socket);
+  bool HandleGasSetAttributeBaseValue(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleGasSetAttributeClamping(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleGasCreateGameplayAbility(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleGasSetAbilityTags(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle Socket);
+  bool HandleGasSetAbilityCosts(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandleGasSetAbilityCooldown(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleGasSetAbilityTargeting(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleGasAddAbilityTask(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle Socket);
+  bool HandleGasSetActivationPolicy(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleGasSetInstancingPolicy(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleGasCreateGameplayEffect(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleGasSetEffectDuration(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleGasAddEffectModifier(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleGasSetModifierMagnitude(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleGasAddEffectExecutionCalculation(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle Socket);
+  bool HandleGasAddEffectCue(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             FMcpResponseHandle Socket);
+  bool HandleGasSetEffectStacking(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleGasSetEffectTags(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandleGasCreateGameplayCueNotify(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleGasConfigureCueTrigger(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleGasSetCueEffects(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandleGasAddTagToAsset(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandleGasGetAttribute(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             FMcpResponseHandle Socket);
+  bool HandleGasGetInfo(const FString &RequestId,
+                        const TSharedPtr<FJsonObject> &Payload,
+                        FMcpResponseHandle Socket);
+  bool HandleGasCreateAbilitySet(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle Socket);
+  bool HandleGasAddAbility(const FString &RequestId,
+                           const TSharedPtr<FJsonObject> &Payload,
+                           FMcpResponseHandle Socket);
+  bool HandleGasCreateExecutionCalculation(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+
+private:
   // manage_character is classed — see MCP/Calls/McpCalls_ManageCharacter.cpp.
   // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
   // can delegate, until the module split de-members the implementations off

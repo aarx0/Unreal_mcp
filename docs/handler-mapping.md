@@ -43,7 +43,7 @@ subdirectory is shown.
 | `manage_sequence` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleSequence*` functions in SequenceHandlers.cpp) |
 | `manage_geometry` | — | `HandleGeometryAction` @ GeometryHandlers.cpp |
 | `manage_effect` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageEffect.cpp (dispatched from the call registry before the handler map; implementations are the `HandleEffect*` members + `CreateNiagaraEffect` @ EffectHandlers.cpp, `HandleManageNiagaraAuthoringAction` @ NiagaraAuthoringHandlers.cpp for the 36 authoring actions, and `HandleNiagaraGraphAction` @ NiagaraGraphHandlers.cpp for the three graph actions) |
-| `manage_gas` | — | `HandleManageGASAction` @ GASHandlers.cpp |
+| `manage_gas` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageGas.cpp (dispatched from the call registry before the handler map; implementations are the `HandleGas*` members @ GASHandlers.cpp) |
 | `manage_character` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCharacter.cpp (dispatched from the call registry before the handler map; implementations are the `HandleCharacter*` members @ CharacterHandlers.cpp) |
 | `manage_combat` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCombat.cpp (dispatched from the call registry before the handler map; implementations are the `HandleCombat*` members @ CombatHandlers.cpp) |
 | `manage_inventory` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInventory.cpp (dispatched from the call registry before the handler map; implementations are the `HandleInventory*` members @ InventoryHandlers.cpp) |
@@ -112,7 +112,7 @@ Core (fallthrough) lists:
 | `ManageSequence` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp |
 | `ManageGeometry` | `HandleGeometryAction` @ GeometryHandlers.cpp |
 | `ManageEffect` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageEffect.cpp (implementations spread across EffectHandlers.cpp, NiagaraAuthoringHandlers.cpp, NiagaraGraphHandlers.cpp) |
-| `ManageGAS` | `HandleManageGASAction` @ GASHandlers.cpp |
+| `ManageGAS` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageGas.cpp (implementations are the `HandleGas*` members @ GASHandlers.cpp) |
 | `ManageCharacter` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCharacter.cpp (implementations are the `HandleCharacter*` members @ CharacterHandlers.cpp) |
 | `ManageCombat` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCombat.cpp (implementations are the `HandleCombat*` members @ CombatHandlers.cpp) |
 | `ManageInventory` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInventory.cpp (implementations are the `HandleInventory*` members @ InventoryHandlers.cpp) |

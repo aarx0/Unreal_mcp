@@ -494,6 +494,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       McpRegisterManageCharacterCalls();
       McpRegisterManageCombatCalls();
       McpRegisterManageEffectCalls();
+      McpRegisterManageGasCalls();
       McpRegisterManageInteractionCalls();
       McpRegisterManageInventoryCalls();
       McpRegisterManageLevelCalls();
@@ -1102,7 +1103,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
 
   MCP_REGISTER_HANDLER("manage_geometry", HandleGeometryAction);
 
-  MCP_REGISTER_HANDLER("manage_gas", HandleManageGASAction);
+  // manage_gas is fully classed (MCP/Calls/McpCalls_ManageGas.cpp)
+  // — dispatch reaches its FMcpCall instances via the registry, not this map.
 
   // manage_character is fully classed (MCP/Calls/McpCalls_ManageCharacter.cpp)
   // — dispatch reaches its FMcpCall instances via the registry, not this map.

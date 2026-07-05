@@ -271,7 +271,8 @@ Quick dispositions:
   list/delete morph targets + virtual bones, set_physics_asset, remove_physics_body...),
   `export_asset` (~180-line generic exporter — DELETED at the system_control classing,
   recover from git), `batch_console_commands` (blocklist-aware),
-  `get_nodes` (graph node dump), `grant_ability`, sun/skylight intensity pair,
+  `get_nodes` (graph node dump), `grant_ability` (DELETED at the manage_gas
+  classing, recover from git), sun/skylight intensity pair,
   `set_ai_movement`, `cleanup_invalid_datalayers`, `attach_render_target_to_volume`
   (DELETED at the system_control classing, recover from git),
   `create_spline_mesh_actor`, Niagara `set_parameter`, `source_control_enable`,
@@ -312,7 +313,7 @@ Full per-name evidence:
 - **set_skylight_intensity** @:1243 - Same HandleControlEnvironmentAction family as set_sun_intensity (lines 1064-1290) — see that finding's familyNote. This branch specifically: locates the first ASkyLight actor in the editor world (FindFirstSkyLight lambda) and applies USkyLightComponent::SetIntensity from the 'intensity' payload fiel…
 
 ### GASHandlers
-- **grant_ability** @:3641 - Section 6 'Ability Sets' family (create_ability_set / add_ability / grant_ability per the file's own header taxonomy). grant_ability's implementation (lines 3641-3741, ~101 lines) validates actorPath/blueprintPath and abilityPath/abilityClass params, loads the actor Blueprint and the ability class, …
+- **grant_ability** @:3641 - Section 6 'Ability Sets' family (create_ability_set / add_ability / grant_ability per the file's own header taxonomy). grant_ability's implementation (lines 3641-3741, ~101 lines) validates actorPath/blueprintPath and abilityPath/abilityClass params, loads the actor Blueprint and the ability class, … Disposition: **deleted at manage_gas classing** (2026-07-05); advertise-candidate parked for Aaron — recover from git.
 
 ### GeometryHandlers
 - **create_procedural_mesh** @:7771 - Part of a 'raw DynamicMesh CRUD' family (create_procedural_mesh, append_triangle, append_vertex, delete_vertex, delete_triangle, get_vertex_position, set_vertex_position, translate_mesh, set_vertex_color, set_uvs, split_normals) that manipulates FDynamicMesh3 directly on an ADynamicMeshActor, distin…

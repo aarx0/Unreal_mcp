@@ -9,6 +9,7 @@ void McpRegisterInspectCalls();
 void McpRegisterManageCharacterCalls();
 void McpRegisterManageCombatCalls();
 void McpRegisterManageEffectCalls();
+void McpRegisterManageGasCalls();
 void McpRegisterManageInteractionCalls();
 void McpRegisterManageInventoryCalls();
 void McpRegisterManageLevelCalls();
