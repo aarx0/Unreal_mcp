@@ -14,7 +14,6 @@
 #include "MCP/Decls/McpDecl_ManageEffect.h"
 #include "MCP/Decls/McpDecl_ManageGas.h"
 #include "MCP/Decls/McpDecl_ManageNetworking.h"
-#include "MCP/Decls/McpDecl_Inspect.h"
 #include "MCP/Decls/McpDecl_BuildEnvironment.h"
 #include "MCP/Decls/McpDecl_ManageInventory.h"
 #include "MCP/Decls/McpDecl_ManageGeometry.h"
@@ -43,7 +42,8 @@ inline void McpRegisterAllActionDecls()
 	// system_control: classed (MCP/Calls/McpCalls_SystemControl.cpp) — decls
 	// register with the call instances via McpRegisterSystemControlCalls().
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageNetworking);
-	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GInspect);
+	// inspect: classed (MCP/Calls/McpCalls_Inspect.cpp) — decls
+	// register with the call instances via McpRegisterInspectCalls().
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GBuildEnvironment);
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageInventory);
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageGeometry);

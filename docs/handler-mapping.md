@@ -38,7 +38,7 @@ subdirectory is shown.
 | `manage_ai` | — (BehaviorTree/Navigation membership is tested *inside* the handler, not the lambda) | `HandleManageAIAction` @ AIHandlers.cpp |
 | `control_actor` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ControlActor.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleControlActor*` functions in ControlHandlers.cpp) |
 | `control_editor` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ControlEditor.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleControlEditor*` functions in ControlHandlers.cpp + FocusInputHandlers.cpp) |
-| `inspect` | — | `HandleInspectAction` @ EnvironmentHandlers.cpp |
+| `inspect` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_Inspect.cpp (dispatched from the call registry before the handler map; implementations are the `HandleInspect*` members @ EnvironmentHandlers.cpp, the shared `HandleControlActor*` members @ ControlHandlers.cpp for the twelve actor actions, `HandleSetObjectProperty`/`HandleGetObjectProperty`/`HandleInspectCdoAction`/`HandleDiffAssetAction` @ PropertyHandlers.cpp, and `HandleInspectUiFocus` @ FocusInputHandlers.cpp) |
 | `manage_level` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevel.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleLevel*` functions in LevelHandlers.cpp, plus `HandleLightingAction` @ LightingHandlers.cpp for `create_light`) |
 | `manage_sequence` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleSequence*` functions in SequenceHandlers.cpp) |
 | `manage_geometry` | — | `HandleGeometryAction` @ GeometryHandlers.cpp |
@@ -107,7 +107,7 @@ Core (fallthrough) lists:
 | `ManageAICore` | `HandleManageAIAction` @ AIHandlers.cpp |
 | `ControlActor` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ControlActor.cpp |
 | `ControlEditor` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ControlEditor.cpp |
-| `Inspect` | `HandleInspectAction` @ EnvironmentHandlers.cpp |
+| `Inspect` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_Inspect.cpp (implementations spread across EnvironmentHandlers.cpp, ControlHandlers.cpp, PropertyHandlers.cpp, FocusInputHandlers.cpp) |
 | `ManageLevel` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevel.cpp |
 | `ManageSequence` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp |
 | `ManageGeometry` | `HandleGeometryAction` @ GeometryHandlers.cpp |

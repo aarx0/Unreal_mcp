@@ -5794,7 +5794,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // If we reached here, it's not a blueprint action we recognize.
-  // Return false to allow other handlers (like HandleInspectAction) to try.
+  // Return false so the dispatcher reports UNKNOWN_ACTION (there is no
+  // secondary dispatch chain).
   UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
          TEXT("HandleBlueprintAction: Action '%s' not recognized, returning "
               "false to continue dispatch."),

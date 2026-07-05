@@ -10,8 +10,8 @@ Two actions, both in one self-contained TU (`McpAutomationBridge_FocusInputHandl
 - **`inspect ui_focus`** (observe) — `HandleInspectUiFocus`. Returns a snapshot:
   `inPie`, `focusedWidget` {slateType, name?, class?}, `focusPath` (root→leaf), and
   (in PIE w/ CommonUI) `inputType`, `currentGamepad`, `activeActivatable`,
-  `desiredFocusTarget`, `activatableStack`, `boundActions`. Wired as an early delegate in
-  `HandleInspectAction` (global, no objectPath).
+  `desiredFocusTarget`, `activatableStack`, `boundActions`. Registered as a classed
+  `inspect` action (MCP/Calls/McpCalls_Inspect.cpp), global (no objectPath).
 - **`control_editor simulate_nav`** (drive, faithful) — `HandleControlEditorSimulateNav`.
   `direction` (Up/Down/Left/Right/Accept/Back/Next/Previous) + `device` (gamepad default /
   keyboard) or explicit `key`; delivers the nav key via `FSlateApplication::ProcessKeyDownEvent`

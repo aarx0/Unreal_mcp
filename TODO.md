@@ -909,7 +909,8 @@ deleted-at-classing (`export_asset`, the 7 UiHandlers pokes,
 (`save_all`/`simulate_input` in UiHandlers, `create_render_target`/
 `nanite_rebuild_mesh` duplicates in RenderHandlers) — **57 hidden entries remain**;
 `console_command` stays live (the classed execute_command/set_cvar call the console
-handler directly).
+handler directly). inspect's classing (2026-07-04) closed nothing here — the family
+had no ledgered hidden or dead names.
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,

@@ -437,6 +437,10 @@ private:
   HandleExecuteEditorFunction(const FString &RequestId, const FString &Action,
                               const TSharedPtr<FJsonObject> &Payload,
                               FMcpResponseHandle RequestingSocket);
+public:
+  // Called directly by the classed inspect set_property/get_property
+  // (MCP/Calls/); Action carries their internal set_object_property /
+  // get_object_property dispatch keys.
   bool
   HandleSetObjectProperty(const FString &RequestId, const FString &Action,
                           const TSharedPtr<FJsonObject> &Payload,
@@ -445,6 +449,8 @@ private:
   HandleGetObjectProperty(const FString &RequestId, const FString &Action,
                           const TSharedPtr<FJsonObject> &Payload,
                           FMcpResponseHandle RequestingSocket);
+
+private:
   // Array manipulation operations
   bool HandleArrayAppend(const FString &RequestId, const FString &Action,
                          const TSharedPtr<FJsonObject> &Payload,
@@ -779,9 +785,8 @@ private:
   HandleConsoleCommandAction(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
-  bool HandleInspectAction(const FString &RequestId, const FString &Action,
-                           const TSharedPtr<FJsonObject> &Payload,
-                           FMcpResponseHandle RequestingSocket);
+public:
+  // Called directly by the classed inspect inspect_cdo/diff_asset/ui_focus (MCP/Calls/).
   bool HandleInspectCdoAction(const FString &RequestId,
                               const TSharedPtr<FJsonObject> &Payload,
                               FMcpResponseHandle RequestingSocket);
@@ -798,6 +803,7 @@ private:
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle RequestingSocket);
 
+private:
   // 1. Editor Authoring & Graph Editing
   bool
   HandleBlueprintGraphAction(const FString &RequestId, const FString &Action,
@@ -1609,6 +1615,58 @@ public:
   bool HandleRenderLumenUpdateScene(const FString &RequestId,
                                     const TSharedPtr<FJsonObject> &Payload,
                                     FMcpResponseHandle Socket);
+
+  // inspect subhandlers — public so the inspect FMcpCall classes
+  // (Private/MCP/Calls/) can delegate, until the module split de-members the
+  // implementations off the subsystem. All bodies live in
+  // EnvironmentHandlers.cpp; HandleInspectRuntimeReport serves runtime_report
+  // and pie_report, HandleInspectObjectGeneric serves inspect_object and the
+  // seven get_*_details actions.
+  bool HandleInspectFindObjects(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandleInspectGetProjectSettings(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleInspectGetEditorSettings(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleInspectGetWorldSettings(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleInspectGetViewportInfo(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleInspectGetSelectedActors(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleInspectGetSceneStats(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleInspectGetPerformanceStats(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleInspectGetMemoryStats(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleInspectRuntimeReport(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleInspectListObjects(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandleInspectFindByClass(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandleInspectFindByTag(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandleInspectClassInfo(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandleInspectObjectGeneric(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
 
 private:
   // stream/unload shared implementation; unload passes bForceUnload=true,

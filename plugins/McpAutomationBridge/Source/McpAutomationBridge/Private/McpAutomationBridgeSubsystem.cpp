@@ -490,6 +490,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       McpRegisterAllActionDecls();
       McpRegisterControlActorCalls();
       McpRegisterControlEditorCalls();
+      McpRegisterInspectCalls();
       McpRegisterManageLevelCalls();
       McpRegisterManageSequenceCalls();
       McpRegisterSystemControlCalls();
@@ -1043,8 +1044,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                     return HandleBuildEnvironmentAction(R, A, P, S);
                   });
 
-  // Tools & System
-  MCP_REGISTER_HANDLER("inspect", HandleInspectAction);
+  // inspect is fully classed (MCP/Calls/McpCalls_Inspect.cpp) —
+  // dispatch reaches its FMcpCall instances via the registry, not this map.
 
   // system_control is fully classed (MCP/Calls/McpCalls_SystemControl.cpp) —
   // dispatch reaches its FMcpCall instances via the registry, not this map.

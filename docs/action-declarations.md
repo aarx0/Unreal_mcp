@@ -115,6 +115,32 @@ parser survives only as a lint.
     `nanite_rebuild_mesh` — the first and last are duplicates of live
     manage_asset implementations). The vestigial `test_progress`/`test_stale`
     gate names (no branches ever existed) died with the gate.
+  - **`inspect` (2026-07-04,
+    `Private/MCP/Calls/McpCalls_Inspect.cpp`).** 38 classes — the cleanest
+    family yet: zero hidden and zero dead names (the sweep ledger has no
+    inspect entries). The dispatcher's 13 inline global bodies extracted to
+    `HandleInspect*` members (EnvironmentHandlers.cpp); `runtime_report` and
+    `pie_report` share one member like they shared one branch; the eight
+    detail actions (`inspect_object` + the seven `get_*_details`) are
+    advertised aliases of one generic body (`HandleInspectObjectGeneric`) with
+    byte-identical output — collapsing them to one name is a product decision,
+    deferred. The twelve actor actions keep their typed direct calls into the
+    shared control_actor handlers (rule 5 was already delivered at the pilot);
+    each class now applies the actorName/name/objectPath alias normalization
+    itself. `set_property`/`get_property` delegate to the 4-arg property
+    handlers under their internal `set_object_property`/`get_object_property`
+    keys, which survive (the handlers dispatch on them and have other owners).
+    Decl burn-down: `list_objects` shed a 33-param mega-bag with seven bogus
+    required fields (the body reads nothing — the contract is now `{}`);
+    `pie_report` shed six unread params by adopting runtime_report's contract;
+    the target aliases went uniformly optional (`add_tag`/`create_snapshot`/
+    `get_component_property` *required* `actorName`, `inspect_object`
+    *required* `objectPath` — each false-rejected the other spellings the
+    prologue accepted); `get_component_property.propertyName` is optional
+    (`propertyPath` is the alternative, matching control_actor's own row).
+    `RequiresEditor` on all 38; `Mutating` on the seven writers
+    (`set_property`, `set_component_property`, `add_tag`, `create_snapshot`,
+    `restore_snapshot`, `delete_object`, `export`).
 
 ## Bootstrap state (2026-07-04, complete)
 
