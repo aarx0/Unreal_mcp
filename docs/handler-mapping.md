@@ -31,7 +31,7 @@ subdirectory is shown.
 | `manage_blueprint` | CommonUi → `HandleCommonUiAction`; WidgetAuthoring → `HandleManageWidgetAuthoringAction`; BlueprintGraph → `HandleBlueprintGraphAction` | `HandleBlueprintAction` @ BlueprintHandlers.cpp |
 | `build_environment` | Lighting → `HandleLightingAction`; Splines → `HandleManageSplinesAction` | `HandleBuildEnvironmentAction` @ EnvironmentHandlers.cpp |
 | `animation_physics` | AnimationAuthoring → `HandleManageAnimationAuthoringAction`; Skeleton → `HandleManageSkeleton` | `HandleAnimationPhysicsAction` @ AnimationHandlers.cpp |
-| `system_control` | Performance → `HandlePerformanceAction`; plus per-action re-dispatches (see note) | `HandleSystemControlAction` @ SystemControlHandlers.cpp |
+| `system_control` | — (Performance stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp (dispatched from the call registry before the handler map; implementations spread across PerformanceHandlers.cpp (`HandlePerf*`), SystemControlHandlers.cpp (`HandleSys*`), UiHandlers.cpp (`HandleUi*`), LogHandlers.cpp (`HandleLog*`), DebugHandlers.cpp, RenderHandlers.cpp — see note) |
 | `manage_networking` | Input → `HandleInputAction`; GameFramework → `HandleManageGameFrameworkAction`; Sessions → `HandleManageSessionsAction` | `HandleManageNetworkingAction` @ NetworkingHandlers.cpp |
 | `manage_level_structure` | Volumes → `HandleManageVolumesAction` | `HandleManageLevelStructureAction` @ LevelStructureHandlers.cpp |
 | `manage_audio` | AudioAuthoring → `HandleManageAudioAuthoringAction` | `HandleAudioAction` @ AudioHandlers.cpp |
@@ -49,17 +49,24 @@ subdirectory is shown.
 | `manage_inventory` | — | `HandleManageInventoryAction` @ InventoryHandlers.cpp |
 | `manage_interaction` | — | `HandleManageInteractionAction` @ InteractionHandlers.cpp |
 
-`system_control` note — its lambda also re-dispatches specific core actions before
-the fallthrough: `execute_command`/`set_cvar` →
-`HandleConsoleCommandAction` @ ConsoleCommandHandlers.cpp (the handler's internal
-canonical name is `console_command`);
-`subscribe`/`unsubscribe`/`get_log`/`tail_log`/`clear_log` → `HandleLogAction` @
-LogHandlers.cpp; `spawn_category` → `HandleDebugAction` @ DebugHandlers.cpp;
-`lumen_update_scene` → `HandleRenderAction` @ RenderHandlers.cpp;
-`screenshot`/`create_widget`/`add_widget_child`/`get_project_settings`/`set_project_setting`
-→ `HandleUiAction` @ UiHandlers.cpp (schema-advertised on `system_control`, implemented
-in the otherwise-unreachable UI handler). These are per-action tests in the lambda,
-not routed families, so `GetToolRoutingTable()` does not list them.
+`system_control` note — the family is classed; the registration lambda that used
+to re-dispatch per action is gone. Per-class delegation: the 21 Performance
+actions → `HandlePerf*` @ PerformanceHandlers.cpp; build/test/python actions →
+`HandleSys*` @ SystemControlHandlers.cpp (`start_session` delegates on to
+`HandleInsightsAction` @ InsightsHandlers.cpp); `execute_command`/`set_cvar` →
+`HandleSysExecuteCommand`/`HandleSysSetCvar`, which call
+`HandleConsoleCommandAction` @ ConsoleCommandHandlers.cpp directly (the console
+handler's internal canonical name stays `console_command`; it has other owners —
+ControlHandlers.cpp and EditorFunctionHandlers.cpp — and survives);
+`get_log`/`tail_log`/`clear_log`/`subscribe`/`unsubscribe` → `HandleLogQuery`/
+`HandleLogClear`/`HandleLogSubscribe`/`HandleLogUnsubscribe` @ LogHandlers.cpp
+(not editor-gated); `spawn_category` → `HandleDebugSpawnCategory` @
+DebugHandlers.cpp; `lumen_update_scene` → `HandleRenderLumenUpdateScene` @
+RenderHandlers.cpp; `screenshot`/`create_widget`/`add_widget_child`/
+`get_project_settings`/`set_project_setting` → `HandleUi*` @ UiHandlers.cpp.
+`GetToolRoutingTable()` keeps the Performance routed-family row so boot
+validation can prove the schema union matches the published enum — the first
+classed family with a non-empty routed list.
 
 ## Shared action lists → owning handler
 
@@ -77,7 +84,7 @@ Routed family lists:
 | `AnimationAuthoring` | `HandleManageAnimationAuthoringAction` @ AnimationAuthoringHandlers.cpp |
 | `Skeleton` | `HandleManageSkeleton` @ SkeletonHandlers.cpp |
 | `AudioAuthoring` | `HandleManageAudioAuthoringAction` @ AudioAuthoringHandlers.cpp |
-| `Performance` | `HandlePerformanceAction` @ PerformanceHandlers.cpp |
+| `Performance` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp delegate to `HandlePerf*` @ PerformanceHandlers.cpp (list retained for schema-union validation) |
 | `Input` | `HandleInputAction` @ InputHandlers.cpp |
 | `GameFramework` | `HandleManageGameFrameworkAction` @ GameFrameworkHandlers.cpp |
 | `Sessions` | `HandleManageSessionsAction` @ SessionsHandlers.cpp |
@@ -93,7 +100,7 @@ Core (fallthrough) lists:
 | `ManageBlueprintCore` | `HandleBlueprintAction` @ BlueprintHandlers.cpp |
 | `BuildEnvironmentCore` | `HandleBuildEnvironmentAction` @ EnvironmentHandlers.cpp |
 | `AnimationPhysicsCore` | `HandleAnimationPhysicsAction` @ AnimationHandlers.cpp |
-| `SystemControlCore` | `HandleSystemControlAction` @ SystemControlHandlers.cpp, plus the lambda re-dispatches noted above |
+| `SystemControlCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp (per-class delegation split in the note above) |
 | `ManageAudioCore` | `HandleAudioAction` @ AudioHandlers.cpp |
 | `ManageNetworkingCore` | `HandleManageNetworkingAction` @ NetworkingHandlers.cpp |
 | `ManageLevelStructureCore` | `HandleManageLevelStructureAction` @ LevelStructureHandlers.cpp |
@@ -125,9 +132,11 @@ enums only — they own no actions.
    tool. `InitializeHandlers` registers only the 22 canonical tool names — the
    legacy Node-server-era per-action registrations (`manage_ui`, `manage_misc`,
    `asset_query`, ~100 others) were deleted 2026-07-02 as unreachable. Their
-   handler functions survive where a consolidated lambda calls them directly
-   (e.g. `HandleUiAction`, `HandleLightingAction`); `HandleMiscAction` had no
-   caller and was deleted with `McpAutomationBridge_MiscHandlers.cpp`.
+   handler functions survive where a consolidated lambda or an FMcpCall class
+   calls them directly (e.g. `HandleLightingAction`); `HandleMiscAction` had no
+   caller and was deleted with `McpAutomationBridge_MiscHandlers.cpp`, and
+   `HandleUiAction` died at the system_control classing (its five advertised
+   bodies extracted to `HandleUi*` members, its hidden bodies deleted).
 
 Within one tool an action belongs to exactly one routed family (boot validation
 enforces disjointness, including against the core list). The same action name may

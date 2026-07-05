@@ -1,23 +1,17 @@
 // =============================================================================
 // McpAutomationBridge_UiHandlers.cpp
 // =============================================================================
-// Handler implementations for UI/Widget and Editor control operations.
+// system_control UI/widget member handlers (HandleUi*). Dispatch lives in the
+// FMcpCall classes (Private/MCP/Calls/McpCalls_SystemControl.cpp); each member
+// here implements one advertised action.
 //
 // HANDLERS IMPLEMENTED:
 // ---------------------
-// system_control / manage_ui:
 //   - create_widget: Create UMG widget blueprint
 //   - add_widget_child: Add child widget to widget tree
 //   - screenshot: Capture viewport screenshot with base64 encoding
-//   - play_in_editor: Start PIE session
-//   - stop_play: Stop PIE session
-//   - save_all: Save all assets
-//   - simulate_input: Simulate keyboard input events
-//   - create_hud: Create and add widget to viewport
-//   - set_widget_text: Set text on TextBlock widgets
-//   - set_widget_image: Set image on Image widgets
-//   - set_widget_visibility: Toggle widget visibility
-//   - remove_widget_from_viewport: Remove widgets from viewport
+//   - get_project_settings: Read common project settings
+//   - set_project_setting: Write a config value to DefaultEngine.ini
 //
 // VERSION COMPATIBILITY:
 // ----------------------
@@ -92,61 +86,16 @@
 // Handler Implementation
 // =============================================================================
 
-/**
- * @brief Handles UI widget operations and system control actions.
- *
- * Processes both "system_control" and "manage_ui" actions with various subActions
- * for widget creation, manipulation, screenshots, and PIE control.
- *
- * @param RequestId Identifier for the incoming request.
- * @param Action Action name ("system_control" or "manage_ui").
- * @param Payload JSON object containing "subAction" and action-specific parameters.
- * @param RequestingSocket WebSocket for response delivery.
- * @return true if the action was handled, false otherwise.
- */
-bool UMcpAutomationBridgeSubsystem::HandleUiAction(
-    const FString &RequestId, const FString &Action,
-    const TSharedPtr<FJsonObject> &Payload,
+bool UMcpAutomationBridgeSubsystem::HandleUiCreateWidget(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
-  const FString LowerAction = Action.ToLower();
-  bool bIsSystemControl =
-      LowerAction.Equals(TEXT("system_control"), ESearchCase::IgnoreCase);
-  bool bIsManageUi =
-      LowerAction.Equals(TEXT("manage_ui"), ESearchCase::IgnoreCase);
-
-  if (!bIsSystemControl && !bIsManageUi) {
-    return false;
-  }
-
-  if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Payload missing."),
-                        TEXT("INVALID_PAYLOAD"));
-    return true;
-  }
-
-  // -------------------------------------------------------------------------
-  // Extract SubAction
-  // -------------------------------------------------------------------------
-  FString SubAction;
-  if (Payload->HasField(TEXT("subAction"))) {
-    SubAction = GetJsonStringField(Payload, TEXT("subAction"));
-  } else {
-    Payload->TryGetStringField(TEXT("action"), SubAction);
-  }
-  const FString LowerSub = SubAction.ToLower();
-
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-  Resp->SetStringField(TEXT("action"), LowerSub);
+  Resp->SetStringField(TEXT("action"), TEXT("create_widget"));
 
   bool bSuccess = false;
   FString Message;
   FString ErrorCode;
 
-#if WITH_EDITOR
-  // ===========================================================================
-  // SubAction: create_widget
-  // ===========================================================================
-  if (LowerSub == TEXT("create_widget")) {
 #if WITH_EDITOR && MCP_HAS_WIDGET_FACTORY
     FString WidgetName;
     if (!Payload->TryGetStringField(TEXT("name"), WidgetName) ||
@@ -221,11 +170,28 @@ bool UMcpAutomationBridgeSubsystem::HandleUiAction(
     ErrorCode = TEXT("NOT_AVAILABLE");
     Resp->SetStringField(TEXT("error"), Message);
 #endif
+
+  Resp->SetBoolField(TEXT("success"), bSuccess);
+  if (Message.IsEmpty()) {
+    Message = bSuccess ? TEXT("System control action completed")
+                       : TEXT("System control action failed");
   }
-  // ===========================================================================
-  // SubAction: add_widget_child
-  // ===========================================================================
-  else if (LowerSub == TEXT("add_widget_child")) {
+
+  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+                         ErrorCode);
+  return true;
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleUiAddWidgetChild(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetStringField(TEXT("action"), TEXT("add_widget_child"));
+
+  bool bSuccess = false;
+  FString Message;
+  FString ErrorCode;
+
 #if WITH_EDITOR && MCP_HAS_WIDGET_FACTORY
     FString WidgetPath;
     if (!Payload->TryGetStringField(TEXT("widgetPath"), WidgetPath) ||
@@ -340,11 +306,29 @@ bool UMcpAutomationBridgeSubsystem::HandleUiAction(
     ErrorCode = TEXT("NOT_AVAILABLE");
     Resp->SetStringField(TEXT("error"), Message);
 #endif
+
+  Resp->SetBoolField(TEXT("success"), bSuccess);
+  if (Message.IsEmpty()) {
+    Message = bSuccess ? TEXT("System control action completed")
+                       : TEXT("System control action failed");
   }
-  // ===========================================================================
-  // SubAction: screenshot
-  // ===========================================================================
-  else if (LowerSub == TEXT("screenshot")) {
+
+  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+                         ErrorCode);
+  return true;
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleUiScreenshot(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetStringField(TEXT("action"), TEXT("screenshot"));
+
+  bool bSuccess = false;
+  FString Message;
+  FString ErrorCode;
+
+#if WITH_EDITOR
     // Take a screenshot of the viewport and return as base64
     FString RawScreenshotPath;
     Payload->TryGetStringField(TEXT("path"), RawScreenshotPath);
@@ -384,7 +368,7 @@ bool UMcpAutomationBridgeSubsystem::HandleUiAction(
 
     FString Filename;
     Payload->TryGetStringField(TEXT("filename"), Filename);
-    
+
     // SECURITY: Sanitize filename to prevent path traversal
     // Strip directory components and validate against traversal patterns
     Filename = FPaths::GetCleanFilename(Filename);
@@ -393,7 +377,7 @@ bool UMcpAutomationBridgeSubsystem::HandleUiAction(
       Filename = FString::Printf(TEXT("Screenshot_%lld"),
                                  FDateTime::Now().ToUnixTimestamp());
     }
-    
+
     if (Filename.IsEmpty()) {
       Filename = FString::Printf(TEXT("Screenshot_%lld"),
                                  FDateTime::Now().ToUnixTimestamp());
@@ -493,303 +477,53 @@ bool UMcpAutomationBridgeSubsystem::HandleUiAction(
         }
       }
     }
+#else
+  Message = TEXT("System control actions require editor build.");
+  ErrorCode = TEXT("NOT_IMPLEMENTED");
+  Resp->SetStringField(TEXT("error"), Message);
+#endif
+
+  Resp->SetBoolField(TEXT("success"), bSuccess);
+  if (Message.IsEmpty()) {
+    Message = bSuccess ? TEXT("System control action completed")
+                       : TEXT("System control action failed");
   }
-  // ===========================================================================
-  // SubAction: play_in_editor
-  // ===========================================================================
-  else if (LowerSub == TEXT("play_in_editor")) {
-    // Start play in editor
-    if (GEditor && GEditor->PlayWorld) {
-      Message = TEXT("Already playing in editor");
-      ErrorCode = TEXT("ALREADY_PLAYING");
-      Resp->SetStringField(TEXT("error"), Message);
-    } else {
-      // Execute play command
-      bool bCommandSuccess = GEditor->Exec(nullptr, TEXT("Play In Editor"));
-      if (bCommandSuccess) {
-        bSuccess = true;
-        Message = TEXT("Started play in editor");
-        Resp->SetStringField(TEXT("status"), TEXT("playing"));
-      } else {
-        Message = TEXT("Failed to start play in editor");
-        ErrorCode = TEXT("PLAY_FAILED");
-        Resp->SetStringField(TEXT("error"), Message);
-      }
-    }
-  }
-  // ===========================================================================
-  // SubAction: stop_play
-  // ===========================================================================
-  else if (LowerSub == TEXT("stop_play")) {
-    // Stop play in editor
-    if (GEditor && GEditor->PlayWorld) {
-      // Execute stop command
-      bool bCommandSuccess =
-          GEditor->Exec(nullptr, TEXT("Stop Play In Editor"));
-      if (bCommandSuccess) {
-        bSuccess = true;
-        Message = TEXT("Stopped play in editor");
-        Resp->SetStringField(TEXT("status"), TEXT("stopped"));
-      } else {
-        Message = TEXT("Failed to stop play in editor");
-        ErrorCode = TEXT("STOP_FAILED");
-        Resp->SetStringField(TEXT("error"), Message);
-      }
-    } else {
-      Message = TEXT("Not currently playing in editor");
-      ErrorCode = TEXT("NOT_PLAYING");
-      Resp->SetStringField(TEXT("error"), Message);
-    }
-  }
-  // ===========================================================================
-  // SubAction: save_all
-  // ===========================================================================
-  else if (LowerSub == TEXT("save_all")) {
-    // Save all assets and levels
-    bool bCommandSuccess = GEditor->Exec(nullptr, TEXT("Asset Save All"));
-    if (bCommandSuccess) {
-      bSuccess = true;
-      Message = TEXT("Saved all assets");
-      Resp->SetStringField(TEXT("status"), TEXT("saved"));
-    } else {
-      Message = TEXT("Failed to save all assets");
-      ErrorCode = TEXT("SAVE_FAILED");
-      Resp->SetStringField(TEXT("error"), Message);
-    }
-  }
-  // ===========================================================================
-  // SubAction: simulate_input
-  // ===========================================================================
-  else if (LowerSub == TEXT("simulate_input")) {
-    FString KeyName;
-    Payload->TryGetStringField(TEXT("keyName"),
-                               KeyName); // Changed to keyName to match schema
-    if (KeyName.IsEmpty())
-      Payload->TryGetStringField(TEXT("key"), KeyName); // Fallback
 
-    FString EventType;
-    Payload->TryGetStringField(TEXT("eventType"), EventType);
+  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+                         ErrorCode);
+  return true;
+}
 
-    FKey Key = FKey(FName(*KeyName));
-    if (Key.IsValid()) {
-      const uint32 CharacterCode = 0;
-      const uint32 KeyCode = 0;
-      const bool bIsRepeat = false;
-      FModifierKeysState ModifierState;
+bool UMcpAutomationBridgeSubsystem::HandleUiGetProjectSettings(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetStringField(TEXT("action"), TEXT("get_project_settings"));
 
-      if (EventType == TEXT("KeyDown")) {
-        FKeyEvent KeyEvent(Key, ModifierState,
-                           FSlateApplication::Get().GetUserIndexForKeyboard(),
-                           bIsRepeat, CharacterCode, KeyCode);
-        FSlateApplication::Get().ProcessKeyDownEvent(KeyEvent);
-      } else if (EventType == TEXT("KeyUp")) {
-        FKeyEvent KeyEvent(Key, ModifierState,
-                           FSlateApplication::Get().GetUserIndexForKeyboard(),
-                           bIsRepeat, CharacterCode, KeyCode);
-        FSlateApplication::Get().ProcessKeyUpEvent(KeyEvent);
-      } else {
-        // Press and Release
-        FKeyEvent KeyDownEvent(
-            Key, ModifierState,
-            FSlateApplication::Get().GetUserIndexForKeyboard(), bIsRepeat,
-            CharacterCode, KeyCode);
-        FSlateApplication::Get().ProcessKeyDownEvent(KeyDownEvent);
+  bool bSuccess = false;
+  FString Message;
+  FString ErrorCode;
 
-        FKeyEvent KeyUpEvent(Key, ModifierState,
-                             FSlateApplication::Get().GetUserIndexForKeyboard(),
-                             bIsRepeat, CharacterCode, KeyCode);
-        FSlateApplication::Get().ProcessKeyUpEvent(KeyUpEvent);
-      }
-
-      bSuccess = true;
-      Message = FString::Printf(TEXT("Simulated input for key: %s"), *KeyName);
-    } else {
-      Message = FString::Printf(TEXT("Invalid key name: %s"), *KeyName);
-      ErrorCode = TEXT("INVALID_KEY");
-      Resp->SetStringField(TEXT("error"), Message);
-    }
-  }
-  // ===========================================================================
-  // SubAction: create_hud
-  // ===========================================================================
-  else if (LowerSub == TEXT("create_hud")) {
-    FString WidgetPath;
-    Payload->TryGetStringField(TEXT("widgetPath"), WidgetPath);
-    UClass *WidgetClass = LoadClass<UUserWidget>(nullptr, *WidgetPath);
-    if (WidgetClass && GEngine && GEngine->GameViewport) {
-      UWorld *World = GEngine->GameViewport->GetWorld();
-      if (World) {
-        UUserWidget *Widget = CreateWidget<UUserWidget>(World, WidgetClass);
-        if (Widget) {
-          Widget->AddToViewport();
-          bSuccess = true;
-          Message = TEXT("HUD created and added to viewport");
-          Resp->SetStringField(TEXT("widgetName"), Widget->GetName());
-        } else {
-          Message = TEXT("Failed to create widget");
-          ErrorCode = TEXT("CREATE_FAILED");
-        }
-      } else {
-        Message = TEXT("No world context found (is PIE running?)");
-        ErrorCode = TEXT("NO_WORLD");
-      }
-    } else {
-      Message =
-          FString::Printf(TEXT("Failed to load widget class: %s"), *WidgetPath);
-      ErrorCode = TEXT("CLASS_NOT_FOUND");
-    }
-  }
-  // ===========================================================================
-  // SubAction: set_widget_text
-  // ===========================================================================
-  else if (LowerSub == TEXT("set_widget_text")) {
-    FString Key, Value;
-    Payload->TryGetStringField(TEXT("key"), Key);
-    Payload->TryGetStringField(TEXT("value"), Value);
-
-    bool bFound = false;
-    // Iterate all widgets to find one matching Key (Name)
-    TArray<UUserWidget *> Widgets;
-    UWidgetBlueprintLibrary::GetAllWidgetsOfClass(
-        GEditor->GetEditorWorldContext().World(), Widgets,
-        UUserWidget::StaticClass(), false);
-    // Also try Game Viewport world if Editor World is not right context (PIE)
-    if (GEngine && GEngine->GameViewport && GEngine->GameViewport->GetWorld()) {
-      UWidgetBlueprintLibrary::GetAllWidgetsOfClass(
-          GEngine->GameViewport->GetWorld(), Widgets,
-          UUserWidget::StaticClass(), false);
-    }
-
-    for (UUserWidget *Widget : Widgets) {
-      // Search inside this widget for a TextBlock named Key
-      UWidget *Child = Widget->GetWidgetFromName(FName(*Key));
-      if (UTextBlock *TextBlock = Cast<UTextBlock>(Child)) {
-        TextBlock->SetText(FText::FromString(Value));
-        bFound = true;
-        bSuccess = true;
-        Message =
-            FString::Printf(TEXT("Set text on '%s' to '%s'"), *Key, *Value);
-        break;
-      }
-      // Also check if the widget ITSELF is the one (though UserWidget !=
-      // TextBlock usually)
-      if (Widget->GetName() == Key) {
-        // Can't set text on UserWidget directly unless it implements interface?
-        // Assuming Key refers to child widget name usually
-      }
-    }
-
-    if (!bFound) {
-      // Fallback: Use TObjectIterator to find ANY UTextBlock with that name,
-      // risky but covers cases
-      for (TObjectIterator<UTextBlock> It; It; ++It) {
-        if (It->GetName() == Key && It->GetWorld()) {
-          It->SetText(FText::FromString(Value));
-          bFound = true;
-          bSuccess = true;
-          Message = FString::Printf(TEXT("Set text on global '%s'"), *Key);
-          break;
-        }
-      }
-    }
-
-    if (!bFound) {
-      Message = FString::Printf(TEXT("Widget/TextBlock '%s' not found"), *Key);
-      ErrorCode = TEXT("WIDGET_NOT_FOUND");
-    }
-  }
-  // ===========================================================================
-  // SubAction: set_widget_image
-  // ===========================================================================
-  else if (LowerSub == TEXT("set_widget_image")) {
-    FString Key, TexturePath;
-    Payload->TryGetStringField(TEXT("key"), Key);
-    Payload->TryGetStringField(TEXT("texturePath"), TexturePath);
-    UTexture2D *Texture = LoadObject<UTexture2D>(nullptr, *TexturePath);
-    if (Texture) {
-      bool bFound = false;
-      for (TObjectIterator<UImage> It; It; ++It) {
-        if (It->GetName() == Key && It->GetWorld()) {
-          It->SetBrushFromTexture(Texture);
-          bFound = true;
-          bSuccess = true;
-          Message = FString::Printf(TEXT("Set image on '%s'"), *Key);
-          break;
-        }
-      }
-      if (!bFound) {
-        Message = FString::Printf(TEXT("Image widget '%s' not found"), *Key);
-        ErrorCode = TEXT("WIDGET_NOT_FOUND");
-      }
-    } else {
-      Message = TEXT("Failed to load texture");
-      ErrorCode = TEXT("ASSET_NOT_FOUND");
-    }
-  }
-  // ===========================================================================
-  // SubAction: set_widget_visibility
-  // ===========================================================================
-  else if (LowerSub == TEXT("set_widget_visibility")) {
-    FString Key;
-    bool bVisible = true;
-    Payload->TryGetStringField(TEXT("key"), Key);
-    Payload->TryGetBoolField(TEXT("visible"), bVisible);
-
-    bool bFound = false;
-    // Try UserWidgets
-    for (TObjectIterator<UUserWidget> It; It; ++It) {
-      if (It->GetName() == Key && It->GetWorld()) {
-        It->SetVisibility(bVisible ? ESlateVisibility::Visible
-                                   : ESlateVisibility::Collapsed);
-        bFound = true;
-        bSuccess = true;
-        break;
-      }
-    }
-    // If not found, try generic UWidget
-    if (!bFound) {
-      for (TObjectIterator<UWidget> It; It; ++It) {
-        if (It->GetName() == Key && It->GetWorld()) {
-          It->SetVisibility(bVisible ? ESlateVisibility::Visible
-                                     : ESlateVisibility::Collapsed);
-          bFound = true;
-          bSuccess = true;
-          break;
-        }
-      }
-    }
-
-      if (bFound) {
-        Message = FString::Printf(TEXT("Set visibility on '%s' to %s"), *Key,
-                                  bVisible ? TEXT("Visible") : TEXT("Collapsed"));
-      } else {
-        Message = FString::Printf(TEXT("Widget '%s' not found"), *Key);
-        ErrorCode = TEXT("WIDGET_NOT_FOUND");
-      }
-  }
-  // ===========================================================================
-  // SubAction: get_project_settings
-  // ===========================================================================
-  else if (LowerSub == TEXT("get_project_settings")) {
+#if WITH_EDITOR
     FString Section;
     Payload->TryGetStringField(TEXT("section"), Section);
     Payload->TryGetStringField(TEXT("category"), Section);  // Accept both
-    
+
     TSharedPtr<FJsonObject> SettingsObj = MakeShared<FJsonObject>();
-    
+
     // Get common project settings
     if (GEngine) {
       // Engine settings
       SettingsObj->SetStringField(TEXT("engineVersion"), FString::Printf(TEXT("%d.%d"), ENGINE_MAJOR_VERSION, ENGINE_MINOR_VERSION));
-      
+
       // Project name
       FString ProjectName = FApp::GetProjectName();
       SettingsObj->SetStringField(TEXT("projectName"), ProjectName);
-      
+
       // Project directory
       FString ProjectDir = FPaths::ProjectDir();
       SettingsObj->SetStringField(TEXT("projectDir"), ProjectDir);
-      
+
       // Game engine settings via config
       FString ResolutionX, ResolutionY;
       GConfig->GetString(TEXT("/Script/Engine.GameUserSettings"), TEXT("ResolutionSizeX"), ResolutionX, GGameUserSettingsIni);
@@ -800,7 +534,7 @@ bool UMcpAutomationBridgeSubsystem::HandleUiAction(
         ResObj->SetStringField(TEXT("height"), ResolutionY);
         SettingsObj->SetObjectField(TEXT("resolution"), ResObj);
       }
-      
+
       // Fullscreen mode
       FString FullscreenMode;
       GConfig->GetString(TEXT("/Script/Engine.GameUserSettings"), TEXT("LastConfirmedFullscreenMode"), FullscreenMode, GGameUserSettingsIni);
@@ -808,20 +542,43 @@ bool UMcpAutomationBridgeSubsystem::HandleUiAction(
         SettingsObj->SetStringField(TEXT("fullscreenMode"), FullscreenMode);
       }
     }
-    
+
     Resp->SetObjectField(TEXT("settings"), SettingsObj);
     bSuccess = true;
     Message = TEXT("Project settings retrieved");
+#else
+  Message = TEXT("System control actions require editor build.");
+  ErrorCode = TEXT("NOT_IMPLEMENTED");
+  Resp->SetStringField(TEXT("error"), Message);
+#endif
+
+  Resp->SetBoolField(TEXT("success"), bSuccess);
+  if (Message.IsEmpty()) {
+    Message = bSuccess ? TEXT("System control action completed")
+                       : TEXT("System control action failed");
   }
-  // ===========================================================================
-  // SubAction: set_project_setting
-  // ===========================================================================
-  else if (LowerSub == TEXT("set_project_setting")) {
+
+  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+                         ErrorCode);
+  return true;
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleUiSetProjectSetting(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetStringField(TEXT("action"), TEXT("set_project_setting"));
+
+  bool bSuccess = false;
+  FString Message;
+  FString ErrorCode;
+
+#if WITH_EDITOR
     FString Section, Key, Value;
     Payload->TryGetStringField(TEXT("section"), Section);
     Payload->TryGetStringField(TEXT("key"), Key);
     Payload->TryGetStringField(TEXT("value"), Value);
-    
+
     if (Section.IsEmpty() || Key.IsEmpty()) {
       Message = TEXT("section and key are required for set_project_setting");
       ErrorCode = TEXT("INVALID_ARGUMENT");
@@ -833,77 +590,21 @@ bool UMcpAutomationBridgeSubsystem::HandleUiAction(
       if (!NormalizedSection.StartsWith(TEXT("/")) && !NormalizedSection.StartsWith(TEXT("["))) {
         NormalizedSection = FString::Printf(TEXT("/Script/%s"), *Section);
       }
-      
+
       // Set the value in the appropriate config file
       // For project settings, use DefaultEngine.ini
       FString ConfigFile = FPaths::ProjectConfigDir() / TEXT("DefaultEngine.ini");
-      
+
       // Use GConfig to set the value
       GConfig->SetString(*NormalizedSection, *Key, *Value, ConfigFile);
       GConfig->Flush(false, ConfigFile);
-      
+
       Resp->SetStringField(TEXT("section"), NormalizedSection);
       Resp->SetStringField(TEXT("key"), Key);
       Resp->SetStringField(TEXT("value"), Value);
       bSuccess = true;
       Message = FString::Printf(TEXT("Set %s.%s = %s"), *NormalizedSection, *Key, *Value);
     }
-  }
-  // ===========================================================================
-  // SubAction: remove_widget_from_viewport
-  // ===========================================================================
-  else if (LowerSub == TEXT("remove_widget_from_viewport")) {
-    FString Key;
-    Payload->TryGetStringField(TEXT("key"),
-                               Key); // If empty, remove all? OR specific
-
-    if (Key.IsEmpty()) {
-      // Remove all user widgets?
-      TArray<UUserWidget *> TempWidgets;
-      UWidgetBlueprintLibrary::GetAllWidgetsOfClass(
-          GEditor->GetEditorWorldContext().World(), TempWidgets,
-          UUserWidget::StaticClass(), true);
-      // Implementation:
-      if (GEngine && GEngine->GameViewport &&
-          GEngine->GameViewport->GetWorld()) {
-        TArray<UUserWidget *> Widgets;
-        UWidgetBlueprintLibrary::GetAllWidgetsOfClass(
-            GEngine->GameViewport->GetWorld(), Widgets,
-            UUserWidget::StaticClass(), true);
-        for (UUserWidget *W : Widgets) {
-          W->RemoveFromParent();
-        }
-        bSuccess = true;
-        Message = TEXT("Removed all widgets");
-      }
-    } else {
-      bool bFound = false;
-      for (TObjectIterator<UUserWidget> It; It; ++It) {
-        if (It->GetName() == Key && It->GetWorld()) {
-          It->RemoveFromParent();
-          bFound = true;
-          bSuccess = true;
-          break;
-        }
-      }
-      if (bFound) {
-        Message = FString::Printf(TEXT("Removed widget '%s'"), *Key);
-      } else {
-        Message = FString::Printf(TEXT("Widget '%s' not found"), *Key);
-        ErrorCode = TEXT("WIDGET_NOT_FOUND");
-      }
-    }
-  }
-  // ===========================================================================
-  // Unknown SubAction
-  // ===========================================================================
-  else {
-    Message = FString::Printf(
-        TEXT("System control action '%s' not implemented"), *LowerSub);
-    ErrorCode = TEXT("NOT_IMPLEMENTED");
-    Resp->SetStringField(TEXT("error"), Message);
-  }
-
 #else
   Message = TEXT("System control actions require editor build.");
   ErrorCode = TEXT("NOT_IMPLEMENTED");

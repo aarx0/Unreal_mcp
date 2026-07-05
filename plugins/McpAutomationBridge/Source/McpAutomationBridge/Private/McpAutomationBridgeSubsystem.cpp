@@ -492,6 +492,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       McpRegisterControlEditorCalls();
       McpRegisterManageLevelCalls();
       McpRegisterManageSequenceCalls();
+      McpRegisterSystemControlCalls();
       UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
              TEXT("Registered %d action declarations"),
              FMcpCallRegistry::Get().NumDecls());
@@ -1013,7 +1014,7 @@ void UMcpAutomationBridgeSubsystem::RegisterHandler(
  */
 // MCP_REGISTER_HANDLER collapses the trivial forwarding-lambda registration boilerplate
 // (an action name -> a member handler taking the same 4 args). The multi-branch routers
-// (manage_blueprint, manage_asset, system_control, ...) that inspect the sub-action before
+// (manage_blueprint, manage_asset, ...) that inspect the sub-action before
 // dispatching are registered longhand below.
 #define MCP_REGISTER_HANDLER(ActionName, HandlerFn) \
   RegisterHandler(TEXT(ActionName), \
@@ -1044,74 +1045,9 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
 
   // Tools & System
   MCP_REGISTER_HANDLER("inspect", HandleInspectAction);
-  RegisterHandler(TEXT("system_control"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         FMcpResponseHandle S) {
-                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
-                    if (McpConsolidatedActions::IsPerformanceAction(SubAction)) {
-                      return HandlePerformanceAction(R, TEXT("manage_performance"), P, S);
-                    }
-                    // Schema/router drift repairs: these sub-actions are
-                    // advertised by the system_control schema but their real
-                    // implementations live behind other canonical action
-                    // names — re-dispatch like the Performance branch above.
-                    // (The old linear chain that used to catch fall-throughs
-                    // is gone; anything not routed here dies in
-                    // HandleSystemControlAction's entry gate.)
-                    if (SubAction == TEXT("screenshot") ||
-                        SubAction == TEXT("create_widget") ||
-                        SubAction == TEXT("add_widget_child") ||
-                        SubAction == TEXT("get_project_settings") ||
-                        SubAction == TEXT("set_project_setting")) {
-                      return HandleUiAction(R, A, P, S);
-                    }
-                    if (SubAction == TEXT("execute_command")) {
-                      // Same path control_editor uses; inherits the console
-                      // security blocklist. "console_command" is the handler's
-                      // internal canonical name.
-                      return HandleConsoleCommandAction(
-                          R, TEXT("console_command"), P, S);
-                    }
-                    if (SubAction == TEXT("set_cvar")) {
-                      // set_cvar was advertised with key/value params but had
-                      // no handler anywhere. Compose a console command and
-                      // reuse the audited console path.
-                      FString Key, Value;
-                      P->TryGetStringField(TEXT("key"), Key);
-                      P->TryGetStringField(TEXT("value"), Value);
-                      if (Key.IsEmpty()) {
-                        SendAutomationError(
-                            S, R,
-                            TEXT("set_cvar requires 'key' (and usually "
-                                 "'value')."),
-                            TEXT("INVALID_ARGUMENT"));
-                        return true;
-                      }
-                      TSharedPtr<FJsonObject> CmdPayload = MakeShared<FJsonObject>();
-                      CmdPayload->SetStringField(
-                          TEXT("command"),
-                          Value.IsEmpty()
-                              ? Key
-                              : FString::Printf(TEXT("%s %s"), *Key, *Value));
-                      return HandleConsoleCommandAction(
-                          R, TEXT("console_command"), CmdPayload, S);
-                    }
-                    if (SubAction == TEXT("subscribe") ||
-                        SubAction == TEXT("unsubscribe") ||
-                        SubAction == TEXT("get_log") ||
-                        SubAction == TEXT("tail_log") ||
-                        SubAction == TEXT("clear_log")) {
-                      return HandleLogAction(R, TEXT("manage_logs"), P, S);
-                    }
-                    if (SubAction == TEXT("spawn_category")) {
-                      return HandleDebugAction(R, TEXT("manage_debug"), P, S);
-                    }
-                    if (SubAction == TEXT("lumen_update_scene")) {
-                      return HandleRenderAction(R, TEXT("manage_render"), P, S);
-                    }
-                    return HandleSystemControlAction(R, A, P, S);
-                  });
+
+  // system_control is fully classed (MCP/Calls/McpCalls_SystemControl.cpp) —
+  // dispatch reaches its FMcpCall instances via the registry, not this map.
 
   // control_actor and control_editor are fully classed (MCP/Calls/) —
   // dispatch reaches their FMcpCall instances via the registry, not this map.

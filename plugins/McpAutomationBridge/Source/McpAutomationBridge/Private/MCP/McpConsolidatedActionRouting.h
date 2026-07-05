@@ -439,12 +439,12 @@ inline const TArray<FString>& SystemControlCore()
 {
 	// Truth in advertising (2026-06-11 drift sweep): removed actions that had
 	// NO handler anywhere — profile, set_quality, set_resolution,
-	// set_fullscreen, play_sound, show_widget, validate_assets. They died at
-	// HandleUiAction's NOT_IMPLEMENTED catch-all; re-add only together with a
-	// real implementation. execute_command/set_cvar/subscribe/unsubscribe/
-	// spawn_category/lumen_update_scene are routed in the system_control
-	// registry lambda (McpAutomationBridgeSubsystem.cpp), which re-dispatches
-	// command execution under the internal literal "console_command".
+	// set_fullscreen, play_sound, show_widget, validate_assets; re-add only
+	// together with a real implementation. system_control is classed
+	// (MCP/Calls/McpCalls_SystemControl.cpp): this list and Performance()
+	// survive only so boot validation can prove the schema union still
+	// matches the published enum. execute_command/set_cvar delegate to the
+	// console handler under its internal literal "console_command".
 	static const TArray<FString> Actions = {
 		TEXT("screenshot"),
 		TEXT("execute_command"), TEXT("run_ubt"),
@@ -1012,7 +1012,6 @@ inline bool IsAudioAuthoringAction(const FString& Action) { return ContainsActio
 inline bool IsLightingAction(const FString& Action) { return ContainsAction(Lighting(), Action); }
 inline bool IsSplineAction(const FString& Action) { return ContainsAction(Splines(), Action); }
 inline bool IsSkeletonAction(const FString& Action) { return ContainsAction(Skeleton(), Action); }
-inline bool IsPerformanceAction(const FString& Action) { return ContainsAction(Performance(), Action); }
 inline bool IsInputAction(const FString& Action) { return ContainsAction(Input(), Action); }
 inline bool IsGameFrameworkAction(const FString& Action) { return ContainsAction(GameFramework(), Action); }
 inline bool IsSessionAction(const FString& Action) { return ContainsAction(Sessions(), Action); }
@@ -1057,6 +1056,11 @@ inline const TArray<FMcpToolRouting>& GetToolRoutingTable()
 		{ TEXT("animation_physics"),
 		  { { TEXT("AnimationAuthoring"), &AnimationAuthoring }, { TEXT("Skeleton"), &Skeleton } },
 		  &AnimationPhysicsCore, &AnimationPhysics },
+		// system_control is CLASSED (first classed family with a non-empty
+		// routed list): there is no live registration lambda — RoutedFamilies
+		// here documents the per-class delegation split (Performance actions
+		// delegate to HandlePerf* members), and the row is retained so the
+		// schema-union validation keeps proving enum coverage.
 		{ TEXT("system_control"),
 		  { { TEXT("Performance"), &Performance } },
 		  &SystemControlCore, &SystemControl },

@@ -898,11 +898,18 @@ v2 (word-boundary vars, per-comparison attribution, +NativeSubAction) → 126 ca
 verified advertised sibling reaching the same code — audio_* prefix family, data-table row
 aliases, control_actor leftovers, skeleton/GAS/foliage/level arms), **1 live** protected
 (`console_command`), 6 false positives. REMAINING (this entry stays open for it): the
-**66 hidden** implemented-but-unadvertised names — advertise-or-delete per family at that
+hidden implemented-but-unadvertised names — advertise-or-delete per family at that
 family's classing; per-name evidence + recommended dispositions in the report. Do NOT
 delete hidden entries without the classing context. manage_level's classing (2026-07-04)
 also deleted 13 transport-dead branches its dispatcher prologue manufactured (below the
 sweep inventory's radar) — ledgered in the report's LevelHandlers section.
+system_control's classing (2026-07-04) closed 9 of the 66 ledgered entries as
+deleted-at-classing (`export_asset`, the 7 UiHandlers pokes,
+`attach_render_target_to_volume`) plus 4 more below-radar co-residents
+(`save_all`/`simulate_input` in UiHandlers, `create_render_target`/
+`nanite_rebuild_mesh` duplicates in RenderHandlers) — **57 hidden entries remain**;
+`console_command` stays live (the classed execute_command/set_cvar call the console
+handler directly).
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,

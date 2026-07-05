@@ -362,7 +362,7 @@ public:
 
   // ---- Log capture ring (pull-only log visibility) ----------------------
   // The capture device (registered always-on in Initialize) appends lines
-  // here; manage_logs get_log/tail_log reads them. This replaces the old
+  // here; system_control get_log/tail_log reads them. This replaces the old
   // server-push path that fed the now-dead SendRawMessage no-op. Bounded so
   // memory is fixed regardless of log volume; a circular buffer keeps append
   // O(1) (no front-eviction array shift).
@@ -513,9 +513,10 @@ private:
   // control_actor and control_editor dispatch chains were classed away —
   // see MCP/Calls/.
   // manage_level is classed — see MCP/Calls/McpCalls_ManageLevel.cpp.
-  bool HandleUiAction(const FString &RequestId, const FString &Action,
-                      const TSharedPtr<FJsonObject> &Payload,
-                      FMcpResponseHandle RequestingSocket);
+  // system_control is classed — see MCP/Calls/McpCalls_SystemControl.cpp;
+  // its member handlers (HandlePerf*/HandleSys*/HandleUi*/HandleLog*/
+  // HandleDebugSpawnCategory/HandleRenderLumenUpdateScene) live in the
+  // transitional public block below.
   // Animation and physics related automation actions
   bool HandleAnimationPhysicsAction(
       const FString &RequestId, const FString &Action,
@@ -574,11 +575,6 @@ public:
                             FMcpResponseHandle RequestingSocket);
 
 private:
-  // Performance related automation actions
-  bool
-  HandlePerformanceAction(const FString &RequestId, const FString &Action,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle RequestingSocket);
   // Environment building automation actions (landscape, foliage, etc.)
   bool HandleBuildEnvironmentAction(
       const FString &RequestId, const FString &Action,
@@ -780,10 +776,6 @@ private:
 
   // Additional consolidated tool handlers
   bool
-  HandleSystemControlAction(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
-  bool
   HandleConsoleCommandAction(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
@@ -827,9 +819,6 @@ private:
   HandleWorldPartitionAction(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
-  bool HandleRenderAction(const FString &RequestId, const FString &Action,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle RequestingSocket);
   bool HandleListBlueprints(const FString &RequestId, const FString &Action,
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle RequestingSocket);
@@ -1088,12 +1077,6 @@ private:
                         FMcpResponseHandle RequestingSocket);
 
   // 3. Observability, Logs, Debugging & History
-  bool HandleLogAction(const FString &RequestId, const FString &Action,
-                       const TSharedPtr<FJsonObject> &Payload,
-                       FMcpResponseHandle RequestingSocket);
-  bool HandleDebugAction(const FString &RequestId, const FString &Action,
-                         const TSharedPtr<FJsonObject> &Payload,
-                         FMcpResponseHandle RequestingSocket);
   bool HandleAssetQueryAction(const FString &RequestId, const FString &Action,
                               const TSharedPtr<FJsonObject> &Payload,
                               FMcpResponseHandle RequestingSocket);
@@ -1491,12 +1474,153 @@ public:
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle Socket);
 
+  // system_control subhandlers — public so the system_control FMcpCall
+  // classes (Private/MCP/Calls/) can delegate, until the module split
+  // de-members the implementations off the subsystem. Implementations span
+  // the Performance / SystemControl / Ui / Log / Debug / Render handler TUs;
+  // the log family and HandleSysExecuteCommand / HandleSysSetCvar /
+  // HandleDebugSpawnCategory are NOT editor-gated.
+  bool HandlePerfGenerateMemoryReport(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandlePerfGetStats(const FString &RequestId,
+                          const TSharedPtr<FJsonObject> &Payload,
+                          FMcpResponseHandle Socket);
+  bool HandlePerfStartProfiling(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandlePerfStopProfiling(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle Socket);
+  bool HandlePerfShowFps(const FString &RequestId,
+                         const TSharedPtr<FJsonObject> &Payload,
+                         FMcpResponseHandle Socket);
+  bool HandlePerfShowStats(const FString &RequestId,
+                           const TSharedPtr<FJsonObject> &Payload,
+                           FMcpResponseHandle Socket);
+  bool HandlePerfSetScalability(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandlePerfSetResolutionScale(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandlePerfSetVsync(const FString &RequestId,
+                          const TSharedPtr<FJsonObject> &Payload,
+                          FMcpResponseHandle Socket);
+  bool HandlePerfSetFrameRateLimit(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandlePerfEnableGpuTiming(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle Socket);
+  bool HandlePerfConfigureNanite(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle Socket);
+  bool HandlePerfConfigureLod(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandlePerfConfigureTextureStreaming(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+  bool HandlePerfApplyBaselineSettings(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandlePerfOptimizeDrawCalls(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandlePerfConfigureOcclusionCulling(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+  bool HandlePerfOptimizeShaders(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle Socket);
+  bool HandlePerfConfigureWorldPartition(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandlePerfMergeActors(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             FMcpResponseHandle Socket);
+  bool HandlePerfRunBenchmark(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandleSysGenerateTestStub(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle Socket);
+  bool HandleSysLiveCodingCompile(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleSysRunUbt(const FString &RequestId,
+                       const TSharedPtr<FJsonObject> &Payload,
+                       FMcpResponseHandle Socket);
+  bool HandleSysGetBuildStatus(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle Socket);
+  bool HandleSysListTests(const FString &RequestId,
+                          const TSharedPtr<FJsonObject> &Payload,
+                          FMcpResponseHandle Socket);
+  bool HandleSysRunTests(const FString &RequestId,
+                         const TSharedPtr<FJsonObject> &Payload,
+                         FMcpResponseHandle Socket);
+  bool HandleSysGetTestResults(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle Socket);
+  bool HandleSysExecutePython(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandleSysStartSession(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             FMcpResponseHandle Socket);
+  bool HandleSysExecuteCommand(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle Socket);
+  bool HandleSysSetCvar(const FString &RequestId,
+                        const TSharedPtr<FJsonObject> &Payload,
+                        FMcpResponseHandle Socket);
+  bool HandleUiCreateWidget(const FString &RequestId,
+                            const TSharedPtr<FJsonObject> &Payload,
+                            FMcpResponseHandle Socket);
+  bool HandleUiAddWidgetChild(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandleUiScreenshot(const FString &RequestId,
+                          const TSharedPtr<FJsonObject> &Payload,
+                          FMcpResponseHandle Socket);
+  bool HandleUiGetProjectSettings(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleUiSetProjectSetting(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle Socket);
+  bool HandleLogQuery(const FString &RequestId,
+                      const TSharedPtr<FJsonObject> &Payload,
+                      FMcpResponseHandle Socket);
+  bool HandleLogClear(const FString &RequestId,
+                      const TSharedPtr<FJsonObject> &Payload,
+                      FMcpResponseHandle Socket);
+  bool HandleLogSubscribe(const FString &RequestId,
+                          const TSharedPtr<FJsonObject> &Payload,
+                          FMcpResponseHandle Socket);
+  bool HandleLogUnsubscribe(const FString &RequestId,
+                            const TSharedPtr<FJsonObject> &Payload,
+                            FMcpResponseHandle Socket);
+  bool HandleDebugSpawnCategory(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandleRenderLumenUpdateScene(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+
 private:
   // stream/unload shared implementation; unload passes bForceUnload=true,
   // which overrides shouldBeLoaded/shouldBeVisible to false.
   bool HandleLevelStreamInternal(const FString &RequestId,
                                  const TSharedPtr<FJsonObject> &Payload,
                                  FMcpResponseHandle Socket, bool bForceUnload);
+
+  // subscribe/unsubscribe shared implementation.
+  bool HandleLogSetSubscribed(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket, bool bSubscribe);
 
   // Asset handlers
   bool HandleImportAsset(const FString &RequestId,

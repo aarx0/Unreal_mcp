@@ -17,6 +17,7 @@ outputB
 outputG
 outputR
 serviceType
+targetPath
 
 # -- read from the request payload, not declared in any tool schema --
 activate
@@ -124,7 +125,6 @@ vertexIndex
 virtualBoneName
 voiceName
 voicePath
-volumePath
 waveName
 widget_path
 z_order

@@ -33,51 +33,21 @@
 #endif
 #endif
 
-bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
-    const FString &RequestId, const FString &Action,
-    const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
-  // The sub-action is in the payload's "action" field
-  FString SubAction;
-  if (Payload.IsValid()) {
-    Payload->TryGetStringField(TEXT("action"), SubAction);
-  }
-  
-  const FString Lower = SubAction.ToLower();
-  
-  // Check if this handler should process this sub-action
-  if (!Lower.StartsWith(TEXT("run_ubt")) &&
-      Lower != TEXT("get_build_status") &&
-      !Lower.StartsWith(TEXT("run_tests")) &&
-      Lower != TEXT("list_tests") &&
-      Lower != TEXT("get_test_results") &&
-      !Lower.StartsWith(TEXT("test_progress")) &&
-      !Lower.StartsWith(TEXT("test_stale")) &&
-      Lower != TEXT("generate_test_stub") &&
-      Lower != TEXT("export_asset") &&
-      Lower != TEXT("start_session") &&
-      Lower != TEXT("execute_python") &&
-      Lower != TEXT("live_coding_compile")) {
-    return false; // Not handled by this function
-  }
+// system_control member handlers (HandleSys*). Dispatch lives in the FMcpCall
+// classes (Private/MCP/Calls/McpCalls_SystemControl.cpp); each member here
+// implements one advertised action.
 
 #if WITH_EDITOR
-  if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("System control payload missing"),
-                        TEXT("INVALID_PAYLOAD"));
-    return true;
-  }
 
-  // ===========================================================================
-  // generate_test_stub - scaffold a correct, registerable C++ automation test
-  // ===========================================================================
-  // The author->compile->run loop for a NEW test previously meant hand-writing
-  // a .cpp and getting the EAutomationTestFlags incantation right (wrong flags =
-  // compiles but never shows under run_tests). This emits the known-good shape
-  // (matching the bridge self-tests) so the only remaining step is compiling it
-  // in (live_coding_compile picks up new files) and running it.
-  if (Lower == TEXT("generate_test_stub")) {
+// generate_test_stub — scaffold a correct, registerable C++ automation test.
+// The author->compile->run loop for a NEW test previously meant hand-writing
+// a .cpp and getting the EAutomationTestFlags incantation right (wrong flags =
+// compiles but never shows under run_tests). This emits the known-good shape
+// (matching the bridge self-tests) so the only remaining step is compiling it
+// in (live_coding_compile picks up new files) and running it.
+bool UMcpAutomationBridgeSubsystem::HandleSysGenerateTestStub(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
     FString TestName;
     Payload->TryGetStringField(TEXT("testName"), TestName);
     if (TestName.IsEmpty()) {
@@ -210,16 +180,20 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
         FString::Printf(TEXT("Wrote %s test '%s' to %s"), *TestType, *TestName, *OutputPath),
         Result);
     return true;
-  }
+}
 
-  if (Lower == TEXT("start_session")) {
+bool UMcpAutomationBridgeSubsystem::HandleSysStartSession(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
     return HandleInsightsAction(RequestId, TEXT("manage_insights"), Payload, RequestingSocket);
-  }
+}
 
-  if (Lower == TEXT("live_coding_compile")) {
-    // Trigger a Live Coding compile + patch of the running editor so .cpp-body
-    // changes to the bridge (or any module) apply without a close/rebuild/relaunch.
-    // Header / Build.cs / .uplugin changes still require a full rebuild.
+// Trigger a Live Coding compile + patch of the running editor so .cpp-body
+// changes to the bridge (or any module) apply without a close/rebuild/relaunch.
+// Header / Build.cs / .uplugin changes still require a full rebuild.
+bool UMcpAutomationBridgeSubsystem::HandleSysLiveCodingCompile(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
 #if WITH_LIVE_CODING
     ILiveCodingModule *LiveCoding =
         FModuleManager::GetModulePtr<ILiveCodingModule>(LIVE_CODING_MODULE_NAME);
@@ -354,9 +328,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
         TEXT("LIVE_CODING_UNAVAILABLE"));
     return true;
 #endif
-  }
+}
 
-  if (Lower == TEXT("run_ubt")) {
+bool UMcpAutomationBridgeSubsystem::HandleSysRunUbt(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
     // Extract optional parameters
     FString Target;
     Payload->TryGetStringField(TEXT("target"), Target);
@@ -589,9 +565,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
         TEXT("UBT started; poll { action:\"get_build_status\" } for progress and results."),
         Result);
     return true;
-  }
+}
 
-  if (Lower == TEXT("get_build_status")) {
+bool UMcpAutomationBridgeSubsystem::HandleSysGetBuildStatus(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
     FString BuildId;
     Payload->TryGetStringField(TEXT("buildId"), BuildId);
     if (BuildId.IsEmpty()) {
@@ -689,10 +667,14 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
     SendAutomationResponse(RequestingSocket, RequestId, true,
                            FString::Printf(TEXT("Build %s: %s"), *BuildId, *Status), Result);
     return true;
-  } else if (Lower == TEXT("list_tests")) {
-    // Enumerate registered automation tests (optionally substring-filtered).
-    // Read-only: no test is started. Useful to discover exact test names/paths
-    // before run_tests, and to confirm seeded project tests are visible.
+}
+
+// Enumerate registered automation tests (optionally substring-filtered).
+// Read-only: no test is started. Useful to discover exact test names/paths
+// before run_tests, and to confirm seeded project tests are visible.
+bool UMcpAutomationBridgeSubsystem::HandleSysListTests(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
     FString Filter;
     Payload->TryGetStringField(TEXT("filter"), Filter);
     Filter.TrimStartAndEndInline();
@@ -729,7 +711,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
                                            Matched, AllTests.Num()),
                            Result);
     return true;
-  } else if (Lower == TEXT("run_tests")) {
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
     FString Suite;
     Payload->TryGetStringField(TEXT("suite"), Suite);
     if (Suite.Equals(TEXT("ui-nav"), ESearchCase::IgnoreCase)) {
@@ -998,7 +984,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
                         Run->TestCommandNames.Num(), *Run->RunId),
         Result);
     return true;
-  } else if (Lower == TEXT("get_test_results")) {
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleSysGetTestResults(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
     FString WantRunId;
     Payload->TryGetStringField(TEXT("runId"), WantRunId);
     WantRunId.TrimStartAndEndInline();
@@ -1158,188 +1148,12 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
                               Run->CurrentIndex, Run->TestCommandNames.Num());
     SendAutomationResponse(RequestingSocket, RequestId, true, Msg, Result);
     return true;
-  } else if (Lower == TEXT("export_asset")) {
-    // Export asset to FBX/OBJ/other format
-    FString AssetPath;
-    Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
-    
-    FString ExportPath;
-    Payload->TryGetStringField(TEXT("exportPath"), ExportPath);
-    
-    if (AssetPath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("assetPath is required for export"),
-                          TEXT("INVALID_ARGUMENT"));
-      return true;
-    }
-    
-    FString SafeAssetPath = SanitizeProjectRelativePath(AssetPath);
-    if (SafeAssetPath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("Invalid asset path for export"),
-                          TEXT("SECURITY_VIOLATION"));
-      return true;
-    }
+}
 
-    if (ExportPath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("exportPath is required for export"),
-                          TEXT("INVALID_ARGUMENT"));
-      return true;
-    }
-
-    FString SafeExportPath = SanitizeProjectFilePath(ExportPath);
-    if (SafeExportPath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
-                          FString::Printf(TEXT("Invalid or unsafe export path: %s"), *ExportPath),
-                          TEXT("SECURITY_VIOLATION"));
-      return true;
-    }
-
-    FString AbsoluteExportPath = FPaths::ProjectDir() / SafeExportPath;
-    FPaths::MakeStandardFilename(AbsoluteExportPath);
-    
-    // CRITICAL: Convert to absolute path for proper comparison
-    AbsoluteExportPath = FPaths::ConvertRelativePathToFull(AbsoluteExportPath);
-    FPaths::NormalizeFilename(AbsoluteExportPath);
-
-    FString NormalizedProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
-    FPaths::NormalizeDirectoryName(NormalizedProjectDir);
-    if (!NormalizedProjectDir.EndsWith(TEXT("/"))) {
-      NormalizedProjectDir += TEXT("/");
-    }
-
-    // SECURITY: Verify the resolved absolute path is within project bounds
-    if (!AbsoluteExportPath.StartsWith(NormalizedProjectDir, ESearchCase::IgnoreCase)) {
-      SendAutomationError(RequestingSocket, RequestId,
-                          FString::Printf(TEXT("Export path escapes project directory: %s"), *ExportPath),
-                          TEXT("SECURITY_VIOLATION"));
-      return true;
-    }
-    
-    // Check if asset exists
-    if (!UEditorAssetLibrary::DoesAssetExist(SafeAssetPath)) {
-      SendAutomationError(RequestingSocket, RequestId,
-                          FString::Printf(TEXT("Asset not found: %s"), *SafeAssetPath),
-                          TEXT("ASSET_NOT_FOUND"));
-      return true;
-    }
-    
-    // Ensure export directory exists
-    FString ExportDir = FPaths::GetPath(AbsoluteExportPath);
-    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-    if (!PlatformFile.DirectoryExists(*ExportDir)) {
-      PlatformFile.CreateDirectoryTree(*ExportDir);
-    }
-    
-    // Load the asset
-    UObject* Asset = UEditorAssetLibrary::LoadAsset(SafeAssetPath);
-    if (!Asset) {
-      SendAutomationError(RequestingSocket, RequestId,
-                          FString::Printf(TEXT("Failed to load asset: %s"), *SafeAssetPath),
-                          TEXT("LOAD_FAILED"));
-      return true;
-    }
-    
-    // Determine export format from file extension
-    FString Extension = FPaths::GetExtension(AbsoluteExportPath).ToLower();
-    
-    // Try generic asset export via AssetTools
-    bool bExportSuccess = false;
-    FString ExportError;
-    
-    // CRITICAL FIX: Use AssetTools ExportAssets with explicit export path
-    // This performs automated export without showing modal dialogs
-    // The bPromptForIndividualFilenames=false suppresses file dialogs
-    FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-    IAssetTools& AssetTools = AssetToolsModule.Get();
-    
-    // Use ExportAssets with explicit path - this suppresses dialogs for automated export
-    // The asset will be exported with its original name to the specified directory
-    TArray<UObject*> AssetsToExport;
-    AssetsToExport.Add(Asset);
-    
-    // ExportAssets exports to the specified directory with the asset's name
-    // For custom filename, we need to rename temporarily or use UExporter directly
-    AssetTools.ExportAssets(AssetsToExport, ExportDir);
-    
-    // Check if file was created
-    FString ExpectedExportPath = ExportDir / FPaths::GetBaseFilename(SafeAssetPath) + TEXT(".") + Extension;
-    if (FPaths::FileExists(ExpectedExportPath))
-    {
-      bExportSuccess = true;
-    }
-    else
-    {
-      // Try with the actual requested filename
-      bExportSuccess = FPaths::FileExists(AbsoluteExportPath);
-    }
-    
-    if (!bExportSuccess)
-    {
-      // Fallback: Use UExporter::ExportToFile directly with Prompt=false
-      UExporter* Exporter = nullptr;
-      
-      // Find appropriate exporter for the asset type and extension
-      for (TObjectIterator<UClass> ClassIt; ClassIt; ++ClassIt) {
-        UClass* CurrentClass = *ClassIt;
-        if (CurrentClass->IsChildOf(UExporter::StaticClass()) && !CurrentClass->HasAnyClassFlags(CLASS_Abstract)) {
-          UExporter* DefaultExporter = Cast<UExporter>(CurrentClass->GetDefaultObject());
-          if (DefaultExporter && DefaultExporter->SupportedClass) {
-            if (Asset->GetClass()->IsChildOf(DefaultExporter->SupportedClass)) {
-              if (DefaultExporter->PreferredFormatIndex < DefaultExporter->FormatExtension.Num()) {
-                FString PreferredExt = DefaultExporter->FormatExtension[DefaultExporter->PreferredFormatIndex].ToLower();
-                if (PreferredExt == Extension || PreferredExt.Contains(Extension)) {
-                  Exporter = DefaultExporter;
-                  break;
-                }
-              }
-              if (!Exporter) {
-                Exporter = DefaultExporter;
-              }
-            }
-          }
-        }
-      }
-      
-      if (Exporter) {
-        // ExportToFile signature: (Object, Exporter, Filename, InSelectedOnly, NoReplaceIdentical, Prompt)
-        // The last parameter (Prompt=false) should suppress dialogs for most exporters
-        int32 ExportResult = UExporter::ExportToFile(Asset, Exporter, *AbsoluteExportPath, false, false, false);
-        bExportSuccess = (ExportResult != 0);
-      }
-      
-      if (!bExportSuccess) {
-        ExportError = FString::Printf(TEXT("Export failed for asset type '%s' and format '%s'"),
-                                       *Asset->GetClass()->GetName(), *Extension);
-      }
-    }
-    
-    if (bExportSuccess) {
-      TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-      AddAssetVerification(Result, Asset);
-      Result->SetStringField(TEXT("assetPath"), SafeAssetPath);
-      Result->SetStringField(TEXT("exportPath"), AbsoluteExportPath);
-      Result->SetStringField(TEXT("format"), Extension);
-      Result->SetBoolField(TEXT("success"), true);
-      
-      SendAutomationResponse(RequestingSocket, RequestId, true,
-                             FString::Printf(TEXT("Asset exported to: %s"), *AbsoluteExportPath),
-                             Result);
-    } else {
-      TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-      Result->SetStringField(TEXT("assetPath"), SafeAssetPath);
-      Result->SetStringField(TEXT("exportPath"), AbsoluteExportPath);
-      Result->SetStringField(TEXT("format"), Extension);
-      Result->SetStringField(TEXT("error"), ExportError);
-      
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             FString::Printf(TEXT("Export failed: %s"), *ExportError),
-                             Result, TEXT("EXPORT_FAILED"));
-    }
-    return true;
-  } else if (Lower == TEXT("execute_python")) {
-    // Execute Python code with stdout/stderr capture via temp file wrapper
+// Execute Python code with stdout/stderr capture via temp file wrapper
+bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
     FString Code;
     Payload->TryGetStringField(TEXT("code"), Code);
     FString File;
@@ -1584,15 +1398,65 @@ bool UMcpAutomationBridgeSubsystem::HandleSystemControlAction(
     SendAutomationResponse(RequestingSocket, RequestId, bSuccess, PyMessage,
                            Result, bSuccess ? FString() : TEXT("PYTHON_ERROR"));
     return true;
+}
+
+#else
+
+// RequiresEditor on every action above means Execute() rejects before Run()
+// in non-editor builds; these exist only so the module links.
+#define MCP_SYS_HANDLER_STUB(Fn)                                              \
+  bool UMcpAutomationBridgeSubsystem::Fn(const FString &,                     \
+                                         const TSharedPtr<FJsonObject> &,     \
+                                         FMcpResponseHandle) {                \
+    return false;                                                             \
   }
 
-  return false;
-#else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
-                         TEXT("System control actions require editor build"),
-                         nullptr, TEXT("NOT_IMPLEMENTED"));
-  return true;
-#endif
+MCP_SYS_HANDLER_STUB(HandleSysGenerateTestStub)
+MCP_SYS_HANDLER_STUB(HandleSysStartSession)
+MCP_SYS_HANDLER_STUB(HandleSysLiveCodingCompile)
+MCP_SYS_HANDLER_STUB(HandleSysRunUbt)
+MCP_SYS_HANDLER_STUB(HandleSysGetBuildStatus)
+MCP_SYS_HANDLER_STUB(HandleSysListTests)
+MCP_SYS_HANDLER_STUB(HandleSysRunTests)
+MCP_SYS_HANDLER_STUB(HandleSysGetTestResults)
+MCP_SYS_HANDLER_STUB(HandleSysExecutePython)
+#undef MCP_SYS_HANDLER_STUB
+
+#endif // WITH_EDITOR
+
+// execute_command / set_cvar — console-handler delegations, available in all
+// builds (HandleConsoleCommandAction owns availability and the security
+// blocklist; "console_command" is its internal canonical name).
+bool UMcpAutomationBridgeSubsystem::HandleSysExecuteCommand(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+  return HandleConsoleCommandAction(RequestId, TEXT("console_command"), Payload,
+                                    Socket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleSysSetCvar(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+  // Compose a console command and reuse the audited console path.
+  FString Key, Value;
+  Payload->TryGetStringField(TEXT("key"), Key);
+  Payload->TryGetStringField(TEXT("value"), Value);
+  if (Key.IsEmpty()) {
+    SendAutomationError(
+        Socket, RequestId,
+        TEXT("set_cvar requires 'key' (and usually "
+             "'value')."),
+        TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+  TSharedPtr<FJsonObject> CmdPayload = MakeShared<FJsonObject>();
+  CmdPayload->SetStringField(
+      TEXT("command"),
+      Value.IsEmpty()
+          ? Key
+          : FString::Printf(TEXT("%s %s"), *Key, *Value));
+  return HandleConsoleCommandAction(
+      RequestId, TEXT("console_command"), CmdPayload, Socket);
 }
 
 // ---------------------------------------------------------------------------

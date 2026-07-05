@@ -7,7 +7,8 @@
 // 
 // Handler Summary:
 // -----------------------------------------------------------------------------
-// Action: manage_debug
+// system_control member handler; dispatch lives in the FMcpCall classes
+// (Private/MCP/Calls/McpCalls_SystemControl.cpp).
 //   - spawn_category: Toggle gameplay debugger category visibility
 // 
 // Dependencies:
@@ -54,44 +55,11 @@
 // Handler Implementation
 // =============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleDebugAction(
-    const FString& RequestId, 
-    const FString& Action, 
-    const TSharedPtr<FJsonObject>& Payload, 
+bool UMcpAutomationBridgeSubsystem::HandleDebugSpawnCategory(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    // Validate action
-    const FString LowerAction = Action.ToLower();
-    if (LowerAction != TEXT("manage_debug") && LowerAction != TEXT("spawn_category"))
-    {
-        return false;
-    }
-
-    // Validate payload
-    if (!Payload.IsValid())
-    {
-        SendAutomationError(RequestingSocket, RequestId, 
-            TEXT("Missing payload."), TEXT("INVALID_PAYLOAD"));
-        return true;
-    }
-
-    // Extract subaction
-    FString SubAction = GetJsonStringField(Payload, TEXT("subAction")).ToLower();
-    if (SubAction.IsEmpty())
-    {
-        Payload->TryGetStringField(TEXT("action"), SubAction);
-        SubAction = SubAction.ToLower();
-    }
-    if (SubAction.IsEmpty() && LowerAction == TEXT("spawn_category"))
-    {
-        SubAction = TEXT("spawn_category");
-    }
-
-    // -------------------------------------------------------------------------
-    // spawn_category: Toggle gameplay debugger category
-    // -------------------------------------------------------------------------
-    if (SubAction == TEXT("spawn_category"))
-    {
         // Accept both 'categoryName' and 'category' for flexibility
         FString CategoryName;
         if (!Payload->TryGetStringField(TEXT("categoryName"), CategoryName))
@@ -233,15 +201,9 @@ bool UMcpAutomationBridgeSubsystem::HandleDebugAction(
             Result->SetNumberField(TEXT("categoryIndex"), UpdatedCategoryIndex);
         }
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
+        SendAutomationResponse(RequestingSocket, RequestId, true,
             FString::Printf(TEXT("Gameplay debugger category %s: %s"),
                 bEnabled ? TEXT("enabled") : TEXT("disabled"), *CategoryName),
             Result);
         return true;
-    }
-
-    // Unknown subaction
-    SendAutomationError(RequestingSocket, RequestId, 
-        TEXT("Unknown subAction."), TEXT("INVALID_SUBACTION"));
-    return true;
 }

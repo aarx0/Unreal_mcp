@@ -13,7 +13,6 @@
 #include "MCP/Decls/McpDecl_AnimationPhysics.h"
 #include "MCP/Decls/McpDecl_ManageEffect.h"
 #include "MCP/Decls/McpDecl_ManageGas.h"
-#include "MCP/Decls/McpDecl_SystemControl.h"
 #include "MCP/Decls/McpDecl_ManageNetworking.h"
 #include "MCP/Decls/McpDecl_Inspect.h"
 #include "MCP/Decls/McpDecl_BuildEnvironment.h"
@@ -41,7 +40,8 @@ inline void McpRegisterAllActionDecls()
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GAnimationPhysics);
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageEffect);
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageGas);
-	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GSystemControl);
+	// system_control: classed (MCP/Calls/McpCalls_SystemControl.cpp) — decls
+	// register with the call instances via McpRegisterSystemControlCalls().
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageNetworking);
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GInspect);
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GBuildEnvironment);

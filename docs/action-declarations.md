@@ -87,6 +87,34 @@ parser survives only as a lint.
     transport-dead hidden branches (`set_level_visibility`,
     `get_level_bounds`, `build_level_navigation`, …) were deleted and
     ledgered in `docs/dead-name-sweep-2026-07-04.md`.
+  - **`system_control` (2026-07-04,
+    `Private/MCP/Calls/McpCalls_SystemControl.cpp`).** 44 classes spanning six
+    implementation TUs (Performance/SystemControl/Ui/Log/Debug/Render
+    handlers) — the first classed family whose routing-table entry keeps a
+    non-empty routed list: `Performance()` and `SystemControlCore()` survive
+    in `GetToolRoutingTable()` solely so boot validation can prove the schema
+    union still matches the published enum (no live lambda remains). Flags
+    are authored per action and deliberately mixed: `RequiresEditor` on the
+    33 actions whose implementing TUs are editor-gated; NOT on the five log
+    actions (LogHandlers.cpp is not editor-gated — flagging them would
+    regress headless use), `screenshot`, `execute_command`, `set_cvar`,
+    `get_project_settings`, `set_project_setting`, `spawn_category`
+    (handler-enforced preconditions). Two decls drop mega-bag residue: a
+    bogus required `functionName` on `configure_texture_streaming` and
+    `generate_memory_report` that neither handler reads. `set_cvar`'s inline
+    lambda synthesis became `HandleSysSetCvar`; it and `execute_command`
+    call `HandleConsoleCommandAction` directly — the `console_command`
+    internal literal SURVIVES this classing (the console handler has other
+    owners: ControlHandlers.cpp, EditorFunctionHandlers.cpp). Hidden bodies
+    deleted and ledgered: `export_asset` (~180 lines, advertise-candidate),
+    nine unreachable UiHandlers branches (`play_in_editor`, `stop_play`,
+    `save_all`, `simulate_input`, `create_hud`, `set_widget_text`,
+    `set_widget_image`, `set_widget_visibility`,
+    `remove_widget_from_viewport`), and three unreachable RenderHandlers
+    subactions (`create_render_target`, `attach_render_target_to_volume`,
+    `nanite_rebuild_mesh` — the first and last are duplicates of live
+    manage_asset implementations). The vestigial `test_progress`/`test_stale`
+    gate names (no branches ever existed) died with the gate.
 
 ## Bootstrap state (2026-07-04, complete)
 

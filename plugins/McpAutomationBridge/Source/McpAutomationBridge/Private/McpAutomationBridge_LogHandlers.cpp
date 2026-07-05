@@ -1,14 +1,15 @@
 // =============================================================================
 // McpAutomationBridge_LogHandlers.cpp
 // =============================================================================
-// MCP Automation Bridge - Log capture + retrieval (manage_logs)
+// MCP Automation Bridge - Log capture + retrieval (system_control log actions)
 //
 // UE Version Support: 5.0 - 5.7
 //
 // Handler Summary:
 // -----------------------------------------------------------------------------
-// Action: manage_logs (reached via system_control subscribe/unsubscribe/
-//         get_log/tail_log/clear_log)
+// system_control member handlers; dispatch lives in the FMcpCall classes
+// (Private/MCP/Calls/McpCalls_SystemControl.cpp). NOT editor-gated: the ring
+// and these members work in non-editor builds.
 //   - get_log / tail_log : return recent captured log lines (poll-based)
 //   - clear_log          : empty the capture ring (seq counter preserved)
 //   - subscribe          : (re)enable capture into the ring
@@ -192,37 +193,12 @@ void UMcpAutomationBridgeSubsystem::CaptureLogLine(
 // Handler Implementation
 // =============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleLogAction(
+// get_log / tail_log : poll recent captured lines (one shared implementation)
+bool UMcpAutomationBridgeSubsystem::HandleLogQuery(
     const FString& RequestId,
-    const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    if (Action != TEXT("manage_logs"))
-    {
-        return false;
-    }
-
-    if (!Payload.IsValid())
-    {
-        SendAutomationError(RequestingSocket, RequestId,
-            TEXT("Missing payload."), TEXT("INVALID_PAYLOAD"));
-        return true;
-    }
-
-    FString SubAction = GetJsonStringField(Payload, TEXT("subAction"));
-    if (SubAction.IsEmpty())
-    {
-        SubAction = GetJsonStringField(Payload, TEXT("action"));
-    }
-
-    // -------------------------------------------------------------------------
-    // get_log / tail_log : poll recent captured lines
-    // -------------------------------------------------------------------------
-    if (SubAction.Equals(TEXT("get_log"), ESearchCase::IgnoreCase) ||
-        SubAction.Equals(TEXT("tail_log"), ESearchCase::IgnoreCase) ||
-        SubAction.Equals(TEXT("get_logs"), ESearchCase::IgnoreCase))
-    {
         int32 Count = GetJsonIntField(Payload, TEXT("count"), 100);
         Count = FMath::Clamp(Count, 1, 2000);
 
@@ -322,7 +298,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLogAction(
 
         TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
         Result->SetBoolField(TEXT("success"), true);
-        Result->SetStringField(TEXT("action"), TEXT("manage_logs"));
+        Result->SetStringField(TEXT("action"), TEXT("system_control"));
         Result->SetStringField(TEXT("subAction"), TEXT("get_log"));
         Result->SetArrayField(TEXT("entries"), Entries);
         Result->SetNumberField(TEXT("returnedCount"), Entries.Num());
@@ -341,13 +317,14 @@ bool UMcpAutomationBridgeSubsystem::HandleLogAction(
             bHasMore ? TEXT(" (more available — raise count or poll with nextSeq)") : TEXT(""));
         SendAutomationResponse(RequestingSocket, RequestId, true, Msg, Result, FString());
         return true;
-    }
+}
 
-    // -------------------------------------------------------------------------
-    // clear_log : empty the ring (seq counter preserved so cursors stay unique)
-    // -------------------------------------------------------------------------
-    if (SubAction.Equals(TEXT("clear_log"), ESearchCase::IgnoreCase))
-    {
+// clear_log : empty the ring (seq counter preserved so cursors stay unique)
+bool UMcpAutomationBridgeSubsystem::HandleLogClear(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
         int32 Cleared = 0;
         {
             FScopeLock Lock(&LogRingMutex);
@@ -357,23 +334,23 @@ bool UMcpAutomationBridgeSubsystem::HandleLogAction(
         }
         TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
         Result->SetBoolField(TEXT("success"), true);
-        Result->SetStringField(TEXT("action"), TEXT("manage_logs"));
+        Result->SetStringField(TEXT("action"), TEXT("system_control"));
         Result->SetStringField(TEXT("subAction"), TEXT("clear_log"));
         Result->SetNumberField(TEXT("cleared"), Cleared);
         SendAutomationResponse(RequestingSocket, RequestId, true,
             FString::Printf(TEXT("Cleared %d log line(s)."), Cleared), Result, FString());
         return true;
-    }
+}
 
-    // -------------------------------------------------------------------------
-    // subscribe / unsubscribe : enable/disable capture (NOT a push — read via
-    // get_log/tail_log). Kept for backward compat with the old action names;
-    // now honest about the pull model instead of reporting a push that never fires.
-    // -------------------------------------------------------------------------
-    if (SubAction.Equals(TEXT("subscribe"), ESearchCase::IgnoreCase) ||
-        SubAction.Equals(TEXT("unsubscribe"), ESearchCase::IgnoreCase))
-    {
-        const bool bEnable = SubAction.Equals(TEXT("subscribe"), ESearchCase::IgnoreCase);
+// subscribe / unsubscribe : enable/disable capture (NOT a push — read via
+// get_log/tail_log). Kept for backward compat with the old action names;
+// now honest about the pull model instead of reporting a push that never fires.
+bool UMcpAutomationBridgeSubsystem::HandleLogSetSubscribed(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket, bool bSubscribe)
+{
+        const bool bEnable = bSubscribe;
         {
             FScopeLock Lock(&LogRingMutex);
             bLogCaptureEnabled = bEnable;
@@ -389,7 +366,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLogAction(
 
         TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
         Result->SetBoolField(TEXT("success"), true);
-        Result->SetStringField(TEXT("action"), TEXT("manage_logs"));
+        Result->SetStringField(TEXT("action"), TEXT("system_control"));
         Result->SetStringField(TEXT("subAction"), bEnable ? TEXT("subscribe") : TEXT("unsubscribe"));
         Result->SetBoolField(TEXT("captureEnabled"), bEnable);
         const FString Msg = bEnable
@@ -397,10 +374,20 @@ bool UMcpAutomationBridgeSubsystem::HandleLogAction(
             : TEXT("Log capture paused. Re-enable with subscribe; existing lines stay readable until clear_log.");
         SendAutomationResponse(RequestingSocket, RequestId, true, Msg, Result, FString());
         return true;
-    }
+}
 
-    SendAutomationError(RequestingSocket, RequestId,
-        TEXT("Unknown subAction. Use get_log/tail_log, clear_log, subscribe, or unsubscribe."),
-        TEXT("INVALID_SUBACTION"));
-    return true;
+bool UMcpAutomationBridgeSubsystem::HandleLogSubscribe(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandleLogSetSubscribed(RequestId, Payload, RequestingSocket, true);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleLogUnsubscribe(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandleLogSetSubscribed(RequestId, Payload, RequestingSocket, false);
 }

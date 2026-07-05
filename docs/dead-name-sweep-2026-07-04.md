@@ -269,12 +269,14 @@ Quick dispositions:
 - **Advertise candidates (real, no advertised equivalent):** geometry raw DynamicMesh CRUD
   family (11 actions), skeleton read/delete family (12: delete_socket, get_bone_transform,
   list/delete morph targets + virtual bones, set_physics_asset, remove_physics_body...),
-  `export_asset` (~180-line generic exporter), `batch_console_commands` (blocklist-aware),
+  `export_asset` (~180-line generic exporter — DELETED at the system_control classing,
+  recover from git), `batch_console_commands` (blocklist-aware),
   `get_nodes` (graph node dump), `grant_ability`, sun/skylight intensity pair,
-  `set_ai_movement`, `cleanup_invalid_datalayers`, `attach_render_target_to_volume`,
+  `set_ai_movement`, `cleanup_invalid_datalayers`, `attach_render_target_to_volume`
+  (DELETED at the system_control classing, recover from git),
   `create_spline_mesh_actor`, Niagara `set_parameter`, `source_control_enable`,
-  UiHandlers PIE/widget pokes (or delete — raw TObjectIterator scans duplicated by newer
-  widget actions).
+  UiHandlers PIE/widget pokes (DELETED at the system_control classing — raw
+  TObjectIterator scans duplicated by newer widget actions; recover from git).
 
 Full per-name evidence:
 ### AIHandlers
@@ -336,8 +338,14 @@ Full per-name evidence:
 ### NiagaraGraphHandlers
 - **set_parameter** @:436 - Dead/unreachable 'set exposed Niagara System user parameter' family (lines 436-500): given a parameterName and a numeric/bool value, it looks up the System's exposed user-parameter store (FNiagaraUserRedirectionParameterStore) and sets it if the parameter is typed Float or Bool, returning PARAM_FAIL…
 
-### RenderHandlers
-- **attach_render_target_to_volume** @:215 - Family: 'attach a render target to a PostProcessVolume via a dynamic material instance'. Reads volumePath (finds an APostProcessVolume actor via FindObject), targetPath (LoadObject a UTextureRenderTarget2D), materialPath+parameterName (LoadObject a base UMaterialInterface), then creates a UMaterialI…
+### RenderHandlers (updated at the system_control classing)
+All three unreachable HandleRenderAction subactions were deleted when `lumen_update_scene`
+was extracted to `HandleRenderLumenUpdateScene`; disposition for each: **deleted at
+system_control classing (transport-dead); recover from git history if advertising is
+wanted.**
+- **attach_render_target_to_volume** @:215 - Family: 'attach a render target to a PostProcessVolume via a dynamic material instance'. Reads volumePath (finds an APostProcessVolume actor via FindObject), targetPath (LoadObject a UTextureRenderTarget2D), materialPath+parameterName (LoadObject a base UMaterialInterface), then creates a UMaterialI… Advertise-candidate (no advertised equivalent anywhere).
+- **create_render_target** @:87 - Hidden duplicate: `manage_asset.create_render_target` is advertised and reaches its own live implementation (AssetWorkflowHandlers.cpp:355). This copy was unreachable (below the sweep inventory's radar because the advertised sibling name exists on another tool).
+- **nanite_rebuild_mesh** @:291 - Hidden duplicate: `manage_asset.nanite_rebuild_mesh` is advertised and reaches `HandleNaniteRebuildMesh` (AssetWorkflowHandlers.cpp:5054). This copy was unreachable (same below-radar class as create_render_target).
 
 ### SkeletonHandlers
 - **set_physics_asset** @:3179 - HandleSetPhysicsAsset (McpAutomationBridge_SkeletonHandlers.cpp:2266-2323, ~58 lines) assigns an EXISTING UPhysicsAsset to a USkeletalMesh via Mesh->SetPhysicsAsset(PhysAsset) and saves the mesh. Distinct from the advertised create_physics_asset (which builds a brand-new physics asset via HandleCrea…
@@ -356,8 +364,8 @@ Full per-name evidence:
 ### SplineHandlers
 - **create_spline_mesh_actor** @:1992 - HandleCreateSplineMeshActor (SplineHandlers.cpp :1316-1431, ~116 lines) spawns a brand-new plain AActor at a given location/rotation, creates a USplineMeshComponent as its root component (distinct from the advertised create_spline_mesh_component path, HandleCreateSplineMeshComponent, which adds a sp…
 
-### SystemControlHandlers
-- **export_asset** @:1161 - Complete, fully-implemented generic asset-export feature (SystemControlHandlers.cpp:1161-1340, ~180 lines) living inside HandleSystemControlAction. Given assetPath + exportPath params, it: sanitizes both paths (SanitizeProjectRelativePath/SanitizeProjectFilePath), enforces the resolved export path s…
+### SystemControlHandlers (updated at the system_control classing)
+- **export_asset** @:1161 - Complete, fully-implemented generic asset-export feature (SystemControlHandlers.cpp:1161-1340, ~180 lines) living inside HandleSystemControlAction. Given assetPath + exportPath params, it: sanitizes both paths (SanitizeProjectRelativePath/SanitizeProjectFilePath), enforces the resolved export path s… Disposition: **deleted at system_control classing**; advertise-candidate — generic asset exporter, recover from git.
 
 ### TextureHandlers
 - **import_texture** @:2830 - TEXTURE CREATION family, 'import_texture' arm (lines 2830-2860, ~31 lines): loads an existing UTexture2D via UEditorAssetLibrary::LoadAsset(sourcePath); if not found but the sourcePath file exists on disk, returns a fake-success 'import queued' stub noting real AssetTools import isn't implemented; o…
@@ -367,9 +375,14 @@ Full per-name evidence:
 - **create_volume_texture** @:3176 - TEXTURE CREATION family, 'create_volume_texture' arm (lines 3176-3194, ~19 lines): validates 'name' is present then unconditionally returns an UNSUPPORTED_OPERATION error stating volume textures aren't implemented for generated assets -- a permanent stub.
 - **create_texture_array** @:3196 - TEXTURE CREATION family, 'create_texture_array' arm (lines 3196-3214, ~19 lines): validates 'name' is present then unconditionally returns an UNSUPPORTED_OPERATION error stating texture arrays aren't implemented for generated assets -- a permanent stub.
 
-### UiHandlers
+### UiHandlers (updated at the system_control classing)
+All nine unreachable HandleUiAction branches were deleted when the five advertised bodies
+were extracted to `HandleUi*` members; disposition for each: **deleted at system_control
+classing (transport-dead); recover from git history if advertising is wanted.**
 - **play_in_editor** @:500 - PIE-control pair (with stop_play): GEditor->Exec(TEXT("Play In Editor")) guarded by a GEditor->PlayWorld already-playing check; returns status "playing". Lines 500-519 (20 lines).
 - **stop_play** @:523 - PIE-control pair (with play_in_editor): GEditor->Exec(TEXT("Stop Play In Editor")) guarded by a GEditor->PlayWorld check (errors NOT_PLAYING if not currently playing). Lines 523-543 (21 lines).
+- **save_all** @:547 - GEditor->Exec(TEXT("Asset Save All")). Not in the sweep's original inventory: `control_editor.save_all` advertises the name against a different implementation (`HandleControlEditorSaveAll`), which stays live.
+- **simulate_input** @:563 - Raw FSlateApplication ProcessKeyDown/UpEvent by key name. Not in the sweep's original inventory: `control_editor.simulate_input` advertises the name against a different implementation (`HandleControlEditorSimulateInput`), which stays live.
 - **create_hud** @:615 - Loads a UUserWidget subclass from a widgetPath payload field via LoadClass, instantiates it in the GameViewport world via CreateWidget, and calls AddToViewport — a minimal HUD-spawn helper distinct from the advertised create_hud_widget/create_hud_class blueprint-authoring actions. Lines 615-641 (27 …
 - **set_widget_text** @:645 - Text-setter for TextBlock widgets by name: first walks all UUserWidget instances in the editor world and the game-viewport world via UWidgetBlueprintLibrary::GetAllWidgetsOfClass, calling GetWidgetFromName and casting to UTextBlock; if not found, falls back to a raw TObjectIterator<UTextBlock> globa…
 - **set_widget_image** @:704 - Image-setter for Image widgets by name: loads a UTexture2D from a texturePath field, then does a raw TObjectIterator<UImage> global scan matching GetName()==key and calls SetBrushFromTexture. Lines 704-728 (25 lines).
