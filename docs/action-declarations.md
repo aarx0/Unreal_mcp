@@ -206,6 +206,28 @@ parser survives only as a lint.
     declared-optional so payloads the family accepts today keep validating.
     `RequiresEditor` on all 27; `Mutating` on everything except the reader,
     `get_character_info`.
+  - **`manage_combat` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_ManageCombat.cpp`).** 39 classes; the
+    dispatcher had zero dedicated handler functions — all 39 bodies were
+    inline branches, extracted verbatim to `HandleCombat*` members
+    (CombatHandlers.cpp). The chain's whole-handler `#if !WITH_EDITOR`
+    stub is replicated per member (same message and code), and the
+    prologue's common name/path/blueprintPath reads moved into the members
+    that use them: the five creators (`create_weapon_blueprint`,
+    `create_projectile_blueprint`, `create_damage_type`,
+    `setup_damage_type`, `create_damage_effect`) keep `name`/`path`
+    (default `/Game`), `setup_hitbox_component` keeps `name` alongside
+    `blueprintPath`, and the other 33 keep `blueprintPath`. No
+    cross-file delegation in either direction, no hidden or dead names (no
+    sweep-ledger entries). Contracts ported verbatim from the shim rows —
+    all 39 re-verified against the extracted bodies, no decl fixes needed:
+    required flags faithful (`blueprintPath` on the 34 rows that resolve
+    a Blueprint, `name` on the five creators), no mega-bags, no one-of
+    collisions, and no declared-optional-but-unread artifact — unlike
+    manage_character, the shim rows never declared the prologue spellings
+    a body does not read. `RequiresEditor` on all 39; `Mutating` on
+    everything except the readers, `get_combat_info` and
+    `get_combat_stats`.
 
 ## Bootstrap state (2026-07-04, complete)
 

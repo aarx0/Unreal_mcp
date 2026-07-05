@@ -492,6 +492,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       McpRegisterControlEditorCalls();
       McpRegisterInspectCalls();
       McpRegisterManageCharacterCalls();
+      McpRegisterManageCombatCalls();
       McpRegisterManageEffectCalls();
       McpRegisterManageInteractionCalls();
       McpRegisterManageLevelCalls();
@@ -1105,7 +1106,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   // manage_character is fully classed (MCP/Calls/McpCalls_ManageCharacter.cpp)
   // — dispatch reaches its FMcpCall instances via the registry, not this map.
 
-  MCP_REGISTER_HANDLER("manage_combat", HandleManageCombatAction);
+  // manage_combat is fully classed (MCP/Calls/McpCalls_ManageCombat.cpp)
+  // — dispatch reaches its FMcpCall instances via the registry, not this map.
 
   MCP_REGISTER_HANDLER("manage_ai", HandleManageAIAction);
 

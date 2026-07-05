@@ -1117,11 +1117,130 @@ public:
                                       FMcpResponseHandle Socket);
 
 private:
-  // Phase 15: Combat & Weapons handlers
-  bool HandleManageCombatAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
+  // manage_combat is classed — see MCP/Calls/McpCalls_ManageCombat.cpp.
+  // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
+  // can delegate, until the module split de-members the implementations off
+  // the subsystem.
+public:
+  bool HandleCombatCreateWeaponBlueprint(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleCombatConfigureWeaponMesh(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleCombatConfigureWeaponSockets(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleCombatSetWeaponStats(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleCombatConfigureHitscan(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleCombatConfigureProjectile(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleCombatConfigureSpreadPattern(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleCombatConfigureRecoilPattern(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleCombatConfigureAimDownSights(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleCombatCreateProjectileBlueprint(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle Socket);
+  bool HandleCombatConfigureProjectileMovement(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle Socket);
+  bool HandleCombatConfigureProjectileCollision(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle Socket);
+  bool HandleCombatConfigureProjectileHoming(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle Socket);
+  bool HandleCombatCreateDamageType(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleCombatConfigureDamageExecution(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle Socket);
+  bool HandleCombatSetupHitboxComponent(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleCombatSetupReloadSystem(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleCombatSetupAmmoSystem(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleCombatSetupAttachmentSystem(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleCombatSetupWeaponSwitching(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleCombatConfigureMuzzleFlash(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleCombatConfigureTracer(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleCombatConfigureImpactEffects(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleCombatConfigureShellEjection(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleCombatCreateMeleeTrace(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleCombatConfigureComboSystem(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleCombatCreateHitPause(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleCombatConfigureHitReaction(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleCombatSetupParryBlockSystem(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleCombatConfigureWeaponTrails(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleCombatGetInfo(const FString &RequestId,
+                           const TSharedPtr<FJsonObject> &Payload,
+                           FMcpResponseHandle Socket);
+  bool HandleCombatSetupDamageType(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleCombatConfigureHitDetection(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleCombatGetStats(const FString &RequestId,
+                            const TSharedPtr<FJsonObject> &Payload,
+                            FMcpResponseHandle Socket);
+  bool HandleCombatCreateDamageEffect(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleCombatApplyDamage(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle Socket);
+  bool HandleCombatHeal(const FString &RequestId,
+                        const TSharedPtr<FJsonObject> &Payload,
+                        FMcpResponseHandle Socket);
+  bool HandleCombatCreateShield(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandleCombatModifyArmor(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle Socket);
+
+private:
   // Phase 16: AI System handlers
   bool HandleManageAIAction(
       const FString &RequestId, const FString &Action,

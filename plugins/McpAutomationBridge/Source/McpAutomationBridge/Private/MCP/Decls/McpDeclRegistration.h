@@ -6,7 +6,6 @@
 #include "MCP/Decls/McpDecl_ManageAi.h"
 #include "MCP/Decls/McpDecl_ManageAudio.h"
 #include "MCP/Decls/McpDecl_ManageBlueprint.h"
-#include "MCP/Decls/McpDecl_ManageCombat.h"
 #include "MCP/Decls/McpDecl_ManageAsset.h"
 #include "MCP/Decls/McpDecl_AnimationPhysics.h"
 #include "MCP/Decls/McpDecl_ManageGas.h"
@@ -33,7 +32,9 @@ inline void McpRegisterAllActionDecls()
 	// McpRegisterManageInteractionCalls().
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageAudio);
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageBlueprint);
-	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageCombat);
+	// manage_combat: classed (MCP/Calls/McpCalls_ManageCombat.cpp) —
+	// decls register with the call instances via
+	// McpRegisterManageCombatCalls().
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageAsset);
 	// manage_sequence: classed (MCP/Calls/McpCalls_ManageSequence.cpp) — decls
 	// register with the call instances via McpRegisterManageSequenceCalls().
