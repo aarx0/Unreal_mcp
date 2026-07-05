@@ -69,8 +69,6 @@ isExit
 jumpZVelocity
 lateGain
 level_path
-lighting
-lightingSettings
 loop
 material_path
 maxAcceleration
@@ -102,7 +100,6 @@ sampleY
 sequenceName
 sequencePath
 setAll
-settings
 sourceElement
 sourceNodeGuid
 sourceState
@@ -130,5 +127,4 @@ voicePath
 volumePath
 waveName
 widget_path
-worldSettings
 z_order

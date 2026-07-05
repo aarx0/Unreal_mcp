@@ -512,10 +512,7 @@ private:
                              FMcpResponseHandle RequestingSocket);
   // control_actor and control_editor dispatch chains were classed away —
   // see MCP/Calls/.
-  // Level and lighting helpers (top-level actions)
-  bool HandleLevelAction(const FString &RequestId, const FString &Action,
-                         const TSharedPtr<FJsonObject> &Payload,
-                         FMcpResponseHandle RequestingSocket);
+  // manage_level is classed — see MCP/Calls/McpCalls_ManageLevel.cpp.
   bool HandleUiAction(const FString &RequestId, const FString &Action,
                       const TSharedPtr<FJsonObject> &Payload,
                       FMcpResponseHandle RequestingSocket);
@@ -570,9 +567,13 @@ private:
                            const TSharedPtr<FJsonObject> &Payload,
                            FMcpResponseHandle RequestingSocket);
   // Lighting related automation actions
+public:
+  // Called directly by the classed manage_level create_light (MCP/Calls/).
   bool HandleLightingAction(const FString &RequestId, const FString &Action,
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle RequestingSocket);
+
+private:
   // Performance related automation actions
   bool
   HandlePerformanceAction(const FString &RequestId, const FString &Action,
@@ -1429,7 +1430,74 @@ public:
                                     const TSharedPtr<FJsonObject> &Payload,
                                     FMcpResponseHandle Socket);
 
+  // manage_level Subhandlers — public so the manage_level FMcpCall classes
+  // (Private/MCP/Calls/) can delegate, until the module split de-members the
+  // implementations off the subsystem.
+  bool HandleLevelLoad(const FString &RequestId,
+                       const TSharedPtr<FJsonObject> &Payload,
+                       FMcpResponseHandle Socket);
+  bool HandleLevelSave(const FString &RequestId,
+                       const TSharedPtr<FJsonObject> &Payload,
+                       FMcpResponseHandle Socket);
+  bool HandleLevelSaveAs(const FString &RequestId,
+                         const TSharedPtr<FJsonObject> &Payload,
+                         FMcpResponseHandle Socket);
+  bool HandleLevelCreate(const FString &RequestId,
+                         const TSharedPtr<FJsonObject> &Payload,
+                         FMcpResponseHandle Socket);
+  bool HandleLevelStream(const FString &RequestId,
+                         const TSharedPtr<FJsonObject> &Payload,
+                         FMcpResponseHandle Socket);
+  bool HandleLevelUnload(const FString &RequestId,
+                         const TSharedPtr<FJsonObject> &Payload,
+                         FMcpResponseHandle Socket);
+  bool HandleLevelCreateLight(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandleLevelBuildLighting(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandleLevelSetMetadata(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandleLevelValidate(const FString &RequestId,
+                           const TSharedPtr<FJsonObject> &Payload,
+                           FMcpResponseHandle Socket);
+  bool HandleLevelList(const FString &RequestId,
+                       const TSharedPtr<FJsonObject> &Payload,
+                       FMcpResponseHandle Socket);
+  bool HandleLevelGetCurrent(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             FMcpResponseHandle Socket);
+  bool HandleLevelExport(const FString &RequestId,
+                         const TSharedPtr<FJsonObject> &Payload,
+                         FMcpResponseHandle Socket);
+  bool HandleLevelImport(const FString &RequestId,
+                         const TSharedPtr<FJsonObject> &Payload,
+                         FMcpResponseHandle Socket);
+  bool HandleLevelAddSublevel(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandleLevelDelete(const FString &RequestId,
+                         const TSharedPtr<FJsonObject> &Payload,
+                         FMcpResponseHandle Socket);
+  bool HandleLevelRename(const FString &RequestId,
+                         const TSharedPtr<FJsonObject> &Payload,
+                         FMcpResponseHandle Socket);
+  bool HandleLevelDuplicate(const FString &RequestId,
+                            const TSharedPtr<FJsonObject> &Payload,
+                            FMcpResponseHandle Socket);
+  bool HandleLevelGetSummary(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             FMcpResponseHandle Socket);
+
 private:
+  // stream/unload shared implementation; unload passes bForceUnload=true,
+  // which overrides shouldBeLoaded/shouldBeVisible to false.
+  bool HandleLevelStreamInternal(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle Socket, bool bForceUnload);
+
   // Asset handlers
   bool HandleImportAsset(const FString &RequestId,
                          const TSharedPtr<FJsonObject> &Payload,

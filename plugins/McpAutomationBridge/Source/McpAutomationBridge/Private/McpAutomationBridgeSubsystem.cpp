@@ -490,6 +490,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       McpRegisterAllActionDecls();
       McpRegisterControlActorCalls();
       McpRegisterControlEditorCalls();
+      McpRegisterManageLevelCalls();
       McpRegisterManageSequenceCalls();
       UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
              TEXT("Registered %d action declarations"),
@@ -1115,7 +1116,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   // control_actor and control_editor are fully classed (MCP/Calls/) —
   // dispatch reaches their FMcpCall instances via the registry, not this map.
 
-  MCP_REGISTER_HANDLER("manage_level", HandleLevelAction);
+  // manage_level is fully classed (MCP/Calls/McpCalls_ManageLevel.cpp) —
+  // dispatch reaches its FMcpCall instances via the registry, not this map.
 
   // manage_sequence is fully classed (MCP/Calls/McpCalls_ManageSequence.cpp) —
   // dispatch reaches its FMcpCall instances via the registry, not this map.

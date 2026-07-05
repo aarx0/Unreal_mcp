@@ -39,7 +39,7 @@ subdirectory is shown.
 | `control_actor` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ControlActor.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleControlActor*` functions in ControlHandlers.cpp) |
 | `control_editor` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ControlEditor.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleControlEditor*` functions in ControlHandlers.cpp + FocusInputHandlers.cpp) |
 | `inspect` | — | `HandleInspectAction` @ EnvironmentHandlers.cpp |
-| `manage_level` | — | `HandleLevelAction` @ LevelHandlers.cpp |
+| `manage_level` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevel.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleLevel*` functions in LevelHandlers.cpp, plus `HandleLightingAction` @ LightingHandlers.cpp for `create_light`) |
 | `manage_sequence` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleSequence*` functions in SequenceHandlers.cpp) |
 | `manage_geometry` | — | `HandleGeometryAction` @ GeometryHandlers.cpp |
 | `manage_effect` | — | `HandleEffectAction` @ EffectHandlers.cpp |
@@ -101,7 +101,7 @@ Core (fallthrough) lists:
 | `ControlActor` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ControlActor.cpp |
 | `ControlEditor` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ControlEditor.cpp |
 | `Inspect` | `HandleInspectAction` @ EnvironmentHandlers.cpp |
-| `ManageLevel` | `HandleLevelAction` @ LevelHandlers.cpp |
+| `ManageLevel` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevel.cpp |
 | `ManageSequence` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp |
 | `ManageGeometry` | `HandleGeometryAction` @ GeometryHandlers.cpp |
 | `ManageEffect` | `HandleEffectAction` @ EffectHandlers.cpp |

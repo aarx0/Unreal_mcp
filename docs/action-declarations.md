@@ -73,6 +73,20 @@ parser survives only as a lint.
     `undo`/`redo`/`save_all`/`execute_command`. PIE-only preconditions
     (pause/possess/simulate_nav/…) stay handler-enforced — the flag only
     covers GEditor existing.
+  - **`manage_level` (2026-07-04,
+    `Private/MCP/Calls/McpCalls_ManageLevel.cpp`).** 19 classes; this family
+    had no dedicated handler functions at all — all 18 live implementations
+    were inline branches in a 2,960-line dispatcher monolith, extracted to
+    `HandleLevel*` members (stream/unload share `HandleLevelStreamInternal`,
+    replicating unload's force-override semantics). The `set_metadata`
+    declaration's `metadata`-object omission — a live false-reject that
+    blocked the action's own payload — is fixed, and `create_light` is
+    deduped onto the full LightingHandlers implementation via a typed call
+    (migration rule 5; the SPAWN_ACTOR_AT_LOCATION payload rewrite that
+    dropped `properties`/`name`/SkyLight support died with the chain). 13
+    transport-dead hidden branches (`set_level_visibility`,
+    `get_level_bounds`, `build_level_navigation`, …) were deleted and
+    ledgered in `docs/dead-name-sweep-2026-07-04.md`.
 
 ## Bootstrap state (2026-07-04, complete)
 

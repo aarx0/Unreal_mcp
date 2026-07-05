@@ -117,7 +117,7 @@ IS declared for the widget/common creates on this tool).
 >   what only the engine call can know — scope shrinks to runtime/target-dependent
 >   ignores now that wrong-action params are caught centrally; (c) generator coverage
 >   upgrade: single-line dispatch (`if (X == TEXT("a")) return HandleA(...);` — the
->   whole manage_geometry create family, manage_level.set_level_visibility) yields no
+>   whole manage_geometry create family) yields no
 >   entry today (validator skips those actions, fail-permissive); attribute the called
 >   function's body reads to the action. 14-entry spot-check found + fixed 2 live
 >   false-warning paths pre-ship: Params-named payload receivers (set_bone_key
@@ -900,7 +900,9 @@ aliases, control_actor leftovers, skeleton/GAS/foliage/level arms), **1 live** p
 (`console_command`), 6 false positives. REMAINING (this entry stays open for it): the
 **66 hidden** implemented-but-unadvertised names — advertise-or-delete per family at that
 family's classing; per-name evidence + recommended dispositions in the report. Do NOT
-delete hidden entries without the classing context.
+delete hidden entries without the classing context. manage_level's classing (2026-07-04)
+also deleted 13 transport-dead branches its dispatcher prologue manufactured (below the
+sweep inventory's radar) — ledgered in the report's LevelHandlers section.
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,
@@ -974,6 +976,9 @@ implementations — manage_level's branch (LevelHandlers.cpp) rewrites the paylo
 implementation in LightingHandlers.cpp (intensity/color/shadows/sky support). Both now
 gate on location; the dedup belongs to manage_level's classing (rule 5 converts the
 rewrite to a typed call — pick the LightingHandlers implementation then).
+DEDUP DELIVERED 2026-07-04 at manage_level's classing: the LevelHandlers rewrite is
+deleted; the classed create_light calls HandleLightingAction directly (one
+implementation, `location` still required, full properties/name/SkyLight surface).
 
 ### [x] 2026-07-02b — Intermittent spurious `TOOL_DISABLED` on `manage_networking` (fresh-session flake)
 **CLOSED 2026-07-03.** Root cause was the audit's own tools-agent mutating the then-GLOBAL

@@ -376,6 +376,39 @@ Full per-name evidence:
 - **set_widget_visibility** @:732 - Visibility toggle by widget name: raw TObjectIterator<UUserWidget> scan matching GetName()==key first, then falls back to a broader TObjectIterator<UWidget> scan; sets ESlateVisibility::Visible or Collapsed based on a 'visible' bool field. Lines 732-769 (38 lines).
 - **remove_widget_from_viewport** @:855 - Widget removal by optional 'key': if key is empty, enumerates all UUserWidgets in the game-viewport world via UWidgetBlueprintLibrary::GetAllWidgetsOfClass and calls RemoveFromParent on each (a dead TempWidgets query against the editor world is computed but unused beforehand); if key is given, does …
 
+### LevelHandlers (manage_level — appended at its classing)
+The manage_level dispatcher carried 13 unadvertised branches the schema enum gate
+rejected before dispatch (transport-dead; they sat below the sweep's inventory because
+the dispatcher's own prologue manufactured their `EffectiveAction` literals). All 13
+were deleted at the manage_level classing; disposition for each: **deleted at
+manage_level classing (transport-dead); recover from git history if advertising is
+wanted.**
+- **get_level_info** - direct-name arm of the `get_summary` implementation (level
+  info + GameMode/default-pawn readback); the capability stays advertised as
+  `get_summary`.
+- **set_level_world_settings** - applies a JSON property map to the current level's
+  AWorldSettings via reflection (`worldSettings`/`settings`/`properties` object or
+  flat payload fields).
+- **set_level_lighting** - same AWorldSettings reflection write aimed at lighting
+  state (LightmassSettings etc.) via a `lighting`/`lightingSettings` object.
+- **add_level_to_world** - adds a level package as a ULevelStreamingDynamic sublevel;
+  thinner sibling of the advertised `add_sublevel` (no duplicate/broken-reference
+  recovery, no streaming-load verification).
+- **remove_level_from_world** - removes a loaded level from the world via
+  UEditorLevelUtils::RemoveLevelFromWorld.
+- **set_level_visibility** - toggles a loaded level's editor visibility via
+  UEditorLevelUtils::SetLevelVisibility.
+- **set_level_locked** - locks/unlocks a loaded level via
+  FLevelUtils::ToggleLevelLock.
+- **get_level_actors** - lists actor names (+count) in a loaded level.
+- **get_level_bounds** - reads the LevelBounds actor's bounding box min/max.
+- **get_level_lighting_scenarios** - lists levels flagged bIsLightingScenario.
+- **build_level_lighting** - kicks FEditorBuildUtils BuildLighting; subset of the
+  advertised `build_lighting` (no quality echo).
+- **build_level_navigation** - kicks FEditorBuildUtils BuildAIPaths; no advertised
+  navigation-build sibling on manage_level.
+- **build_all_level** - kicks FEditorBuildUtils BuildAll.
+
 ### WorldPartitionHandlers
 - **create_datalayer** @:347 - manage_level_structure (live, advertised, dispatched at McpAutomationBridgeSubsystem.cpp:1222 -> HandleManageLevelStructureAction) has a genuinely-working, differently-spelled sibling `create_data_layer` (with underscore) at McpAutomationBridge_LevelStructureHandlers.cpp:3128-3131 -> HandleCreateDat…
 - **set_datalayer** @:446 - The live, advertised sibling doing the analogous operation is manage_level_structure's `assign_actor_to_data_layer` (tools-schema.golden.json:8503, dispatched McpAutomationBridge_LevelStructureHandlers.cpp:3132-3135 -> HandleAssignActorToDataLayer, impl :1906-2093). It looks up the actor by name/lab…
