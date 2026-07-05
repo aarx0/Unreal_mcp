@@ -1589,16 +1589,150 @@ private:
       const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);
-  // Phase 23: Level Structure handlers
-  bool HandleManageLevelStructureAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  // Phase 24: Volumes & Zones handlers
-  bool HandleManageVolumesAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
+  // manage_level_structure is classed — see
+  // MCP/Calls/McpCalls_ManageLevelStructure.cpp.
+  // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
+  // can delegate, until the module split de-members the implementations off
+  // the subsystem. Implementations span two TUs: HandleLevelStructure* @
+  // LevelStructureHandlers.cpp, HandleVolume* @ VolumeHandlers.cpp.
+public:
+  bool HandleLevelStructureCreateLevel(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleLevelStructureCreateSublevel(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleLevelStructureConfigureLevelStreaming(const FString &RequestId,
+                                                   const TSharedPtr<FJsonObject> &Payload,
+                                                   FMcpResponseHandle Socket);
+  bool HandleLevelStructureSetStreamingDistance(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle Socket);
+  bool HandleLevelStructureConfigureLevelBounds(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle Socket);
+  bool HandleLevelStructureEnableWorldPartition(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle Socket);
+  bool HandleLevelStructureConfigureGridSize(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle Socket);
+  bool HandleLevelStructureCreateDataLayer(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+  bool HandleLevelStructureAssignActorToDataLayer(const FString &RequestId,
+                                                  const TSharedPtr<FJsonObject> &Payload,
+                                                  FMcpResponseHandle Socket);
+  bool HandleLevelStructureConfigureHlodLayer(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle Socket);
+  bool HandleLevelStructureCreateMinimapVolume(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle Socket);
+  bool HandleLevelStructureOpenLevelBlueprint(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle Socket);
+  bool HandleLevelStructureAddLevelBlueprintNode(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle Socket);
+  bool HandleLevelStructureConnectLevelBlueprintNodes(const FString &RequestId,
+                                                      const TSharedPtr<FJsonObject> &Payload,
+                                                      FMcpResponseHandle Socket);
+  bool HandleLevelStructureCreateLevelInstance(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle Socket);
+  bool HandleLevelStructureCreatePackedLevelActor(const FString &RequestId,
+                                                  const TSharedPtr<FJsonObject> &Payload,
+                                                  FMcpResponseHandle Socket);
+  bool HandleLevelStructureGetInfo(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleVolumeCreateTriggerVolume(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleVolumeCreateTriggerBox(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleVolumeCreateTriggerSphere(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleVolumeCreateTriggerCapsule(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleVolumeCreateBlockingVolume(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleVolumeCreateKillZVolume(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleVolumeCreatePainCausingVolume(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+  bool HandleVolumeCreatePhysicsVolume(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleVolumeCreateAudioVolume(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleVolumeCreateReverbVolume(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleVolumeCreatePostProcessVolume(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+  bool HandleVolumeCreateCullDistanceVolume(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle Socket);
+  bool HandleVolumeCreatePrecomputedVisibilityVolume(const FString &RequestId,
+                                                     const TSharedPtr<FJsonObject> &Payload,
+                                                     FMcpResponseHandle Socket);
+  bool HandleVolumeCreateLightmassImportanceVolume(const FString &RequestId,
+                                                   const TSharedPtr<FJsonObject> &Payload,
+                                                   FMcpResponseHandle Socket);
+  bool HandleVolumeCreateNavMeshBoundsVolume(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle Socket);
+  bool HandleVolumeCreateNavModifierVolume(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+  bool HandleVolumeCreateCameraBlockingVolume(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle Socket);
+  bool HandleVolumeSetVolumeExtent(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleVolumeSetVolumeProperties(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleVolumeSetVolumeBounds(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleVolumeRemoveVolume(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandleVolumeGetVolumesInfo(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleVolumeAddTriggerVolume(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleVolumeAddBlockingVolume(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleVolumeAddKillZVolume(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleVolumeAddPhysicsVolume(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleVolumeAddCullDistanceVolume(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleVolumeAddPostProcessVolume(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+
+private:
   // Phase 25: Navigation System handlers
   bool HandleManageNavigationAction(
       const FString &RequestId, const FString &Action,

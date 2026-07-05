@@ -1383,13 +1383,12 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelCreate(
   // avoids EditorDestroyWorld/NewMap entirely while still producing a real
   // level asset that manage_level load/stream/export actions can use.
   TSharedPtr<FJsonObject> CreatePayload = MakeShared<FJsonObject>();
-  CreatePayload->SetStringField(TEXT("subAction"), TEXT("create_level"));
   CreatePayload->SetStringField(TEXT("levelName"), FPaths::GetBaseFilename(SavePath));
   CreatePayload->SetStringField(TEXT("levelPath"), FPaths::GetPath(SavePath));
   CreatePayload->SetBoolField(TEXT("bCreateWorldPartition"), bUseWorldPartition);
   CreatePayload->SetBoolField(TEXT("save"), true);
   CreatePayload->SetBoolField(TEXT("loadAfterCreate"), true);
-  return HandleManageLevelStructureAction(RequestId, TEXT("manage_level_structure"), CreatePayload, Socket);
+  return HandleLevelStructureCreateLevel(RequestId, CreatePayload, Socket);
 }
 
 bool UMcpAutomationBridgeSubsystem::HandleLevelStreamInternal(

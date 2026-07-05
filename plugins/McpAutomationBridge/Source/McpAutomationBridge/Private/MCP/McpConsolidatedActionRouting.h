@@ -567,6 +567,10 @@ inline TArray<FString> ManageNetworking()
 
 inline const TArray<FString>& ManageLevelStructureCore()
 {
+	// manage_level_structure is classed
+	// (MCP/Calls/McpCalls_ManageLevelStructure.cpp): this list and Volumes()
+	// survive only so boot validation can prove the schema union still
+	// matches the published enum.
 	static const TArray<FString> Actions = {
 		TEXT("create_level"), TEXT("create_sublevel"),
 		TEXT("configure_level_streaming"), TEXT("set_streaming_distance"),
@@ -1015,7 +1019,6 @@ inline bool IsSkeletonAction(const FString& Action) { return ContainsAction(Skel
 inline bool IsInputAction(const FString& Action) { return ContainsAction(Input(), Action); }
 inline bool IsGameFrameworkAction(const FString& Action) { return ContainsAction(GameFramework(), Action); }
 inline bool IsSessionAction(const FString& Action) { return ContainsAction(Sessions(), Action); }
-inline bool IsVolumeAction(const FString& Action) { return ContainsAction(Volumes(), Action); }
 inline bool IsBehaviorTreeAction(const FString& Action) { return ContainsAction(BehaviorTree(), Action); }
 inline bool IsNavigationAction(const FString& Action) { return ContainsAction(Navigation(), Action); }
 
@@ -1068,6 +1071,11 @@ inline const TArray<FMcpToolRouting>& GetToolRoutingTable()
 		  { { TEXT("Input"), &Input }, { TEXT("GameFramework"), &GameFramework },
 		    { TEXT("Sessions"), &Sessions } },
 		  &ManageNetworkingCore, &ManageNetworking },
+		// manage_level_structure is CLASSED: there is no live registration
+		// lambda — RoutedFamilies here documents the per-class delegation
+		// split (Volume actions delegate to HandleVolume* members in
+		// VolumeHandlers.cpp), and the row is retained so the schema-union
+		// validation keeps proving enum coverage.
 		{ TEXT("manage_level_structure"),
 		  { { TEXT("Volumes"), &Volumes } },
 		  &ManageLevelStructureCore, &ManageLevelStructure },

@@ -13,5 +13,6 @@ void McpRegisterManageGasCalls();
 void McpRegisterManageInteractionCalls();
 void McpRegisterManageInventoryCalls();
 void McpRegisterManageLevelCalls();
+void McpRegisterManageLevelStructureCalls();
 void McpRegisterManageSequenceCalls();
 void McpRegisterSystemControlCalls();

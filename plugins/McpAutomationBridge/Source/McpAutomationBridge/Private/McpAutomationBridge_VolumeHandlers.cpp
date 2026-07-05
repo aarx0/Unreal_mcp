@@ -3116,181 +3116,440 @@ static bool HandleSetVolumeBounds(
 #endif // WITH_EDITOR
 
 // ============================================================================
-// Main Dispatcher
+// Volume Member Handlers
 // ============================================================================
+// Dispatch lives in the manage_level_structure FMcpCall classes
+// (Private/MCP/Calls/McpCalls_ManageLevelStructure.cpp); each HandleVolume*
+// member here wraps one advertised action's dedicated handler above,
+// replicating the retired chain's editor-build and post-process-version
+// stubs.
 
-bool UMcpAutomationBridgeSubsystem::HandleManageVolumesAction(
+// create_trigger_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateTriggerVolume(
     const FString& RequestId,
-    const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
-    // Only handle manage_volumes; decline anything else so the dispatcher keeps
-    // trying other handlers and reaches its UNKNOWN_ACTION fallback. Without this
-    // gate the handler claims any unrouted action that reaches it.
-    if (Action != TEXT("manage_volumes"))
-    {
-        return false;
-    }
 #if WITH_EDITOR
-    FString SubAction = GetJsonStringField(Payload, TEXT("subAction"), TEXT(""));
+    return HandleCreateTriggerVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
 
-    UE_LOG(LogMcpVolumeHandlers, Verbose, TEXT("HandleManageVolumesAction: SubAction=%s"), *SubAction);
+// create_trigger_box
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateTriggerBox(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateTriggerBox(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
 
-    // Trigger Volumes
-    if (SubAction == TEXT("create_trigger_volume"))
-    {
-        return HandleCreateTriggerVolume(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("create_trigger_box"))
-    {
-        return HandleCreateTriggerBox(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("create_trigger_sphere"))
-    {
-        return HandleCreateTriggerSphere(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("create_trigger_capsule"))
-    {
-        return HandleCreateTriggerCapsule(this, RequestId, Payload, Socket);
-    }
+// create_trigger_sphere
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateTriggerSphere(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateTriggerSphere(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
 
-    // Gameplay Volumes
-    if (SubAction == TEXT("create_blocking_volume"))
-    {
-        return HandleCreateBlockingVolume(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("create_kill_z_volume"))
-    {
-        return HandleCreateKillZVolume(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("create_pain_causing_volume"))
-    {
-        return HandleCreatePainCausingVolume(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("create_physics_volume"))
-    {
-        return HandleCreatePhysicsVolume(this, RequestId, Payload, Socket);
-    }
+// create_trigger_capsule
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateTriggerCapsule(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateTriggerCapsule(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
 
-    // Audio Volumes
-    if (SubAction == TEXT("create_audio_volume"))
-    {
-        return HandleCreateAudioVolume(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("create_reverb_volume"))
-    {
-        return HandleCreateReverbVolume(this, RequestId, Payload, Socket);
-    }
+// create_blocking_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateBlockingVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateBlockingVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
 
-    // Rendering Volumes
+// create_kill_z_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateKillZVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateKillZVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_pain_causing_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreatePainCausingVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreatePainCausingVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_physics_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreatePhysicsVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreatePhysicsVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_audio_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateAudioVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateAudioVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_reverb_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateReverbVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateReverbVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_post_process_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreatePostProcessVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
 #if MCP_HAS_POSTPROCESS_VOLUME
-    if (SubAction == TEXT("create_post_process_volume"))
-    {
-        return HandleCreatePostProcessVolume(this, RequestId, Payload, Socket);
-    }
+    return HandleCreatePostProcessVolume(this, RequestId, Payload, Socket);
 #else
     // PostProcessVolume requires UE 5.1+
-    if (SubAction == TEXT("create_post_process_volume"))
-    {
-        SendAutomationResponse(Socket, RequestId, false,
-            TEXT("PostProcessVolume requires UE 5.1 or later"), nullptr, TEXT("UNSUPPORTED_VERSION"));
-        return true;
-    }
-#endif
-    if (SubAction == TEXT("create_cull_distance_volume"))
-    {
-        return HandleCreateCullDistanceVolume(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("create_precomputed_visibility_volume"))
-    {
-        return HandleCreatePrecomputedVisibilityVolume(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("create_lightmass_importance_volume"))
-    {
-        return HandleCreateLightmassImportanceVolume(this, RequestId, Payload, Socket);
-    }
-
-    // Navigation Volumes
-    if (SubAction == TEXT("create_nav_mesh_bounds_volume"))
-    {
-        return HandleCreateNavMeshBoundsVolume(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("create_nav_modifier_volume"))
-    {
-        return HandleCreateNavModifierVolume(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("create_camera_blocking_volume"))
-    {
-        return HandleCreateCameraBlockingVolume(this, RequestId, Payload, Socket);
-    }
-
-    // Volume Configuration
-    if (SubAction == TEXT("set_volume_extent"))
-    {
-        return HandleSetVolumeExtent(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("set_volume_properties"))
-    {
-        return HandleSetVolumeProperties(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("set_volume_bounds"))
-    {
-        return HandleSetVolumeBounds(this, RequestId, Payload, Socket);
-    }
-
-    // Volume Removal
-    if (SubAction == TEXT("remove_volume"))
-    {
-        return HandleRemoveVolume(this, RequestId, Payload, Socket);
-    }
-
-    // Utility
-    if (SubAction == TEXT("get_volumes_info"))
-    {
-        return HandleGetVolumesInfo(this, RequestId, Payload, Socket);
-    }
-
-    // Add Volume To Actor handlers
-    if (SubAction == TEXT("add_trigger_volume"))
-    {
-        return HandleAddTriggerVolume(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("add_blocking_volume"))
-    {
-        return HandleAddBlockingVolume(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("add_kill_z_volume"))
-    {
-        return HandleAddKillZVolume(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("add_physics_volume"))
-    {
-        return HandleAddPhysicsVolume(this, RequestId, Payload, Socket);
-    }
-    if (SubAction == TEXT("add_cull_distance_volume"))
-    {
-        return HandleAddCullDistanceVolume(this, RequestId, Payload, Socket);
-    }
-#if MCP_HAS_POSTPROCESS_VOLUME
-    if (SubAction == TEXT("add_post_process_volume"))
-    {
-        return HandleAddPostProcessVolume(this, RequestId, Payload, Socket);
-    }
-#else
-    if (SubAction == TEXT("add_post_process_volume"))
-    {
-        SendAutomationResponse(Socket, RequestId, false,
-            TEXT("PostProcessVolume requires UE 5.1 or later"), nullptr, TEXT("UNSUPPORTED_VERSION"));
-        return true;
-    }
-#endif
-
-    // Unknown action
     SendAutomationResponse(Socket, RequestId, false,
-        FString::Printf(TEXT("Unknown volume subAction: %s"), *SubAction), nullptr, TEXT("UNKNOWN_ACTION"));
+        TEXT("PostProcessVolume requires UE 5.1 or later"), nullptr, TEXT("UNSUPPORTED_VERSION"));
     return true;
+#endif
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
 
+// create_cull_distance_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateCullDistanceVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateCullDistanceVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_precomputed_visibility_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreatePrecomputedVisibilityVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreatePrecomputedVisibilityVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_lightmass_importance_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateLightmassImportanceVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateLightmassImportanceVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_nav_mesh_bounds_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateNavMeshBoundsVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateNavMeshBoundsVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_nav_modifier_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateNavModifierVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateNavModifierVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_camera_blocking_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateCameraBlockingVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateCameraBlockingVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// set_volume_extent
+bool UMcpAutomationBridgeSubsystem::HandleVolumeSetVolumeExtent(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleSetVolumeExtent(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// set_volume_properties
+bool UMcpAutomationBridgeSubsystem::HandleVolumeSetVolumeProperties(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleSetVolumeProperties(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// set_volume_bounds
+bool UMcpAutomationBridgeSubsystem::HandleVolumeSetVolumeBounds(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleSetVolumeBounds(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// remove_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeRemoveVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleRemoveVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// get_volumes_info
+bool UMcpAutomationBridgeSubsystem::HandleVolumeGetVolumesInfo(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleGetVolumesInfo(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// add_trigger_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeAddTriggerVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleAddTriggerVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// add_blocking_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeAddBlockingVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleAddBlockingVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// add_kill_z_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeAddKillZVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleAddKillZVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// add_physics_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeAddPhysicsVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleAddPhysicsVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// add_cull_distance_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeAddCullDistanceVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleAddCullDistanceVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// add_post_process_volume
+bool UMcpAutomationBridgeSubsystem::HandleVolumeAddPostProcessVolume(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+#if MCP_HAS_POSTPROCESS_VOLUME
+    return HandleAddPostProcessVolume(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("PostProcessVolume requires UE 5.1 or later"), nullptr, TEXT("UNSUPPORTED_VERSION"));
+    return true;
+#endif
 #else
     SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));

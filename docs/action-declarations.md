@@ -285,6 +285,38 @@ parser survives only as a lint.
     the family accepts today keep validating. `RequiresEditor` on all
     31 (the TU is whole-handler editor-gated); `Mutating` on everything
     except the readers, `get_attribute` and `get_gas_info`.
+  - **`manage_level_structure` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_ManageLevelStructure.cpp`).** 45 classes —
+    the second classed family with a non-empty routed list (after
+    system_control): the registration lambda that split `Volumes()` actions
+    off to `HandleManageVolumesAction` was deleted with both string
+    dispatchers, the `IsVolumeAction` predicate died with its only caller,
+    and the
+    `Volumes`/`ManageLevelStructureCore` routing lists survive only so boot
+    validation can prove the schema union still matches the published enum.
+    Unlike the inline-branch families, both dispatchers already delegated
+    every branch to a dedicated static free function in its TU, so no body
+    moved: the 45 members are thin wrappers — 17 `HandleLevelStructure*`
+    (LevelStructureHandlers.cpp) + 28 `HandleVolume*` (VolumeHandlers.cpp) —
+    each replicating its chain's whole-dispatcher `#if WITH_EDITOR` stub
+    (same message and code), the two post-process members also replicating
+    the per-branch `MCP_HAS_POSTPROCESS_VOLUME` UNSUPPORTED_VERSION stub.
+    The inbound edge converted per rule 5: manage_level's classed
+    `create_level` re-entered this family's dispatcher with a synthesized
+    `subAction` payload; it now calls `HandleLevelStructureCreateLevel`
+    directly and the `subAction` write died with the chain. One decl fix:
+    `set_volume_extent` declared BOTH `volumeExtent` AND `extent` required
+    although the handler resolves them as a one-of alias pair and rejects
+    only when neither is present — both optional now, `volumeName` stays
+    required. The other 44 rows verified handler-true, including the
+    pervasive optional volumeLocation/location + volumeExtent/extent alias
+    pairs (VolumeHelpers first-present-wins reads). Zero hidden and zero
+    dead names (the ledger's three manage_level_structure mentions are
+    WorldPartitionHandlers entries citing this family as the live sibling).
+    `RequiresEditor` baked on all 45 (both TUs are whole-editor-gated);
+    `Mutating` on everything except the readers, `get_level_structure_info`
+    and `get_volumes_info` (`open_level_blueprint` stays a writer — it
+    lazily creates the Level Script Blueprint).
 
 ## Bootstrap state (2026-07-04, complete)
 

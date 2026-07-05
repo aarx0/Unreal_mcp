@@ -33,7 +33,7 @@ subdirectory is shown.
 | `animation_physics` | AnimationAuthoring → `HandleManageAnimationAuthoringAction`; Skeleton → `HandleManageSkeleton` | `HandleAnimationPhysicsAction` @ AnimationHandlers.cpp |
 | `system_control` | — (Performance stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp (dispatched from the call registry before the handler map; implementations spread across PerformanceHandlers.cpp (`HandlePerf*`), SystemControlHandlers.cpp (`HandleSys*`), UiHandlers.cpp (`HandleUi*`), LogHandlers.cpp (`HandleLog*`), DebugHandlers.cpp, RenderHandlers.cpp — see note) |
 | `manage_networking` | Input → `HandleInputAction`; GameFramework → `HandleManageGameFrameworkAction`; Sessions → `HandleManageSessionsAction` | `HandleManageNetworkingAction` @ NetworkingHandlers.cpp |
-| `manage_level_structure` | Volumes → `HandleManageVolumesAction` | `HandleManageLevelStructureAction` @ LevelStructureHandlers.cpp |
+| `manage_level_structure` | — (Volumes stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevelStructure.cpp (dispatched from the call registry before the handler map; implementations are the `HandleLevelStructure*` members @ LevelStructureHandlers.cpp for the 17 core actions and the `HandleVolume*` members @ VolumeHandlers.cpp for the 28 volume actions) |
 | `manage_audio` | AudioAuthoring → `HandleManageAudioAuthoringAction` | `HandleAudioAction` @ AudioHandlers.cpp |
 | `manage_ai` | — (BehaviorTree/Navigation membership is tested *inside* the handler, not the lambda) | `HandleManageAIAction` @ AIHandlers.cpp |
 | `control_actor` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ControlActor.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleControlActor*` functions in ControlHandlers.cpp) |
@@ -88,7 +88,7 @@ Routed family lists:
 | `Input` | `HandleInputAction` @ InputHandlers.cpp |
 | `GameFramework` | `HandleManageGameFrameworkAction` @ GameFrameworkHandlers.cpp |
 | `Sessions` | `HandleManageSessionsAction` @ SessionsHandlers.cpp |
-| `Volumes` | `HandleManageVolumesAction` @ VolumeHandlers.cpp |
+| `Volumes` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevelStructure.cpp delegate to `HandleVolume*` @ VolumeHandlers.cpp (list retained for schema-union validation) |
 | `BehaviorTree` | `HandleBehaviorTreeAction` @ BehaviorTreeHandlers.cpp (reached via `HandleManageAIAction`'s internal dispatch) |
 | `Navigation` | `HandleManageNavigationAction` @ NavigationHandlers.cpp (same) |
 
@@ -103,7 +103,7 @@ Core (fallthrough) lists:
 | `SystemControlCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp (per-class delegation split in the note above) |
 | `ManageAudioCore` | `HandleAudioAction` @ AudioHandlers.cpp |
 | `ManageNetworkingCore` | `HandleManageNetworkingAction` @ NetworkingHandlers.cpp |
-| `ManageLevelStructureCore` | `HandleManageLevelStructureAction` @ LevelStructureHandlers.cpp |
+| `ManageLevelStructureCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevelStructure.cpp (implementations are the `HandleLevelStructure*` members @ LevelStructureHandlers.cpp) |
 | `ManageAICore` | `HandleManageAIAction` @ AIHandlers.cpp |
 | `ControlActor` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ControlActor.cpp |
 | `ControlEditor` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ControlEditor.cpp |

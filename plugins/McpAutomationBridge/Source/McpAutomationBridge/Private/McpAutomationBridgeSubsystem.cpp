@@ -498,6 +498,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       McpRegisterManageInteractionCalls();
       McpRegisterManageInventoryCalls();
       McpRegisterManageLevelCalls();
+      McpRegisterManageLevelStructureCalls();
       McpRegisterManageSequenceCalls();
       McpRegisterSystemControlCalls();
       UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
@@ -1175,16 +1176,9 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   // manage_effect is fully classed (MCP/Calls/McpCalls_ManageEffect.cpp) —
   // dispatch reaches its FMcpCall instances via the registry, not this map.
 
-  RegisterHandler(TEXT("manage_level_structure"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         FMcpResponseHandle S) {
-                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
-                    if (McpConsolidatedActions::IsVolumeAction(SubAction)) {
-                      return HandleManageVolumesAction(R, TEXT("manage_volumes"), P, S);
-                    }
-                    return HandleManageLevelStructureAction(R, A, P, S);
-                  });
+  // manage_level_structure is fully classed
+  // (MCP/Calls/McpCalls_ManageLevelStructure.cpp) — dispatch reaches its
+  // FMcpCall instances via the registry, not this map.
 
 #undef MCP_REGISTER_HANDLER
 

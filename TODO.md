@@ -939,7 +939,10 @@ manage_inventory's classing (2026-07-05) closed nothing too — the ledger has n
 InventoryHandlers entries. manage_gas's classing (2026-07-05) closed one — the
 ledger's sole GASHandlers entry, grant_ability, deleted-at-classing (honest
 NOT_IMPLEMENTED branch; advertise candidate parked for Aaron, recover from git)
-— **56 hidden entries remain**.
+— **56 hidden entries remain**. manage_level_structure's classing (2026-07-05)
+closed nothing — the ledger has no LevelStructureHandlers or VolumeHandlers
+entries (its three manage_level_structure mentions are WorldPartitionHandlers
+entries citing the family as the live sibling; they stay open).
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,

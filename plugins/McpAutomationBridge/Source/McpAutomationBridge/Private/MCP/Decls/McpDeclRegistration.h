@@ -4,7 +4,6 @@
 
 #include "MCP/McpCallRegistry.h"
 
-#include "MCP/Decls/McpDecl_ManageLevelStructure.h"
 #include "MCP/Decls/McpDecl_ManageAi.h"
 #include "MCP/Decls/McpDecl_ManageAudio.h"
 #include "MCP/Decls/McpDecl_ManageBlueprint.h"
@@ -16,7 +15,9 @@
 
 inline void McpRegisterAllActionDecls()
 {
-	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageLevelStructure);
+	// manage_level_structure: classed
+	// (MCP/Calls/McpCalls_ManageLevelStructure.cpp) — decls register with the
+	// call instances via McpRegisterManageLevelStructureCalls().
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageAi);
 	// manage_level: classed (MCP/Calls/McpCalls_ManageLevel.cpp) — decls
 	// register with the call instances via McpRegisterManageLevelCalls().
