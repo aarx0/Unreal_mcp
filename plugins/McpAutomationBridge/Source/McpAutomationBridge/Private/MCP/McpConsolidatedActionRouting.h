@@ -490,6 +490,10 @@ inline TArray<FString> SystemControl()
 
 inline const TArray<FString>& ManageNetworkingCore()
 {
+	// manage_networking is classed
+	// (MCP/Calls/McpCalls_ManageNetworking.cpp): this list and the
+	// Input()/GameFramework()/Sessions() lists survive only so boot
+	// validation can prove the schema union still matches the published enum.
 	static const TArray<FString> Actions = {
 		TEXT("set_property_replicated"), TEXT("set_replication_condition"),
 		TEXT("configure_net_update_frequency"), TEXT("configure_net_priority"),
@@ -1016,9 +1020,6 @@ inline bool IsAudioAuthoringAction(const FString& Action) { return ContainsActio
 inline bool IsLightingAction(const FString& Action) { return ContainsAction(Lighting(), Action); }
 inline bool IsSplineAction(const FString& Action) { return ContainsAction(Splines(), Action); }
 inline bool IsSkeletonAction(const FString& Action) { return ContainsAction(Skeleton(), Action); }
-inline bool IsInputAction(const FString& Action) { return ContainsAction(Input(), Action); }
-inline bool IsGameFrameworkAction(const FString& Action) { return ContainsAction(GameFramework(), Action); }
-inline bool IsSessionAction(const FString& Action) { return ContainsAction(Sessions(), Action); }
 inline bool IsBehaviorTreeAction(const FString& Action) { return ContainsAction(BehaviorTree(), Action); }
 inline bool IsNavigationAction(const FString& Action) { return ContainsAction(Navigation(), Action); }
 
@@ -1067,6 +1068,13 @@ inline const TArray<FMcpToolRouting>& GetToolRoutingTable()
 		{ TEXT("system_control"),
 		  { { TEXT("Performance"), &Performance } },
 		  &SystemControlCore, &SystemControl },
+		// manage_networking is CLASSED: there is no live registration lambda
+		// — RoutedFamilies here documents the per-class delegation split
+		// (Input actions delegate to HandleInput* members in InputHandlers.cpp,
+		// GameFramework to HandleGameFramework* in GameFrameworkHandlers.cpp,
+		// Sessions to HandleSessions* wrappers in SessionsHandlers.cpp), and
+		// the row is retained so the schema-union validation keeps proving
+		// enum coverage.
 		{ TEXT("manage_networking"),
 		  { { TEXT("Input"), &Input }, { TEXT("GameFramework"), &GameFramework },
 		    { TEXT("Sessions"), &Sessions } },

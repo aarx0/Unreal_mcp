@@ -317,6 +317,54 @@ parser survives only as a lint.
     `Mutating` on everything except the readers, `get_level_structure_info`
     and `get_volumes_info` (`open_level_blueprint` stays a writer — it
     lazily creates the Level Script Blueprint).
+  - **`manage_networking` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_ManageNetworking.cpp`).** 72 classes — the
+    largest classed family and the third with a non-empty routed list: the
+    registration lambda that split `Input()`/`GameFramework()`/`Sessions()`
+    actions off to their dispatchers died with all FOUR string dispatchers,
+    the `IsInputAction`/`IsGameFrameworkAction`/`IsSessionAction`
+    predicates died with their only caller, and the routed lists plus
+    `ManageNetworkingCore` survive only so boot validation can prove the
+    schema union still matches the published enum. Three dispatchers were
+    inline-branch monoliths, extracted verbatim to members in their home
+    TUs: 27 `HandleNetworking*` (NetworkingHandlers.cpp; each member keeps
+    the chain's `using namespace NetworkingHelpers` + `ResultJson`
+    prologue), 9 `HandleInput*` (InputHandlers.cpp; each replicates the
+    whole-dispatcher `#if WITH_EDITOR` gate WITH its EnhancedInput runtime
+    module-load check and the NOT_AVAILABLE stub), 20 `HandleGameFramework*`
+    (GameFrameworkHandlers.cpp; each replicates the `#if !WITH_EDITOR`
+    EDITOR_ONLY stub, and the chain's prologue reads moved into the members
+    that use them — the six creators keep `name`/`path`/`save` + the path
+    sanitize, the thirteen GameMode-targeting members keep `save` + the
+    gameModeBlueprint→blueprintPath first-present-wins alias resolution +
+    its sanitize, `configure_player_start` also keeps the `BlueprintPath`
+    sync line, `get_game_framework_info` keeps only the alias resolution).
+    Sessions already delegated every branch to a dedicated static free
+    function, so its 16 members are thin wrappers (level-structure
+    precedent) replicating the chain's editor-build stub — the
+    MCP_HAS_VOICECHAT/MCP_HAS_ONLINE_SUBSYSTEM ladders live inside the
+    untouched free functions, not the dispatcher, so no per-member ladder
+    exists. Decl burn-down — 13 of 72 rows fixed: twelve GameFramework rows
+    declared the gameModeBlueprint/blueprintPath alias pair BOTH-required
+    although each body joint-rejects only when neither is present (the nine
+    configure/setup/respawn rows plus the three set_*_class rows, whose
+    genuinely-required single class param stays required), and
+    `set_default_pawn_class` declared BOTH of its one-of pairs all-required
+    (gameModeBlueprint/blueprintPath AND pawnClass/defaultPawnClass) — all
+    flipped optional with the at-least-one requirements handler-enforced.
+    The other 59 rows are byte-identical to the retired shim rows and
+    re-verified handler-true (`get_sessions_info` reads nothing — its
+    contract stays `{}`). Zero hidden and zero dead names across all four
+    dispatchers (the sweep ledger has no NetworkingHandlers, InputHandlers,
+    GameFrameworkHandlers, or SessionsHandlers entries). Flags are
+    deliberately mixed: `RequiresEditor` on the 45 Input/GameFramework/
+    Sessions actions (their chains were whole-editor-gated); NOT on the 27
+    core actions (NetworkingHandlers.cpp carries no editor gate — flagging
+    would newly reject GEditor-less runs the shim served); `Mutating` on
+    writers only — eleven no-op acknowledgment actions (nine Sessions
+    echoes + Input's enable_input_mapping/disable_input_action) stay
+    unflagged alongside the six readers, with deepen-or-retire TODO'd for
+    Aaron.
 
 ## Bootstrap state (2026-07-04, complete)
 

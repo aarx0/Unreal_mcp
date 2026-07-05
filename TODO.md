@@ -71,6 +71,22 @@ configuration (the dogfood audit's silent-success class, tag-writer flavor). Opt
 deepen to real writes (destruction params, filter/response defaults + params to carry
 them), or retire the names from the schema. Schema surface is Aaron's decision.
 
+### [ ] 2026-07-05 — manage_networking's eleven no-op acknowledgment actions: deepen or retire (Aaron's call)
+Preserved as-is at the family's classing (McpCalls_ManageNetworking.cpp — bodies moved
+verbatim, deliberately not deepened there). Nine Sessions actions parse and echo their
+inputs without writing anything (SessionsHandlers.cpp free functions):
+`configure_local_session_settings`, `configure_session_interface`,
+`set_split_screen_type`, `configure_lan_play`, `join_lan_server` (builds the travel
+URL, never travels — "Use ClientTravel to connect"), `configure_voice_settings`,
+`set_voice_channel`, `set_voice_attenuation`, `configure_push_to_talk`; and two Input
+actions load the asset and answer success without touching it (InputHandlers.cpp):
+`enable_input_mapping` ("requires PIE for runtime effect"), `disable_input_action`.
+All eleven answer success, so a green response reads as a real configuration (the
+dogfood audit's silent-success class, echo flavor). Their classed rows carry honest
+flags — RequiresEditor without Mutating — so the no-write behavior is at least
+machine-visible now. Options: deepen to real writes, or retire the names from the
+schema. Schema surface is Aaron's decision.
+
 ### [ ] 2026-07-03 — `manage_blueprint create_blueprint` ignores `path`, sprays to /Game root
 Found during the sleep-triage benchmark: `create_blueprint {name:'BP_Bench', path:'/Game/ZZ_McpScratch'}`
 silently created `/Game/BP_Bench` — the schema documents `savePath` for this action and the handler
@@ -943,6 +959,9 @@ NOT_IMPLEMENTED branch; advertise candidate parked for Aaron, recover from git)
 closed nothing — the ledger has no LevelStructureHandlers or VolumeHandlers
 entries (its three manage_level_structure mentions are WorldPartitionHandlers
 entries citing the family as the live sibling; they stay open).
+manage_networking's classing (2026-07-05) closed nothing either — the ledger
+has no NetworkingHandlers, InputHandlers, GameFrameworkHandlers, or
+SessionsHandlers entries.
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,

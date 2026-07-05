@@ -14,5 +14,6 @@ void McpRegisterManageInteractionCalls();
 void McpRegisterManageInventoryCalls();
 void McpRegisterManageLevelCalls();
 void McpRegisterManageLevelStructureCalls();
+void McpRegisterManageNetworkingCalls();
 void McpRegisterManageSequenceCalls();
 void McpRegisterSystemControlCalls();

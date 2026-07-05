@@ -499,6 +499,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       McpRegisterManageInventoryCalls();
       McpRegisterManageLevelCalls();
       McpRegisterManageLevelStructureCalls();
+      McpRegisterManageNetworkingCalls();
       McpRegisterManageSequenceCalls();
       McpRegisterSystemControlCalls();
       UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
@@ -1121,23 +1122,9 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   // manage_interaction is fully classed (MCP/Calls/McpCalls_ManageInteraction.cpp)
   // — dispatch reaches its FMcpCall instances via the registry, not this map.
 
-  RegisterHandler(TEXT("manage_networking"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         FMcpResponseHandle S) {
-                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
-                    if (McpConsolidatedActions::IsInputAction(SubAction)) {
-                      return HandleInputAction(R, TEXT("manage_input"), P, S);
-                    }
-                    if (McpConsolidatedActions::IsGameFrameworkAction(SubAction)) {
-                      return HandleManageGameFrameworkAction(
-                          R, TEXT("manage_game_framework"), P, S);
-                    }
-                    if (McpConsolidatedActions::IsSessionAction(SubAction)) {
-                      return HandleManageSessionsAction(R, TEXT("manage_sessions"), P, S);
-                    }
-                    return HandleManageNetworkingAction(R, A, P, S);
-                  });
+  // manage_networking is fully classed
+  // (MCP/Calls/McpCalls_ManageNetworking.cpp) — dispatch reaches its
+  // FMcpCall instances via the registry, not this map.
 
   RegisterHandler(TEXT("manage_audio"),
                   [this](const FString &R, const FString &A,

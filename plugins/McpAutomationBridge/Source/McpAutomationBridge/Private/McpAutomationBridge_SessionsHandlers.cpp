@@ -1152,114 +1152,231 @@ static bool HandleGetSessionsInfo(
 #endif // WITH_EDITOR
 
 // ============================================================================
-// Main Handler Function
+// Sessions Member Handlers
 // ============================================================================
+// Dispatch lives in the manage_networking FMcpCall classes
+// (Private/MCP/Calls/McpCalls_ManageNetworking.cpp); each HandleSessions*
+// member here wraps one advertised action's dedicated handler above,
+// replicating the retired chain's editor-build stub.
 
-bool UMcpAutomationBridgeSubsystem::HandleManageSessionsAction(
+// configure_local_session_settings
+bool UMcpAutomationBridgeSubsystem::HandleSessionsConfigureLocalSessionSettings(
     const FString& RequestId,
-    const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
-    // Only handle manage_sessions. Without this gate the handler reads the
-    // sub-action straight from the payload and "claims" any unrouted action that
-    // reaches it in the dispatch if-chain, mislabeling the error (and preempting
-    // the dispatcher's own UNKNOWN_ACTION fallback). Every sibling handler gates
-    // the same way.
-    if (Action != TEXT("manage_sessions"))
-    {
-        return false;
-    }
 #if WITH_EDITOR
-    // Extract sub-action from payload
-    FString SubAction;
-    if (Payload.IsValid() && Payload->HasField(TEXT("action")))
-    {
-        SubAction = GetJsonStringField(Payload, TEXT("action"));
-    }
-    
-    UE_LOG(LogMcpSessionsHandlers, Log, TEXT("HandleManageSessionsAction: SubAction=%s, RequestId=%s"), *SubAction, *RequestId);
+    return HandleConfigureLocalSessionSettings(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
 
-    bool bHandled = false;
+// configure_session_interface
+bool UMcpAutomationBridgeSubsystem::HandleSessionsConfigureSessionInterface(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleConfigureSessionInterface(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
 
-    // Session Management
-    if (SubAction == TEXT("configure_local_session_settings"))
-    {
-        bHandled = HandleConfigureLocalSessionSettings(this, RequestId, Payload, Socket);
-    }
-    else if (SubAction == TEXT("configure_session_interface"))
-    {
-        bHandled = HandleConfigureSessionInterface(this, RequestId, Payload, Socket);
-    }
-    // Local Multiplayer
-    else if (SubAction == TEXT("configure_split_screen"))
-    {
-        bHandled = HandleConfigureSplitScreen(this, RequestId, Payload, Socket);
-    }
-    else if (SubAction == TEXT("set_split_screen_type"))
-    {
-        bHandled = HandleSetSplitScreenType(this, RequestId, Payload, Socket);
-    }
-    else if (SubAction == TEXT("add_local_player"))
-    {
-        bHandled = HandleAddLocalPlayer(this, RequestId, Payload, Socket);
-    }
-    else if (SubAction == TEXT("remove_local_player"))
-    {
-        bHandled = HandleRemoveLocalPlayer(this, RequestId, Payload, Socket);
-    }
-    // LAN
-    else if (SubAction == TEXT("configure_lan_play"))
-    {
-        bHandled = HandleConfigureLanPlay(this, RequestId, Payload, Socket);
-    }
-    else if (SubAction == TEXT("host_lan_server"))
-    {
-        bHandled = HandleHostLanServer(this, RequestId, Payload, Socket);
-    }
-    else if (SubAction == TEXT("join_lan_server"))
-    {
-        bHandled = HandleJoinLanServer(this, RequestId, Payload, Socket);
-    }
-    // Voice Chat
-    else if (SubAction == TEXT("enable_voice_chat"))
-    {
-        bHandled = HandleEnableVoiceChat(this, RequestId, Payload, Socket);
-    }
-    else if (SubAction == TEXT("configure_voice_settings"))
-    {
-        bHandled = HandleConfigureVoiceSettings(this, RequestId, Payload, Socket);
-    }
-    else if (SubAction == TEXT("set_voice_channel"))
-    {
-        bHandled = HandleSetVoiceChannel(this, RequestId, Payload, Socket);
-    }
-    else if (SubAction == TEXT("mute_player"))
-    {
-        bHandled = HandleMutePlayer(this, RequestId, Payload, Socket);
-    }
-    else if (SubAction == TEXT("set_voice_attenuation"))
-    {
-        bHandled = HandleSetVoiceAttenuation(this, RequestId, Payload, Socket);
-    }
-    else if (SubAction == TEXT("configure_push_to_talk"))
-    {
-        bHandled = HandleConfigurePushToTalk(this, RequestId, Payload, Socket);
-    }
-    // Utility
-    else if (SubAction == TEXT("get_sessions_info"))
-    {
-        bHandled = HandleGetSessionsInfo(this, RequestId, Payload, Socket);
-    }
-    else
-    {
-        SendAutomationResponse(Socket, RequestId, false,
-            FString::Printf(TEXT("Unknown manage_sessions action: %s"), *SubAction), nullptr);
-        return true;  // Return true: request was handled (error response sent)
-    }
+// configure_split_screen
+bool UMcpAutomationBridgeSubsystem::HandleSessionsConfigureSplitScreen(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleConfigureSplitScreen(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
 
-    return bHandled;
+// set_split_screen_type
+bool UMcpAutomationBridgeSubsystem::HandleSessionsSetSplitScreenType(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleSetSplitScreenType(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
 
+// add_local_player
+bool UMcpAutomationBridgeSubsystem::HandleSessionsAddLocalPlayer(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleAddLocalPlayer(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
+
+// remove_local_player
+bool UMcpAutomationBridgeSubsystem::HandleSessionsRemoveLocalPlayer(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleRemoveLocalPlayer(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
+
+// configure_lan_play
+bool UMcpAutomationBridgeSubsystem::HandleSessionsConfigureLanPlay(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleConfigureLanPlay(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
+
+// host_lan_server
+bool UMcpAutomationBridgeSubsystem::HandleSessionsHostLanServer(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleHostLanServer(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
+
+// join_lan_server
+bool UMcpAutomationBridgeSubsystem::HandleSessionsJoinLanServer(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleJoinLanServer(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
+
+// enable_voice_chat
+bool UMcpAutomationBridgeSubsystem::HandleSessionsEnableVoiceChat(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleEnableVoiceChat(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
+
+// configure_voice_settings
+bool UMcpAutomationBridgeSubsystem::HandleSessionsConfigureVoiceSettings(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleConfigureVoiceSettings(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
+
+// set_voice_channel
+bool UMcpAutomationBridgeSubsystem::HandleSessionsSetVoiceChannel(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleSetVoiceChannel(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
+
+// mute_player
+bool UMcpAutomationBridgeSubsystem::HandleSessionsMutePlayer(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleMutePlayer(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
+
+// set_voice_attenuation
+bool UMcpAutomationBridgeSubsystem::HandleSessionsSetVoiceAttenuation(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleSetVoiceAttenuation(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
+
+// configure_push_to_talk
+bool UMcpAutomationBridgeSubsystem::HandleSessionsConfigurePushToTalk(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleConfigurePushToTalk(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    return true;  // Return true: request was handled (error response sent)
+#endif
+}
+
+// get_sessions_info
+bool UMcpAutomationBridgeSubsystem::HandleSessionsGetSessionsInfo(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleGetSessionsInfo(this, RequestId, Payload, Socket);
 #else
     SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)

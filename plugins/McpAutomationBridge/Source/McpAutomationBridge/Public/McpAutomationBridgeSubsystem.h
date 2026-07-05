@@ -535,9 +535,6 @@ private:
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
   // manage_sequence is classed — see MCP/Calls/McpCalls_ManageSequence.cpp.
-  bool HandleInputAction(const FString &RequestId, const FString &Action,
-                         const TSharedPtr<FJsonObject> &Payload,
-                         FMcpResponseHandle RequestingSocket);
   bool CreateNiagaraEffect(const FString &RequestId,
                            const TSharedPtr<FJsonObject> &Payload,
                            FMcpResponseHandle RequestingSocket,
@@ -1574,21 +1571,233 @@ private:
       const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);
-  // Phase 20: Networking & Multiplayer handlers
-  bool HandleManageNetworkingAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  // Phase 21: Game Framework handlers
-  bool HandleManageGameFrameworkAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  // Phase 22: Sessions & Local Multiplayer handlers
-  bool HandleManageSessionsAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
+  // manage_networking is classed — see
+  // MCP/Calls/McpCalls_ManageNetworking.cpp.
+  // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
+  // can delegate, until the module split de-members the implementations off
+  // the subsystem. Implementations span four TUs: HandleNetworking* @
+  // NetworkingHandlers.cpp, HandleInput* @ InputHandlers.cpp,
+  // HandleGameFramework* @ GameFrameworkHandlers.cpp, HandleSessions* @
+  // SessionsHandlers.cpp.
+public:
+  bool HandleNetworkingSetPropertyReplicated(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle Socket);
+  bool HandleNetworkingSetReplicationCondition(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle Socket);
+  bool HandleNetworkingConfigureNetUpdateFrequency(const FString &RequestId,
+                                                   const TSharedPtr<FJsonObject> &Payload,
+                                                   FMcpResponseHandle Socket);
+  bool HandleNetworkingConfigureNetPriority(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle Socket);
+  bool HandleNetworkingSetNetDormancy(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleNetworkingConfigureReplicationGraph(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle Socket);
+  bool HandleNetworkingCreateRpcFunction(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleNetworkingConfigureRpcValidation(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle Socket);
+  bool HandleNetworkingSetRpcReliability(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleNetworkingSetOwner(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandleNetworkingSetAutonomousProxy(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleNetworkingCheckHasAuthority(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleNetworkingCheckIsLocallyControlled(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle Socket);
+  bool HandleNetworkingConfigureNetCullDistance(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle Socket);
+  bool HandleNetworkingSetAlwaysRelevant(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleNetworkingSetOnlyRelevantToOwner(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle Socket);
+  bool HandleNetworkingConfigureNetSerialization(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle Socket);
+  bool HandleNetworkingSetReplicatedUsing(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleNetworkingConfigurePushModel(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleNetworkingConfigureClientPrediction(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle Socket);
+  bool HandleNetworkingConfigureServerCorrection(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle Socket);
+  bool HandleNetworkingAddNetworkPredictionData(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle Socket);
+  bool HandleNetworkingConfigureMovementPrediction(const FString &RequestId,
+                                                   const TSharedPtr<FJsonObject> &Payload,
+                                                   FMcpResponseHandle Socket);
+  bool HandleNetworkingConfigureNetDriver(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleNetworkingSetNetRole(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleNetworkingConfigureReplicatedMovement(const FString &RequestId,
+                                                   const TSharedPtr<FJsonObject> &Payload,
+                                                   FMcpResponseHandle Socket);
+  bool HandleNetworkingGetInfo(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle Socket);
+  bool HandleInputCreateInputAction(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleInputCreateInputMappingContext(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle Socket);
+  bool HandleInputAddMapping(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             FMcpResponseHandle Socket);
+  bool HandleInputRemoveMapping(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandleInputSetInputTrigger(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleInputSetInputModifier(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleInputEnableInputMapping(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleInputDisableInputAction(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleInputGetInputInfo(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle Socket);
+  bool HandleGameFrameworkCreateGameMode(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleGameFrameworkCreateGameState(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleGameFrameworkCreatePlayerController(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle Socket);
+  bool HandleGameFrameworkCreatePlayerState(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle Socket);
+  bool HandleGameFrameworkCreateGameInstance(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle Socket);
+  bool HandleGameFrameworkCreateHudClass(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleGameFrameworkSetDefaultPawnClass(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle Socket);
+  bool HandleGameFrameworkSetPlayerControllerClass(const FString &RequestId,
+                                                   const TSharedPtr<FJsonObject> &Payload,
+                                                   FMcpResponseHandle Socket);
+  bool HandleGameFrameworkSetGameStateClass(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle Socket);
+  bool HandleGameFrameworkSetPlayerStateClass(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle Socket);
+  bool HandleGameFrameworkConfigureGameRules(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle Socket);
+  bool HandleGameFrameworkSetupMatchStates(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+  bool HandleGameFrameworkConfigureRoundSystem(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle Socket);
+  bool HandleGameFrameworkConfigureTeamSystem(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle Socket);
+  bool HandleGameFrameworkConfigureScoringSystem(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle Socket);
+  bool HandleGameFrameworkConfigureSpawnSystem(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle Socket);
+  bool HandleGameFrameworkConfigurePlayerStart(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle Socket);
+  bool HandleGameFrameworkSetRespawnRules(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleGameFrameworkConfigureSpectating(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle Socket);
+  bool HandleGameFrameworkGetGameFrameworkInfo(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle Socket);
+  bool HandleSessionsConfigureLocalSessionSettings(const FString &RequestId,
+                                                   const TSharedPtr<FJsonObject> &Payload,
+                                                   FMcpResponseHandle Socket);
+  bool HandleSessionsConfigureSessionInterface(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle Socket);
+  bool HandleSessionsConfigureSplitScreen(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleSessionsSetSplitScreenType(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleSessionsAddLocalPlayer(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleSessionsRemoveLocalPlayer(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleSessionsConfigureLanPlay(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleSessionsHostLanServer(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleSessionsJoinLanServer(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleSessionsEnableVoiceChat(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleSessionsConfigureVoiceSettings(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle Socket);
+  bool HandleSessionsSetVoiceChannel(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleSessionsMutePlayer(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandleSessionsSetVoiceAttenuation(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleSessionsConfigurePushToTalk(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleSessionsGetSessionsInfo(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+
+private:
   // manage_level_structure is classed — see
   // MCP/Calls/McpCalls_ManageLevelStructure.cpp.
   // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
