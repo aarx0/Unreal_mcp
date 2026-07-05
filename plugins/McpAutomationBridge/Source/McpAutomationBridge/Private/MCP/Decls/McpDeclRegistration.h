@@ -7,7 +7,6 @@
 #include "MCP/Decls/McpDecl_ManageAudio.h"
 #include "MCP/Decls/McpDecl_ManageBlueprint.h"
 #include "MCP/Decls/McpDecl_ManageAsset.h"
-#include "MCP/Decls/McpDecl_ManageGeometry.h"
 
 inline void McpRegisterAllActionDecls()
 {
@@ -57,5 +56,7 @@ inline void McpRegisterAllActionDecls()
 	// manage_inventory: classed (MCP/Calls/McpCalls_ManageInventory.cpp) —
 	// decls register with the call instances via
 	// McpRegisterManageInventoryCalls().
-	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageGeometry);
+	// manage_geometry: classed (MCP/Calls/McpCalls_ManageGeometry.cpp) —
+	// decls register with the call instances via
+	// McpRegisterManageGeometryCalls().
 }

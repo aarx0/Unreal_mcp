@@ -44,7 +44,6 @@ contentColorAndOpacity
 contextIndex
 dataLayerAssetPath
 effectName
-enableCollision
 encumberanceSystem
 encumberanceThreshold
 endTime
@@ -52,7 +51,6 @@ factor
 fixedAreaEnteringCost
 fromExpression
 function
-groupID
 includeSoftDependencies
 lateGain
 level_path
@@ -76,19 +74,15 @@ reflectionsGain
 retargetAssets
 rows
 sequencePath
-setAll
 sourceNodeGuid
 spectatorViewMode
-splitAngle
 startPlayersNeeded
 subAction
 subsystem
 targetNodeGuid
 threshold
 toExpression
-triangleIndex
 types
-vertexIndex
 voiceName
 voicePath
 waveName

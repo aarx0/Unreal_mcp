@@ -228,6 +228,9 @@ shape: Drop the `|| SubAction == TEXT("get_attribute_value")` disjunct at line 3
 ## McpAutomationBridge_GeometryHandlers.cpp — difference @ :7869
 sibling: boolean_subtract
 shape: Delete the single-line if-arm `if (SubAction == TEXT("difference")) return HandleBooleanSubtract(this, RequestId, Payload, RequestingSocket);` at :7869 (and its now-empty `// Aliases` comment at :7868 if no other alias arms remain in that block). HandleBooleanSubtract has another caller (boolean_subtract at :7776), so it does not become orphaned.
+(Executed with this sweep, 2874d066 — the :7869 coordinate is pre-deletion; the slot
+held edge_split at later HEADs and the whole dispatcher died at the manage_geometry
+classing, 2026-07-05. Noted so a scoping pass does not hunt for a live alias arm.)
 
 ## McpAutomationBridge_LevelHandlers.cpp — delete_levels @ :1407
 sibling: delete
@@ -269,7 +272,8 @@ Quick dispositions:
   WorldPartition `create_datalayer`/`set_datalayer` (live differently-spelled siblings
   exist in manage_level_structure).
 - **Advertise candidates (real, no advertised equivalent):** geometry raw DynamicMesh CRUD
-  family (11 actions), skeleton read/delete family (12: delete_socket, get_bone_transform,
+  family (11 actions — DELETED at the manage_geometry classing, recover from git),
+  skeleton read/delete family (12: delete_socket, get_bone_transform,
   list/delete morph targets + virtual bones, set_physics_asset, remove_physics_body... —
   DELETED at the animation_physics classing, recover from git),
   `export_asset` (~180-line generic exporter — DELETED at the system_control classing,
@@ -357,7 +361,17 @@ history if advertising is wanted.**
 ### GASHandlers
 - **grant_ability** @:3641 - Section 6 'Ability Sets' family (create_ability_set / add_ability / grant_ability per the file's own header taxonomy). grant_ability's implementation (lines 3641-3741, ~101 lines) validates actorPath/blueprintPath and abilityPath/abilityClass params, loads the actor Blueprint and the ability class, … Disposition: **deleted at manage_gas classing** (2026-07-05); advertise-candidate parked for Aaron — recover from git.
 
-### GeometryHandlers
+### GeometryHandlers (updated at the manage_geometry classing, 2026-07-05)
+All eleven entries below were **deleted at the manage_geometry classing (2026-07-05)**
+— the dispatcher arms died with the retired chain and the eleven file-static
+implementations (HandleCreateProceduralMesh, HandleAppendTriangle, HandleAppendVertex,
+HandleDeleteVertex, HandleDeleteTriangle, HandleGetVertexPosition,
+HandleSetVertexPosition, HandleSetUVs, HandleSetVertexColor, HandleSplitNormals,
+HandleTranslateMesh; each file-local, with exactly its definition and its dispatcher
+arm as its two references) died as their single callers vanished. Disposition per the
+sweep's quick-dispositions: the raw-mesh CRUD family stays an **advertise candidate
+parked for Aaron** (real, distinct capability — direct FDynamicMesh3 vertex/triangle
+editing that no advertised action covers — recover from git).
 - **create_procedural_mesh** @:7771 - Part of a 'raw DynamicMesh CRUD' family (create_procedural_mesh, append_triangle, append_vertex, delete_vertex, delete_triangle, get_vertex_position, set_vertex_position, translate_mesh, set_vertex_color, set_uvs, split_normals) that manipulates FDynamicMesh3 directly on an ADynamicMeshActor, distin…
 - **append_triangle** @:7772 - Same raw-mesh family as create_procedural_mesh. HandleAppendTriangle (:5831-5902, ~72 lines) locates the target ADynamicMeshActor by label then calls FDynamicMesh3::AppendVertex three times (for v0/v1/v2) followed by AppendTriangle(idx0,idx1,idx2,groupID) directly on the mesh's edit ref, notifying t…
 - **set_uvs** @:7834 - Same raw-mesh family, UV subset. HandleSetUVs (:6005-6119, ~115 lines) ensures a UV overlay/layer exists for the requested channel (growing NumUVLayers if needed) and sets the UV coordinate on every UV-overlay element whose parent vertex matches the given vertexIndex.

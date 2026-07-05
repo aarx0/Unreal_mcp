@@ -41,7 +41,7 @@ subdirectory is shown.
 | `inspect` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_Inspect.cpp (dispatched from the call registry before the handler map; implementations are the `HandleInspect*` members @ EnvironmentHandlers.cpp, the shared `HandleControlActor*` members @ ControlHandlers.cpp for the twelve actor actions, `HandleSetObjectProperty`/`HandleGetObjectProperty`/`HandleInspectCdoAction`/`HandleDiffAssetAction` @ PropertyHandlers.cpp, and `HandleInspectUiFocus` @ FocusInputHandlers.cpp) |
 | `manage_level` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevel.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleLevel*` functions in LevelHandlers.cpp, plus `HandleLightingCreateLight` @ LightingHandlers.cpp for `create_light`) |
 | `manage_sequence` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleSequence*` functions in SequenceHandlers.cpp) |
-| `manage_geometry` | — | `HandleGeometryAction` @ GeometryHandlers.cpp |
+| `manage_geometry` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageGeometry.cpp (dispatched from the call registry before the handler map; implementations are the `HandleGeometry*` members @ GeometryHandlers.cpp, thin wrappers over that TU's static free functions) |
 | `manage_effect` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageEffect.cpp (dispatched from the call registry before the handler map; implementations are the `HandleEffect*` members + `CreateNiagaraEffect` @ EffectHandlers.cpp, `HandleManageNiagaraAuthoringAction` @ NiagaraAuthoringHandlers.cpp for the 36 authoring actions, and `HandleNiagaraGraphAction` @ NiagaraGraphHandlers.cpp for the three graph actions) |
 | `manage_gas` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageGas.cpp (dispatched from the call registry before the handler map; implementations are the `HandleGas*` members @ GASHandlers.cpp) |
 | `manage_character` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCharacter.cpp (dispatched from the call registry before the handler map; implementations are the `HandleCharacter*` members @ CharacterHandlers.cpp) |
@@ -110,7 +110,7 @@ Core (fallthrough) lists:
 | `Inspect` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_Inspect.cpp (implementations spread across EnvironmentHandlers.cpp, ControlHandlers.cpp, PropertyHandlers.cpp, FocusInputHandlers.cpp) |
 | `ManageLevel` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevel.cpp |
 | `ManageSequence` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp |
-| `ManageGeometry` | `HandleGeometryAction` @ GeometryHandlers.cpp |
+| `ManageGeometry` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageGeometry.cpp (implementations are the `HandleGeometry*` members @ GeometryHandlers.cpp) |
 | `ManageEffect` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageEffect.cpp (implementations spread across EffectHandlers.cpp, NiagaraAuthoringHandlers.cpp, NiagaraGraphHandlers.cpp) |
 | `ManageGAS` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageGas.cpp (implementations are the `HandleGas*` members @ GASHandlers.cpp) |
 | `ManageCharacter` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCharacter.cpp (implementations are the `HandleCharacter*` members @ CharacterHandlers.cpp) |

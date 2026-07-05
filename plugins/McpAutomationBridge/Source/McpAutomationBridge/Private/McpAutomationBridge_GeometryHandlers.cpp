@@ -5719,808 +5719,6 @@ static bool HandleLoopCut(UMcpAutomationBridgeSubsystem* Self, const FString& Re
 }
 
 // -------------------------------------------------------------------------
-// Split Normals Operation
-// -------------------------------------------------------------------------
-
-static bool HandleSplitNormals(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
-                               const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
-{
-    FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
-    double SplitAngle = GetJsonNumberField(Payload, TEXT("splitAngle"), 60.0);
-
-    if (ActorName.IsEmpty())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("actorName required"), TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-    ADynamicMeshActor* TargetActor = nullptr;
-
-    for (TActorIterator<ADynamicMeshActor> It(World); It; ++It)
-    {
-        if (It->GetActorLabel() == ActorName)
-        {
-            TargetActor = *It;
-            break;
-        }
-    }
-
-    if (!TargetActor)
-    {
-        Self->SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Actor not found: %s"), *ActorName), TEXT("ACTOR_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMeshComponent* DMC = TargetActor->GetDynamicMeshComponent();
-    if (!DMC || !DMC->GetDynamicMesh())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("DynamicMesh not available"), TEXT("MESH_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMesh* Mesh = DMC->GetDynamicMesh();
-
-    // UE 5.7: SplitAngle was removed from FGeometryScriptCalculateNormalsOptions
-    // Use ComputeSplitNormals with FGeometryScriptSplitNormalsOptions instead
-    FGeometryScriptSplitNormalsOptions SplitOptions;
-    SplitOptions.bSplitByOpeningAngle = true;
-    SplitOptions.OpeningAngleDeg = SplitAngle;
-    SplitOptions.bSplitByFaceGroup = false;
-
-    FGeometryScriptCalculateNormalsOptions CalcOptions;
-    CalcOptions.bAngleWeighted = true;
-    CalcOptions.bAreaWeighted = true;
-
-    UGeometryScriptLibrary_MeshNormalsFunctions::ComputeSplitNormals(Mesh, SplitOptions, CalcOptions, nullptr);
-
-    DMC->NotifyMeshUpdated();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("actorName"), ActorName);
-    Result->SetNumberField(TEXT("splitAngle"), SplitAngle);
-    Self->SendAutomationResponse(Socket, RequestId, true, TEXT("Split normals applied"), Result);
-    return true;
-}
-
-// -------------------------------------------------------------------------
-// create_procedural_mesh - Create empty dynamic mesh actor
-// -------------------------------------------------------------------------
-
-static bool HandleCreateProceduralMesh(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
-                                       const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
-{
-    FString Name = GetCreateActorName(Payload, TEXT("ProceduralMesh"));
-
-    FTransform Transform = ReadTransformFromPayload(Payload);
-    bool bEnableCollision = GetJsonBoolField(Payload, TEXT("enableCollision"), false);
-
-    UDynamicMesh* DynMesh = GetOrCreateDynamicMesh(GetTransientPackage());
-    FString SpawnError;
-    AActor* NewActor = SpawnDynamicMeshActorWithMesh(Transform, Name, DynMesh,
-                                                     SpawnError);
-    if (!NewActor)
-    {
-        DynMesh->MarkAsGarbage();
-        Self->SendAutomationError(Socket, RequestId, SpawnError.IsEmpty() ? TEXT("Failed to spawn DynamicMeshActor") : SpawnError, TEXT("SPAWN_FAILED"));
-        return true;
-    }
-
-    // Initialize with an empty dynamic mesh
-    if (ADynamicMeshActor* DMActor = Cast<ADynamicMeshActor>(NewActor))
-    {
-        UDynamicMeshComponent* DMComp = DMActor->GetDynamicMeshComponent();
-        if (DMComp)
-        {
-            DMComp->SetGenerateOverlapEvents(bEnableCollision);
-        }
-    }
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("name"), NewActor->GetActorLabel());
-    Result->SetStringField(TEXT("class"), TEXT("DynamicMeshActor"));
-    Result->SetBoolField(TEXT("enableCollision"), bEnableCollision);
-    Self->SendAutomationResponse(Socket, RequestId, true, TEXT("Procedural mesh actor created"), Result);
-    return true;
-}
-
-// -------------------------------------------------------------------------
-// append_triangle - Add single triangle to mesh
-// -------------------------------------------------------------------------
-
-static bool HandleAppendTriangle(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
-                                 const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
-{
-    FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
-    
-    if (ActorName.IsEmpty())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("actorName required"), TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    // Read vertices
-    FVector V0 = ReadVectorFromPayload(Payload, TEXT("v0"), FVector(0, 0, 0));
-    FVector V1 = ReadVectorFromPayload(Payload, TEXT("v1"), FVector(100, 0, 0));
-    FVector V2 = ReadVectorFromPayload(Payload, TEXT("v2"), FVector(50, 100, 0));
-    int32 GroupID = GetJsonIntField(Payload, TEXT("groupID"), 0);
-
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-    if (!World)
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
-        return true;
-    }
-
-    ADynamicMeshActor* TargetActor = nullptr;
-    for (TActorIterator<ADynamicMeshActor> It(World); It; ++It)
-    {
-        if (It->GetActorLabel() == ActorName)
-        {
-            TargetActor = *It;
-            break;
-        }
-    }
-
-    if (!TargetActor)
-    {
-        Self->SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Actor not found: %s"), *ActorName), TEXT("ACTOR_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMeshComponent* DMC = TargetActor->GetDynamicMeshComponent();
-    if (!DMC || !DMC->GetDynamicMesh())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("DynamicMesh not available"), TEXT("MESH_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMesh* Mesh = DMC->GetDynamicMesh();
-
-    // Use the internal mesh directly to append triangle
-    UE::Geometry::FDynamicMesh3& EditMesh = Mesh->GetMeshRef();
-    
-    // Append vertices
-    int32 Idx0 = EditMesh.AppendVertex(UE::Geometry::FVertexInfo(V0));
-    int32 Idx1 = EditMesh.AppendVertex(UE::Geometry::FVertexInfo(V1));
-    int32 Idx2 = EditMesh.AppendVertex(UE::Geometry::FVertexInfo(V2));
-    
-    // Append triangle
-    int32 TriIdx = EditMesh.AppendTriangle(Idx0, Idx1, Idx2, GroupID);
-    
-    DMC->NotifyMeshUpdated();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("actorName"), ActorName);
-    Result->SetNumberField(TEXT("triangleIndex"), TriIdx);
-    Result->SetNumberField(TEXT("vertexIndex0"), Idx0);
-    Result->SetNumberField(TEXT("vertexIndex1"), Idx1);
-    Result->SetNumberField(TEXT("vertexIndex2"), Idx2);
-    Result->SetNumberField(TEXT("triangleCount"), Mesh->GetTriangleCount());
-    Self->SendAutomationResponse(Socket, RequestId, true, TEXT("Triangle appended"), Result);
-    return true;
-}
-
-// -------------------------------------------------------------------------
-// set_vertex_color - Set vertex colors on mesh
-// -------------------------------------------------------------------------
-
-static bool HandleSetVertexColor(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
-                                 const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
-{
-    FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
-    int32 VertexIndex = GetJsonIntField(Payload, TEXT("vertexIndex"), -1);
-    double R = GetJsonNumberField(Payload, TEXT("r"), 1.0);
-    double G = GetJsonNumberField(Payload, TEXT("g"), 1.0);
-    double B = GetJsonNumberField(Payload, TEXT("b"), 1.0);
-    double A = GetJsonNumberField(Payload, TEXT("a"), 1.0);
-    bool bSetAll = GetJsonBoolField(Payload, TEXT("setAll"), false);
-
-    if (ActorName.IsEmpty())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("actorName required"), TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-    if (!World)
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
-        return true;
-    }
-
-    ADynamicMeshActor* TargetActor = nullptr;
-    for (TActorIterator<ADynamicMeshActor> It(World); It; ++It)
-    {
-        if (It->GetActorLabel() == ActorName)
-        {
-            TargetActor = *It;
-            break;
-        }
-    }
-
-    if (!TargetActor)
-    {
-        Self->SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Actor not found: %s"), *ActorName), TEXT("ACTOR_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMeshComponent* DMC = TargetActor->GetDynamicMeshComponent();
-    if (!DMC || !DMC->GetDynamicMesh())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("DynamicMesh not available"), TEXT("MESH_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMesh* Mesh = DMC->GetDynamicMesh();
-    UE::Geometry::FDynamicMesh3& EditMesh = Mesh->GetMeshRef();
-
-    // Enable vertex colors if not already enabled
-    if (!EditMesh.HasVertexColors())
-    {
-        EditMesh.EnableVertexColors(FVector3f(1.0f, 1.0f, 1.0f));
-    }
-
-    FVector4f Color(static_cast<float>(R), static_cast<float>(G), static_cast<float>(B), static_cast<float>(A));
-    int32 VerticesModified = 0;
-
-    if (bSetAll)
-    {
-        // Set all vertex colors
-        for (int32 VID : EditMesh.VertexIndicesItr())
-        {
-            EditMesh.SetVertexColor(VID, Color);
-            VerticesModified++;
-        }
-    }
-    else if (VertexIndex >= 0 && EditMesh.IsVertex(VertexIndex))
-    {
-        EditMesh.SetVertexColor(VertexIndex, Color);
-        VerticesModified = 1;
-    }
-    else
-    {
-        Self->SendAutomationError(Socket, RequestId, 
-            FString::Printf(TEXT("Invalid vertex index: %d"), VertexIndex), TEXT("INVALID_VERTEX"));
-        return true;
-    }
-
-    DMC->NotifyMeshUpdated();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("actorName"), ActorName);
-    Result->SetNumberField(TEXT("verticesModified"), VerticesModified);
-    Result->SetNumberField(TEXT("r"), R);
-    Result->SetNumberField(TEXT("g"), G);
-    Result->SetNumberField(TEXT("b"), B);
-    Result->SetNumberField(TEXT("a"), A);
-    Self->SendAutomationResponse(Socket, RequestId, true, TEXT("Vertex color set"), Result);
-    return true;
-}
-
-// -------------------------------------------------------------------------
-// set_uvs - Set UV coordinates on mesh
-// -------------------------------------------------------------------------
-
-static bool HandleSetUVs(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
-                         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
-{
-    FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
-    int32 VertexIndex = GetJsonIntField(Payload, TEXT("vertexIndex"), -1);
-    double U = GetJsonNumberField(Payload, TEXT("u"), 0.0);
-    double V = GetJsonNumberField(Payload, TEXT("v"), 0.0);
-    int32 UVChannel = GetJsonIntField(Payload, TEXT("uvChannel"), 0);
-
-    if (ActorName.IsEmpty())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("actorName required"), TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-    if (!World)
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
-        return true;
-    }
-
-    ADynamicMeshActor* TargetActor = nullptr;
-    for (TActorIterator<ADynamicMeshActor> It(World); It; ++It)
-    {
-        if (It->GetActorLabel() == ActorName)
-        {
-            TargetActor = *It;
-            break;
-        }
-    }
-
-    if (!TargetActor)
-    {
-        Self->SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Actor not found: %s"), *ActorName), TEXT("ACTOR_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMeshComponent* DMC = TargetActor->GetDynamicMeshComponent();
-    if (!DMC || !DMC->GetDynamicMesh())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("DynamicMesh not available"), TEXT("MESH_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMesh* Mesh = DMC->GetDynamicMesh();
-    UE::Geometry::FDynamicMesh3& EditMesh = Mesh->GetMeshRef();
-
-    // Ensure the mesh has UV overlay for the specified channel
-    UE::Geometry::FDynamicMeshAttributeSet* Attributes = EditMesh.Attributes();
-    if (!Attributes)
-    {
-        EditMesh.EnableAttributes();
-        Attributes = EditMesh.Attributes();
-    }
-
-    if (UVChannel >= Attributes->NumUVLayers())
-    {
-        // Add UV layers up to the requested channel
-        for (int32 i = Attributes->NumUVLayers(); i <= UVChannel; ++i)
-        {
-            Attributes->SetNumUVLayers(i + 1);
-        }
-    }
-
-    UE::Geometry::FDynamicMeshUVOverlay* UVOverlay = Attributes->GetUVLayer(UVChannel);
-    if (!UVOverlay)
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("Failed to access UV layer"), TEXT("UV_LAYER_ERROR"));
-        return true;
-    }
-
-    // Set UV for the vertex (all connected elements)
-    FVector2f UVValue(static_cast<float>(U), static_cast<float>(V));
-    int32 ElementsModified = 0;
-
-    if (VertexIndex >= 0 && EditMesh.IsVertex(VertexIndex))
-    {
-        // Get all UV elements for this vertex and set their UVs
-        TArray<int32> ElementIDs;
-        for (int32 ElementID : UVOverlay->ElementIndicesItr())
-        {
-            if (UVOverlay->GetParentVertex(ElementID) == VertexIndex)
-            {
-                UVOverlay->SetElement(ElementID, UVValue);
-                ElementsModified++;
-            }
-        }
-        
-        // If no elements exist for this vertex, we need to handle it differently
-        if (ElementsModified == 0)
-        {
-            Self->SendAutomationError(Socket, RequestId, 
-                FString::Printf(TEXT("No UV elements found for vertex %d"), VertexIndex), TEXT("NO_UV_ELEMENTS"));
-            return true;
-        }
-    }
-    else
-    {
-        Self->SendAutomationError(Socket, RequestId, 
-            FString::Printf(TEXT("Invalid vertex index: %d"), VertexIndex), TEXT("INVALID_VERTEX"));
-        return true;
-    }
-
-    DMC->NotifyMeshUpdated();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("actorName"), ActorName);
-    Result->SetNumberField(TEXT("vertexIndex"), VertexIndex);
-    Result->SetNumberField(TEXT("u"), U);
-    Result->SetNumberField(TEXT("v"), V);
-    Result->SetNumberField(TEXT("uvChannel"), UVChannel);
-    Result->SetNumberField(TEXT("elementsModified"), ElementsModified);
-    Self->SendAutomationResponse(Socket, RequestId, true, TEXT("UV coordinates set"), Result);
-    return true;
-}
-
-// -------------------------------------------------------------------------
-// append_vertex - Add a single vertex to mesh
-// -------------------------------------------------------------------------
-
-static bool HandleAppendVertex(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
-                               const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
-{
-    FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
-    
-    if (ActorName.IsEmpty())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("actorName required"), TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    FVector Position = ReadVectorFromPayload(Payload, TEXT("position"), FVector::ZeroVector);
-
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-    if (!World)
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
-        return true;
-    }
-
-    ADynamicMeshActor* TargetActor = nullptr;
-    for (TActorIterator<ADynamicMeshActor> It(World); It; ++It)
-    {
-        if (It->GetActorLabel() == ActorName)
-        {
-            TargetActor = *It;
-            break;
-        }
-    }
-
-    if (!TargetActor)
-    {
-        Self->SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Actor not found: %s"), *ActorName), TEXT("ACTOR_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMeshComponent* DMC = TargetActor->GetDynamicMeshComponent();
-    if (!DMC || !DMC->GetDynamicMesh())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("DynamicMesh not available"), TEXT("MESH_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMesh* Mesh = DMC->GetDynamicMesh();
-    UE::Geometry::FDynamicMesh3& EditMesh = Mesh->GetMeshRef();
-    
-    int32 VertexIndex = EditMesh.AppendVertex(UE::Geometry::FVertexInfo(Position));
-    
-    DMC->NotifyMeshUpdated();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("actorName"), ActorName);
-    Result->SetNumberField(TEXT("vertexIndex"), VertexIndex);
-    Result->SetNumberField(TEXT("vertexCount"), UGeometryScriptLibrary_MeshQueryFunctions::GetVertexCount(Mesh));
-    Self->SendAutomationResponse(Socket, RequestId, true, TEXT("Vertex appended"), Result);
-    return true;
-}
-
-// -------------------------------------------------------------------------
-// delete_vertex - Remove a vertex from mesh
-// -------------------------------------------------------------------------
-
-static bool HandleDeleteVertex(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
-                               const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
-{
-    FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
-    int32 VertexIndex = GetJsonIntField(Payload, TEXT("vertexIndex"), -1);
-    
-    if (ActorName.IsEmpty() || VertexIndex < 0)
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("actorName and vertexIndex required"), TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-    if (!World)
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
-        return true;
-    }
-
-    ADynamicMeshActor* TargetActor = nullptr;
-    for (TActorIterator<ADynamicMeshActor> It(World); It; ++It)
-    {
-        if (It->GetActorLabel() == ActorName)
-        {
-            TargetActor = *It;
-            break;
-        }
-    }
-
-    if (!TargetActor)
-    {
-        Self->SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Actor not found: %s"), *ActorName), TEXT("ACTOR_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMeshComponent* DMC = TargetActor->GetDynamicMeshComponent();
-    if (!DMC || !DMC->GetDynamicMesh())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("DynamicMesh not available"), TEXT("MESH_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMesh* Mesh = DMC->GetDynamicMesh();
-    UE::Geometry::FDynamicMesh3& EditMesh = Mesh->GetMeshRef();
-    
-    if (!EditMesh.IsVertex(VertexIndex))
-    {
-        Self->SendAutomationError(Socket, RequestId, 
-            FString::Printf(TEXT("Invalid vertex index: %d"), VertexIndex), TEXT("INVALID_VERTEX"));
-        return true;
-    }
-    
-    // Remove the vertex (this will also remove any triangles using it)
-    UE::Geometry::EMeshResult RemoveResult = EditMesh.RemoveVertex(VertexIndex);
-    bool bSuccess = (RemoveResult == UE::Geometry::EMeshResult::Ok);
-    
-    DMC->NotifyMeshUpdated();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("actorName"), ActorName);
-    Result->SetNumberField(TEXT("vertexIndex"), VertexIndex);
-    Result->SetBoolField(TEXT("success"), bSuccess);
-    Result->SetNumberField(TEXT("vertexCount"), UGeometryScriptLibrary_MeshQueryFunctions::GetVertexCount(Mesh));
-    Self->SendAutomationResponse(Socket, RequestId, true, TEXT("Vertex deleted"), Result);
-    return true;
-}
-
-// -------------------------------------------------------------------------
-// delete_triangle - Remove a triangle from mesh
-// -------------------------------------------------------------------------
-
-static bool HandleDeleteTriangle(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
-                                 const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
-{
-    FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
-    int32 TriangleIndex = GetJsonIntField(Payload, TEXT("triangleIndex"), -1);
-    
-    if (ActorName.IsEmpty() || TriangleIndex < 0)
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("actorName and triangleIndex required"), TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-    if (!World)
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
-        return true;
-    }
-
-    ADynamicMeshActor* TargetActor = nullptr;
-    for (TActorIterator<ADynamicMeshActor> It(World); It; ++It)
-    {
-        if (It->GetActorLabel() == ActorName)
-        {
-            TargetActor = *It;
-            break;
-        }
-    }
-
-    if (!TargetActor)
-    {
-        Self->SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Actor not found: %s"), *ActorName), TEXT("ACTOR_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMeshComponent* DMC = TargetActor->GetDynamicMeshComponent();
-    if (!DMC || !DMC->GetDynamicMesh())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("DynamicMesh not available"), TEXT("MESH_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMesh* Mesh = DMC->GetDynamicMesh();
-    UE::Geometry::FDynamicMesh3& EditMesh = Mesh->GetMeshRef();
-    
-    if (!EditMesh.IsTriangle(TriangleIndex))
-    {
-        Self->SendAutomationError(Socket, RequestId, 
-            FString::Printf(TEXT("Invalid triangle index: %d"), TriangleIndex), TEXT("INVALID_TRIANGLE"));
-        return true;
-    }
-    
-    UE::Geometry::EMeshResult RemoveResult = EditMesh.RemoveTriangle(TriangleIndex);
-    bool bSuccess = (RemoveResult == UE::Geometry::EMeshResult::Ok);
-    
-    DMC->NotifyMeshUpdated();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("actorName"), ActorName);
-    Result->SetNumberField(TEXT("triangleIndex"), TriangleIndex);
-    Result->SetBoolField(TEXT("success"), bSuccess);
-    Result->SetNumberField(TEXT("triangleCount"), Mesh->GetTriangleCount());
-    Self->SendAutomationResponse(Socket, RequestId, true, TEXT("Triangle deleted"), Result);
-    return true;
-}
-
-// -------------------------------------------------------------------------
-// get_vertex_position - Get position of a vertex
-// -------------------------------------------------------------------------
-
-static bool HandleGetVertexPosition(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
-                                    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
-{
-    FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
-    int32 VertexIndex = GetJsonIntField(Payload, TEXT("vertexIndex"), -1);
-    
-    if (ActorName.IsEmpty() || VertexIndex < 0)
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("actorName and vertexIndex required"), TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-    ADynamicMeshActor* TargetActor = nullptr;
-
-    for (TActorIterator<ADynamicMeshActor> It(World); It; ++It)
-    {
-        if (It->GetActorLabel() == ActorName)
-        {
-            TargetActor = *It;
-            break;
-        }
-    }
-
-    if (!TargetActor)
-    {
-        Self->SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Actor not found: %s"), *ActorName), TEXT("ACTOR_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMeshComponent* DMC = TargetActor->GetDynamicMeshComponent();
-    if (!DMC || !DMC->GetDynamicMesh())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("DynamicMesh not available"), TEXT("MESH_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMesh* Mesh = DMC->GetDynamicMesh();
-    
-    bool bIsValidVertex = false;
-    FVector Position = UGeometryScriptLibrary_MeshQueryFunctions::GetVertexPosition(Mesh, VertexIndex, bIsValidVertex);
-    
-    if (!bIsValidVertex)
-    {
-        Self->SendAutomationError(Socket, RequestId, 
-            FString::Printf(TEXT("Invalid vertex index: %d"), VertexIndex), TEXT("INVALID_VERTEX"));
-        return true;
-    }
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("actorName"), ActorName);
-    Result->SetNumberField(TEXT("vertexIndex"), VertexIndex);
-    
-    TSharedPtr<FJsonObject> PosObj = McpHandlerUtils::CreateResultObject();
-    PosObj->SetNumberField(TEXT("x"), Position.X);
-    PosObj->SetNumberField(TEXT("y"), Position.Y);
-    PosObj->SetNumberField(TEXT("z"), Position.Z);
-    Result->SetObjectField(TEXT("position"), PosObj);
-    
-    Self->SendAutomationResponse(Socket, RequestId, true, TEXT("Vertex position retrieved"), Result);
-    return true;
-}
-
-// -------------------------------------------------------------------------
-// set_vertex_position - Set position of a vertex
-// -------------------------------------------------------------------------
-
-static bool HandleSetVertexPosition(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
-                                    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
-{
-    FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
-    int32 VertexIndex = GetJsonIntField(Payload, TEXT("vertexIndex"), -1);
-    FVector Position = ReadVectorFromPayload(Payload, TEXT("position"), FVector::ZeroVector);
-    
-    if (ActorName.IsEmpty() || VertexIndex < 0)
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("actorName and vertexIndex required"), TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-    ADynamicMeshActor* TargetActor = nullptr;
-
-    for (TActorIterator<ADynamicMeshActor> It(World); It; ++It)
-    {
-        if (It->GetActorLabel() == ActorName)
-        {
-            TargetActor = *It;
-            break;
-        }
-    }
-
-    if (!TargetActor)
-    {
-        Self->SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Actor not found: %s"), *ActorName), TEXT("ACTOR_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMeshComponent* DMC = TargetActor->GetDynamicMeshComponent();
-    if (!DMC || !DMC->GetDynamicMesh())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("DynamicMesh not available"), TEXT("MESH_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMesh* Mesh = DMC->GetDynamicMesh();
-    UE::Geometry::FDynamicMesh3& EditMesh = Mesh->GetMeshRef();
-    
-    if (!EditMesh.IsVertex(VertexIndex))
-    {
-        Self->SendAutomationError(Socket, RequestId, 
-            FString::Printf(TEXT("Invalid vertex index: %d"), VertexIndex), TEXT("INVALID_VERTEX"));
-        return true;
-    }
-    
-    EditMesh.SetVertex(VertexIndex, Position);
-    DMC->NotifyMeshUpdated();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("actorName"), ActorName);
-    Result->SetNumberField(TEXT("vertexIndex"), VertexIndex);
-    
-    TSharedPtr<FJsonObject> PosObj = McpHandlerUtils::CreateResultObject();
-    PosObj->SetNumberField(TEXT("x"), Position.X);
-    PosObj->SetNumberField(TEXT("y"), Position.Y);
-    PosObj->SetNumberField(TEXT("z"), Position.Z);
-    Result->SetObjectField(TEXT("position"), PosObj);
-    
-    Self->SendAutomationResponse(Socket, RequestId, true, TEXT("Vertex position set"), Result);
-    return true;
-}
-
-// -------------------------------------------------------------------------
-// translate_mesh - Translate entire mesh
-// -------------------------------------------------------------------------
-
-static bool HandleTranslateMesh(UMcpAutomationBridgeSubsystem* Self, const FString& RequestId,
-                                const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket)
-{
-    FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
-    FVector Translation = ReadVectorFromPayload(Payload, TEXT("translation"), FVector::ZeroVector);
-    
-    if (ActorName.IsEmpty())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("actorName required"), TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-    ADynamicMeshActor* TargetActor = nullptr;
-
-    for (TActorIterator<ADynamicMeshActor> It(World); It; ++It)
-    {
-        if (It->GetActorLabel() == ActorName)
-        {
-            TargetActor = *It;
-            break;
-        }
-    }
-
-    if (!TargetActor)
-    {
-        Self->SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Actor not found: %s"), *ActorName), TEXT("ACTOR_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMeshComponent* DMC = TargetActor->GetDynamicMeshComponent();
-    if (!DMC || !DMC->GetDynamicMesh())
-    {
-        Self->SendAutomationError(Socket, RequestId, TEXT("DynamicMesh not available"), TEXT("MESH_NOT_FOUND"));
-        return true;
-    }
-
-    UDynamicMesh* Mesh = DMC->GetDynamicMesh();
-    
-    // Use Geometry Script to translate the mesh
-    // UE 5.7+: TranslateMesh is in MeshTransformFunctions
-    // UE 5.5+: TranslateMesh is in MeshTransformFunctions
-    UGeometryScriptLibrary_MeshTransformFunctions::TranslateMesh(Mesh, Translation, nullptr);
-    DMC->NotifyMeshUpdated();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("actorName"), ActorName);
-    
-    TSharedPtr<FJsonObject> TransObj = McpHandlerUtils::CreateResultObject();
-    TransObj->SetNumberField(TEXT("x"), Translation.X);
-    TransObj->SetNumberField(TEXT("y"), Translation.Y);
-    TransObj->SetNumberField(TEXT("z"), Translation.Z);
-    Result->SetObjectField(TEXT("translation"), TransObj);
-    
-    Self->SendAutomationResponse(Socket, RequestId, true, TEXT("Mesh translated"), Result);
-    return true;
-}
-
-// -------------------------------------------------------------------------
 // UV Operations - Unwrap and Pack
 // -------------------------------------------------------------------------
 
@@ -7720,180 +6918,1308 @@ static bool HandleSetLODScreenSizes(UMcpAutomationBridgeSubsystem* Self, const F
     return true;
 }
 
-// -------------------------------------------------------------------------
-// Handler Dispatcher
-// -------------------------------------------------------------------------
-
 #endif // MCP_HAS_FULL_GEOMETRY_SCRIPT
 
-bool UMcpAutomationBridgeSubsystem::HandleGeometryAction(
+// -------------------------------------------------------------------------
+// Geometry Member Handlers
+// -------------------------------------------------------------------------
+// Dispatch lives in the manage_geometry FMcpCall classes
+// (Private/MCP/Calls/McpCalls_ManageGeometry.cpp); each HandleGeometry*
+// member here wraps one advertised action's static free function above,
+// replicating the retired chain's pre-5.1 NOT_SUPPORTED stub. The TU-wide
+// WITH_EDITOR gate encloses these members: non-editor builds omit them
+// exactly as they omitted the retired dispatcher.
+
+// create_box
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateBox(
     const FString& RequestId,
-    const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle RequestingSocket)
+    FMcpResponseHandle Socket)
 {
-    if (Action != TEXT("manage_geometry"))
-    {
-        return false;
-    }
-
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-
-    if (!Payload.IsValid())
-    {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing payload"), TEXT("INVALID_PAYLOAD"));
-        return true;
-    }
-
-    FString SubAction = GetJsonStringField(Payload, TEXT("subAction"));
-    if (SubAction.IsEmpty())
-    {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'subAction' in payload"), TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    // Primitives
-    if (SubAction == TEXT("create_box")) return HandleCreateBox(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_sphere")) return HandleCreateSphere(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_cylinder")) return HandleCreateCylinder(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_cone")) return HandleCreateCone(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_capsule")) return HandleCreateCapsule(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_torus")) return HandleCreateTorus(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_plane")) return HandleCreatePlane(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_disc")) return HandleCreateDisc(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_stairs")) return HandleCreateStairs(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_spiral_stairs")) return HandleCreateSpiralStairs(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_ring")) return HandleCreateRing(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_arch")) return HandleCreateArch(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_pipe")) return HandleCreatePipe(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_ramp")) return HandleCreateRamp(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("revolve")) return HandleRevolve(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("create_procedural_mesh")) return HandleCreateProceduralMesh(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("append_triangle")) return HandleAppendTriangle(this, RequestId, Payload, RequestingSocket);
-
-    // Booleans
-    if (SubAction == TEXT("boolean_union")) return HandleBooleanUnion(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("boolean_subtract")) return HandleBooleanSubtract(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("boolean_intersection")) return HandleBooleanIntersection(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("boolean_trim")) return HandleBooleanTrim(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("self_union")) return HandleSelfUnion(this, RequestId, Payload, RequestingSocket);
-
-    // Mesh Utils
-    if (SubAction == TEXT("get_mesh_info")) return HandleGetMeshInfo(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("recalculate_normals")) return HandleRecalculateNormals(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("flip_normals")) return HandleFlipNormals(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("simplify_mesh")) return HandleSimplifyMesh(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("subdivide")) return HandleSubdivide(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("auto_uv")) return HandleAutoUV(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("convert_to_static_mesh")) return HandleConvertToStaticMesh(this, RequestId, Payload, RequestingSocket);
-
-    // Modeling Operations
-    if (SubAction == TEXT("extrude")) return HandleExtrude(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("inset")) return HandleInsetOutset(this, RequestId, Payload, RequestingSocket, true);
-    if (SubAction == TEXT("outset")) return HandleInsetOutset(this, RequestId, Payload, RequestingSocket, false);
-    if (SubAction == TEXT("bevel")) return HandleBevel(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("offset_faces")) return HandleOffsetFaces(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("shell")) return HandleShell(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("chamfer")) return HandleChamfer(this, RequestId, Payload, RequestingSocket);
-
-    // Deformers
-    if (SubAction == TEXT("bend")) return HandleBend(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("twist")) return HandleTwist(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("taper")) return HandleTaper(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("noise_deform")) return HandleNoiseDeform(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("smooth")) return HandleSmooth(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("relax")) return HandleRelax(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("stretch")) return HandleStretch(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("spherify")) return HandleSpherify(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("cylindrify")) return HandleCylindrify(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("lattice_deform")) return HandleLatticeDeform(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("displace_by_texture")) return HandleDisplaceByTexture(this, RequestId, Payload, RequestingSocket);
-
-    // Mesh Repair
-    if (SubAction == TEXT("weld_vertices")) return HandleWeldVertices(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("fill_holes")) return HandleFillHoles(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("remove_degenerates")) return HandleRemoveDegenerates(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("remesh_uniform")) return HandleRemeshUniform(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("merge_vertices")) return HandleMergeVertices(this, RequestId, Payload, RequestingSocket);
-
-    // Collision Generation
-    if (SubAction == TEXT("generate_collision")) return HandleGenerateCollision(this, RequestId, Payload, RequestingSocket);
-
-    // Transform Operations
-    if (SubAction == TEXT("mirror")) return HandleMirror(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("array_linear")) return HandleArrayLinear(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("array_radial")) return HandleArrayRadial(this, RequestId, Payload, RequestingSocket);
-
-    // Mesh Topology Operations
-    if (SubAction == TEXT("triangulate")) return HandleTriangulate(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("poke")) return HandlePoke(this, RequestId, Payload, RequestingSocket);
-
-    // UV Operations
-    if (SubAction == TEXT("project_uv")) return HandleProjectUV(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("transform_uvs")) return HandleTransformUVs(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("set_uvs")) return HandleSetUVs(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("set_vertex_color")) return HandleSetVertexColor(this, RequestId, Payload, RequestingSocket);
-
-    // Tangent Operations
-    if (SubAction == TEXT("recompute_tangents")) return HandleRecomputeTangents(this, RequestId, Payload, RequestingSocket);
-
-    // Normal Operations
-    if (SubAction == TEXT("split_normals")) return HandleSplitNormals(this, RequestId, Payload, RequestingSocket);
-
-    // Advanced Operations (Bridge, Loft, Sweep)
-    if (SubAction == TEXT("bridge")) return HandleBridge(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("loft")) return HandleLoft(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("sweep")) return HandleSweep(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("loop_cut")) return HandleLoopCut(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("duplicate_along_spline")) return HandleDuplicateAlongSpline(this, RequestId, Payload, RequestingSocket);
-
-    // Vertex and Triangle Operations
-    if (SubAction == TEXT("append_vertex")) return HandleAppendVertex(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("delete_vertex")) return HandleDeleteVertex(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("delete_triangle")) return HandleDeleteTriangle(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("get_vertex_position")) return HandleGetVertexPosition(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("set_vertex_position")) return HandleSetVertexPosition(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("translate_mesh")) return HandleTranslateMesh(this, RequestId, Payload, RequestingSocket);
-
-    // Additional UV Operations
-    if (SubAction == TEXT("unwrap_uv")) return HandleUnwrapUV(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("pack_uv_islands")) return HandlePackUVIslands(this, RequestId, Payload, RequestingSocket);
-
-    // Nanite Conversion
-    if (SubAction == TEXT("convert_to_nanite")) return HandleConvertToNanite(this, RequestId, Payload, RequestingSocket);
-
-    // Spline-based Operations
-    if (SubAction == TEXT("extrude_along_spline")) return HandleExtrudeAlongSpline(this, RequestId, Payload, RequestingSocket);
-
-    // Edge Operations
-    if (SubAction == TEXT("edge_split")) return HandleEdgeSplit(this, RequestId, Payload, RequestingSocket);
-
-    // Topology Operations
-    if (SubAction == TEXT("quadrangulate")) return HandleQuadrangulate(this, RequestId, Payload, RequestingSocket);
-
-    // Remesh Operations
-    if (SubAction == TEXT("remesh_voxel")) return HandleRemeshVoxel(this, RequestId, Payload, RequestingSocket);
-
-    // Complex Collision
-    if (SubAction == TEXT("generate_complex_collision")) return HandleGenerateComplexCollision(this, RequestId, Payload, RequestingSocket);
-
-    // Collision Simplification
-    if (SubAction == TEXT("simplify_collision")) return HandleSimplifyCollision(this, RequestId, Payload, RequestingSocket);
-
-    // LOD Operations (Geometry-specific)
-    if (SubAction == TEXT("generate_lods")) return HandleGenerateLODsGeometry(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("set_lod_settings")) return HandleSetLODSettings(this, RequestId, Payload, RequestingSocket);
-    if (SubAction == TEXT("set_lod_screen_sizes")) return HandleSetLODScreenSizes(this, RequestId, Payload, RequestingSocket);
-
-    SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Unknown geometry subAction: '%s'"), *SubAction), TEXT("UNKNOWN_SUBACTION"));
-    return true;
+    return HandleCreateBox(this, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(RequestingSocket, RequestId,
+    SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
-#endif // MCP_HAS_FULL_GEOMETRY_SCRIPT
+#endif
+}
+
+// create_sphere
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateSphere(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCreateSphere(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// create_cylinder
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateCylinder(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCreateCylinder(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// create_cone
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateCone(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCreateCone(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// create_capsule
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateCapsule(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCreateCapsule(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// create_torus
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateTorus(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCreateTorus(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// create_plane
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreatePlane(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCreatePlane(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// create_disc
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateDisc(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCreateDisc(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// create_stairs
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateStairs(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCreateStairs(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// create_spiral_stairs
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateSpiralStairs(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCreateSpiralStairs(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// create_ring
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateRing(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCreateRing(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// create_arch
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateArch(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCreateArch(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// create_pipe
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreatePipe(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCreatePipe(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// create_ramp
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateRamp(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCreateRamp(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// revolve
+bool UMcpAutomationBridgeSubsystem::HandleGeometryRevolve(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleRevolve(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// boolean_union
+bool UMcpAutomationBridgeSubsystem::HandleGeometryBooleanUnion(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleBooleanUnion(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// boolean_subtract
+bool UMcpAutomationBridgeSubsystem::HandleGeometryBooleanSubtract(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleBooleanSubtract(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// boolean_intersection
+bool UMcpAutomationBridgeSubsystem::HandleGeometryBooleanIntersection(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleBooleanIntersection(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// boolean_trim
+bool UMcpAutomationBridgeSubsystem::HandleGeometryBooleanTrim(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleBooleanTrim(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// self_union
+bool UMcpAutomationBridgeSubsystem::HandleGeometrySelfUnion(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleSelfUnion(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// get_mesh_info
+bool UMcpAutomationBridgeSubsystem::HandleGeometryGetMeshInfo(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleGetMeshInfo(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// recalculate_normals
+bool UMcpAutomationBridgeSubsystem::HandleGeometryRecalculateNormals(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleRecalculateNormals(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// flip_normals
+bool UMcpAutomationBridgeSubsystem::HandleGeometryFlipNormals(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleFlipNormals(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// simplify_mesh
+bool UMcpAutomationBridgeSubsystem::HandleGeometrySimplifyMesh(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleSimplifyMesh(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// subdivide
+bool UMcpAutomationBridgeSubsystem::HandleGeometrySubdivide(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleSubdivide(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// auto_uv
+bool UMcpAutomationBridgeSubsystem::HandleGeometryAutoUV(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleAutoUV(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// convert_to_static_mesh
+bool UMcpAutomationBridgeSubsystem::HandleGeometryConvertToStaticMesh(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleConvertToStaticMesh(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// extrude
+bool UMcpAutomationBridgeSubsystem::HandleGeometryExtrude(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleExtrude(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// inset
+bool UMcpAutomationBridgeSubsystem::HandleGeometryInset(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleInsetOutset(this, RequestId, Payload, Socket, true);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// outset
+bool UMcpAutomationBridgeSubsystem::HandleGeometryOutset(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleInsetOutset(this, RequestId, Payload, Socket, false);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// bevel
+bool UMcpAutomationBridgeSubsystem::HandleGeometryBevel(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleBevel(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// offset_faces
+bool UMcpAutomationBridgeSubsystem::HandleGeometryOffsetFaces(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleOffsetFaces(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// shell
+bool UMcpAutomationBridgeSubsystem::HandleGeometryShell(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleShell(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// chamfer
+bool UMcpAutomationBridgeSubsystem::HandleGeometryChamfer(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleChamfer(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// bend
+bool UMcpAutomationBridgeSubsystem::HandleGeometryBend(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleBend(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// twist
+bool UMcpAutomationBridgeSubsystem::HandleGeometryTwist(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleTwist(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// taper
+bool UMcpAutomationBridgeSubsystem::HandleGeometryTaper(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleTaper(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// noise_deform
+bool UMcpAutomationBridgeSubsystem::HandleGeometryNoiseDeform(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleNoiseDeform(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// smooth
+bool UMcpAutomationBridgeSubsystem::HandleGeometrySmooth(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleSmooth(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// relax
+bool UMcpAutomationBridgeSubsystem::HandleGeometryRelax(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleRelax(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// stretch
+bool UMcpAutomationBridgeSubsystem::HandleGeometryStretch(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleStretch(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// spherify
+bool UMcpAutomationBridgeSubsystem::HandleGeometrySpherify(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleSpherify(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// cylindrify
+bool UMcpAutomationBridgeSubsystem::HandleGeometryCylindrify(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleCylindrify(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// lattice_deform
+bool UMcpAutomationBridgeSubsystem::HandleGeometryLatticeDeform(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleLatticeDeform(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// displace_by_texture
+bool UMcpAutomationBridgeSubsystem::HandleGeometryDisplaceByTexture(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleDisplaceByTexture(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// weld_vertices
+bool UMcpAutomationBridgeSubsystem::HandleGeometryWeldVertices(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleWeldVertices(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// fill_holes
+bool UMcpAutomationBridgeSubsystem::HandleGeometryFillHoles(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleFillHoles(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// remove_degenerates
+bool UMcpAutomationBridgeSubsystem::HandleGeometryRemoveDegenerates(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleRemoveDegenerates(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// remesh_uniform
+bool UMcpAutomationBridgeSubsystem::HandleGeometryRemeshUniform(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleRemeshUniform(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// merge_vertices
+bool UMcpAutomationBridgeSubsystem::HandleGeometryMergeVertices(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleMergeVertices(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// generate_collision
+bool UMcpAutomationBridgeSubsystem::HandleGeometryGenerateCollision(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleGenerateCollision(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// mirror
+bool UMcpAutomationBridgeSubsystem::HandleGeometryMirror(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleMirror(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// array_linear
+bool UMcpAutomationBridgeSubsystem::HandleGeometryArrayLinear(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleArrayLinear(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// array_radial
+bool UMcpAutomationBridgeSubsystem::HandleGeometryArrayRadial(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleArrayRadial(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// triangulate
+bool UMcpAutomationBridgeSubsystem::HandleGeometryTriangulate(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleTriangulate(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// poke
+bool UMcpAutomationBridgeSubsystem::HandleGeometryPoke(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandlePoke(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// project_uv
+bool UMcpAutomationBridgeSubsystem::HandleGeometryProjectUV(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleProjectUV(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// transform_uvs
+bool UMcpAutomationBridgeSubsystem::HandleGeometryTransformUVs(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleTransformUVs(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// recompute_tangents
+bool UMcpAutomationBridgeSubsystem::HandleGeometryRecomputeTangents(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleRecomputeTangents(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// bridge
+bool UMcpAutomationBridgeSubsystem::HandleGeometryBridge(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleBridge(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// loft
+bool UMcpAutomationBridgeSubsystem::HandleGeometryLoft(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleLoft(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// sweep
+bool UMcpAutomationBridgeSubsystem::HandleGeometrySweep(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleSweep(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// loop_cut
+bool UMcpAutomationBridgeSubsystem::HandleGeometryLoopCut(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleLoopCut(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// duplicate_along_spline
+bool UMcpAutomationBridgeSubsystem::HandleGeometryDuplicateAlongSpline(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleDuplicateAlongSpline(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// unwrap_uv
+bool UMcpAutomationBridgeSubsystem::HandleGeometryUnwrapUV(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleUnwrapUV(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// pack_uv_islands
+bool UMcpAutomationBridgeSubsystem::HandleGeometryPackUVIslands(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandlePackUVIslands(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// convert_to_nanite
+bool UMcpAutomationBridgeSubsystem::HandleGeometryConvertToNanite(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleConvertToNanite(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// extrude_along_spline
+bool UMcpAutomationBridgeSubsystem::HandleGeometryExtrudeAlongSpline(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleExtrudeAlongSpline(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// edge_split
+bool UMcpAutomationBridgeSubsystem::HandleGeometryEdgeSplit(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleEdgeSplit(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// quadrangulate
+bool UMcpAutomationBridgeSubsystem::HandleGeometryQuadrangulate(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleQuadrangulate(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// remesh_voxel
+bool UMcpAutomationBridgeSubsystem::HandleGeometryRemeshVoxel(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleRemeshVoxel(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// generate_complex_collision
+bool UMcpAutomationBridgeSubsystem::HandleGeometryGenerateComplexCollision(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleGenerateComplexCollision(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// simplify_collision
+bool UMcpAutomationBridgeSubsystem::HandleGeometrySimplifyCollision(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleSimplifyCollision(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// generate_lods
+bool UMcpAutomationBridgeSubsystem::HandleGeometryGenerateLODs(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleGenerateLODsGeometry(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// set_lod_settings
+bool UMcpAutomationBridgeSubsystem::HandleGeometrySetLODSettings(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleSetLODSettings(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
+}
+
+// set_lod_screen_sizes
+bool UMcpAutomationBridgeSubsystem::HandleGeometrySetLODScreenSizes(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if MCP_HAS_FULL_GEOMETRY_SCRIPT
+    return HandleSetLODScreenSizes(this, RequestId, Payload, Socket);
+#else
+    // UE 5.0 doesn't have full GeometryScript support
+    SendAutomationError(Socket, RequestId,
+        TEXT("GeometryScript operations require UE 5.1 or later"),
+        TEXT("NOT_SUPPORTED"));
+    return true;
+#endif
 }
 
 #endif // WITH_EDITOR

@@ -556,6 +556,46 @@ parser survives only as a lint.
     `auto_skin_weights`, `copy_weights`, `assign_cloth_asset_to_mesh` —
     honest MANUAL_INTERVENTION_REQUIRED-class errors) plus the two ragdoll
     stubs.
+  - **`manage_geometry` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_ManageGeometry.cpp`).** 76 classes; the
+    dispatcher already delegated every advertised branch to a dedicated
+    static free function in its own TU, so no body moved: the members are
+    `HandleGeometry*` thin wrappers (GeometryHandlers.cpp, level-structure
+    precedent), each replicating the chain's `MCP_HAS_FULL_GEOMETRY_SCRIPT`
+    NOT_SUPPORTED stub ("GeometryScript operations require UE 5.1 or
+    later") per member. The TU is compiled only WITH_EDITOR — retired
+    dispatcher included — so non-editor builds omit the members exactly as
+    they omitted the chain, with the baked `RequiresEditor` flag answering
+    at `Execute()`. `inset`/`outset` keep the shared `HandleInsetOutset`
+    static with its boolean resolved per member, `generate_lods` keeps
+    `HandleGenerateLODsGeometry` (suffixed around the manage_asset
+    sibling), and the chain's `subAction` prologue died with it; the
+    routing row and `ManageGeometry()` list stay for boot schema-union
+    validation. No cross-file delegation in either direction. Eleven
+    hidden raw-mesh DynamicMesh CRUD arms deleted with their statics and
+    ledgered (`create_procedural_mesh`, `append_triangle`,
+    `append_vertex`, `delete_vertex`, `delete_triangle`,
+    `get_vertex_position`, `set_vertex_position`, `set_uvs`,
+    `set_vertex_color`, `split_normals`, `translate_mesh` — the sweep
+    ledger's advertise-candidate family, parked for Aaron; recover from
+    git); six stale reconciliation pins pruned with them. Contracts
+    ported verbatim from the shim rows — zero decl fixes, the first fully
+    clean port of a large family: the read-sets reconcile on all 76 rows
+    (create_plane's `height`/`widthSegments`/`heightSegments` are the
+    body's first-choice reads with
+    `depth`/`widthSubdivisions`/`depthSubdivisions` as fallbacks), and
+    every required flag matches a body reject — the joint rejects
+    (targetActor AND toolActor on the three booleans, actorName AND
+    trimActorName on boolean_trim, actorName AND splineActorName on
+    duplicate_along_spline, each separately on extrude_along_spline) are
+    AND requirements, not one-of alias pairs; `get_mesh_info` and
+    `generate_lods` joint-reject only when BOTH actorName and assetPath
+    are absent, so both stay optional (at-least-one handler-enforced);
+    `sweep`'s `splineActorName` stays optional — an absent spelling falls
+    back to a straight-path sweep. The three `McpSafeAssetSave` tails
+    (generate_lods, set_lod_settings, set_lod_screen_sizes) ride inside
+    the untouched statics. `RequiresEditor` baked on all 76; `Mutating`
+    on everything except the one reader, `get_mesh_info`.
 
 ## Bootstrap state (2026-07-04, complete)
 

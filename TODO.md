@@ -1004,6 +1004,13 @@ family, parked for Aaron, recover from git) — plus the below-radar
 shadowed-dead class: the primary dispatcher's THIRTY unreachable copies of
 routed authoring actions and the authoring chain's dead create_pose_library
 copy, ledgered at deletion — **31 hidden entries remain**.
+manage_geometry's classing (2026-07-05) closed eleven — the ledger's whole
+GeometryHandlers section, the raw-mesh DynamicMesh CRUD advertise-candidate
+family (create_procedural_mesh, append_triangle, append_vertex,
+delete_vertex, delete_triangle, get_vertex_position, set_vertex_position,
+set_uvs, set_vertex_color, split_normals, translate_mesh — each static's
+only caller was its dispatcher arm; deleted with the retired chain, parked
+for Aaron, recover from git) — **20 hidden entries remain**.
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,
