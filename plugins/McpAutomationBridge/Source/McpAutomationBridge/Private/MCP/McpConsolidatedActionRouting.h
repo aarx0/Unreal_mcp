@@ -255,6 +255,10 @@ inline TArray<FString> ManageBlueprint()
 
 inline const TArray<FString>& BuildEnvironmentCore()
 {
+	// build_environment is classed
+	// (MCP/Calls/McpCalls_BuildEnvironment.cpp): this list and the
+	// Lighting()/Splines() lists survive only so boot validation can prove
+	// the schema union still matches the published enum.
 	static const TArray<FString> Actions = {
 		TEXT("create_landscape"), TEXT("sculpt"),
 		TEXT("add_foliage"), TEXT("paint_foliage"),
@@ -1017,8 +1021,6 @@ inline bool IsWidgetAuthoringAction(const FString& Action) { return ContainsActi
 inline bool IsCommonUiAction(const FString& Action) { return ContainsAction(CommonUi(), Action); }
 inline bool IsAnimationAuthoringAction(const FString& Action) { return ContainsAction(AnimationAuthoring(), Action); }
 inline bool IsAudioAuthoringAction(const FString& Action) { return ContainsAction(AudioAuthoring(), Action); }
-inline bool IsLightingAction(const FString& Action) { return ContainsAction(Lighting(), Action); }
-inline bool IsSplineAction(const FString& Action) { return ContainsAction(Splines(), Action); }
 inline bool IsSkeletonAction(const FString& Action) { return ContainsAction(Skeleton(), Action); }
 inline bool IsBehaviorTreeAction(const FString& Action) { return ContainsAction(BehaviorTree(), Action); }
 inline bool IsNavigationAction(const FString& Action) { return ContainsAction(Navigation(), Action); }
@@ -1054,6 +1056,12 @@ inline const TArray<FMcpToolRouting>& GetToolRoutingTable()
 		  { { TEXT("CommonUi"), &CommonUi }, { TEXT("WidgetAuthoring"), &WidgetAuthoring },
 		    { TEXT("BlueprintGraph"), &BlueprintGraph } },
 		  &ManageBlueprintCore, &ManageBlueprint },
+		// build_environment is CLASSED: there is no live registration lambda
+		// — RoutedFamilies here documents the per-class delegation split
+		// (Lighting actions delegate to HandleLighting* members in
+		// LightingHandlers.cpp, Splines to HandleSpline* wrappers in
+		// SplineHandlers.cpp), and the row is retained so the schema-union
+		// validation keeps proving enum coverage.
 		{ TEXT("build_environment"),
 		  { { TEXT("Lighting"), &Lighting }, { TEXT("Splines"), &Splines } },
 		  &BuildEnvironmentCore, &BuildEnvironment },

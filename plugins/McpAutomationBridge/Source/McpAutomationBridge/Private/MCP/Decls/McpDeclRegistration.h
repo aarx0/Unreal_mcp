@@ -9,7 +9,6 @@
 #include "MCP/Decls/McpDecl_ManageBlueprint.h"
 #include "MCP/Decls/McpDecl_ManageAsset.h"
 #include "MCP/Decls/McpDecl_AnimationPhysics.h"
-#include "MCP/Decls/McpDecl_BuildEnvironment.h"
 #include "MCP/Decls/McpDecl_ManageGeometry.h"
 
 inline void McpRegisterAllActionDecls()
@@ -51,7 +50,9 @@ inline void McpRegisterAllActionDecls()
 	// call instances via McpRegisterManageNetworkingCalls().
 	// inspect: classed (MCP/Calls/McpCalls_Inspect.cpp) — decls
 	// register with the call instances via McpRegisterInspectCalls().
-	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GBuildEnvironment);
+	// build_environment: classed
+	// (MCP/Calls/McpCalls_BuildEnvironment.cpp) — decls register with the
+	// call instances via McpRegisterBuildEnvironmentCalls().
 	// manage_inventory: classed (MCP/Calls/McpCalls_ManageInventory.cpp) —
 	// decls register with the call instances via
 	// McpRegisterManageInventoryCalls().

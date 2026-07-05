@@ -1313,123 +1313,6 @@ static bool HandleSetSplineMeshMaterial(
     return true;
 }
 
-static bool HandleCreateSplineMeshActor(
-    UMcpAutomationBridgeSubsystem* Self,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-    FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"), TEXT("SplineMeshActor"));
-    FString ComponentName = GetJsonStringFieldSpline(Payload, TEXT("componentName"), TEXT("SplineMesh"));
-    FString MeshPath = GetJsonStringFieldSpline(Payload, TEXT("meshPath"));
-    FString ForwardAxis = GetJsonStringFieldSpline(Payload, TEXT("forwardAxis"), TEXT("X"));
-    FVector Location = GetJsonVectorFieldSpline(Payload, TEXT("location"));
-    FRotator Rotation = GetJsonRotatorFieldSpline(Payload, TEXT("rotation"));
-
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-    if (!World)
-    {
-        Self->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("No editor world available"), nullptr, TEXT("NO_WORLD"));
-        return true;
-    }
-
-    // SECURITY: Validate meshPath if provided
-    FString SafeMeshPath;
-    if (!MeshPath.IsEmpty())
-    {
-        SafeMeshPath = SanitizeProjectRelativePath(MeshPath);
-        if (SafeMeshPath.IsEmpty())
-        {
-            Self->SendAutomationResponse(Socket, RequestId, false,
-                FString::Printf(TEXT("Invalid or unsafe meshPath: %s. Path must be relative to project (e.g., /Game/...)"), *MeshPath),
-                nullptr, TEXT("SECURITY_VIOLATION"));
-            return true;
-        }
-    }
-
-    // Spawn actor with unique name handling
-    FActorSpawnParameters SpawnParams;
-    SpawnParams.Name = *ActorName;
-    SpawnParams.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
-    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-    AActor* NewActor = World->SpawnActor<AActor>(AActor::StaticClass(), Location, Rotation, SpawnParams);
-    if (!NewActor)
-    {
-        Self->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("Failed to spawn spline mesh actor"), nullptr, TEXT("SPAWN_FAILED"));
-        return true;
-    }
-
-    NewActor->SetActorLabel(*ActorName);
-
-    // Create SplineMeshComponent and attach to actor
-    USplineMeshComponent* SplineMeshComp = NewObject<USplineMeshComponent>(NewActor, *ComponentName);
-    if (!SplineMeshComp)
-    {
-        NewActor->Destroy();
-        Self->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("Failed to create SplineMeshComponent"), nullptr, TEXT("COMPONENT_FAILED"));
-        return true;
-    }
-
-    SplineMeshComp->RegisterComponent();
-    NewActor->AddInstanceComponent(SplineMeshComp);
-    NewActor->SetRootComponent(SplineMeshComp);
-
-    // Set mesh if provided
-    if (!SafeMeshPath.IsEmpty())
-    {
-        UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *SafeMeshPath);
-        if (!Mesh)
-        {
-            // Clean up the partially created actor
-            NewActor->Destroy();
-            Self->SendAutomationResponse(Socket, RequestId, false,
-                FString::Printf(TEXT("Mesh not found: %s"), *SafeMeshPath), nullptr, TEXT("MESH_NOT_FOUND"));
-            return true;
-        }
-        SplineMeshComp->SetStaticMesh(Mesh);
-    }
-
-    // Ensure material is valid - use fallback if engine default is missing
-    // This prevents "DefaultMaterial not available" warnings on custom engine builds
-    if (SplineMeshComp->GetMaterial(0) == nullptr)
-    {
-        UMaterialInterface* FallbackMaterial = McpLoadMaterialWithFallback(TEXT(""), true);
-        if (FallbackMaterial)
-        {
-            SplineMeshComp->SetMaterial(0, FallbackMaterial);
-        }
-    }
-
-    // Set forward axis
-    ESplineMeshAxis::Type Axis = ESplineMeshAxis::X;
-    if (ForwardAxis == TEXT("Y")) Axis = ESplineMeshAxis::Y;
-    else if (ForwardAxis == TEXT("Z")) Axis = ESplineMeshAxis::Z;
-    SplineMeshComp->SetForwardAxis(Axis);
-
-    // Set default start/end positions for a simple spline mesh
-    SplineMeshComp->SetStartAndEnd(FVector::ZeroVector, FVector(100, 0, 0),
-                                    FVector(500, 0, 0), FVector(-100, 0, 0));
-
-    World->MarkPackageDirty();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("actorName"), NewActor->GetActorLabel());
-    Result->SetStringField(TEXT("actorPath"), NewActor->GetPathName());
-    Result->SetStringField(TEXT("componentName"), ComponentName);
-    
-    // Add verification data
-    McpHandlerUtils::AddVerification(Result, NewActor);
-    AddComponentVerification(Result, SplineMeshComp);
-
-    Self->SendAutomationResponse(Socket, RequestId, true,
-        FString::Printf(TEXT("SplineMeshActor '%s' created with component '%s'"), *ActorName, *ComponentName), Result);
-    return true;
-}
-
 // ============================================================================
 // Mesh Scattering Handlers
 // ============================================================================
@@ -1947,87 +1830,336 @@ static bool HandleGetSplinesInfo(
 #endif // WITH_EDITOR
 
 // ============================================================================
-// Main Dispatcher
+// Spline Member Handlers
 // ============================================================================
+// Dispatch lives in the build_environment FMcpCall classes
+// (Private/MCP/Calls/McpCalls_BuildEnvironment.cpp); each HandleSpline*
+// member here wraps one advertised action's dedicated handler above,
+// replicating the retired chain's editor-build stub.
 
-bool UMcpAutomationBridgeSubsystem::HandleManageSplinesAction(
+// create_spline_actor
+bool UMcpAutomationBridgeSubsystem::HandleSplineCreateSplineActor(
     const FString& RequestId,
-    const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
-    // Only handle manage_splines; decline anything else so the dispatcher keeps
-    // trying other handlers and reaches its UNKNOWN_ACTION fallback. Without this
-    // gate the handler claims any unrouted action that reaches it.
-    if (Action != TEXT("manage_splines"))
-    {
-        return false;
-    }
 #if WITH_EDITOR
-    FString SubAction = GetJsonStringFieldSpline(Payload, TEXT("subAction"), TEXT(""));
-    
-    UE_LOG(LogMcpSplineHandlers, Verbose, TEXT("HandleManageSplinesAction: SubAction=%s"), *SubAction);
-
-    // Spline Creation
-    if (SubAction == TEXT("create_spline_actor"))
-        return HandleCreateSplineActor(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("add_spline_point"))
-        return HandleAddSplinePoint(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("remove_spline_point"))
-        return HandleRemoveSplinePoint(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("set_spline_point_position"))
-        return HandleSetSplinePointPosition(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("set_spline_point_tangents"))
-        return HandleSetSplinePointTangents(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("set_spline_point_rotation"))
-        return HandleSetSplinePointRotation(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("set_spline_point_scale"))
-        return HandleSetSplinePointScale(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("set_spline_type"))
-        return HandleSetSplineType(this, RequestId, Payload, Socket);
-
-    // Spline Mesh
-    if (SubAction == TEXT("create_spline_mesh_component"))
-        return HandleCreateSplineMeshComponent(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("create_spline_mesh_actor"))
-        return HandleCreateSplineMeshActor(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("set_spline_mesh_asset"))
-        return HandleSetSplineMeshAsset(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("configure_spline_mesh_axis"))
-        return HandleConfigureSplineMeshAxis(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("set_spline_mesh_material"))
-        return HandleSetSplineMeshMaterial(this, RequestId, Payload, Socket);
-
-    // Mesh Scattering
-    if (SubAction == TEXT("scatter_meshes_along_spline"))
-        return HandleScatterMeshesAlongSpline(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("configure_mesh_spacing"))
-        return HandleConfigureMeshSpacing(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("configure_mesh_randomization"))
-        return HandleConfigureMeshRandomization(this, RequestId, Payload, Socket);
-
-    // Quick Templates
-    if (SubAction == TEXT("create_road_spline"))
-        return HandleCreateRoadSpline(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("create_river_spline"))
-        return HandleCreateRiverSpline(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("create_fence_spline"))
-        return HandleCreateFenceSpline(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("create_wall_spline"))
-        return HandleCreateWallSpline(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("create_cable_spline"))
-        return HandleCreateCableSpline(this, RequestId, Payload, Socket);
-    if (SubAction == TEXT("create_pipe_spline"))
-        return HandleCreatePipeSpline(this, RequestId, Payload, Socket);
-
-    // Utility
-    if (SubAction == TEXT("get_splines_info"))
-        return HandleGetSplinesInfo(this, RequestId, Payload, Socket);
-
-    // Unknown action
+    return HandleCreateSplineActor(this, RequestId, Payload, Socket);
+#else
     SendAutomationResponse(Socket, RequestId, false,
-        FString::Printf(TEXT("Unknown spline subAction: %s"), *SubAction), nullptr, TEXT("UNKNOWN_ACTION"));
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
+#endif
+}
+
+// add_spline_point
+bool UMcpAutomationBridgeSubsystem::HandleSplineAddSplinePoint(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleAddSplinePoint(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// remove_spline_point
+bool UMcpAutomationBridgeSubsystem::HandleSplineRemoveSplinePoint(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleRemoveSplinePoint(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// set_spline_point_position
+bool UMcpAutomationBridgeSubsystem::HandleSplineSetSplinePointPosition(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleSetSplinePointPosition(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// set_spline_point_tangents
+bool UMcpAutomationBridgeSubsystem::HandleSplineSetSplinePointTangents(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleSetSplinePointTangents(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// set_spline_point_rotation
+bool UMcpAutomationBridgeSubsystem::HandleSplineSetSplinePointRotation(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleSetSplinePointRotation(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// set_spline_point_scale
+bool UMcpAutomationBridgeSubsystem::HandleSplineSetSplinePointScale(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleSetSplinePointScale(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// set_spline_type
+bool UMcpAutomationBridgeSubsystem::HandleSplineSetSplineType(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleSetSplineType(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_spline_mesh_component
+bool UMcpAutomationBridgeSubsystem::HandleSplineCreateSplineMeshComponent(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateSplineMeshComponent(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// set_spline_mesh_asset
+bool UMcpAutomationBridgeSubsystem::HandleSplineSetSplineMeshAsset(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleSetSplineMeshAsset(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// configure_spline_mesh_axis
+bool UMcpAutomationBridgeSubsystem::HandleSplineConfigureSplineMeshAxis(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleConfigureSplineMeshAxis(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// set_spline_mesh_material
+bool UMcpAutomationBridgeSubsystem::HandleSplineSetSplineMeshMaterial(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleSetSplineMeshMaterial(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// scatter_meshes_along_spline
+bool UMcpAutomationBridgeSubsystem::HandleSplineScatterMeshesAlongSpline(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleScatterMeshesAlongSpline(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// configure_mesh_spacing
+bool UMcpAutomationBridgeSubsystem::HandleSplineConfigureMeshSpacing(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleConfigureMeshSpacing(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// configure_mesh_randomization
+bool UMcpAutomationBridgeSubsystem::HandleSplineConfigureMeshRandomization(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleConfigureMeshRandomization(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_road_spline
+bool UMcpAutomationBridgeSubsystem::HandleSplineCreateRoadSpline(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateRoadSpline(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_river_spline
+bool UMcpAutomationBridgeSubsystem::HandleSplineCreateRiverSpline(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateRiverSpline(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_fence_spline
+bool UMcpAutomationBridgeSubsystem::HandleSplineCreateFenceSpline(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateFenceSpline(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_wall_spline
+bool UMcpAutomationBridgeSubsystem::HandleSplineCreateWallSpline(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateWallSpline(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_cable_spline
+bool UMcpAutomationBridgeSubsystem::HandleSplineCreateCableSpline(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreateCableSpline(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// create_pipe_spline
+bool UMcpAutomationBridgeSubsystem::HandleSplineCreatePipeSpline(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleCreatePipeSpline(this, RequestId, Payload, Socket);
+#else
+    SendAutomationResponse(Socket, RequestId, false,
+        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+// get_splines_info
+bool UMcpAutomationBridgeSubsystem::HandleSplineGetSplinesInfo(
+    const FString& RequestId,
+    const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle Socket)
+{
+#if WITH_EDITOR
+    return HandleGetSplinesInfo(this, RequestId, Payload, Socket);
 #else
     SendAutomationResponse(Socket, RequestId, false,
         TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));

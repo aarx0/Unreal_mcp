@@ -308,7 +308,15 @@ Full per-name evidence:
 - **get_actor** @:2796 - HandleControlActorGet (impl at ControlHandlers.cpp:4888-4938, ~50 lines) is a single-actor lookup-by-name: resolves actorName via FindActorByName, then returns name/label/path/class/tags[]/location[]/scale[] as JSON. It is a distinct, complete feature (not a stub) that duplicates none of the adverti…
 - **get_actor_by_name** @:2797 - Same family/branch as "get_actor" above — HandleControlActorGet (ControlHandlers.cpp:4888-4938): single-actor lookup-by-name returning name/label/path/class/tags/location/scale. The whole 3-way OR (get / get_actor / get_actor_by_name) is unreachable externally and unmanufactured internally; treat as…
 
-### EnvironmentHandlers
+### EnvironmentHandlers (updated at the build_environment classing)
+The whole `HandleControlEnvironmentAction` legacy dispatcher (EnvironmentHandlers.cpp
+:1064-1290) was **deleted at the build_environment classing (2026-07-05)**: it gated on
+the `control_environment` action name, which `InitializeHandlers` never registers (only
+the 21 canonical tool names are) and which no code calls — repo-wide, the only mentions
+were its own definition and header declaration. Disposition for both entries below plus
+the below-radar hidden `set_time_of_day` sibling branch (:1160, a duplicate of the
+advertised build_environment action): **deleted (transport-dead); recover from git
+history if advertising is wanted.**
 - **set_sun_intensity** @:1208 - Belongs to the HandleControlEnvironmentAction family (lines 1064-1290): a small time/lighting-control handler with three sibling branches — set_time_of_day (rotates the first ADirectionalLight to simulate sun position from an 'hour' param), set_sun_intensity (this one: sets the first ADirectionalLig…
 - **set_skylight_intensity** @:1243 - Same HandleControlEnvironmentAction family as set_sun_intensity (lines 1064-1290) — see that finding's familyNote. This branch specifically: locates the first ASkyLight actor in the editor world (FindFirstSkyLight lambda) and applies USkyLightComponent::SetIntensity from the 'intensity' payload fiel…
 
@@ -362,8 +370,15 @@ wanted.**
 - **delete_virtual_bone** @:3237 - HandleDeleteVirtualBone (SkeletonHandlers.cpp:2946-3007, ~62 lines) finds a named virtual bone on a USkeleton and removes it via Skeleton->RemoveVirtualBones. No advertised action performs deletion of a virtual bone - create_virtual_bone only creates.
 - **preview_physics** @:3908 - Inline stub at SkeletonHandlers.cpp:3907-3942 (~35 lines): loads skeletalMeshPath (or legacy skeletonPath) via LoadObject, errors if missing, and otherwise just echoes back assetPath/previewRequested/mode:"editor_asset_verification" - it does not toggle any real physics-simulation preview state, jus…
 
-### SplineHandlers
-- **create_spline_mesh_actor** @:1992 - HandleCreateSplineMeshActor (SplineHandlers.cpp :1316-1431, ~116 lines) spawns a brand-new plain AActor at a given location/rotation, creates a USplineMeshComponent as its root component (distinct from the advertised create_spline_mesh_component path, HandleCreateSplineMeshComponent, which adds a sp…
+### SplineHandlers (updated at the build_environment classing)
+- **create_spline_mesh_actor** @:1992 - HandleCreateSplineMeshActor (SplineHandlers.cpp :1316-1431, ~116 lines) spawns a brand-new plain AActor at a given location/rotation, creates a USplineMeshComponent as its root component (distinct from the advertised create_spline_mesh_component path, HandleCreateSplineMeshComponent, which adds a sp… Disposition: **deleted at the build_environment classing (2026-07-05)** — the name is not in the `Splines()` routing list, so it was transport-dead (the dispatcher arm and the free function both died); advertise candidate parked for Aaron, recover from git.
+
+### LightingHandlers (added at the build_environment classing, 2026-07-05)
+Two dead disjuncts inside the retired `HandleLightingAction` chain, below the sweep
+inventory's radar (compound `||` arms of advertised branches). Both **deleted at the
+build_environment classing; recover from git history if advertising is wanted.**
+- **spawn_light** @:217 - `if (Lower == TEXT("spawn_light") || Lower == TEXT("create_light"))` — rule 6's parked internal literal: the manage_level create_light payload rewrite that targeted it became a typed `HandleLightingAction(..., TEXT("create_light"), ...)` call at manage_level's classing (2026-07-04), and `spawn_light` is not in the `Lighting()` routing list, so no path could produce the spelling. The body lives on as `HandleLightingCreateLight` (its UE_LOG strings keep the historical `spawn_light:` prefix).
+- **bake_lightmap** @:736 - `else if (Lower == TEXT("build_lighting") || Lower == TEXT("bake_lightmap"))` — `bake_lightmap` sits in `BuildEnvironmentCore()`, not `Lighting()`, so the registration lambda always routed it to the env dispatcher's `HandleBakeLightmap` (the BUILD_LIGHTING editor-function implementation); this Lighting-chain copy (console `BuildLighting <quality>` exec) was unreachable. Deliberately-kept sibling implementation per the de-alias pass ("two different implementations, not aliases"): `build_lighting` keeps this body as `HandleLightingBuildLighting`; `bake_lightmap` keeps `HandleEnvironmentBakeLightmap`.
 
 ### SystemControlHandlers (updated at the system_control classing)
 - **export_asset** @:1161 - Complete, fully-implemented generic asset-export feature (SystemControlHandlers.cpp:1161-1340, ~180 lines) living inside HandleSystemControlAction. Given assetPath + exportPath params, it: sanitizes both paths (SanitizeProjectRelativePath/SanitizeProjectFilePath), enforces the resolved export path s… Disposition: **deleted at system_control classing**; advertise-candidate — generic asset exporter, recover from git.

@@ -4,7 +4,7 @@
 // manage_level member handlers. Dispatch lives in the FMcpCall classes
 // (Private/MCP/Calls/McpCalls_ManageLevel.cpp); each HandleLevel* member here
 // implements one advertised action. stream/unload share
-// HandleLevelStreamInternal; create_light delegates to HandleLightingAction
+// HandleLevelStreamInternal; create_light delegates to HandleLightingCreateLight
 // (McpAutomationBridge_LightingHandlers.cpp).
 //
 // VERSION COMPATIBILITY:
@@ -1531,7 +1531,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelUnload(
 bool UMcpAutomationBridgeSubsystem::HandleLevelCreateLight(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
-  return HandleLightingAction(RequestId, TEXT("create_light"), Payload, Socket);
+  return HandleLightingCreateLight(RequestId, Payload, Socket);
 }
 
 bool UMcpAutomationBridgeSubsystem::HandleLevelBuildLighting(

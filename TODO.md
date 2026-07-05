@@ -961,7 +961,15 @@ entries (its three manage_level_structure mentions are WorldPartitionHandlers
 entries citing the family as the live sibling; they stay open).
 manage_networking's classing (2026-07-05) closed nothing either — the ledger
 has no NetworkingHandlers, InputHandlers, GameFrameworkHandlers, or
-SessionsHandlers entries.
+SessionsHandlers entries. build_environment's classing (2026-07-05) closed
+three — SplineHandlers' create_spline_mesh_actor (hidden ~116-line
+SplineMeshActor spawner, deleted-at-classing; advertise candidate parked for
+Aaron, recover from git) and EnvironmentHandlers' set_sun_intensity +
+set_skylight_intensity (deleted with the whole transport-dead
+HandleControlEnvironmentAction legacy dispatcher, which also took the hidden
+set_time_of_day duplicate; recover from git) — plus two below-radar dead
+disjuncts in the Lighting chain (spawn_light, bake_lightmap), ledgered at
+deletion — **53 hidden entries remain**.
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,

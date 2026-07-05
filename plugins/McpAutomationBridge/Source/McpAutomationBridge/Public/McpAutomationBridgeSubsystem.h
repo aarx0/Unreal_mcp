@@ -625,23 +625,181 @@ private:
   HandleCreateSubmixEffect(const FString &RequestId,
                            const TSharedPtr<FJsonObject> &Payload,
                            FMcpResponseHandle RequestingSocket);
-  // Lighting related automation actions
+  // build_environment is classed — see
+  // MCP/Calls/McpCalls_BuildEnvironment.cpp.
+  // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
+  // can delegate, until the module split de-members the implementations off
+  // the subsystem. Implementations span three TUs: HandleEnvironment* @
+  // EnvironmentHandlers.cpp, HandleLighting* @ LightingHandlers.cpp,
+  // HandleSpline* @ SplineHandlers.cpp.
 public:
-  // Called directly by the classed manage_level create_light (MCP/Calls/).
-  bool HandleLightingAction(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentAddFoliageInstances(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentGetFoliageInstances(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentRemoveFoliage(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentPaintFoliage(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentCreateProceduralFoliage(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentCreateProceduralTerrain(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentAddFoliage(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentCreateLandscape(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentPaintLandscape(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentSculpt(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentModifyHeightmap(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentSetLandscapeMaterial(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentCreateLandscapeGrassType(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentGenerateLODs(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentBakeLightmap(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentExportSnapshot(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentImportSnapshot(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentDelete(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentCreateSkySphere(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentSetTimeOfDay(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleEnvironmentCreateFogVolume(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+  bool HandleLightingListLightTypes(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle RequestingSocket);
+  bool HandleLightingCreateLight(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle RequestingSocket);
+  bool HandleLightingCreateSkyLight(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle RequestingSocket);
+  bool HandleLightingBuildLighting(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle RequestingSocket);
+  bool HandleLightingEnsureSingleSkyLight(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleLightingCreateLightmassVolume(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle RequestingSocket);
+  bool HandleLightingSetupVolumetricFog(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+  bool HandleLightingSetupGlobalIllumination(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle RequestingSocket);
+  bool HandleLightingConfigureShadows(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleLightingSetExposure(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle RequestingSocket);
+  bool HandleLightingSetAmbientOcclusion(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle RequestingSocket);
+  bool HandleLightingCreateLightingEnabledLevel(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle RequestingSocket);
+  bool HandleSplineCreateSplineActor(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleSplineAddSplinePoint(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleSplineRemoveSplinePoint(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleSplineSetSplinePointPosition(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleSplineSetSplinePointTangents(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleSplineSetSplinePointRotation(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleSplineSetSplinePointScale(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleSplineSetSplineType(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle Socket);
+  bool HandleSplineCreateSplineMeshComponent(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle Socket);
+  bool HandleSplineSetSplineMeshAsset(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleSplineConfigureSplineMeshAxis(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+  bool HandleSplineSetSplineMeshMaterial(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleSplineScatterMeshesAlongSpline(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle Socket);
+  bool HandleSplineConfigureMeshSpacing(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleSplineConfigureMeshRandomization(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle Socket);
+  bool HandleSplineCreateRoadSpline(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleSplineCreateRiverSpline(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleSplineCreateFenceSpline(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleSplineCreateWallSpline(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleSplineCreateCableSpline(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleSplineCreatePipeSpline(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleSplineGetSplinesInfo(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
 
 private:
-  // Environment building automation actions (landscape, foliage, etc.)
-  bool HandleBuildEnvironmentAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool HandleControlEnvironmentAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
   bool HandlePaintFoliage(const FString &RequestId, const FString &Action,
                           const TSharedPtr<FJsonObject> &Payload,
                           FMcpResponseHandle RequestingSocket);
@@ -1944,11 +2102,6 @@ public:
 private:
   // Phase 25: Navigation System handlers
   bool HandleManageNavigationAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  // Phase 26: Spline System handlers
-  bool HandleManageSplinesAction(
       const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);

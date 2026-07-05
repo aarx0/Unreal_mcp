@@ -5,19 +5,12 @@
 //
 // HANDLERS IMPLEMENTED:
 // --------------------
-// Section 1: Build Environment Actions
-//   - HandleBuildEnvironmentAction     : Main dispatcher for environment sub-actions
-//     Sub-actions: export_snapshot, import_snapshot, delete, create_sky_sphere,
-//                  set_time_of_day, create_fog_volume, foliage dispatch
-//
-// Section 2: Control Environment Actions
-//   - HandleControlEnvironmentAction   : Environment control (time, lighting)
-//     Sub-actions: set_time_of_day, set_sun_intensity, set_skylight_intensity
-//
-// Section 3: Console Command Handler
-//   - HandleConsoleCommandAction       : Execute console commands with security filtering
-//     Supports: Direct "console_command" and "system_control" with subAction
-//     Security: Blocks dangerous commands (quit, exit, crash, etc.)
+// Section 1: Build Environment Member Handlers
+//   - HandleEnvironment* members       : build_environment core actions (classed
+//     in MCP/Calls/McpCalls_BuildEnvironment.cpp) — six inline bodies
+//     (export_snapshot, import_snapshot, delete, create_sky_sphere,
+//     set_time_of_day, create_fog_volume) plus 15 wrappers forwarding to the
+//     dedicated foliage/landscape members
 //
 // Section 4: Environment Utilities
 //   - HandleBakeLightmap               : Lightmap baking via BUILD_LIGHTING
@@ -29,14 +22,6 @@
 // build_environment:
 //   Payload: { "action": "<sub-action>", ... }
 //   Response: { "success": bool, "action": string, ... }
-//
-// control_environment:
-//   Payload: { "action": "<sub-action>", "hour"?: number, "intensity"?: number }
-//   Response: { "success": bool, "hour"?: number, "intensity"?: number }
-//
-// console_command:
-//   Payload: { "command": string }
-//   Response: { "success": bool, "command": string, "executed": bool }
 //
 // inspect:
 //   Payload: { "action": "<sub-action>", "objectPath"?: string }
@@ -346,692 +331,302 @@ static TSharedPtr<FJsonObject> McpDescribeRuntimeActor(AActor *Actor, const TArr
 #endif
 
 // =============================================================================
-// Section 1: Build Environment Actions
+// Section 1: Build Environment Member Handlers
 // =============================================================================
+// Dispatch lives in the build_environment FMcpCall classes
+// (Private/MCP/Calls/McpCalls_BuildEnvironment.cpp); each HandleEnvironment*
+// member here owns one advertised core action. Six bodies are extracted
+// verbatim from the retired dispatcher chain, replicating its editor-build
+// stub per member; the other 15 forward to the family's dedicated 4-arg
+// members exactly as the retired branches did (same internal action
+// literals and payload re-shaping).
 
-/**
- * HandleBuildEnvironmentAction
- * ----------------------------
- * Main dispatcher for environment building actions.
- * 
- * Payload:
- *   - action: string (required) - Sub-action to execute
- *   - Other params vary by sub-action
- * 
- * Supported Sub-actions:
- *   - add_foliage_instances: Dispatch to HandlePaintFoliage
- *   - get_foliage_instances: Dispatch to HandleGetFoliageInstances
- *   - remove_foliage: Dispatch to HandleRemoveFoliage
- *   - paint_foliage: Dispatch to HandlePaintFoliage
- *   - create_procedural_foliage: Dispatch to HandleCreateProceduralFoliage
- *   - create_procedural_terrain: Dispatch to HandleCreateProceduralTerrain
- *   - add_foliage_type/add_foliage: Dispatch to HandleAddFoliageType
- *   - create_landscape: Dispatch to HandleCreateLandscape
- *   - paint_landscape/paint_landscape_layer: Dispatch to HandlePaintLandscapeLayer
- *   - sculpt_landscape/sculpt: Dispatch to HandleSculptLandscape
- *   - modify_heightmap: Dispatch to HandleModifyHeightmap
- *   - set_landscape_material: Dispatch to HandleSetLandscapeMaterial
- *   - create_landscape_grass_type: Dispatch to HandleCreateLandscapeGrassType
- *   - generate_lods: Dispatch to HandleGenerateLODs
- *   - bake_lightmap: Dispatch to HandleBakeLightmap
- *   - export_snapshot: Export environment snapshot to JSON file
- *   - import_snapshot: Import environment snapshot from JSON file
- *   - delete: Delete environment actors by name
- *   - create_sky_sphere: Create sky sphere actor
- *   - set_time_of_day: Set time of day on sky sphere
- *   - create_fog_volume: Create exponential height fog
- */
-bool UMcpAutomationBridgeSubsystem::HandleBuildEnvironmentAction(
-    const FString &RequestId, const FString &Action,
-    const TSharedPtr<FJsonObject> &Payload,
+// add_foliage_instances
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentAddFoliageInstances(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    const FString Lower = Action.ToLower();
-    if (!Lower.Equals(TEXT("build_environment"), ESearchCase::IgnoreCase) &&
-        !Lower.StartsWith(TEXT("build_environment")))
+    FString FoliageTypePath;
+    if (!Payload->TryGetStringField(TEXT("foliageTypePath"), FoliageTypePath) ||
+        FoliageTypePath.IsEmpty())
     {
-        return false;
-    }
-
-    // Validate payload
-    if (!Payload.IsValid())
-    {
-        SendAutomationError(RequestingSocket, RequestId,
-                            TEXT("build_environment payload missing."),
-                            TEXT("INVALID_PAYLOAD"));
-        return true;
-    }
-
-    // Extract sub-action
-    FString SubAction;
-    Payload->TryGetStringField(TEXT("action"), SubAction);
-    const FString LowerSub = SubAction.ToLower();
-
-    UE_LOG(LogMcpEnvironmentHandlers, Verbose, 
-           TEXT("HandleBuildEnvironmentAction: SubAction=%s"), *LowerSub);
-
-    // =========================================================================
-    // Foliage Sub-actions (dispatch to dedicated handlers)
-    // =========================================================================
-    if (LowerSub == TEXT("add_foliage_instances"))
-    {
-        FString FoliageTypePath;
-        if (!Payload->TryGetStringField(TEXT("foliageTypePath"), FoliageTypePath) ||
-            FoliageTypePath.IsEmpty())
-        {
-            Payload->TryGetStringField(TEXT("foliageType"), FoliageTypePath);
-        }
-
-        TSharedPtr<FJsonObject> FoliagePayload = McpHandlerUtils::CreateResultObject();
-        if (!FoliageTypePath.IsEmpty())
-        {
-            FoliagePayload->SetStringField(TEXT("foliageTypePath"), FoliageTypePath);
-        }
-
-        // Preserve full transform data so callers can specify rotation and scale.
-        const TArray<TSharedPtr<FJsonValue>> *Transforms = nullptr;
-        Payload->TryGetArrayField(TEXT("transforms"), Transforms);
-        if (Transforms)
-        {
-            FoliagePayload->SetArrayField(TEXT("transforms"), *Transforms);
-        }
-
-        const TArray<TSharedPtr<FJsonValue>> *Locations = nullptr;
-        if (Payload->TryGetArrayField(TEXT("locations"), Locations) && Locations)
-        {
-            FoliagePayload->SetArrayField(TEXT("locations"), *Locations);
-        }
-
-        return HandleAddFoliageInstances(RequestId, TEXT("add_foliage_instances"),
-                                         FoliagePayload, RequestingSocket);
-    }
-    else if (LowerSub == TEXT("get_foliage_instances"))
-    {
-        FString FoliageTypePath;
         Payload->TryGetStringField(TEXT("foliageType"), FoliageTypePath);
-        TSharedPtr<FJsonObject> FoliagePayload = McpHandlerUtils::CreateResultObject();
-        if (!FoliageTypePath.IsEmpty())
-        {
-            FoliagePayload->SetStringField(TEXT("foliageTypePath"), FoliageTypePath);
-        }
-        return HandleGetFoliageInstances(RequestId, TEXT("get_foliage_instances"),
-                                         FoliagePayload, RequestingSocket);
-    }
-    else if (LowerSub == TEXT("remove_foliage"))
-    {
-        FString FoliageTypePath;
-        Payload->TryGetStringField(TEXT("foliageType"), FoliageTypePath);
-        bool bRemoveAll = false;
-        Payload->TryGetBoolField(TEXT("removeAll"), bRemoveAll);
-        
-        TSharedPtr<FJsonObject> FoliagePayload = McpHandlerUtils::CreateResultObject();
-        if (!FoliageTypePath.IsEmpty())
-        {
-            FoliagePayload->SetStringField(TEXT("foliageTypePath"), FoliageTypePath);
-        }
-        FoliagePayload->SetBoolField(TEXT("removeAll"), bRemoveAll);
-        return HandleRemoveFoliage(RequestId, TEXT("remove_foliage"),
-                                   FoliagePayload, RequestingSocket);
-    }
-    else if (LowerSub == TEXT("paint_foliage"))
-    {
-        return HandlePaintFoliage(RequestId, TEXT("paint_foliage"), Payload,
-                                  RequestingSocket);
-    }
-    else if (LowerSub == TEXT("create_procedural_foliage"))
-    {
-        return HandleCreateProceduralFoliage(RequestId,
-                                             TEXT("create_procedural_foliage"),
-                                             Payload, RequestingSocket);
-    }
-    else if (LowerSub == TEXT("create_procedural_terrain"))
-    {
-        return HandleCreateProceduralTerrain(RequestId,
-                                             TEXT("create_procedural_terrain"),
-                                             Payload, RequestingSocket);
-    }
-    else if (LowerSub == TEXT("add_foliage"))
-    {
-        return HandleAddFoliageType(RequestId, TEXT("add_foliage_type"),
-                                    Payload, RequestingSocket);
-    }
-    else if (LowerSub == TEXT("create_landscape"))
-    {
-        return HandleCreateLandscape(RequestId, TEXT("create_landscape"),
-                                     Payload, RequestingSocket);
     }
 
-    // =========================================================================
-    // Landscape Operations (dispatch to dedicated handlers)
-    // =========================================================================
-    else if (LowerSub == TEXT("paint_landscape"))
+    TSharedPtr<FJsonObject> FoliagePayload = McpHandlerUtils::CreateResultObject();
+    if (!FoliageTypePath.IsEmpty())
     {
-        return HandlePaintLandscapeLayer(RequestId, TEXT("paint_landscape_layer"),
+        FoliagePayload->SetStringField(TEXT("foliageTypePath"), FoliageTypePath);
+    }
+
+    // Preserve full transform data so callers can specify rotation and scale.
+    const TArray<TSharedPtr<FJsonValue>> *Transforms = nullptr;
+    Payload->TryGetArrayField(TEXT("transforms"), Transforms);
+    if (Transforms)
+    {
+        FoliagePayload->SetArrayField(TEXT("transforms"), *Transforms);
+    }
+
+    const TArray<TSharedPtr<FJsonValue>> *Locations = nullptr;
+    if (Payload->TryGetArrayField(TEXT("locations"), Locations) && Locations)
+    {
+        FoliagePayload->SetArrayField(TEXT("locations"), *Locations);
+    }
+
+    return HandleAddFoliageInstances(RequestId, TEXT("add_foliage_instances"),
+                                     FoliagePayload, RequestingSocket);
+}
+
+// get_foliage_instances
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentGetFoliageInstances(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    FString FoliageTypePath;
+    Payload->TryGetStringField(TEXT("foliageType"), FoliageTypePath);
+    TSharedPtr<FJsonObject> FoliagePayload = McpHandlerUtils::CreateResultObject();
+    if (!FoliageTypePath.IsEmpty())
+    {
+        FoliagePayload->SetStringField(TEXT("foliageTypePath"), FoliageTypePath);
+    }
+    return HandleGetFoliageInstances(RequestId, TEXT("get_foliage_instances"),
+                                     FoliagePayload, RequestingSocket);
+}
+
+// remove_foliage
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentRemoveFoliage(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    FString FoliageTypePath;
+    Payload->TryGetStringField(TEXT("foliageType"), FoliageTypePath);
+    bool bRemoveAll = false;
+    Payload->TryGetBoolField(TEXT("removeAll"), bRemoveAll);
+    
+    TSharedPtr<FJsonObject> FoliagePayload = McpHandlerUtils::CreateResultObject();
+    if (!FoliageTypePath.IsEmpty())
+    {
+        FoliagePayload->SetStringField(TEXT("foliageTypePath"), FoliageTypePath);
+    }
+    FoliagePayload->SetBoolField(TEXT("removeAll"), bRemoveAll);
+    return HandleRemoveFoliage(RequestId, TEXT("remove_foliage"),
+                               FoliagePayload, RequestingSocket);
+}
+
+// paint_foliage
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentPaintFoliage(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandlePaintFoliage(RequestId, TEXT("paint_foliage"), Payload,
+                              RequestingSocket);
+}
+
+// create_procedural_foliage
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateProceduralFoliage(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandleCreateProceduralFoliage(RequestId,
+                                         TEXT("create_procedural_foliage"),
                                          Payload, RequestingSocket);
-    }
-    else if (LowerSub == TEXT("sculpt"))
-    {
-        return HandleSculptLandscape(RequestId, TEXT("sculpt_landscape"), Payload,
-                                     RequestingSocket);
-    }
-    else if (LowerSub == TEXT("modify_heightmap"))
-    {
-        return HandleModifyHeightmap(RequestId, TEXT("modify_heightmap"), Payload,
-                                     RequestingSocket);
-    }
-    else if (LowerSub == TEXT("set_landscape_material"))
-    {
-        return HandleSetLandscapeMaterial(RequestId, TEXT("set_landscape_material"),
-                                          Payload, RequestingSocket);
-    }
-    else if (LowerSub == TEXT("create_landscape_grass_type"))
-    {
-        return HandleCreateLandscapeGrassType(RequestId,
-                                              TEXT("create_landscape_grass_type"),
-                                              Payload, RequestingSocket);
-    }
-    else if (LowerSub == TEXT("generate_lods"))
-    {
-        return HandleGenerateLODs(RequestId, TEXT("generate_lods"), Payload,
-                                  RequestingSocket);
-    }
-    else if (LowerSub == TEXT("bake_lightmap"))
-    {
-        return HandleBakeLightmap(RequestId, TEXT("bake_lightmap"), Payload,
-                                  RequestingSocket);
-    }
+}
 
+// create_procedural_terrain
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateProceduralTerrain(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandleCreateProceduralTerrain(RequestId,
+                                         TEXT("create_procedural_terrain"),
+                                         Payload, RequestingSocket);
+}
+
+// add_foliage
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentAddFoliage(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandleAddFoliageType(RequestId, TEXT("add_foliage_type"),
+                                Payload, RequestingSocket);
+}
+
+// create_landscape
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateLandscape(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandleCreateLandscape(RequestId, TEXT("create_landscape"),
+                                 Payload, RequestingSocket);
+}
+
+// paint_landscape
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentPaintLandscape(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandlePaintLandscapeLayer(RequestId, TEXT("paint_landscape_layer"),
+                                     Payload, RequestingSocket);
+}
+
+// sculpt
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentSculpt(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandleSculptLandscape(RequestId, TEXT("sculpt_landscape"), Payload,
+                                 RequestingSocket);
+}
+
+// modify_heightmap
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentModifyHeightmap(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandleModifyHeightmap(RequestId, TEXT("modify_heightmap"), Payload,
+                                 RequestingSocket);
+}
+
+// set_landscape_material
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentSetLandscapeMaterial(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandleSetLandscapeMaterial(RequestId, TEXT("set_landscape_material"),
+                                      Payload, RequestingSocket);
+}
+
+// create_landscape_grass_type
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateLandscapeGrassType(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandleCreateLandscapeGrassType(RequestId,
+                                          TEXT("create_landscape_grass_type"),
+                                          Payload, RequestingSocket);
+}
+
+// generate_lods
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentGenerateLODs(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandleGenerateLODs(RequestId, TEXT("generate_lods"), Payload,
+                              RequestingSocket);
+}
+
+// bake_lightmap
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentBakeLightmap(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return HandleBakeLightmap(RequestId, TEXT("bake_lightmap"), Payload,
+                              RequestingSocket);
+}
+
+// export_snapshot: Export environment snapshot to JSON file
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentExportSnapshot(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
 #if WITH_EDITOR
-    // =========================================================================
-    // Editor-Only Environment Actions
-    // =========================================================================
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetStringField(TEXT("action"), LowerSub);
+    Resp->SetStringField(TEXT("action"), TEXT("export_snapshot"));
     bool bSuccess = true;
-    FString Message = FString::Printf(TEXT("Environment action '%s' completed"), *LowerSub);
+    FString Message = TEXT("Environment action 'export_snapshot' completed");
     FString ErrorCode;
 
-    // -------------------------------------------------------------------------
-    // export_snapshot: Export environment snapshot to JSON file
-    // -------------------------------------------------------------------------
-    if (LowerSub == TEXT("export_snapshot"))
+    FString Path;
+    Payload->TryGetStringField(TEXT("path"), Path);
+    
+    if (Path.IsEmpty())
     {
-        FString Path;
-        Payload->TryGetStringField(TEXT("path"), Path);
-        
-        if (Path.IsEmpty())
-        {
-            bSuccess = false;
-            Message = TEXT("path required for export_snapshot");
-            ErrorCode = TEXT("INVALID_ARGUMENT");
-            Resp->SetStringField(TEXT("error"), Message);
-        }
-        else
-        {
-            // SECURITY: Validate file path to prevent directory traversal
-            FString SafePath = SanitizeProjectFilePath(Path);
-            if (SafePath.IsEmpty())
-            {
-                bSuccess = false;
-                Message = FString::Printf(
-                    TEXT("Invalid or unsafe path: %s. Path must be relative to project (e.g., /Temp/snapshot.json)"),
-                    *Path);
-                ErrorCode = TEXT("SECURITY_VIOLATION");
-                Resp->SetStringField(TEXT("error"), Message);
-            }
-            else
-            {
-                // Convert project-relative path to absolute file path
-                FString AbsolutePath = FPaths::ProjectDir() / SafePath;
-                FPaths::MakeStandardFilename(AbsolutePath);
-
-                // CRITICAL: Convert to absolute path for proper comparison
-                // This prevents path traversal via leading slash (e.g., /etc/passwd)
-                AbsolutePath = FPaths::ConvertRelativePathToFull(AbsolutePath);
-                FPaths::NormalizeFilename(AbsolutePath);
-
-                FString NormalizedProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
-                FPaths::NormalizeDirectoryName(NormalizedProjectDir);
-                if (!NormalizedProjectDir.EndsWith(TEXT("/")))
-                {
-                    NormalizedProjectDir += TEXT("/");
-                }
-
-                if (!AbsolutePath.StartsWith(NormalizedProjectDir, ESearchCase::IgnoreCase))
-                {
-                    bSuccess = false;
-                    Message = FString::Printf(TEXT("Invalid or unsafe path: %s. Path escapes project directory."), *Path);
-                    ErrorCode = TEXT("SECURITY_VIOLATION");
-                    Resp->SetStringField(TEXT("error"), Message);
-                }
-                else if (!McpValidateProjectSnapshotFilePath(AbsolutePath, Message))
-                {
-                    bSuccess = false;
-                    ErrorCode = TEXT("SECURITY_VIOLATION");
-                    Resp->SetStringField(TEXT("error"), Message);
-                }
-                else
-                {
-                    TSharedPtr<FJsonObject> Snapshot = McpHandlerUtils::CreateResultObject();
-                    Snapshot->SetStringField(TEXT("timestamp"), FDateTime::UtcNow().ToString());
-                    Snapshot->SetStringField(TEXT("type"), TEXT("environment_snapshot"));
-
-                    FString JsonString;
-                    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
-                    if (FJsonSerializer::Serialize(Snapshot.ToSharedRef(), Writer))
-                    {
-                        if (FFileHelper::SaveStringToFile(JsonString, *AbsolutePath))
-                        {
-                            Resp->SetStringField(TEXT("exportPath"), SafePath);
-                            Resp->SetStringField(TEXT("message"), TEXT("Snapshot exported"));
-                        }
-                        else
-                        {
-                            bSuccess = false;
-                            Message = TEXT("Failed to write snapshot file");
-                            ErrorCode = TEXT("WRITE_FAILED");
-                            Resp->SetStringField(TEXT("error"), Message);
-                        }
-                    }
-                    else
-                    {
-                        bSuccess = false;
-                        Message = TEXT("Failed to serialize snapshot");
-                        ErrorCode = TEXT("SERIALIZE_FAILED");
-                        Resp->SetStringField(TEXT("error"), Message);
-                    }
-                }
-            }
-        }
-    }
-    // -------------------------------------------------------------------------
-    // import_snapshot: Import environment snapshot from JSON file
-    // -------------------------------------------------------------------------
-    else if (LowerSub == TEXT("import_snapshot"))
-    {
-        FString Path;
-        Payload->TryGetStringField(TEXT("path"), Path);
-        
-        if (Path.IsEmpty())
-        {
-            bSuccess = false;
-            Message = TEXT("path required for import_snapshot");
-            ErrorCode = TEXT("INVALID_ARGUMENT");
-            Resp->SetStringField(TEXT("error"), Message);
-        }
-        else
-        {
-            // SECURITY: Validate file path to prevent directory traversal
-            FString SafePath = SanitizeProjectFilePath(Path);
-            if (SafePath.IsEmpty())
-            {
-                bSuccess = false;
-                Message = FString::Printf(
-                    TEXT("Invalid or unsafe path: %s. Path must be relative to project (e.g., /Temp/snapshot.json)"),
-                    *Path);
-                ErrorCode = TEXT("SECURITY_VIOLATION");
-                Resp->SetStringField(TEXT("error"), Message);
-            }
-            else
-            {
-                FString AbsolutePath = FPaths::ProjectDir() / SafePath;
-                FPaths::MakeStandardFilename(AbsolutePath);
-
-                // CRITICAL: Convert to absolute path for proper comparison
-                // This prevents path traversal via leading slash (e.g., /etc/passwd)
-                AbsolutePath = FPaths::ConvertRelativePathToFull(AbsolutePath);
-                FPaths::NormalizeFilename(AbsolutePath);
-
-                FString NormalizedProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
-                FPaths::NormalizeDirectoryName(NormalizedProjectDir);
-                if (!NormalizedProjectDir.EndsWith(TEXT("/")))
-                {
-                    NormalizedProjectDir += TEXT("/");
-                }
-
-                if (!AbsolutePath.StartsWith(NormalizedProjectDir, ESearchCase::IgnoreCase))
-                {
-                    bSuccess = false;
-                    Message = FString::Printf(TEXT("Invalid or unsafe path: %s. Path escapes project directory."), *Path);
-                    ErrorCode = TEXT("SECURITY_VIOLATION");
-                    Resp->SetStringField(TEXT("error"), Message);
-                }
-                else if (!McpValidateProjectSnapshotFilePath(AbsolutePath, Message))
-                {
-                    bSuccess = false;
-                    ErrorCode = TEXT("SECURITY_VIOLATION");
-                    Resp->SetStringField(TEXT("error"), Message);
-                }
-                else
-                {
-                    FString JsonString;
-                    if (!FFileHelper::LoadFileToString(JsonString, *AbsolutePath))
-                    {
-                        bSuccess = false;
-                        Message = TEXT("Failed to read snapshot file");
-                        ErrorCode = TEXT("LOAD_FAILED");
-                        Resp->SetStringField(TEXT("error"), Message);
-                    }
-                    else
-                    {
-                        TSharedPtr<FJsonObject> SnapshotObj;
-                        TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
-                        if (!FJsonSerializer::Deserialize(Reader, SnapshotObj) || !SnapshotObj.IsValid())
-                        {
-                            bSuccess = false;
-                            Message = TEXT("Failed to parse snapshot");
-                            ErrorCode = TEXT("PARSE_FAILED");
-                            Resp->SetStringField(TEXT("error"), Message);
-                        }
-                        else
-                        {
-                            Resp->SetObjectField(TEXT("snapshot"), SnapshotObj.ToSharedRef());
-                            Resp->SetStringField(TEXT("message"), TEXT("Snapshot imported"));
-                        }
-                    }
-                }
-            }
-        }
-    }
-    // -------------------------------------------------------------------------
-    // delete: Delete environment actors by name
-    // -------------------------------------------------------------------------
-    else if (LowerSub == TEXT("delete"))
-    {
-        const TArray<TSharedPtr<FJsonValue>> *NamesArray = nullptr;
-        if (!Payload->TryGetArrayField(TEXT("names"), NamesArray) || !NamesArray)
-        {
-            bSuccess = false;
-            Message = TEXT("names array required for delete");
-            ErrorCode = TEXT("INVALID_ARGUMENT");
-            Resp->SetStringField(TEXT("error"), Message);
-        }
-        else if (!GEditor)
-        {
-            bSuccess = false;
-            Message = TEXT("Editor not available");
-            ErrorCode = TEXT("EDITOR_NOT_AVAILABLE");
-            Resp->SetStringField(TEXT("error"), Message);
-        }
-        else
-        {
-            UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
-            if (!ActorSS)
-            {
-                bSuccess = false;
-                Message = TEXT("EditorActorSubsystem not available");
-                ErrorCode = TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING");
-                Resp->SetStringField(TEXT("error"), Message);
-            }
-            else
-            {
-                TArray<FString> Deleted;
-                TArray<FString> Missing;
-
-                for (const TSharedPtr<FJsonValue> &Val : *NamesArray)
-                {
-                    if (Val.IsValid() && Val->Type == EJson::String)
-                    {
-                        FString Name = Val->AsString();
-                        TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
-                        bool bRemoved = false;
-
-                        for (AActor *A : AllActors)
-                        {
-                            if (A && A->GetActorLabel().Equals(Name, ESearchCase::IgnoreCase))
-                            {
-                                if (ActorSS->DestroyActor(A))
-                                {
-                                    Deleted.Add(Name);
-                                    bRemoved = true;
-                                }
-                                break;
-                            }
-                        }
-
-                        if (!bRemoved)
-                        {
-                            Missing.Add(Name);
-                        }
-                    }
-                }
-
-                // Build response arrays
-                TArray<TSharedPtr<FJsonValue>> DeletedArray;
-                for (const FString &Name : Deleted)
-                {
-                    DeletedArray.Add(MakeShared<FJsonValueString>(Name));
-                }
-                Resp->SetArrayField(TEXT("deleted"), DeletedArray);
-                Resp->SetNumberField(TEXT("deletedCount"), Deleted.Num());
-
-                if (Missing.Num() > 0)
-                {
-                    TArray<TSharedPtr<FJsonValue>> MissingArray;
-                    for (const FString &Name : Missing)
-                    {
-                        MissingArray.Add(MakeShared<FJsonValueString>(Name));
-                    }
-                    Resp->SetArrayField(TEXT("missing"), MissingArray);
-                    bSuccess = false;
-                    Message = TEXT("Some environment actors could not be removed");
-                    ErrorCode = TEXT("DELETE_PARTIAL");
-                    Resp->SetStringField(TEXT("error"), Message);
-                }
-                else
-                {
-                    Message = TEXT("Environment actors deleted");
-                }
-            }
-        }
-    }
-    // -------------------------------------------------------------------------
-    // create_sky_sphere: Create sky sphere actor
-    // -------------------------------------------------------------------------
-    else if (LowerSub == TEXT("create_sky_sphere"))
-    {
-        // Initialize to false - only set true on successful creation
         bSuccess = false;
-        
-        if (!GEditor)
-        {
-            Message = TEXT("Editor not available");
-            ErrorCode = TEXT("EDITOR_NOT_AVAILABLE");
-        }
-        else
-        {
-            UClass *SkySphereClass = LoadClass<AActor>(
-                nullptr, TEXT("/Script/Engine.Blueprint'/Engine/Maps/Templates/"
-                              "SkySphere.SkySphere_C'"));
-            if (!SkySphereClass)
-            {
-                FString RequestedName = TEXT("SkySphere");
-                Payload->TryGetStringField(TEXT("name"), RequestedName);
-
-                ADirectionalLight *SunLight = Cast<ADirectionalLight>(
-                    SpawnActorInActiveWorld<AActor>(ADirectionalLight::StaticClass(),
-                                                    FVector::ZeroVector,
-                                                    FRotator(-45.0f, -35.0f, 0.0f),
-                                                    TEXT("SkySunLight")));
-                ASkyLight *SkyLight = Cast<ASkyLight>(
-                    SpawnActorInActiveWorld<AActor>(ASkyLight::StaticClass(),
-                                                    FVector::ZeroVector,
-                                                    FRotator::ZeroRotator,
-                                                    TEXT("SkyLight")));
-
-                if (SunLight && SkyLight)
-                {
-                    SunLight->SetActorLabel(FString::Printf(TEXT("%s_Sun"), *RequestedName));
-                    SkyLight->SetActorLabel(FString::Printf(TEXT("%s_SkyLight"), *RequestedName));
-
-                    if (UDirectionalLightComponent *SunComp =
-                            Cast<UDirectionalLightComponent>(SunLight->GetLightComponent()))
-                    {
-                        SunComp->SetIntensity(10.0f);
-                        SunComp->MarkRenderStateDirty();
-                    }
-                    if (USkyLightComponent *SkyComp = SkyLight->GetLightComponent())
-                    {
-                        SkyComp->SetIntensity(1.0f);
-                        SkyComp->MarkRenderStateDirty();
-                    }
-
-                    bSuccess = true;
-                    Message = TEXT("Native sky lighting rig created");
-                    Resp->SetBoolField(TEXT("fallbackUsed"), true);
-                    Resp->SetStringField(TEXT("missingAsset"), TEXT("/Engine/Maps/Templates/SkySphere"));
-                    Resp->SetStringField(TEXT("actorName"), RequestedName);
-                    Resp->SetStringField(TEXT("sunActorName"), SunLight->GetActorLabel());
-                    Resp->SetStringField(TEXT("skyLightActorName"), SkyLight->GetActorLabel());
-                    McpHandlerUtils::AddVerification(Resp, SunLight);
-                }
-                else
-                {
-                    Message = TEXT("SkySphere class not found and native sky rig fallback failed");
-                    ErrorCode = TEXT("SPAWN_FAILED");
-                    Resp->SetStringField(TEXT("missingAsset"), TEXT("/Engine/Maps/Templates/SkySphere"));
-                }
-            }
-            else
-            {
-                AActor *SkySphere = SpawnActorInActiveWorld<AActor>(
-                    SkySphereClass, FVector::ZeroVector, FRotator::ZeroRotator,
-                    TEXT("SkySphere"));
-                if (SkySphere)
-                {
-                    bSuccess = true;
-                    Message = TEXT("Sky sphere created");
-                    Resp->SetStringField(TEXT("actorName"), SkySphere->GetActorLabel());
-                }
-                else
-                {
-                    Message = TEXT("Failed to spawn sky sphere actor");
-                    ErrorCode = TEXT("SPAWN_FAILED");
-                }
-            }
-        }
+        Message = TEXT("path required for export_snapshot");
+        ErrorCode = TEXT("INVALID_ARGUMENT");
+        Resp->SetStringField(TEXT("error"), Message);
     }
-    // -------------------------------------------------------------------------
-    // set_time_of_day: Set time of day on sky sphere
-    // -------------------------------------------------------------------------
-    else if (LowerSub == TEXT("set_time_of_day"))
-    {
-        float TimeOfDay = 12.0f;
-        if (!Payload->TryGetNumberField(TEXT("time"), TimeOfDay))
-        {
-            Payload->TryGetNumberField(TEXT("hour"), TimeOfDay);
-        }
-
-        if (GEditor)
-        {
-            UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
-            if (ActorSS)
-            {
-                for (AActor *Actor : ActorSS->GetAllLevelActors())
-                {
-                    if (Actor->GetClass()->GetName().Contains(TEXT("SkySphere")))
-                    {
-                        UFunction *SetTimeFunction = Actor->FindFunction(TEXT("SetTimeOfDay"));
-                        if (SetTimeFunction)
-                        {
-                            float TimeParam = TimeOfDay;
-                            Actor->ProcessEvent(SetTimeFunction, &TimeParam);
-                            bSuccess = true;
-                            Message = FString::Printf(TEXT("Time of day set to %.2f"), TimeOfDay);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        if (!bSuccess)
-        {
-            bSuccess = false;
-            Message = TEXT("Sky sphere not found or time function not available");
-            ErrorCode = TEXT("SET_TIME_FAILED");
-        }
-    }
-    // -------------------------------------------------------------------------
-    // create_fog_volume: Create exponential height fog
-    // -------------------------------------------------------------------------
-    else if (LowerSub == TEXT("create_fog_volume"))
-    {
-        // Initialize to false - only set true on successful creation
-        bSuccess = false;
-        
-        FVector Location(0, 0, 0);
-        // Support both top-level x/y/z and location object
-        const TSharedPtr<FJsonObject> *LocObj = nullptr;
-        if (Payload->TryGetObjectField(TEXT("location"), LocObj) && LocObj)
-        {
-            (*LocObj)->TryGetNumberField(TEXT("x"), Location.X);
-            (*LocObj)->TryGetNumberField(TEXT("y"), Location.Y);
-            (*LocObj)->TryGetNumberField(TEXT("z"), Location.Z);
-        }
-        else
-        {
-            Payload->TryGetNumberField(TEXT("x"), Location.X);
-            Payload->TryGetNumberField(TEXT("y"), Location.Y);
-            Payload->TryGetNumberField(TEXT("z"), Location.Z);
-        }
-
-        FString FogName;
-        Payload->TryGetStringField(TEXT("name"), FogName);
-        if (FogName.IsEmpty())
-        {
-            Payload->TryGetStringField(TEXT("actorName"), FogName);
-        }
-        if (FogName.IsEmpty())
-        {
-            FogName = TEXT("FogVolume");
-        }
-
-        if (!GEditor)
-        {
-            Message = TEXT("Editor not available");
-            ErrorCode = TEXT("EDITOR_NOT_AVAILABLE");
-        }
-        else
-        {
-            UClass *FogClass = LoadClass<AActor>(nullptr, TEXT("/Script/Engine.ExponentialHeightFog"));
-            if (!FogClass)
-            {
-                Message = TEXT("ExponentialHeightFog class not found");
-                ErrorCode = TEXT("CLASS_NOT_FOUND");
-            }
-            else
-            {
-                AActor *FogVolume = SpawnActorInActiveWorld<AActor>(
-                    FogClass, Location, FRotator::ZeroRotator, FogName);
-                if (FogVolume)
-                {
-                    bSuccess = true;
-                    Message = TEXT("Fog volume created");
-                    Resp->SetStringField(TEXT("actorName"), FogVolume->GetActorLabel());
-                }
-                else
-                {
-                    Message = TEXT("Failed to spawn fog volume actor");
-                    ErrorCode = TEXT("SPAWN_FAILED");
-                }
-            }
-        }
-    }
-    // -------------------------------------------------------------------------
-    // Unknown action
-    // -------------------------------------------------------------------------
     else
     {
-        bSuccess = false;
-        Message = FString::Printf(TEXT("Environment action '%s' not implemented"), *LowerSub);
-        ErrorCode = TEXT("NOT_IMPLEMENTED");
-        Resp->SetStringField(TEXT("error"), Message);
+        // SECURITY: Validate file path to prevent directory traversal
+        FString SafePath = SanitizeProjectFilePath(Path);
+        if (SafePath.IsEmpty())
+        {
+            bSuccess = false;
+            Message = FString::Printf(
+                TEXT("Invalid or unsafe path: %s. Path must be relative to project (e.g., /Temp/snapshot.json)"),
+                *Path);
+            ErrorCode = TEXT("SECURITY_VIOLATION");
+            Resp->SetStringField(TEXT("error"), Message);
+        }
+        else
+        {
+            // Convert project-relative path to absolute file path
+            FString AbsolutePath = FPaths::ProjectDir() / SafePath;
+            FPaths::MakeStandardFilename(AbsolutePath);
+
+            // CRITICAL: Convert to absolute path for proper comparison
+            // This prevents path traversal via leading slash (e.g., /etc/passwd)
+            AbsolutePath = FPaths::ConvertRelativePathToFull(AbsolutePath);
+            FPaths::NormalizeFilename(AbsolutePath);
+
+            FString NormalizedProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+            FPaths::NormalizeDirectoryName(NormalizedProjectDir);
+            if (!NormalizedProjectDir.EndsWith(TEXT("/")))
+            {
+                NormalizedProjectDir += TEXT("/");
+            }
+
+            if (!AbsolutePath.StartsWith(NormalizedProjectDir, ESearchCase::IgnoreCase))
+            {
+                bSuccess = false;
+                Message = FString::Printf(TEXT("Invalid or unsafe path: %s. Path escapes project directory."), *Path);
+                ErrorCode = TEXT("SECURITY_VIOLATION");
+                Resp->SetStringField(TEXT("error"), Message);
+            }
+            else if (!McpValidateProjectSnapshotFilePath(AbsolutePath, Message))
+            {
+                bSuccess = false;
+                ErrorCode = TEXT("SECURITY_VIOLATION");
+                Resp->SetStringField(TEXT("error"), Message);
+            }
+            else
+            {
+                TSharedPtr<FJsonObject> Snapshot = McpHandlerUtils::CreateResultObject();
+                Snapshot->SetStringField(TEXT("timestamp"), FDateTime::UtcNow().ToString());
+                Snapshot->SetStringField(TEXT("type"), TEXT("environment_snapshot"));
+
+                FString JsonString;
+                TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
+                if (FJsonSerializer::Serialize(Snapshot.ToSharedRef(), Writer))
+                {
+                    if (FFileHelper::SaveStringToFile(JsonString, *AbsolutePath))
+                    {
+                        Resp->SetStringField(TEXT("exportPath"), SafePath);
+                        Resp->SetStringField(TEXT("message"), TEXT("Snapshot exported"));
+                    }
+                    else
+                    {
+                        bSuccess = false;
+                        Message = TEXT("Failed to write snapshot file");
+                        ErrorCode = TEXT("WRITE_FAILED");
+                        Resp->SetStringField(TEXT("error"), Message);
+                    }
+                }
+                else
+                {
+                    bSuccess = false;
+                    Message = TEXT("Failed to serialize snapshot");
+                    ErrorCode = TEXT("SERIALIZE_FAILED");
+                    Resp->SetStringField(TEXT("error"), Message);
+                }
+            }
+        }
     }
 
     Resp->SetBoolField(TEXT("success"), bSuccess);
     SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
     return true;
-
 #else
     SendAutomationResponse(
         RequestingSocket, RequestId, false,
@@ -1041,255 +636,473 @@ bool UMcpAutomationBridgeSubsystem::HandleBuildEnvironmentAction(
 #endif
 }
 
-// =============================================================================
-// Section 2: Control Environment Actions
-// =============================================================================
-
-/**
- * HandleControlEnvironmentAction
- * -------------------------------
- * Handle environment control actions (time, lighting, etc.)
- * 
- * Payload:
- *   - action: string (required) - Sub-action to execute
- *   - hour: number (optional) - For set_time_of_day
- *   - intensity: number (optional) - For set_sun_intensity/set_skylight_intensity
- * 
- * Response:
- *   - success: bool
- *   - hour/intensity: number (depending on action)
- *   - actor: string - Affected actor path
- *   - pitch: number (for set_time_of_day)
- */
-bool UMcpAutomationBridgeSubsystem::HandleControlEnvironmentAction(
-    const FString &RequestId, const FString &Action,
-    const TSharedPtr<FJsonObject> &Payload,
+// import_snapshot: Import environment snapshot from JSON file
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentImportSnapshot(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    const FString Lower = Action.ToLower();
-    if (!Lower.Equals(TEXT("control_environment"), ESearchCase::IgnoreCase) &&
-        !Lower.StartsWith(TEXT("control_environment")))
-    {
-        return false;
-    }
-
-    if (!Payload.IsValid())
-    {
-        SendAutomationError(RequestingSocket, RequestId,
-                            TEXT("control_environment payload missing."),
-                            TEXT("INVALID_PAYLOAD"));
-        return true;
-    }
-
-    FString SubAction;
-    Payload->TryGetStringField(TEXT("action"), SubAction);
-    const FString LowerSub = SubAction.ToLower();
-
 #if WITH_EDITOR
-    // -------------------------------------------------------------------------
-    // Helper lambda for sending results
-    // -------------------------------------------------------------------------
-    auto SendResult = [&](bool bSuccess, const TCHAR *Message,
-                          const FString &ErrorCode,
-                          const TSharedPtr<FJsonObject> &Result)
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetStringField(TEXT("action"), TEXT("import_snapshot"));
+    bool bSuccess = true;
+    FString Message = TEXT("Environment action 'import_snapshot' completed");
+    FString ErrorCode;
+
+    FString Path;
+    Payload->TryGetStringField(TEXT("path"), Path);
+    
+    if (Path.IsEmpty())
     {
-        if (bSuccess)
+        bSuccess = false;
+        Message = TEXT("path required for import_snapshot");
+        ErrorCode = TEXT("INVALID_ARGUMENT");
+        Resp->SetStringField(TEXT("error"), Message);
+    }
+    else
+    {
+        // SECURITY: Validate file path to prevent directory traversal
+        FString SafePath = SanitizeProjectFilePath(Path);
+        if (SafePath.IsEmpty())
         {
-            SendAutomationResponse(RequestingSocket, RequestId, true,
-                                   Message ? Message : TEXT("Environment control succeeded."),
-                                   Result, FString());
+            bSuccess = false;
+            Message = FString::Printf(
+                TEXT("Invalid or unsafe path: %s. Path must be relative to project (e.g., /Temp/snapshot.json)"),
+                *Path);
+            ErrorCode = TEXT("SECURITY_VIOLATION");
+            Resp->SetStringField(TEXT("error"), Message);
         }
         else
         {
-            SendAutomationResponse(RequestingSocket, RequestId, false,
-                                   Message ? Message : TEXT("Environment control failed."),
-                                   Result, ErrorCode);
-        }
-    };
+            FString AbsolutePath = FPaths::ProjectDir() / SafePath;
+            FPaths::MakeStandardFilename(AbsolutePath);
 
-    // Get editor world
-    UWorld *World = nullptr;
-    if (GEditor)
-    {
-        World = GEditor->GetEditorWorldContext().World();
-    }
+            // CRITICAL: Convert to absolute path for proper comparison
+            // This prevents path traversal via leading slash (e.g., /etc/passwd)
+            AbsolutePath = FPaths::ConvertRelativePathToFull(AbsolutePath);
+            FPaths::NormalizeFilename(AbsolutePath);
 
-    if (!World)
-    {
-        SendResult(false, TEXT("Editor world is unavailable"),
-                   TEXT("WORLD_NOT_AVAILABLE"), nullptr);
-        return true;
-    }
-
-    // -------------------------------------------------------------------------
-    // Helper lambdas for finding lights
-    // -------------------------------------------------------------------------
-    auto FindFirstDirectionalLight = [&]() -> ADirectionalLight *
-    {
-        for (TActorIterator<ADirectionalLight> It(World); It; ++It)
-        {
-            if (ADirectionalLight *Light = *It)
+            FString NormalizedProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+            FPaths::NormalizeDirectoryName(NormalizedProjectDir);
+            if (!NormalizedProjectDir.EndsWith(TEXT("/")))
             {
-                if (IsValid(Light))
+                NormalizedProjectDir += TEXT("/");
+            }
+
+            if (!AbsolutePath.StartsWith(NormalizedProjectDir, ESearchCase::IgnoreCase))
+            {
+                bSuccess = false;
+                Message = FString::Printf(TEXT("Invalid or unsafe path: %s. Path escapes project directory."), *Path);
+                ErrorCode = TEXT("SECURITY_VIOLATION");
+                Resp->SetStringField(TEXT("error"), Message);
+            }
+            else if (!McpValidateProjectSnapshotFilePath(AbsolutePath, Message))
+            {
+                bSuccess = false;
+                ErrorCode = TEXT("SECURITY_VIOLATION");
+                Resp->SetStringField(TEXT("error"), Message);
+            }
+            else
+            {
+                FString JsonString;
+                if (!FFileHelper::LoadFileToString(JsonString, *AbsolutePath))
                 {
-                    return Light;
+                    bSuccess = false;
+                    Message = TEXT("Failed to read snapshot file");
+                    ErrorCode = TEXT("LOAD_FAILED");
+                    Resp->SetStringField(TEXT("error"), Message);
+                }
+                else
+                {
+                    TSharedPtr<FJsonObject> SnapshotObj;
+                    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
+                    if (!FJsonSerializer::Deserialize(Reader, SnapshotObj) || !SnapshotObj.IsValid())
+                    {
+                        bSuccess = false;
+                        Message = TEXT("Failed to parse snapshot");
+                        ErrorCode = TEXT("PARSE_FAILED");
+                        Resp->SetStringField(TEXT("error"), Message);
+                    }
+                    else
+                    {
+                        Resp->SetObjectField(TEXT("snapshot"), SnapshotObj.ToSharedRef());
+                        Resp->SetStringField(TEXT("message"), TEXT("Snapshot imported"));
+                    }
                 }
             }
         }
-        return nullptr;
-    };
-
-    auto FindFirstSkyLight = [&]() -> ASkyLight *
-    {
-        for (TActorIterator<ASkyLight> It(World); It; ++It)
-        {
-            if (ASkyLight *Sky = *It)
-            {
-                if (IsValid(Sky))
-                {
-                    return Sky;
-                }
-            }
-        }
-        return nullptr;
-    };
-
-    // -------------------------------------------------------------------------
-    // set_time_of_day: Adjust sun rotation based on hour
-    // -------------------------------------------------------------------------
-    if (LowerSub == TEXT("set_time_of_day"))
-    {
-        double Hour = 0.0;
-        const bool bHasHour = Payload->TryGetNumberField(TEXT("hour"), Hour);
-        if (!bHasHour)
-        {
-            SendResult(false, TEXT("Missing hour parameter"),
-                       TEXT("INVALID_ARGUMENT"), nullptr);
-            return true;
-        }
-
-        ADirectionalLight *SunLight = FindFirstDirectionalLight();
-        if (!SunLight)
-        {
-            SendResult(false, TEXT("No directional light found"),
-                       TEXT("SUN_NOT_FOUND"), nullptr);
-            return true;
-        }
-
-        const float ClampedHour = FMath::Clamp(static_cast<float>(Hour), 0.0f, 24.0f);
-        const float SolarPitch = (ClampedHour / 24.0f) * 360.0f - 90.0f;
-
-        SunLight->Modify();
-        FRotator NewRotation = SunLight->GetActorRotation();
-        NewRotation.Pitch = SolarPitch;
-        SunLight->SetActorRotation(NewRotation);
-
-        if (UDirectionalLightComponent *LightComp =
-                Cast<UDirectionalLightComponent>(SunLight->GetLightComponent()))
-        {
-            LightComp->MarkRenderStateDirty();
-        }
-
-        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetNumberField(TEXT("hour"), ClampedHour);
-        Result->SetNumberField(TEXT("pitch"), SolarPitch);
-        Result->SetStringField(TEXT("actor"), SunLight->GetPathName());
-
-        // Add verification data
-        McpHandlerUtils::AddVerification(Result, SunLight);
-
-        SendResult(true, TEXT("Time of day updated"), FString(), Result);
-        return true;
     }
 
-    // -------------------------------------------------------------------------
-    // set_sun_intensity: Set directional light intensity
-    // -------------------------------------------------------------------------
-    if (LowerSub == TEXT("set_sun_intensity"))
-    {
-        double Intensity = 0.0;
-        if (!Payload->TryGetNumberField(TEXT("intensity"), Intensity))
-        {
-            SendResult(false, TEXT("Missing intensity parameter"),
-                       TEXT("INVALID_ARGUMENT"), nullptr);
-            return true;
-        }
-
-        ADirectionalLight *SunLight = FindFirstDirectionalLight();
-        if (!SunLight)
-        {
-            SendResult(false, TEXT("No directional light found"),
-                       TEXT("SUN_NOT_FOUND"), nullptr);
-            return true;
-        }
-
-        if (UDirectionalLightComponent *LightComp =
-                Cast<UDirectionalLightComponent>(SunLight->GetLightComponent()))
-        {
-            LightComp->SetIntensity(static_cast<float>(Intensity));
-            LightComp->MarkRenderStateDirty();
-        }
-
-        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetNumberField(TEXT("intensity"), Intensity);
-        Result->SetStringField(TEXT("actor"), SunLight->GetPathName());
-        SendResult(true, TEXT("Sun intensity updated"), FString(), Result);
-        return true;
-    }
-
-    // -------------------------------------------------------------------------
-    // set_skylight_intensity: Set sky light intensity
-    // -------------------------------------------------------------------------
-    if (LowerSub == TEXT("set_skylight_intensity"))
-    {
-        double Intensity = 0.0;
-        if (!Payload->TryGetNumberField(TEXT("intensity"), Intensity))
-        {
-            SendResult(false, TEXT("Missing intensity parameter"),
-                       TEXT("INVALID_ARGUMENT"), nullptr);
-            return true;
-        }
-
-        ASkyLight *SkyActor = FindFirstSkyLight();
-        if (!SkyActor)
-        {
-            SendResult(false, TEXT("No skylight found"), TEXT("SKYLIGHT_NOT_FOUND"),
-                       nullptr);
-            return true;
-        }
-
-        if (USkyLightComponent *SkyComp = SkyActor->GetLightComponent())
-        {
-            SkyComp->SetIntensity(static_cast<float>(Intensity));
-            SkyComp->MarkRenderStateDirty();
-            SkyActor->MarkComponentsRenderStateDirty();
-        }
-
-        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetNumberField(TEXT("intensity"), Intensity);
-        Result->SetStringField(TEXT("actor"), SkyActor->GetPathName());
-        SendResult(true, TEXT("Skylight intensity updated"), FString(), Result);
-        return true;
-    }
-
-    // -------------------------------------------------------------------------
-    // Unknown action
-    // -------------------------------------------------------------------------
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("action"), LowerSub);
-    SendResult(false, TEXT("Unsupported environment control action"),
-               TEXT("UNSUPPORTED_ACTION"), Result);
+    Resp->SetBoolField(TEXT("success"), bSuccess);
+    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
     return true;
-
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
-                           TEXT("Environment control requires editor build"),
-                           nullptr, TEXT("NOT_IMPLEMENTED"));
+    SendAutomationResponse(
+        RequestingSocket, RequestId, false,
+        TEXT("Environment building actions require editor build."), nullptr,
+        TEXT("NOT_IMPLEMENTED"));
     return true;
 #endif
 }
 
+// delete: Delete environment actors by name
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentDelete(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetStringField(TEXT("action"), TEXT("delete"));
+    bool bSuccess = true;
+    FString Message = TEXT("Environment action 'delete' completed");
+    FString ErrorCode;
 
+    const TArray<TSharedPtr<FJsonValue>> *NamesArray = nullptr;
+    if (!Payload->TryGetArrayField(TEXT("names"), NamesArray) || !NamesArray)
+    {
+        bSuccess = false;
+        Message = TEXT("names array required for delete");
+        ErrorCode = TEXT("INVALID_ARGUMENT");
+        Resp->SetStringField(TEXT("error"), Message);
+    }
+    else if (!GEditor)
+    {
+        bSuccess = false;
+        Message = TEXT("Editor not available");
+        ErrorCode = TEXT("EDITOR_NOT_AVAILABLE");
+        Resp->SetStringField(TEXT("error"), Message);
+    }
+    else
+    {
+        UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
+        if (!ActorSS)
+        {
+            bSuccess = false;
+            Message = TEXT("EditorActorSubsystem not available");
+            ErrorCode = TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING");
+            Resp->SetStringField(TEXT("error"), Message);
+        }
+        else
+        {
+            TArray<FString> Deleted;
+            TArray<FString> Missing;
+
+            for (const TSharedPtr<FJsonValue> &Val : *NamesArray)
+            {
+                if (Val.IsValid() && Val->Type == EJson::String)
+                {
+                    FString Name = Val->AsString();
+                    TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
+                    bool bRemoved = false;
+
+                    for (AActor *A : AllActors)
+                    {
+                        if (A && A->GetActorLabel().Equals(Name, ESearchCase::IgnoreCase))
+                        {
+                            if (ActorSS->DestroyActor(A))
+                            {
+                                Deleted.Add(Name);
+                                bRemoved = true;
+                            }
+                            break;
+                        }
+                    }
+
+                    if (!bRemoved)
+                    {
+                        Missing.Add(Name);
+                    }
+                }
+            }
+
+            // Build response arrays
+            TArray<TSharedPtr<FJsonValue>> DeletedArray;
+            for (const FString &Name : Deleted)
+            {
+                DeletedArray.Add(MakeShared<FJsonValueString>(Name));
+            }
+            Resp->SetArrayField(TEXT("deleted"), DeletedArray);
+            Resp->SetNumberField(TEXT("deletedCount"), Deleted.Num());
+
+            if (Missing.Num() > 0)
+            {
+                TArray<TSharedPtr<FJsonValue>> MissingArray;
+                for (const FString &Name : Missing)
+                {
+                    MissingArray.Add(MakeShared<FJsonValueString>(Name));
+                }
+                Resp->SetArrayField(TEXT("missing"), MissingArray);
+                bSuccess = false;
+                Message = TEXT("Some environment actors could not be removed");
+                ErrorCode = TEXT("DELETE_PARTIAL");
+                Resp->SetStringField(TEXT("error"), Message);
+            }
+            else
+            {
+                Message = TEXT("Environment actors deleted");
+            }
+        }
+    }
+
+    Resp->SetBoolField(TEXT("success"), bSuccess);
+    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
+    return true;
+#else
+    SendAutomationResponse(
+        RequestingSocket, RequestId, false,
+        TEXT("Environment building actions require editor build."), nullptr,
+        TEXT("NOT_IMPLEMENTED"));
+    return true;
+#endif
+}
+
+// create_sky_sphere: Create sky sphere actor
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateSkySphere(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetStringField(TEXT("action"), TEXT("create_sky_sphere"));
+    bool bSuccess = true;
+    FString Message = TEXT("Environment action 'create_sky_sphere' completed");
+    FString ErrorCode;
+
+    // Initialize to false - only set true on successful creation
+    bSuccess = false;
+    
+    if (!GEditor)
+    {
+        Message = TEXT("Editor not available");
+        ErrorCode = TEXT("EDITOR_NOT_AVAILABLE");
+    }
+    else
+    {
+        UClass *SkySphereClass = LoadClass<AActor>(
+            nullptr, TEXT("/Script/Engine.Blueprint'/Engine/Maps/Templates/"
+                          "SkySphere.SkySphere_C'"));
+        if (!SkySphereClass)
+        {
+            FString RequestedName = TEXT("SkySphere");
+            Payload->TryGetStringField(TEXT("name"), RequestedName);
+
+            ADirectionalLight *SunLight = Cast<ADirectionalLight>(
+                SpawnActorInActiveWorld<AActor>(ADirectionalLight::StaticClass(),
+                                                FVector::ZeroVector,
+                                                FRotator(-45.0f, -35.0f, 0.0f),
+                                                TEXT("SkySunLight")));
+            ASkyLight *SkyLight = Cast<ASkyLight>(
+                SpawnActorInActiveWorld<AActor>(ASkyLight::StaticClass(),
+                                                FVector::ZeroVector,
+                                                FRotator::ZeroRotator,
+                                                TEXT("SkyLight")));
+
+            if (SunLight && SkyLight)
+            {
+                SunLight->SetActorLabel(FString::Printf(TEXT("%s_Sun"), *RequestedName));
+                SkyLight->SetActorLabel(FString::Printf(TEXT("%s_SkyLight"), *RequestedName));
+
+                if (UDirectionalLightComponent *SunComp =
+                        Cast<UDirectionalLightComponent>(SunLight->GetLightComponent()))
+                {
+                    SunComp->SetIntensity(10.0f);
+                    SunComp->MarkRenderStateDirty();
+                }
+                if (USkyLightComponent *SkyComp = SkyLight->GetLightComponent())
+                {
+                    SkyComp->SetIntensity(1.0f);
+                    SkyComp->MarkRenderStateDirty();
+                }
+
+                bSuccess = true;
+                Message = TEXT("Native sky lighting rig created");
+                Resp->SetBoolField(TEXT("fallbackUsed"), true);
+                Resp->SetStringField(TEXT("missingAsset"), TEXT("/Engine/Maps/Templates/SkySphere"));
+                Resp->SetStringField(TEXT("actorName"), RequestedName);
+                Resp->SetStringField(TEXT("sunActorName"), SunLight->GetActorLabel());
+                Resp->SetStringField(TEXT("skyLightActorName"), SkyLight->GetActorLabel());
+                McpHandlerUtils::AddVerification(Resp, SunLight);
+            }
+            else
+            {
+                Message = TEXT("SkySphere class not found and native sky rig fallback failed");
+                ErrorCode = TEXT("SPAWN_FAILED");
+                Resp->SetStringField(TEXT("missingAsset"), TEXT("/Engine/Maps/Templates/SkySphere"));
+            }
+        }
+        else
+        {
+            AActor *SkySphere = SpawnActorInActiveWorld<AActor>(
+                SkySphereClass, FVector::ZeroVector, FRotator::ZeroRotator,
+                TEXT("SkySphere"));
+            if (SkySphere)
+            {
+                bSuccess = true;
+                Message = TEXT("Sky sphere created");
+                Resp->SetStringField(TEXT("actorName"), SkySphere->GetActorLabel());
+            }
+            else
+            {
+                Message = TEXT("Failed to spawn sky sphere actor");
+                ErrorCode = TEXT("SPAWN_FAILED");
+            }
+        }
+    }
+
+    Resp->SetBoolField(TEXT("success"), bSuccess);
+    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
+    return true;
+#else
+    SendAutomationResponse(
+        RequestingSocket, RequestId, false,
+        TEXT("Environment building actions require editor build."), nullptr,
+        TEXT("NOT_IMPLEMENTED"));
+    return true;
+#endif
+}
+
+// set_time_of_day: Set time of day on sky sphere
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentSetTimeOfDay(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetStringField(TEXT("action"), TEXT("set_time_of_day"));
+    bool bSuccess = true;
+    FString Message = TEXT("Environment action 'set_time_of_day' completed");
+    FString ErrorCode;
+
+    float TimeOfDay = 12.0f;
+    if (!Payload->TryGetNumberField(TEXT("time"), TimeOfDay))
+    {
+        Payload->TryGetNumberField(TEXT("hour"), TimeOfDay);
+    }
+
+    if (GEditor)
+    {
+        UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
+        if (ActorSS)
+        {
+            for (AActor *Actor : ActorSS->GetAllLevelActors())
+            {
+                if (Actor->GetClass()->GetName().Contains(TEXT("SkySphere")))
+                {
+                    UFunction *SetTimeFunction = Actor->FindFunction(TEXT("SetTimeOfDay"));
+                    if (SetTimeFunction)
+                    {
+                        float TimeParam = TimeOfDay;
+                        Actor->ProcessEvent(SetTimeFunction, &TimeParam);
+                        bSuccess = true;
+                        Message = FString::Printf(TEXT("Time of day set to %.2f"), TimeOfDay);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (!bSuccess)
+    {
+        bSuccess = false;
+        Message = TEXT("Sky sphere not found or time function not available");
+        ErrorCode = TEXT("SET_TIME_FAILED");
+    }
+
+    Resp->SetBoolField(TEXT("success"), bSuccess);
+    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
+    return true;
+#else
+    SendAutomationResponse(
+        RequestingSocket, RequestId, false,
+        TEXT("Environment building actions require editor build."), nullptr,
+        TEXT("NOT_IMPLEMENTED"));
+    return true;
+#endif
+}
+
+// create_fog_volume: Create exponential height fog
+bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateFogVolume(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetStringField(TEXT("action"), TEXT("create_fog_volume"));
+    bool bSuccess = true;
+    FString Message = TEXT("Environment action 'create_fog_volume' completed");
+    FString ErrorCode;
+
+    // Initialize to false - only set true on successful creation
+    bSuccess = false;
+    
+    FVector Location(0, 0, 0);
+    // Support both top-level x/y/z and location object
+    const TSharedPtr<FJsonObject> *LocObj = nullptr;
+    if (Payload->TryGetObjectField(TEXT("location"), LocObj) && LocObj)
+    {
+        (*LocObj)->TryGetNumberField(TEXT("x"), Location.X);
+        (*LocObj)->TryGetNumberField(TEXT("y"), Location.Y);
+        (*LocObj)->TryGetNumberField(TEXT("z"), Location.Z);
+    }
+    else
+    {
+        Payload->TryGetNumberField(TEXT("x"), Location.X);
+        Payload->TryGetNumberField(TEXT("y"), Location.Y);
+        Payload->TryGetNumberField(TEXT("z"), Location.Z);
+    }
+
+    FString FogName;
+    Payload->TryGetStringField(TEXT("name"), FogName);
+    if (FogName.IsEmpty())
+    {
+        Payload->TryGetStringField(TEXT("actorName"), FogName);
+    }
+    if (FogName.IsEmpty())
+    {
+        FogName = TEXT("FogVolume");
+    }
+
+    if (!GEditor)
+    {
+        Message = TEXT("Editor not available");
+        ErrorCode = TEXT("EDITOR_NOT_AVAILABLE");
+    }
+    else
+    {
+        UClass *FogClass = LoadClass<AActor>(nullptr, TEXT("/Script/Engine.ExponentialHeightFog"));
+        if (!FogClass)
+        {
+            Message = TEXT("ExponentialHeightFog class not found");
+            ErrorCode = TEXT("CLASS_NOT_FOUND");
+        }
+        else
+        {
+            AActor *FogVolume = SpawnActorInActiveWorld<AActor>(
+                FogClass, Location, FRotator::ZeroRotator, FogName);
+            if (FogVolume)
+            {
+                bSuccess = true;
+                Message = TEXT("Fog volume created");
+                Resp->SetStringField(TEXT("actorName"), FogVolume->GetActorLabel());
+            }
+            else
+            {
+                Message = TEXT("Failed to spawn fog volume actor");
+                ErrorCode = TEXT("SPAWN_FAILED");
+            }
+        }
+    }
+
+    Resp->SetBoolField(TEXT("success"), bSuccess);
+    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
+    return true;
+#else
+    SendAutomationResponse(
+        RequestingSocket, RequestId, false,
+        TEXT("Environment building actions require editor build."), nullptr,
+        TEXT("NOT_IMPLEMENTED"));
+    return true;
+#endif
+}
 
 // =============================================================================
 // Section 4: Environment Utilities

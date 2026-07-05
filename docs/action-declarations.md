@@ -365,6 +365,63 @@ parser survives only as a lint.
     echoes + Input's enable_input_mapping/disable_input_action) stay
     unflagged alongside the six readers, with deepen-or-retire TODO'd for
     Aaron.
+  - **`build_environment` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_BuildEnvironment.cpp`).** 55 classes — the
+    fourth classed family with a non-empty routed list: the registration
+    lambda that split `Lighting()`/`Splines()` actions off to their
+    dispatchers died with all three string dispatchers — deleted:
+    `HandleBuildEnvironmentAction`, `HandleLightingAction`, and
+    `HandleManageSplinesAction` — the `IsLightingAction`/`IsSplineAction`
+    predicates are gone with their only caller, and the routed lists plus
+    `BuildEnvironmentCore` survive only so boot validation can prove the
+    schema union still matches the published enum. The 21 core actions
+    became `HandleEnvironment*` members (EnvironmentHandlers.cpp): six
+    inline bodies extracted verbatim (each replicating the chain's
+    editor-build stub, with the chain's shared `Resp`/`bSuccess`/`Message`
+    prologue and response tail moved into each member and the lowercased
+    `LowerSub` echoes inlined to the action literal), 15 wrappers
+    forwarding to the family's dedicated 4-arg members with the same
+    internal action literals and payload re-shaping the retired branches
+    used (foliage alias/`removeAll` re-shaping included). The 12 lighting
+    actions extracted verbatim to `HandleLighting*` members, each
+    replicating the chain's whole-dispatcher editor stub and
+    EditorActorSubsystem precheck (the chain's payload-null precheck is
+    now `FMcpCall::Execute`'s envelope check); the 22 spline actions are
+    `HandleSpline*` thin wrappers (level-structure precedent) replicating
+    the chain's EDITOR_ONLY stub. The old dispatchers matched
+    case-insensitively (env/lighting lowercased the payload action; the
+    splines chain used FString's IgnoreCase ==) — the registry's FindCall
+    lookup is case-insensitive too, so dispatch behavior is preserved.
+    The inbound edge converted per rule 5: manage_level's classed
+    `create_light` called `HandleLightingAction(RequestId,
+    TEXT("create_light"), ...)`; it now calls `HandleLightingCreateLight`
+    directly. Hidden names deleted and ledgered: the Lighting chain's
+    `spawn_light` disjunct (rule 6's parked internal literal — its last
+    payload-rewrite caller converted to the typed call at manage_level's
+    classing) and its `bake_lightmap` disjunct (that name routes to the
+    env dispatcher's own `HandleBakeLightmap` implementation, never to the
+    Lighting chain), plus SplineHandlers' `create_spline_mesh_actor`
+    (~116-line hidden implementation, already ledgered) and the
+    transport-dead `HandleControlEnvironmentAction` legacy dispatcher
+    (set_time_of_day/set_sun_intensity/set_skylight_intensity; never
+    registered, no callers). Decl burn-down — 2 of 55 rows fixed:
+    `create_landscape_grass_type` declared BOTH meshPath AND staticMesh
+    required although the body resolves them first-present-wins and
+    joint-rejects only when neither is present; `modify_heightmap`
+    declared heightData required although the body requires it only for
+    the `set` operation and serves raise/lower/flatten without it. The
+    scoping sweep's other two suspects verified handler-true: the
+    configure_mesh_spacing/randomization rows keep `actorName` optional
+    because an empty spelling falls back to the WorldSettings config
+    target rather than rejecting. Flags deliberately mixed:
+    `RequiresEditor` on the 12 Lighting + 22 Spline actions (whole-gated
+    chains) and the six core inline extractions (editor-gated region of
+    the retired chain); NOT on the 15 delegating core actions (their
+    dispatch was ungated; the 4-arg members self-gate). `Mutating` on
+    everything except the four readers — `get_foliage_instances`,
+    `import_snapshot`, `list_light_types`, `get_splines_info`
+    (bake_lightmap and build_lighting kick a lighting build and stay
+    writers).
 
 ## Bootstrap state (2026-07-04, complete)
 

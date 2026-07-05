@@ -488,6 +488,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       // validate its first tools/call. Classed families register alongside
       // the shim declarations (their decls come from the class instances).
       McpRegisterAllActionDecls();
+      McpRegisterBuildEnvironmentCalls();
       McpRegisterControlActorCalls();
       McpRegisterControlEditorCalls();
       McpRegisterInspectCalls();
@@ -1038,19 +1039,9 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   // dispatches by tool name alone, so any other key is unreachable. The
   // legacy per-action registrations from the Node-server era were removed
   // 2026-07-02.
-  RegisterHandler(TEXT("build_environment"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         FMcpResponseHandle S) {
-                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
-                    if (McpConsolidatedActions::IsLightingAction(SubAction)) {
-                      return HandleLightingAction(R, TEXT("manage_lighting"), P, S);
-                    }
-                    if (McpConsolidatedActions::IsSplineAction(SubAction)) {
-                      return HandleManageSplinesAction(R, TEXT("manage_splines"), P, S);
-                    }
-                    return HandleBuildEnvironmentAction(R, A, P, S);
-                  });
+  // build_environment is fully classed
+  // (MCP/Calls/McpCalls_BuildEnvironment.cpp) — dispatch reaches its
+  // FMcpCall instances via the registry, not this map.
 
   // inspect is fully classed (MCP/Calls/McpCalls_Inspect.cpp) —
   // dispatch reaches its FMcpCall instances via the registry, not this map.
