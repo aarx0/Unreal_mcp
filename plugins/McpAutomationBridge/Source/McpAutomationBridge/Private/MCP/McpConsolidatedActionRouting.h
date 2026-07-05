@@ -26,25 +26,6 @@ inline FString GetPayloadSubAction(const TSharedPtr<FJsonObject>& Payload)
 	return SubAction;
 }
 
-inline TSharedPtr<FJsonObject> WithPayloadSubAction(const TSharedPtr<FJsonObject>& Payload, const FString& SubAction)
-{
-	if (!Payload.IsValid() || SubAction.IsEmpty())
-	{
-		return Payload;
-	}
-
-	FString ExistingSubAction;
-	if (Payload->TryGetStringField(TEXT("subAction"), ExistingSubAction) && !ExistingSubAction.IsEmpty())
-	{
-		return Payload;
-	}
-
-	TSharedPtr<FJsonObject> RoutedPayload = MakeShared<FJsonObject>();
-	RoutedPayload->Values = Payload->Values;
-	RoutedPayload->SetStringField(TEXT("subAction"), SubAction);
-	return RoutedPayload;
-}
-
 inline bool ContainsAction(const TArray<FString>& Actions, const FString& Action)
 {
 	return Actions.Contains(Action);
@@ -1019,7 +1000,6 @@ inline bool IsTextureAction(const FString& Action) { return ContainsAction(Textu
 inline bool IsBlueprintGraphAction(const FString& Action) { return ContainsAction(BlueprintGraph(), Action); }
 inline bool IsWidgetAuthoringAction(const FString& Action) { return ContainsAction(WidgetAuthoring(), Action); }
 inline bool IsCommonUiAction(const FString& Action) { return ContainsAction(CommonUi(), Action); }
-inline bool IsAudioAuthoringAction(const FString& Action) { return ContainsAction(AudioAuthoring(), Action); }
 
 // ─── Routing introspection ───────────────────────────────────────────────────
 // Mirrors what each tool's registration lambda tests, in test order, so startup

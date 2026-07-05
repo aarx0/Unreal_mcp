@@ -31,8 +31,6 @@ bPlayerOnly
 brushColor
 cameraActorPath
 candidates
-chainName
-chainPath
 class
 class_path
 collision_enabled
@@ -41,9 +39,7 @@ commands
 component_class
 component_name
 contentColorAndOpacity
-contextIndex
 dataLayerAssetPath
-effectName
 encumberanceSystem
 encumberanceThreshold
 endTime
@@ -52,7 +48,6 @@ fixedAreaEnteringCost
 fromExpression
 function
 includeSoftDependencies
-lateGain
 level_path
 loop
 material_path
@@ -66,11 +61,9 @@ parent_component
 pawnClass
 payloadBase64
 player_index
-pluralization
 property_name
 property_value
 provider
-reflectionsGain
 retargetAssets
 rows
 sequencePath
@@ -83,8 +76,5 @@ targetNodeGuid
 threshold
 toExpression
 types
-voiceName
-voicePath
-waveName
 widget_path
 z_order

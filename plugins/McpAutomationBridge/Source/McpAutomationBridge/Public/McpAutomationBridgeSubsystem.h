@@ -854,36 +854,169 @@ public:
                                        FMcpResponseHandle Socket);
 
 private:
-  // Audio related automation actions
-  bool HandleAudioAction(const FString &RequestId, const FString &Action,
-                         const TSharedPtr<FJsonObject> &Payload,
-                         FMcpResponseHandle RequestingSocket);
-  bool
-  HandleCreateDialogueVoice(const FString &RequestId,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
-  bool
-  HandleCreateDialogueWave(const FString &RequestId,
-                           const TSharedPtr<FJsonObject> &Payload,
-                           FMcpResponseHandle RequestingSocket);
-  bool
-  HandleSetDialogueContext(const FString &RequestId,
-                           const TSharedPtr<FJsonObject> &Payload,
-                           FMcpResponseHandle RequestingSocket);
-  bool
-  HandleCreateReverbEffect(const FString &RequestId,
-                           const TSharedPtr<FJsonObject> &Payload,
-                           FMcpResponseHandle RequestingSocket);
-  bool HandleCreateSourceEffectChain(
-      const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool HandleAddSourceEffect(const FString &RequestId,
+  // manage_audio is classed — see MCP/Calls/McpCalls_ManageAudio.cpp. Its
+  // per-action members are public so the FMcpCall classes (Private/MCP/Calls/)
+  // can delegate, until the module split de-members the implementations off
+  // the subsystem: HandleAudio* (AudioHandlers.cpp), HandleAudioAuthoring*
+  // (AudioAuthoringHandlers.cpp).
+public:
+  bool HandleAudioCreateSoundCue(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle RequestingSocket);
+  bool HandleAudioCreateSoundClass(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle RequestingSocket);
+  bool HandleAudioCreateSoundMix(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle RequestingSocket);
+  bool HandleAudioPlaySoundAtLocation(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAudioPlaySound2D(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle RequestingSocket);
+  bool HandleAudioPlaySoundAttached(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle RequestingSocket);
+  bool HandleAudioCreateAmbientSound(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleAudioSpawnSoundAtLocation(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle RequestingSocket);
+  bool HandleAudioPushSoundMix(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle RequestingSocket);
+  bool HandleAudioPopSoundMix(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle RequestingSocket);
+  bool HandleAudioSetSoundMixClassOverride(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle RequestingSocket);
+  bool HandleAudioClearSoundMixClassOverride(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle RequestingSocket);
+  bool HandleAudioSetBaseSoundMix(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle RequestingSocket);
+  bool HandleAudioFadeSoundOut(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle RequestingSocket);
+  bool HandleAudioFadeSoundIn(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle RequestingSocket);
+  // fade_sound_out/fade_sound_in shared implementation.
+  bool HandleAudioFadeSoundInternal(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle RequestingSocket,
+                                    bool bFadeIn);
+  bool HandleAudioPrimeSound(const FString &RequestId,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
-  bool
-  HandleCreateSubmixEffect(const FString &RequestId,
-                           const TSharedPtr<FJsonObject> &Payload,
-                           FMcpResponseHandle RequestingSocket);
+  bool HandleAudioCreateAudioComponent(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle RequestingSocket);
+  bool HandleAudioEnableAudioAnalysis(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAudioSetDopplerEffect(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle RequestingSocket);
+  bool HandleAudioSetAudioOcclusion(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle RequestingSocket);
+  bool HandleAudioSetSoundAttenuation(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAudioFadeSound(const FString &RequestId,
+                            const TSharedPtr<FJsonObject> &Payload,
+                            FMcpResponseHandle RequestingSocket);
+  bool HandleAudioCreateReverbZone(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringAddCueNode(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringConnectCueNodes(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringSetCueAttenuation(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringSetCueConcurrency(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringCreateMetasound(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringAddMetasoundNode(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringConnectMetasoundNodes(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringAddMetasoundInput(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringAddMetasoundOutput(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringSetMetasoundDefault(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringSetClassProperties(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringSetClassParent(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringAddMixModifier(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringConfigureMixEq(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringCreateAttenuationSettings(const FString &RequestId,
+                                                     const TSharedPtr<FJsonObject> &Payload,
+                                                     FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringConfigureDistanceAttenuation(const FString &RequestId,
+                                                        const TSharedPtr<FJsonObject> &Payload,
+                                                        FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringConfigureSpatialization(const FString &RequestId,
+                                                   const TSharedPtr<FJsonObject> &Payload,
+                                                   FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringConfigureOcclusion(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringConfigureReverbSend(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringCreateDialogueVoice(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringCreateDialogueWave(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringSetDialogueContext(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringCreateReverbEffect(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringCreateSourceEffectChain(const FString &RequestId,
+                                                   const TSharedPtr<FJsonObject> &Payload,
+                                                   FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringAddSourceEffect(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringCreateSubmixEffect(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle RequestingSocket);
+  bool HandleAudioAuthoringGetAudioInfo(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+
+private:
   // build_environment is classed — see
   // MCP/Calls/McpCalls_BuildEnvironment.cpp.
   // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
@@ -1614,11 +1747,9 @@ private:
   // Phase 10: Animation Authoring handlers — animation_physics is classed;
   // its HandleAnimAuthoring* members live in the transitional public block
   // above (AnimationAuthoringHandlers.cpp).
-  // Phase 11: Audio Authoring handlers
-  bool HandleManageAudioAuthoringAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
+  // Phase 11: Audio Authoring handlers — manage_audio is classed; its
+  // HandleAudioAuthoring* members live in the transitional public block
+  // above (AudioAuthoringHandlers.cpp).
 public:
   // Phase 12: Niagara Authoring handlers — called directly by the classed
   // manage_effect Niagara-authoring actions (MCP/Calls/); Action carries its

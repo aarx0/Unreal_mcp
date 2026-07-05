@@ -284,7 +284,7 @@ All `blueprint_*` authoring commands now require editor support and execute nati
 
 ### Phase 20.5: Audio Authoring (`manage_audio`)
 
-`manage_audio` exposes 50 actions. Regular playback/runtime actions route through `HandleAudioAction`; the 27 graph and asset-authoring actions route through the internal native `manage_audio_authoring` bridge action.
+`manage_audio` exposes 50 actions, classed as `FMcpCall` instances (`MCP/Calls/McpCalls_ManageAudio.cpp`): the 23 playback/runtime actions delegate to the `HandleAudio*` members and the 27 graph and asset-authoring actions to the `HandleAudioAuthoring*` members.
 
 | Action | Status | Notes |
 |--------|--------|-------|

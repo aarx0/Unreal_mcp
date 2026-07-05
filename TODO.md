@@ -1011,6 +1011,15 @@ delete_vertex, delete_triangle, get_vertex_position, set_vertex_position,
 set_uvs, set_vertex_color, split_normals, translate_mesh — each static's
 only caller was its dispatcher arm; deleted with the retired chain, parked
 for Aaron, recover from git) — **20 hidden entries remain**.
+manage_audio's classing (2026-07-05) closed seven — all below-radar
+shadowed-dead, ledgered at deletion (the sweep inventory had no AudioHandlers
+entries): the core dispatcher's arms for the seven AudioAuthoring-owned names
+(create_dialogue_voice, create_dialogue_wave, set_dialogue_context,
+create_reverb_effect, create_source_effect_chain, add_source_effect,
+create_submix_effect) and their seven dedicated members — the registration
+lambda always routed those names to the authoring chain first, so the primary
+copies could never match (animation_physics precedent); recover from git —
+**13 hidden entries remain**.
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,

@@ -34,7 +34,7 @@ subdirectory is shown.
 | `system_control` | — (Performance stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp (dispatched from the call registry before the handler map; implementations spread across PerformanceHandlers.cpp (`HandlePerf*`), SystemControlHandlers.cpp (`HandleSys*`), UiHandlers.cpp (`HandleUi*`), LogHandlers.cpp (`HandleLog*`), DebugHandlers.cpp, RenderHandlers.cpp — see note) |
 | `manage_networking` | — (Input/GameFramework/Sessions stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageNetworking.cpp (dispatched from the call registry before the handler map; implementations are the `HandleNetworking*` members @ NetworkingHandlers.cpp for the 27 core actions, `HandleInput*` @ InputHandlers.cpp for the 9 input actions, `HandleGameFramework*` @ GameFrameworkHandlers.cpp for the 20 game-framework actions, and the `HandleSessions*` wrappers @ SessionsHandlers.cpp for the 16 session actions) |
 | `manage_level_structure` | — (Volumes stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevelStructure.cpp (dispatched from the call registry before the handler map; implementations are the `HandleLevelStructure*` members @ LevelStructureHandlers.cpp for the 17 core actions and the `HandleVolume*` members @ VolumeHandlers.cpp for the 28 volume actions) |
-| `manage_audio` | AudioAuthoring → `HandleManageAudioAuthoringAction` | `HandleAudioAction` @ AudioHandlers.cpp |
+| `manage_audio` | — (AudioAuthoring stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAudio.cpp (dispatched from the call registry before the handler map; implementations are the `HandleAudio*` members @ AudioHandlers.cpp for the 23 core actions and the `HandleAudioAuthoring*` members @ AudioAuthoringHandlers.cpp for the 27 authoring actions) |
 | `manage_ai` | — (BehaviorTree/Navigation survive as `ManageAI()` union inputs for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAi.cpp (dispatched from the call registry before the handler map; implementations are the `HandleAi*` members @ AIHandlers.cpp for the 42 core actions, `HandleBehaviorTree*` @ BehaviorTreeHandlers.cpp for the 7 Behavior Tree graph actions, and the `HandleNavigation*` wrappers @ NavigationHandlers.cpp for the 12 navigation actions) |
 | `control_actor` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ControlActor.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleControlActor*` functions in ControlHandlers.cpp) |
 | `control_editor` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ControlEditor.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleControlEditor*` functions in ControlHandlers.cpp + FocusInputHandlers.cpp) |
@@ -83,7 +83,7 @@ Routed family lists:
 | `Splines` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp delegate to `HandleSpline*` wrappers @ SplineHandlers.cpp (list retained for schema-union validation) |
 | `AnimationAuthoring` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp delegate to `HandleAnimAuthoring*` @ AnimationAuthoringHandlers.cpp (list retained for schema-union validation) |
 | `Skeleton` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp delegate to `HandleSkeleton*` @ SkeletonHandlers.cpp (list retained for schema-union validation) |
-| `AudioAuthoring` | `HandleManageAudioAuthoringAction` @ AudioAuthoringHandlers.cpp |
+| `AudioAuthoring` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAudio.cpp delegate to `HandleAudioAuthoring*` @ AudioAuthoringHandlers.cpp (list retained for schema-union validation) |
 | `Performance` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp delegate to `HandlePerf*` @ PerformanceHandlers.cpp (list retained for schema-union validation) |
 | `Input` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageNetworking.cpp delegate to `HandleInput*` @ InputHandlers.cpp (list retained for schema-union validation) |
 | `GameFramework` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageNetworking.cpp delegate to `HandleGameFramework*` @ GameFrameworkHandlers.cpp (list retained for schema-union validation) |
@@ -101,7 +101,7 @@ Core (fallthrough) lists:
 | `BuildEnvironmentCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp (implementations are the `HandleEnvironment*` members @ EnvironmentHandlers.cpp) |
 | `AnimationPhysicsCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp (implementations are the `HandleAnimPhys*` members @ AnimationHandlers.cpp) |
 | `SystemControlCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp (per-class delegation split in the note above) |
-| `ManageAudioCore` | `HandleAudioAction` @ AudioHandlers.cpp |
+| `ManageAudioCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAudio.cpp (implementations are the `HandleAudio*` members @ AudioHandlers.cpp) |
 | `ManageNetworkingCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageNetworking.cpp (implementations are the `HandleNetworking*` members @ NetworkingHandlers.cpp) |
 | `ManageLevelStructureCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevelStructure.cpp (implementations are the `HandleLevelStructure*` members @ LevelStructureHandlers.cpp) |
 | `ManageAICore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAi.cpp (implementations are the `HandleAi*` members @ AIHandlers.cpp) |
@@ -133,7 +133,7 @@ enums only — they own no actions.
    legacy Node-server-era per-action registrations (`manage_ui`, `manage_misc`,
    `asset_query`, ~100 others) were deleted 2026-07-02 as unreachable. Their
    handler functions survive where a consolidated lambda or an FMcpCall class
-   calls them directly (e.g. `HandleAudioAction`); `HandleMiscAction` had no
+   calls them directly (e.g. `HandleAssetAction`); `HandleMiscAction` had no
    caller and was deleted with `McpAutomationBridge_MiscHandlers.cpp`, and
    `HandleUiAction` died at the system_control classing (its five advertised
    bodies extracted to `HandleUi*` members, its hidden bodies deleted).

@@ -596,6 +596,65 @@ parser survives only as a lint.
     (generate_lods, set_lod_settings, set_lod_screen_sizes) ride inside
     the untouched statics. `RequiresEditor` baked on all 76; `Mutating`
     on everything except the one reader, `get_mesh_info`.
+  - **`manage_audio` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_ManageAudio.cpp`).** 50 classes; both string
+    dispatchers died — `HandleAudioAction` (AudioHandlers.cpp, an 18-prefix
+    entry gate over a ~1,900-line if/else chain) and the
+    `HandleManageAudioAuthoringAction` wrapper + its static
+    `HandleAudioAuthoringRequest` chain (AudioAuthoringHandlers.cpp, 27
+    blocks) — along with the registration lambda that split them on
+    `IsAudioAuthoringAction` (the predicate died with its only caller, the
+    manufactured `manage_audio_authoring` gate literal died with the wrapper,
+    and `WithPayloadSubAction` died with the lambda — the audio lambda was
+    its last caller). The 23 live core bodies extracted verbatim to
+    `HandleAudio*` members (whitespace-only dedent), each replicating the
+    chain's `#else` NOT_IMPLEMENTED stub ("Audio actions require editor
+    build"); `fade_sound_in`/`fade_sound_out` share
+    `HandleAudioFadeSoundInternal` with the chain's action comparisons
+    resolved to a `bFadeIn` parameter and the `action` echo resolved to the
+    two literals, and `fade_sound`'s lowercased echo inlined to its literal
+    (the only non-verbatim body deltas). The 27 authoring actions became
+    per-action file statics (block bodies verbatim from the retired chain)
+    behind `HandleAudioAuthoring*` members that apply the retired wrapper's
+    response conversion via one shared `SendAudioAuthoringResult` static
+    (verbatim, including its BuildErrorResponse "code"-field mapping) and
+    replicate its `#else` EDITOR_REQUIRED stub per member. The chains'
+    `Lower`/`SubAction` prologues and payload-null checks died
+    (`FMcpCall::Execute` owns payload-null); the routing row and
+    `AudioAuthoring()`/`ManageAudioCore()` lists stay for boot schema-union
+    validation. Seven shadowed-dead arms deleted with their dedicated
+    members and ledgered: the core dispatcher re-implemented seven
+    AudioAuthoring-owned names in unreachable copies (`create_dialogue_voice`,
+    `create_dialogue_wave`, `set_dialogue_context`, `create_reverb_effect`,
+    `create_source_effect_chain`, `add_source_effect`,
+    `create_submix_effect`) — the registration lambda always routed those
+    names to the authoring chain first (animation_physics precedent); ten
+    stale reconciliation pins pruned with them. Decl burn-down — 14 of 50
+    rows fixed: the seven shadowed actions' rows re-derived from the live
+    authoring blocks (the fleet had unioned the dead copies' spellings into
+    the rows — dropped voiceName/outputPath/pluralization,
+    waveName/soundPath/outputPath, wavePath/voicePath/contextIndex,
+    effectName/outputPath/reflectionsGain/lateGain, chainName/outputPath,
+    chainPath/effectName, effectName/outputPath; add_source_effect's
+    `effectType` flipped optional — the live block only consults it when
+    `effectPresetPath` is absent); `play_sound_2d` and
+    `play_sound_at_location` dropped the functionName/params/path spellings
+    no body reads (bootstrap residue); the mixName/mix/name
+    (+soundClassName/soundClass) alias chains on
+    `set_sound_mix_class_override`, `clear_sound_mix_class_override`, and
+    `set_base_sound_mix` flipped all-required→all-optional (first-present-
+    wins fallback chains — the bodies reject only at asset resolution), as
+    did `fade_sound`'s soundName/actorName pair and
+    `create_audio_component`'s soundPath/path pair (joint reject only when
+    both are absent); create_audio_component's String-typed volume/pitch
+    verified handler-true (the body reads TryGetStringField + Atof), and
+    fade_sound_out keeps its declared-optional targetVolume although only
+    the fade_in path reads it, so payloads the family accepts today keep
+    validating. The other 36 rows are byte-identical to the retired shim
+    rows. `RequiresEditor` baked on all 50 (the core chain was whole-body
+    editor-gated with a NOT_IMPLEMENTED stub, the authoring wrapper answered
+    EDITOR_REQUIRED — both stubs replicated per member); `Mutating` on
+    everything except the one reader, `get_audio_info`.
 
 ## Bootstrap state (2026-07-04, complete)
 

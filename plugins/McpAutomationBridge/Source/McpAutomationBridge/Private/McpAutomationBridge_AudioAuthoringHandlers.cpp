@@ -380,17 +380,19 @@ static USoundEffectSourcePreset* CreateSourceEffectPresetByType(const FString& E
 
 } // anonymous namespace
 
-// Main handler function that processes audio authoring requests
-static TSharedPtr<FJsonObject> HandleAudioAuthoringRequest(const TSharedPtr<FJsonObject>& Params)
-{
-    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
-    
-    FString SubAction = GetJsonStringField(Params, TEXT("subAction"), TEXT(""));
+// =============================================================================
+// Classed manage_audio authoring actions
+// =============================================================================
+// One static per action (block bodies verbatim from the retired
+// HandleAudioAuthoringRequest chain), plus the response conversion the
+// retired HandleManageAudioAuthoringAction wrapper applied, shared by the
+// per-action members below.
     
     // ===== 11.1 Sound Cues =====
 
-    if (SubAction == TEXT("add_cue_node"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringAddCueNode(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString NodeType = GetJsonStringField(Params, TEXT("nodeType"), TEXT("wave_player"));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
@@ -499,10 +501,11 @@ static TSharedPtr<FJsonObject> HandleAudioAuthoringRequest(const TSharedPtr<FJso
 	Response->SetStringField(TEXT("nodeId"), NewNode->GetName());
 	McpHandlerUtils::AddVerification(Response, Cue);
 	return Response;
-    }
+}
     
-    if (SubAction == TEXT("connect_cue_nodes"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringConnectCueNodes(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString SourceNodeId = GetJsonStringField(Params, TEXT("sourceNodeId"), TEXT(""));
         FString TargetNodeId = GetJsonStringField(Params, TEXT("targetNodeId"), TEXT(""));
@@ -628,10 +631,11 @@ static TSharedPtr<FJsonObject> HandleAudioAuthoringRequest(const TSharedPtr<FJso
         McpHandlerUtils::AddVerification(Response, Cue);
         Response->SetBoolField(TEXT("success"), true);
         return Response;
-    }
+}
     
-    if (SubAction == TEXT("set_cue_attenuation"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringSetCueAttenuation(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString AttenuationPath = GetJsonStringField(Params, TEXT("attenuationPath"), TEXT(""));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
@@ -670,8 +674,9 @@ static TSharedPtr<FJsonObject> HandleAudioAuthoringRequest(const TSharedPtr<FJso
 	return Response;
 }
 
-	if (SubAction == TEXT("set_cue_concurrency"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringSetCueConcurrency(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString ConcurrencyPath = GetJsonStringField(Params, TEXT("concurrencyPath"), TEXT(""));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
@@ -707,8 +712,9 @@ static TSharedPtr<FJsonObject> HandleAudioAuthoringRequest(const TSharedPtr<FJso
 
 	// ===== 11.2 MetaSounds =====
     
-if (SubAction == TEXT("create_metasound"))
-	{
+static TSharedPtr<FJsonObject> AudioAuthoringCreateMetasound(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_METASOUND
 		FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
 		FString Path = NormalizeAudioPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Audio/MetaSounds")), false);
@@ -753,10 +759,11 @@ if (SubAction == TEXT("create_metasound"))
 #else
 		return McpHandlerUtils::BuildErrorResponse(TEXT("METASOUND_NOT_AVAILABLE"), TEXT("MetaSound support not available in this engine version"));
 #endif
-	}
+}
 
-	if (SubAction == TEXT("add_metasound_node"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringAddMetasoundNode(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_METASOUND && MCP_HAS_METASOUND_FRONTEND
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString NodeClassName = GetJsonStringField(Params, TEXT("nodeClassName"), TEXT(""));
@@ -914,10 +921,11 @@ if (SubAction == TEXT("create_metasound"))
 #else
         return McpHandlerUtils::BuildErrorResponse(TEXT("METASOUND_NOT_AVAILABLE"), TEXT("MetaSound support not available"));
 #endif
-    }
+}
     
-    if (SubAction == TEXT("connect_metasound_nodes"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringConnectMetasoundNodes(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_METASOUND && MCP_HAS_METASOUND_FRONTEND
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString SourceNodeId = GetJsonStringField(Params, TEXT("sourceNodeId"), TEXT(""));
@@ -1023,10 +1031,11 @@ if (SubAction == TEXT("create_metasound"))
 #else
         return McpHandlerUtils::BuildErrorResponse(TEXT("METASOUND_NOT_AVAILABLE"), TEXT("MetaSound support not available"));
 #endif
-    }
+}
     
-    if (SubAction == TEXT("add_metasound_input"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringAddMetasoundInput(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_METASOUND && MCP_HAS_METASOUND_FRONTEND
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString InputName = GetJsonStringField(Params, TEXT("inputName"), TEXT(""));
@@ -1106,10 +1115,11 @@ if (SubAction == TEXT("create_metasound"))
 #else
         return McpHandlerUtils::BuildErrorResponse(TEXT("METASOUND_NOT_AVAILABLE"), TEXT("MetaSound support not available"));
 #endif
-    }
+}
     
-    if (SubAction == TEXT("add_metasound_output"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringAddMetasoundOutput(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_METASOUND && MCP_HAS_METASOUND_FRONTEND
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString OutputName = GetJsonStringField(Params, TEXT("outputName"), TEXT(""));
@@ -1189,10 +1199,11 @@ if (SubAction == TEXT("create_metasound"))
 #else
         return McpHandlerUtils::BuildErrorResponse(TEXT("METASOUND_NOT_AVAILABLE"), TEXT("MetaSound support not available"));
 #endif
-    }
+}
     
-    if (SubAction == TEXT("set_metasound_default"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringSetMetasoundDefault(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_METASOUND && MCP_HAS_METASOUND_FRONTEND
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString InputName = GetJsonStringField(Params, TEXT("inputName"), TEXT(""));
@@ -1287,12 +1298,13 @@ if (SubAction == TEXT("create_metasound"))
 #else
         return McpHandlerUtils::BuildErrorResponse(TEXT("METASOUND_NOT_AVAILABLE"), TEXT("MetaSound support not available"));
 #endif
-    }
+}
     
     // ===== 11.3 Sound Classes & Mixes =====
 
-    if (SubAction == TEXT("set_class_properties"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringSetClassProperties(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
@@ -1334,8 +1346,9 @@ if (SubAction == TEXT("create_metasound"))
 	return Response;
 }
 
-	if (SubAction == TEXT("set_class_parent"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringSetClassParent(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString ParentPath = GetJsonStringField(Params, TEXT("parentPath"), TEXT(""));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
@@ -1374,8 +1387,9 @@ if (SubAction == TEXT("create_metasound"))
 	return Response;
 }
 
-    if (SubAction == TEXT("add_mix_modifier"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringAddMixModifier(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString SoundClassPath = GetJsonStringField(Params, TEXT("soundClassPath"), TEXT(""));
         float VolumeAdjust = static_cast<float>(GetJsonNumberField(Params, TEXT("volumeAdjuster"), 1.0));
@@ -1419,8 +1433,9 @@ if (SubAction == TEXT("create_metasound"))
 	return Response;
 }
     
-    if (SubAction == TEXT("configure_mix_eq"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringConfigureMixEq(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
@@ -1578,12 +1593,13 @@ if (SubAction == TEXT("create_metasound"))
         McpHandlerUtils::AddVerification(Response, Mix);
         Response->SetBoolField(TEXT("success"), true);
         return Response;
-    }
+}
     
     // ===== 11.4 Attenuation & Spatialization =====
     
-    if (SubAction == TEXT("create_attenuation_settings"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringCreateAttenuationSettings(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
         FString Path = NormalizeAudioPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Audio/Attenuation")), false);
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
@@ -1628,10 +1644,11 @@ if (SubAction == TEXT("create_metasound"))
         Response->SetStringField(TEXT("assetPath"), FullPath);
         McpHandlerUtils::AddVerification(Response, NewAtten);
         return Response;
-    }
+}
     
-    if (SubAction == TEXT("configure_distance_attenuation"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringConfigureDistanceAttenuation(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
@@ -1674,10 +1691,11 @@ if (SubAction == TEXT("create_metasound"))
         McpHandlerUtils::AddVerification(Response, Atten);
         Response->SetBoolField(TEXT("success"), true);
         return Response;
-    }
+}
     
-    if (SubAction == TEXT("configure_spatialization"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringConfigureSpatialization(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
@@ -1742,8 +1760,9 @@ if (SubAction == TEXT("create_metasound"))
 	return Response;
 }
 
-	if (SubAction == TEXT("configure_occlusion"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringConfigureOcclusion(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
@@ -1780,8 +1799,9 @@ if (SubAction == TEXT("create_metasound"))
 	return Response;
 }
 
-	if (SubAction == TEXT("configure_reverb_send"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringConfigureReverbSend(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
@@ -1825,8 +1845,9 @@ if (SubAction == TEXT("create_metasound"))
 
 	// ===== 11.5 Dialogue System =====
     
-    if (SubAction == TEXT("create_dialogue_voice"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringCreateDialogueVoice(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_DIALOGUE && MCP_HAS_DIALOGUE_FACTORY
         FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
         FString Path = NormalizeAudioPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Audio/Dialogue")), false);
@@ -1897,10 +1918,11 @@ if (SubAction == TEXT("create_metasound"))
 #else
         return McpHandlerUtils::BuildErrorResponse(TEXT("DIALOGUE_NOT_AVAILABLE"), TEXT("Dialogue system not available"));
 #endif
-    }
+}
     
-    if (SubAction == TEXT("create_dialogue_wave"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringCreateDialogueWave(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_DIALOGUE && MCP_HAS_DIALOGUE_FACTORY
         FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
         FString Path = NormalizeAudioPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Audio/Dialogue")), false);
@@ -1948,10 +1970,11 @@ if (SubAction == TEXT("create_metasound"))
 #else
         return McpHandlerUtils::BuildErrorResponse(TEXT("DIALOGUE_NOT_AVAILABLE"), TEXT("Dialogue system not available"));
 #endif
-    }
+}
     
-    if (SubAction == TEXT("set_dialogue_context"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringSetDialogueContext(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_DIALOGUE
         FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString SpeakerPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("speakerPath"), TEXT("")));
@@ -2050,12 +2073,13 @@ if (SubAction == TEXT("create_metasound"))
 #else
         return McpHandlerUtils::BuildErrorResponse(TEXT("DIALOGUE_NOT_AVAILABLE"), TEXT("Dialogue system not available"));
 #endif
-    }
+}
     
     // ===== 11.6 Effects =====
     
-    if (SubAction == TEXT("create_reverb_effect"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringCreateReverbEffect(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_REVERB_EFFECT
         FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
         FString Path = NormalizeAudioPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Audio/Effects")), false);
@@ -2117,10 +2141,11 @@ if (SubAction == TEXT("create_metasound"))
 #else
         return McpHandlerUtils::BuildErrorResponse(TEXT("REVERB_NOT_AVAILABLE"), TEXT("Reverb effect not available"));
 #endif
-    }
+}
     
-    if (SubAction == TEXT("create_source_effect_chain"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringCreateSourceEffectChain(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_SOURCE_EFFECT
         FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
         FString Path = NormalizeAudioPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Audio/Effects")), false);
@@ -2172,10 +2197,11 @@ if (SubAction == TEXT("create_metasound"))
         Response->SetStringField(TEXT("note"), TEXT("Enable AudioMixer plugin for full source effect chain support"));
         return Response;
 #endif
-    }
+}
     
-	if (SubAction == TEXT("add_source_effect"))
-	{
+static TSharedPtr<FJsonObject> AudioAuthoringAddSourceEffect(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_SOURCE_EFFECT
 		FString AssetPath = NormalizeAudioPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
 		FString EffectPresetPath = GetJsonStringField(Params, TEXT("effectPresetPath"), TEXT(""));
@@ -2244,10 +2270,11 @@ if (SubAction == TEXT("create_metasound"))
         Response->SetStringField(TEXT("note"), TEXT("AudioMixer module not available - enable AudioMixer plugin for full support"));
         return Response;
 #endif
-    }
+}
     
-    if (SubAction == TEXT("create_submix_effect"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringCreateSubmixEffect(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_SUBMIX
         FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
         FString EffectType = GetJsonStringField(Params, TEXT("effectType"), TEXT(""));
@@ -2305,12 +2332,13 @@ if (SubAction == TEXT("create_metasound"))
         Response->SetStringField(TEXT("note"), TEXT("Enable AudioMixer plugin for full submix support"));
         return Response;
 #endif
-    }
+}
     
     // ===== Utility =====
     
-    if (SubAction == TEXT("get_audio_info"))
-    {
+static TSharedPtr<FJsonObject> AudioAuthoringGetAudioInfo(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         const FString RawAssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
         if (RawAssetPath.IsEmpty())
         {
@@ -2423,37 +2451,15 @@ if (SubAction == TEXT("create_metasound"))
         
         Response->SetBoolField(TEXT("success"), true);
         return Response;
-    }
-    
-    // Unknown subAction
-    return McpHandlerUtils::BuildErrorResponse(TEXT("UNKNOWN_ACTION"), FString::Printf(TEXT("Unknown audio authoring action: %s"), *SubAction));
 }
 
-#endif // WITH_EDITOR
-
-// Public handler function called by the subsystem
-bool UMcpAutomationBridgeSubsystem::HandleManageAudioAuthoringAction(
-    const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle RequestingSocket)
+// Response conversion shared by the classed members — verbatim from the
+// retired HandleManageAudioAuthoringAction wrapper.
+static bool SendAudioAuthoringResult(UMcpAutomationBridgeSubsystem* Self,
+                                     const FString& RequestId,
+                                     const TSharedPtr<FJsonObject>& Response,
+                                     FMcpResponseHandle RequestingSocket)
 {
-    // Check if this is a manage_audio_authoring request
-    FString LowerAction = Action.ToLower();
-    if (!LowerAction.StartsWith(TEXT("manage_audio_authoring")))
-    {
-        return false;
-    }
-
-#if WITH_EDITOR
-    if (!Payload.IsValid())
-    {
-        SendAutomationError(RequestingSocket, RequestId,
-                           TEXT("Audio authoring payload missing"), TEXT("INVALID_PAYLOAD"));
-        return true;
-    }
-    
-    TSharedPtr<FJsonObject> Response = HandleAudioAuthoringRequest(Payload);
-    
     if (Response.IsValid())
     {
         bool bSuccess = Response->HasField(TEXT("success")) && GetJsonBoolField(Response, TEXT("success"));
@@ -2463,22 +2469,370 @@ bool UMcpAutomationBridgeSubsystem::HandleManageAudioAuthoringAction(
         
         if (bSuccess)
         {
-            SendAutomationResponse(RequestingSocket, RequestId, true, Message, Response);
+            Self->SendAutomationResponse(RequestingSocket, RequestId, true, Message, Response);
         }
         else
         {
             // BuildErrorResponse sets "error" field with the message
             FString ErrorMsg = Response->HasField(TEXT("error")) ? GetJsonStringField(Response, TEXT("error")) : Message.Len() > 0 ? Message : TEXT("Unknown error");
-            SendAutomationError(RequestingSocket, RequestId, ErrorMsg, ErrorCode);
+            Self->SendAutomationError(RequestingSocket, RequestId, ErrorMsg, ErrorCode);
         }
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        Self->SendAutomationError(RequestingSocket, RequestId,
                            TEXT("Failed to process audio authoring request"), TEXT("PROCESS_FAILED"));
     }
     
     return true;
+}
+
+#endif // WITH_EDITOR
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringAddCueNode(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringAddCueNode(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConnectCueNodes(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConnectCueNodes(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringSetCueAttenuation(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringSetCueAttenuation(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringSetCueConcurrency(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringSetCueConcurrency(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateMetasound(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateMetasound(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringAddMetasoundNode(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringAddMetasoundNode(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConnectMetasoundNodes(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConnectMetasoundNodes(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringAddMetasoundInput(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringAddMetasoundInput(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringAddMetasoundOutput(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringAddMetasoundOutput(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringSetMetasoundDefault(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringSetMetasoundDefault(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringSetClassProperties(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringSetClassProperties(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringSetClassParent(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringSetClassParent(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringAddMixModifier(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringAddMixModifier(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConfigureMixEq(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConfigureMixEq(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateAttenuationSettings(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateAttenuationSettings(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConfigureDistanceAttenuation(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConfigureDistanceAttenuation(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConfigureSpatialization(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConfigureSpatialization(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConfigureOcclusion(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConfigureOcclusion(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConfigureReverbSend(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConfigureReverbSend(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateDialogueVoice(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateDialogueVoice(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateDialogueWave(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateDialogueWave(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringSetDialogueContext(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringSetDialogueContext(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateReverbEffect(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateReverbEffect(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateSourceEffectChain(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateSourceEffectChain(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringAddSourceEffect(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringAddSourceEffect(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateSubmixEffect(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateSubmixEffect(Payload), RequestingSocket);
+#else
+    SendAutomationError(RequestingSocket, RequestId,
+                       TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
+    return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringGetAudioInfo(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringGetAudioInfo(Payload), RequestingSocket);
 #else
     SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));

@@ -494,6 +494,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       McpRegisterControlEditorCalls();
       McpRegisterInspectCalls();
       McpRegisterManageAiCalls();
+      McpRegisterManageAudioCalls();
       McpRegisterManageCharacterCalls();
       McpRegisterManageCombatCalls();
       McpRegisterManageEffectCalls();
@@ -1122,22 +1123,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   // (MCP/Calls/McpCalls_ManageNetworking.cpp) — dispatch reaches its
   // FMcpCall instances via the registry, not this map.
 
-  RegisterHandler(TEXT("manage_audio"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         FMcpResponseHandle S) {
-                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
-                    if (McpConsolidatedActions::IsAudioAuthoringAction(SubAction)) {
-                      const TSharedPtr<FJsonObject> RoutedPayload =
-                          McpConsolidatedActions::WithPayloadSubAction(P, SubAction);
-                      return HandleManageAudioAuthoringAction(
-                          R, TEXT("manage_audio_authoring"), RoutedPayload, S);
-                    }
-                    // HandleAudioAction's entry gate matches on the sub-action
-                    // prefix, not the tool name; passing A ("manage_audio") fails
-                    // the gate and the request would go unrouted.
-                    return HandleAudioAction(R, SubAction, P, S);
-                  });
+  // manage_audio is fully classed (MCP/Calls/McpCalls_ManageAudio.cpp) —
+  // dispatch reaches its FMcpCall instances via the registry, not this map.
 
   // animation_physics is fully classed
   // (MCP/Calls/McpCalls_AnimationPhysics.cpp) — dispatch reaches its FMcpCall

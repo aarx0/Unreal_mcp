@@ -188,6 +188,10 @@ shape: drop `|| Lower == TEXT("audio_fade_sound")` from the single-line conditio
 ## McpAutomationBridge_AudioHandlers.cpp — audio_create_reverb_zone @ :2363
 sibling: create_reverb_zone
 shape: drop `|| Lower == TEXT("audio_create_reverb_zone")` from the single-line condition at :2363, leaving `if (Lower == TEXT("create_reverb_zone"))`
+(All seventeen audio_* arms above were executed with this sweep, 2874d066 — the
+coordinates are pre-deletion, and the whole HandleAudioAction dispatcher died at
+the manage_audio classing, 2026-07-05. Noted so a scoping pass does not hunt for
+live alias arms.)
 
 ## McpAutomationBridge_ControlHandlers.cpp — remove @ :2741
 sibling: delete
@@ -335,6 +339,27 @@ without axis parameters, the sampleX/sampleY blend-sample variant).
 
 ### AssetWorkflowHandlers
 - **source_control_enable** @:418 - Source Control family (McpAutomationBridge_AssetWorkflowHandlers.cpp :838-891, ~54 lines, WITH_EDITOR-gated). HandleSourceControlEnable wraps ISourceControlModule::Get(): if source control is already enabled it returns success with the active provider's name; otherwise it optionally sets the provide…
+
+### AudioHandlers (added at the manage_audio classing, 2026-07-05)
+All seven entries below are the below-radar shadowed-dead class found at the
+manage_audio classing (same class as animation_physics's thirty): each name is in
+`AudioAuthoring()`, so the registration lambda always routed it to
+AudioAuthoringHandlers' live block first and the core dispatcher's own arm +
+dedicated member could never match. **Deleted at the manage_audio classing
+(2026-07-05)**; the live authoring implementations are unchanged (now the
+`HandleAudioAuthoring*` members); the spellings only the shadowed members read
+left the decl rows with them (see the classing's decl burn-down). Recover any
+copy from git — several were differently-shaped implementations of the same
+action name (the UE 5.7-aware NewObject dialogue creators, the
+reflectionsGain/lateGain reverb params, add_source_effect's typed
+EQ/Reverb/Delay entries).
+- **create_dialogue_voice** arm @:1827 → HandleCreateDialogueVoice @:2484 - read voiceName/outputPath/gender/pluralization; NewObject-based UDialogueVoice creator (the live block reads name/path/gender/plurality/save and creates via UDialogueVoiceFactory).
+- **create_dialogue_wave** arm @:1830 → HandleCreateDialogueWave @:2576 - read waveName/soundPath/outputPath; required a USoundWave and seeded one context mapping (the live block reads name/path/spokenText/save).
+- **set_dialogue_context** arm @:1833 → HandleSetDialogueContext @:2667 - read wavePath/voicePath/contextIndex; set the speaker on an existing mapping by index (the live block appends/replaces full mappings from speakerPath/soundWavePath/targetVoices).
+- **create_reverb_effect** arm @:1841 → HandleCreateReverbEffect @:2743 - read effectName/outputPath plus eight reverb params incl. reflectionsGain/lateGain (the live block reads name/path/save + six params).
+- **create_source_effect_chain** arm @:1844 → HandleCreateSourceEffectChain @:2834 - read chainName/outputPath (the live block reads name/path/save).
+- **add_source_effect** arm @:1847 → HandleAddSourceEffect @:2900 - read chainPath/effectType/effectName with typed EQ/Reverb/Delay entries (the live block loads a preset by effectPresetPath or synthesizes one from effectType).
+- **create_submix_effect** arm @:1850 → HandleCreateSubmixEffect @:2980 - read effectName/outputPath/effectType and created a USoundEffectSubmixPreset (the live block creates a USoundSubmix from name/path/save).
 
 ### BlueprintGraphHandlers
 - **get_nodes** @:1790 - Family: "list all nodes in a graph" node-dump. Body (lines 1790-1859) iterates TargetGraph->Nodes and, per node, emits nodeId/nodeName/nodeType/nodeTitle/comment/x/y plus a nested pins array (pinName/pinType/direction/pinSubType-for-object-class-struct/linkedTo as {nodeId,pinName} objects), wrapped …
