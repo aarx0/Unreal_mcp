@@ -1019,9 +1019,7 @@ inline bool IsTextureAction(const FString& Action) { return ContainsAction(Textu
 inline bool IsBlueprintGraphAction(const FString& Action) { return ContainsAction(BlueprintGraph(), Action); }
 inline bool IsWidgetAuthoringAction(const FString& Action) { return ContainsAction(WidgetAuthoring(), Action); }
 inline bool IsCommonUiAction(const FString& Action) { return ContainsAction(CommonUi(), Action); }
-inline bool IsAnimationAuthoringAction(const FString& Action) { return ContainsAction(AnimationAuthoring(), Action); }
 inline bool IsAudioAuthoringAction(const FString& Action) { return ContainsAction(AudioAuthoring(), Action); }
-inline bool IsSkeletonAction(const FString& Action) { return ContainsAction(Skeleton(), Action); }
 
 // ─── Routing introspection ───────────────────────────────────────────────────
 // Mirrors what each tool's registration lambda tests, in test order, so startup

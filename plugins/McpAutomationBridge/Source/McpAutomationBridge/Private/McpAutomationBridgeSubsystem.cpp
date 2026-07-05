@@ -488,6 +488,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       // validate its first tools/call. Classed families register alongside
       // the shim declarations (their decls come from the class instances).
       McpRegisterAllActionDecls();
+      McpRegisterAnimationPhysicsCalls();
       McpRegisterBuildEnvironmentCalls();
       McpRegisterControlActorCalls();
       McpRegisterControlEditorCalls();
@@ -1136,22 +1137,9 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                     return HandleAudioAction(R, SubAction, P, S);
                   });
 
-  RegisterHandler(TEXT("animation_physics"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         FMcpResponseHandle S) {
-                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
-                    if (McpConsolidatedActions::IsAnimationAuthoringAction(SubAction)) {
-                      const TSharedPtr<FJsonObject> RoutedPayload =
-                          McpConsolidatedActions::WithPayloadSubAction(P, SubAction);
-                      return HandleManageAnimationAuthoringAction(
-                          R, TEXT("manage_animation_authoring"), RoutedPayload, S);
-                    }
-                    if (McpConsolidatedActions::IsSkeletonAction(SubAction)) {
-                      return HandleManageSkeleton(R, TEXT("manage_skeleton"), P, S);
-                    }
-                    return HandleAnimationPhysicsAction(R, A, P, S);
-                  });
+  // animation_physics is fully classed
+  // (MCP/Calls/McpCalls_AnimationPhysics.cpp) — dispatch reaches its FMcpCall
+  // instances via the registry, not this map.
 
   // manage_effect is fully classed (MCP/Calls/McpCalls_ManageEffect.cpp) —
   // dispatch reaches its FMcpCall instances via the registry, not this map.

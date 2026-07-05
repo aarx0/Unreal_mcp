@@ -7,7 +7,6 @@
 #include "MCP/Decls/McpDecl_ManageAudio.h"
 #include "MCP/Decls/McpDecl_ManageBlueprint.h"
 #include "MCP/Decls/McpDecl_ManageAsset.h"
-#include "MCP/Decls/McpDecl_AnimationPhysics.h"
 #include "MCP/Decls/McpDecl_ManageGeometry.h"
 
 inline void McpRegisterAllActionDecls()
@@ -37,7 +36,9 @@ inline void McpRegisterAllActionDecls()
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageAsset);
 	// manage_sequence: classed (MCP/Calls/McpCalls_ManageSequence.cpp) — decls
 	// register with the call instances via McpRegisterManageSequenceCalls().
-	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GAnimationPhysics);
+	// animation_physics: classed (MCP/Calls/McpCalls_AnimationPhysics.cpp) —
+	// decls register with the call instances via
+	// McpRegisterAnimationPhysicsCalls().
 	// manage_effect: classed (MCP/Calls/McpCalls_ManageEffect.cpp) — decls
 	// register with the call instances via McpRegisterManageEffectCalls().
 	// manage_gas: classed (MCP/Calls/McpCalls_ManageGas.cpp) — decls

@@ -259,16 +259,19 @@ Implemented behind unreachable names. Each family needs one decision; recommenda
 
 Quick dispositions:
 - **Delete at classing (stubs/lies):** AnimationAuthoring rig stubs (circular "call
-  animation_physics with action=X" errors for names nothing advertises),
-  AnimationHandlers NOT_SUPPORTED rig family, texture create_cube/volume/array
+  animation_physics with action=X" errors for names nothing advertises — DELETED at the
+  animation_physics classing), AnimationHandlers NOT_SUPPORTED rig family (DELETED at
+  the animation_physics classing), texture create_cube/volume/array
   (honest UNSUPPORTED stubs), `import_texture` (**fake-success "import queued"** — a lying
-  stub), `preview_physics` (echo stub), `set_cast_shadows` (UNSUPPORTED stub),
+  stub), `preview_physics` (echo stub — DELETED at the animation_physics classing),
+  `set_cast_shadows` (UNSUPPORTED stub),
   MaterialAuthoring per-node conveniences (generic `add_material_node` covers all five),
   WorldPartition `create_datalayer`/`set_datalayer` (live differently-spelled siblings
   exist in manage_level_structure).
 - **Advertise candidates (real, no advertised equivalent):** geometry raw DynamicMesh CRUD
   family (11 actions), skeleton read/delete family (12: delete_socket, get_bone_transform,
-  list/delete morph targets + virtual bones, set_physics_asset, remove_physics_body...),
+  list/delete morph targets + virtual bones, set_physics_asset, remove_physics_body... —
+  DELETED at the animation_physics classing, recover from git),
   `export_asset` (~180-line generic exporter — DELETED at the system_control classing,
   recover from git), `batch_console_commands` (blocklist-aware),
   `get_nodes` (graph node dump), `grant_ability` (DELETED at the manage_gas
@@ -285,13 +288,42 @@ Full per-name evidence:
 - **set_ai_movement** @:3845 - Standalone `if (SubAction == TEXT("set_ai_movement"))` block (:3845-3998) in HandleManageAIAction. Not in manage_ai's action enum and no code manufactures the literal `set_ai_movement` anywhere in Private (grep confirms only the comment/condition), so the whole branch is unreachable both externally … Disposition: **deleted at the manage_ai classing (2026-07-05)** (the branch sat at :3614-:3767 at HEAD); advertise candidate parked for Aaron — recover from git.
 - **create_nav_link_proxy (shadowed inline copy)** @:3976 - Below-radar dead duplicate found at the manage_ai classing: the advertised name belongs to the Navigation family, and HandleManageAIAction's top-of-function Navigation router forwarded it to NavigationHandlers' `HandleCreateNavLinkProxy` (the live point-link actor spawner) before the inline branch could ever match, so the dispatcher's own copy — a NavLinkProxy *blueprint* creator reading blueprintPath/name/path, a different capability from the live spawner — was unreachable since the router landed. **Deleted at the manage_ai classing (2026-07-05)**; recover from git if the blueprint-creator variant is ever wanted (its blueprintPath/name/path spellings left the decl row with it).
 
-### AnimationAuthoringHandlers
+### AnimationAuthoringHandlers (updated at the animation_physics classing, 2026-07-05)
+All four rig stubs below were **deleted at the animation_physics classing (2026-07-05)**
+— circular "call animation_physics with action=X" errors for names nothing advertises
+(transport-dead); recover from git history if advertising is wanted. Deleted with them,
+below the sweep inventory's radar: the chain's dead `create_pose_library` copy (:3751,
+MCP_HAS_POSEASSET-guarded WRONG_HANDLER_ROUTE stub after name/skeleton validation) —
+the advertised name sits in `AnimationPhysicsCore()`, so the registration lambda always
+routed it to the primary dispatcher's live UMcpGenericDataAsset implementation (now
+`HandleAnimPhysCreatePoseLibrary`) and this authoring copy could never match; its
+`save` read left the decl row with it.
 - **add_control** @:3703 - 3-line stub (3703-3721, guarded by #if MCP_HAS_CONTROLRIG): if ControlName param is empty it returns MISSING_CONTROL_NAME, otherwise it unconditionally falls through to ANIM_ERROR_RESPONSE("add_control is handled by the animation_physics runtime authoring route; call animation_physics with action=ad…
 - **add_rig_unit** @:3724 - 13-line stub (3724-3736, guarded by #if MCP_HAS_CONTROLRIG): reads assetPath/unitType into local variables that are then unused, and unconditionally returns ANIM_ERROR_RESPONSE("add_rig_unit is handled by the animation_physics runtime authoring route; call animation_physics with action=add_rig_unit.…
 - **connect_rig_elements** @:3739 - 10-line stub (3739-3748, guarded by #if MCP_HAS_CONTROLRIG): does no field extraction at all, unconditionally returns ANIM_ERROR_RESPONSE("connect_rig_elements is handled by the animation_physics runtime authoring route; call animation_physics with action=connect_rig_elements.", WRONG_HANDLER_ROUTE)…
 - **add_ik_chain** @:3862 - 18-line stub (3862-3879, guarded by #if MCP_HAS_IKRIG): validates ChainName is non-empty (else MISSING_CHAIN_NAME) then unconditionally falls through to ANIM_ERROR_RESPONSE("add_ik_chain is handled by the animation_physics runtime authoring route; call animation_physics with action=add_ik_chain.", W…
 
-### AnimationHandlers
+### AnimationHandlers (updated at the animation_physics classing, 2026-07-05)
+All four NOT_SUPPORTED rig stubs below were **deleted at the animation_physics classing
+(2026-07-05)** — permanent stubs, transport-dead (no decl row, not in any routing list,
+schema enum rejects the names); recover from git history if advertising is wanted.
+Deleted with them, below the sweep inventory's radar: the dispatcher's THIRTY
+unreachable shadowed copies of routed authoring actions (create_animation_sequence,
+set_sequence_length, add_bone_track, set_bone_key, set_curve_key, add_notify,
+create_montage, add_montage_section, add_montage_slot, set_section_timing,
+add_montage_notify, set_blend_in, set_blend_out, link_sections, create_blend_space_1d,
+create_blend_space_2d, add_blend_sample, set_axis_settings, set_interpolation_settings,
+create_aim_offset, add_aim_offset_sample, add_state_machine, add_state, add_transition,
+set_transition_rules, add_blend_node, add_cached_pose, add_slot_node,
+create_control_rig, create_ik_rig) — every one of those advertised names is in
+`AnimationAuthoring()`, so the registration lambda always routed it to
+AnimationAuthoringHandlers' implementation first and the primary's own copy could never
+match (same class as manage_ai's shadowed create_nav_link_proxy). The live authoring
+implementations are unchanged (now the `HandleAnimAuthoring*` members); the spellings
+only the shadowed copies read left the decl rows with them (see the classing's decl
+burn-down). Recover any copy from git — several were older, differently-shaped
+implementations of the same action name (e.g. the aim-offset/blend-space creators
+without axis parameters, the sampleX/sampleY blend-sample variant).
 - **add_control** @:4110 - Control Rig graph-editing family (add_control/add_rig_unit/connect_rig_elements): always returns NOT_SUPPORTED, no actual Control Rig graph mutation implemented behind any of the three. Extent: lines 4110-4135.
 - **add_rig_unit** @:4136 - Control Rig graph-editing family (same family as add_control/connect_rig_elements): always returns NOT_SUPPORTED, no rig-unit insertion logic implemented. Extent: lines 4136-4158.
 - **connect_rig_elements** @:4159 - Control Rig graph-editing family (same family as add_control/add_rig_unit): always returns NOT_SUPPORTED, no pin-connection logic implemented. Extent: lines 4159-4189.
@@ -358,7 +390,18 @@ wanted.**
 - **create_render_target** @:87 - Hidden duplicate: `manage_asset.create_render_target` is advertised and reaches its own live implementation (AssetWorkflowHandlers.cpp:355). This copy was unreachable (below the sweep inventory's radar because the advertised sibling name exists on another tool).
 - **nanite_rebuild_mesh** @:291 - Hidden duplicate: `manage_asset.nanite_rebuild_mesh` is advertised and reaches `HandleNaniteRebuildMesh` (AssetWorkflowHandlers.cpp:5054). This copy was unreachable (same below-radar class as create_render_target).
 
-### SkeletonHandlers
+### SkeletonHandlers (updated at the animation_physics classing, 2026-07-05)
+All twelve entries below were **deleted at the animation_physics classing (2026-07-05)**
+— the dispatcher arms died with the chain and the ten dedicated member implementations
+(HandleSetPhysicsAsset, HandleRemovePhysicsBody, HandleGetPhysicsAssetInfo,
+HandleSetMorphTargetValue, HandleListMorphTargets, HandleDeleteMorphTarget,
+HandleDeleteSocket, HandleGetBoneTransform, HandleListVirtualBones,
+HandleDeleteVirtualBone; each had exactly the branch, its definition, and its header
+declaration as its three references) died as their single callers vanished;
+preview_physics was an inline echo stub. Disposition per the sweep's quick-dispositions:
+the read/delete family stays an **advertise candidate parked for Aaron** (real,
+distinct capabilities with no advertised equivalent — recover from git);
+preview_physics was a stub, delete-class.
 - **set_physics_asset** @:3179 - HandleSetPhysicsAsset (McpAutomationBridge_SkeletonHandlers.cpp:2266-2323, ~58 lines) assigns an EXISTING UPhysicsAsset to a USkeletalMesh via Mesh->SetPhysicsAsset(PhysAsset) and saves the mesh. Distinct from the advertised create_physics_asset (which builds a brand-new physics asset via HandleCrea…
 - **remove_physics_body** @:3183 - HandleRemovePhysicsBody (SkeletonHandlers.cpp:2330-2414, ~85 lines) finds the SkeletalBodySetup for a given boneName in a UPhysicsAsset, removes any ConstraintSetup entries referencing that bone, removes the body setup, and rebuilds the bounds/index maps before saving. add_physics_body (advertised) …
 - **get_physics_asset_info** @:3187 - HandleGetPhysicsAssetInfo (SkeletonHandlers.cpp:3014-3097, ~84 lines) loads a UPhysicsAsset (by physicsAssetPath or via a skeletal mesh's assigned asset) and reports per-body geometry counts (spheres/boxes/capsules/convex, physics type) plus per-constraint bone pairs. list_physics_bodies (advertised…

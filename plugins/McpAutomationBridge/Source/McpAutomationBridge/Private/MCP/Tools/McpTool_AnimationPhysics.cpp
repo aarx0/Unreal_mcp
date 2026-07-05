@@ -1,4 +1,4 @@
-// McpTool_AnimationPhysics.cpp — animation_physics tool definition (55 actions)
+// McpTool_AnimationPhysics.cpp — animation_physics tool definition (85 actions)
 
 #include "McpVersionCompatibility.h"
 #include "MCP/McpToolDefinition.h"

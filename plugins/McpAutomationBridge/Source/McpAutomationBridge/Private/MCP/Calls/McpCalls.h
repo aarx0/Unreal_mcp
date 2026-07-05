@@ -3,6 +3,7 @@
 // McpRegisterAllActionDecls(), before the transport starts.
 #pragma once
 
+void McpRegisterAnimationPhysicsCalls();
 void McpRegisterBuildEnvironmentCalls();
 void McpRegisterControlActorCalls();
 void McpRegisterControlEditorCalls();

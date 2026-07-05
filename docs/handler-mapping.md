@@ -30,7 +30,7 @@ subdirectory is shown.
 | `manage_asset` | MaterialAuthoring → `HandleManageMaterialAuthoringAction`; Texture → `HandleManageTextureAction` | `HandleAssetAction` @ AssetWorkflowHandlers.cpp |
 | `manage_blueprint` | CommonUi → `HandleCommonUiAction`; WidgetAuthoring → `HandleManageWidgetAuthoringAction`; BlueprintGraph → `HandleBlueprintGraphAction` | `HandleBlueprintAction` @ BlueprintHandlers.cpp |
 | `build_environment` | — (Lighting/Splines stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp (dispatched from the call registry before the handler map; implementations are the `HandleEnvironment*` members @ EnvironmentHandlers.cpp for the 21 core actions, `HandleLighting*` @ LightingHandlers.cpp for the 12 lighting actions, and the `HandleSpline*` wrappers @ SplineHandlers.cpp for the 22 spline actions) |
-| `animation_physics` | AnimationAuthoring → `HandleManageAnimationAuthoringAction`; Skeleton → `HandleManageSkeleton` | `HandleAnimationPhysicsAction` @ AnimationHandlers.cpp |
+| `animation_physics` | — (AnimationAuthoring/Skeleton stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp (dispatched from the call registry before the handler map; implementations are the `HandleAnimPhys*` members @ AnimationHandlers.cpp for the 14 core actions, `HandleAnimAuthoring*` @ AnimationAuthoringHandlers.cpp for the 42 authoring actions, and the `HandleSkeleton*` members @ SkeletonHandlers.cpp for the 29 skeleton actions) |
 | `system_control` | — (Performance stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp (dispatched from the call registry before the handler map; implementations spread across PerformanceHandlers.cpp (`HandlePerf*`), SystemControlHandlers.cpp (`HandleSys*`), UiHandlers.cpp (`HandleUi*`), LogHandlers.cpp (`HandleLog*`), DebugHandlers.cpp, RenderHandlers.cpp — see note) |
 | `manage_networking` | — (Input/GameFramework/Sessions stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageNetworking.cpp (dispatched from the call registry before the handler map; implementations are the `HandleNetworking*` members @ NetworkingHandlers.cpp for the 27 core actions, `HandleInput*` @ InputHandlers.cpp for the 9 input actions, `HandleGameFramework*` @ GameFrameworkHandlers.cpp for the 20 game-framework actions, and the `HandleSessions*` wrappers @ SessionsHandlers.cpp for the 16 session actions) |
 | `manage_level_structure` | — (Volumes stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevelStructure.cpp (dispatched from the call registry before the handler map; implementations are the `HandleLevelStructure*` members @ LevelStructureHandlers.cpp for the 17 core actions and the `HandleVolume*` members @ VolumeHandlers.cpp for the 28 volume actions) |
@@ -81,8 +81,8 @@ Routed family lists:
 | `CommonUi` | `HandleCommonUiAction` @ CommonUIHandlers.cpp |
 | `Lighting` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp delegate to `HandleLighting*` @ LightingHandlers.cpp (list retained for schema-union validation) |
 | `Splines` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp delegate to `HandleSpline*` wrappers @ SplineHandlers.cpp (list retained for schema-union validation) |
-| `AnimationAuthoring` | `HandleManageAnimationAuthoringAction` @ AnimationAuthoringHandlers.cpp |
-| `Skeleton` | `HandleManageSkeleton` @ SkeletonHandlers.cpp |
+| `AnimationAuthoring` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp delegate to `HandleAnimAuthoring*` @ AnimationAuthoringHandlers.cpp (list retained for schema-union validation) |
+| `Skeleton` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp delegate to `HandleSkeleton*` @ SkeletonHandlers.cpp (list retained for schema-union validation) |
 | `AudioAuthoring` | `HandleManageAudioAuthoringAction` @ AudioAuthoringHandlers.cpp |
 | `Performance` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp delegate to `HandlePerf*` @ PerformanceHandlers.cpp (list retained for schema-union validation) |
 | `Input` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageNetworking.cpp delegate to `HandleInput*` @ InputHandlers.cpp (list retained for schema-union validation) |
@@ -99,7 +99,7 @@ Core (fallthrough) lists:
 | `ManageAssetCore` | `HandleAssetAction` @ AssetWorkflowHandlers.cpp |
 | `ManageBlueprintCore` | `HandleBlueprintAction` @ BlueprintHandlers.cpp |
 | `BuildEnvironmentCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp (implementations are the `HandleEnvironment*` members @ EnvironmentHandlers.cpp) |
-| `AnimationPhysicsCore` | `HandleAnimationPhysicsAction` @ AnimationHandlers.cpp |
+| `AnimationPhysicsCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp (implementations are the `HandleAnimPhys*` members @ AnimationHandlers.cpp) |
 | `SystemControlCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp (per-class delegation split in the note above) |
 | `ManageAudioCore` | `HandleAudioAction` @ AudioHandlers.cpp |
 | `ManageNetworkingCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageNetworking.cpp (implementations are the `HandleNetworking*` members @ NetworkingHandlers.cpp) |

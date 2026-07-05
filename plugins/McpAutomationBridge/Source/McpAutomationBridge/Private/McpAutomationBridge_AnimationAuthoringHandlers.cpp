@@ -555,17 +555,18 @@ static UAnimStateTransitionNode* FindTransitionNode(UAnimationStateMachineGraph*
 
 } // anonymous namespace
 
-// Main handler function that processes animation authoring requests
-static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<FJsonObject>& Params)
+// =============================================================================
+// Classed animation_physics authoring actions
+// =============================================================================
+// One static per action (block bodies verbatim from the retired
+// HandleAnimationAuthoringRequest chain), plus the response conversion the
+// retired HandleManageAnimationAuthoringAction wrapper applied, shared by the
+// per-action members below.
+
+    // ===== 10.1 Animation Sequences =====
+static TSharedPtr<FJsonObject> AnimAuthoringCreateAnimationSequence(const TSharedPtr<FJsonObject>& Params)
 {
     TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
-    
-    FString SubAction = GetJsonStringField(Params, TEXT("subAction"), TEXT(""));
-    
-    // ===== 10.1 Animation Sequences =====
-    
-    if (SubAction == TEXT("create_animation_sequence"))
-    {
     FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
     // Schema advertises savePath; older callers pass path. Prefer savePath, fall back to path.
     FString Path = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
@@ -675,10 +676,11 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Animation sequence '%s' created"), *Name));
         McpHandlerUtils::AddVerification(Response, NewSequence);
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("set_sequence_length"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringSetSequenceLength(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         int32 FrameRate = static_cast<int32>(GetJsonNumberField(Params, TEXT("frameRate"), 30));
         // Schema exposes length (seconds); numFrames is an undocumented override.
@@ -721,10 +723,11 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
         ANIM_SUCCESS_RESPONSE(TEXT("Sequence length updated"));
         McpHandlerUtils::AddVerification(Response, Sequence);
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("add_bone_track"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringAddBoneTrack(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString BoneName = GetJsonStringField(Params, TEXT("boneName"), TEXT(""));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
@@ -850,10 +853,11 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Bone track '%s' added"), *BoneName));
         McpHandlerUtils::AddVerification(Response, Sequence);
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("set_bone_key"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringSetBoneKey(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString BoneName = GetJsonStringField(Params, TEXT("boneName"), TEXT(""));
         int32 Frame = static_cast<int32>(GetJsonNumberField(Params, TEXT("frame"), 0));
@@ -967,10 +971,11 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Bone key set at frame %d"), Frame));
         McpHandlerUtils::AddVerification(Response, Sequence);
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("set_curve_key"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringSetCurveKey(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString CurveName = GetJsonStringField(Params, TEXT("curveName"), TEXT(""));
         int32 Frame = static_cast<int32>(GetJsonNumberField(Params, TEXT("frame"), 0));
@@ -1019,10 +1024,11 @@ static TSharedPtr<FJsonObject> HandleAnimationAuthoringRequest(const TSharedPtr<
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Curve key set at frame %d"), Frame));
         McpHandlerUtils::AddVerification(Response, Sequence);
         return Response;
-    }
+}
 
-if (SubAction == TEXT("add_notify"))
+static TSharedPtr<FJsonObject> AnimAuthoringAddNotify(const TSharedPtr<FJsonObject>& Params)
 {
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
     FString NotifyClass = GetJsonStringField(Params, TEXT("notifyClass"), TEXT(""));
     int32 Frame = static_cast<int32>(GetJsonNumberField(Params, TEXT("frame"), 0));
@@ -1136,8 +1142,9 @@ if (SubAction == TEXT("add_notify"))
         return Response;
 }
 
-if (SubAction == TEXT("add_notify_state"))
+static TSharedPtr<FJsonObject> AnimAuthoringAddNotifyState(const TSharedPtr<FJsonObject>& Params)
 {
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
     FString NotifyClass = GetJsonStringField(Params, TEXT("notifyClass"), TEXT(""));
     int32 StartFrame = static_cast<int32>(GetJsonNumberField(Params, TEXT("startFrame"), 0));
@@ -1257,10 +1264,11 @@ if (SubAction == TEXT("add_notify_state"))
         ANIM_SUCCESS_RESPONSE(TEXT("Notify state added"));
         McpHandlerUtils::AddVerification(Response, AnimAsset);
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("add_sync_marker"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringAddSyncMarker(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString MarkerName = GetJsonStringField(Params, TEXT("markerName"), TEXT(""));
         int32 Frame = static_cast<int32>(GetJsonNumberField(Params, TEXT("frame"), 0));
@@ -1297,10 +1305,11 @@ if (SubAction == TEXT("add_notify_state"))
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Sync marker '%s' added"), *MarkerName));
         McpHandlerUtils::AddVerification(Response, Sequence);
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("set_root_motion_settings"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringSetRootMotionSettings(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         bool bEnableRootMotion = GetJsonBoolField(Params, TEXT("enableRootMotion"), true);
         FString RootMotionRootLock = GetJsonStringField(Params, TEXT("rootMotionRootLock"), TEXT("RefPose"));
@@ -1335,10 +1344,11 @@ if (SubAction == TEXT("add_notify_state"))
         ANIM_SUCCESS_RESPONSE(TEXT("Root motion settings updated"));
         McpHandlerUtils::AddVerification(Response, Sequence);
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("set_additive_settings"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringSetAdditiveSettings(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString AdditiveAnimType = GetJsonStringField(Params, TEXT("additiveAnimType"), TEXT("NoAdditive"));
         FString BasePoseType = GetJsonStringField(Params, TEXT("basePoseType"), TEXT("RefPose"));
@@ -1396,12 +1406,12 @@ if (SubAction == TEXT("add_notify_state"))
         ANIM_SUCCESS_RESPONSE(TEXT("Additive settings updated"));
         McpHandlerUtils::AddVerification(Response, Sequence);
         return Response;
-    }
+}
 
     // ===== 10.2 Animation Montages =====
-    
-    if (SubAction == TEXT("create_montage"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringCreateMontage(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
     FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
     // Accept 'path' (legacy) and 'savePath' (the animation_physics schema's
     // param name — previously ignored, so callers passing savePath silently
@@ -1512,10 +1522,11 @@ if (SubAction == TEXT("add_notify_state"))
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Montage '%s' created"), *Name));
         McpHandlerUtils::AddVerification(Response, NewMontage);
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("add_montage_section"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringAddMontageSection(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Accept assetPath, montagePath, and 'name' (the schema's only
         // name-ish field — callers passed the montage path there and got
         // MONTAGE_NOT_FOUND with an EMPTY path in the message).
@@ -1571,10 +1582,11 @@ if (SubAction == TEXT("add_notify_state"))
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Section '%s' added at index %d"), *SectionName, SectionIndex));
         McpHandlerUtils::AddVerification(Response, Montage);
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("add_montage_slot"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringAddMontageSlot(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString AnimationPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("animationPath"), TEXT("")));
         FString SlotName = GetJsonStringField(Params, TEXT("slotName"), TEXT("DefaultSlot"));
@@ -1629,10 +1641,11 @@ if (SubAction == TEXT("add_notify_state"))
         ANIM_SUCCESS_RESPONSE(TEXT("Animation added to montage slot"));
         McpHandlerUtils::AddVerification(Response, Montage);
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("set_section_timing"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringSetSectionTiming(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString SectionName = GetJsonStringField(Params, TEXT("sectionName"), TEXT(""));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
@@ -1671,10 +1684,11 @@ if (SubAction == TEXT("add_notify_state"))
         ANIM_SUCCESS_RESPONSE(TEXT("Section timing updated"));
         McpHandlerUtils::AddVerification(Response, Montage);
         return Response;
-    }
+}
 
-if (SubAction == TEXT("add_montage_notify"))
+static TSharedPtr<FJsonObject> AnimAuthoringAddMontageNotify(const TSharedPtr<FJsonObject>& Params)
 {
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
     FString NotifyClass = GetJsonStringField(Params, TEXT("notifyClass"), TEXT(""));
     float Time = static_cast<float>(GetJsonNumberField(Params, TEXT("time"), 0.0));
@@ -1790,9 +1804,9 @@ if (SubAction == TEXT("add_montage_notify"))
         return Response;
 }
 
-    if (SubAction == TEXT("set_blend_in") || SubAction == TEXT("set_blend_out"))
-    {
-        const bool bBlendIn = SubAction == TEXT("set_blend_in");
+static TSharedPtr<FJsonObject> AnimAuthoringSetBlend(const TSharedPtr<FJsonObject>& Params, const bool bBlendIn)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         // 'time' accepted as an alias of blendTime.
         const bool bHasBlendTime = Params->HasField(TEXT("blendTime")) || Params->HasField(TEXT("time"));
@@ -1850,10 +1864,11 @@ if (SubAction == TEXT("add_montage_notify"))
         ANIM_SUCCESS_RESPONSE(bBlendIn ? TEXT("Blend in settings updated") : TEXT("Blend out settings updated"));
         McpHandlerUtils::AddVerification(Response, Montage);
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("link_sections"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringLinkSections(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString FromSection = GetJsonStringField(Params, TEXT("fromSection"), TEXT(""));
         FString ToSection = GetJsonStringField(Params, TEXT("toSection"), TEXT(""));
@@ -1883,12 +1898,12 @@ if (SubAction == TEXT("add_montage_notify"))
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Linked '%s' to '%s'"), *FromSection, *ToSection));
         McpHandlerUtils::AddVerification(Response, Montage);
         return Response;
-    }
+}
 
     // ===== 10.3 Blend Spaces =====
-    
-    if (SubAction == TEXT("create_blend_space_1d"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringCreateBlendSpace1D(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_BLENDSPACE_FACTORY
     FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
     // Accept 'path' (legacy) and 'savePath' (the animation_physics schema's
@@ -2010,10 +2025,11 @@ if (SubAction == TEXT("add_montage_notify"))
         ANIM_ERROR_RESPONSE(TEXT("Blend space factory not available"), TEXT("NOT_SUPPORTED"));
 #endif
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("create_blend_space_2d"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringCreateBlendSpace2D(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_BLENDSPACE_FACTORY
     FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
     // Accept 'path' (legacy) and 'savePath' (the animation_physics schema's
@@ -2146,10 +2162,11 @@ if (SubAction == TEXT("add_montage_notify"))
         ANIM_ERROR_RESPONSE(TEXT("Blend space factory not available"), TEXT("NOT_SUPPORTED"));
 #endif
         return Response;
-    }
-    
-    if (SubAction == TEXT("add_blend_sample"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringAddBlendSample(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString AnimationPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("animationPath"), TEXT("")));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
@@ -2203,15 +2220,16 @@ if (SubAction == TEXT("add_montage_notify"))
 
         ANIM_SUCCESS_RESPONSE(TEXT("Blend sample added"));
         return Response;
-    }
+}
 
     // Wave 7+ #12: explicit BS rebuild for cases where SampleData / BlendParameters
     // were mutated via Python set_editor_property (raw memory write skips
     // PostEditChange) or any other path that bypasses MCP's add_blend_sample.
     // Optionally cascade-compile referencing AnimBlueprints so the user doesn't
     // have to hunt them down manually.
-    if (SubAction == TEXT("force_rebuild_blend_space"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringForceRebuildBlendSpace(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         bool bRebuildBlendParams = GetJsonBoolField(Params, TEXT("rebuildBlendParameters"), false);
         bool bCompileReferencers = GetJsonBoolField(Params, TEXT("compileReferencers"), true);
@@ -2319,10 +2337,11 @@ if (SubAction == TEXT("add_montage_notify"))
 
         ANIM_SUCCESS_RESPONSE(TEXT("Blend space rebuilt"));
         return Response;
-    }
+}
 
-    if (SubAction == TEXT("set_axis_settings"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringSetAxisSettings(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString Axis = GetJsonStringField(Params, TEXT("axis"), TEXT("Horizontal"));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
@@ -2408,10 +2427,11 @@ if (SubAction == TEXT("add_montage_notify"))
         Response->SetNumberField(TEXT("gridDivisions"), Param.GridNum);
         ANIM_SUCCESS_RESPONSE(TEXT("Axis settings updated"));
         return Response;
-    }
-    
-    if (SubAction == TEXT("set_interpolation_settings"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringSetInterpolationSettings(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString InterpolationType = GetJsonStringField(Params, TEXT("interpolationType"), TEXT("Lerp"));
         float TargetWeightSpeed = static_cast<float>(GetJsonNumberField(Params, TEXT("targetWeightInterpolationSpeed"), 5.0));
@@ -2432,10 +2452,11 @@ if (SubAction == TEXT("add_montage_notify"))
         
         ANIM_SUCCESS_RESPONSE(TEXT("Interpolation settings updated"));
         return Response;
-    }
-    
-    if (SubAction == TEXT("create_aim_offset"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringCreateAimOffset(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_BLENDSPACE_FACTORY
     FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
     // Schema advertises savePath; older callers pass path. Prefer savePath, fall back to path.
@@ -2494,10 +2515,11 @@ if (SubAction == TEXT("add_montage_notify"))
         ANIM_ERROR_RESPONSE(TEXT("Blend space factory not available"), TEXT("NOT_SUPPORTED"));
 #endif
         return Response;
-    }
-    
-    if (SubAction == TEXT("add_aim_offset_sample"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringAddAimOffsetSample(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString AnimationPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("animationPath"), TEXT("")));
         float Yaw = static_cast<float>(GetJsonNumberField(Params, TEXT("yaw"), 0.0));
@@ -2543,12 +2565,12 @@ if (SubAction == TEXT("add_montage_notify"))
         
         ANIM_SUCCESS_RESPONSE(TEXT("Aim offset sample added"));
         return Response;
-    }
-    
+}
+
     // ===== 10.4 Animation Blueprints =====
-    
-    if (SubAction == TEXT("create_anim_blueprint"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringCreateAnimBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
     FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
     // Schema advertises savePath; older callers pass path. Prefer savePath, fall back to path.
     FString Path = GetJsonStringField(Params, TEXT("savePath"), TEXT(""));
@@ -2659,10 +2681,11 @@ if (SubAction == TEXT("add_montage_notify"))
         Response->SetStringField(TEXT("assetPath"), FullPath);
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Animation Blueprint '%s' created"), *Name));
         return Response;
-    }
-    
-    if (SubAction == TEXT("add_state_machine"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringAddStateMachine(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // The schema documents 'assetPath' and 'machineName' for these
         // params; blueprintPath/stateMachineName are the original names.
         FString RawBlueprintPath = GetJsonStringField(Params, TEXT("blueprintPath"), TEXT(""));
@@ -2759,10 +2782,11 @@ if (SubAction == TEXT("add_montage_notify"))
             TEXT("ANIMGRAPH_MODULE_UNAVAILABLE"));
 #endif
         return Response;
-    }
-    
-    if (SubAction == TEXT("add_state"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringAddState(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString RawBlueprintPath = GetJsonStringField(Params, TEXT("blueprintPath"), TEXT(""));
         if (RawBlueprintPath.IsEmpty())
         {
@@ -2909,10 +2933,11 @@ if (SubAction == TEXT("add_montage_notify"))
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("State '%s' marked for creation (requires AnimGraph module)"), *StateName));
 #endif
         return Response;
-    }
-    
-    if (SubAction == TEXT("add_transition"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringAddTransition(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString RawBlueprintPath = GetJsonStringField(Params, TEXT("blueprintPath"), TEXT(""));
         if (RawBlueprintPath.IsEmpty())
         {
@@ -3054,10 +3079,11 @@ if (SubAction == TEXT("add_montage_notify"))
             TEXT("ANIMGRAPH_MODULE_UNAVAILABLE"));
 #endif
         return Response;
-    }
-    
-    if (SubAction == TEXT("set_transition_rules"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringSetTransitionRules(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString RawBlueprintPath = GetJsonStringField(Params, TEXT("blueprintPath"), TEXT(""));
         if (RawBlueprintPath.IsEmpty())
         {
@@ -3154,10 +3180,11 @@ if (SubAction == TEXT("add_montage_notify"))
             TEXT("ANIMGRAPH_MODULE_UNAVAILABLE"));
 #endif
         return Response;
-    }
-    
-    if (SubAction == TEXT("add_blend_node"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringAddBlendNode(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
         FString BlendType = GetJsonStringField(Params, TEXT("blendType"), TEXT("TwoWayBlend"));
         FString NodeName = GetJsonStringField(Params, TEXT("nodeName"), TEXT(""));
@@ -3263,10 +3290,11 @@ if (SubAction == TEXT("add_montage_notify"))
             TEXT("ANIMGRAPH_MODULE_UNAVAILABLE"));
 #endif
         return Response;
-    }
-    
-    if (SubAction == TEXT("add_cached_pose"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringAddCachedPose(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
         FString CacheName = GetJsonStringField(Params, TEXT("cacheName"), TEXT(""));
         int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
@@ -3311,10 +3339,11 @@ if (SubAction == TEXT("add_montage_notify"))
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Cached pose '%s' marked for creation (requires AnimGraph module)"), *CacheName));
 #endif
         return Response;
-    }
-    
-    if (SubAction == TEXT("add_slot_node"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringAddSlotNode(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
         FString SlotName = GetJsonStringField(Params, TEXT("slotName"), TEXT(""));
         FString GroupName = GetJsonStringField(Params, TEXT("groupName"), TEXT("DefaultGroup"));
@@ -3365,10 +3394,11 @@ if (SubAction == TEXT("add_montage_notify"))
             TEXT("ANIMGRAPH_MODULE_UNAVAILABLE"));
 #endif
         return Response;
-    }
-    
-    if (SubAction == TEXT("add_layered_blend_per_bone"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringAddLayeredBlendPerBone(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
         FString BoneName = GetJsonStringField(Params, TEXT("boneName"), TEXT(""));
         int32 NodePosX = static_cast<int32>(GetJsonNumberField(Params, TEXT("positionX"), 0));
@@ -3410,10 +3440,11 @@ if (SubAction == TEXT("add_montage_notify"))
             TEXT("ANIMGRAPH_MODULE_UNAVAILABLE"));
 #endif
         return Response;
-    }
-    
-    if (SubAction == TEXT("set_anim_graph_node_value"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringSetAnimGraphNodeValue(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
         FString NodeName = GetJsonStringField(Params, TEXT("nodeName"), TEXT(""));
         FString PropertyName = GetJsonStringField(Params, TEXT("propertyName"), TEXT(""));
@@ -3543,12 +3574,12 @@ if (SubAction == TEXT("add_montage_notify"))
             TEXT("ANIMGRAPH_MODULE_UNAVAILABLE"));
 #endif
         return Response;
-    }
-    
+}
+
     // ===== 10.5 Control Rig =====
-    
-    if (SubAction == TEXT("create_control_rig"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringCreateControlRig(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 // ControlRig factory static methods (CreateNewControlRigAsset, CreateControlRigFromSkeletalMeshOrSkeleton)
 // are only available in UE 5.5+ where ControlRigBlueprintFactory.h is in Public folder
 #if MCP_HAS_CONTROLRIG_FACTORY && MCP_HAS_CONTROLRIG_BLUEPRINT && ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5
@@ -3698,88 +3729,12 @@ if (SubAction == TEXT("add_montage_notify"))
         ANIM_ERROR_RESPONSE(TEXT("Control Rig module not available"), TEXT("NOT_SUPPORTED"));
 #endif
         return Response;
-    }
-    
-    if (SubAction == TEXT("add_control"))
-    {
-#if MCP_HAS_CONTROLRIG
-        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
-        FString ControlName = GetJsonStringField(Params, TEXT("controlName"), TEXT(""));
-        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
-        
-        if (ControlName.IsEmpty())
-        {
-            ANIM_ERROR_RESPONSE(TEXT("controlName is required"), TEXT("MISSING_CONTROL_NAME"));
-        }
-        
-        ANIM_ERROR_RESPONSE(
-            TEXT("add_control is handled by the animation_physics runtime authoring route; call animation_physics with action=add_control."),
-            TEXT("WRONG_HANDLER_ROUTE"));
-#else
-        ANIM_ERROR_RESPONSE(TEXT("Control Rig module not available"), TEXT("NOT_SUPPORTED"));
-#endif
-        return Response;
-    }
-    
-    if (SubAction == TEXT("add_rig_unit"))
-    {
-#if MCP_HAS_CONTROLRIG
-        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
-        FString UnitType = GetJsonStringField(Params, TEXT("unitType"), TEXT(""));
-        
-        ANIM_ERROR_RESPONSE(
-            TEXT("add_rig_unit is handled by the animation_physics runtime authoring route; call animation_physics with action=add_rig_unit."),
-            TEXT("WRONG_HANDLER_ROUTE"));
-#else
-        ANIM_ERROR_RESPONSE(TEXT("Control Rig module not available"), TEXT("NOT_SUPPORTED"));
-#endif
-        return Response;
-    }
-    
-    if (SubAction == TEXT("connect_rig_elements"))
-    {
-#if MCP_HAS_CONTROLRIG
-        ANIM_ERROR_RESPONSE(
-            TEXT("connect_rig_elements is handled by the animation_physics runtime authoring route; call animation_physics with action=connect_rig_elements."),
-            TEXT("WRONG_HANDLER_ROUTE"));
-#else
-        ANIM_ERROR_RESPONSE(TEXT("Control Rig module not available"), TEXT("NOT_SUPPORTED"));
-#endif
-        return Response;
-    }
-    
-    if (SubAction == TEXT("create_pose_library"))
-    {
-#if MCP_HAS_POSEASSET
-        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Animations")));
-        FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
-        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
-        
-        if (Name.IsEmpty())
-        {
-            ANIM_ERROR_RESPONSE(TEXT("Name is required"), TEXT("MISSING_NAME"));
-        }
-        
-        USkeleton* Skeleton = LoadSkeletonFromPathAnim(SkeletonPath);
-        if (!Skeleton)
-        {
-            ANIM_ERROR_RESPONSE(FString::Printf(TEXT("Could not load skeleton: %s"), *SkeletonPath), TEXT("SKELETON_NOT_FOUND"));
-        }
-        
-        ANIM_ERROR_RESPONSE(
-            TEXT("create_pose_library is handled by the animation_physics runtime authoring route; call animation_physics with action=create_pose_library."),
-            TEXT("WRONG_HANDLER_ROUTE"));
-#else
-        ANIM_ERROR_RESPONSE(TEXT("Pose Asset not available in this engine version"), TEXT("NOT_SUPPORTED"));
-#endif
-        return Response;
-    }
-    
+}
+
     // ===== 10.6 Retargeting =====
-    
-if (SubAction == TEXT("create_ik_rig"))
+static TSharedPtr<FJsonObject> AnimAuthoringCreateIkRig(const TSharedPtr<FJsonObject>& Params)
 {
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_IKRIG_FACTORY && MCP_HAS_IKRIG
     FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
     FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Retargeting")));
@@ -3858,29 +3813,10 @@ if (SubAction == TEXT("create_ik_rig"))
 #endif
     return Response;
 }
-    
-    if (SubAction == TEXT("add_ik_chain"))
-    {
-#if MCP_HAS_IKRIG
-        FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
-        FString ChainName = GetJsonStringField(Params, TEXT("chainName"), TEXT(""));
-        
-        if (ChainName.IsEmpty())
-        {
-            ANIM_ERROR_RESPONSE(TEXT("chainName is required"), TEXT("MISSING_CHAIN_NAME"));
-        }
-        
-        ANIM_ERROR_RESPONSE(
-            TEXT("add_ik_chain is handled by the animation_physics runtime authoring route; call animation_physics with action=add_ik_chain."),
-            TEXT("WRONG_HANDLER_ROUTE"));
-#else
-        ANIM_ERROR_RESPONSE(TEXT("IK Rig module not available"), TEXT("NOT_SUPPORTED"));
-#endif
-        return Response;
-    }
-    
-    if (SubAction == TEXT("create_ik_retargeter"))
-    {
+
+static TSharedPtr<FJsonObject> AnimAuthoringCreateIkRetargeter(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_IKRETARGET_FACTORY && MCP_HAS_IKRETARGETER
         FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
         FString Path = NormalizeAnimPath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Retargeting")));
@@ -3974,10 +3910,11 @@ Retargeter->TargetIKRigAsset = TargetRig;
         ANIM_ERROR_RESPONSE(TEXT("IK Retargeter module not available"), TEXT("NOT_SUPPORTED"));
 #endif
         return Response;
-    }
-    
-    if (SubAction == TEXT("set_retarget_chain_mapping"))
-    {
+}
+
+static TSharedPtr<FJsonObject> AnimAuthoringSetRetargetChainMapping(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
 #if MCP_HAS_IKRETARGETER
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString SourceChain = GetJsonStringField(Params, TEXT("sourceChain"), TEXT(""));
@@ -3993,12 +3930,12 @@ Retargeter->TargetIKRigAsset = TargetRig;
         ANIM_ERROR_RESPONSE(TEXT("IK Retargeter module not available"), TEXT("NOT_SUPPORTED"));
 #endif
         return Response;
-    }
-    
+}
+
     // ===== Utility =====
-    
-    if (SubAction == TEXT("get_animation_info"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringGetAnimationInfo(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         
         UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
@@ -4213,7 +4150,7 @@ Retargeter->TargetIKRigAsset = TargetRig;
         Response->SetObjectField(TEXT("animationInfo"), AnimInfo);
         ANIM_SUCCESS_RESPONSE(TEXT("Animation info retrieved"));
         return Response;
-    }
+}
 
     // Wires a montage AnimNotify to a BlueprintCallable function: authors an
     // AnimNotify_<NotifyName> custom event in the AnimBP EventGraph, then
@@ -4221,8 +4158,9 @@ Retargeter->TargetIKRigAsset = TargetRig;
     // A name-only montage notify dispatches by FindFunction("AnimNotify_"+name)
     // on the AnimInstance (UAnimInstance::TriggerSingleAnimNotify), so the
     // custom event name is load-bearing and must match the notify name.
-    if (SubAction == TEXT("bind_anim_notify"))
-    {
+static TSharedPtr<FJsonObject> AnimAuthoringBindAnimNotify(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString BlueprintPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("blueprintPath"), TEXT("")));
         if (BlueprintPath.IsEmpty())
         {
@@ -4376,51 +4314,329 @@ Retargeter->TargetIKRigAsset = TargetRig;
         ANIM_SUCCESS_RESPONSE(FString::Printf(TEXT("Bound notify '%s' -> %s::%s"), *NotifyName, *TargetClass->GetName(), *FunctionName));
         McpHandlerUtils::AddVerification(Response, AnimBP);
         return Response;
-    }
-
-    // Unknown action
-    Response->SetBoolField(TEXT("success"), false);
-    Response->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown animation authoring action: %s"), *SubAction));
-    Response->SetStringField(TEXT("errorCode"), TEXT("UNKNOWN_ACTION"));
-    return Response;
 }
 
-// Wrapper handler that follows the standard signature pattern
-bool UMcpAutomationBridgeSubsystem::HandleManageAnimationAuthoringAction(
-    const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle RequestingSocket)
+// Response conversion shared by the classed members — verbatim from the
+// retired HandleManageAnimationAuthoringAction wrapper.
+static bool SendAnimAuthoringResult(UMcpAutomationBridgeSubsystem* Self,
+                                    const FString& RequestId,
+                                    const TSharedPtr<FJsonObject>& Result,
+                                    FMcpResponseHandle RequestingSocket)
 {
-    // Check if this is an animation authoring action
-    if (Action != TEXT("manage_animation_authoring"))
-    {
-        return false; // Not handled
-    }
-    
-    // Call the internal processing function
-    TSharedPtr<FJsonObject> Result = HandleAnimationAuthoringRequest(Payload);
-    
-    // Send response
     if (Result.IsValid())
     {
         bool bSuccess = Result->HasField(TEXT("success")) && GetJsonBoolField(Result, TEXT("success"));
         FString Message = Result->HasField(TEXT("message")) ? GetJsonStringField(Result, TEXT("message")) : TEXT("");
-        
+
         if (bSuccess)
         {
-            SendAutomationResponse(RequestingSocket, RequestId, true, Message, Result);
+            Self->SendAutomationResponse(RequestingSocket, RequestId, true, Message, Result);
         }
         else
         {
             FString Error = Result->HasField(TEXT("error")) ? GetJsonStringField(Result, TEXT("error")) : TEXT("Unknown error");
             FString ErrorCode = Result->HasField(TEXT("errorCode")) ? GetJsonStringField(Result, TEXT("errorCode")) : TEXT("ANIMATION_AUTHORING_ERROR");
-            SendAutomationError(RequestingSocket, RequestId, Error, ErrorCode);
+            Self->SendAutomationError(RequestingSocket, RequestId, Error, ErrorCode);
         }
         return true;
     }
-    
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to process animation authoring action"), TEXT("PROCESSING_FAILED"));
+
+    Self->SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to process animation authoring action"), TEXT("PROCESSING_FAILED"));
     return true;
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateAnimationSequence(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateAnimationSequence(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetSequenceLength(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetSequenceLength(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddBoneTrack(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddBoneTrack(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetBoneKey(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetBoneKey(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetCurveKey(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetCurveKey(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddNotify(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddNotify(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddNotifyState(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddNotifyState(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddSyncMarker(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddSyncMarker(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetRootMotionSettings(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetRootMotionSettings(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetAdditiveSettings(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetAdditiveSettings(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateMontage(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateMontage(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddMontageSection(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddMontageSection(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddMontageSlot(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddMontageSlot(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetSectionTiming(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetSectionTiming(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddMontageNotify(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddMontageNotify(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetBlendIn(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetBlend(Payload, /*bBlendIn=*/true), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetBlendOut(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetBlend(Payload, /*bBlendIn=*/false), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringLinkSections(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringLinkSections(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateBlendSpace1D(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateBlendSpace1D(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateBlendSpace2D(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateBlendSpace2D(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddBlendSample(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddBlendSample(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringForceRebuildBlendSpace(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringForceRebuildBlendSpace(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetAxisSettings(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetAxisSettings(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetInterpolationSettings(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetInterpolationSettings(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateAimOffset(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateAimOffset(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddAimOffsetSample(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddAimOffsetSample(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateAnimBlueprint(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateAnimBlueprint(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddStateMachine(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddStateMachine(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddState(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddState(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddTransition(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddTransition(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetTransitionRules(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetTransitionRules(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddBlendNode(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddBlendNode(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddCachedPose(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddCachedPose(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddSlotNode(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddSlotNode(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddLayeredBlendPerBone(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddLayeredBlendPerBone(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetAnimGraphNodeValue(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetAnimGraphNodeValue(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateControlRig(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateControlRig(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateIkRig(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateIkRig(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateIkRetargeter(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateIkRetargeter(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetRetargetChainMapping(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetRetargetChainMapping(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringGetAnimationInfo(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringGetAnimationInfo(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringBindAnimNotify(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringBindAnimNotify(Payload), RequestingSocket);
 }
 
 #undef ANIM_ERROR_RESPONSE

@@ -58,6 +58,22 @@ as they land.
 > split (step 10, deferred by design — the real surgery is de-membering handlers off the
 > subsystem god object; cleanest first slice is extracting Private/MCP/ as its own module).
 
+### [ ] 2026-07-05 — animation_physics setup_ragdoll/activate_ragdoll: wire the orphans or retire the rows (Aaron's call)
+Dogfood find, preserved exactly at the family's classing (McpCalls_AnimationPhysics.cpp):
+both names are ADVERTISED (schema enum + decl rows) but the retired dispatcher had no
+branch for either, so every call answered its terminal else — "Animation/Physics action
+'<name>' not implemented", NOT_IMPLEMENTED. The classed stubs replicate that response
+byte-for-byte (flags None so even non-editor builds answer the chain's own stub). The
+twist: full implementations EXIST and have never had a call site — `HandleSetupRagdoll`
+and `HandleActivateRagdoll` (AnimationHandlers.cpp, kept unchanged at classing; actor
+resolution, physics-asset verification, per-bone simulation + blend-weight handling,
+both fully written and documented). Options: (a) wire the orphans — point the two
+classes at them (they carry the 4-arg legacy signature and gate on their action
+literal, so adapt or wrap), restoring the advertised capability with zero schema
+change; or (b) retire the two rows — a schema change needing golden regen, after which
+the orphans delete as dead code. Advertised surface is Aaron's decision; do neither
+silently.
+
 ### [ ] 2026-07-05 — manage_interaction's five scaffold actions: deepen or retire (Aaron's call)
 Preserved as-is at the family's classing (McpCalls_ManageInteraction.cpp — bodies moved
 verbatim, deliberately not deepened there): `configure_destruction_levels`/
@@ -975,7 +991,19 @@ the retired HandleManageAIAction, deleted-at-classing; advertise candidate
 parked for Aaron, recover from git) plus the below-radar shadowed inline
 create_nav_link_proxy copy (the top-of-function Navigation router always won
 the advertised name; NavigationHandlers' implementation stays the live one)
-— **51 hidden entries remain**.
+— **51 hidden entries remain**. animation_physics's classing (2026-07-05)
+closed twenty — the ledger's whole AnimationAuthoringHandlers section
+(add_control, add_rig_unit, connect_rig_elements, add_ik_chain — circular
+WRONG_HANDLER_ROUTE stubs), the whole AnimationHandlers section (the same
+four names as permanent NOT_SUPPORTED stubs), and the whole SkeletonHandlers
+section (set_physics_asset, remove_physics_body, get_physics_asset_info,
+set_morph_target_value, list_morph_targets, delete_morph_target,
+delete_socket, remove_socket, get_bone_transform, list_virtual_bones,
+delete_virtual_bone, preview_physics — the read/delete advertise-candidate
+family, parked for Aaron, recover from git) — plus the below-radar
+shadowed-dead class: the primary dispatcher's THIRTY unreachable copies of
+routed authoring actions and the authoring chain's dead create_pose_library
+copy, ledgered at deletion — **31 hidden entries remain**.
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,

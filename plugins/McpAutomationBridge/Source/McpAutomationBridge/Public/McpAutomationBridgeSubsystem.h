@@ -523,11 +523,270 @@ private:
   // its member handlers (HandlePerf*/HandleSys*/HandleUi*/HandleLog*/
   // HandleDebugSpawnCategory/HandleRenderLumenUpdateScene) live in the
   // transitional public block below.
-  // Animation and physics related automation actions
-  bool HandleAnimationPhysicsAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
+  // animation_physics is classed — see
+  // MCP/Calls/McpCalls_AnimationPhysics.cpp. Its per-action members are
+  // public so the FMcpCall classes (Private/MCP/Calls/) can delegate, until
+  // the module split de-members the implementations off the subsystem:
+  // HandleAnimPhys* (AnimationHandlers.cpp), HandleAnimAuthoring*
+  // (AnimationAuthoringHandlers.cpp), HandleSkeleton* (SkeletonHandlers.cpp).
+public:
+  bool HandleAnimPhysCleanup(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             FMcpResponseHandle RequestingSocket);
+  bool HandleAnimPhysCreateBlendSpace(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAnimPhysCreateBlendTree(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleAnimPhysCreateProceduralAnim(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleAnimPhysCreateStateMachine(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+  bool HandleAnimPhysSetupIk(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             FMcpResponseHandle RequestingSocket);
+  bool HandleAnimPhysConfigureVehicle(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAnimPhysSetupPhysicsSimulation(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle RequestingSocket);
+  bool HandleAnimPhysCreateAnimationAsset(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleAnimPhysSetupRetargeting(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAnimPhysPlayMontage(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle RequestingSocket);
+  bool HandleAnimPhysCreatePoseLibrary(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle RequestingSocket);
+  bool HandleAnimPhysSetupRagdoll(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle RequestingSocket);
+  bool HandleAnimPhysActivateRagdoll(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringCreateAnimationSequence(const FString &RequestId,
+                                                  const TSharedPtr<FJsonObject> &Payload,
+                                                  FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringSetSequenceLength(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddBoneTrack(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringSetBoneKey(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringSetCurveKey(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddNotify(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddNotifyState(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddSyncMarker(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringSetRootMotionSettings(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringSetAdditiveSettings(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringCreateMontage(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddMontageSection(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddMontageSlot(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringSetSectionTiming(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddMontageNotify(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringSetBlendIn(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringSetBlendOut(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringLinkSections(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringCreateBlendSpace1D(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringCreateBlendSpace2D(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddBlendSample(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringForceRebuildBlendSpace(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringSetAxisSettings(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringSetInterpolationSettings(const FString &RequestId,
+                                                   const TSharedPtr<FJsonObject> &Payload,
+                                                   FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringCreateAimOffset(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddAimOffsetSample(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringCreateAnimBlueprint(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddStateMachine(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddState(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddTransition(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringSetTransitionRules(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddBlendNode(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddCachedPose(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddSlotNode(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringAddLayeredBlendPerBone(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringSetAnimGraphNodeValue(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringCreateControlRig(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringCreateIkRig(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringCreateIkRetargeter(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringSetRetargetChainMapping(const FString &RequestId,
+                                                  const TSharedPtr<FJsonObject> &Payload,
+                                                  FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringGetAnimationInfo(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle RequestingSocket);
+  bool HandleAnimAuthoringBindAnimNotify(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonGetSkeletonInfo(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonListBones(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonListSockets(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonCreateSocket(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonConfigureSocket(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonCreateVirtualBone(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonCreatePhysicsAsset(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonListPhysicsBodies(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonAddPhysicsBody(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonConfigurePhysicsBody(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonAddPhysicsConstraint(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonConfigureConstraintLimits(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonRenameBone(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonSetBoneTransform(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonCreateMorphTarget(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonSetMorphTargetDeltas(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonImportMorphTargets(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonNormalizeWeights(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonPruneWeights(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonBindClothToSkeletalMesh(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonAssignClothAssetToMesh(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonCreateSkeleton(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonAddBone(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonRemoveBone(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonSetBoneParent(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonSetVertexWeights(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonAutoSkinWeights(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonCopyWeights(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle RequestingSocket);
+  bool HandleSkeletonMirrorWeights(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle RequestingSocket);
+
+private:
   // manage_effect is classed — see MCP/Calls/McpCalls_ManageEffect.cpp; its
   // member handlers (HandleEffect*) live in the transitional public block
   // below.
@@ -1045,10 +1304,6 @@ private:
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle RequestingSocket);
   // Phase 7: Skeleton & Rigging handlers
-  bool HandleManageSkeleton(const FString &RequestId,
-                            const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
   bool HandleGetSkeletonInfo(const FString &RequestId,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
@@ -1113,36 +1368,6 @@ private:
   bool HandleAssignClothAssetToMesh(const FString &RequestId,
                                      const TSharedPtr<FJsonObject> &Payload,
                                      FMcpResponseHandle RequestingSocket);
-  bool HandleSetPhysicsAsset(const FString &RequestId,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
-  bool HandleRemovePhysicsBody(const FString &RequestId,
-                               const TSharedPtr<FJsonObject> &Payload,
-                               FMcpResponseHandle RequestingSocket);
-  bool HandleSetMorphTargetValue(const FString &RequestId,
-                                 const TSharedPtr<FJsonObject> &Payload,
-                                 FMcpResponseHandle RequestingSocket);
-  bool HandleListMorphTargets(const FString &RequestId,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle RequestingSocket);
-  bool HandleDeleteMorphTarget(const FString &RequestId,
-                               const TSharedPtr<FJsonObject> &Payload,
-                               FMcpResponseHandle RequestingSocket);
-  bool HandleDeleteSocket(const FString &RequestId,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle RequestingSocket);
-  bool HandleGetBoneTransform(const FString &RequestId,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle RequestingSocket);
-  bool HandleListVirtualBones(const FString &RequestId,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle RequestingSocket);
-  bool HandleDeleteVirtualBone(const FString &RequestId,
-                               const TSharedPtr<FJsonObject> &Payload,
-                               FMcpResponseHandle RequestingSocket);
-  bool HandleGetPhysicsAssetInfo(const FString &RequestId,
-                                 const TSharedPtr<FJsonObject> &Payload,
-                                 FMcpResponseHandle RequestingSocket);
   // Phase 8: Material Authoring handlers
   bool HandleManageMaterialAuthoringAction(
       const FString &RequestId, const FString &Action,
@@ -1155,11 +1380,9 @@ private:
       FMcpResponseHandle RequestingSocket);
   // Internal texture processing helper
   TSharedPtr<FJsonObject> HandleManageTextureAction(const TSharedPtr<FJsonObject>& Params);
-  // Phase 10: Animation Authoring handlers
-  bool HandleManageAnimationAuthoringAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
+  // Phase 10: Animation Authoring handlers — animation_physics is classed;
+  // its HandleAnimAuthoring* members live in the transitional public block
+  // above (AnimationAuthoringHandlers.cpp).
   // Phase 11: Audio Authoring handlers
   bool HandleManageAudioAuthoringAction(
       const FString &RequestId, const FString &Action,

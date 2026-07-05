@@ -477,6 +477,85 @@ parser survives only as a lint.
     `Mutating` on everything except the readers — `get_ai_info`,
     `get_blackboard_value`, `get_navigation_info` — and the honest
     NOT_IMPLEMENTED `add_eqs_context`.
+  - **`animation_physics` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_AnimationPhysics.cpp`).** 85 classes — the
+    largest classed family and the heaviest shadowed-dead deletion. The
+    registration lambda split `AnimationAuthoring()`/`Skeleton()` actions off
+    to sibling dispatchers (the only caller of the
+    `IsAnimationAuthoringAction`/`IsSkeletonAction` predicates, which died
+    with it), and the primary dispatcher re-implemented THIRTY of the 42
+    routed authoring actions in unreachable shadowed copies — the router
+    always won the name, so every copy was deleted at classing, along with
+    the hidden rig-stub family both TUs carried (`add_control`,
+    `add_rig_unit`, `connect_rig_elements`, `add_ik_chain` — NOT_SUPPORTED
+    stubs in the primary, circular WRONG_HANDLER_ROUTE stubs in the
+    authoring TU), the authoring TU's dead `create_pose_library` copy (the
+    primary owns the live one), and SkeletonHandlers' twelve hidden
+    unadvertised members (`set_physics_asset`, `remove_physics_body`,
+    `get_physics_asset_info`, `set_morph_target_value`,
+    `list_morph_targets`, `delete_morph_target`,
+    `delete_socket`/`remove_socket`, `get_bone_transform`,
+    `list_virtual_bones`, `delete_virtual_bone`, `preview_physics` — the
+    sweep ledger's advertise-candidate family, parked for Aaron; recover
+    from git). All three dispatchers died: the 12 live core bodies
+    extracted verbatim to `HandleAnimPhys*` members
+    (AnimationHandlers.cpp), each replicating the chain's shared
+    `Resp`/`bSuccess`/`Message` prologue, response tail, and non-editor
+    NOT_IMPLEMENTED stub, with the lowercased `LowerSub` echoes inlined to
+    the action literal (`play_montage` keeps its typed
+    `HandlePlayAnimMontage` forward — the internal `play_anim_montage`
+    literal survives inside that live handler); the 42 authoring actions
+    became per-action file statics (block bodies verbatim from the retired
+    `HandleAnimationAuthoringRequest` chain; `set_blend_in`/`set_blend_out`
+    share one static with the chain's SubAction ternary resolved to a
+    `bBlendIn` parameter) behind `HandleAnimAuthoring*` members that apply
+    the retired wrapper's response conversion (one shared
+    `SendAnimAuthoringResult` static, verbatim); the 29 skeleton actions
+    became `HandleSkeleton*` members — 21 thin wrappers over the dedicated
+    members the retired `HandleManageSkeleton` chain delegated to, 8
+    verbatim extractions of its inline branches. **setup_ragdoll and
+    activate_ragdoll are advertised-but-unwired** (Aaron's dogfood find):
+    the retired dispatcher had no branch for either name, so both always
+    answered its terminal NOT_IMPLEMENTED else — their classes are explicit
+    stubs preserving that response byte-for-byte (flags `None`, so the
+    members answer the chain's own compile-time stub in non-editor builds
+    too), the orphaned `HandleSetupRagdoll`/`HandleActivateRagdoll`
+    implementations stay in place as wire-up candidates, and
+    wire-the-orphans vs retire-the-rows is logged for Aaron (TODO.md).
+    Decl burn-down — 27 of 85 rows fixed, in three classes: (1) spellings
+    only the deleted shadowed copies read were dropped (`sequenceName`,
+    `montageName`, add_notify's `animationPath`/`time`, set_bone_key's
+    `time`/`position`, set_curve_key's `time`, add_blend_sample's
+    `sampleX`/`sampleY`, set_axis_settings' `axisIndex`/`gridNum`,
+    set_interpolation_settings' `interpolationSpeed`, add_state's
+    `animationPath`/`isEntry`/`isExit`, add_transition's and
+    set_transition_rules' `sourceState`/`targetState` (+`condition`),
+    add_blend_node's `nodeType`, add_cached_pose's `poseName`,
+    create_control_rig's and create_ik_rig's `savePath` (+`meshPath`),
+    create_aim_offset's `is1D`, create_pose_library's `save`), plus
+    bootstrap residue no copy ever read (the `min`/`max`/`grid` spellings
+    on create_aim_offset and create_blend_space_1d/2d) and
+    create_anim_blueprint's `meshPath` (last reader deleted 2026-07-04i);
+    (2) required flags flipped optional where the live body joint-rejects
+    an alias group (the `blueprintPath`/`assetPath` pairs on add_state,
+    add_state_machine, add_transition, set_transition_rules;
+    create_state_machine's `blueprintPath`/`name`; play_montage's
+    `montagePath`/`assetPath`; add_montage_section's
+    `assetPath`/`montagePath`/`name` triple; setup_retargeting's
+    `assets`/`retargetAssets`; the `notifyClass`/`notifyName` one-ofs on
+    add_notify and add_montage_notify) or serves a fallback-with-default
+    (create_anim_blueprint's `savePath`, create_control_rig's
+    `skeletonPath`); (3) two flags flipped required by the live bodies'
+    own rejects (add_notify's `assetPath`, set_section_timing's
+    `startTime`). 24 stale reconciliation pins pruned with the deleted
+    bodies. `RequiresEditor` on 83 of 85 (three whole-editor-gated
+    chains); `Mutating` on the 72 writers — the readers are
+    `get_animation_info`, `get_skeleton_info`, `list_bones`,
+    `list_sockets`, `list_physics_bodies`, and six more actions write
+    nothing (`import_morph_targets`, `normalize_weights`, `prune_weights`,
+    `auto_skin_weights`, `copy_weights`, `assign_cloth_asset_to_mesh` —
+    honest MANUAL_INTERVENTION_REQUIRED-class errors) plus the two ragdoll
+    stubs.
 
 ## Bootstrap state (2026-07-04, complete)
 
