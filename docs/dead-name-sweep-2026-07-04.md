@@ -273,15 +273,17 @@ Quick dispositions:
   recover from git), `batch_console_commands` (blocklist-aware),
   `get_nodes` (graph node dump), `grant_ability` (DELETED at the manage_gas
   classing, recover from git), sun/skylight intensity pair,
-  `set_ai_movement`, `cleanup_invalid_datalayers`, `attach_render_target_to_volume`
+  `set_ai_movement` (DELETED at the manage_ai classing, recover from git),
+  `cleanup_invalid_datalayers`, `attach_render_target_to_volume`
   (DELETED at the system_control classing, recover from git),
   `create_spline_mesh_actor`, Niagara `set_parameter`, `source_control_enable`,
   UiHandlers PIE/widget pokes (DELETED at the system_control classing — raw
   TObjectIterator scans duplicated by newer widget actions; recover from git).
 
 Full per-name evidence:
-### AIHandlers
-- **set_ai_movement** @:3845 - Standalone `if (SubAction == TEXT("set_ai_movement"))` block (:3845-3998) in HandleManageAIAction. Not in manage_ai's action enum and no code manufactures the literal `set_ai_movement` anywhere in Private (grep confirms only the comment/condition), so the whole branch is unreachable both externally …
+### AIHandlers (updated at the manage_ai classing, 2026-07-05)
+- **set_ai_movement** @:3845 - Standalone `if (SubAction == TEXT("set_ai_movement"))` block (:3845-3998) in HandleManageAIAction. Not in manage_ai's action enum and no code manufactures the literal `set_ai_movement` anywhere in Private (grep confirms only the comment/condition), so the whole branch is unreachable both externally … Disposition: **deleted at the manage_ai classing (2026-07-05)** (the branch sat at :3614-:3767 at HEAD); advertise candidate parked for Aaron — recover from git.
+- **create_nav_link_proxy (shadowed inline copy)** @:3976 - Below-radar dead duplicate found at the manage_ai classing: the advertised name belongs to the Navigation family, and HandleManageAIAction's top-of-function Navigation router forwarded it to NavigationHandlers' `HandleCreateNavLinkProxy` (the live point-link actor spawner) before the inline branch could ever match, so the dispatcher's own copy — a NavLinkProxy *blueprint* creator reading blueprintPath/name/path, a different capability from the live spawner — was unreachable since the router landed. **Deleted at the manage_ai classing (2026-07-05)**; recover from git if the blueprint-creator variant is ever wanted (its blueprintPath/name/path spellings left the decl row with it).
 
 ### AnimationAuthoringHandlers
 - **add_control** @:3703 - 3-line stub (3703-3721, guarded by #if MCP_HAS_CONTROLRIG): if ControlName param is empty it returns MISSING_CONTROL_NAME, otherwise it unconditionally falls through to ANIM_ERROR_RESPONSE("add_control is handled by the animation_physics runtime authoring route; call animation_physics with action=ad…

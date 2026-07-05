@@ -422,6 +422,61 @@ parser survives only as a lint.
     `import_snapshot`, `list_light_types`, `get_splines_info`
     (bake_lightmap and build_lighting kick a lighting build and stay
     writers).
+  - **`manage_ai` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_ManageAi.cpp`).** 61 classes — the family
+    whose dispatcher was itself a router: `HandleManageAIAction` tested
+    BehaviorTree/Navigation membership at the top of the function (the only
+    caller of the `IsBehaviorTreeAction`/`IsNavigationAction` predicates,
+    which died with its file-static wrappers) and forwarded to two sibling
+    dispatchers, so all THREE string dispatchers are deleted —
+    `HandleManageAIAction`, `HandleBehaviorTreeAction`, and
+    `HandleManageNavigationAction` are gone. The 37 advertised inline
+    bodies extracted verbatim to `HandleAi*` members (AIHandlers.cpp), each
+    replicating the chain's whole-handler `#if !WITH_EDITOR` EDITOR_ONLY
+    stub; the members that answer through the chain's shared `Result`
+    object carry its creation line, and the per-branch feature ladders
+    (MCP_HAS_STATE_TREE ×4, MCP_HAS_SMART_OBJECTS ×4, MCP_HAS_MASS_AI ×3,
+    MCP_HAS_ENVQUERY_TESTS, MCP_AI_HAS_BEHAVIOR_TREE_GRAPH) ride inside the
+    bodies unchanged. The five manufactured-rewrite wrappers became typed
+    calls per rule 5: `create_behavior_tree` keeps its savePath-defaulting
+    glue and calls `HandleBehaviorTreeCreate`;
+    `add_composite_node`/`add_task_node` keep the enum→node-class mapping
+    verbatim and call `HandleBehaviorTreeAddNode`;
+    `add_decorator`/`add_service` split the shared block with the
+    SubAction/bDecorator ternaries resolved per member and call
+    `HandleBehaviorTreeAddSubnode` — the internal `create`/`add_node`/
+    `add_subnode` subAction rewrites died with the chains (`create`
+    survives only as the advertised action's own literal). The 7 Behavior
+    Tree graph actions became `HandleBehaviorTree*` members
+    (BehaviorTreeHandlers.cpp), each carrying the chain's
+    BehaviorTreeEditor module check (its `SubAction != "create"` disjunct
+    resolved to the member's constant) and the six graph members
+    replicating the chain's shared asset-load prologue
+    (assetPath→behaviorTreePath→path fallback, graph null-check, and the
+    UpdateBehaviorTreeAsset/FindGraphNodeByIdOrName lambdas); the chain's
+    payload-null check died (`FMcpCall::Execute` owns it). The 12
+    navigation actions are `HandleNavigation*` thin wrappers
+    (level-structure precedent) over the untouched static free functions,
+    replicating the chain's EDITOR_ONLY stub. Hidden/dead deleted and
+    ledgered: `set_ai_movement` (hidden CharacterMovement tuner; advertise
+    candidate parked) and the dispatcher's shadowed inline
+    `create_nav_link_proxy` copy (the Navigation router always won the
+    name — NavigationHandlers' implementation is the live one). Decl
+    burn-down — 7 of 61 rows fixed: the six BT graph rows (`add_node`,
+    `add_subnode`, `break_connections`, `connect_nodes`, `remove_node`,
+    `set_node_properties`) declared `assetPath` required although the
+    prologue serves the behaviorTreePath/path fallbacks and joint-rejects
+    only when all three are absent, and `create_nav_link_proxy` dropped
+    the dead copy's blueprintPath/name/path spellings — its row now
+    matches `create_smart_link`'s (the scoping sweep's
+    location/startPoint/endPoint one-of suspicion did not survive the body
+    evidence: all three are genuinely required, on both rows). The stale
+    `McpTool_ManageAI.cpp` "60 actions" header reads 61 now (the schema
+    union adds `add_subnode` to the 60-name core list — the decl count was
+    right). `RequiresEditor` on all 61 (three whole-editor-gated chains);
+    `Mutating` on everything except the readers — `get_ai_info`,
+    `get_blackboard_value`, `get_navigation_info` — and the honest
+    NOT_IMPLEMENTED `add_eqs_context`.
 
 ## Bootstrap state (2026-07-04, complete)
 

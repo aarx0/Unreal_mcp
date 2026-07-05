@@ -1034,10 +1034,6 @@ private:
                                  const TSharedPtr<FJsonObject> &Payload,
                                  FMcpResponseHandle Socket);
   bool
-  HandleBehaviorTreeAction(const FString &RequestId, const FString &Action,
-                           const TSharedPtr<FJsonObject> &Payload,
-                           FMcpResponseHandle RequestingSocket);
-  bool
   HandleWorldPartitionAction(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
@@ -1490,12 +1486,196 @@ public:
                                const TSharedPtr<FJsonObject> &Payload,
                                FMcpResponseHandle Socket);
 
-private:
-  // Phase 16: AI System handlers
-  bool HandleManageAIAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
+  // Phase 16: AI System handlers — manage_ai is classed
+  // (MCP/Calls/McpCalls_ManageAi.cpp). Its per-action members are public so
+  // the FMcpCall classes (Private/MCP/Calls/) can delegate, until the module
+  // split de-members the implementations off the subsystem: HandleAi*
+  // (AIHandlers.cpp), HandleBehaviorTree* (BehaviorTreeHandlers.cpp),
+  // HandleNavigation* (NavigationHandlers.cpp).
+public:
+  bool HandleAiCreateAiController(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle RequestingSocket);
+  bool HandleAiAssignBehaviorTree(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle RequestingSocket);
+  bool HandleAiAssignBlackboard(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle RequestingSocket);
+  bool HandleAiCreateBlackboardAsset(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddBlackboardKey(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle RequestingSocket);
+  bool HandleAiSetKeyInstanceSynced(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle RequestingSocket);
+  bool HandleAiCreateBehaviorTree(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddCompositeNode(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddTaskNode(const FString &RequestId,
+                           const TSharedPtr<FJsonObject> &Payload,
+                           FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddDecorator(const FString &RequestId,
+                            const TSharedPtr<FJsonObject> &Payload,
+                            FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddService(const FString &RequestId,
+                          const TSharedPtr<FJsonObject> &Payload,
+                          FMcpResponseHandle RequestingSocket);
+  bool HandleAiConfigureBtNode(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle RequestingSocket);
+  bool HandleAiCreateEqsQuery(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddEqsGenerator(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddEqsContext(const FString &RequestId,
+                             const TSharedPtr<FJsonObject> &Payload,
+                             FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddEqsTest(const FString &RequestId,
+                          const TSharedPtr<FJsonObject> &Payload,
+                          FMcpResponseHandle RequestingSocket);
+  bool HandleAiConfigureTestScoring(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddAiPerceptionComponent(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle RequestingSocket);
+  bool HandleAiConfigureSightConfig(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle RequestingSocket);
+  bool HandleAiConfigureHearingConfig(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAiConfigureDamageSenseConfig(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleAiSetPerceptionTeam(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle RequestingSocket);
+  bool HandleAiCreateStateTree(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddStateTreeState(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddStateTreeTransition(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAiConfigureStateTreeTask(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAiCreateSmartObjectDefinition(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddSmartObjectSlot(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle RequestingSocket);
+  bool HandleAiConfigureSlotBehavior(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddSmartObjectComponent(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle RequestingSocket);
+  bool HandleAiCreateMassEntityConfig(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleAiConfigureMassEntity(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle RequestingSocket);
+  bool HandleAiAddMassSpawner(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle RequestingSocket);
+  bool HandleAiGetAiInfo(const FString &RequestId,
+                         const TSharedPtr<FJsonObject> &Payload,
+                         FMcpResponseHandle RequestingSocket);
+  bool HandleAiCreateBlackboard(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle RequestingSocket);
+  bool HandleAiSetupPerception(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle RequestingSocket);
+  bool HandleAiSetFocus(const FString &RequestId,
+                        const TSharedPtr<FJsonObject> &Payload,
+                        FMcpResponseHandle RequestingSocket);
+  bool HandleAiClearFocus(const FString &RequestId,
+                          const TSharedPtr<FJsonObject> &Payload,
+                          FMcpResponseHandle RequestingSocket);
+  bool HandleAiSetBlackboardValue(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle RequestingSocket);
+  bool HandleAiGetBlackboardValue(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle RequestingSocket);
+  bool HandleAiRunBehaviorTree(const FString &RequestId,
+                               const TSharedPtr<FJsonObject> &Payload,
+                               FMcpResponseHandle RequestingSocket);
+  bool HandleAiStopBehaviorTree(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle RequestingSocket);
+  bool HandleBehaviorTreeCreate(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle RequestingSocket);
+  bool HandleBehaviorTreeAddNode(const FString &RequestId,
+                                 const TSharedPtr<FJsonObject> &Payload,
+                                 FMcpResponseHandle RequestingSocket);
+  bool HandleBehaviorTreeConnectNodes(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle RequestingSocket);
+  bool HandleBehaviorTreeRemoveNode(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle RequestingSocket);
+  bool HandleBehaviorTreeBreakConnections(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle RequestingSocket);
+  bool HandleBehaviorTreeSetNodeProperties(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle RequestingSocket);
+  bool HandleBehaviorTreeAddSubnode(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle RequestingSocket);
+  bool HandleNavigationConfigureNavMeshSettings(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle Socket);
+  bool HandleNavigationSetNavAgentProperties(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle Socket);
+  bool HandleNavigationRebuildNavigation(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleNavigationCreateNavModifierComponent(const FString &RequestId,
+                                                  const TSharedPtr<FJsonObject> &Payload,
+                                                  FMcpResponseHandle Socket);
+  bool HandleNavigationSetNavAreaClass(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleNavigationConfigureNavAreaCost(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle Socket);
+  bool HandleNavigationCreateNavLinkProxy(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleNavigationConfigureNavLink(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleNavigationSetNavLinkType(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleNavigationCreateSmartLink(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleNavigationConfigureSmartLinkBehavior(const FString &RequestId,
+                                                  const TSharedPtr<FJsonObject> &Payload,
+                                                  FMcpResponseHandle Socket);
+  bool HandleNavigationGetNavigationInfo(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
   // manage_inventory is classed — see MCP/Calls/McpCalls_ManageInventory.cpp.
   // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
   // can delegate, until the module split de-members the implementations off
@@ -2100,11 +2280,6 @@ public:
                                         FMcpResponseHandle Socket);
 
 private:
-  // Phase 25: Navigation System handlers
-  bool HandleManageNavigationAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
   // 2. Execution & Build / Test Pipeline
   bool HandleTestAction(const FString &RequestId, const FString &Action,
                         const TSharedPtr<FJsonObject> &Payload,

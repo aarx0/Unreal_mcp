@@ -1,4 +1,4 @@
-// McpTool_ManageAI.cpp — manage_ai tool definition (60 actions)
+// McpTool_ManageAI.cpp — manage_ai tool definition (61 actions)
 
 #include "McpVersionCompatibility.h"
 #include "MCP/McpToolDefinition.h"

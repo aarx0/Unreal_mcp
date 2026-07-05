@@ -5,7 +5,7 @@
 //
 // HANDLERS IMPLEMENTED:
 // ---------------------
-// manage_behavior_tree:
+// manage_ai (Behavior Tree graph actions, classed):
 //   - create: Create new Behavior Tree asset with optional graph initialization
 //   - add_node: Add composite/task/decorator/service nodes to BT graph
 //   - connect_nodes: Connect parent->child nodes in BT graph
@@ -98,45 +98,17 @@
 // Handler Implementation
 // =============================================================================
 
-/**
- * @brief Handles requests to create and manipulate Behavior Tree assets and their graphs.
- *
- * Processes the "manage_behavior_tree" action and performs editor-only subActions
- * such as "create", "add_node", "connect_nodes", "remove_node",
- * "break_connections", and "set_node_properties". Results and errors are sent
- * back over the provided websocket; when compiled without editor support an
- * appropriate error response is sent.
- *
- * @param RequestId Identifier for the incoming request; used when sending the response.
- * @param Action Action name to handle (this function acts on "manage_behavior_tree").
- * @param Payload JSON object containing a required "subAction" field and subAction-specific parameters.
- * @param RequestingSocket WebSocket to which success or error responses are written.
- * @return bool True if the request was handled (including cases where an error response was sent); false if Action does not equal "manage_behavior_tree".
- */
-bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAction(
-    const FString &RequestId, const FString &Action,
-    const TSharedPtr<FJsonObject> &Payload,
+// manage_ai's Behavior Tree graph actions are classed
+// (MCP/Calls/McpCalls_ManageAi.cpp); the members below are the per-action
+// implementations extracted from the retired manage_behavior_tree dispatcher.
+
+// ===========================================================================
+// SubAction: create - Create new Behavior Tree asset
+// ===========================================================================
+bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeCreate(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
-  if (Action != TEXT("manage_behavior_tree")) {
-    return false;
-  }
-
 #if WITH_EDITOR
-  if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Missing payload."),
-                        TEXT("INVALID_PAYLOAD"));
-    return true;
-  }
-
-  FString SubAction;
-  if (!Payload->TryGetStringField(TEXT("subAction"), SubAction) ||
-      SubAction.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("Missing 'subAction' for manage_behavior_tree"),
-                        TEXT("INVALID_ARGUMENT"));
-    return true;
-  }
-
   // Runtime check: Verify BehaviorTreeEditor module is loaded for graph editing operations
   // This handles the case where headers were available at compile time
   // but the plugin is not enabled in the target project at runtime
@@ -146,7 +118,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAction(
 #if MCP_HAS_BEHAVIOR_TREE_GRAPH
   const bool bNeedsEditorModule = true;  // UE 5.3+: All operations need BehaviorTreeEditor for graph classes
 #else
-  const bool bNeedsEditorModule = (SubAction != TEXT("create"));  // UE 5.0-5.2: Only graph ops need editor module
+  const bool bNeedsEditorModule = false;  // UE 5.0-5.2: 'create' only uses core BehaviorTree runtime classes
 #endif
   if (bNeedsEditorModule && !FModuleManager::Get().IsModuleLoaded(TEXT("BehaviorTreeEditor")))
   {
@@ -160,142 +132,168 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAction(
       }
   }
 
-  // ===========================================================================
-  // SubAction: create - Create new Behavior Tree asset
-  // ===========================================================================
-  if (SubAction == TEXT("create")) {
-    FString Name;
-    if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("name required for create"),
-                          TEXT("INVALID_ARGUMENT"));
-      return true;
-    }
-
-    FString SavePath;
-    if (!Payload->TryGetStringField(TEXT("savePath"), SavePath) ||
-        SavePath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("path"), SavePath);
-    }
-    if (SavePath.IsEmpty()) {
-      SavePath = TEXT("/Game");
-    }
-
-    // Ensure path starts with /Game (security: normalized path)
-    if (!SavePath.StartsWith(TEXT("/"))) {
-      SavePath = TEXT("/Game/") + SavePath;
-    }
-
-    FString PackagePath = SavePath / Name;
-
-    // Validate path before CreatePackage (prevents crashes from // and path traversal)
-    if (!IsValidAssetPath(PackagePath)) {
-      SendAutomationError(
-          RequestingSocket, RequestId,
-          FString::Printf(TEXT("Invalid asset path: '%s'. Path must start with '/', cannot contain '..' or '//'."),
-                          *PackagePath),
-          TEXT("INVALID_PATH"));
-      return true;
-    }
-
-    // Check if already exists
-    if (UEditorAssetLibrary::DoesAssetExist(PackagePath)) {
-      SendAutomationError(
-          RequestingSocket, RequestId,
-          FString::Printf(TEXT("Behavior Tree already exists at %s"),
-                          *PackagePath),
-          TEXT("ASSET_EXISTS"));
-      return true;
-    }
-
-    // Resolve the requested blackboard before creating anything so a bad path
-    // fails without leaving a half-created asset.
-    FString BlackboardPath;
-    Payload->TryGetStringField(TEXT("blackboardPath"), BlackboardPath);
-    UBlackboardData *Blackboard = nullptr;
-    if (!BlackboardPath.IsEmpty()) {
-      Blackboard = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
-      if (!Blackboard) {
-        SendAutomationError(
-            RequestingSocket, RequestId,
-            FString::Printf(TEXT("Blackboard not found: %s"), *BlackboardPath),
-            TEXT("BLACKBOARD_NOT_FOUND"));
-        return true;
-      }
-    }
-
-    // Create the behavior tree asset
-    UPackage *Package = CreatePackage(*PackagePath);
-    if (!Package) {
-      SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("Failed to create package"),
-                          TEXT("PACKAGE_FAILED"));
-      return true;
-    }
-
-    UBehaviorTree *NewBT =
-        NewObject<UBehaviorTree>(Package, UBehaviorTree::StaticClass(), FName(*Name), RF_Public | RF_Standalone);
-    if (!NewBT) {
-      SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("Failed to create Behavior Tree"),
-                          TEXT("CREATE_FAILED"));
-      return true;
-    }
-
-    // Initialize the BT graph (EdGraph)
-#if MCP_HAS_BEHAVIOR_TREE_GRAPH
-    UEdGraph *NewGraph =
-        NewObject<UBehaviorTreeGraph>(NewBT, TEXT("BehaviorTree"));
-    NewGraph->Schema = UEdGraphSchema_BehaviorTree::StaticClass();
-    NewBT->BTGraph = NewGraph;
-
-    // Create default nodes (Root)
-    NewGraph->GetSchema()->CreateDefaultNodesForGraph(*NewGraph);
-
-    // The engine root node auto-picks the first loaded BlackboardData in
-    // PostPlacedNewNode and writes it into the asset — an arbitrary,
-    // project-dependent binding. Force the caller's choice (or none).
-    for (UEdGraphNode *GraphNode : NewGraph->Nodes) {
-      if (UBehaviorTreeGraphNode_Root *RootNode =
-              Cast<UBehaviorTreeGraphNode_Root>(GraphNode)) {
-        RootNode->BlackboardAsset = Blackboard;
-        break;
-      }
-    }
-#else
-    // UE 5.0-5.2: BehaviorTreeGraph classes not available in BehaviorTreeEditor module
-    // The graph will be initialized when the asset is first opened in the editor
-    NewBT->BTGraph = nullptr;
-#endif
-    NewBT->BlackboardAsset = Blackboard;
-
-    // Save the asset using safe helper
-    FAssetRegistryModule::AssetCreated(NewBT);
-    Package->MarkPackageDirty();
-    bool bSaved = McpSafeAssetSave(NewBT);
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("assetPath"), NewBT->GetPathName());
-    Result->SetStringField(TEXT("behaviorTreePath"), NewBT->GetPathName());
-    Result->SetStringField(TEXT("name"), Name);
-    Result->SetBoolField(TEXT("saved"), bSaved);
-    if (Blackboard) {
-      Result->SetStringField(TEXT("assignedBlackboard"),
-                             Blackboard->GetPathName());
-    } else {
-      Result->SetField(TEXT("assignedBlackboard"),
-                       MakeShared<FJsonValueNull>());
-    }
-    McpHandlerUtils::AddVerification(Result, NewBT);
-
-    SendAutomationResponse(RequestingSocket, RequestId, true,
-                           TEXT("Behavior Tree created."), Result);
+  FString Name;
+  if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("name required for create"),
+                        TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
-  // ===========================================================================
-  // Load existing Behavior Tree for remaining subActions
-  // ===========================================================================
+  FString SavePath;
+  if (!Payload->TryGetStringField(TEXT("savePath"), SavePath) ||
+      SavePath.IsEmpty()) {
+    Payload->TryGetStringField(TEXT("path"), SavePath);
+  }
+  if (SavePath.IsEmpty()) {
+    SavePath = TEXT("/Game");
+  }
+
+  // Ensure path starts with /Game (security: normalized path)
+  if (!SavePath.StartsWith(TEXT("/"))) {
+    SavePath = TEXT("/Game/") + SavePath;
+  }
+
+  FString PackagePath = SavePath / Name;
+
+  // Validate path before CreatePackage (prevents crashes from // and path traversal)
+  if (!IsValidAssetPath(PackagePath)) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(TEXT("Invalid asset path: '%s'. Path must start with '/', cannot contain '..' or '//'."),
+                        *PackagePath),
+        TEXT("INVALID_PATH"));
+    return true;
+  }
+
+  // Check if already exists
+  if (UEditorAssetLibrary::DoesAssetExist(PackagePath)) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(TEXT("Behavior Tree already exists at %s"),
+                        *PackagePath),
+        TEXT("ASSET_EXISTS"));
+    return true;
+  }
+
+  // Resolve the requested blackboard before creating anything so a bad path
+  // fails without leaving a half-created asset.
+  FString BlackboardPath;
+  Payload->TryGetStringField(TEXT("blackboardPath"), BlackboardPath);
+  UBlackboardData *Blackboard = nullptr;
+  if (!BlackboardPath.IsEmpty()) {
+    Blackboard = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
+    if (!Blackboard) {
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(TEXT("Blackboard not found: %s"), *BlackboardPath),
+          TEXT("BLACKBOARD_NOT_FOUND"));
+      return true;
+    }
+  }
+
+  // Create the behavior tree asset
+  UPackage *Package = CreatePackage(*PackagePath);
+  if (!Package) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Failed to create package"),
+                        TEXT("PACKAGE_FAILED"));
+    return true;
+  }
+
+  UBehaviorTree *NewBT =
+      NewObject<UBehaviorTree>(Package, UBehaviorTree::StaticClass(), FName(*Name), RF_Public | RF_Standalone);
+  if (!NewBT) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Failed to create Behavior Tree"),
+                        TEXT("CREATE_FAILED"));
+    return true;
+  }
+
+  // Initialize the BT graph (EdGraph)
+#if MCP_HAS_BEHAVIOR_TREE_GRAPH
+  UEdGraph *NewGraph =
+      NewObject<UBehaviorTreeGraph>(NewBT, TEXT("BehaviorTree"));
+  NewGraph->Schema = UEdGraphSchema_BehaviorTree::StaticClass();
+  NewBT->BTGraph = NewGraph;
+
+  // Create default nodes (Root)
+  NewGraph->GetSchema()->CreateDefaultNodesForGraph(*NewGraph);
+
+  // The engine root node auto-picks the first loaded BlackboardData in
+  // PostPlacedNewNode and writes it into the asset — an arbitrary,
+  // project-dependent binding. Force the caller's choice (or none).
+  for (UEdGraphNode *GraphNode : NewGraph->Nodes) {
+    if (UBehaviorTreeGraphNode_Root *RootNode =
+            Cast<UBehaviorTreeGraphNode_Root>(GraphNode)) {
+      RootNode->BlackboardAsset = Blackboard;
+      break;
+    }
+  }
+#else
+  // UE 5.0-5.2: BehaviorTreeGraph classes not available in BehaviorTreeEditor module
+  // The graph will be initialized when the asset is first opened in the editor
+  NewBT->BTGraph = nullptr;
+#endif
+  NewBT->BlackboardAsset = Blackboard;
+
+  // Save the asset using safe helper
+  FAssetRegistryModule::AssetCreated(NewBT);
+  Package->MarkPackageDirty();
+  bool bSaved = McpSafeAssetSave(NewBT);
+
+  TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+  Result->SetStringField(TEXT("assetPath"), NewBT->GetPathName());
+  Result->SetStringField(TEXT("behaviorTreePath"), NewBT->GetPathName());
+  Result->SetStringField(TEXT("name"), Name);
+  Result->SetBoolField(TEXT("saved"), bSaved);
+  if (Blackboard) {
+    Result->SetStringField(TEXT("assignedBlackboard"),
+                           Blackboard->GetPathName());
+  } else {
+    Result->SetField(TEXT("assignedBlackboard"),
+                     MakeShared<FJsonValueNull>());
+  }
+  McpHandlerUtils::AddVerification(Result, NewBT);
+
+  SendAutomationResponse(RequestingSocket, RequestId, true,
+                         TEXT("Behavior Tree created."), Result);
+  return true;
+#else
+  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+// ===========================================================================
+// SubAction: add_node - Add node to Behavior Tree graph
+// ===========================================================================
+bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  // Runtime check: Verify BehaviorTreeEditor module is loaded for graph editing operations
+  // This handles the case where headers were available at compile time
+  // but the plugin is not enabled in the target project at runtime
+#if MCP_HAS_BEHAVIOR_TREE_GRAPH
+  const bool bNeedsEditorModule = true;  // UE 5.3+: All operations need BehaviorTreeEditor for graph classes
+#else
+  const bool bNeedsEditorModule = true;   // UE 5.0-5.2: graph ops need the editor module
+#endif
+  if (bNeedsEditorModule && !FModuleManager::Get().IsModuleLoaded(TEXT("BehaviorTreeEditor")))
+  {
+      if (!FModuleManager::Get().ModuleExists(TEXT("BehaviorTreeEditor")) ||
+          !FModuleManager::Get().LoadModule(TEXT("BehaviorTreeEditor")))
+      {
+          SendAutomationError(RequestingSocket, RequestId,
+              TEXT("BehaviorTreeEditor plugin is not enabled in this project. Enable the Behavior Tree Editor plugin to use Behavior Tree graph editing features."),
+              TEXT("BEHAVIORTREEEDITOR_PLUGIN_NOT_ENABLED"));
+          return true;
+      }
+  }
+
+  // Load the target Behavior Tree and its graph.
   FString AssetPath;
   if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
       AssetPath.IsEmpty()) {
@@ -384,735 +382,1313 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAction(
     return nullptr;
   };
 
-  // ===========================================================================
-  // SubAction: add_node - Add node to Behavior Tree graph
-  // ===========================================================================
-  if (SubAction == TEXT("add_node")) {
 #if !MCP_HAS_BEHAVIOR_TREE_GRAPH
-    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("Behavior Tree graph editing requires UE 5.3+"),
-                        TEXT("NOT_SUPPORTED"));
-    return true;
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("Behavior Tree graph editing requires UE 5.3+"),
+                      TEXT("NOT_SUPPORTED"));
+  return true;
 #else
-    FString NodeType;
-    Payload->TryGetStringField(TEXT("nodeType"), NodeType);
-    float X = 0.0f;
-    float Y = 0.0f;
-    const bool bHasX = Payload->TryGetNumberField(TEXT("x"), X);
-    const bool bHasY = Payload->TryGetNumberField(TEXT("y"), Y);
+  FString NodeType;
+  Payload->TryGetStringField(TEXT("nodeType"), NodeType);
+  float X = 0.0f;
+  float Y = 0.0f;
+  const bool bHasX = Payload->TryGetNumberField(TEXT("x"), X);
+  const bool bHasY = Payload->TryGetNumberField(TEXT("y"), Y);
 
-    // Reject calls where x/y are present but not valid numbers (e.g. boolean flags from bad input)
-    // TryGetNumberField returns false for booleans, strings, null, etc.
-    // Check specifically if field exists but as wrong type using HasField + wrong-type detection
-    if (Payload->HasField(TEXT("x")) && !bHasX) {
-      // x field is present but not a number - this is invalid input
-      SendAutomationError(
-          RequestingSocket, RequestId,
-          TEXT("Invalid value for 'x': expected number"),
-          TEXT("INVALID_ARGUMENT"));
-      return true;
-    }
-    if (Payload->HasField(TEXT("y")) && !bHasY) {
-      SendAutomationError(
-          RequestingSocket, RequestId,
-          TEXT("Invalid value for 'y': expected number"),
-          TEXT("INVALID_ARGUMENT"));
-      return true;
-    }
+  // Reject calls where x/y are present but not valid numbers (e.g. boolean flags from bad input)
+  // TryGetNumberField returns false for booleans, strings, null, etc.
+  // Check specifically if field exists but as wrong type using HasField + wrong-type detection
+  if (Payload->HasField(TEXT("x")) && !bHasX) {
+    // x field is present but not a number - this is invalid input
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        TEXT("Invalid value for 'x': expected number"),
+        TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+  if (Payload->HasField(TEXT("y")) && !bHasY) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        TEXT("Invalid value for 'y': expected number"),
+        TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
 
-    // Check for explicit Node ID
-    FString ProvidedNodeId;
-    Payload->TryGetStringField(TEXT("nodeId"), ProvidedNodeId);
+  // Check for explicit Node ID
+  FString ProvidedNodeId;
+  Payload->TryGetStringField(TEXT("nodeId"), ProvidedNodeId);
 
-    UBehaviorTreeGraphNode *NewNode = nullptr;
+  UBehaviorTreeGraphNode *NewNode = nullptr;
 
-    // Determine node class
-    // Use runtime class lookup for BehaviorTreeGraphNode classes to avoid GetPrivateStaticClass requirement
-    UClass *NodeClass = nullptr;
-    UClass *NodeInstanceClass = nullptr;
+  // Determine node class
+  // Use runtime class lookup for BehaviorTreeGraphNode classes to avoid GetPrivateStaticClass requirement
+  UClass *NodeClass = nullptr;
+  UClass *NodeInstanceClass = nullptr;
 
-    // Composite types
-    if (NodeType == TEXT("Sequence")) {
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Composite"));
-      NodeInstanceClass = UBTComposite_Sequence::StaticClass();
-    } else if (NodeType == TEXT("Selector")) {
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Composite"));
-      NodeInstanceClass = UBTComposite_Selector::StaticClass();
-    } else if (NodeType == TEXT("SimpleParallel")) {
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Composite"));
-      NodeInstanceClass = UBTComposite_SimpleParallel::StaticClass();
-    }
-    // Task types
-    else if (NodeType == TEXT("Wait")) {
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
-      NodeInstanceClass = UBTTask_Wait::StaticClass();
-    } else if (NodeType == TEXT("MoveTo")) {
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
-      NodeInstanceClass = UBTTask_MoveTo::StaticClass();
-    } else if (NodeType == TEXT("RotateTo")) {
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
-      NodeInstanceClass = UBTTask_RotateToFaceBBEntry::StaticClass();
-    } else if (NodeType == TEXT("RunBehavior")) {
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
-      NodeInstanceClass = UBTTask_RunBehavior::StaticClass();
-    } else if (NodeType == TEXT("Fail")) {
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
-      NodeInstanceClass = UBTTask_FinishWithResult::StaticClass();
-    } else if (NodeType == TEXT("Succeed")) {
-      // Succeed is a FinishWithResult task configured to success
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
-      NodeInstanceClass = UBTTask_FinishWithResult::StaticClass();
-    }
-    // Special node types
-    else if (NodeType == TEXT("Root")) {
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Root"));
-      // Root doesn't have an instance class in the same way
-    } else if (NodeType == TEXT("Task")) {
-      // Generic Task - creates a Wait task as default
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
-      NodeInstanceClass = UBTTask_Wait::StaticClass();
-    } else if (NodeType == TEXT("Decorator") || NodeType == TEXT("Blackboard")) {
-      // Generic Decorator - creates a Blackboard decorator as default
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Decorator"));
-      NodeInstanceClass = UBTDecorator_Blackboard::StaticClass();
-    } else if (NodeType == TEXT("Service") || NodeType == TEXT("DefaultFocus")) {
-      // Generic Service - creates a DefaultFocus service as default
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Service"));
-      NodeInstanceClass = UBTService_DefaultFocus::StaticClass();
-    } else if (NodeType == TEXT("Composite")) {
-      // Generic Composite - creates a Sequence as default
-      NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Composite"));
-      NodeInstanceClass = UBTComposite_Sequence::StaticClass();
-    } else {
-      // Try to resolve as a class path
-      UClass *Resolved = ResolveClassByName(NodeType);
-      if (Resolved) {
-        if (Resolved->IsChildOf(UBTCompositeNode::StaticClass())) {
-          NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Composite"));
-          NodeInstanceClass = Resolved;
-        } else if (Resolved->IsChildOf(UBTTaskNode::StaticClass())) {
-          NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
-          NodeInstanceClass = Resolved;
-        } else if (Resolved->IsChildOf(UBTDecorator::StaticClass())) {
-          NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Decorator"));
-          NodeInstanceClass = Resolved;
-        } else if (Resolved->IsChildOf(UBTService::StaticClass())) {
-          NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Service"));
-          NodeInstanceClass = Resolved;
-        }
+  // Composite types
+  if (NodeType == TEXT("Sequence")) {
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Composite"));
+    NodeInstanceClass = UBTComposite_Sequence::StaticClass();
+  } else if (NodeType == TEXT("Selector")) {
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Composite"));
+    NodeInstanceClass = UBTComposite_Selector::StaticClass();
+  } else if (NodeType == TEXT("SimpleParallel")) {
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Composite"));
+    NodeInstanceClass = UBTComposite_SimpleParallel::StaticClass();
+  }
+  // Task types
+  else if (NodeType == TEXT("Wait")) {
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
+    NodeInstanceClass = UBTTask_Wait::StaticClass();
+  } else if (NodeType == TEXT("MoveTo")) {
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
+    NodeInstanceClass = UBTTask_MoveTo::StaticClass();
+  } else if (NodeType == TEXT("RotateTo")) {
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
+    NodeInstanceClass = UBTTask_RotateToFaceBBEntry::StaticClass();
+  } else if (NodeType == TEXT("RunBehavior")) {
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
+    NodeInstanceClass = UBTTask_RunBehavior::StaticClass();
+  } else if (NodeType == TEXT("Fail")) {
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
+    NodeInstanceClass = UBTTask_FinishWithResult::StaticClass();
+  } else if (NodeType == TEXT("Succeed")) {
+    // Succeed is a FinishWithResult task configured to success
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
+    NodeInstanceClass = UBTTask_FinishWithResult::StaticClass();
+  }
+  // Special node types
+  else if (NodeType == TEXT("Root")) {
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Root"));
+    // Root doesn't have an instance class in the same way
+  } else if (NodeType == TEXT("Task")) {
+    // Generic Task - creates a Wait task as default
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
+    NodeInstanceClass = UBTTask_Wait::StaticClass();
+  } else if (NodeType == TEXT("Decorator") || NodeType == TEXT("Blackboard")) {
+    // Generic Decorator - creates a Blackboard decorator as default
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Decorator"));
+    NodeInstanceClass = UBTDecorator_Blackboard::StaticClass();
+  } else if (NodeType == TEXT("Service") || NodeType == TEXT("DefaultFocus")) {
+    // Generic Service - creates a DefaultFocus service as default
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Service"));
+    NodeInstanceClass = UBTService_DefaultFocus::StaticClass();
+  } else if (NodeType == TEXT("Composite")) {
+    // Generic Composite - creates a Sequence as default
+    NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Composite"));
+    NodeInstanceClass = UBTComposite_Sequence::StaticClass();
+  } else {
+    // Try to resolve as a class path
+    UClass *Resolved = ResolveClassByName(NodeType);
+    if (Resolved) {
+      if (Resolved->IsChildOf(UBTCompositeNode::StaticClass())) {
+        NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Composite"));
+        NodeInstanceClass = Resolved;
+      } else if (Resolved->IsChildOf(UBTTaskNode::StaticClass())) {
+        NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Task"));
+        NodeInstanceClass = Resolved;
+      } else if (Resolved->IsChildOf(UBTDecorator::StaticClass())) {
+        NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Decorator"));
+        NodeInstanceClass = Resolved;
+      } else if (Resolved->IsChildOf(UBTService::StaticClass())) {
+        NodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_Service"));
+        NodeInstanceClass = Resolved;
       }
     }
+  }
 
-    if (NodeInstanceClass && NodeInstanceClass->HasAnyClassFlags(CLASS_Abstract)) {
-      SendAutomationError(
-          RequestingSocket, RequestId,
-          FString::Printf(TEXT("Node class %s is abstract and cannot be instantiated"),
-                          *NodeInstanceClass->GetName()),
-          TEXT("INVALID_CLASS"));
-      return true;
-    }
+  if (NodeInstanceClass && NodeInstanceClass->HasAnyClassFlags(CLASS_Abstract)) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(TEXT("Node class %s is abstract and cannot be instantiated"),
+                        *NodeInstanceClass->GetName()),
+        TEXT("INVALID_CLASS"));
+    return true;
+  }
 
-    if (NodeClass) {
-      // Use NewObject with UClass* parameter to avoid GetPrivateStaticClass requirement
-      // The templated NewObject<UBehaviorTreeGraphNode>() triggers the unexported symbol issue
-      UObject* NewNodeObj = NewObject<UObject>(BTGraph, NodeClass, NAME_None, RF_Transactional);
-      UClass* BTNodeBaseClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode"));
-      if (NewNodeObj && BTNodeBaseClass && NewNodeObj->GetClass()->IsChildOf(BTNodeBaseClass))
-      {
-        NewNode = static_cast<UBehaviorTreeGraphNode*>(NewNodeObj);
+  if (NodeClass) {
+    // Use NewObject with UClass* parameter to avoid GetPrivateStaticClass requirement
+    // The templated NewObject<UBehaviorTreeGraphNode>() triggers the unexported symbol issue
+    UObject* NewNodeObj = NewObject<UObject>(BTGraph, NodeClass, NAME_None, RF_Transactional);
+    UClass* BTNodeBaseClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode"));
+    if (NewNodeObj && BTNodeBaseClass && NewNodeObj->GetClass()->IsChildOf(BTNodeBaseClass))
+    {
+      NewNode = static_cast<UBehaviorTreeGraphNode*>(NewNodeObj);
 
-        // Initialize the node
-        BT->Modify();
-        BTGraph->Modify();
-        NewNode->Modify();
-        NewNode->CreateNewGuid();
+      // Initialize the node
+      BT->Modify();
+      BTGraph->Modify();
+      NewNode->Modify();
+      NewNode->CreateNewGuid();
 
-        if (NodeInstanceClass) {
-          NewNode->ClassData = FGraphNodeClassData(NodeInstanceClass, TEXT(""));
-        }
-        
-        // Use provided ID if valid, otherwise keep the generated one
-        FGuid NewGuid;
-        if (!ProvidedNodeId.IsEmpty() &&
-            FGuid::Parse(ProvidedNodeId, NewGuid)) {
-          NewNode->NodeGuid = NewGuid;
-        }
+      if (NodeInstanceClass) {
+        NewNode->ClassData = FGraphNodeClassData(NodeInstanceClass, TEXT(""));
+      }
+      
+      // Use provided ID if valid, otherwise keep the generated one
+      FGuid NewGuid;
+      if (!ProvidedNodeId.IsEmpty() &&
+          FGuid::Parse(ProvidedNodeId, NewGuid)) {
+        NewNode->NodeGuid = NewGuid;
+      }
 
-        NewNode->NodePosX = X;
-        NewNode->NodePosY = Y;
-        
-        // Add node to graph and initialize
-        BTGraph->AddNode(NewNode, true, false);
-        NewNode->PostPlacedNewNode();
-        NewNode->AllocateDefaultPins();
+      NewNode->NodePosX = X;
+      NewNode->NodePosY = Y;
+      
+      // Add node to graph and initialize
+      BTGraph->AddNode(NewNode, true, false);
+      NewNode->PostPlacedNewNode();
+      NewNode->AllocateDefaultPins();
 
-        if (NodeInstanceClass && !NewNode->NodeInstance) {
-          BTGraph->RemoveNode(NewNode);
-          SendAutomationError(RequestingSocket, RequestId,
-                              TEXT("Failed to initialize Behavior Tree node instance."),
-                              TEXT("CREATE_FAILED"));
-          return true;
-        }
+      if (NodeInstanceClass && !NewNode->NodeInstance) {
+        BTGraph->RemoveNode(NewNode);
+        SendAutomationError(RequestingSocket, RequestId,
+                            TEXT("Failed to initialize Behavior Tree node instance."),
+                            TEXT("CREATE_FAILED"));
+        return true;
+      }
 
-        // Optional parentNodeId ('root' or a node id) connects the new node in
-        // the same call; a failed connection removes the node again so the call
-        // never half-applies.
-        FString ParentNodeIdStr;
-        Payload->TryGetStringField(TEXT("parentNodeId"), ParentNodeIdStr);
-        if (!ParentNodeIdStr.IsEmpty()) {
-          UEdGraphNode *Parent = nullptr;
-          if (ParentNodeIdStr.Equals(TEXT("root"), ESearchCase::IgnoreCase)) {
-            for (UEdGraphNode *GraphNode : BTGraph->Nodes) {
-              if (Cast<UBehaviorTreeGraphNode_Root>(GraphNode)) {
-                Parent = GraphNode;
-                break;
-              }
-            }
-          } else {
-            Parent = FindGraphNodeByIdOrName(ParentNodeIdStr);
-          }
-          UEdGraphPin *ParentOut = nullptr;
-          if (Parent && Parent != NewNode) {
-            for (UEdGraphPin *Pin : Parent->Pins) {
-              if (Pin->Direction == EGPD_Output) {
-                ParentOut = Pin;
-                break;
-              }
-            }
-          }
-          UEdGraphPin *ChildIn = nullptr;
-          for (UEdGraphPin *Pin : NewNode->Pins) {
-            if (Pin->Direction == EGPD_Input) {
-              ChildIn = Pin;
+      // Optional parentNodeId ('root' or a node id) connects the new node in
+      // the same call; a failed connection removes the node again so the call
+      // never half-applies.
+      FString ParentNodeIdStr;
+      Payload->TryGetStringField(TEXT("parentNodeId"), ParentNodeIdStr);
+      if (!ParentNodeIdStr.IsEmpty()) {
+        UEdGraphNode *Parent = nullptr;
+        if (ParentNodeIdStr.Equals(TEXT("root"), ESearchCase::IgnoreCase)) {
+          for (UEdGraphNode *GraphNode : BTGraph->Nodes) {
+            if (Cast<UBehaviorTreeGraphNode_Root>(GraphNode)) {
+              Parent = GraphNode;
               break;
             }
           }
-          if (!Parent || Parent == NewNode) {
-            BTGraph->RemoveNode(NewNode);
-            SendAutomationError(
-                RequestingSocket, RequestId,
-                FString::Printf(TEXT("Parent node not found: %s"),
-                                *ParentNodeIdStr),
-                TEXT("NODE_NOT_FOUND"));
-            return true;
+        } else {
+          Parent = FindGraphNodeByIdOrName(ParentNodeIdStr);
+        }
+        UEdGraphPin *ParentOut = nullptr;
+        if (Parent && Parent != NewNode) {
+          for (UEdGraphPin *Pin : Parent->Pins) {
+            if (Pin->Direction == EGPD_Output) {
+              ParentOut = Pin;
+              break;
+            }
           }
-          if (!ParentOut || !ChildIn ||
-              !BTGraph->GetSchema()->TryCreateConnection(ParentOut, ChildIn)) {
-            BTGraph->RemoveNode(NewNode);
-            SendAutomationError(
-                RequestingSocket, RequestId,
-                FString::Printf(
-                    TEXT("Cannot connect a '%s' node under parent '%s' (rejected "
-                         "by the Behavior Tree schema)"),
-                    *NodeType, *ParentNodeIdStr),
-                TEXT("CONNECT_FAILED"));
-            return true;
+        }
+        UEdGraphPin *ChildIn = nullptr;
+        for (UEdGraphPin *Pin : NewNode->Pins) {
+          if (Pin->Direction == EGPD_Input) {
+            ChildIn = Pin;
+            break;
           }
-          Parent->Modify();
         }
-
-        UpdateBehaviorTreeAsset();
-
-        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
-        if (!ParentNodeIdStr.IsEmpty()) {
-          Result->SetStringField(TEXT("parentNodeId"), ParentNodeIdStr);
-          Result->SetBoolField(TEXT("connectedToParent"), true);
+        if (!Parent || Parent == NewNode) {
+          BTGraph->RemoveNode(NewNode);
+          SendAutomationError(
+              RequestingSocket, RequestId,
+              FString::Printf(TEXT("Parent node not found: %s"),
+                              *ParentNodeIdStr),
+              TEXT("NODE_NOT_FOUND"));
+          return true;
         }
-        McpHandlerUtils::AddVerification(Result, BT);
-
-        SendAutomationResponse(RequestingSocket, RequestId, true,
-                               TEXT("Node added."), Result);
-      } else {
-        SendAutomationError(RequestingSocket, RequestId,
-                            TEXT("Failed to create node object."),
-                            TEXT("CREATE_FAILED"));
+        if (!ParentOut || !ChildIn ||
+            !BTGraph->GetSchema()->TryCreateConnection(ParentOut, ChildIn)) {
+          BTGraph->RemoveNode(NewNode);
+          SendAutomationError(
+              RequestingSocket, RequestId,
+              FString::Printf(
+                  TEXT("Cannot connect a '%s' node under parent '%s' (rejected "
+                       "by the Behavior Tree schema)"),
+                  *NodeType, *ParentNodeIdStr),
+              TEXT("CONNECT_FAILED"));
+          return true;
+        }
+        Parent->Modify();
       }
+
+      UpdateBehaviorTreeAsset();
+
+      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+      Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
+      if (!ParentNodeIdStr.IsEmpty()) {
+        Result->SetStringField(TEXT("parentNodeId"), ParentNodeIdStr);
+        Result->SetBoolField(TEXT("connectedToParent"), true);
+      }
+      McpHandlerUtils::AddVerification(Result, BT);
+
+      SendAutomationResponse(RequestingSocket, RequestId, true,
+                             TEXT("Node added."), Result);
     } else {
-      SendAutomationError(
-          RequestingSocket, RequestId,
-          FString::Printf(TEXT("Unknown node type '%s'"), *NodeType),
-          TEXT("UNKNOWN_TYPE"));
-    }
-    return true;
-#endif
-  }
-  // ===========================================================================
-  // SubAction: connect_nodes - Connect parent to child node
-  // ===========================================================================
-  else if (SubAction == TEXT("connect_nodes")) {
-#if !MCP_HAS_BEHAVIOR_TREE_GRAPH
-    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("Behavior Tree graph editing requires UE 5.3+"),
-                        TEXT("NOT_SUPPORTED"));
-    return true;
-#endif
-    // Parent -> Child connection
-    FString ParentNodeId, ChildNodeId;
-    Payload->TryGetStringField(TEXT("parentNodeId"), ParentNodeId);
-    Payload->TryGetStringField(TEXT("childNodeId"), ChildNodeId);
-
-    // parentNodeId "root" (case-insensitive) targets the graph's root node so the
-    // child becomes the tree's entry composite — without this there was no way to
-    // attach the top node to the root, leaving hasRootNode:false (non-runnable).
-    // Mirrors the root-sentinel lookup used by add_subnode.
-    UEdGraphNode *Parent = nullptr;
-    if (ParentNodeId.Equals(TEXT("root"), ESearchCase::IgnoreCase)) {
-      for (UEdGraphNode *GraphNode : BTGraph->Nodes) {
-        if (UBehaviorTreeGraphNode_Root *RootNode = Cast<UBehaviorTreeGraphNode_Root>(GraphNode)) {
-          Parent = RootNode;
-          break;
-        }
-      }
-      if (!Parent) {
-        SendAutomationError(RequestingSocket, RequestId,
-                            TEXT("Root graph node not found for parentNodeId 'root'."),
-                            TEXT("NODE_NOT_FOUND"));
-        return true;
-      }
-    } else {
-      Parent = FindGraphNodeByIdOrName(ParentNodeId);
-    }
-    UEdGraphNode *Child = FindGraphNodeByIdOrName(ChildNodeId);
-
-    if (!Parent || !Child) {
       SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("Parent or child node not found."),
+                          TEXT("Failed to create node object."),
+                          TEXT("CREATE_FAILED"));
+    }
+  } else {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(TEXT("Unknown node type '%s'"), *NodeType),
+        TEXT("UNKNOWN_TYPE"));
+  }
+  return true;
+#endif
+#else
+  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+// ===========================================================================
+// SubAction: connect_nodes - Connect parent to child node
+// ===========================================================================
+bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeConnectNodes(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  // Runtime check: Verify BehaviorTreeEditor module is loaded for graph editing operations
+  // This handles the case where headers were available at compile time
+  // but the plugin is not enabled in the target project at runtime
+#if MCP_HAS_BEHAVIOR_TREE_GRAPH
+  const bool bNeedsEditorModule = true;  // UE 5.3+: All operations need BehaviorTreeEditor for graph classes
+#else
+  const bool bNeedsEditorModule = true;   // UE 5.0-5.2: graph ops need the editor module
+#endif
+  if (bNeedsEditorModule && !FModuleManager::Get().IsModuleLoaded(TEXT("BehaviorTreeEditor")))
+  {
+      if (!FModuleManager::Get().ModuleExists(TEXT("BehaviorTreeEditor")) ||
+          !FModuleManager::Get().LoadModule(TEXT("BehaviorTreeEditor")))
+      {
+          SendAutomationError(RequestingSocket, RequestId,
+              TEXT("BehaviorTreeEditor plugin is not enabled in this project. Enable the Behavior Tree Editor plugin to use Behavior Tree graph editing features."),
+              TEXT("BEHAVIORTREEEDITOR_PLUGIN_NOT_ENABLED"));
+          return true;
+      }
+  }
+
+  // Load the target Behavior Tree and its graph.
+  FString AssetPath;
+  if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
+      AssetPath.IsEmpty()) {
+    // Fallback: try behaviorTreePath (common test convention)
+    if (!Payload->TryGetStringField(TEXT("behaviorTreePath"), AssetPath) ||
+        AssetPath.IsEmpty()) {
+      // Fallback: try path
+      Payload->TryGetStringField(TEXT("path"), AssetPath);
+    }
+  }
+  if (AssetPath.IsEmpty()) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Missing 'assetPath' (or 'behaviorTreePath'/'path'). Use 'create' subAction to "
+                             "create a new Behavior Tree first."),
+                        TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  UBehaviorTree *BT = LoadObject<UBehaviorTree>(nullptr, *AssetPath);
+  if (!BT) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(
+            TEXT("Could not load Behavior Tree at '%s'. Use 'create' subAction "
+                 "to create a new Behavior Tree first."),
+            *AssetPath),
+        TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
+
+  UEdGraph *BTGraph = BT->BTGraph;
+  if (!BTGraph) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(
+            TEXT("Behavior Tree '%s' has no graph, so it cannot be edited here. "
+                 "Open it once in the BT editor to build its graph, or recreate "
+                 "it with the 'create' action (which initializes the graph)."),
+            *AssetPath),
+        TEXT("GRAPH_NOT_FOUND"));
+    return true;
+  }
+
+  auto UpdateBehaviorTreeAsset = [&]() {
+#if MCP_HAS_BEHAVIOR_TREE_GRAPH
+    if (UBehaviorTreeGraph *TypedBTGraph = Cast<UBehaviorTreeGraph>(BTGraph)) {
+      TypedBTGraph->UpdateAsset();
+    }
+#endif
+    BTGraph->NotifyGraphChanged();
+    BT->MarkPackageDirty();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Helper: Find graph node by GUID or Name
+  // ---------------------------------------------------------------------------
+  auto FindGraphNodeByIdOrName =
+      [&](const FString &IdOrName) -> UEdGraphNode * {
+    if (IdOrName.IsEmpty()) {
+      return nullptr;
+    }
+    const FString Needle = IdOrName.TrimStartAndEnd();
+
+    // Inner matcher — recurses into UAIGraphNode::SubNodes for decorator/service
+    // lookup. Captured by reference so the lambda can refer to itself.
+    TFunction<UEdGraphNode*(UEdGraphNode*)> Match;
+    Match = [&](UEdGraphNode* Node) -> UEdGraphNode* {
+      if (!Node) return nullptr;
+      if (Node->NodeGuid.ToString() == Needle) return Node;
+      FGuid SearchGuid;
+      if (FGuid::Parse(Needle, SearchGuid) && Node->NodeGuid == SearchGuid) return Node;
+      if (Node->GetName().Equals(Needle, ESearchCase::IgnoreCase)) return Node;
+      if (Node->GetPathName().Equals(Needle, ESearchCase::IgnoreCase)) return Node;
+      // Recurse into subnodes (decorators/services attached to graph nodes).
+      if (UAIGraphNode* AINode = Cast<UAIGraphNode>(Node)) {
+        for (UAIGraphNode* SubNode : AINode->SubNodes) {
+          if (UEdGraphNode* Found = Match(SubNode)) return Found;
+        }
+      }
+      return nullptr;
+    };
+
+    for (UEdGraphNode *Node : BTGraph->Nodes) {
+      if (UEdGraphNode* Found = Match(Node)) return Found;
+    }
+    return nullptr;
+  };
+
+#if !MCP_HAS_BEHAVIOR_TREE_GRAPH
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("Behavior Tree graph editing requires UE 5.3+"),
+                      TEXT("NOT_SUPPORTED"));
+  return true;
+#endif
+  // Parent -> Child connection
+  FString ParentNodeId, ChildNodeId;
+  Payload->TryGetStringField(TEXT("parentNodeId"), ParentNodeId);
+  Payload->TryGetStringField(TEXT("childNodeId"), ChildNodeId);
+
+  // parentNodeId "root" (case-insensitive) targets the graph's root node so the
+  // child becomes the tree's entry composite — without this there was no way to
+  // attach the top node to the root, leaving hasRootNode:false (non-runnable).
+  // Mirrors the root-sentinel lookup used by add_subnode.
+  UEdGraphNode *Parent = nullptr;
+  if (ParentNodeId.Equals(TEXT("root"), ESearchCase::IgnoreCase)) {
+    for (UEdGraphNode *GraphNode : BTGraph->Nodes) {
+      if (UBehaviorTreeGraphNode_Root *RootNode = Cast<UBehaviorTreeGraphNode_Root>(GraphNode)) {
+        Parent = RootNode;
+        break;
+      }
+    }
+    if (!Parent) {
+      SendAutomationError(RequestingSocket, RequestId,
+                          TEXT("Root graph node not found for parentNodeId 'root'."),
                           TEXT("NODE_NOT_FOUND"));
       return true;
     }
+  } else {
+    Parent = FindGraphNodeByIdOrName(ParentNodeId);
+  }
+  UEdGraphNode *Child = FindGraphNodeByIdOrName(ChildNodeId);
 
-    // In BT, output pin of parent connects to input pin of child
-    UEdGraphPin *OutputPin = nullptr;
-    for (UEdGraphPin *Pin : Parent->Pins) {
-      if (Pin->Direction == EGPD_Output) {
-        OutputPin = Pin;
-        break;
-      }
+  if (!Parent || !Child) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Parent or child node not found."),
+                        TEXT("NODE_NOT_FOUND"));
+    return true;
+  }
+
+  // In BT, output pin of parent connects to input pin of child
+  UEdGraphPin *OutputPin = nullptr;
+  for (UEdGraphPin *Pin : Parent->Pins) {
+    if (Pin->Direction == EGPD_Output) {
+      OutputPin = Pin;
+      break;
     }
+  }
 
-    UEdGraphPin *InputPin = nullptr;
-    for (UEdGraphPin *Pin : Child->Pins) {
-      if (Pin->Direction == EGPD_Input) {
-        InputPin = Pin;
-        break;
-      }
+  UEdGraphPin *InputPin = nullptr;
+  for (UEdGraphPin *Pin : Child->Pins) {
+    if (Pin->Direction == EGPD_Input) {
+      InputPin = Pin;
+      break;
     }
+  }
 
-    if (OutputPin && InputPin) {
-      if (BTGraph->GetSchema()->TryCreateConnection(OutputPin, InputPin)) {
-        BT->Modify();
-        BTGraph->Modify();
-        Parent->Modify();
-        Child->Modify();
-        UpdateBehaviorTreeAsset();
-        TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-        McpHandlerUtils::AddVerification(Resp, BT);
-        SendAutomationResponse(RequestingSocket, RequestId, true,
-                               TEXT("Nodes connected."), Resp);
-      } else {
-        SendAutomationError(RequestingSocket, RequestId,
-                            TEXT("Failed to connect nodes."),
-                            TEXT("CONNECT_FAILED"));
-      }
+  if (OutputPin && InputPin) {
+    if (BTGraph->GetSchema()->TryCreateConnection(OutputPin, InputPin)) {
+      BT->Modify();
+      BTGraph->Modify();
+      Parent->Modify();
+      Child->Modify();
+      UpdateBehaviorTreeAsset();
+      TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+      McpHandlerUtils::AddVerification(Resp, BT);
+      SendAutomationResponse(RequestingSocket, RequestId, true,
+                             TEXT("Nodes connected."), Resp);
     } else {
       SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("Could not find valid pins for connection."),
-                          TEXT("PIN_NOT_FOUND"));
+                          TEXT("Failed to connect nodes."),
+                          TEXT("CONNECT_FAILED"));
     }
-    return true;
-  }
-  // ===========================================================================
-  // SubAction: remove_node - Remove node from graph
-  // ===========================================================================
-  else if (SubAction == TEXT("remove_node")) {
-#if !MCP_HAS_BEHAVIOR_TREE_GRAPH
+  } else {
     SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("Behavior Tree graph editing requires UE 5.3+"),
-                        TEXT("NOT_SUPPORTED"));
-    return true;
-#endif
-    FString NodeId;
-    Payload->TryGetStringField(TEXT("nodeId"), NodeId);
-
-    UEdGraphNode *TargetNode = FindGraphNodeByIdOrName(NodeId);
-
-    if (TargetNode) {
-      BT->Modify();
-      BTGraph->Modify();
-      TargetNode->Modify();
-      BTGraph->GetSchema()->BreakNodeLinks(*TargetNode);
-      BTGraph->RemoveNode(TargetNode);
-      UpdateBehaviorTreeAsset();
-      TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-      McpHandlerUtils::AddVerification(Resp, BT);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
-                             TEXT("Node removed."), Resp);
-    } else {
-      SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
-                          TEXT("NODE_NOT_FOUND"));
-    }
-    return true;
+                        TEXT("Could not find valid pins for connection."),
+                        TEXT("PIN_NOT_FOUND"));
   }
-  // ===========================================================================
-  // SubAction: break_connections - Break all connections on a node
-  // ===========================================================================
-  else if (SubAction == TEXT("break_connections")) {
-#if !MCP_HAS_BEHAVIOR_TREE_GRAPH
-    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("Behavior Tree graph editing requires UE 5.3+"),
-                        TEXT("NOT_SUPPORTED"));
-    return true;
-#endif
-    FString NodeId;
-    Payload->TryGetStringField(TEXT("nodeId"), NodeId);
-
-    UEdGraphNode *TargetNode = FindGraphNodeByIdOrName(NodeId);
-
-    if (TargetNode) {
-      BT->Modify();
-      BTGraph->Modify();
-      TargetNode->Modify();
-      BTGraph->GetSchema()->BreakNodeLinks(*TargetNode);
-      UpdateBehaviorTreeAsset();
-      TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-      McpHandlerUtils::AddVerification(Resp, BT);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
-                             TEXT("Connections broken."), Resp);
-    } else {
-      SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
-                          TEXT("NODE_NOT_FOUND"));
-    }
-    return true;
-  }
-  // ===========================================================================
-  // SubAction: set_node_properties - Set properties on node instance
-  // ===========================================================================
-  else if (SubAction == TEXT("set_node_properties")) {
-#if !MCP_HAS_BEHAVIOR_TREE_GRAPH
-    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("Behavior Tree graph editing requires UE 5.3+"),
-                        TEXT("NOT_SUPPORTED"));
-    return true;
+  return true;
 #else
-    FString NodeId;
-    Payload->TryGetStringField(TEXT("nodeId"), NodeId);
+  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-    UEdGraphNode *TargetNode = FindGraphNodeByIdOrName(NodeId);
-
-    if (TargetNode) {
-      bool bModified = false;
-      FString Comment;
-      if (Payload->TryGetStringField(TEXT("comment"), Comment)) {
-        TargetNode->NodeComment = Comment;
-        bModified = true;
-      }
-
-      // Try to set properties on the underlying NodeInstance
-      // Use runtime class lookup and static_cast instead of Cast<> to avoid GetPrivateStaticClass requirement
-      UBehaviorTreeGraphNode *BTNode = nullptr;
-      UClass* BTNodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode"));
-      if (BTNodeClass && TargetNode->GetClass()->IsChildOf(BTNodeClass))
+// ===========================================================================
+// SubAction: remove_node - Remove node from graph
+// ===========================================================================
+bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeRemoveNode(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  // Runtime check: Verify BehaviorTreeEditor module is loaded for graph editing operations
+  // This handles the case where headers were available at compile time
+  // but the plugin is not enabled in the target project at runtime
+#if MCP_HAS_BEHAVIOR_TREE_GRAPH
+  const bool bNeedsEditorModule = true;  // UE 5.3+: All operations need BehaviorTreeEditor for graph classes
+#else
+  const bool bNeedsEditorModule = true;   // UE 5.0-5.2: graph ops need the editor module
+#endif
+  if (bNeedsEditorModule && !FModuleManager::Get().IsModuleLoaded(TEXT("BehaviorTreeEditor")))
+  {
+      if (!FModuleManager::Get().ModuleExists(TEXT("BehaviorTreeEditor")) ||
+          !FModuleManager::Get().LoadModule(TEXT("BehaviorTreeEditor")))
       {
-        BTNode = static_cast<UBehaviorTreeGraphNode*>(TargetNode);
+          SendAutomationError(RequestingSocket, RequestId,
+              TEXT("BehaviorTreeEditor plugin is not enabled in this project. Enable the Behavior Tree Editor plugin to use Behavior Tree graph editing features."),
+              TEXT("BEHAVIORTREEEDITOR_PLUGIN_NOT_ENABLED"));
+          return true;
       }
-      const TSharedPtr<FJsonObject> *Props = nullptr;
-      if (BTNode && BTNode->NodeInstance &&
-          Payload->TryGetObjectField(TEXT("properties"), Props)) {
-        for (const auto &Pair : (*Props)->Values) {
-          FProperty *Prop =
-              BTNode->NodeInstance->GetClass()->FindPropertyByName(*Pair.Key);
-          if (Prop) {
-            if (FFloatProperty *FloatProp = CastField<FFloatProperty>(Prop)) {
-              if (Pair.Value->Type == EJson::Number) {
-                FloatProp->SetPropertyValue_InContainer(
-                    BTNode->NodeInstance, (float)Pair.Value->AsNumber());
-                bModified = true;
-              }
-            } else if (FDoubleProperty *DoubleProp =
-                           CastField<FDoubleProperty>(Prop)) {
-              if (Pair.Value->Type == EJson::Number) {
-                DoubleProp->SetPropertyValue_InContainer(
-                    BTNode->NodeInstance, Pair.Value->AsNumber());
-                bModified = true;
-              }
-            } else if (FIntProperty *IntProp = CastField<FIntProperty>(Prop)) {
-              if (Pair.Value->Type == EJson::Number) {
-                IntProp->SetPropertyValue_InContainer(
-                    BTNode->NodeInstance, (int32)Pair.Value->AsNumber());
-                bModified = true;
-              }
-            } else if (FBoolProperty *BoolProp =
-                           CastField<FBoolProperty>(Prop)) {
-              if (Pair.Value->Type == EJson::Boolean) {
-                BoolProp->SetPropertyValue_InContainer(BTNode->NodeInstance,
-                                                       Pair.Value->AsBool());
-                bModified = true;
-              }
-            } else if (FStrProperty *StrProp = CastField<FStrProperty>(Prop)) {
-              if (Pair.Value->Type == EJson::String) {
-                StrProp->SetPropertyValue_InContainer(BTNode->NodeInstance,
-                                                      Pair.Value->AsString());
-                bModified = true;
-              }
-            } else if (FNameProperty *NameProp =
-                           CastField<FNameProperty>(Prop)) {
-              if (Pair.Value->Type == EJson::String) {
-                NameProp->SetPropertyValue_InContainer(
-                    BTNode->NodeInstance, FName(*Pair.Value->AsString()));
-                bModified = true;
-              }
-            } else if (FStructProperty *StructProp =
-                           CastField<FStructProperty>(Prop)) {
-              if (StructProp->Struct == FBlackboardKeySelector::StaticStruct() &&
-                  Pair.Value->Type == EJson::String) {
-                void* StructPtr = StructProp->ContainerPtrToValuePtr<void>(BTNode->NodeInstance);
-                FBlackboardKeySelector* Selector = static_cast<FBlackboardKeySelector*>(StructPtr);
-                Selector->SelectedKeyName = FName(*Pair.Value->AsString());
+  }
 
-                // Resolve against BT's blackboard. BB may be null when
-                // assign_blackboard was not called yet — log a warning and
-                // continue without crashing (PR0a-confirmed: BT->BlackboardAsset
-                // is null in that case).
-                if (UBlackboardData* BB = BT->BlackboardAsset) {
-                  Selector->ResolveSelectedKey(*BB);
-                  // ResolveSelectedKey does NOT signal failure — on a typo'd key
-                  // name it leaves SelectedKeyID == FBlackboard::InvalidKey while
-                  // returning normally. Without this check a caller can write a
-                  // wrong key name, see success: true, and have a silently broken
-                  // decorator at PIE time.
-                  if (!Selector->IsSet()) {
-                    SendAutomationError(RequestingSocket, RequestId,
-                      FString::Printf(TEXT("BlackboardKey '%s' not found in BT's assigned BB '%s' (typo or missing add_blackboard_key call?)"),
-                        *Pair.Value->AsString(), *BB->GetPathName()),
-                      TEXT("BB_KEY_NOT_FOUND"));
-                    return true;
-                  }
-                } else {
-                  UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
-                    TEXT("set_node_properties: BT '%s' has no BlackboardAsset assigned; "
-                         "BlackboardKey selector name set but not resolved."),
-                    *BT->GetPathName());
+  // Load the target Behavior Tree and its graph.
+  FString AssetPath;
+  if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
+      AssetPath.IsEmpty()) {
+    // Fallback: try behaviorTreePath (common test convention)
+    if (!Payload->TryGetStringField(TEXT("behaviorTreePath"), AssetPath) ||
+        AssetPath.IsEmpty()) {
+      // Fallback: try path
+      Payload->TryGetStringField(TEXT("path"), AssetPath);
+    }
+  }
+  if (AssetPath.IsEmpty()) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Missing 'assetPath' (or 'behaviorTreePath'/'path'). Use 'create' subAction to "
+                             "create a new Behavior Tree first."),
+                        TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  UBehaviorTree *BT = LoadObject<UBehaviorTree>(nullptr, *AssetPath);
+  if (!BT) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(
+            TEXT("Could not load Behavior Tree at '%s'. Use 'create' subAction "
+                 "to create a new Behavior Tree first."),
+            *AssetPath),
+        TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
+
+  UEdGraph *BTGraph = BT->BTGraph;
+  if (!BTGraph) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(
+            TEXT("Behavior Tree '%s' has no graph, so it cannot be edited here. "
+                 "Open it once in the BT editor to build its graph, or recreate "
+                 "it with the 'create' action (which initializes the graph)."),
+            *AssetPath),
+        TEXT("GRAPH_NOT_FOUND"));
+    return true;
+  }
+
+  auto UpdateBehaviorTreeAsset = [&]() {
+#if MCP_HAS_BEHAVIOR_TREE_GRAPH
+    if (UBehaviorTreeGraph *TypedBTGraph = Cast<UBehaviorTreeGraph>(BTGraph)) {
+      TypedBTGraph->UpdateAsset();
+    }
+#endif
+    BTGraph->NotifyGraphChanged();
+    BT->MarkPackageDirty();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Helper: Find graph node by GUID or Name
+  // ---------------------------------------------------------------------------
+  auto FindGraphNodeByIdOrName =
+      [&](const FString &IdOrName) -> UEdGraphNode * {
+    if (IdOrName.IsEmpty()) {
+      return nullptr;
+    }
+    const FString Needle = IdOrName.TrimStartAndEnd();
+
+    // Inner matcher — recurses into UAIGraphNode::SubNodes for decorator/service
+    // lookup. Captured by reference so the lambda can refer to itself.
+    TFunction<UEdGraphNode*(UEdGraphNode*)> Match;
+    Match = [&](UEdGraphNode* Node) -> UEdGraphNode* {
+      if (!Node) return nullptr;
+      if (Node->NodeGuid.ToString() == Needle) return Node;
+      FGuid SearchGuid;
+      if (FGuid::Parse(Needle, SearchGuid) && Node->NodeGuid == SearchGuid) return Node;
+      if (Node->GetName().Equals(Needle, ESearchCase::IgnoreCase)) return Node;
+      if (Node->GetPathName().Equals(Needle, ESearchCase::IgnoreCase)) return Node;
+      // Recurse into subnodes (decorators/services attached to graph nodes).
+      if (UAIGraphNode* AINode = Cast<UAIGraphNode>(Node)) {
+        for (UAIGraphNode* SubNode : AINode->SubNodes) {
+          if (UEdGraphNode* Found = Match(SubNode)) return Found;
+        }
+      }
+      return nullptr;
+    };
+
+    for (UEdGraphNode *Node : BTGraph->Nodes) {
+      if (UEdGraphNode* Found = Match(Node)) return Found;
+    }
+    return nullptr;
+  };
+
+#if !MCP_HAS_BEHAVIOR_TREE_GRAPH
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("Behavior Tree graph editing requires UE 5.3+"),
+                      TEXT("NOT_SUPPORTED"));
+  return true;
+#endif
+  FString NodeId;
+  Payload->TryGetStringField(TEXT("nodeId"), NodeId);
+
+  UEdGraphNode *TargetNode = FindGraphNodeByIdOrName(NodeId);
+
+  if (TargetNode) {
+    BT->Modify();
+    BTGraph->Modify();
+    TargetNode->Modify();
+    BTGraph->GetSchema()->BreakNodeLinks(*TargetNode);
+    BTGraph->RemoveNode(TargetNode);
+    UpdateBehaviorTreeAsset();
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    McpHandlerUtils::AddVerification(Resp, BT);
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           TEXT("Node removed."), Resp);
+  } else {
+    SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
+                        TEXT("NODE_NOT_FOUND"));
+  }
+  return true;
+#else
+  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+// ===========================================================================
+// SubAction: break_connections - Break all connections on a node
+// ===========================================================================
+bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeBreakConnections(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  // Runtime check: Verify BehaviorTreeEditor module is loaded for graph editing operations
+  // This handles the case where headers were available at compile time
+  // but the plugin is not enabled in the target project at runtime
+#if MCP_HAS_BEHAVIOR_TREE_GRAPH
+  const bool bNeedsEditorModule = true;  // UE 5.3+: All operations need BehaviorTreeEditor for graph classes
+#else
+  const bool bNeedsEditorModule = true;   // UE 5.0-5.2: graph ops need the editor module
+#endif
+  if (bNeedsEditorModule && !FModuleManager::Get().IsModuleLoaded(TEXT("BehaviorTreeEditor")))
+  {
+      if (!FModuleManager::Get().ModuleExists(TEXT("BehaviorTreeEditor")) ||
+          !FModuleManager::Get().LoadModule(TEXT("BehaviorTreeEditor")))
+      {
+          SendAutomationError(RequestingSocket, RequestId,
+              TEXT("BehaviorTreeEditor plugin is not enabled in this project. Enable the Behavior Tree Editor plugin to use Behavior Tree graph editing features."),
+              TEXT("BEHAVIORTREEEDITOR_PLUGIN_NOT_ENABLED"));
+          return true;
+      }
+  }
+
+  // Load the target Behavior Tree and its graph.
+  FString AssetPath;
+  if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
+      AssetPath.IsEmpty()) {
+    // Fallback: try behaviorTreePath (common test convention)
+    if (!Payload->TryGetStringField(TEXT("behaviorTreePath"), AssetPath) ||
+        AssetPath.IsEmpty()) {
+      // Fallback: try path
+      Payload->TryGetStringField(TEXT("path"), AssetPath);
+    }
+  }
+  if (AssetPath.IsEmpty()) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Missing 'assetPath' (or 'behaviorTreePath'/'path'). Use 'create' subAction to "
+                             "create a new Behavior Tree first."),
+                        TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  UBehaviorTree *BT = LoadObject<UBehaviorTree>(nullptr, *AssetPath);
+  if (!BT) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(
+            TEXT("Could not load Behavior Tree at '%s'. Use 'create' subAction "
+                 "to create a new Behavior Tree first."),
+            *AssetPath),
+        TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
+
+  UEdGraph *BTGraph = BT->BTGraph;
+  if (!BTGraph) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(
+            TEXT("Behavior Tree '%s' has no graph, so it cannot be edited here. "
+                 "Open it once in the BT editor to build its graph, or recreate "
+                 "it with the 'create' action (which initializes the graph)."),
+            *AssetPath),
+        TEXT("GRAPH_NOT_FOUND"));
+    return true;
+  }
+
+  auto UpdateBehaviorTreeAsset = [&]() {
+#if MCP_HAS_BEHAVIOR_TREE_GRAPH
+    if (UBehaviorTreeGraph *TypedBTGraph = Cast<UBehaviorTreeGraph>(BTGraph)) {
+      TypedBTGraph->UpdateAsset();
+    }
+#endif
+    BTGraph->NotifyGraphChanged();
+    BT->MarkPackageDirty();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Helper: Find graph node by GUID or Name
+  // ---------------------------------------------------------------------------
+  auto FindGraphNodeByIdOrName =
+      [&](const FString &IdOrName) -> UEdGraphNode * {
+    if (IdOrName.IsEmpty()) {
+      return nullptr;
+    }
+    const FString Needle = IdOrName.TrimStartAndEnd();
+
+    // Inner matcher — recurses into UAIGraphNode::SubNodes for decorator/service
+    // lookup. Captured by reference so the lambda can refer to itself.
+    TFunction<UEdGraphNode*(UEdGraphNode*)> Match;
+    Match = [&](UEdGraphNode* Node) -> UEdGraphNode* {
+      if (!Node) return nullptr;
+      if (Node->NodeGuid.ToString() == Needle) return Node;
+      FGuid SearchGuid;
+      if (FGuid::Parse(Needle, SearchGuid) && Node->NodeGuid == SearchGuid) return Node;
+      if (Node->GetName().Equals(Needle, ESearchCase::IgnoreCase)) return Node;
+      if (Node->GetPathName().Equals(Needle, ESearchCase::IgnoreCase)) return Node;
+      // Recurse into subnodes (decorators/services attached to graph nodes).
+      if (UAIGraphNode* AINode = Cast<UAIGraphNode>(Node)) {
+        for (UAIGraphNode* SubNode : AINode->SubNodes) {
+          if (UEdGraphNode* Found = Match(SubNode)) return Found;
+        }
+      }
+      return nullptr;
+    };
+
+    for (UEdGraphNode *Node : BTGraph->Nodes) {
+      if (UEdGraphNode* Found = Match(Node)) return Found;
+    }
+    return nullptr;
+  };
+
+#if !MCP_HAS_BEHAVIOR_TREE_GRAPH
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("Behavior Tree graph editing requires UE 5.3+"),
+                      TEXT("NOT_SUPPORTED"));
+  return true;
+#endif
+  FString NodeId;
+  Payload->TryGetStringField(TEXT("nodeId"), NodeId);
+
+  UEdGraphNode *TargetNode = FindGraphNodeByIdOrName(NodeId);
+
+  if (TargetNode) {
+    BT->Modify();
+    BTGraph->Modify();
+    TargetNode->Modify();
+    BTGraph->GetSchema()->BreakNodeLinks(*TargetNode);
+    UpdateBehaviorTreeAsset();
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    McpHandlerUtils::AddVerification(Resp, BT);
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           TEXT("Connections broken."), Resp);
+  } else {
+    SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
+                        TEXT("NODE_NOT_FOUND"));
+  }
+  return true;
+#else
+  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+// ===========================================================================
+// SubAction: set_node_properties - Set properties on node instance
+// ===========================================================================
+bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeSetNodeProperties(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  // Runtime check: Verify BehaviorTreeEditor module is loaded for graph editing operations
+  // This handles the case where headers were available at compile time
+  // but the plugin is not enabled in the target project at runtime
+#if MCP_HAS_BEHAVIOR_TREE_GRAPH
+  const bool bNeedsEditorModule = true;  // UE 5.3+: All operations need BehaviorTreeEditor for graph classes
+#else
+  const bool bNeedsEditorModule = true;   // UE 5.0-5.2: graph ops need the editor module
+#endif
+  if (bNeedsEditorModule && !FModuleManager::Get().IsModuleLoaded(TEXT("BehaviorTreeEditor")))
+  {
+      if (!FModuleManager::Get().ModuleExists(TEXT("BehaviorTreeEditor")) ||
+          !FModuleManager::Get().LoadModule(TEXT("BehaviorTreeEditor")))
+      {
+          SendAutomationError(RequestingSocket, RequestId,
+              TEXT("BehaviorTreeEditor plugin is not enabled in this project. Enable the Behavior Tree Editor plugin to use Behavior Tree graph editing features."),
+              TEXT("BEHAVIORTREEEDITOR_PLUGIN_NOT_ENABLED"));
+          return true;
+      }
+  }
+
+  // Load the target Behavior Tree and its graph.
+  FString AssetPath;
+  if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
+      AssetPath.IsEmpty()) {
+    // Fallback: try behaviorTreePath (common test convention)
+    if (!Payload->TryGetStringField(TEXT("behaviorTreePath"), AssetPath) ||
+        AssetPath.IsEmpty()) {
+      // Fallback: try path
+      Payload->TryGetStringField(TEXT("path"), AssetPath);
+    }
+  }
+  if (AssetPath.IsEmpty()) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Missing 'assetPath' (or 'behaviorTreePath'/'path'). Use 'create' subAction to "
+                             "create a new Behavior Tree first."),
+                        TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  UBehaviorTree *BT = LoadObject<UBehaviorTree>(nullptr, *AssetPath);
+  if (!BT) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(
+            TEXT("Could not load Behavior Tree at '%s'. Use 'create' subAction "
+                 "to create a new Behavior Tree first."),
+            *AssetPath),
+        TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
+
+  UEdGraph *BTGraph = BT->BTGraph;
+  if (!BTGraph) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(
+            TEXT("Behavior Tree '%s' has no graph, so it cannot be edited here. "
+                 "Open it once in the BT editor to build its graph, or recreate "
+                 "it with the 'create' action (which initializes the graph)."),
+            *AssetPath),
+        TEXT("GRAPH_NOT_FOUND"));
+    return true;
+  }
+
+  auto UpdateBehaviorTreeAsset = [&]() {
+#if MCP_HAS_BEHAVIOR_TREE_GRAPH
+    if (UBehaviorTreeGraph *TypedBTGraph = Cast<UBehaviorTreeGraph>(BTGraph)) {
+      TypedBTGraph->UpdateAsset();
+    }
+#endif
+    BTGraph->NotifyGraphChanged();
+    BT->MarkPackageDirty();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Helper: Find graph node by GUID or Name
+  // ---------------------------------------------------------------------------
+  auto FindGraphNodeByIdOrName =
+      [&](const FString &IdOrName) -> UEdGraphNode * {
+    if (IdOrName.IsEmpty()) {
+      return nullptr;
+    }
+    const FString Needle = IdOrName.TrimStartAndEnd();
+
+    // Inner matcher — recurses into UAIGraphNode::SubNodes for decorator/service
+    // lookup. Captured by reference so the lambda can refer to itself.
+    TFunction<UEdGraphNode*(UEdGraphNode*)> Match;
+    Match = [&](UEdGraphNode* Node) -> UEdGraphNode* {
+      if (!Node) return nullptr;
+      if (Node->NodeGuid.ToString() == Needle) return Node;
+      FGuid SearchGuid;
+      if (FGuid::Parse(Needle, SearchGuid) && Node->NodeGuid == SearchGuid) return Node;
+      if (Node->GetName().Equals(Needle, ESearchCase::IgnoreCase)) return Node;
+      if (Node->GetPathName().Equals(Needle, ESearchCase::IgnoreCase)) return Node;
+      // Recurse into subnodes (decorators/services attached to graph nodes).
+      if (UAIGraphNode* AINode = Cast<UAIGraphNode>(Node)) {
+        for (UAIGraphNode* SubNode : AINode->SubNodes) {
+          if (UEdGraphNode* Found = Match(SubNode)) return Found;
+        }
+      }
+      return nullptr;
+    };
+
+    for (UEdGraphNode *Node : BTGraph->Nodes) {
+      if (UEdGraphNode* Found = Match(Node)) return Found;
+    }
+    return nullptr;
+  };
+
+#if !MCP_HAS_BEHAVIOR_TREE_GRAPH
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("Behavior Tree graph editing requires UE 5.3+"),
+                      TEXT("NOT_SUPPORTED"));
+  return true;
+#else
+  FString NodeId;
+  Payload->TryGetStringField(TEXT("nodeId"), NodeId);
+
+  UEdGraphNode *TargetNode = FindGraphNodeByIdOrName(NodeId);
+
+  if (TargetNode) {
+    bool bModified = false;
+    FString Comment;
+    if (Payload->TryGetStringField(TEXT("comment"), Comment)) {
+      TargetNode->NodeComment = Comment;
+      bModified = true;
+    }
+
+    // Try to set properties on the underlying NodeInstance
+    // Use runtime class lookup and static_cast instead of Cast<> to avoid GetPrivateStaticClass requirement
+    UBehaviorTreeGraphNode *BTNode = nullptr;
+    UClass* BTNodeClass = FindObject<UClass>(nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode"));
+    if (BTNodeClass && TargetNode->GetClass()->IsChildOf(BTNodeClass))
+    {
+      BTNode = static_cast<UBehaviorTreeGraphNode*>(TargetNode);
+    }
+    const TSharedPtr<FJsonObject> *Props = nullptr;
+    if (BTNode && BTNode->NodeInstance &&
+        Payload->TryGetObjectField(TEXT("properties"), Props)) {
+      for (const auto &Pair : (*Props)->Values) {
+        FProperty *Prop =
+            BTNode->NodeInstance->GetClass()->FindPropertyByName(*Pair.Key);
+        if (Prop) {
+          if (FFloatProperty *FloatProp = CastField<FFloatProperty>(Prop)) {
+            if (Pair.Value->Type == EJson::Number) {
+              FloatProp->SetPropertyValue_InContainer(
+                  BTNode->NodeInstance, (float)Pair.Value->AsNumber());
+              bModified = true;
+            }
+          } else if (FDoubleProperty *DoubleProp =
+                         CastField<FDoubleProperty>(Prop)) {
+            if (Pair.Value->Type == EJson::Number) {
+              DoubleProp->SetPropertyValue_InContainer(
+                  BTNode->NodeInstance, Pair.Value->AsNumber());
+              bModified = true;
+            }
+          } else if (FIntProperty *IntProp = CastField<FIntProperty>(Prop)) {
+            if (Pair.Value->Type == EJson::Number) {
+              IntProp->SetPropertyValue_InContainer(
+                  BTNode->NodeInstance, (int32)Pair.Value->AsNumber());
+              bModified = true;
+            }
+          } else if (FBoolProperty *BoolProp =
+                         CastField<FBoolProperty>(Prop)) {
+            if (Pair.Value->Type == EJson::Boolean) {
+              BoolProp->SetPropertyValue_InContainer(BTNode->NodeInstance,
+                                                     Pair.Value->AsBool());
+              bModified = true;
+            }
+          } else if (FStrProperty *StrProp = CastField<FStrProperty>(Prop)) {
+            if (Pair.Value->Type == EJson::String) {
+              StrProp->SetPropertyValue_InContainer(BTNode->NodeInstance,
+                                                    Pair.Value->AsString());
+              bModified = true;
+            }
+          } else if (FNameProperty *NameProp =
+                         CastField<FNameProperty>(Prop)) {
+            if (Pair.Value->Type == EJson::String) {
+              NameProp->SetPropertyValue_InContainer(
+                  BTNode->NodeInstance, FName(*Pair.Value->AsString()));
+              bModified = true;
+            }
+          } else if (FStructProperty *StructProp =
+                         CastField<FStructProperty>(Prop)) {
+            if (StructProp->Struct == FBlackboardKeySelector::StaticStruct() &&
+                Pair.Value->Type == EJson::String) {
+              void* StructPtr = StructProp->ContainerPtrToValuePtr<void>(BTNode->NodeInstance);
+              FBlackboardKeySelector* Selector = static_cast<FBlackboardKeySelector*>(StructPtr);
+              Selector->SelectedKeyName = FName(*Pair.Value->AsString());
+
+              // Resolve against BT's blackboard. BB may be null when
+              // assign_blackboard was not called yet — log a warning and
+              // continue without crashing (PR0a-confirmed: BT->BlackboardAsset
+              // is null in that case).
+              if (UBlackboardData* BB = BT->BlackboardAsset) {
+                Selector->ResolveSelectedKey(*BB);
+                // ResolveSelectedKey does NOT signal failure — on a typo'd key
+                // name it leaves SelectedKeyID == FBlackboard::InvalidKey while
+                // returning normally. Without this check a caller can write a
+                // wrong key name, see success: true, and have a silently broken
+                // decorator at PIE time.
+                if (!Selector->IsSet()) {
+                  SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("BlackboardKey '%s' not found in BT's assigned BB '%s' (typo or missing add_blackboard_key call?)"),
+                      *Pair.Value->AsString(), *BB->GetPathName()),
+                    TEXT("BB_KEY_NOT_FOUND"));
+                  return true;
                 }
-                bModified = true;
               } else {
-                UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
-                  TEXT("set_node_properties: unsupported struct property '%s' on node (only FBlackboardKeySelector supported)"),
-                  *Pair.Key);
+                UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
+                  TEXT("set_node_properties: BT '%s' has no BlackboardAsset assigned; "
+                       "BlackboardKey selector name set but not resolved."),
+                  *BT->GetPathName());
               }
+              bModified = true;
+            } else {
+              UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
+                TEXT("set_node_properties: unsupported struct property '%s' on node (only FBlackboardKeySelector supported)"),
+                *Pair.Key);
             }
           }
         }
       }
-
-      if (bModified) {
-        BT->Modify();
-        BTGraph->Modify();
-        TargetNode->Modify();
-        UpdateBehaviorTreeAsset();
-      }
-
-      TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-      McpHandlerUtils::AddVerification(Resp, BT);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
-                             TEXT("Node properties updated."), Resp);
-    } else {
-      SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
-                          TEXT("NODE_NOT_FOUND"));
     }
-    return true;
-#endif
+
+    if (bModified) {
+      BT->Modify();
+      BTGraph->Modify();
+      TargetNode->Modify();
+      UpdateBehaviorTreeAsset();
+    }
+
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    McpHandlerUtils::AddVerification(Resp, BT);
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           TEXT("Node properties updated."), Resp);
+  } else {
+    SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
+                        TEXT("NODE_NOT_FOUND"));
   }
-  // ===========================================================================
-  // SubAction: add_subnode — Add decorator/service as a subnode attached to a
-  // parent graph node (uses "root" sentinel for root-level decorators).
-  // ===========================================================================
-  else if (SubAction == TEXT("add_subnode")) {
-#if !MCP_HAS_BEHAVIOR_TREE_GRAPH
-    SendAutomationError(RequestingSocket, RequestId,
-      TEXT("add_subnode requires UE 5.3+ Behavior Tree graph editing support."),
-      TEXT("NOT_SUPPORTED"));
-    return true;
+  return true;
+#endif
 #else
-    FString ParentNodeIdStr, SubnodeType, NodeClass;
-    if (!Payload->TryGetStringField(TEXT("parentNodeId"), ParentNodeIdStr) ||
-        !Payload->TryGetStringField(TEXT("subnodeType"), SubnodeType) ||
-        !Payload->TryGetStringField(TEXT("nodeClass"), NodeClass)) {
-      SendAutomationError(RequestingSocket, RequestId,
-        TEXT("add_subnode requires assetPath, parentNodeId, subnodeType, nodeClass"),
-        TEXT("INVALID_ARGUMENT"));
-      return true;
-    }
+  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-    // Resolve parent node. "root" sentinel is a contract, not workaround.
-    // Branch order: literal BEFORE GUID parse — real GUIDs always contain
-    // hyphens so the literal cannot collide (per spec R8).
-    UBehaviorTreeGraphNode* ParentNode = nullptr;
-    bool bRootSentinelParent = false;
-    if (ParentNodeIdStr.Equals(TEXT("root"), ESearchCase::IgnoreCase)) {
-      bRootSentinelParent = true;
-      UBehaviorTreeGraphNode_Root* RootNode = nullptr;
-      for (UEdGraphNode* GraphNode : BTGraph->Nodes) {
-        if (UBehaviorTreeGraphNode_Root* CandidateRoot = Cast<UBehaviorTreeGraphNode_Root>(GraphNode)) {
-          RootNode = CandidateRoot;
-          break;
-        }
-      }
-      if (!RootNode) {
-        SendAutomationError(RequestingSocket, RequestId,
-          TEXT("Root graph node not found for root sentinel parentNodeId"),
-          TEXT("INVALID_PARENT"));
-        return true;
-      }
-      UEdGraphPin::ResolveAllPinReferences();
-      if (RootNode->Pins.Num() == 0 || !RootNode->Pins[0] || RootNode->Pins[0]->LinkedTo.Num() == 0) {
-        SendAutomationError(RequestingSocket, RequestId,
-          TEXT("Root graph node has no linked child; connect the root to a Behavior Tree node before adding a root subnode"),
-          TEXT("INVALID_PARENT"));
-        return true;
-      }
-      UEdGraphPin* LinkedPin = RootNode->Pins[0]->LinkedTo[0];
-      ParentNode = LinkedPin ? Cast<UBehaviorTreeGraphNode>(LinkedPin->GetOwningNode()) : nullptr;
-      if (!ParentNode) {
-        SendAutomationError(RequestingSocket, RequestId,
-          TEXT("Root graph node's linked child is not a Behavior Tree graph node"),
-          TEXT("INVALID_PARENT"));
-        return true;
-      }
-    } else {
-      FGuid ParentGuid;
-      if (!FGuid::Parse(ParentNodeIdStr, ParentGuid)) {
-        SendAutomationError(RequestingSocket, RequestId,
-          FString::Printf(TEXT("Invalid parentNodeId: %s (must be 'root' or a GUID)"), *ParentNodeIdStr),
-          TEXT("INVALID_PARENT"));
-        return true;
-      }
-      // Use the subnode-aware helper so a caller passing a subnode's GUID gets
-      // a clear "parent cannot host subnodes" rejection instead of a misleading
-      // "not found". This restores symmetry with the other 4 BT SubActions that
-      // already walk UAIGraphNode::SubNodes via FindGraphNodeByIdOrName.
-      if (UEdGraphNode* Found = FindGraphNodeByIdOrName(ParentNodeIdStr)) {
-        if (Cast<UBehaviorTreeGraphNode_Decorator>(Found) ||
-            Cast<UBehaviorTreeGraphNode_Service>(Found)) {
+// ===========================================================================
+// SubAction: add_subnode — Add decorator/service as a subnode attached to a
+// parent graph node (uses "root" sentinel for root-level decorators).
+// ===========================================================================
+bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  // Runtime check: Verify BehaviorTreeEditor module is loaded for graph editing operations
+  // This handles the case where headers were available at compile time
+  // but the plugin is not enabled in the target project at runtime
+#if MCP_HAS_BEHAVIOR_TREE_GRAPH
+  const bool bNeedsEditorModule = true;  // UE 5.3+: All operations need BehaviorTreeEditor for graph classes
+#else
+  const bool bNeedsEditorModule = true;   // UE 5.0-5.2: graph ops need the editor module
+#endif
+  if (bNeedsEditorModule && !FModuleManager::Get().IsModuleLoaded(TEXT("BehaviorTreeEditor")))
+  {
+      if (!FModuleManager::Get().ModuleExists(TEXT("BehaviorTreeEditor")) ||
+          !FModuleManager::Get().LoadModule(TEXT("BehaviorTreeEditor")))
+      {
           SendAutomationError(RequestingSocket, RequestId,
-            FString::Printf(TEXT("Parent node %s is a Decorator/Service subnode and cannot host other subnodes"),
-              *ParentNodeIdStr),
-            TEXT("INVALID_PARENT_FOR_SUBNODE"));
+              TEXT("BehaviorTreeEditor plugin is not enabled in this project. Enable the Behavior Tree Editor plugin to use Behavior Tree graph editing features."),
+              TEXT("BEHAVIORTREEEDITOR_PLUGIN_NOT_ENABLED"));
           return true;
+      }
+  }
+
+  // Load the target Behavior Tree and its graph.
+  FString AssetPath;
+  if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
+      AssetPath.IsEmpty()) {
+    // Fallback: try behaviorTreePath (common test convention)
+    if (!Payload->TryGetStringField(TEXT("behaviorTreePath"), AssetPath) ||
+        AssetPath.IsEmpty()) {
+      // Fallback: try path
+      Payload->TryGetStringField(TEXT("path"), AssetPath);
+    }
+  }
+  if (AssetPath.IsEmpty()) {
+    SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Missing 'assetPath' (or 'behaviorTreePath'/'path'). Use 'create' subAction to "
+                             "create a new Behavior Tree first."),
+                        TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  UBehaviorTree *BT = LoadObject<UBehaviorTree>(nullptr, *AssetPath);
+  if (!BT) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(
+            TEXT("Could not load Behavior Tree at '%s'. Use 'create' subAction "
+                 "to create a new Behavior Tree first."),
+            *AssetPath),
+        TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
+
+  UEdGraph *BTGraph = BT->BTGraph;
+  if (!BTGraph) {
+    SendAutomationError(
+        RequestingSocket, RequestId,
+        FString::Printf(
+            TEXT("Behavior Tree '%s' has no graph, so it cannot be edited here. "
+                 "Open it once in the BT editor to build its graph, or recreate "
+                 "it with the 'create' action (which initializes the graph)."),
+            *AssetPath),
+        TEXT("GRAPH_NOT_FOUND"));
+    return true;
+  }
+
+  auto UpdateBehaviorTreeAsset = [&]() {
+#if MCP_HAS_BEHAVIOR_TREE_GRAPH
+    if (UBehaviorTreeGraph *TypedBTGraph = Cast<UBehaviorTreeGraph>(BTGraph)) {
+      TypedBTGraph->UpdateAsset();
+    }
+#endif
+    BTGraph->NotifyGraphChanged();
+    BT->MarkPackageDirty();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Helper: Find graph node by GUID or Name
+  // ---------------------------------------------------------------------------
+  auto FindGraphNodeByIdOrName =
+      [&](const FString &IdOrName) -> UEdGraphNode * {
+    if (IdOrName.IsEmpty()) {
+      return nullptr;
+    }
+    const FString Needle = IdOrName.TrimStartAndEnd();
+
+    // Inner matcher — recurses into UAIGraphNode::SubNodes for decorator/service
+    // lookup. Captured by reference so the lambda can refer to itself.
+    TFunction<UEdGraphNode*(UEdGraphNode*)> Match;
+    Match = [&](UEdGraphNode* Node) -> UEdGraphNode* {
+      if (!Node) return nullptr;
+      if (Node->NodeGuid.ToString() == Needle) return Node;
+      FGuid SearchGuid;
+      if (FGuid::Parse(Needle, SearchGuid) && Node->NodeGuid == SearchGuid) return Node;
+      if (Node->GetName().Equals(Needle, ESearchCase::IgnoreCase)) return Node;
+      if (Node->GetPathName().Equals(Needle, ESearchCase::IgnoreCase)) return Node;
+      // Recurse into subnodes (decorators/services attached to graph nodes).
+      if (UAIGraphNode* AINode = Cast<UAIGraphNode>(Node)) {
+        for (UAIGraphNode* SubNode : AINode->SubNodes) {
+          if (UEdGraphNode* Found = Match(SubNode)) return Found;
         }
-        ParentNode = Cast<UBehaviorTreeGraphNode>(Found);
+      }
+      return nullptr;
+    };
+
+    for (UEdGraphNode *Node : BTGraph->Nodes) {
+      if (UEdGraphNode* Found = Match(Node)) return Found;
+    }
+    return nullptr;
+  };
+
+#if !MCP_HAS_BEHAVIOR_TREE_GRAPH
+  SendAutomationError(RequestingSocket, RequestId,
+    TEXT("add_subnode requires UE 5.3+ Behavior Tree graph editing support."),
+    TEXT("NOT_SUPPORTED"));
+  return true;
+#else
+  FString ParentNodeIdStr, SubnodeType, NodeClass;
+  if (!Payload->TryGetStringField(TEXT("parentNodeId"), ParentNodeIdStr) ||
+      !Payload->TryGetStringField(TEXT("subnodeType"), SubnodeType) ||
+      !Payload->TryGetStringField(TEXT("nodeClass"), NodeClass)) {
+    SendAutomationError(RequestingSocket, RequestId,
+      TEXT("add_subnode requires assetPath, parentNodeId, subnodeType, nodeClass"),
+      TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  // Resolve parent node. "root" sentinel is a contract, not workaround.
+  // Branch order: literal BEFORE GUID parse — real GUIDs always contain
+  // hyphens so the literal cannot collide (per spec R8).
+  UBehaviorTreeGraphNode* ParentNode = nullptr;
+  bool bRootSentinelParent = false;
+  if (ParentNodeIdStr.Equals(TEXT("root"), ESearchCase::IgnoreCase)) {
+    bRootSentinelParent = true;
+    UBehaviorTreeGraphNode_Root* RootNode = nullptr;
+    for (UEdGraphNode* GraphNode : BTGraph->Nodes) {
+      if (UBehaviorTreeGraphNode_Root* CandidateRoot = Cast<UBehaviorTreeGraphNode_Root>(GraphNode)) {
+        RootNode = CandidateRoot;
+        break;
       }
     }
-    if (!ParentNode) {
+    if (!RootNode) {
       SendAutomationError(RequestingSocket, RequestId,
-        FString::Printf(TEXT("Parent node not found: %s"), *ParentNodeIdStr),
+        TEXT("Root graph node not found for root sentinel parentNodeId"),
         TEXT("INVALID_PARENT"));
       return true;
     }
-
-    // Resolve subnode UClass. ANY_PACKAGE was deprecated in UE 5.1+ so we use
-    // TryFindTypeSlow. LoadObject is the cross-asset (BP-class) fallback.
-    UClass* NodeInstanceClass = UClass::TryFindTypeSlow<UClass>(NodeClass);
-    if (!NodeInstanceClass) {
-      NodeInstanceClass = LoadObject<UClass>(nullptr, *NodeClass);
-    }
-    // Short names ("Cooldown", "DefaultFocus") expand to the engine prefix for
-    // the requested subnodeType.
-    if (!NodeInstanceClass && !NodeClass.Contains(TEXT("/")) &&
-        !NodeClass.StartsWith(TEXT("BT"))) {
-      const FString Prefixed =
-          (SubnodeType.Equals(TEXT("Service"), ESearchCase::IgnoreCase)
-               ? TEXT("BTService_")
-               : TEXT("BTDecorator_")) +
-          NodeClass;
-      NodeInstanceClass = UClass::TryFindTypeSlow<UClass>(Prefixed);
-    }
-    if (!NodeInstanceClass) {
+    UEdGraphPin::ResolveAllPinReferences();
+    if (RootNode->Pins.Num() == 0 || !RootNode->Pins[0] || RootNode->Pins[0]->LinkedTo.Num() == 0) {
       SendAutomationError(RequestingSocket, RequestId,
-        FString::Printf(TEXT("Subnode class not found: %s. Use an engine class "
-                             "name (e.g. 'BTDecorator_Blackboard', "
-                             "'BTService_DefaultFocus'), a short name that "
-                             "expands to one (e.g. 'Cooldown'), or a Blueprint "
-                             "class path."),
-                        *NodeClass),
-        TEXT("INVALID_CLASS"));
+        TEXT("Root graph node has no linked child; connect the root to a Behavior Tree node before adding a root subnode"),
+        TEXT("INVALID_PARENT"));
       return true;
     }
-    if (NodeInstanceClass->HasAnyClassFlags(CLASS_Abstract)) {
+    UEdGraphPin* LinkedPin = RootNode->Pins[0]->LinkedTo[0];
+    ParentNode = LinkedPin ? Cast<UBehaviorTreeGraphNode>(LinkedPin->GetOwningNode()) : nullptr;
+    if (!ParentNode) {
       SendAutomationError(RequestingSocket, RequestId,
-        FString::Printf(TEXT("Subnode class %s is abstract and cannot be instantiated"),
-                        *NodeInstanceClass->GetName()),
-        TEXT("INVALID_CLASS"));
+        TEXT("Root graph node's linked child is not a Behavior Tree graph node"),
+        TEXT("INVALID_PARENT"));
       return true;
     }
-
-    // Validate Decorator vs Service against class hierarchy.
-    UClass* SubnodeGraphClass = nullptr;
-    if (SubnodeType.Equals(TEXT("Decorator"), ESearchCase::IgnoreCase)) {
-      if (!NodeInstanceClass->IsChildOf(UBTDecorator::StaticClass())) {
+  } else {
+    FGuid ParentGuid;
+    if (!FGuid::Parse(ParentNodeIdStr, ParentGuid)) {
+      SendAutomationError(RequestingSocket, RequestId,
+        FString::Printf(TEXT("Invalid parentNodeId: %s (must be 'root' or a GUID)"), *ParentNodeIdStr),
+        TEXT("INVALID_PARENT"));
+      return true;
+    }
+    // Use the subnode-aware helper so a caller passing a subnode's GUID gets
+    // a clear "parent cannot host subnodes" rejection instead of a misleading
+    // "not found". This restores symmetry with the other 4 BT SubActions that
+    // already walk UAIGraphNode::SubNodes via FindGraphNodeByIdOrName.
+    if (UEdGraphNode* Found = FindGraphNodeByIdOrName(ParentNodeIdStr)) {
+      if (Cast<UBehaviorTreeGraphNode_Decorator>(Found) ||
+          Cast<UBehaviorTreeGraphNode_Service>(Found)) {
         SendAutomationError(RequestingSocket, RequestId,
-          FString::Printf(TEXT("Class %s is not a UBTDecorator subclass"), *NodeClass),
-          TEXT("INVALID_CLASS"));
-        return true;
-      }
-      SubnodeGraphClass = UBehaviorTreeGraphNode_Decorator::StaticClass();
-    } else if (SubnodeType.Equals(TEXT("Service"), ESearchCase::IgnoreCase)) {
-      if (!NodeInstanceClass->IsChildOf(UBTService::StaticClass())) {
-        SendAutomationError(RequestingSocket, RequestId,
-          FString::Printf(TEXT("Class %s is not a UBTService subclass"), *NodeClass),
-          TEXT("INVALID_CLASS"));
-        return true;
-      }
-      // Parent acceptance: services cannot attach to BT root graph node
-      // (UE editor convention — root only accepts decorators). Fail before
-      // constructing rather than producing a graph the editor rejects.
-      if (bRootSentinelParent || Cast<UBehaviorTreeGraphNode_Root>(ParentNode)) {
-        SendAutomationError(RequestingSocket, RequestId,
-          TEXT("Service subnode cannot be attached to the root graph node — use Decorator, or attach the Service to a composite/task child."),
+          FString::Printf(TEXT("Parent node %s is a Decorator/Service subnode and cannot host other subnodes"),
+            *ParentNodeIdStr),
           TEXT("INVALID_PARENT_FOR_SUBNODE"));
         return true;
       }
-      SubnodeGraphClass = UBehaviorTreeGraphNode_Service::StaticClass();
-    } else {
-      SendAutomationError(RequestingSocket, RequestId,
-        FString::Printf(TEXT("subnodeType must be 'Decorator' or 'Service' (got: %s)"), *SubnodeType),
-        TEXT("INVALID_ARGUMENT"));
-      return true;
+      ParentNode = Cast<UBehaviorTreeGraphNode>(Found);
     }
-
-    // Create graph subnode + UBTNode instance. Mirror add_node init triplet
-    // (AddNode + PostPlacedNewNode + AllocateDefaultPins). AllocateDefaultPins
-    // is a no-op for subnodes (no pins) but kept for consistency.
-    UBehaviorTreeGraphNode* NewSubnode = NewObject<UBehaviorTreeGraphNode>(BTGraph, SubnodeGraphClass);
-    NewSubnode->ClassData = FGraphNodeClassData(NodeInstanceClass, FString());
-    // NodeInstance is declared as UObject* on UAIGraphNode (shared with
-    // StateTree). For BT subnodes the runtime type is always UBTNode — using
-    // UBTNode tightens static intent and surfaces accidental mismatches.
-    NewSubnode->NodeInstance = NewObject<UBTNode>(NewSubnode, NodeInstanceClass);
-    NewSubnode->CreateNewGuid();
-    NewSubnode->PostPlacedNewNode();
-    NewSubnode->AllocateDefaultPins();
-
-    ParentNode->AddSubNode(NewSubnode, BTGraph);
-    UpdateBehaviorTreeAsset();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("nodeId"), NewSubnode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
-    Result->SetStringField(TEXT("nodeClass"), NodeInstanceClass->GetName());
-    Result->SetStringField(TEXT("parentNodeId"), ParentNodeIdStr);
-    Result->SetStringField(TEXT("subnodeType"), SubnodeType);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
-                           TEXT("Subnode added."), Result);
+  }
+  if (!ParentNode) {
+    SendAutomationError(RequestingSocket, RequestId,
+      FString::Printf(TEXT("Parent node not found: %s"), *ParentNodeIdStr),
+      TEXT("INVALID_PARENT"));
     return true;
-#endif  // MCP_HAS_BEHAVIOR_TREE_GRAPH
   }
 
-  // Unknown subAction
-  SendAutomationError(
-      RequestingSocket, RequestId,
-      FString::Printf(TEXT("Unknown subAction: %s"), *SubAction),
-      TEXT("INVALID_SUBACTION"));
+  // Resolve subnode UClass. ANY_PACKAGE was deprecated in UE 5.1+ so we use
+  // TryFindTypeSlow. LoadObject is the cross-asset (BP-class) fallback.
+  UClass* NodeInstanceClass = UClass::TryFindTypeSlow<UClass>(NodeClass);
+  if (!NodeInstanceClass) {
+    NodeInstanceClass = LoadObject<UClass>(nullptr, *NodeClass);
+  }
+  // Short names ("Cooldown", "DefaultFocus") expand to the engine prefix for
+  // the requested subnodeType.
+  if (!NodeInstanceClass && !NodeClass.Contains(TEXT("/")) &&
+      !NodeClass.StartsWith(TEXT("BT"))) {
+    const FString Prefixed =
+        (SubnodeType.Equals(TEXT("Service"), ESearchCase::IgnoreCase)
+             ? TEXT("BTService_")
+             : TEXT("BTDecorator_")) +
+        NodeClass;
+    NodeInstanceClass = UClass::TryFindTypeSlow<UClass>(Prefixed);
+  }
+  if (!NodeInstanceClass) {
+    SendAutomationError(RequestingSocket, RequestId,
+      FString::Printf(TEXT("Subnode class not found: %s. Use an engine class "
+                           "name (e.g. 'BTDecorator_Blackboard', "
+                           "'BTService_DefaultFocus'), a short name that "
+                           "expands to one (e.g. 'Cooldown'), or a Blueprint "
+                           "class path."),
+                      *NodeClass),
+      TEXT("INVALID_CLASS"));
+    return true;
+  }
+  if (NodeInstanceClass->HasAnyClassFlags(CLASS_Abstract)) {
+    SendAutomationError(RequestingSocket, RequestId,
+      FString::Printf(TEXT("Subnode class %s is abstract and cannot be instantiated"),
+                      *NodeInstanceClass->GetName()),
+      TEXT("INVALID_CLASS"));
+    return true;
+  }
+
+  // Validate Decorator vs Service against class hierarchy.
+  UClass* SubnodeGraphClass = nullptr;
+  if (SubnodeType.Equals(TEXT("Decorator"), ESearchCase::IgnoreCase)) {
+    if (!NodeInstanceClass->IsChildOf(UBTDecorator::StaticClass())) {
+      SendAutomationError(RequestingSocket, RequestId,
+        FString::Printf(TEXT("Class %s is not a UBTDecorator subclass"), *NodeClass),
+        TEXT("INVALID_CLASS"));
+      return true;
+    }
+    SubnodeGraphClass = UBehaviorTreeGraphNode_Decorator::StaticClass();
+  } else if (SubnodeType.Equals(TEXT("Service"), ESearchCase::IgnoreCase)) {
+    if (!NodeInstanceClass->IsChildOf(UBTService::StaticClass())) {
+      SendAutomationError(RequestingSocket, RequestId,
+        FString::Printf(TEXT("Class %s is not a UBTService subclass"), *NodeClass),
+        TEXT("INVALID_CLASS"));
+      return true;
+    }
+    // Parent acceptance: services cannot attach to BT root graph node
+    // (UE editor convention — root only accepts decorators). Fail before
+    // constructing rather than producing a graph the editor rejects.
+    if (bRootSentinelParent || Cast<UBehaviorTreeGraphNode_Root>(ParentNode)) {
+      SendAutomationError(RequestingSocket, RequestId,
+        TEXT("Service subnode cannot be attached to the root graph node — use Decorator, or attach the Service to a composite/task child."),
+        TEXT("INVALID_PARENT_FOR_SUBNODE"));
+      return true;
+    }
+    SubnodeGraphClass = UBehaviorTreeGraphNode_Service::StaticClass();
+  } else {
+    SendAutomationError(RequestingSocket, RequestId,
+      FString::Printf(TEXT("subnodeType must be 'Decorator' or 'Service' (got: %s)"), *SubnodeType),
+      TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  // Create graph subnode + UBTNode instance. Mirror add_node init triplet
+  // (AddNode + PostPlacedNewNode + AllocateDefaultPins). AllocateDefaultPins
+  // is a no-op for subnodes (no pins) but kept for consistency.
+  UBehaviorTreeGraphNode* NewSubnode = NewObject<UBehaviorTreeGraphNode>(BTGraph, SubnodeGraphClass);
+  NewSubnode->ClassData = FGraphNodeClassData(NodeInstanceClass, FString());
+  // NodeInstance is declared as UObject* on UAIGraphNode (shared with
+  // StateTree). For BT subnodes the runtime type is always UBTNode — using
+  // UBTNode tightens static intent and surfaces accidental mismatches.
+  NewSubnode->NodeInstance = NewObject<UBTNode>(NewSubnode, NodeInstanceClass);
+  NewSubnode->CreateNewGuid();
+  NewSubnode->PostPlacedNewNode();
+  NewSubnode->AllocateDefaultPins();
+
+  ParentNode->AddSubNode(NewSubnode, BTGraph);
+  UpdateBehaviorTreeAsset();
+
+  TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+  Result->SetStringField(TEXT("nodeId"), NewSubnode->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+  Result->SetStringField(TEXT("nodeClass"), NodeInstanceClass->GetName());
+  Result->SetStringField(TEXT("parentNodeId"), ParentNodeIdStr);
+  Result->SetStringField(TEXT("subnodeType"), SubnodeType);
+  SendAutomationResponse(RequestingSocket, RequestId, true,
+                         TEXT("Subnode added."), Result);
   return true;
+#endif  // MCP_HAS_BEHAVIOR_TREE_GRAPH
 #else
   SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));

@@ -6,7 +6,6 @@
 # -- declared in a tool schema, no handler read found --
 attributeSetPath
 cuePath
-decoratorType
 detectFriendly
 effectPath
 input
@@ -16,7 +15,6 @@ output
 outputB
 outputG
 outputR
-serviceType
 targetPath
 
 # -- read from the request payload, not declared in any tool schema --
@@ -28,7 +26,6 @@ allowSpectating
 animSequencePath
 areaWeighted
 args
-avoidanceWeight
 axisIndex
 bindingGuid
 blueprint_path
@@ -67,19 +64,14 @@ interpolationSpeed
 is1D
 isEntry
 isExit
-jumpZVelocity
 lateGain
 level_path
 loop
 material_path
-maxAcceleration
-maxFlySpeed
-maxWalkSpeed
 mesh_path
 montageName
 new_parent
 op
-orientRotationToMovement
 origin
 pagination
 params
@@ -119,8 +111,6 @@ triangleIndex
 types
 unitName
 unitType
-useAccelerationForPaths
-useRVOAvoidance
 vertexIndex
 virtualBoneName
 voiceName

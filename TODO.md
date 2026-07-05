@@ -969,7 +969,13 @@ set_skylight_intensity (deleted with the whole transport-dead
 HandleControlEnvironmentAction legacy dispatcher, which also took the hidden
 set_time_of_day duplicate; recover from git) — plus two below-radar dead
 disjuncts in the Lighting chain (spawn_light, bake_lightmap), ledgered at
-deletion — **53 hidden entries remain**.
+deletion — **53 hidden entries remain**. manage_ai's classing (2026-07-05)
+closed two — the ledger's set_ai_movement (hidden CharacterMovement tuner in
+the retired HandleManageAIAction, deleted-at-classing; advertise candidate
+parked for Aaron, recover from git) plus the below-radar shadowed inline
+create_nav_link_proxy copy (the top-of-function Navigation router always won
+the advertised name; NavigationHandlers' implementation stays the live one)
+— **51 hidden entries remain**.
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,
