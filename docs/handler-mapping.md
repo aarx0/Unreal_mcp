@@ -46,7 +46,7 @@ subdirectory is shown.
 | `manage_gas` | — | `HandleManageGASAction` @ GASHandlers.cpp |
 | `manage_character` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCharacter.cpp (dispatched from the call registry before the handler map; implementations are the `HandleCharacter*` members @ CharacterHandlers.cpp) |
 | `manage_combat` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCombat.cpp (dispatched from the call registry before the handler map; implementations are the `HandleCombat*` members @ CombatHandlers.cpp) |
-| `manage_inventory` | — | `HandleManageInventoryAction` @ InventoryHandlers.cpp |
+| `manage_inventory` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInventory.cpp (dispatched from the call registry before the handler map; implementations are the `HandleInventory*` members @ InventoryHandlers.cpp) |
 | `manage_interaction` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInteraction.cpp (dispatched from the call registry before the handler map; implementations are the `HandleInteraction*` members @ InteractionHandlers.cpp) |
 
 `system_control` note — the family is classed; the registration lambda that used
@@ -115,7 +115,7 @@ Core (fallthrough) lists:
 | `ManageGAS` | `HandleManageGASAction` @ GASHandlers.cpp |
 | `ManageCharacter` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCharacter.cpp (implementations are the `HandleCharacter*` members @ CharacterHandlers.cpp) |
 | `ManageCombat` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCombat.cpp (implementations are the `HandleCombat*` members @ CombatHandlers.cpp) |
-| `ManageInventory` | `HandleManageInventoryAction` @ InventoryHandlers.cpp |
+| `ManageInventory` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInventory.cpp (implementations are the `HandleInventory*` members @ InventoryHandlers.cpp) |
 | `ManageInteraction` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInteraction.cpp (implementations are the `HandleInteraction*` members @ InteractionHandlers.cpp) |
 
 The union builders (`ManageAsset()`, `ManageBlueprint()`, …, `*Union()`) are schema

@@ -935,6 +935,8 @@ closed nothing — no ledgered entries (the file's Section 6/7 dead dispatch was
 above (deepen-or-retire, 2026-07-05). manage_character's classing (2026-07-05) also
 closed nothing — the ledger has no CharacterHandlers entries. manage_combat's
 classing (2026-07-05) closed nothing as well — no CombatHandlers entries either.
+manage_inventory's classing (2026-07-05) closed nothing too — the ledger has no
+InventoryHandlers entries.
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,

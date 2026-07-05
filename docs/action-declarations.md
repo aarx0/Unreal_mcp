@@ -228,6 +228,30 @@ parser survives only as a lint.
     a body does not read. `RequiresEditor` on all 39; `Mutating` on
     everything except the readers, `get_combat_info` and
     `get_combat_stats`.
+  - **`manage_inventory` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_ManageInventory.cpp`).** 33 classes; the
+    dispatcher had zero dedicated handler functions — all 33 bodies were
+    inline branches, extracted verbatim to `HandleInventory*` members
+    (InventoryHandlers.cpp). Unlike combat/character there was no
+    whole-handler editor gate to replicate (the TU carries no
+    `#if WITH_EDITOR` at all) and no common-parameter prologue to move —
+    the chain's only shared read was `subAction`, which died with it.
+    Every save/compile tail is preserved verbatim (`McpFinalizeBlueprint`
+    on the Blueprint-scaffold actions, save-gated `McpSafeAssetSave` on
+    the data-asset actions, compile-then-write-CDO sequencing where
+    defaults are set). No cross-file delegation in either direction, no
+    hidden or dead names (no sweep-ledger entries). Contracts ported
+    verbatim from the shim rows — all 33 re-verified against the extracted
+    bodies, no decl fixes needed: required flags faithful, no mega-bags,
+    no one-of collisions, and no declared-optional-but-unread artifact
+    (`get_inventory_info`'s five resolver spellings and
+    `remove_loot_entry`'s entryIndex-or-itemPath one-of stay
+    handler-enforced; `configure_inventory_weight` declares both
+    encumbrance spellings because the body reads the historical
+    'encumberance' (sic) fallbacks). First classed family with NO
+    `RequiresEditor` anywhere — the TU is not editor-gated, and flagging
+    would newly reject GEditor-less runs the shim served; `Mutating` on
+    everything except the reader, `get_inventory_info`.
 
 ## Bootstrap state (2026-07-04, complete)
 

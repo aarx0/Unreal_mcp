@@ -495,6 +495,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       McpRegisterManageCombatCalls();
       McpRegisterManageEffectCalls();
       McpRegisterManageInteractionCalls();
+      McpRegisterManageInventoryCalls();
       McpRegisterManageLevelCalls();
       McpRegisterManageSequenceCalls();
       McpRegisterSystemControlCalls();
@@ -1111,7 +1112,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
 
   MCP_REGISTER_HANDLER("manage_ai", HandleManageAIAction);
 
-  MCP_REGISTER_HANDLER("manage_inventory", HandleManageInventoryAction);
+  // manage_inventory is fully classed (MCP/Calls/McpCalls_ManageInventory.cpp)
+  // — dispatch reaches its FMcpCall instances via the registry, not this map.
 
   // manage_interaction is fully classed (MCP/Calls/McpCalls_ManageInteraction.cpp)
   // — dispatch reaches its FMcpCall instances via the registry, not this map.

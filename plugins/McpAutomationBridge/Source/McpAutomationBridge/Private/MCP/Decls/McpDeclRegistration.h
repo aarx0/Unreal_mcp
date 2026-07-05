@@ -2,6 +2,8 @@
 // subsystem before the transport starts.
 #pragma once
 
+#include "MCP/McpCallRegistry.h"
+
 #include "MCP/Decls/McpDecl_ManageLevelStructure.h"
 #include "MCP/Decls/McpDecl_ManageAi.h"
 #include "MCP/Decls/McpDecl_ManageAudio.h"
@@ -11,7 +13,6 @@
 #include "MCP/Decls/McpDecl_ManageGas.h"
 #include "MCP/Decls/McpDecl_ManageNetworking.h"
 #include "MCP/Decls/McpDecl_BuildEnvironment.h"
-#include "MCP/Decls/McpDecl_ManageInventory.h"
 #include "MCP/Decls/McpDecl_ManageGeometry.h"
 
 inline void McpRegisterAllActionDecls()
@@ -48,6 +49,8 @@ inline void McpRegisterAllActionDecls()
 	// inspect: classed (MCP/Calls/McpCalls_Inspect.cpp) — decls
 	// register with the call instances via McpRegisterInspectCalls().
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GBuildEnvironment);
-	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageInventory);
+	// manage_inventory: classed (MCP/Calls/McpCalls_ManageInventory.cpp) —
+	// decls register with the call instances via
+	// McpRegisterManageInventoryCalls().
 	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageGeometry);
 }

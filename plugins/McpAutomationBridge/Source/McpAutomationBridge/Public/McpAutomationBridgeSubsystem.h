@@ -1246,11 +1246,112 @@ private:
       const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);
-  // Phase 17: Inventory & Items System handlers
-  bool HandleManageInventoryAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
+  // manage_inventory is classed — see MCP/Calls/McpCalls_ManageInventory.cpp.
+  // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
+  // can delegate, until the module split de-members the implementations off
+  // the subsystem.
+public:
+  bool HandleInventoryCreateItemDataAsset(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleInventorySetItemProperties(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleInventoryCreateItemCategory(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleInventoryAssignItemCategory(const FString &RequestId,
+                                         const TSharedPtr<FJsonObject> &Payload,
+                                         FMcpResponseHandle Socket);
+  bool HandleInventoryCreateComponent(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleInventoryConfigureSlots(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleInventoryAddFunctions(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleInventoryConfigureEvents(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleInventorySetReplication(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleInventoryCreatePickupActor(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleInventoryConfigurePickupInteraction(const FString &RequestId,
+                                                 const TSharedPtr<FJsonObject> &Payload,
+                                                 FMcpResponseHandle Socket);
+  bool HandleInventoryConfigurePickupRespawn(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle Socket);
+  bool HandleInventoryConfigurePickupEffects(const FString &RequestId,
+                                             const TSharedPtr<FJsonObject> &Payload,
+                                             FMcpResponseHandle Socket);
+  bool HandleInventoryCreateEquipmentComponent(const FString &RequestId,
+                                               const TSharedPtr<FJsonObject> &Payload,
+                                               FMcpResponseHandle Socket);
+  bool HandleInventoryDefineEquipmentSlots(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+  bool HandleInventoryConfigureEquipmentEffects(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle Socket);
+  bool HandleInventoryAddEquipmentFunctions(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle Socket);
+  bool HandleInventoryConfigureEquipmentVisuals(const FString &RequestId,
+                                                const TSharedPtr<FJsonObject> &Payload,
+                                                FMcpResponseHandle Socket);
+  bool HandleInventoryCreateLootTable(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleInventoryAddLootEntry(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleInventoryConfigureLootDrop(const FString &RequestId,
+                                        const TSharedPtr<FJsonObject> &Payload,
+                                        FMcpResponseHandle Socket);
+  bool HandleInventorySetLootQualityTiers(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleInventoryCreateCraftingRecipe(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+  bool HandleInventoryConfigureRecipeRequirements(const FString &RequestId,
+                                                  const TSharedPtr<FJsonObject> &Payload,
+                                                  FMcpResponseHandle Socket);
+  bool HandleInventoryCreateCraftingStation(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle Socket);
+  bool HandleInventoryAddCraftingComponent(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+  bool HandleInventoryConfigureItemStacking(const FString &RequestId,
+                                            const TSharedPtr<FJsonObject> &Payload,
+                                            FMcpResponseHandle Socket);
+  bool HandleInventorySetItemIcon(const FString &RequestId,
+                                  const TSharedPtr<FJsonObject> &Payload,
+                                  FMcpResponseHandle Socket);
+  bool HandleInventoryAddRecipeIngredient(const FString &RequestId,
+                                          const TSharedPtr<FJsonObject> &Payload,
+                                          FMcpResponseHandle Socket);
+  bool HandleInventoryRemoveLootEntry(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleInventoryConfigureWeight(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleInventoryConfigureStationRecipes(const FString &RequestId,
+                                              const TSharedPtr<FJsonObject> &Payload,
+                                              FMcpResponseHandle Socket);
+  bool HandleInventoryGetInfo(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+
+private:
   // manage_interaction is classed — see MCP/Calls/McpCalls_ManageInteraction.cpp.
   // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
   // can delegate, until the module split de-members the implementations off
