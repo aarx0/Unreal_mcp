@@ -528,9 +528,9 @@ private:
       const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);
-  bool HandleEffectAction(const FString &RequestId, const FString &Action,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle RequestingSocket);
+  // manage_effect is classed — see MCP/Calls/McpCalls_ManageEffect.cpp; its
+  // member handlers (HandleEffect*) live in the transitional public block
+  // below.
   bool HandleBlueprintAction(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
@@ -543,6 +543,61 @@ private:
                            FMcpResponseHandle RequestingSocket,
                            const FString &EffectName,
                            const FString &DefaultSystemPath);
+
+  // manage_effect subhandlers — public so the manage_effect FMcpCall classes
+  // (Private/MCP/Calls/) can delegate, until the module split de-members the
+  // implementations off the subsystem.
+public:
+  bool HandleEffectListDebugShapes(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleEffectClearDebugShapes(const FString &RequestId,
+                                    const TSharedPtr<FJsonObject> &Payload,
+                                    FMcpResponseHandle Socket);
+  bool HandleEffectDebugShape(const FString &RequestId,
+                              const TSharedPtr<FJsonObject> &Payload,
+                              FMcpResponseHandle Socket);
+  bool HandleEffectParticle(const FString &RequestId,
+                            const TSharedPtr<FJsonObject> &Payload,
+                            FMcpResponseHandle Socket);
+  bool HandleEffectSetNiagaraParameter(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleEffectActivateNiagara(const FString &RequestId,
+                                   const TSharedPtr<FJsonObject> &Payload,
+                                   FMcpResponseHandle Socket);
+  bool HandleEffectDeactivateNiagara(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleEffectAdvanceSimulation(const FString &RequestId,
+                                     const TSharedPtr<FJsonObject> &Payload,
+                                     FMcpResponseHandle Socket);
+  bool HandleEffectCreateDynamicLight(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleEffectCleanup(const FString &RequestId,
+                           const TSharedPtr<FJsonObject> &Payload,
+                           FMcpResponseHandle Socket);
+  bool HandleEffectSpawnNiagara(const FString &RequestId,
+                                const TSharedPtr<FJsonObject> &Payload,
+                                FMcpResponseHandle Socket);
+  bool HandleEffectCreateVolumetricFog(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleEffectCreateParticleTrail(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+  bool HandleEffectCreateEnvironmentEffect(const FString &RequestId,
+                                           const TSharedPtr<FJsonObject> &Payload,
+                                           FMcpResponseHandle Socket);
+  bool HandleEffectCreateImpactEffect(const FString &RequestId,
+                                      const TSharedPtr<FJsonObject> &Payload,
+                                      FMcpResponseHandle Socket);
+  bool HandleEffectCreateNiagaraRibbon(const FString &RequestId,
+                                       const TSharedPtr<FJsonObject> &Payload,
+                                       FMcpResponseHandle Socket);
+
+private:
   // Audio related automation actions
   bool HandleAudioAction(const FString &RequestId, const FString &Action,
                          const TSharedPtr<FJsonObject> &Payload,
@@ -809,10 +864,16 @@ private:
   HandleBlueprintGraphAction(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
+
+public:
+  // Called directly by the classed manage_effect graph actions (MCP/Calls/);
+  // Action carries its manage_niagara_graph gate literal.
   bool
   HandleNiagaraGraphAction(const FString &RequestId, const FString &Action,
                            const TSharedPtr<FJsonObject> &Payload,
                            FMcpResponseHandle RequestingSocket);
+
+private:
   bool HandleMaterialGraphAction(const FString &RequestId,
                                  const FString &Action,
                                  const TSharedPtr<FJsonObject> &Payload,
@@ -953,11 +1014,16 @@ private:
       const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);
-  // Phase 12: Niagara Authoring handlers
+public:
+  // Phase 12: Niagara Authoring handlers — called directly by the classed
+  // manage_effect Niagara-authoring actions (MCP/Calls/); Action carries its
+  // manage_niagara_authoring gate literal.
   bool HandleManageNiagaraAuthoringAction(
       const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);
+
+private:
   // Phase 13: GAS (Gameplay Ability System) handlers
   bool HandleManageGASAction(
       const FString &RequestId, const FString &Action,

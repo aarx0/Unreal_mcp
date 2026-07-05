@@ -910,7 +910,13 @@ deleted-at-classing (`export_asset`, the 7 UiHandlers pokes,
 `nanite_rebuild_mesh` duplicates in RenderHandlers) — **57 hidden entries remain**;
 `console_command` stays live (the classed execute_command/set_cvar call the console
 handler directly). inspect's classing (2026-07-04) closed nothing here — the family
-had no ledgered hidden or dead names.
+had no ledgered hidden or dead names. manage_effect's classing (2026-07-04) also
+closed nothing: its EffectHandlers surface was already cleared by the numbered-stub
+deletion (04b), and the one Niagara-adjacent ledger entry — NiagaraGraphHandlers
+`set_parameter` @436, a hidden exposed-user-parameter setter — is unreachable
+through manage_effect's surface (the graph delegates rewrite subAction to
+add_module/connect_pins/remove_node only); it stays ledgered for a future
+advertise-or-delete decision.
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,

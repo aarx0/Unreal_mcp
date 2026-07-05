@@ -42,7 +42,7 @@ subdirectory is shown.
 | `manage_level` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevel.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleLevel*` functions in LevelHandlers.cpp, plus `HandleLightingAction` @ LightingHandlers.cpp for `create_light`) |
 | `manage_sequence` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleSequence*` functions in SequenceHandlers.cpp) |
 | `manage_geometry` | — | `HandleGeometryAction` @ GeometryHandlers.cpp |
-| `manage_effect` | — | `HandleEffectAction` @ EffectHandlers.cpp |
+| `manage_effect` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageEffect.cpp (dispatched from the call registry before the handler map; implementations are the `HandleEffect*` members + `CreateNiagaraEffect` @ EffectHandlers.cpp, `HandleManageNiagaraAuthoringAction` @ NiagaraAuthoringHandlers.cpp for the 36 authoring actions, and `HandleNiagaraGraphAction` @ NiagaraGraphHandlers.cpp for the three graph actions) |
 | `manage_gas` | — | `HandleManageGASAction` @ GASHandlers.cpp |
 | `manage_character` | — | `HandleManageCharacterAction` @ CharacterHandlers.cpp |
 | `manage_combat` | — | `HandleManageCombatAction` @ CombatHandlers.cpp |
@@ -111,7 +111,7 @@ Core (fallthrough) lists:
 | `ManageLevel` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevel.cpp |
 | `ManageSequence` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp |
 | `ManageGeometry` | `HandleGeometryAction` @ GeometryHandlers.cpp |
-| `ManageEffect` | `HandleEffectAction` @ EffectHandlers.cpp |
+| `ManageEffect` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageEffect.cpp (implementations spread across EffectHandlers.cpp, NiagaraAuthoringHandlers.cpp, NiagaraGraphHandlers.cpp) |
 | `ManageGAS` | `HandleManageGASAction` @ GASHandlers.cpp |
 | `ManageCharacter` | `HandleManageCharacterAction` @ CharacterHandlers.cpp |
 | `ManageCombat` | `HandleManageCombatAction` @ CombatHandlers.cpp |

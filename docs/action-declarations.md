@@ -141,6 +141,33 @@ parser survives only as a lint.
     `RequiresEditor` on all 38; `Mutating` on the seven writers
     (`set_property`, `set_component_property`, `add_tag`, `create_snapshot`,
     `restore_snapshot`, `delete_object`, `export`).
+  - **`manage_effect` (2026-07-04,
+    `Private/MCP/Calls/McpCalls_ManageEffect.cpp`).** 58 classes — the largest
+    family yet, spanning three implementation TUs. The dispatcher's 16 inline
+    bodies extracted verbatim to `HandleEffect*` members (EffectHandlers.cpp);
+    the 36 Niagara authoring actions delegate to
+    `HandleManageNiagaraAuthoringAction` (NiagaraAuthoringHandlers.cpp) and
+    the three graph actions to `HandleNiagaraGraphAction`
+    (NiagaraGraphHandlers.cpp, after the same subAction rewrite the chain
+    did) — the manufactured `manage_niagara_authoring`/`manage_niagara_graph`
+    gate literals SURVIVE inside those delegate classes (the live handlers
+    gate on them), while the chain's internal `create_effect` self-recursion
+    key is dead. `activate`/`activate_effect` are advertised aliases of
+    `activate_niagara`'s member and `deactivate` of `deactivate_niagara`'s
+    (the extracted members ignore the action spelling, so the chain's payload
+    action/subAction rewrites died too). Decl burn-down:
+    `create_niagara_system`'s shim row was mis-authored with a
+    `set_niagara_parameter`-shaped contract (required `parameterName` plus
+    `systemName`/`parameterType`/`value`); the live branch requires `name`
+    and reads the same common param block as `create_niagara_emitter`, so
+    both now share one contract. The other 35 authoring rows and both graph
+    rows verified against their live branches unchanged. Zero hidden and
+    zero dead names remained on this family's surface (the lying
+    numbered-stub block was already deleted at the 2026-07-04 sweep).
+    `RequiresEditor` on all 58; `Mutating` on the 52 writers — the readers
+    are `get_niagara_info`, `validate_niagara_system`, `list_debug_shapes`,
+    and the transient debug-draw trio (`debug_shape`, `particle`,
+    `clear_debug_shapes`).
 
 ## Bootstrap state (2026-07-04, complete)
 

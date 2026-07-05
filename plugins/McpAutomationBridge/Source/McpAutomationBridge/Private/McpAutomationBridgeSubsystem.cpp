@@ -491,6 +491,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       McpRegisterControlActorCalls();
       McpRegisterControlEditorCalls();
       McpRegisterInspectCalls();
+      McpRegisterManageEffectCalls();
       McpRegisterManageLevelCalls();
       McpRegisterManageSequenceCalls();
       McpRegisterSystemControlCalls();
@@ -1161,7 +1162,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
                     return HandleAnimationPhysicsAction(R, A, P, S);
                   });
 
-  MCP_REGISTER_HANDLER("manage_effect", HandleEffectAction);
+  // manage_effect is fully classed (MCP/Calls/McpCalls_ManageEffect.cpp) —
+  // dispatch reaches its FMcpCall instances via the registry, not this map.
 
   RegisterHandler(TEXT("manage_level_structure"),
                   [this](const FString &R, const FString &A,
