@@ -880,7 +880,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     Ops.Add(MakeShared<FJsonValueObject>(Op));
     SCSPayload->SetArrayField(TEXT("operations"), Ops);
 
-    return HandleBlueprintAction(RequestId, TEXT("blueprint_modify_scs"),
+    return HandleBlueprintAction(RequestId, TEXT("modify_scs"),
                                  SCSPayload, RequestingSocket);
   }
 

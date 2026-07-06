@@ -31,16 +31,12 @@ namespace McpCalls::ManageBlueprint
 
 // Core (HandleBlueprintAction)
 inline const FMcpParamDecl P_Create[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false }, { TEXT("blueprintType"), EMcpParamKind::String, false }, { TEXT("properties"), EMcpParamKind::Object, false }, { TEXT("waitForCompletion"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateBlueprint[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false }, { TEXT("blueprintType"), EMcpParamKind::String, false }, { TEXT("waitForCompletion"), EMcpParamKind::Bool, false }, { TEXT("properties"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_GetBlueprint[] = { { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false } };
 inline const FMcpParamDecl P_Get[] = { { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false }, { TEXT("actorName"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_Compile[] = { { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false }, { TEXT("saveAfterCompile"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_AddComponent[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("componentType"), EMcpParamKind::String, true }, { TEXT("componentName"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_SetDefault[] = { { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false }, { TEXT("propertyName"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Any, true } };
 inline const FMcpParamDecl P_GetDefault[] = { { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false }, { TEXT("propertyName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_BlueprintGetDefault[] = { { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false }, { TEXT("propertyName"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_ListFunctions[] = { { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_BlueprintListFunctions[] = { { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false } };
 inline const FMcpParamDecl P_ModifyScs[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("operations"), EMcpParamKind::Array, true }, { TEXT("compile"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_GetScs[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false } };
 inline const FMcpParamDecl P_AddScsComponent[] = { { TEXT("blueprint_path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("component_class"), EMcpParamKind::String, false }, { TEXT("componentClass"), EMcpParamKind::String, false }, { TEXT("component_name"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("parent_component"), EMcpParamKind::String, false }, { TEXT("parentComponent"), EMcpParamKind::String, false }, { TEXT("mesh_path"), EMcpParamKind::String, false }, { TEXT("meshPath"), EMcpParamKind::String, false }, { TEXT("material_path"), EMcpParamKind::String, false }, { TEXT("materialPath"), EMcpParamKind::String, false } };
@@ -147,7 +143,6 @@ inline const FMcpParamDecl P_GetWidgetSlotInfo[] = { { TEXT("widgetPath"), EMcpP
 inline const FMcpParamDecl P_ReplaceWidgetClass[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("slotName"), EMcpParamKind::String, true }, { TEXT("newWidgetClass"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_AddWidget[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("widgetClass"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, true }, { TEXT("parentSlot"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_WrapRoot[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("panelType"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateWidget[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("folder"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_ShowWidget[] = { { TEXT("widgetPath"), EMcpParamKind::String, false }, { TEXT("widgetId"), EMcpParamKind::String, false }, { TEXT("message"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_AddWidgetComponent[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("componentType"), EMcpParamKind::String, true }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("parentName"), EMcpParamKind::String, false }, { TEXT("positionX"), EMcpParamKind::Number, false }, { TEXT("positionY"), EMcpParamKind::Number, false }, { TEXT("sizeX"), EMcpParamKind::Number, false }, { TEXT("sizeY"), EMcpParamKind::Number, false }, { TEXT("text"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_AddSafeZone[] = { { TEXT("widgetPath"), EMcpParamKind::String, true }, { TEXT("slotName"), EMcpParamKind::String, false }, { TEXT("parentSlot"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
@@ -210,16 +205,12 @@ class FMcpCall_ManageBlueprint_##ClassSuffix final : public FMcpCall            
 
 // Core (HandleBlueprintAction, Action arg "manage_blueprint")
 MCP_BP_ACTION_CALL(Create, "create", P_Create, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateBlueprint, "create_blueprint", P_CreateBlueprint, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(GetBlueprint, "get_blueprint", P_GetBlueprint, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
 MCP_BP_ACTION_CALL(Get, "get", P_Get, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
 MCP_BP_ACTION_CALL(Compile, "compile", P_Compile, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(AddComponent, "add_component", P_AddComponent, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(SetDefault, "set_default", P_SetDefault, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(GetDefault, "get_default", P_GetDefault, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
-MCP_BP_ACTION_CALL(BlueprintGetDefault, "blueprint_get_default", P_BlueprintGetDefault, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
 MCP_BP_ACTION_CALL(ListFunctions, "list_functions", P_ListFunctions, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
-MCP_BP_ACTION_CALL(BlueprintListFunctions, "blueprint_list_functions", P_BlueprintListFunctions, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
 MCP_BP_ACTION_CALL(ModifyScs, "modify_scs", P_ModifyScs, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(GetScs, "get_scs", P_GetScs, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
 MCP_BP_ACTION_CALL(AddScsComponent, "add_scs_component", P_AddScsComponent, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -331,7 +322,6 @@ MCP_BP_ACTION_CALL(GetWidgetSlotInfo, "get_widget_slot_info", P_GetWidgetSlotInf
 MCP_BP_ACTION_CALL(ReplaceWidgetClass, "replace_widget_class", P_ReplaceWidgetClass, HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(AddWidget, "add_widget", P_AddWidget, HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(WrapRoot, "wrap_root", P_WrapRoot, HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateWidget, "create_widget", P_CreateWidget, HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(ShowWidget, "show_widget", P_ShowWidget, HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(AddWidgetComponent, "add_widget_component", P_AddWidgetComponent, HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(AddSafeZone, "add_safe_zone", P_AddSafeZone, HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
@@ -370,16 +360,12 @@ void McpRegisterManageBlueprintCalls()
 	using namespace McpCalls::ManageBlueprint;
 	FMcpCallRegistry& Registry = FMcpCallRegistry::Get();
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_Create>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_CreateBlueprint>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_GetBlueprint>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_Get>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_Compile>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_AddComponent>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_SetDefault>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_GetDefault>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_BlueprintGetDefault>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_ListFunctions>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_BlueprintListFunctions>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_ModifyScs>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_GetScs>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_AddScsComponent>());
@@ -487,7 +473,6 @@ void McpRegisterManageBlueprintCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_ReplaceWidgetClass>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_AddWidget>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_WrapRoot>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_CreateWidget>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_ShowWidget>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_AddWidgetComponent>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageBlueprint_AddSafeZone>());

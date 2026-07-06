@@ -124,10 +124,10 @@ inline TArray<FString> ManageAsset()
 inline const TArray<FString>& ManageBlueprintCore()
 {
 	static const TArray<FString> Actions = {
-		TEXT("create"), TEXT("create_blueprint"), TEXT("get_blueprint"),
+		TEXT("create"),
 		TEXT("get"), TEXT("compile"), TEXT("add_component"),
-		TEXT("set_default"), TEXT("get_default"), TEXT("blueprint_get_default"),
-		TEXT("list_functions"), TEXT("blueprint_list_functions"),
+		TEXT("set_default"), TEXT("get_default"),
+		TEXT("list_functions"),
 		TEXT("modify_scs"), TEXT("get_scs"),
 		TEXT("add_scs_component"),
 		TEXT("remove_scs_component"), TEXT("reparent_scs_component"),
@@ -200,7 +200,7 @@ inline const TArray<FString>& WidgetAuthoring()
 		TEXT("add_widget"), TEXT("wrap_root"),
 		// Handlers existed in WidgetAuthoringHandlers.cpp but were never routed
 		// here, so manage_blueprint returned "Unknown blueprint action" for them.
-		TEXT("create_widget"), TEXT("show_widget"), TEXT("add_widget_component"),
+		TEXT("show_widget"), TEXT("add_widget_component"),
 		TEXT("add_safe_zone"), TEXT("add_spacer"), TEXT("add_widget_switcher"),
 		TEXT("set_font"), TEXT("set_margin"),
 		TEXT("create_widget_style"), TEXT("apply_style_to_widget"),

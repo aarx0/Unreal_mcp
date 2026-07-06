@@ -1014,60 +1014,6 @@ struct THasAttach<T, std::void_t<decltype(std::declval<T>().AttachSubobject(
 } // namespace McpAutomationBridge
 #endif // WITH_EDITOR && MCP_HAS_SUBOBJECT_DATA_SUBSYSTEM
 
-// Helper: pattern-match logic extracted to file-scope so diagnostic
-// loops cannot be accidentally placed outside a function body by
-// preprocessor variations.
-static bool ActionMatchesPatternImpl(const FString &Lower,
-                                     const FString &AlphaNumLower,
-                                     const TCHAR *Pattern) {
-  const FString PatternStr = FString(Pattern).ToLower();
-  FString PatternAlpha;
-  PatternAlpha.Reserve(PatternStr.Len());
-  for (int32 i = 0; i < PatternStr.Len(); ++i) {
-    const TCHAR C = PatternStr[i];
-    if (FChar::IsAlnum(C))
-      PatternAlpha.AppendChar(C);
-  }
-  const bool bExactOrContains =
-      (Lower.Equals(PatternStr) || Lower.Contains(PatternStr));
-  const bool bAlphaMatch =
-      (!AlphaNumLower.IsEmpty() && !PatternAlpha.IsEmpty() &&
-       AlphaNumLower.Contains(PatternAlpha));
-  return (bExactOrContains || bAlphaMatch);
-}
-
-static void DiagnosticPatternChecks(const FString &CleanAction,
-                                    const FString &Lower,
-                                    const FString &AlphaNumLower) {
-  const TCHAR *Patterns[] = {TEXT("blueprint_add_variable"),
-                             TEXT("add_variable"),
-                             TEXT("addvariable"),
-                             TEXT("blueprint_add_event"),
-                             TEXT("add_event"),
-                             TEXT("blueprint_add_function"),
-                             TEXT("add_function"),
-                             TEXT("blueprint_modify_scs"),
-                             TEXT("modify_scs"),
-                             TEXT("blueprint_set_default"),
-                             TEXT("set_default"),
-                             TEXT("blueprint_set_variable_metadata"),
-                             TEXT("set_variable_metadata"),
-                             TEXT("blueprint_compile"),
-                             TEXT("blueprint_probe_subobject_handle"),
-                             TEXT("blueprint_exists"),
-                             TEXT("blueprint_get"),
-                             TEXT("blueprint_create")};
-  for (const TCHAR *P : Patterns) {
-    const bool bMatch = ActionMatchesPatternImpl(Lower, AlphaNumLower, P);
-    // This diagnostic is extremely chatty when processing many requests —
-    // lower it to VeryVerbose so it only appears when a developer explicitly
-    // enables very verbose logging for the subsystem.
-    UE_LOG(LogMcpAutomationBridgeSubsystem, VeryVerbose,
-           TEXT("Diagnostic pattern check: Action=%s Pattern=%s Matched=%s"),
-           *CleanAction, P, bMatch ? TEXT("true") : TEXT("false"));
-  }
-}
-
 /**
  * Central handler for general Blueprint actions (create, add variable/function,
  * modify SCS, etc.). Dispatches to specific logic based on Action name or
@@ -1254,47 +1200,6 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     }
   }
 
-  // Build a compact alphanumeric-only lowercase key so we can match
-  // variants such as 'add_variable', 'addVariable' and 'add-variable'.
-  AlphaNumLower.Empty();
-  AlphaNumLower.Reserve(CleanAction.Len());
-  for (int32 i = 0; i < CleanAction.Len(); ++i) {
-    const TCHAR C = CleanAction[i];
-    if (FChar::IsAlnum(C))
-      AlphaNumLower.AppendChar(FChar::ToLower(C));
-  }
-
-  // Helper that performs tolerant matching: exact lower/suffix matches or
-  // an alphanumeric-substring match against the compacted key.
-  auto ActionMatchesPattern = [&](const TCHAR *Pattern) -> bool {
-    const FString PatternStr = FString(Pattern).ToLower();
-    // compact pattern (alpha-numeric only)
-    FString PatternAlpha;
-    PatternAlpha.Reserve(PatternStr.Len());
-    for (int32 i = 0; i < PatternStr.Len(); ++i) {
-      const TCHAR C = PatternStr[i];
-      if (FChar::IsAlnum(C))
-        PatternAlpha.AppendChar(C);
-    }
-    const bool bExactOrContains = Lower.Equals(PatternStr);
-    const bool bAlphaMatch =
-        (!AlphaNumLower.IsEmpty() && !PatternAlpha.IsEmpty() &&
-         AlphaNumLower.Equals(PatternAlpha));
-    const bool bMatched = (bExactOrContains || bAlphaMatch);
-    // Keep this at VeryVerbose because it executes for every pattern match
-    // attempt and rapidly fills the log during normal operation.
-    UE_LOG(LogMcpAutomationBridgeSubsystem, VeryVerbose,
-           TEXT("ActionMatchesPattern check: pattern='%s' patternAlpha='%s' "
-                "lower='%s' alpha='%s' matched=%s"),
-           *PatternStr, *PatternAlpha, *Lower, *AlphaNumLower,
-           bMatched ? TEXT("true") : TEXT("false"));
-    return bMatched;
-  };
-
-  // Run diagnostic pattern checks early while CleanAction/Lower/AlphaNumLower
-  // are in scope
-  DiagnosticPatternChecks(CleanAction, Lower, AlphaNumLower);
-
   // Helper to resolve requested blueprint path (honors 'requestedPath', 'name',
   // 'blueprintPath', or 'blueprintCandidates')
   auto ResolveBlueprintRequestedPath = [&]() -> FString {
@@ -1377,11 +1282,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     return FString();
   };
 
-  if (ActionMatchesPattern(TEXT("blueprint_modify_scs")) ||
-      ActionMatchesPattern(TEXT("modify_scs")) ||
-      ActionMatchesPattern(TEXT("modifyscs")) ||
-      AlphaNumLower.Contains(TEXT("blueprintmodifyscs")) ||
-      AlphaNumLower.Contains(TEXT("modifyscs"))) {
+  if (CleanAction.Equals(TEXT("modify_scs"), ESearchCase::IgnoreCase)) {
     const double HandlerStartTimeSec = FPlatformTime::Seconds();
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("blueprint_modify_scs handler start (RequestId=%s)"),
@@ -2106,8 +2007,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   };
 
   // get_blueprint_scs: retrieve SCS hierarchy
-  if (ActionMatchesPattern(TEXT("get_blueprint_scs")) ||
-      AlphaNumLower.Contains(TEXT("getblueprintscs"))) {
+  if (CleanAction.Equals(TEXT("get_blueprint_scs"), ESearchCase::IgnoreCase)) {
     FString BPPath;
     Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
     TSharedPtr<FJsonObject> Result = FSCSHandlers::GetBlueprintSCS(BPPath);
@@ -2119,8 +2019,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // add_scs_component: add component to SCS
-  if (ActionMatchesPattern(TEXT("add_scs_component")) ||
-      AlphaNumLower.Contains(TEXT("addscscomponent"))) {
+  if (CleanAction.Equals(TEXT("add_scs_component"), ESearchCase::IgnoreCase)) {
     FString BPPath;
     Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
     if (BPPath.IsEmpty()) {
@@ -2162,8 +2061,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // remove_scs_component: remove component from SCS
-  if (ActionMatchesPattern(TEXT("remove_scs_component")) ||
-      AlphaNumLower.Contains(TEXT("removescscomponent"))) {
+  if (CleanAction.Equals(TEXT("remove_scs_component"), ESearchCase::IgnoreCase)) {
     FString BPPath;
     Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
     if (BPPath.IsEmpty()) {
@@ -2184,8 +2082,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // reparent_scs_component: reparent component in SCS
-  if (ActionMatchesPattern(TEXT("reparent_scs_component")) ||
-      AlphaNumLower.Contains(TEXT("reparentscscomponent"))) {
+  if (CleanAction.Equals(TEXT("reparent_scs_component"), ESearchCase::IgnoreCase)) {
     FString BPPath;
     Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
     if (BPPath.IsEmpty()) {
@@ -2211,10 +2108,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // set_scs_component_transform: set component transform in SCS
-  if (ActionMatchesPattern(TEXT("set_scs_component_transform")) ||
-      ActionMatchesPattern(TEXT("set_scs_transform")) ||
-      AlphaNumLower.Contains(TEXT("setscscomponenttransform")) ||
-      AlphaNumLower.Contains(TEXT("setscstransform"))) {
+  if (CleanAction.Equals(TEXT("set_scs_transform"), ESearchCase::IgnoreCase)) {
     FString BPPath;
     Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
     if (BPPath.IsEmpty()) {
@@ -2235,10 +2129,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // set_scs_component_property: set component property in SCS
-  if (ActionMatchesPattern(TEXT("set_scs_component_property")) ||
-      ActionMatchesPattern(TEXT("set_scs_property")) ||
-      AlphaNumLower.Contains(TEXT("setscscomponentproperty")) ||
-      AlphaNumLower.Contains(TEXT("setscsproperty"))) {
+  if (CleanAction.Equals(TEXT("set_scs_property"), ESearchCase::IgnoreCase)) {
     FString BPPath;
     Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
     if (BPPath.IsEmpty()) {
@@ -2269,10 +2160,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 
   // blueprint_set_variable_metadata: apply metadata to the Blueprint variable
   // (editor-only when available)
-  if (ActionMatchesPattern(TEXT("blueprint_set_variable_metadata")) ||
-      ActionMatchesPattern(TEXT("set_variable_metadata")) ||
-      AlphaNumLower.Contains(TEXT("blueprintsetvariablemetadata")) ||
-      AlphaNumLower.Contains(TEXT("setvariablemetadata"))) {
+  if (CleanAction.Equals(TEXT("set_variable_metadata"), ESearchCase::IgnoreCase)) {
     UE_LOG(
         LogMcpAutomationBridgeSubsystem, Verbose,
         TEXT("Entered blueprint_set_variable_metadata handler: RequestId=%s"),
@@ -2437,10 +2325,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  if (ActionMatchesPattern(TEXT("blueprint_add_construction_script")) ||
-      ActionMatchesPattern(TEXT("add_construction_script")) ||
-      AlphaNumLower.Contains(TEXT("blueprintaddconstructionscript")) ||
-      AlphaNumLower.Contains(TEXT("addconstructionscript"))) {
+  if (CleanAction.Equals(TEXT("add_construction_script"), ESearchCase::IgnoreCase)) {
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
       SendAutomationResponse(
@@ -2531,10 +2416,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // Add a variable to the blueprint (registry-backed implementation)
-  if (ActionMatchesPattern(TEXT("blueprint_add_variable")) ||
-      ActionMatchesPattern(TEXT("add_variable")) ||
-      AlphaNumLower.Contains(TEXT("blueprintaddvariable")) ||
-      AlphaNumLower.Contains(TEXT("addvariable"))) {
+  if (CleanAction.Equals(TEXT("add_variable"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_add_variable handler: RequestId=%s"),
            *RequestId);
@@ -2921,10 +2803,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  if (ActionMatchesPattern(TEXT("blueprint_set_default")) ||
-      ActionMatchesPattern(TEXT("set_default")) ||
-      AlphaNumLower.Contains(TEXT("blueprintsetdefault")) ||
-      AlphaNumLower.Contains(TEXT("setdefault"))) {
+  if (CleanAction.Equals(TEXT("set_default"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_set_default handler: RequestId=%s"),
            *RequestId);
@@ -3052,10 +2931,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  if (ActionMatchesPattern(TEXT("blueprint_remove_variable")) ||
-      ActionMatchesPattern(TEXT("remove_variable")) || // schema-advertised form
-      AlphaNumLower.Contains(TEXT("blueprintremovevariable")) ||
-      AlphaNumLower.Contains(TEXT("removevariable"))) {
+  if (CleanAction.Equals(TEXT("remove_variable"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_remove_variable handler: RequestId=%s"),
            *RequestId);
@@ -3139,10 +3015,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  if (ActionMatchesPattern(TEXT("blueprint_rename_variable")) ||
-      ActionMatchesPattern(TEXT("rename_variable")) || // schema-advertised form
-      AlphaNumLower.Contains(TEXT("blueprintrenamevariable")) ||
-      AlphaNumLower.Contains(TEXT("renamevariable"))) {
+  if (CleanAction.Equals(TEXT("rename_variable"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_rename_variable handler: RequestId=%s"),
            *RequestId);
@@ -3232,10 +3105,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // Add an event to the blueprint (synchronous editor implementation)
-  if (ActionMatchesPattern(TEXT("blueprint_add_event")) ||
-      ActionMatchesPattern(TEXT("add_event")) ||
-      AlphaNumLower.Contains(TEXT("blueprintaddevent")) ||
-      AlphaNumLower.Contains(TEXT("addevent"))) {
+  if (CleanAction.Equals(TEXT("add_event"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_add_event handler: RequestId=%s"),
            *RequestId);
@@ -3571,10 +3441,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // Remove an event from the blueprint (registry-backed implementation)
-  if (ActionMatchesPattern(TEXT("blueprint_remove_event")) ||
-      ActionMatchesPattern(TEXT("remove_event")) ||
-      AlphaNumLower.Contains(TEXT("blueprintremoveevent")) ||
-      AlphaNumLower.Contains(TEXT("removeevent"))) {
+  if (CleanAction.Equals(TEXT("remove_event"), ESearchCase::IgnoreCase)) {
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
       SendAutomationResponse(
@@ -3715,9 +3582,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // Add a function to the blueprint (synchronous editor implementation)
-  if (ActionMatchesPattern(TEXT("blueprint_remove_function")) ||
-      ActionMatchesPattern(TEXT("remove_function")) ||
-      AlphaNumLower.Contains(TEXT("removefunction"))) {
+  if (CleanAction.Equals(TEXT("remove_function"), ESearchCase::IgnoreCase)) {
     // Delete a function graph by name (incl. override graphs) — the inverse of
     // add_function. Idempotent: absent graph reports alreadyAbsent.
     FString Path = ResolveBlueprintRequestedPath();
@@ -3774,10 +3639,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  if (ActionMatchesPattern(TEXT("blueprint_add_function")) ||
-      ActionMatchesPattern(TEXT("add_function")) ||
-      AlphaNumLower.Contains(TEXT("blueprintaddfunction")) ||
-      AlphaNumLower.Contains(TEXT("addfunction"))) {
+  if (CleanAction.Equals(TEXT("add_function"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_add_function handler: RequestId=%s"),
            *RequestId);
@@ -4159,9 +4021,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  if (ActionMatchesPattern(TEXT("blueprint_get_default")) ||
-      ActionMatchesPattern(TEXT("get_default")) ||
-      AlphaNumLower.Contains(TEXT("blueprintgetdefault"))) {
+  if (CleanAction.Equals(TEXT("get_default"), ESearchCase::IgnoreCase)) {
     // Read-counterpart to blueprint_set_default: export a CDO property's
     // current value (verify loops previously had to trust the set's echo or
     // detour through find_objects/the Default__ asset path).
@@ -4262,9 +4122,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  if (ActionMatchesPattern(TEXT("blueprint_list_functions")) ||
-      ActionMatchesPattern(TEXT("list_functions")) ||
-      AlphaNumLower.Contains(TEXT("blueprintlistfunctions"))) {
+  if (CleanAction.Equals(TEXT("list_functions"), ESearchCase::IgnoreCase)) {
     // One-call answer to "what does this BP implement/override?" — previously
     // required reading EventGraph nodes via get_graph_details to tell whether
     // e.g. BP_GetDesiredFocusTarget was overridden.
@@ -4378,11 +4236,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  if (ActionMatchesPattern(TEXT("blueprint_set_default")) ||
-      ActionMatchesPattern(TEXT("set_default")) ||
-      ActionMatchesPattern(TEXT("setdefault")) ||
-      AlphaNumLower.Contains(TEXT("blueprintsetdefault")) ||
-      AlphaNumLower.Contains(TEXT("setdefault"))) {
+  if (CleanAction.Equals(TEXT("set_default"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_set_default handler: RequestId=%s"),
            *RequestId);
@@ -4595,10 +4449,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 
   // Compile a Blueprint asset (editor builds only). Returns whether
   // compilation (and optional save) succeeded.
-  if (ActionMatchesPattern(TEXT("blueprint_compile")) ||
-      ActionMatchesPattern(TEXT("compile")) ||
-      AlphaNumLower.Contains(TEXT("blueprintcompile")) ||
-      AlphaNumLower.Contains(TEXT("compile"))) {
+  if (CleanAction.Equals(TEXT("compile"), ESearchCase::IgnoreCase)) {
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
       SendAutomationResponse(
@@ -4653,12 +4504,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  if (ActionMatchesPattern(TEXT("blueprint_probe_subobject_handle")) ||
-      ActionMatchesPattern(TEXT("probe_subobject_handle")) ||
-      ActionMatchesPattern(TEXT("probehandle")) ||
-      AlphaNumLower.Contains(TEXT("blueprintprobesubobjecthandle")) ||
-      AlphaNumLower.Contains(TEXT("probesubobjecthandle")) ||
-      AlphaNumLower.Contains(TEXT("probehandle"))) {
+  if (CleanAction.Equals(TEXT("probe_subobject_handle"), ESearchCase::IgnoreCase)) {
     return FBlueprintCreationHandlers::HandleBlueprintProbeSubobjectHandle(
         this, RequestId, LocalPayload, RequestingSocket);
   }
@@ -4666,11 +4512,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   // blueprint_create handler: parse payload and prepare coalesced creation
   // Support both explicit blueprint_create and the nested 'create' action from
   // manage_blueprint
-  if (ActionMatchesPattern(TEXT("blueprint_create")) ||
-      ActionMatchesPattern(TEXT("create_blueprint")) ||
-      ActionMatchesPattern(TEXT("create")) ||
-      AlphaNumLower.Contains(TEXT("blueprintcreate")) ||
-      AlphaNumLower.Contains(TEXT("createblueprint"))) {
+  if (CleanAction.Equals(TEXT("create"), ESearchCase::IgnoreCase)) {
     return FBlueprintCreationHandlers::HandleBlueprintCreate(
         this, RequestId, LocalPayload, RequestingSocket);
   }
@@ -4680,9 +4522,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   // the server may fall back to Python helpers if available.
 
   // blueprint_exists: check whether a blueprint asset or registry entry exists
-  if (ActionMatchesPattern(TEXT("blueprint_exists")) ||
-      ActionMatchesPattern(TEXT("exists")) ||
-      AlphaNumLower.Contains(TEXT("blueprintexists"))) {
+  if (CleanAction.Equals(TEXT("exists"), ESearchCase::IgnoreCase)) {
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
       SendAutomationResponse(
@@ -4733,11 +4573,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // blueprint_get: return the lightweight registry entry for a blueprint
-  if ((ActionMatchesPattern(TEXT("blueprint_get")) ||
-       ActionMatchesPattern(TEXT("get")) ||
-       ActionMatchesPattern(TEXT("get_blueprint")) || // schema-advertised form
-       AlphaNumLower.Contains(TEXT("blueprintget"))) &&
-      !Lower.Contains(TEXT("scs"))) {
+  if (CleanAction.Equals(TEXT("get"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_get handler: RequestId=%s"), *RequestId);
     FString Path = ResolveBlueprintRequestedPath();
@@ -4934,9 +4770,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // blueprint_add_node: Create a Blueprint graph node programmatically
-  if (ActionMatchesPattern(TEXT("blueprint_add_node")) ||
-      ActionMatchesPattern(TEXT("add_node")) ||
-      AlphaNumLower.Contains(TEXT("blueprintaddnode"))) {
+  if (CleanAction.Equals(TEXT("add_node"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_add_node handler: RequestId=%s"),
            *RequestId);
@@ -5360,9 +5194,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // blueprint_connect_pins: Connect two pins between nodes
-  if (ActionMatchesPattern(TEXT("blueprint_connect_pins")) ||
-      ActionMatchesPattern(TEXT("connect_pins")) ||
-      AlphaNumLower.Contains(TEXT("blueprintconnectpins"))) {
+  if (CleanAction.Equals(TEXT("connect_pins"), ESearchCase::IgnoreCase)) {
 #if WITH_EDITOR && MCP_HAS_EDGRAPH_SCHEMA_K2
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
@@ -5532,10 +5364,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // blueprint_ensure_exists: Check if blueprint exists, create if not
-  if (ActionMatchesPattern(TEXT("blueprint_ensure_exists")) ||
-      ActionMatchesPattern(TEXT("ensure_exists")) ||
-      AlphaNumLower.Contains(TEXT("blueprintensureexists")) ||
-      AlphaNumLower.Contains(TEXT("ensureexists"))) {
+  if (CleanAction.Equals(TEXT("ensure_exists"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_ensure_exists handler: RequestId=%s"),
            *RequestId);
@@ -5614,10 +5443,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // blueprint_probe_handle: Lightweight check for blueprint existence without loading
-  if (ActionMatchesPattern(TEXT("blueprint_probe_handle")) ||
-      ActionMatchesPattern(TEXT("probe_handle")) ||
-      AlphaNumLower.Contains(TEXT("blueprintprobehandle")) ||
-      AlphaNumLower.Contains(TEXT("probehandle"))) {
+  if (CleanAction.Equals(TEXT("probe_handle"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_probe_handle handler: RequestId=%s"),
            *RequestId);
@@ -5689,10 +5515,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   }
 
   // blueprint_set_metadata: Set metadata on a blueprint asset
-  if (ActionMatchesPattern(TEXT("blueprint_set_metadata")) ||
-      ActionMatchesPattern(TEXT("set_metadata")) ||
-      AlphaNumLower.Contains(TEXT("blueprintsetmetadata")) ||
-      AlphaNumLower.Contains(TEXT("setmetadata"))) {
+  if (CleanAction.Equals(TEXT("set_metadata"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
            TEXT("Entered blueprint_set_metadata handler: RequestId=%s"),
            *RequestId);
@@ -5827,33 +5650,6 @@ bool UMcpAutomationBridgeSubsystem::HandleSCSAction(
 
   FString CleanAction = Action;
   CleanAction.TrimStartAndEndInline();
-  FString Lower = CleanAction.ToLower();
-
-  // Build alphanumeric key for matching
-  FString AlphaNumLower;
-  AlphaNumLower.Reserve(CleanAction.Len());
-  for (int32 i = 0; i < CleanAction.Len(); ++i) {
-    const TCHAR C = CleanAction[i];
-    if (FChar::IsAlnum(C))
-      AlphaNumLower.AppendChar(FChar::ToLower(C));
-  }
-
-  auto ActionMatchesPattern = [&](const TCHAR *Pattern) -> bool {
-    const FString PatternStr = FString(Pattern).ToLower();
-    FString PatternAlpha;
-    PatternAlpha.Reserve(PatternStr.Len());
-    for (int32 i = 0; i < PatternStr.Len(); ++i) {
-      const TCHAR C = PatternStr[i];
-      if (FChar::IsAlnum(C))
-        PatternAlpha.AppendChar(C);
-    }
-    const bool bExactOrContains =
-        (Lower.Equals(PatternStr) || Lower.Contains(PatternStr));
-    const bool bAlphaMatch =
-        (!AlphaNumLower.IsEmpty() && !PatternAlpha.IsEmpty() &&
-         AlphaNumLower.Contains(PatternAlpha));
-    return (bExactOrContains || bAlphaMatch);
-  };
 
   // Helper to resolve blueprint
   auto ResolveBlueprint = [&]() -> UBlueprint * {
@@ -5884,9 +5680,10 @@ bool UMcpAutomationBridgeSubsystem::HandleSCSAction(
     return nullptr;
   };
 
-  // Add component to SCS
-  if (ActionMatchesPattern(TEXT("add_component")) ||
-      ActionMatchesPattern(TEXT("add_scs_component"))) {
+  // Add component to SCS. Note: add_scs_component is fully served by the Core
+  // HandleBlueprintAction branch (which returns before delegating here), so this
+  // branch serves add_component only.
+  if (CleanAction.Equals(TEXT("add_component"), ESearchCase::IgnoreCase)) {
     UBlueprint *Blueprint = ResolveBlueprint();
     if (!Blueprint) {
       SendAutomationResponse(RequestingSocket, RequestId, false,
@@ -5974,7 +5771,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSCSAction(
   }
 
   // Set SCS transform
-  if (ActionMatchesPattern(TEXT("set_scs_transform"))) {
+  if (CleanAction.Equals(TEXT("set_scs_transform"), ESearchCase::IgnoreCase)) {
     UBlueprint *Blueprint = ResolveBlueprint();
     if (!Blueprint) {
       SendAutomationResponse(
@@ -6085,7 +5882,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSCSAction(
   }
 
   // Remove SCS component
-  if (ActionMatchesPattern(TEXT("remove_scs_component"))) {
+  if (CleanAction.Equals(TEXT("remove_scs_component"), ESearchCase::IgnoreCase)) {
     UBlueprint *Blueprint = ResolveBlueprint();
     if (!Blueprint) {
       SendAutomationResponse(
@@ -6152,7 +5949,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSCSAction(
   }
 
   // Get SCS hierarchy
-  if (ActionMatchesPattern(TEXT("get_scs"))) {
+  if (CleanAction.Equals(TEXT("get_scs"), ESearchCase::IgnoreCase)) {
     UBlueprint *Blueprint = ResolveBlueprint();
     if (!Blueprint) {
       SendAutomationResponse(RequestingSocket, RequestId, false,
@@ -6237,7 +6034,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSCSAction(
   }
 
   // Reparent SCS component (simplified implementation)
-  if (ActionMatchesPattern(TEXT("reparent_scs_component"))) {
+  if (CleanAction.Equals(TEXT("reparent_scs_component"), ESearchCase::IgnoreCase)) {
     UBlueprint *Blueprint = ResolveBlueprint();
     if (!Blueprint) {
       SendAutomationResponse(
@@ -6333,7 +6130,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSCSAction(
   }
 
   // Set SCS property (simplified implementation)
-  if (ActionMatchesPattern(TEXT("set_scs_property"))) {
+  if (CleanAction.Equals(TEXT("set_scs_property"), ESearchCase::IgnoreCase)) {
     UBlueprint *Blueprint = ResolveBlueprint();
     if (!Blueprint) {
       SendAutomationResponse(

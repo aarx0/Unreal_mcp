@@ -1031,8 +1031,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Lifecycle(
     const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
 {
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
-    if (SubAction.Equals(TEXT("create_widget_blueprint"), ESearchCase::IgnoreCase) ||
-        SubAction.Equals(TEXT("create_widget"), ESearchCase::IgnoreCase))
+    if (SubAction.Equals(TEXT("create_widget_blueprint"), ESearchCase::IgnoreCase))
     {
         FString Name = GetJsonStringField(Payload, TEXT("name"));
         if (Name.IsEmpty())
