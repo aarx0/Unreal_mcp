@@ -1,54 +1,160 @@
 // LINT-TOOL: manage_level
-// manage_level as FMcpCall classes — fourth classed family
-// (docs/action-declarations.md). Each class co-locates the action's
-// declaration with its implementation. Run() delegates to the subsystem
-// member handlers until the module split de-members those bodies.
+// LINT-SCHEMA-DERIVED
+// manage_level as FMcpCall classes — adopts schema-from-decls
+// (docs/action-declarations.md). Each class AUTHORS its schema fragment in a
+// S_<Suffix>() function; the published facade schema folds those fragments and
+// GetDecl() derives the validation decl from the same fragment via
+// McpDeriveDecl(), so schema and decl are one source and cannot drift. Run()
+// delegates to the subsystem member handlers until the module split de-members
+// those bodies.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
+#include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
-// so file-scope param arrays would collide across families otherwise.
+// so file-scope helpers would collide across families otherwise.
 namespace McpCalls::ManageLevel
 {
 
-// ─── Param contracts ─────────────────────────────────────────────────────────
-// Authored from the handler bodies' actual payload reads
-// (McpAutomationBridge_LevelHandlers.cpp; create_light delegates to the full
-// implementation in McpAutomationBridge_LightingHandlers.cpp). Actions that
-// accept one-of-several params (delete's levelPath/path, export_level's
-// exportPath/destinationPath, rename_level's destinationPath/newName, ...)
-// declare each optional: the requirement is "at least one", which the decl
-// vocabulary cannot express and the handler enforces itself. unload does not
-// declare shouldBeLoaded/shouldBeVisible — the handler force-overrides both
-// to false, so sending them is inert.
+// ─── Schema fragments ────────────────────────────────────────────────────────
+// One S_<Suffix>() per action, authoring exactly the params that action reads
+// (the fold dedups shared params to one entry). Descriptions are the tool's
+// authored help text; McpDeriveDecl() reads the param kinds + required-set back
+// out of these to build the transport validation decl. Actions that accept
+// one-of-several params (delete's levelPath/path, export_level's exportPath/
+// destinationPath, rename_level's destinationPath/newName, ...) author each
+// optional: the requirement is "at least one", which the decl vocabulary cannot
+// express and the handler enforces itself. unload does not author
+// shouldBeLoaded/shouldBeVisible — the handler force-overrides both to false,
+// so sending them is inert.
 
-inline const FMcpParamDecl P_Load[] = { { TEXT("levelPath"), EMcpParamKind::String, true }, { TEXT("saveDirtyPackages"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SaveAs[] = { { TEXT("savePath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_CreateLevel[] = { { TEXT("levelName"), EMcpParamKind::String, false }, { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("useWorldPartition"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_Stream[] = { { TEXT("levelName"), EMcpParamKind::String, false }, { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("shouldBeLoaded"), EMcpParamKind::Bool, false }, { TEXT("shouldBeVisible"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_Unload[] = { { TEXT("levelName"), EMcpParamKind::String, false }, { TEXT("levelPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_BuildLighting[] = { { TEXT("quality"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetMetadata[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("metadata"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_Validate[] = { { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_Export[] = { { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("exportPath"), EMcpParamKind::String, false }, { TEXT("destinationPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_Import[] = { { TEXT("sourcePath"), EMcpParamKind::String, false }, { TEXT("packagePath"), EMcpParamKind::String, false }, { TEXT("destinationPath"), EMcpParamKind::String, false }, { TEXT("overwrite"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddSublevel[] = { { TEXT("sublevelPath"), EMcpParamKind::String, false }, { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("streamingMethod"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_Delete[] = { { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_Rename[] = { { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("sourcePath"), EMcpParamKind::String, false }, { TEXT("destinationPath"), EMcpParamKind::String, false }, { TEXT("newName"), EMcpParamKind::String, false }, { TEXT("overwrite"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_Duplicate[] = { { TEXT("sourcePath"), EMcpParamKind::String, false }, { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("overwrite"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_GetSummary[] = { { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("level_path"), EMcpParamKind::String, false } };
+static void S_Load(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelPath"), TEXT("Level asset path."))
+	 .Bool(TEXT("saveDirtyPackages"), TEXT("load: save dirty world/content "
+		"packages before loading (required in headless/unattended mode)."))
+	 .Required({TEXT("levelPath")});
+}
+
+static void S_Save(FMcpSchemaBuilder&) {}
+
+static void S_SaveAs(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .Required({TEXT("savePath")});
+}
+
+static void S_CreateLevel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelName"), TEXT(""))
+	 .String(TEXT("levelPath"), TEXT("Level asset path."))
+	 .Bool(TEXT("useWorldPartition"), TEXT(""));
+}
+
+static void S_Stream(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelName"), TEXT(""))
+	 .String(TEXT("levelPath"), TEXT("Level asset path."))
+	 .Bool(TEXT("shouldBeLoaded"), TEXT(""))
+	 .Bool(TEXT("shouldBeVisible"), TEXT(""));
+}
+
+static void S_Unload(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelName"), TEXT(""))
+	 .String(TEXT("levelPath"), TEXT("Level asset path."));
+}
+
+static void S_BuildLighting(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("quality"), TEXT("Lighting build quality label."));
+}
+
+static void S_SetMetadata(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path for metadata or validation aliases."))
+	 .String(TEXT("levelPath"), TEXT("Level asset path."))
+	 .FreeformObject(TEXT("metadata"), TEXT("Metadata key/value object."));
+}
+
+static void S_ExportLevel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelPath"), TEXT("Level asset path."))
+	 .String(TEXT("exportPath"), TEXT("Export file path."))
+	 .String(TEXT("destinationPath"), TEXT("Destination path for move/copy."));
+}
+
+static void S_ImportLevel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("sourcePath"), TEXT("Source path for import/move/copy."))
+	 .String(TEXT("packagePath"), TEXT("Path to a directory."))
+	 .String(TEXT("destinationPath"), TEXT("Destination path for move/copy."))
+	 .Bool(TEXT("overwrite"), TEXT("Allow replacing an existing destination level."));
+}
+
+static void S_AddSublevel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("sublevelPath"), TEXT("Level asset path alias for add_sublevel."))
+	 .String(TEXT("levelPath"), TEXT("Level asset path."))
+	 .String(TEXT("streamingMethod"), TEXT(""));
+}
+
+static void S_Delete(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelPath"), TEXT("Level asset path."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."));
+}
+
+static void S_RenameLevel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelPath"), TEXT("Level asset path."))
+	 .String(TEXT("sourcePath"), TEXT("Source path for import/move/copy."))
+	 .String(TEXT("destinationPath"), TEXT("Destination path for move/copy."))
+	 .String(TEXT("newName"), TEXT("New asset name for rename operations."))
+	 .Bool(TEXT("overwrite"), TEXT("Allow replacing an existing destination level."));
+}
+
+static void S_DuplicateLevel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("sourcePath"), TEXT("Source path for import/move/copy."))
+	 .String(TEXT("levelPath"), TEXT("Level asset path."))
+	 .String(TEXT("destinationPath"), TEXT("Destination path for move/copy."))
+	 .Bool(TEXT("overwrite"), TEXT("Allow replacing an existing destination level."))
+	 .Required({TEXT("destinationPath")});
+}
+
+static void S_ListLevels(FMcpSchemaBuilder&) {}
+
+static void S_GetSummary(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelPath"), TEXT("Level asset path."))
+	 .String(TEXT("level_path"), TEXT("get_summary: snake_case alias for levelPath."));
+}
+
+static void S_GetCurrentLevel(FMcpSchemaBuilder&) {}
+
+static void S_ValidateLevel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelPath"), TEXT("Level asset path."))
+	 .String(TEXT("assetPath"), TEXT("Asset path for metadata or validation aliases."));
+}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
+// Flags are authored per action: RequiresEditor on every action (the chain was
+// whole-editor-gated), Mutating on the writers only; the readers (list_levels,
+// get_summary, get_current_level, validate_level) stay unflagged.
 
-#define MCP_ML_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)       \
+#define MCP_ML_CALL(ClassSuffix, ActionLiteral, HandlerFn, ExtraFlags)                     \
 class FMcpCall_ManageLevel_##ClassSuffix final : public FMcpCall                          \
 {                                                                                         \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
 	const FMcpCallDecl& GetDecl() const override                                          \
 	{                                                                                     \
-		static const FMcpCallDecl Decl{ TEXT("manage_level"), TEXT(ActionLiteral),        \
-			ParamsArray, EMcpCallFlags::RequiresEditor | (ExtraFlags) };                  \
-		return Decl;                                                                      \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_level"),                \
+			TEXT(ActionLiteral), EMcpCallFlags::RequiresEditor | (ExtraFlags),           \
+			&S_##ClassSuffix);                                                            \
+		return D;                                                                         \
 	}                                                                                     \
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
@@ -57,24 +163,24 @@ class FMcpCall_ManageLevel_##ClassSuffix final : public FMcpCall                
 	}                                                                                     \
 };
 
-MCP_ML_CALL(Load, "load", P_Load, HandleLevelLoad, EMcpCallFlags::Mutating)
-MCP_ML_CALL(Save, "save", {}, HandleLevelSave, EMcpCallFlags::Mutating)
-MCP_ML_CALL(SaveAs, "save_as", P_SaveAs, HandleLevelSaveAs, EMcpCallFlags::Mutating)
-MCP_ML_CALL(CreateLevel, "create_level", P_CreateLevel, HandleLevelCreate, EMcpCallFlags::Mutating)
-MCP_ML_CALL(Stream, "stream", P_Stream, HandleLevelStream, EMcpCallFlags::Mutating)
-MCP_ML_CALL(Unload, "unload", P_Unload, HandleLevelUnload, EMcpCallFlags::Mutating)
-MCP_ML_CALL(BuildLighting, "build_lighting", P_BuildLighting, HandleLevelBuildLighting, EMcpCallFlags::Mutating)
-MCP_ML_CALL(SetMetadata, "set_metadata", P_SetMetadata, HandleLevelSetMetadata, EMcpCallFlags::Mutating)
-MCP_ML_CALL(ExportLevel, "export_level", P_Export, HandleLevelExport, EMcpCallFlags::Mutating)
-MCP_ML_CALL(ImportLevel, "import_level", P_Import, HandleLevelImport, EMcpCallFlags::Mutating)
-MCP_ML_CALL(AddSublevel, "add_sublevel", P_AddSublevel, HandleLevelAddSublevel, EMcpCallFlags::Mutating)
-MCP_ML_CALL(Delete, "delete", P_Delete, HandleLevelDelete, EMcpCallFlags::Mutating)
-MCP_ML_CALL(RenameLevel, "rename_level", P_Rename, HandleLevelRename, EMcpCallFlags::Mutating)
-MCP_ML_CALL(DuplicateLevel, "duplicate_level", P_Duplicate, HandleLevelDuplicate, EMcpCallFlags::Mutating)
-MCP_ML_CALL(ListLevels, "list_levels", {}, HandleLevelList, EMcpCallFlags::None)
-MCP_ML_CALL(GetSummary, "get_summary", P_GetSummary, HandleLevelGetSummary, EMcpCallFlags::None)
-MCP_ML_CALL(GetCurrentLevel, "get_current_level", {}, HandleLevelGetCurrent, EMcpCallFlags::None)
-MCP_ML_CALL(ValidateLevel, "validate_level", P_Validate, HandleLevelValidate, EMcpCallFlags::None)
+MCP_ML_CALL(Load, "load", HandleLevelLoad, EMcpCallFlags::Mutating)
+MCP_ML_CALL(Save, "save", HandleLevelSave, EMcpCallFlags::Mutating)
+MCP_ML_CALL(SaveAs, "save_as", HandleLevelSaveAs, EMcpCallFlags::Mutating)
+MCP_ML_CALL(CreateLevel, "create_level", HandleLevelCreate, EMcpCallFlags::Mutating)
+MCP_ML_CALL(Stream, "stream", HandleLevelStream, EMcpCallFlags::Mutating)
+MCP_ML_CALL(Unload, "unload", HandleLevelUnload, EMcpCallFlags::Mutating)
+MCP_ML_CALL(BuildLighting, "build_lighting", HandleLevelBuildLighting, EMcpCallFlags::Mutating)
+MCP_ML_CALL(SetMetadata, "set_metadata", HandleLevelSetMetadata, EMcpCallFlags::Mutating)
+MCP_ML_CALL(ExportLevel, "export_level", HandleLevelExport, EMcpCallFlags::Mutating)
+MCP_ML_CALL(ImportLevel, "import_level", HandleLevelImport, EMcpCallFlags::Mutating)
+MCP_ML_CALL(AddSublevel, "add_sublevel", HandleLevelAddSublevel, EMcpCallFlags::Mutating)
+MCP_ML_CALL(Delete, "delete", HandleLevelDelete, EMcpCallFlags::Mutating)
+MCP_ML_CALL(RenameLevel, "rename_level", HandleLevelRename, EMcpCallFlags::Mutating)
+MCP_ML_CALL(DuplicateLevel, "duplicate_level", HandleLevelDuplicate, EMcpCallFlags::Mutating)
+MCP_ML_CALL(ListLevels, "list_levels", HandleLevelList, EMcpCallFlags::None)
+MCP_ML_CALL(GetSummary, "get_summary", HandleLevelGetSummary, EMcpCallFlags::None)
+MCP_ML_CALL(GetCurrentLevel, "get_current_level", HandleLevelGetCurrent, EMcpCallFlags::None)
+MCP_ML_CALL(ValidateLevel, "validate_level", HandleLevelValidate, EMcpCallFlags::None)
 
 #undef MCP_ML_CALL
 

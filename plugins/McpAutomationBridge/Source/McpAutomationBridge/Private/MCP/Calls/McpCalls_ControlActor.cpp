@@ -1,96 +1,295 @@
 // LINT-TOOL: control_actor
-// control_actor as FMcpCall classes — the pilot family (docs/action-declarations.md).
-// Each class co-locates the action's declaration (its true param contract, verified
-// against the dedicated handler's reads) with its implementation. Run() delegates to
-// the subsystem member handlers until the module split de-members those bodies.
+// LINT-SCHEMA-DERIVED
+// control_actor as FMcpCall classes — the pilot family (docs/action-declarations.md),
+// now on schema-from-decls. Each class AUTHORS its schema fragment in a S_<Suffix>()
+// function; the published facade schema folds those fragments and GetDecl() derives the
+// validation decl from the same fragment via McpDeriveDecl(), so schema and decl are one
+// source and cannot drift. Run() delegates to the subsystem member handlers until the
+// module split de-members those bodies.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
+#include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
-// so file-scope param arrays would collide across families otherwise.
+// so file-scope helpers would collide across families otherwise.
 namespace McpCalls::ControlActor
 {
 
-// ─── Param contracts ─────────────────────────────────────────────────────────
-// bRequired marks params the handler hard-errors without. Actions that accept
-// one-of-several aliases (delete, set_actor_collision, find_by_class) declare
-// every alias optional: the requirement is "at least one", which the decl
-// vocabulary cannot express and the handler enforces itself.
+// ─── Schema fragments ────────────────────────────────────────────────────────
+// One S_<Suffix>() per action, authoring exactly the params that action reads
+// (the fold dedups shared params to one entry). Descriptions are the tool's
+// authored help text; McpDeriveDecl() reads the param kinds + required-set back
+// out of these to build the transport validation decl. Actions that accept
+// one-of-several aliases (delete, remove_component, get_components, find_by_class,
+// detach, set_actor_collision) author every alias optional: the requirement is
+// "at least one", which the decl vocabulary cannot express and the handler
+// enforces itself.
 
-inline const FMcpParamDecl P_Spawn[] = { { TEXT("classPath"), EMcpParamKind::String, false }, { TEXT("className"), EMcpParamKind::String, false }, { TEXT("actorClass"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("scale"), EMcpParamKind::Object, false }, { TEXT("meshPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SpawnBlueprint[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("scale"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_Delete[] = { { TEXT("actorNames"), EMcpParamKind::Array, false }, { TEXT("actorName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_DeleteByTag[] = { { TEXT("tag"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_Duplicate[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("newName"), EMcpParamKind::String, false }, { TEXT("offset"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_ApplyForce[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("force"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_SetTransform[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("scale"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_GetTransform[] = { { TEXT("actorName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_SetVisibility[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("visible"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddComponent[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("componentType"), EMcpParamKind::String, true }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("meshPath"), EMcpParamKind::String, false }, { TEXT("properties"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_RemoveComponent[] = { { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("actor_name"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("component_name"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetComponentProperty[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("componentName"), EMcpParamKind::String, true }, { TEXT("properties"), EMcpParamKind::Object, false }, { TEXT("propertyName"), EMcpParamKind::String, false }, { TEXT("propertyPath"), EMcpParamKind::String, false }, { TEXT("value"), EMcpParamKind::Any, false } };
-inline const FMcpParamDecl P_GetComponentProperty[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("componentName"), EMcpParamKind::String, true }, { TEXT("propertyName"), EMcpParamKind::String, false }, { TEXT("propertyPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_GetComponents[] = { { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("objectPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_GetActorBounds[] = { { TEXT("actorName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_AddTag[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("tag"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_RemoveTag[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("tag"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_FindByTag[] = { { TEXT("tag"), EMcpParamKind::String, true }, { TEXT("matchType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_FindByName[] = { { TEXT("name"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_FindByClass[] = { { TEXT("className"), EMcpParamKind::String, false }, { TEXT("class"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_List[] = { { TEXT("filter"), EMcpParamKind::String, false }, { TEXT("limit"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetBlueprintVariables[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("variables"), EMcpParamKind::Object, true } };
-inline const FMcpParamDecl P_CreateSnapshot[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("snapshotName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_Attach[] = { { TEXT("childActor"), EMcpParamKind::String, true }, { TEXT("parentActor"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_Detach[] = { { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("childActor"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetActorCollision[] = { { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("actor_name"), EMcpParamKind::String, false }, { TEXT("collisionEnabled"), EMcpParamKind::Bool, false }, { TEXT("collision_enabled"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CallActorFunction[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("functionName"), EMcpParamKind::String, true }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("arguments"), EMcpParamKind::Array, false } };
+static void S_Spawn(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("classPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("className"), TEXT("Actor class name."))
+	 .String(TEXT("actorClass"), TEXT("Actor class alias or path."))
+	 .String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("name"), TEXT("find_by_name query; alias of actorName for spawn actions."))
+	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("scale"), TEXT("3D scale (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .String(TEXT("meshPath"), TEXT("Mesh asset path."));
+}
+
+static void S_SpawnBlueprint(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("name"), TEXT("find_by_name query; alias of actorName for spawn actions."))
+	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("scale"), TEXT("3D scale (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_Delete(FMcpSchemaBuilder& B)
+{
+	B.Array(TEXT("actorNames"), TEXT("Actor names for bulk actor operations."))
+	 .String(TEXT("actorName"), TEXT("Name of the actor."));
+}
+
+static void S_DeleteByTag(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("tag"), TEXT("Name of the tag."))
+	 .Required({TEXT("tag")});
+}
+
+static void S_Duplicate(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("newName"), TEXT("New name for renaming."))
+	 .Object(TEXT("offset"), TEXT("3D offset (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Required({TEXT("actorName")});
+}
+
+static void S_ApplyForce(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Object(TEXT("force"), TEXT("3D vector."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Required({TEXT("actorName")});
+}
+
+static void S_SetTransform(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("scale"), TEXT("3D scale (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Required({TEXT("actorName")});
+}
+
+static void S_GetTransform(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_SetVisibility(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Bool(TEXT("visible"), TEXT("Whether the item/actor is visible."))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_AddComponent(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("componentType"), TEXT(""))
+	 .String(TEXT("componentName"), TEXT("Name of the component."))
+	 .String(TEXT("meshPath"), TEXT("Mesh asset path."))
+	 .FreeformObject(TEXT("properties"), TEXT(""))
+	 .Required({TEXT("actorName"), TEXT("componentType")});
+}
+
+static void S_RemoveComponent(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("actor_name"), TEXT("snake_case alias of actorName."))
+	 .String(TEXT("componentName"), TEXT("Name of the component."))
+	 .String(TEXT("component_name"), TEXT("snake_case alias of componentName."));
+}
+
+static void S_SetComponentProperty(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("componentName"), TEXT("Name of the component."))
+	 .FreeformObject(TEXT("properties"), TEXT(""))
+	 .String(TEXT("propertyName"), TEXT("Name of the property."))
+	 .String(TEXT("propertyPath"), TEXT("Dotted path to the property (alternative to propertyName)."))
+	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Required({TEXT("actorName"), TEXT("componentName")});
+}
+
+static void S_GetComponentProperty(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("componentName"), TEXT("Name of the component."))
+	 .String(TEXT("propertyName"), TEXT("Name of the property."))
+	 .String(TEXT("propertyPath"), TEXT("Dotted path to the property (alternative to propertyName)."))
+	 .Required({TEXT("actorName"), TEXT("componentName")});
+}
+
+static void S_GetComponents(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("objectPath"), TEXT("Object path of the actor (alternative to actorName)."));
+}
+
+static void S_GetActorBounds(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_AddTag(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("tag"), TEXT("Name of the tag."))
+	 .Required({TEXT("actorName"), TEXT("tag")});
+}
+
+static void S_RemoveTag(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("tag"), TEXT("Name of the tag."))
+	 .Required({TEXT("actorName"), TEXT("tag")});
+}
+
+static void S_FindByTag(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("tag"), TEXT("Name of the tag."))
+	 .String(TEXT("matchType"), TEXT("find_by_tag: match mode, 'exact' (default) or 'contains'."))
+	 .Required({TEXT("tag")});
+}
+
+static void S_FindByName(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("find_by_name query; alias of actorName for spawn actions."))
+	 .Required({TEXT("name")});
+}
+
+static void S_FindByClass(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("className"), TEXT("Actor class name."))
+	 .String(TEXT("class"), TEXT("Actor class name (alias of className)."));
+}
+
+static void S_List(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("filter"), TEXT("Optional actor label/name filter for list."))
+	 .Integer(TEXT("limit"), TEXT("Maximum number of actors to return."));
+}
+
+static void S_SetBlueprintVariables(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .FreeformObject(TEXT("variables"), TEXT(""))
+	 .Required({TEXT("actorName"), TEXT("variables")});
+}
+
+static void S_CreateSnapshot(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("snapshotName"), TEXT(""))
+	 .Required({TEXT("actorName"), TEXT("snapshotName")});
+}
+
+static void S_Attach(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("childActor"), TEXT("Name of the child actor (for attach/detach operations)."))
+	 .String(TEXT("parentActor"), TEXT("Name of the parent actor (for attach operations)."))
+	 .Required({TEXT("childActor"), TEXT("parentActor")});
+}
+
+static void S_Detach(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("childActor"), TEXT("Name of the child actor (for attach/detach operations)."));
+}
+
+static void S_SetActorCollision(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("actor_name"), TEXT("snake_case alias of actorName."))
+	 .Bool(TEXT("collisionEnabled"), TEXT("Whether actor collision is enabled."))
+	 .Bool(TEXT("collision_enabled"), TEXT("snake_case alias of collisionEnabled."));
+}
+
+static void S_CallActorFunction(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("functionName"), TEXT("Name of the function."))
+	 .String(TEXT("componentName"), TEXT("Name of the component."))
+	 .Array(TEXT("arguments"), TEXT("Arguments to pass to an actor function."))
+	 .Required({TEXT("actorName"), TEXT("functionName")});
+}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
 
-#define MCP_CA_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)      \
-class FMcpCall_ControlActor_##ClassSuffix final : public FMcpCall                        \
-{                                                                                        \
-	const FMcpCallDecl& GetDecl() const override                                         \
-	{                                                                                    \
-		static const FMcpCallDecl Decl{ TEXT("control_actor"), TEXT(ActionLiteral),      \
-			ParamsArray, EMcpCallFlags::RequiresEditor | (ExtraFlags) };                 \
-		return Decl;                                                                     \
-	}                                                                                    \
-	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
-	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
-	{                                                                                    \
-		return S.HandlerFn(RequestId, Payload, Socket);                                  \
-	}                                                                                    \
+#define MCP_CA_CALL(ClassSuffix, ActionLiteral, HandlerFn, ExtraFlags)                    \
+class FMcpCall_ControlActor_##ClassSuffix final : public FMcpCall                         \
+{                                                                                         \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
+	const FMcpCallDecl& GetDecl() const override                                          \
+	{                                                                                     \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("control_actor"),               \
+			TEXT(ActionLiteral), EMcpCallFlags::RequiresEditor | (ExtraFlags),            \
+			&S_##ClassSuffix);                                                            \
+		return D;                                                                         \
+	}                                                                                     \
+	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
+	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
+	{                                                                                     \
+		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+	}                                                                                     \
 };
 
-MCP_CA_CALL(Spawn, "spawn", P_Spawn, HandleControlActorSpawn, EMcpCallFlags::Mutating)
-MCP_CA_CALL(SpawnBlueprint, "spawn_blueprint", P_SpawnBlueprint, HandleControlActorSpawnBlueprint, EMcpCallFlags::Mutating)
-MCP_CA_CALL(Delete, "delete", P_Delete, HandleControlActorDelete, EMcpCallFlags::Mutating)
-MCP_CA_CALL(DeleteByTag, "delete_by_tag", P_DeleteByTag, HandleControlActorDeleteByTag, EMcpCallFlags::Mutating)
-MCP_CA_CALL(Duplicate, "duplicate", P_Duplicate, HandleControlActorDuplicate, EMcpCallFlags::Mutating)
-MCP_CA_CALL(ApplyForce, "apply_force", P_ApplyForce, HandleControlActorApplyForce, EMcpCallFlags::Mutating)
-MCP_CA_CALL(SetTransform, "set_transform", P_SetTransform, HandleControlActorSetTransform, EMcpCallFlags::Mutating)
-MCP_CA_CALL(GetTransform, "get_transform", P_GetTransform, HandleControlActorGetTransform, EMcpCallFlags::None)
-MCP_CA_CALL(SetVisibility, "set_visibility", P_SetVisibility, HandleControlActorSetVisibility, EMcpCallFlags::Mutating)
-MCP_CA_CALL(AddComponent, "add_component", P_AddComponent, HandleControlActorAddComponent, EMcpCallFlags::Mutating)
-MCP_CA_CALL(RemoveComponent, "remove_component", P_RemoveComponent, HandleControlActorRemoveComponent, EMcpCallFlags::Mutating)
-MCP_CA_CALL(SetComponentProperty, "set_component_property", P_SetComponentProperty, HandleControlActorSetComponentProperties, EMcpCallFlags::Mutating)
-MCP_CA_CALL(GetComponentProperty, "get_component_property", P_GetComponentProperty, HandleControlActorGetComponentProperty, EMcpCallFlags::None)
-MCP_CA_CALL(GetComponents, "get_components", P_GetComponents, HandleControlActorGetComponents, EMcpCallFlags::None)
-MCP_CA_CALL(GetActorBounds, "get_actor_bounds", P_GetActorBounds, HandleControlActorGetBoundingBox, EMcpCallFlags::None)
-MCP_CA_CALL(AddTag, "add_tag", P_AddTag, HandleControlActorAddTag, EMcpCallFlags::Mutating)
-MCP_CA_CALL(RemoveTag, "remove_tag", P_RemoveTag, HandleControlActorRemoveTag, EMcpCallFlags::Mutating)
-MCP_CA_CALL(FindByTag, "find_by_tag", P_FindByTag, HandleControlActorFindByTag, EMcpCallFlags::None)
-MCP_CA_CALL(FindByName, "find_by_name", P_FindByName, HandleControlActorFindByName, EMcpCallFlags::None)
-MCP_CA_CALL(FindByClass, "find_by_class", P_FindByClass, HandleControlActorFindByClass, EMcpCallFlags::None)
-MCP_CA_CALL(List, "list", P_List, HandleControlActorList, EMcpCallFlags::None)
-MCP_CA_CALL(SetBlueprintVariables, "set_blueprint_variables", P_SetBlueprintVariables, HandleControlActorSetBlueprintVariables, EMcpCallFlags::Mutating)
-MCP_CA_CALL(CreateSnapshot, "create_snapshot", P_CreateSnapshot, HandleControlActorCreateSnapshot, EMcpCallFlags::Mutating)
-MCP_CA_CALL(Attach, "attach", P_Attach, HandleControlActorAttach, EMcpCallFlags::Mutating)
-MCP_CA_CALL(Detach, "detach", P_Detach, HandleControlActorDetach, EMcpCallFlags::Mutating)
-MCP_CA_CALL(SetActorCollision, "set_actor_collision", P_SetActorCollision, HandleControlActorSetCollision, EMcpCallFlags::Mutating)
-MCP_CA_CALL(CallActorFunction, "call_actor_function", P_CallActorFunction, HandleControlActorCallFunction, EMcpCallFlags::Mutating)
+MCP_CA_CALL(Spawn, "spawn", HandleControlActorSpawn, EMcpCallFlags::Mutating)
+MCP_CA_CALL(SpawnBlueprint, "spawn_blueprint", HandleControlActorSpawnBlueprint, EMcpCallFlags::Mutating)
+MCP_CA_CALL(Delete, "delete", HandleControlActorDelete, EMcpCallFlags::Mutating)
+MCP_CA_CALL(DeleteByTag, "delete_by_tag", HandleControlActorDeleteByTag, EMcpCallFlags::Mutating)
+MCP_CA_CALL(Duplicate, "duplicate", HandleControlActorDuplicate, EMcpCallFlags::Mutating)
+MCP_CA_CALL(ApplyForce, "apply_force", HandleControlActorApplyForce, EMcpCallFlags::Mutating)
+MCP_CA_CALL(SetTransform, "set_transform", HandleControlActorSetTransform, EMcpCallFlags::Mutating)
+MCP_CA_CALL(GetTransform, "get_transform", HandleControlActorGetTransform, EMcpCallFlags::None)
+MCP_CA_CALL(SetVisibility, "set_visibility", HandleControlActorSetVisibility, EMcpCallFlags::Mutating)
+MCP_CA_CALL(AddComponent, "add_component", HandleControlActorAddComponent, EMcpCallFlags::Mutating)
+MCP_CA_CALL(RemoveComponent, "remove_component", HandleControlActorRemoveComponent, EMcpCallFlags::Mutating)
+MCP_CA_CALL(SetComponentProperty, "set_component_property", HandleControlActorSetComponentProperties, EMcpCallFlags::Mutating)
+MCP_CA_CALL(GetComponentProperty, "get_component_property", HandleControlActorGetComponentProperty, EMcpCallFlags::None)
+MCP_CA_CALL(GetComponents, "get_components", HandleControlActorGetComponents, EMcpCallFlags::None)
+MCP_CA_CALL(GetActorBounds, "get_actor_bounds", HandleControlActorGetBoundingBox, EMcpCallFlags::None)
+MCP_CA_CALL(AddTag, "add_tag", HandleControlActorAddTag, EMcpCallFlags::Mutating)
+MCP_CA_CALL(RemoveTag, "remove_tag", HandleControlActorRemoveTag, EMcpCallFlags::Mutating)
+MCP_CA_CALL(FindByTag, "find_by_tag", HandleControlActorFindByTag, EMcpCallFlags::None)
+MCP_CA_CALL(FindByName, "find_by_name", HandleControlActorFindByName, EMcpCallFlags::None)
+MCP_CA_CALL(FindByClass, "find_by_class", HandleControlActorFindByClass, EMcpCallFlags::None)
+MCP_CA_CALL(List, "list", HandleControlActorList, EMcpCallFlags::None)
+MCP_CA_CALL(SetBlueprintVariables, "set_blueprint_variables", HandleControlActorSetBlueprintVariables, EMcpCallFlags::Mutating)
+MCP_CA_CALL(CreateSnapshot, "create_snapshot", HandleControlActorCreateSnapshot, EMcpCallFlags::Mutating)
+MCP_CA_CALL(Attach, "attach", HandleControlActorAttach, EMcpCallFlags::Mutating)
+MCP_CA_CALL(Detach, "detach", HandleControlActorDetach, EMcpCallFlags::Mutating)
+MCP_CA_CALL(SetActorCollision, "set_actor_collision", HandleControlActorSetCollision, EMcpCallFlags::Mutating)
+MCP_CA_CALL(CallActorFunction, "call_actor_function", HandleControlActorCallFunction, EMcpCallFlags::Mutating)
 
 #undef MCP_CA_CALL
 

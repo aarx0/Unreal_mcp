@@ -1,9 +1,10 @@
-// McpTool_ManageLevel.cpp — manage_level tool definition (24 actions)
+// McpTool_ManageLevel.cpp — manage_level tool definition (18 actions)
 
 #include "McpVersionCompatibility.h"
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpCallRegistry.h"
 #include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_ManageLevel : public FMcpToolDefinition
@@ -20,35 +21,18 @@ public:
 
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
-		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), McpConsolidatedActions::ManageLevel(), TEXT("Action"))
-			.String(TEXT("levelPath"), TEXT("Level asset path."))
-			.Bool(TEXT("saveDirtyPackages"), TEXT("load: save dirty world/content "
-				"packages before loading (required in headless/unattended mode)."))
-			.String(TEXT("assetPath"), TEXT("Asset path for metadata or validation aliases."))
-			.String(TEXT("levelName"), TEXT(""))
-			.String(TEXT("name"), TEXT("Name alias used by light and utility actions."))
-			.String(TEXT("path"), TEXT("Directory path for asset creation."))
-			.String(TEXT("savePath"), TEXT("Path to save the asset."))
-			.String(TEXT("destinationPath"), TEXT("Destination path for move/copy."))
-			.Bool(TEXT("overwrite"), TEXT("Allow replacing an existing destination level."))
-			.String(TEXT("newName"), TEXT("New asset name for rename operations."))
-			.String(TEXT("targetPath"), TEXT("Path to a directory."))
-			.String(TEXT("exportPath"), TEXT("Export file path."))
-			.String(TEXT("packagePath"), TEXT("Path to a directory."))
-			.String(TEXT("sourcePath"), TEXT("Source path for import/move/copy."))
-			.String(TEXT("sublevelPath"), TEXT("Level asset path."))
-			.String(TEXT("sublevelPath"), TEXT("Level asset path alias for add_sublevel."))
-			.String(TEXT("parentLevel"), TEXT("Parent level path."))
-			.String(TEXT("parentPath"), TEXT("Path to a directory."))
-			.String(TEXT("streamingMethod"), TEXT(""))
-			.Bool(TEXT("shouldBeLoaded"), TEXT(""))
-			.Bool(TEXT("shouldBeVisible"), TEXT(""))
-			.String(TEXT("quality"), TEXT("Lighting build quality label."))
-			.Bool(TEXT("useWorldPartition"), TEXT(""))
-			.FreeformObject(TEXT("metadata"), TEXT("Metadata key/value object."))
-			.Required({TEXT("action")})
-			.Build();
+		// schema-from-decls: every param comes from a classed action's authored
+		// AppendSchema() fragment (see Calls/McpCalls_ManageLevel.cpp). The fold
+		// dedups shared params; this facade only owns the cross-cutting 'action'.
+		FMcpSchemaBuilder B;
+		B.StringEnum(TEXT("action"), McpConsolidatedActions::ManageLevel(), TEXT("Action"));
+		for (FMcpCall* Call : FMcpCallRegistry::Get().CallsForTool(TEXT("manage_level")))
+		{
+			Call->AppendSchema(B);
+		}
+		// Per-action required params live in each action's derived decl; the flat
+		// tool 'required' only carries 'action' (fragments' Required() pollute B).
+		return B.ClearRequired().Required({TEXT("action")}).Build();
 	}
 };
 

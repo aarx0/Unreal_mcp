@@ -1,100 +1,273 @@
 // LINT-TOOL: manage_interaction
+// LINT-SCHEMA-DERIVED
 // manage_interaction as FMcpCall classes — eighth classed family
-// (docs/action-declarations.md). Each class co-locates the action's
-// declaration with its implementation. Run() delegates to the subsystem
-// member handlers (HandleInteraction*, InteractionHandlers.cpp) until the
-// module split de-members those bodies. Five of the 22 are shallow scaffolds
-// preserved as-is at classing — the configure_destruction_* marker-tag
-// writers and the configure_trigger_filter/response variable scaffolds;
-// deepening or retiring them is a logged product decision (TODO.md).
+// (docs/action-declarations.md). Adopts schema-from-decls: each class AUTHORS
+// its schema fragment in a S_<Suffix>() function; the published facade schema
+// folds those fragments and GetDecl() derives the validation decl from the same
+// fragment via McpDeriveDecl(), so schema and decl are one source and cannot
+// drift. Run() delegates to the subsystem member handlers (HandleInteraction*,
+// InteractionHandlers.cpp) until the module split de-members those bodies. Five
+// of the 22 are shallow scaffolds preserved as-is — the configure_destruction_*
+// marker-tag writers and the configure_trigger_filter/response variable
+// scaffolds; deepening or retiring them is a logged product decision (TODO.md).
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
+#include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
-// so file-scope param arrays would collide across families otherwise.
+// so file-scope helpers would collide across families otherwise.
 namespace McpCalls::ManageInteraction
 {
 
-// ─── Param contracts ─────────────────────────────────────────────────────────
-// Ported from this family's retired shim declarations
-// (McpDecl_ManageInteraction.h) and re-verified against the extracted
-// HandleInteraction* bodies. The configure door/switch/chest property rows
-// accept blueprintPath as a fallback for their primary path spelling, so
-// both spellings are optional and the "at least one" requirement is
-// handler-enforced — same for get_info's resolver bag.
+// ─── Schema fragments ────────────────────────────────────────────────────────
+// One S_<Suffix>() per action, authoring exactly the params that action reads
+// (the fold dedups shared params to one entry). Descriptions are the tool's
+// authored help text; McpDeriveDecl() reads the param kinds + required-set back
+// out of these to build the transport validation decl. The configure
+// door/switch/chest property rows and get_info accept several path spellings as
+// fallbacks (blueprintPath for the primary path, or a resolver bag); all are
+// authored optional and the "at least one" requirement is handler-enforced.
 
-inline const FMcpParamDecl P_CreateInteractionComponent[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("traceDistance"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_ConfigureInteractionTrace[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("traceType"), EMcpParamKind::String, false }, { TEXT("traceDistance"), EMcpParamKind::Number, false }, { TEXT("traceRadius"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_ConfigureInteractionWidget[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("widgetClass"), EMcpParamKind::String, false }, { TEXT("showOnHover"), EMcpParamKind::Bool, false }, { TEXT("showPromptText"), EMcpParamKind::Bool, false }, { TEXT("promptTextFormat"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddInteractionEvents[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateInteractableInterface[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("folder"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateDoorActor[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("folder"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("openAngle"), EMcpParamKind::Number, false }, { TEXT("openTime"), EMcpParamKind::Number, false }, { TEXT("autoClose"), EMcpParamKind::Bool, false }, { TEXT("autoCloseDelay"), EMcpParamKind::Number, false }, { TEXT("requiresKey"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureDoorProperties[] = { { TEXT("doorPath"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("openAngle"), EMcpParamKind::Number, false }, { TEXT("openTime"), EMcpParamKind::Number, false }, { TEXT("locked"), EMcpParamKind::Bool, false }, { TEXT("autoClose"), EMcpParamKind::Bool, false }, { TEXT("autoCloseDelay"), EMcpParamKind::Number, false }, { TEXT("requiresKey"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateSwitchActor[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("folder"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("switchType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ConfigureSwitchProperties[] = { { TEXT("switchPath"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("switchType"), EMcpParamKind::String, false }, { TEXT("canToggle"), EMcpParamKind::Bool, false }, { TEXT("resetTime"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_CreateChestActor[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("folder"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("locked"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureChestProperties[] = { { TEXT("chestPath"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("locked"), EMcpParamKind::Bool, false }, { TEXT("openAngle"), EMcpParamKind::Number, false }, { TEXT("openTime"), EMcpParamKind::Number, false }, { TEXT("lootTablePath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateLeverActor[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("folder"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("savePath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ActorNameRequired[] = { { TEXT("actorName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_AddDestructionComponent[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateTriggerActor[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("folder"), EMcpParamKind::String, false }, { TEXT("triggerShape"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ConfigureTriggerEvents[] = { { TEXT("triggerPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_TriggerPathRequired[] = { { TEXT("triggerPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_GetInteractionInfo[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("doorPath"), EMcpParamKind::String, false }, { TEXT("switchPath"), EMcpParamKind::String, false }, { TEXT("chestPath"), EMcpParamKind::String, false }, { TEXT("triggerPath"), EMcpParamKind::String, false } };
+static void S_CreateComponent(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("componentName"), TEXT("Name of the component."))
+	 .Number(TEXT("traceDistance"), TEXT("Trace distance."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_ConfigureTrace(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .StringEnum(TEXT("traceType"), {
+		TEXT("line"), TEXT("sphere"), TEXT("box")
+	 }, TEXT("Type of interaction trace."))
+	 .Number(TEXT("traceDistance"), TEXT("Trace distance."))
+	 .Number(TEXT("traceRadius"), TEXT("Trace radius."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_ConfigureWidget(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("widgetClass"), TEXT("Widget class path."))
+	 .Bool(TEXT("showOnHover"), TEXT("Show widget when hovering."))
+	 .Bool(TEXT("showPromptText"), TEXT("Show interaction prompt text."))
+	 .String(TEXT("promptTextFormat"), TEXT("Format string for prompt (e.g., \"Press {Key} to {Action}\")."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_AddEvents(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."));
+}
+
+static void S_CreateInteractableInterface(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("folder"), TEXT("Destination folder for create_* actions ('path'/'savePath' accepted as aliases; default /Game/Interactables)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_CreateDoorActor(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("folder"), TEXT("Destination folder for create_* actions ('path'/'savePath' accepted as aliases; default /Game/Interactables)."))
+	 .String(TEXT("path"), TEXT("Alias of folder (create_* destination folder)."))
+	 .String(TEXT("savePath"), TEXT("Alias of folder (create_* destination folder)."))
+	 .Number(TEXT("openAngle"), TEXT("Door open rotation angle in degrees."))
+	 .Number(TEXT("openTime"), TEXT("Time to open/close door in seconds."))
+	 .Bool(TEXT("autoClose"), TEXT("Automatically close after opening."))
+	 .Number(TEXT("autoCloseDelay"), TEXT("Delay before auto-close in seconds."))
+	 .Bool(TEXT("requiresKey"), TEXT("Whether interaction requires a key item."))
+	 .Required({TEXT("name")});
+}
+
+static void S_ConfigureDoorProperties(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("doorPath"), TEXT("Path to door actor blueprint."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("openAngle"), TEXT("Door open rotation angle in degrees."))
+	 .Number(TEXT("openTime"), TEXT("Time to open/close door in seconds."))
+	 .Bool(TEXT("locked"), TEXT("Whether the item is locked."))
+	 .Bool(TEXT("autoClose"), TEXT("Automatically close after opening."))
+	 .Number(TEXT("autoCloseDelay"), TEXT("Delay before auto-close in seconds."))
+	 .Bool(TEXT("requiresKey"), TEXT("Whether interaction requires a key item."));
+}
+
+static void S_CreateSwitchActor(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("folder"), TEXT("Destination folder for create_* actions ('path'/'savePath' accepted as aliases; default /Game/Interactables)."))
+	 .String(TEXT("path"), TEXT("Alias of folder (create_* destination folder)."))
+	 .String(TEXT("savePath"), TEXT("Alias of folder (create_* destination folder)."))
+	 .StringEnum(TEXT("switchType"), {
+		TEXT("button"), TEXT("lever"), TEXT("pressure_plate"), TEXT("toggle")
+	 }, TEXT("Type of switch."))
+	 .Required({TEXT("name")});
+}
+
+static void S_ConfigureSwitchProperties(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("switchPath"), TEXT("Path to switch actor blueprint."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .StringEnum(TEXT("switchType"), {
+		TEXT("button"), TEXT("lever"), TEXT("pressure_plate"), TEXT("toggle")
+	 }, TEXT("Type of switch."))
+	 .Bool(TEXT("canToggle"), TEXT("Whether switch can be toggled."))
+	 .Number(TEXT("resetTime"), TEXT("Time to reset switch in seconds."));
+}
+
+static void S_CreateChestActor(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("folder"), TEXT("Destination folder for create_* actions ('path'/'savePath' accepted as aliases; default /Game/Interactables)."))
+	 .String(TEXT("path"), TEXT("Alias of folder (create_* destination folder)."))
+	 .String(TEXT("savePath"), TEXT("Alias of folder (create_* destination folder)."))
+	 .Bool(TEXT("locked"), TEXT("Whether the item is locked."))
+	 .Required({TEXT("name")});
+}
+
+static void S_ConfigureChestProperties(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("chestPath"), TEXT("Path to chest actor blueprint."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Bool(TEXT("locked"), TEXT("Whether the item is locked."))
+	 .Number(TEXT("openAngle"), TEXT("Door open rotation angle in degrees."))
+	 .Number(TEXT("openTime"), TEXT("Time to open/close door in seconds."))
+	 .String(TEXT("lootTablePath"), TEXT("Path to loot table asset."));
+}
+
+static void S_CreateLeverActor(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("folder"), TEXT("Destination folder for create_* actions ('path'/'savePath' accepted as aliases; default /Game/Interactables)."))
+	 .String(TEXT("path"), TEXT("Alias of folder (create_* destination folder)."))
+	 .String(TEXT("savePath"), TEXT("Alias of folder (create_* destination folder)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_SetupDestructibleMesh(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_AddDestructionComponent(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("componentName"), TEXT("Name of the component."));
+}
+
+static void S_ConfigureDestructionLevels(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_ConfigureDestructionEffects(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_ConfigureDestructionDamage(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_CreateTriggerActor(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("folder"), TEXT("Destination folder for create_* actions ('path'/'savePath' accepted as aliases; default /Game/Interactables)."))
+	 .StringEnum(TEXT("triggerShape"), {
+		TEXT("box"), TEXT("sphere"), TEXT("capsule")
+	 }, TEXT("Shape of trigger volume."))
+	 .Required({TEXT("name")});
+}
+
+static void S_ConfigureTriggerEvents(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("triggerPath"), TEXT("Path to trigger actor blueprint."));
+}
+
+static void S_ConfigureTriggerFilter(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("triggerPath"), TEXT("Path to trigger actor blueprint."))
+	 .Required({TEXT("triggerPath")});
+}
+
+static void S_ConfigureTriggerResponse(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("triggerPath"), TEXT("Path to trigger actor blueprint."))
+	 .Required({TEXT("triggerPath")});
+}
+
+static void S_GetInfo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("doorPath"), TEXT("Path to door actor blueprint."))
+	 .String(TEXT("switchPath"), TEXT("Path to switch actor blueprint."))
+	 .String(TEXT("chestPath"), TEXT("Path to chest actor blueprint."))
+	 .String(TEXT("triggerPath"), TEXT("Path to trigger actor blueprint."));
+}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // RequiresEditor is baked into every row (every implementation body is
-// editor-gated). Mutating on all writers; the only reader is
-// get_info.
+// editor-gated). Mutating on all writers; the only reader is get_info.
 
-#define MCP_MI_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)        \
-class FMcpCall_ManageInteraction_##ClassSuffix final : public FMcpCall                     \
+#define MCP_MI_CALL(ClassSuffix, ActionLiteral, HandlerFn, ExtraFlags)                      \
+class FMcpCall_ManageInteraction_##ClassSuffix final : public FMcpCall                      \
 {                                                                                          \
-	const FMcpCallDecl& GetDecl() const override                                           \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }          \
+	const FMcpCallDecl& GetDecl() const override                                            \
 	{                                                                                      \
-		static const FMcpCallDecl Decl{ TEXT("manage_interaction"), TEXT(ActionLiteral),   \
-			ParamsArray, EMcpCallFlags::RequiresEditor | (ExtraFlags) };                   \
-		return Decl;                                                                       \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_interaction"),            \
+			TEXT(ActionLiteral), EMcpCallFlags::RequiresEditor | (ExtraFlags),              \
+			&S_##ClassSuffix);                                                              \
+		return D;                                                                          \
 	}                                                                                      \
-	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                   \
-	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override   \
+	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                    \
+	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override    \
 	{                                                                                      \
-		return S.HandlerFn(RequestId, Payload, Socket);                                    \
+		return S.HandlerFn(RequestId, Payload, Socket);                                     \
 	}                                                                                      \
 };
 
 // Interaction component (18.1)
-MCP_MI_CALL(CreateComponent, "create_interaction_component", P_CreateInteractionComponent, HandleInteractionCreateComponent, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureTrace, "configure_interaction_trace", P_ConfigureInteractionTrace, HandleInteractionConfigureTrace, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureWidget, "configure_interaction_widget", P_ConfigureInteractionWidget, HandleInteractionConfigureWidget, EMcpCallFlags::Mutating)
-MCP_MI_CALL(AddEvents, "add_interaction_events", P_AddInteractionEvents, HandleInteractionAddEvents, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateComponent, "create_interaction_component", HandleInteractionCreateComponent, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureTrace, "configure_interaction_trace", HandleInteractionConfigureTrace, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureWidget, "configure_interaction_widget", HandleInteractionConfigureWidget, EMcpCallFlags::Mutating)
+MCP_MI_CALL(AddEvents, "add_interaction_events", HandleInteractionAddEvents, EMcpCallFlags::Mutating)
 
 // Interactables (18.2)
-MCP_MI_CALL(CreateInteractableInterface, "create_interactable_interface", P_CreateInteractableInterface, HandleInteractionCreateInteractableInterface, EMcpCallFlags::Mutating)
-MCP_MI_CALL(CreateDoorActor, "create_door_actor", P_CreateDoorActor, HandleInteractionCreateDoorActor, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureDoorProperties, "configure_door_properties", P_ConfigureDoorProperties, HandleInteractionConfigureDoorProperties, EMcpCallFlags::Mutating)
-MCP_MI_CALL(CreateSwitchActor, "create_switch_actor", P_CreateSwitchActor, HandleInteractionCreateSwitchActor, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureSwitchProperties, "configure_switch_properties", P_ConfigureSwitchProperties, HandleInteractionConfigureSwitchProperties, EMcpCallFlags::Mutating)
-MCP_MI_CALL(CreateChestActor, "create_chest_actor", P_CreateChestActor, HandleInteractionCreateChestActor, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureChestProperties, "configure_chest_properties", P_ConfigureChestProperties, HandleInteractionConfigureChestProperties, EMcpCallFlags::Mutating)
-MCP_MI_CALL(CreateLeverActor, "create_lever_actor", P_CreateLeverActor, HandleInteractionCreateLeverActor, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateInteractableInterface, "create_interactable_interface", HandleInteractionCreateInteractableInterface, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateDoorActor, "create_door_actor", HandleInteractionCreateDoorActor, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureDoorProperties, "configure_door_properties", HandleInteractionConfigureDoorProperties, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateSwitchActor, "create_switch_actor", HandleInteractionCreateSwitchActor, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureSwitchProperties, "configure_switch_properties", HandleInteractionConfigureSwitchProperties, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateChestActor, "create_chest_actor", HandleInteractionCreateChestActor, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureChestProperties, "configure_chest_properties", HandleInteractionConfigureChestProperties, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateLeverActor, "create_lever_actor", HandleInteractionCreateLeverActor, EMcpCallFlags::Mutating)
 
 // Destructibles (18.3; the configure_destruction_* trio are marker-tag scaffolds)
-MCP_MI_CALL(SetupDestructibleMesh, "setup_destructible_mesh", P_ActorNameRequired, HandleInteractionSetupDestructibleMesh, EMcpCallFlags::Mutating)
-MCP_MI_CALL(AddDestructionComponent, "add_destruction_component", P_AddDestructionComponent, HandleInteractionAddDestructionComponent, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureDestructionLevels, "configure_destruction_levels", P_ActorNameRequired, HandleInteractionConfigureDestructionLevels, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureDestructionEffects, "configure_destruction_effects", P_ActorNameRequired, HandleInteractionConfigureDestructionEffects, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureDestructionDamage, "configure_destruction_damage", P_ActorNameRequired, HandleInteractionConfigureDestructionDamage, EMcpCallFlags::Mutating)
+MCP_MI_CALL(SetupDestructibleMesh, "setup_destructible_mesh", HandleInteractionSetupDestructibleMesh, EMcpCallFlags::Mutating)
+MCP_MI_CALL(AddDestructionComponent, "add_destruction_component", HandleInteractionAddDestructionComponent, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureDestructionLevels, "configure_destruction_levels", HandleInteractionConfigureDestructionLevels, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureDestructionEffects, "configure_destruction_effects", HandleInteractionConfigureDestructionEffects, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureDestructionDamage, "configure_destruction_damage", HandleInteractionConfigureDestructionDamage, EMcpCallFlags::Mutating)
 
 // Trigger system (18.4; filter/response are variable scaffolds)
-MCP_MI_CALL(CreateTriggerActor, "create_trigger_actor", P_CreateTriggerActor, HandleInteractionCreateTriggerActor, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureTriggerEvents, "configure_trigger_events", P_ConfigureTriggerEvents, HandleInteractionConfigureTriggerEvents, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureTriggerFilter, "configure_trigger_filter", P_TriggerPathRequired, HandleInteractionConfigureTriggerFilter, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureTriggerResponse, "configure_trigger_response", P_TriggerPathRequired, HandleInteractionConfigureTriggerResponse, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateTriggerActor, "create_trigger_actor", HandleInteractionCreateTriggerActor, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureTriggerEvents, "configure_trigger_events", HandleInteractionConfigureTriggerEvents, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureTriggerFilter, "configure_trigger_filter", HandleInteractionConfigureTriggerFilter, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureTriggerResponse, "configure_trigger_response", HandleInteractionConfigureTriggerResponse, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_MI_CALL(GetInfo, "get_info", P_GetInteractionInfo, HandleInteractionGetInfo, EMcpCallFlags::None)
+MCP_MI_CALL(GetInfo, "get_info", HandleInteractionGetInfo, EMcpCallFlags::None)
 
 #undef MCP_MI_CALL
 

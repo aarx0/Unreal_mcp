@@ -16,13 +16,11 @@ output
 outputB
 outputG
 outputR
-targetPath
 targetPin
 
 # -- read from the request payload, not declared in any tool schema --
 activate
 activeIndex
-actor_name
 allowSpectating
 animSequencePath
 areaWeighted
@@ -33,13 +31,10 @@ bPlayerOnly
 brushColor
 cameraActorPath
 candidates
-class
 class_path
-collision_enabled
 columns
 commands
 component_class
-component_name
 contentColorAndOpacity
 dataLayerAssetPath
 encumberanceSystem
@@ -50,7 +45,6 @@ fixedAreaEnteringCost
 fromExpression
 function
 includeSoftDependencies
-level_path
 loop
 material_path
 mesh_path

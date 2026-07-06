@@ -1509,6 +1509,10 @@
           ],
           "type": "string"
         },
+        "actor_name": {
+          "description": "snake_case alias of actorName.",
+          "type": "string"
+        },
         "actorClass": {
           "description": "Actor class alias or path.",
           "type": "string"
@@ -1539,6 +1543,10 @@
           "description": "Name of the child actor (for attach/detach operations).",
           "type": "string"
         },
+        "class": {
+          "description": "Actor class name (alias of className).",
+          "type": "string"
+        },
         "className": {
           "description": "Actor class name.",
           "type": "string"
@@ -1547,9 +1555,17 @@
           "description": "Asset path (e.g., /Game/Path/Asset).",
           "type": "string"
         },
+        "collision_enabled": {
+          "description": "snake_case alias of collisionEnabled.",
+          "type": "boolean"
+        },
         "collisionEnabled": {
           "description": "Whether actor collision is enabled.",
           "type": "boolean"
+        },
+        "component_name": {
+          "description": "snake_case alias of componentName.",
+          "type": "string"
         },
         "componentName": {
           "description": "Name of the component.",
@@ -1616,6 +1632,10 @@
           "description": "New name for renaming.",
           "type": "string"
         },
+        "objectPath": {
+          "description": "Object path of the actor (alternative to actorName).",
+          "type": "string"
+        },
         "offset": {
           "description": "3D offset (x, y, z).",
           "properties": {
@@ -1638,6 +1658,10 @@
         "properties": {},
         "propertyName": {
           "description": "Name of the property.",
+          "type": "string"
+        },
+        "propertyPath": {
+          "description": "Dotted path to the property (alternative to propertyName).",
           "type": "string"
         },
         "rotation": {
@@ -8005,6 +8029,10 @@
           "description": "Time to open/close door in seconds.",
           "type": "number"
         },
+        "path": {
+          "description": "Alias of folder (create_* destination folder).",
+          "type": "string"
+        },
         "promptTextFormat": {
           "description": "Format string for prompt (e.g., \"Press {Key} to {Action}\").",
           "type": "string"
@@ -8016,6 +8044,10 @@
         "resetTime": {
           "description": "Time to reset switch in seconds.",
           "type": "number"
+        },
+        "savePath": {
+          "description": "Alias of folder (create_* destination folder).",
+          "type": "string"
         },
         "showOnHover": {
           "description": "Show widget when hovering.",
@@ -8413,6 +8445,10 @@
           "description": "Export file path.",
           "type": "string"
         },
+        "level_path": {
+          "description": "get_summary: snake_case alias for levelPath.",
+          "type": "string"
+        },
         "levelName": {
           "type": "string"
         },
@@ -8423,10 +8459,6 @@
         "metadata": {
           "description": "Metadata key/value object."
         },
-        "name": {
-          "description": "Name alias used by light and utility actions.",
-          "type": "string"
-        },
         "newName": {
           "description": "New asset name for rename operations.",
           "type": "string"
@@ -8436,14 +8468,6 @@
           "type": "boolean"
         },
         "packagePath": {
-          "description": "Path to a directory.",
-          "type": "string"
-        },
-        "parentLevel": {
-          "description": "Parent level path.",
-          "type": "string"
-        },
-        "parentPath": {
           "description": "Path to a directory.",
           "type": "string"
         },
@@ -8478,10 +8502,6 @@
         },
         "sublevelPath": {
           "description": "Level asset path alias for add_sublevel.",
-          "type": "string"
-        },
-        "targetPath": {
-          "description": "Path to a directory.",
           "type": "string"
         },
         "useWorldPartition": {
