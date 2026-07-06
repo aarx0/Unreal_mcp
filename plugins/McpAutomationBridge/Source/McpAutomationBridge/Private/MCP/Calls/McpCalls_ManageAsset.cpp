@@ -1,168 +1,1212 @@
 // LINT-TOOL: manage_asset
-// manage_asset as FMcpCall classes — twentieth classed family
-// (docs/action-declarations.md). Each class co-locates the action's
-// declaration with its implementation. Run() delegates to the subsystem
-// member handlers — Core actions to their existing AssetWorkflow/AssetQuery
-// members, MaterialAuthoring actions to HandleMaterial* members
-// (MaterialAuthoringHandlers.cpp), Texture actions to HandleTexture* members
-// (TextureHandlers.cpp) — until the module split de-members those bodies.
+// LINT-SCHEMA-DERIVED
+// manage_asset as FMcpCall classes — schema-from-decls
+// (docs/action-declarations.md). Each class AUTHORS its schema fragment in a
+// S_<Suffix>() function; the published facade schema folds those fragments and
+// GetDecl() derives the validation decl from the same fragment via
+// McpDeriveDecl(), so schema and decl are one source and cannot drift. Run()
+// delegates to the subsystem member handlers — Core actions to their existing
+// AssetWorkflow/AssetQuery members, MaterialAuthoring actions to HandleMaterial*
+// members (MaterialAuthoringHandlers.cpp), Texture actions to HandleTexture*
+// members (TextureHandlers.cpp) — until the module split de-members those bodies.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
+#include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
-// so file-scope param arrays would collide across families otherwise.
+// so file-scope helpers would collide across families otherwise.
 namespace McpCalls::ManageAsset
 {
 
-// ─── Param contracts ─────────────────────────────────────────────────────────
-// Ported from this family's retired shim declarations (McpDecl_ManageAsset.h)
-// and re-verified against the member bodies. 13 rows shipped with decl fixes at
-// classing, all with body evidence:
-//  • The five own-branch shadowed material actions had rows unioned from the
-//    DEAD AssetWorkflow copies the router never let execute (MaterialAuthoring
-//    is tested first). Re-derived from the live HandleManageMaterialAuthoring
-//    branches: create_material dropped `properties`; create_material_instance
-//    dropped `parameters`; add_material_node dropped materialPath/posX/posY/
-//    value/color/texturePath; remove_material_node and get_material_node_details
-//    dropped materialPath/expressionIndex (all proven absent from the live
-//    bodies).
-//  • rebuild_material re-derived from its remap target (the dispatcher rewrites
-//    rebuild_material→compile_material before the branch chain): dropped
-//    materialPath.
-//  • The five data-table rows declared the assetPath/dataTablePath/tablePath/
-//    path alias group all-required although McpLoadDataTableArg resolves them
-//    first-present-wins and joint-rejects only when all are absent — flipped
-//    optional (rowName stays required on add/edit/remove per the body's own
-//    reject). import_data_table's sourceText/csv/json/content source aliases
-//    were likewise all-required despite a first-present-wins joint reject —
-//    flipped optional.
+// ─── Schema fragments ────────────────────────────────────────────────────────
+// One S_<Suffix>() per action, authoring exactly the params that action's
+// handler reads (the fold dedups shared params to one entry). Builder method +
+// description are the tool's authored help text, copied verbatim; McpDeriveDecl()
+// reads the param kinds + required-set back out to build the transport
+// validation decl. Ported from this family's retired P_* param arrays, then
+// drift-corrected against the live handler bodies: the five mega-bag actions
+// (search_assets / create_thumbnail / create_render_target / save / save_all)
+// dropped their union residue down to the keys their handler actually reads;
+// rename dropped levelPath/overwrite; get_dependencies dropped
+// includeSoftDependencies; exists dropped the path-resolver residue; list gained
+// pagination (its handler reads it, the facade lacked it); create_render_target
+// gained format and dropped packagePath. The dead advertised param
+// luminanceFactors is carried on desaturate (allowlisted, kept per request);
+// targetPin (mega-bag-only, no handler read, not allowlisted) is dropped. Shared
+// param names author an identical builder call in every fragment so the fold is
+// unambiguous.
 
-// Core (AssetWorkflow / AssetQuery members)
-inline const FMcpParamDecl P_List[] = { { TEXT("filter"), EMcpParamKind::Object, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("directory"), EMcpParamKind::String, false }, { TEXT("directoryPath"), EMcpParamKind::String, false }, { TEXT("recursive"), EMcpParamKind::Bool, false }, { TEXT("recursivePaths"), EMcpParamKind::Bool, false }, { TEXT("pagination"), EMcpParamKind::Object, false }, { TEXT("depth"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_Import[] = { { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("sourcePath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_Duplicate[] = { { TEXT("sourcePath"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("newName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_Rename[] = { { TEXT("levelPath"), EMcpParamKind::String, true }, { TEXT("sourcePath"), EMcpParamKind::String, false }, { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("newName"), EMcpParamKind::String, false }, { TEXT("overwrite"), EMcpParamKind::Bool, false }, { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_Move[] = { { TEXT("sourcePath"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("newName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_Delete[] = { { TEXT("paths"), EMcpParamKind::Array, true }, { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_CreateFolder[] = { { TEXT("path"), EMcpParamKind::String, true }, { TEXT("directoryPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_SearchAssets[] = { { TEXT("classNames"), EMcpParamKind::Array, false }, { TEXT("packagePaths"), EMcpParamKind::Array, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("searchText"), EMcpParamKind::String, false }, { TEXT("recursivePaths"), EMcpParamKind::Bool, false }, { TEXT("recursiveClasses"), EMcpParamKind::Bool, false }, { TEXT("offset"), EMcpParamKind::Number, false }, { TEXT("limit"), EMcpParamKind::Number, false }, { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("sourcePath"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("newName"), EMcpParamKind::String, true }, { TEXT("paths"), EMcpParamKind::Array, true }, { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("directoryPath"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("properties"), EMcpParamKind::Object, false }, { TEXT("parentMaterial"), EMcpParamKind::String, true }, { TEXT("parameters"), EMcpParamKind::Object, false }, { TEXT("rowStruct"), EMcpParamKind::String, true }, { TEXT("rowStructPath"), EMcpParamKind::String, true }, { TEXT("dataTablePath"), EMcpParamKind::String, true }, { TEXT("tablePath"), EMcpParamKind::String, true }, { TEXT("rowName"), EMcpParamKind::String, true }, { TEXT("rowData"), EMcpParamKind::Any, false }, { TEXT("sourceText"), EMcpParamKind::String, true }, { TEXT("csv"), EMcpParamKind::String, true }, { TEXT("json"), EMcpParamKind::String, true }, { TEXT("content"), EMcpParamKind::String, true }, { TEXT("format"), EMcpParamKind::String, false }, { TEXT("recursive"), EMcpParamKind::Bool, false }, { TEXT("includeTransient"), EMcpParamKind::Bool, false }, { TEXT("propertyName"), EMcpParamKind::String, false }, { TEXT("value"), EMcpParamKind::Any, true }, { TEXT("maxDepth"), EMcpParamKind::Number, false }, { TEXT("tags"), EMcpParamKind::Array, false }, { TEXT("metadata"), EMcpParamKind::Object, false }, { TEXT("filter"), EMcpParamKind::Object, false }, { TEXT("directory"), EMcpParamKind::String, false }, { TEXT("pagination"), EMcpParamKind::Object, false }, { TEXT("depth"), EMcpParamKind::Number, false }, { TEXT("reportType"), EMcpParamKind::String, false }, { TEXT("outputPath"), EMcpParamKind::String, false }, { TEXT("type"), EMcpParamKind::String, true }, { TEXT("checkoutFiles"), EMcpParamKind::Bool, false }, { TEXT("prefix"), EMcpParamKind::String, false }, { TEXT("suffix"), EMcpParamKind::String, false }, { TEXT("replaceText"), EMcpParamKind::String, false }, { TEXT("folderPath"), EMcpParamKind::String, true }, { TEXT("showConfirmation"), EMcpParamKind::Bool, false }, { TEXT("fixupRedirectors"), EMcpParamKind::Bool, false }, { TEXT("pattern"), EMcpParamKind::String, false }, { TEXT("landscapePath"), EMcpParamKind::String, false }, { TEXT("assets"), EMcpParamKind::Array, false }, { TEXT("lodCount"), EMcpParamKind::Number, false }, { TEXT("numLODs"), EMcpParamKind::Number, false }, { TEXT("reductionSettings"), EMcpParamKind::Object, false }, { TEXT("meshPath"), EMcpParamKind::String, true }, { TEXT("enableNanite"), EMcpParamKind::Bool, false }, { TEXT("preserveArea"), EMcpParamKind::Bool, false }, { TEXT("trianglePercent"), EMcpParamKind::Number, false }, { TEXT("fallbackPercent"), EMcpParamKind::Number, false }, { TEXT("description"), EMcpParamKind::String, false }, { TEXT("materialPath"), EMcpParamKind::String, true }, { TEXT("tag"), EMcpParamKind::String, true }, { TEXT("maxResults"), EMcpParamKind::Number, false }, { TEXT("searchActors"), EMcpParamKind::Bool, false }, { TEXT("searchComponents"), EMcpParamKind::Bool, false }, { TEXT("searchAssets"), EMcpParamKind::Bool, false }, { TEXT("nodeType"), EMcpParamKind::String, true }, { TEXT("posX"), EMcpParamKind::Number, false }, { TEXT("posY"), EMcpParamKind::Number, false }, { TEXT("color"), EMcpParamKind::Object, false }, { TEXT("texturePath"), EMcpParamKind::String, false }, { TEXT("sourceNodeId"), EMcpParamKind::String, false }, { TEXT("targetNodeId"), EMcpParamKind::String, false }, { TEXT("fromExpression"), EMcpParamKind::Number, false }, { TEXT("toExpression"), EMcpParamKind::Number, false }, { TEXT("sourcePin"), EMcpParamKind::String, false }, { TEXT("inputName"), EMcpParamKind::String, false }, { TEXT("targetPin"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("expressionIndex"), EMcpParamKind::Number, false }, { TEXT("pinName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_GetDependencies[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("includeSoftDependencies"), EMcpParamKind::Bool, false }, { TEXT("recursive"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_GetReferencers[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_GetAssetProperties[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("includeTransient"), EMcpParamKind::Bool, false }, { TEXT("propertyName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetAssetProperty[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("propertyName"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Any, true } };
-inline const FMcpParamDecl P_GetSourceControlState[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("assetPaths"), EMcpParamKind::Array, true } };
-inline const FMcpParamDecl P_AnalyzeGraph[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("materialPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_GetAssetGraph[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("maxDepth"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_CreateThumbnail[] = { { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("sourcePath"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("newName"), EMcpParamKind::String, true }, { TEXT("paths"), EMcpParamKind::Array, true }, { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("directoryPath"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("properties"), EMcpParamKind::Object, false }, { TEXT("parentMaterial"), EMcpParamKind::String, true }, { TEXT("parameters"), EMcpParamKind::Object, false }, { TEXT("rowStruct"), EMcpParamKind::String, true }, { TEXT("rowStructPath"), EMcpParamKind::String, true }, { TEXT("dataTablePath"), EMcpParamKind::String, true }, { TEXT("tablePath"), EMcpParamKind::String, true }, { TEXT("rowName"), EMcpParamKind::String, true }, { TEXT("rowData"), EMcpParamKind::Any, false }, { TEXT("sourceText"), EMcpParamKind::String, true }, { TEXT("csv"), EMcpParamKind::String, true }, { TEXT("json"), EMcpParamKind::String, true }, { TEXT("content"), EMcpParamKind::String, true }, { TEXT("format"), EMcpParamKind::String, false }, { TEXT("recursive"), EMcpParamKind::Bool, false }, { TEXT("includeTransient"), EMcpParamKind::Bool, false }, { TEXT("propertyName"), EMcpParamKind::String, false }, { TEXT("value"), EMcpParamKind::Any, true }, { TEXT("maxDepth"), EMcpParamKind::Number, false }, { TEXT("tags"), EMcpParamKind::Array, false }, { TEXT("metadata"), EMcpParamKind::Object, false }, { TEXT("filter"), EMcpParamKind::Object, false }, { TEXT("directory"), EMcpParamKind::String, false }, { TEXT("recursivePaths"), EMcpParamKind::Bool, false }, { TEXT("pagination"), EMcpParamKind::Object, false }, { TEXT("depth"), EMcpParamKind::Number, false }, { TEXT("reportType"), EMcpParamKind::String, false }, { TEXT("outputPath"), EMcpParamKind::String, false }, { TEXT("type"), EMcpParamKind::String, true }, { TEXT("checkoutFiles"), EMcpParamKind::Bool, false }, { TEXT("prefix"), EMcpParamKind::String, false }, { TEXT("suffix"), EMcpParamKind::String, false }, { TEXT("searchText"), EMcpParamKind::String, false }, { TEXT("replaceText"), EMcpParamKind::String, false }, { TEXT("folderPath"), EMcpParamKind::String, true }, { TEXT("showConfirmation"), EMcpParamKind::Bool, false }, { TEXT("fixupRedirectors"), EMcpParamKind::Bool, false }, { TEXT("pattern"), EMcpParamKind::String, false }, { TEXT("landscapePath"), EMcpParamKind::String, false }, { TEXT("assets"), EMcpParamKind::Array, false }, { TEXT("lodCount"), EMcpParamKind::Number, false }, { TEXT("numLODs"), EMcpParamKind::Number, false }, { TEXT("reductionSettings"), EMcpParamKind::Object, false }, { TEXT("meshPath"), EMcpParamKind::String, true }, { TEXT("enableNanite"), EMcpParamKind::Bool, false }, { TEXT("preserveArea"), EMcpParamKind::Bool, false }, { TEXT("trianglePercent"), EMcpParamKind::Number, false }, { TEXT("fallbackPercent"), EMcpParamKind::Number, false }, { TEXT("description"), EMcpParamKind::String, false }, { TEXT("materialPath"), EMcpParamKind::String, true }, { TEXT("tag"), EMcpParamKind::String, true }, { TEXT("maxResults"), EMcpParamKind::Number, false }, { TEXT("searchActors"), EMcpParamKind::Bool, false }, { TEXT("searchComponents"), EMcpParamKind::Bool, false }, { TEXT("searchAssets"), EMcpParamKind::Bool, false }, { TEXT("nodeType"), EMcpParamKind::String, true }, { TEXT("posX"), EMcpParamKind::Number, false }, { TEXT("posY"), EMcpParamKind::Number, false }, { TEXT("color"), EMcpParamKind::Object, false }, { TEXT("texturePath"), EMcpParamKind::String, false }, { TEXT("sourceNodeId"), EMcpParamKind::String, false }, { TEXT("targetNodeId"), EMcpParamKind::String, false }, { TEXT("fromExpression"), EMcpParamKind::Number, false }, { TEXT("toExpression"), EMcpParamKind::Number, false }, { TEXT("sourcePin"), EMcpParamKind::String, false }, { TEXT("inputName"), EMcpParamKind::String, false }, { TEXT("targetPin"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("expressionIndex"), EMcpParamKind::Number, false }, { TEXT("pinName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetTags[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("tags"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_GetMetadata[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_SetMetadata[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("metadata"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_Validate[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_FixupRedirectors[] = { { TEXT("directoryPath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("checkoutFiles"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_FindByTag[] = { { TEXT("tag"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("maxResults"), EMcpParamKind::Number, false }, { TEXT("searchActors"), EMcpParamKind::Bool, false }, { TEXT("searchComponents"), EMcpParamKind::Bool, false }, { TEXT("searchAssets"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_GenerateReport[] = { { TEXT("directory"), EMcpParamKind::String, false }, { TEXT("reportType"), EMcpParamKind::String, false }, { TEXT("outputPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateDataTable[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("rowStruct"), EMcpParamKind::String, true }, { TEXT("rowStructPath"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddDataTableRow[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("dataTablePath"), EMcpParamKind::String, false }, { TEXT("tablePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("rowName"), EMcpParamKind::String, true }, { TEXT("rowData"), EMcpParamKind::Any, false } };
-inline const FMcpParamDecl P_EditDataTableRow[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("dataTablePath"), EMcpParamKind::String, false }, { TEXT("tablePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("rowName"), EMcpParamKind::String, true }, { TEXT("rowData"), EMcpParamKind::Any, false } };
-inline const FMcpParamDecl P_RemoveDataTableRow[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("dataTablePath"), EMcpParamKind::String, false }, { TEXT("tablePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("rowName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_GetDataTableRows[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("dataTablePath"), EMcpParamKind::String, false }, { TEXT("tablePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ImportDataTable[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("dataTablePath"), EMcpParamKind::String, false }, { TEXT("tablePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("sourceText"), EMcpParamKind::String, false }, { TEXT("csv"), EMcpParamKind::String, false }, { TEXT("json"), EMcpParamKind::String, false }, { TEXT("content"), EMcpParamKind::String, false }, { TEXT("format"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateRenderTarget[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("width"), EMcpParamKind::Number, false }, { TEXT("height"), EMcpParamKind::Number, false }, { TEXT("format"), EMcpParamKind::String, false }, { TEXT("packagePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("sourcePath"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("newName"), EMcpParamKind::String, true }, { TEXT("paths"), EMcpParamKind::Array, true }, { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("directoryPath"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("properties"), EMcpParamKind::Object, false }, { TEXT("parentMaterial"), EMcpParamKind::String, true }, { TEXT("parameters"), EMcpParamKind::Object, false }, { TEXT("rowStruct"), EMcpParamKind::String, true }, { TEXT("rowStructPath"), EMcpParamKind::String, true }, { TEXT("dataTablePath"), EMcpParamKind::String, true }, { TEXT("tablePath"), EMcpParamKind::String, true }, { TEXT("rowName"), EMcpParamKind::String, true }, { TEXT("rowData"), EMcpParamKind::Any, false }, { TEXT("sourceText"), EMcpParamKind::String, true }, { TEXT("csv"), EMcpParamKind::String, true }, { TEXT("json"), EMcpParamKind::String, true }, { TEXT("content"), EMcpParamKind::String, true }, { TEXT("recursive"), EMcpParamKind::Bool, false }, { TEXT("includeTransient"), EMcpParamKind::Bool, false }, { TEXT("propertyName"), EMcpParamKind::String, false }, { TEXT("value"), EMcpParamKind::Any, true }, { TEXT("maxDepth"), EMcpParamKind::Number, false }, { TEXT("tags"), EMcpParamKind::Array, false }, { TEXT("metadata"), EMcpParamKind::Object, false }, { TEXT("filter"), EMcpParamKind::Object, false }, { TEXT("directory"), EMcpParamKind::String, false }, { TEXT("recursivePaths"), EMcpParamKind::Bool, false }, { TEXT("pagination"), EMcpParamKind::Object, false }, { TEXT("depth"), EMcpParamKind::Number, false }, { TEXT("reportType"), EMcpParamKind::String, false }, { TEXT("outputPath"), EMcpParamKind::String, false }, { TEXT("type"), EMcpParamKind::String, true }, { TEXT("checkoutFiles"), EMcpParamKind::Bool, false }, { TEXT("prefix"), EMcpParamKind::String, false }, { TEXT("suffix"), EMcpParamKind::String, false }, { TEXT("searchText"), EMcpParamKind::String, false }, { TEXT("replaceText"), EMcpParamKind::String, false }, { TEXT("folderPath"), EMcpParamKind::String, true }, { TEXT("showConfirmation"), EMcpParamKind::Bool, false }, { TEXT("fixupRedirectors"), EMcpParamKind::Bool, false }, { TEXT("pattern"), EMcpParamKind::String, false }, { TEXT("landscapePath"), EMcpParamKind::String, false }, { TEXT("assets"), EMcpParamKind::Array, false }, { TEXT("lodCount"), EMcpParamKind::Number, false }, { TEXT("numLODs"), EMcpParamKind::Number, false }, { TEXT("reductionSettings"), EMcpParamKind::Object, false }, { TEXT("meshPath"), EMcpParamKind::String, true }, { TEXT("enableNanite"), EMcpParamKind::Bool, false }, { TEXT("preserveArea"), EMcpParamKind::Bool, false }, { TEXT("trianglePercent"), EMcpParamKind::Number, false }, { TEXT("fallbackPercent"), EMcpParamKind::Number, false }, { TEXT("description"), EMcpParamKind::String, false }, { TEXT("materialPath"), EMcpParamKind::String, true }, { TEXT("tag"), EMcpParamKind::String, true }, { TEXT("maxResults"), EMcpParamKind::Number, false }, { TEXT("searchActors"), EMcpParamKind::Bool, false }, { TEXT("searchComponents"), EMcpParamKind::Bool, false }, { TEXT("searchAssets"), EMcpParamKind::Bool, false }, { TEXT("nodeType"), EMcpParamKind::String, true }, { TEXT("posX"), EMcpParamKind::Number, false }, { TEXT("posY"), EMcpParamKind::Number, false }, { TEXT("color"), EMcpParamKind::Object, false }, { TEXT("texturePath"), EMcpParamKind::String, false }, { TEXT("sourceNodeId"), EMcpParamKind::String, false }, { TEXT("targetNodeId"), EMcpParamKind::String, false }, { TEXT("fromExpression"), EMcpParamKind::Number, false }, { TEXT("toExpression"), EMcpParamKind::Number, false }, { TEXT("sourcePin"), EMcpParamKind::String, false }, { TEXT("inputName"), EMcpParamKind::String, false }, { TEXT("targetPin"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("expressionIndex"), EMcpParamKind::Number, false }, { TEXT("pinName"), EMcpParamKind::String, false }, { TEXT("renderTargetPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_GenerateLods[] = { { TEXT("landscapePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("assetPaths"), EMcpParamKind::Array, false }, { TEXT("assets"), EMcpParamKind::Array, false }, { TEXT("lodCount"), EMcpParamKind::Number, false }, { TEXT("numLODs"), EMcpParamKind::Number, false }, { TEXT("reductionSettings"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_AddMaterialParameter[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, true }, { TEXT("type"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Any, false } };
-inline const FMcpParamDecl P_ListInstances[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ResetInstanceParameters[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_Exists[] = { { TEXT("functionName"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("params"), EMcpParamKind::Object, true }, { TEXT("requestedPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("blueprintCandidates"), EMcpParamKind::Array, false }, { TEXT("candidates"), EMcpParamKind::Array, false }, { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_GetMaterialStats[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_NaniteRebuildMesh[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("meshPath"), EMcpParamKind::String, true }, { TEXT("enableNanite"), EMcpParamKind::Bool, false }, { TEXT("preserveArea"), EMcpParamKind::Bool, false }, { TEXT("trianglePercent"), EMcpParamKind::Number, false }, { TEXT("fallbackPercent"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_BulkRename[] = { { TEXT("prefix"), EMcpParamKind::String, false }, { TEXT("suffix"), EMcpParamKind::String, false }, { TEXT("searchText"), EMcpParamKind::String, false }, { TEXT("replaceText"), EMcpParamKind::String, false }, { TEXT("checkoutFiles"), EMcpParamKind::Bool, false }, { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("folderPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_BulkDelete[] = { { TEXT("showConfirmation"), EMcpParamKind::Bool, false }, { TEXT("fixupRedirectors"), EMcpParamKind::Bool, false }, { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("folderPath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("pattern"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SourceControlCheckout[] = { { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_SourceControlSubmit[] = { { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("description"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_Save[] = { { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("sourcePath"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("newName"), EMcpParamKind::String, true }, { TEXT("paths"), EMcpParamKind::Array, true }, { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("directoryPath"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("properties"), EMcpParamKind::Object, false }, { TEXT("parentMaterial"), EMcpParamKind::String, true }, { TEXT("parameters"), EMcpParamKind::Object, false }, { TEXT("rowStruct"), EMcpParamKind::String, true }, { TEXT("rowStructPath"), EMcpParamKind::String, true }, { TEXT("dataTablePath"), EMcpParamKind::String, true }, { TEXT("tablePath"), EMcpParamKind::String, true }, { TEXT("rowName"), EMcpParamKind::String, true }, { TEXT("rowData"), EMcpParamKind::Any, false }, { TEXT("sourceText"), EMcpParamKind::String, true }, { TEXT("csv"), EMcpParamKind::String, true }, { TEXT("json"), EMcpParamKind::String, true }, { TEXT("content"), EMcpParamKind::String, true }, { TEXT("format"), EMcpParamKind::String, false }, { TEXT("recursive"), EMcpParamKind::Bool, false }, { TEXT("includeTransient"), EMcpParamKind::Bool, false }, { TEXT("propertyName"), EMcpParamKind::String, false }, { TEXT("value"), EMcpParamKind::Any, true }, { TEXT("maxDepth"), EMcpParamKind::Number, false }, { TEXT("tags"), EMcpParamKind::Array, false }, { TEXT("metadata"), EMcpParamKind::Object, false }, { TEXT("filter"), EMcpParamKind::Object, false }, { TEXT("directory"), EMcpParamKind::String, false }, { TEXT("recursivePaths"), EMcpParamKind::Bool, false }, { TEXT("pagination"), EMcpParamKind::Object, false }, { TEXT("depth"), EMcpParamKind::Number, false }, { TEXT("reportType"), EMcpParamKind::String, false }, { TEXT("outputPath"), EMcpParamKind::String, false }, { TEXT("type"), EMcpParamKind::String, true }, { TEXT("checkoutFiles"), EMcpParamKind::Bool, false }, { TEXT("prefix"), EMcpParamKind::String, false }, { TEXT("suffix"), EMcpParamKind::String, false }, { TEXT("searchText"), EMcpParamKind::String, false }, { TEXT("replaceText"), EMcpParamKind::String, false }, { TEXT("folderPath"), EMcpParamKind::String, true }, { TEXT("showConfirmation"), EMcpParamKind::Bool, false }, { TEXT("fixupRedirectors"), EMcpParamKind::Bool, false }, { TEXT("pattern"), EMcpParamKind::String, false }, { TEXT("landscapePath"), EMcpParamKind::String, false }, { TEXT("assets"), EMcpParamKind::Array, false }, { TEXT("lodCount"), EMcpParamKind::Number, false }, { TEXT("numLODs"), EMcpParamKind::Number, false }, { TEXT("reductionSettings"), EMcpParamKind::Object, false }, { TEXT("meshPath"), EMcpParamKind::String, true }, { TEXT("enableNanite"), EMcpParamKind::Bool, false }, { TEXT("preserveArea"), EMcpParamKind::Bool, false }, { TEXT("trianglePercent"), EMcpParamKind::Number, false }, { TEXT("fallbackPercent"), EMcpParamKind::Number, false }, { TEXT("description"), EMcpParamKind::String, false }, { TEXT("materialPath"), EMcpParamKind::String, true }, { TEXT("tag"), EMcpParamKind::String, true }, { TEXT("maxResults"), EMcpParamKind::Number, false }, { TEXT("searchActors"), EMcpParamKind::Bool, false }, { TEXT("searchComponents"), EMcpParamKind::Bool, false }, { TEXT("searchAssets"), EMcpParamKind::Bool, false }, { TEXT("nodeType"), EMcpParamKind::String, true }, { TEXT("posX"), EMcpParamKind::Number, false }, { TEXT("posY"), EMcpParamKind::Number, false }, { TEXT("color"), EMcpParamKind::Object, false }, { TEXT("texturePath"), EMcpParamKind::String, false }, { TEXT("sourceNodeId"), EMcpParamKind::String, false }, { TEXT("targetNodeId"), EMcpParamKind::String, false }, { TEXT("fromExpression"), EMcpParamKind::Number, false }, { TEXT("toExpression"), EMcpParamKind::Number, false }, { TEXT("sourcePin"), EMcpParamKind::String, false }, { TEXT("inputName"), EMcpParamKind::String, false }, { TEXT("targetPin"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("expressionIndex"), EMcpParamKind::Number, false }, { TEXT("pinName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SaveAll[] = { { TEXT("destinationPath"), EMcpParamKind::String, true }, { TEXT("sourcePath"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("newName"), EMcpParamKind::String, true }, { TEXT("paths"), EMcpParamKind::Array, true }, { TEXT("assetPaths"), EMcpParamKind::Array, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("directoryPath"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("properties"), EMcpParamKind::Object, false }, { TEXT("parentMaterial"), EMcpParamKind::String, true }, { TEXT("parameters"), EMcpParamKind::Object, false }, { TEXT("rowStruct"), EMcpParamKind::String, true }, { TEXT("rowStructPath"), EMcpParamKind::String, true }, { TEXT("dataTablePath"), EMcpParamKind::String, true }, { TEXT("tablePath"), EMcpParamKind::String, true }, { TEXT("rowName"), EMcpParamKind::String, true }, { TEXT("rowData"), EMcpParamKind::Any, false }, { TEXT("sourceText"), EMcpParamKind::String, true }, { TEXT("csv"), EMcpParamKind::String, true }, { TEXT("json"), EMcpParamKind::String, true }, { TEXT("content"), EMcpParamKind::String, true }, { TEXT("format"), EMcpParamKind::String, false }, { TEXT("recursive"), EMcpParamKind::Bool, false }, { TEXT("includeTransient"), EMcpParamKind::Bool, false }, { TEXT("propertyName"), EMcpParamKind::String, false }, { TEXT("value"), EMcpParamKind::Any, true }, { TEXT("maxDepth"), EMcpParamKind::Number, false }, { TEXT("tags"), EMcpParamKind::Array, false }, { TEXT("metadata"), EMcpParamKind::Object, false }, { TEXT("filter"), EMcpParamKind::Object, false }, { TEXT("directory"), EMcpParamKind::String, false }, { TEXT("recursivePaths"), EMcpParamKind::Bool, false }, { TEXT("pagination"), EMcpParamKind::Object, false }, { TEXT("depth"), EMcpParamKind::Number, false }, { TEXT("reportType"), EMcpParamKind::String, false }, { TEXT("outputPath"), EMcpParamKind::String, false }, { TEXT("type"), EMcpParamKind::String, true }, { TEXT("checkoutFiles"), EMcpParamKind::Bool, false }, { TEXT("prefix"), EMcpParamKind::String, false }, { TEXT("suffix"), EMcpParamKind::String, false }, { TEXT("searchText"), EMcpParamKind::String, false }, { TEXT("replaceText"), EMcpParamKind::String, false }, { TEXT("folderPath"), EMcpParamKind::String, true }, { TEXT("showConfirmation"), EMcpParamKind::Bool, false }, { TEXT("fixupRedirectors"), EMcpParamKind::Bool, false }, { TEXT("pattern"), EMcpParamKind::String, false }, { TEXT("landscapePath"), EMcpParamKind::String, false }, { TEXT("assets"), EMcpParamKind::Array, false }, { TEXT("lodCount"), EMcpParamKind::Number, false }, { TEXT("numLODs"), EMcpParamKind::Number, false }, { TEXT("reductionSettings"), EMcpParamKind::Object, false }, { TEXT("meshPath"), EMcpParamKind::String, true }, { TEXT("enableNanite"), EMcpParamKind::Bool, false }, { TEXT("preserveArea"), EMcpParamKind::Bool, false }, { TEXT("trianglePercent"), EMcpParamKind::Number, false }, { TEXT("fallbackPercent"), EMcpParamKind::Number, false }, { TEXT("description"), EMcpParamKind::String, false }, { TEXT("materialPath"), EMcpParamKind::String, true }, { TEXT("tag"), EMcpParamKind::String, true }, { TEXT("maxResults"), EMcpParamKind::Number, false }, { TEXT("searchActors"), EMcpParamKind::Bool, false }, { TEXT("searchComponents"), EMcpParamKind::Bool, false }, { TEXT("searchAssets"), EMcpParamKind::Bool, false }, { TEXT("nodeType"), EMcpParamKind::String, true }, { TEXT("posX"), EMcpParamKind::Number, false }, { TEXT("posY"), EMcpParamKind::Number, false }, { TEXT("color"), EMcpParamKind::Object, false }, { TEXT("texturePath"), EMcpParamKind::String, false }, { TEXT("sourceNodeId"), EMcpParamKind::String, false }, { TEXT("targetNodeId"), EMcpParamKind::String, false }, { TEXT("fromExpression"), EMcpParamKind::Number, false }, { TEXT("toExpression"), EMcpParamKind::Number, false }, { TEXT("sourcePin"), EMcpParamKind::String, false }, { TEXT("inputName"), EMcpParamKind::String, false }, { TEXT("targetPin"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("expressionIndex"), EMcpParamKind::Number, false }, { TEXT("pinName"), EMcpParamKind::String, false } };
+static void S_List(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("filter"), TEXT("get_material_info: what to include — 'parameters'|'expressions'|'connections'|'all' (default all)."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .String(TEXT("directory"), TEXT("list: directory to list (default /Game)."))
+	 .String(TEXT("directoryPath"), TEXT("Path to a directory."))
+	 .Bool(TEXT("recursive"), TEXT("list: recurse into subfolders (default true)."))
+	 .Bool(TEXT("recursivePaths"), TEXT(""))
+	 .FreeformObject(TEXT("pagination"), TEXT("list: pagination window {offset, limit}."))
+	 .Number(TEXT("depth"), TEXT("list: recursion depth filter relative to the queried path. get_node_connections: BFS hop limit (default 1; -1 unlimited)."));
+}
 
-// Material authoring (MaterialAuthoringHandlers.cpp)
-inline const FMcpParamDecl P_CreateMaterial[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("materialDomain"), EMcpParamKind::String, false }, { TEXT("blendMode"), EMcpParamKind::String, false }, { TEXT("shadingModel"), EMcpParamKind::String, false }, { TEXT("twoSided"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetBlendMode[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("blendMode"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetShadingModel[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("shadingModel"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetMaterialDomain[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("materialDomain"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddTextureSample[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("texturePath"), EMcpParamKind::String, false }, { TEXT("parameterName"), EMcpParamKind::String, false }, { TEXT("samplerType"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddTextureCoordinate[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("coordinateIndex"), EMcpParamKind::Number, false }, { TEXT("uTiling"), EMcpParamKind::Number, false }, { TEXT("vTiling"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddScalarParameter[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("defaultValue"), EMcpParamKind::Number, false }, { TEXT("group"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddVectorParameter[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("group"), EMcpParamKind::String, false }, { TEXT("defaultValue"), EMcpParamKind::Object, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddStaticSwitchParameter[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("defaultValue"), EMcpParamKind::Bool, false }, { TEXT("group"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddMathNode[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("operation"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddWorldPosition[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddVertexNormal[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddPixelDepth[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddFresnel[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddReflectionVector[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddPanner[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddRotator[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddNoise[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddVoronoi[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddIf[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddSwitch[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddCustomExpression[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("code"), EMcpParamKind::String, true }, { TEXT("outputType"), EMcpParamKind::String, false }, { TEXT("description"), EMcpParamKind::String, false }, { TEXT("inputs"), EMcpParamKind::Array, false }, { TEXT("additionalOutputs"), EMcpParamKind::Array, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConnectNodes[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("sourceNodeId"), EMcpParamKind::String, true }, { TEXT("targetNodeId"), EMcpParamKind::String, false }, { TEXT("inputName"), EMcpParamKind::String, false }, { TEXT("sourcePin"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_DisconnectNodes[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("pinName"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateMaterialFunction[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("description"), EMcpParamKind::String, false }, { TEXT("exposeToLibrary"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddFunctionInput[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("inputName"), EMcpParamKind::String, true }, { TEXT("inputType"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("functionPath"), EMcpParamKind::Any, false } };
-inline const FMcpParamDecl P_AddFunctionOutput[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("inputName"), EMcpParamKind::String, true }, { TEXT("inputType"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_UseMaterialFunction[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("functionPath"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_GetMaterialFunctionInfo[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_CreateMaterialInstance[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("parentMaterial"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetScalarParameterValue[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetVectorParameterValue[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Object, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetTextureParameterValue[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("texturePath"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateLandscapeMaterial[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateDecalMaterial[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreatePostProcessMaterial[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddLandscapeLayer[] = { { TEXT("layerName"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("materialPath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("hardness"), EMcpParamKind::Number, false }, { TEXT("physicalMaterialPath"), EMcpParamKind::String, false }, { TEXT("noWeightBlend"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureLayerBlend[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("materialPath"), EMcpParamKind::String, false }, { TEXT("layers"), EMcpParamKind::Array, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CompileMaterial[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("waitForShaders"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_GetMaterialInfo[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("filter"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("nodeIds"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_FindNode[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeType"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_GetNodeConnections[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, true }, { TEXT("direction"), EMcpParamKind::String, false }, { TEXT("depth"), EMcpParamKind::Number, false }, { TEXT("upstream"), EMcpParamKind::Bool, false }, { TEXT("downstream"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_GetNodeProperties[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_SetNodeValue[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Number, false }, { TEXT("r"), EMcpParamKind::Number, false }, { TEXT("g"), EMcpParamKind::Number, false }, { TEXT("b"), EMcpParamKind::Number, false }, { TEXT("a"), EMcpParamKind::Number, false }, { TEXT("constA"), EMcpParamKind::Number, false }, { TEXT("constB"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetStaticSwitchParameterValue[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_DeleteNode[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("nodeIds"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_UpdateCustomExpression[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, true }, { TEXT("code"), EMcpParamKind::String, false }, { TEXT("description"), EMcpParamKind::String, false }, { TEXT("outputType"), EMcpParamKind::String, false }, { TEXT("inputs"), EMcpParamKind::Array, false }, { TEXT("additionalOutputs"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_GetNodeChain[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("startNodeId"), EMcpParamKind::String, true }, { TEXT("endNodeId"), EMcpParamKind::String, false }, { TEXT("endPin"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_GetConnectedSubgraph[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("orphansOnly"), EMcpParamKind::Bool, false }, { TEXT("nodeId"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ArrangeGraph[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddMaterialNode[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("nodeType"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_RebuildMaterial[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("waitForShaders"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetMaterialParameter[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("parameterName"), EMcpParamKind::String, true }, { TEXT("parameterType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_GetMaterialNodeDetails[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("nodeId"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_RemoveMaterialNode[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("nodeId"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetTwoSided[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("twoSided"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
+static void S_Import(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("destinationPath"), TEXT("Destination path for move/copy."))
+	 .String(TEXT("sourcePath"), TEXT("Source path for import/duplicate/rename/move (assetPath also accepted)."))
+	 .Required({TEXT("destinationPath"), TEXT("sourcePath")});
+}
 
-// Texture (TextureHandlers.cpp)
-inline const FMcpParamDecl P_CreateNoiseTexture[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("noiseType"), EMcpParamKind::String, false }, { TEXT("width"), EMcpParamKind::Number, false }, { TEXT("height"), EMcpParamKind::Number, false }, { TEXT("scale"), EMcpParamKind::Number, false }, { TEXT("octaves"), EMcpParamKind::Number, false }, { TEXT("persistence"), EMcpParamKind::Number, false }, { TEXT("lacunarity"), EMcpParamKind::Number, false }, { TEXT("seed"), EMcpParamKind::Number, false }, { TEXT("seamless"), EMcpParamKind::Bool, false }, { TEXT("hdr"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateGradientTexture[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("gradientType"), EMcpParamKind::String, false }, { TEXT("width"), EMcpParamKind::Number, false }, { TEXT("height"), EMcpParamKind::Number, false }, { TEXT("angle"), EMcpParamKind::Number, false }, { TEXT("centerX"), EMcpParamKind::Number, false }, { TEXT("centerY"), EMcpParamKind::Number, false }, { TEXT("radius"), EMcpParamKind::Number, false }, { TEXT("hdr"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("startColor"), EMcpParamKind::Object, false }, { TEXT("endColor"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_CreatePatternTexture[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("patternType"), EMcpParamKind::String, false }, { TEXT("width"), EMcpParamKind::Number, false }, { TEXT("height"), EMcpParamKind::Number, false }, { TEXT("tilesX"), EMcpParamKind::Number, false }, { TEXT("tilesY"), EMcpParamKind::Number, false }, { TEXT("lineWidth"), EMcpParamKind::Number, false }, { TEXT("brickRatio"), EMcpParamKind::Number, false }, { TEXT("offset"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("primaryColor"), EMcpParamKind::Object, false }, { TEXT("secondaryColor"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_CreateNormalFromHeight[] = { { TEXT("sourceTexture"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("strength"), EMcpParamKind::Number, false }, { TEXT("algorithm"), EMcpParamKind::String, false }, { TEXT("flipY"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("channelMode"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateAoFromMesh[] = { { TEXT("meshPath"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("width"), EMcpParamKind::Number, false }, { TEXT("height"), EMcpParamKind::Number, false }, { TEXT("sampleCount"), EMcpParamKind::Number, false }, { TEXT("rayDistance"), EMcpParamKind::Number, false }, { TEXT("bias"), EMcpParamKind::Number, false }, { TEXT("uvChannel"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ResizeTexture[] = { { TEXT("sourcePath"), EMcpParamKind::String, true }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("newWidth"), EMcpParamKind::Number, false }, { TEXT("newHeight"), EMcpParamKind::Number, false }, { TEXT("filterMethod"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AdjustLevels[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("inBlack"), EMcpParamKind::Number, false }, { TEXT("inWhite"), EMcpParamKind::Number, false }, { TEXT("gamma"), EMcpParamKind::Number, false }, { TEXT("outBlack"), EMcpParamKind::Number, false }, { TEXT("outWhite"), EMcpParamKind::Number, false }, { TEXT("inPlace"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AdjustCurves[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("inPlace"), EMcpParamKind::Bool, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("inputR"), EMcpParamKind::Array, false }, { TEXT("outputR"), EMcpParamKind::Array, false }, { TEXT("inputG"), EMcpParamKind::Array, false }, { TEXT("outputG"), EMcpParamKind::Array, false }, { TEXT("inputB"), EMcpParamKind::Array, false }, { TEXT("outputB"), EMcpParamKind::Array, false }, { TEXT("input"), EMcpParamKind::Array, false }, { TEXT("output"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_Blur[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("radius"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_Sharpen[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("amount"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_Invert[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("inPlace"), EMcpParamKind::Bool, false }, { TEXT("invertAlpha"), EMcpParamKind::Bool, false }, { TEXT("channel"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_Desaturate[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("amount"), EMcpParamKind::Number, false }, { TEXT("inPlace"), EMcpParamKind::Bool, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ChannelPack[] = { { TEXT("redTexture"), EMcpParamKind::String, false }, { TEXT("greenTexture"), EMcpParamKind::String, false }, { TEXT("blueTexture"), EMcpParamKind::String, false }, { TEXT("alphaTexture"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ChannelExtract[] = { { TEXT("texturePath"), EMcpParamKind::String, true }, { TEXT("channel"), EMcpParamKind::String, false }, { TEXT("outputPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CombineTextures[] = { { TEXT("baseTexture"), EMcpParamKind::String, true }, { TEXT("overlayTexture"), EMcpParamKind::String, false }, { TEXT("blendTexture"), EMcpParamKind::String, false }, { TEXT("blendMode"), EMcpParamKind::String, false }, { TEXT("opacity"), EMcpParamKind::Number, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetCompressionSettings[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("compressionSettings"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetTextureGroup[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("textureGroup"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetLodBias[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("lodBias"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureVirtualTexture[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("virtualTextureStreaming"), EMcpParamKind::Bool, false }, { TEXT("tileSize"), EMcpParamKind::Number, false }, { TEXT("tileBorderSize"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetStreamingPriority[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("neverStream"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_GetTextureInfo[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
+static void S_Duplicate(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("sourcePath"), TEXT("Source path for import/duplicate/rename/move (assetPath also accepted)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("destinationPath"), TEXT("Destination path for move/copy."))
+	 .String(TEXT("newName"), TEXT("rename/duplicate/move: new asset name, resolved into the source asset's folder (alternative to destinationPath)."))
+	 .Required({TEXT("sourcePath"), TEXT("assetPath"), TEXT("destinationPath"), TEXT("newName")});
+}
+
+static void S_Rename(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("sourcePath"), TEXT("Source path for import/duplicate/rename/move (assetPath also accepted)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("destinationPath"), TEXT("Destination path for move/copy."))
+	 .String(TEXT("newName"), TEXT("rename/duplicate/move: new asset name, resolved into the source asset's folder (alternative to destinationPath)."));
+}
+
+static void S_Move(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("sourcePath"), TEXT("Source path for import/duplicate/rename/move (assetPath also accepted)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("destinationPath"), TEXT("Destination path for move/copy."))
+	 .String(TEXT("newName"), TEXT("rename/duplicate/move: new asset name, resolved into the source asset's folder (alternative to destinationPath)."))
+	 .Required({TEXT("sourcePath"), TEXT("assetPath"), TEXT("destinationPath"), TEXT("newName")});
+}
+
+static void S_Delete(FMcpSchemaBuilder& B)
+{
+	B.Array(TEXT("paths"), TEXT(""))
+	 .Array(TEXT("assetPaths"), TEXT(""))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("paths"), TEXT("assetPaths"), TEXT("path"), TEXT("assetPath")});
+}
+
+static void S_CreateFolder(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("path"), TEXT("Path to a directory."))
+	 .String(TEXT("directoryPath"), TEXT("Path to a directory."))
+	 .Required({TEXT("path"), TEXT("directoryPath")});
+}
+
+static void S_SearchAssets(FMcpSchemaBuilder& B)
+{
+	B.Array(TEXT("classNames"), TEXT(""))
+	 .Array(TEXT("packagePaths"), TEXT(""))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .String(TEXT("searchText"), TEXT(""))
+	 .Bool(TEXT("recursivePaths"), TEXT(""))
+	 .Bool(TEXT("recursiveClasses"), TEXT(""))
+	 .Number(TEXT("offset"), TEXT(""))
+	 .Number(TEXT("limit"), TEXT(""));
+}
+
+static void S_GetDependencies(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Bool(TEXT("recursive"), TEXT("list: recurse into subfolders (default true)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_GetReferencers(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_GetAssetProperties(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Bool(TEXT("includeTransient"), TEXT("get_asset_properties: also dump transient (non-serialized) properties (default false)."))
+	 .String(TEXT("propertyName"), TEXT("set_asset_property: name of the reflected UPROPERTY to write."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_SetAssetProperty(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("propertyName"), TEXT("set_asset_property: name of the reflected UPROPERTY to write."))
+	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Required({TEXT("assetPath"), TEXT("propertyName"), TEXT("value")});
+}
+
+static void S_GetSourceControlState(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Array(TEXT("assetPaths"), TEXT(""))
+	 .Required({TEXT("assetPath"), TEXT("assetPaths")});
+}
+
+static void S_AnalyzeGraph(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("materialPath"), TEXT("Material asset path."))
+	 .Required({TEXT("assetPath"), TEXT("materialPath")});
+}
+
+static void S_GetAssetGraph(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("maxDepth"), TEXT(""))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_CreateThumbnail(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("width"), TEXT(""))
+	 .Number(TEXT("height"), TEXT(""))
+	 .String(TEXT("outputPath"), TEXT("create_thumbnail/generate_report: file path (relative to project dir) to write output to. channel_extract: destination texture path."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_SetTags(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Array(TEXT("tags"), TEXT(""))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_GetMetadata(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_SetMetadata(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .FreeformObject(TEXT("metadata"), TEXT(""))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_Validate(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_FixupRedirectors(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("directoryPath"), TEXT("Path to a directory."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("checkoutFiles"), TEXT(""))
+	 .Required({TEXT("directoryPath"), TEXT("path")});
+}
+
+static void S_FindByTag(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("tag"), TEXT("find_by_tag: tag key to match (set_tags metadata or asset-registry tag)."))
+	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Number(TEXT("maxResults"), TEXT("find_by_tag: result cap (default 100, max 1000)."))
+	 .Bool(TEXT("searchActors"), TEXT("find_by_tag: match level-actor tags (default true)."))
+	 .Bool(TEXT("searchComponents"), TEXT("find_by_tag: match component tags (default false)."))
+	 .Bool(TEXT("searchAssets"), TEXT("find_by_tag: match asset registry/metadata tags (default true)."))
+	 .Required({TEXT("tag")});
+}
+
+static void S_GenerateReport(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("directory"), TEXT("list: directory to list (default /Game)."))
+	 .String(TEXT("reportType"), TEXT("generate_report: report kind, e.g. 'Summary' (default)."))
+	 .String(TEXT("outputPath"), TEXT("create_thumbnail/generate_report: file path (relative to project dir) to write output to. channel_extract: destination texture path."));
+}
+
+static void S_CreateDataTable(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .String(TEXT("rowStruct"), TEXT("create_data_table (required): row struct deriving from FTableRowBase — full path ('/Script/Module.Struct' or '/Game/.../UserStruct') or bare struct name."))
+	 .String(TEXT("rowStructPath"), TEXT("create_data_table: alias for rowStruct."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("name"), TEXT("path"), TEXT("rowStruct"), TEXT("rowStructPath")});
+}
+
+static void S_AddDataTableRow(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("dataTablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
+	 .String(TEXT("tablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .String(TEXT("rowName"), TEXT("DataTable row CRUD: the row's key (FName)."))
+	 .FreeformObject(TEXT("rowData"), TEXT("DataTable add/edit row: JSON object of row-struct fields (partial edit merges)."))
+	 .Required({TEXT("rowName")});
+}
+
+static void S_EditDataTableRow(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("dataTablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
+	 .String(TEXT("tablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .String(TEXT("rowName"), TEXT("DataTable row CRUD: the row's key (FName)."))
+	 .FreeformObject(TEXT("rowData"), TEXT("DataTable add/edit row: JSON object of row-struct fields (partial edit merges)."))
+	 .Required({TEXT("rowName")});
+}
+
+static void S_RemoveDataTableRow(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("dataTablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
+	 .String(TEXT("tablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .String(TEXT("rowName"), TEXT("DataTable row CRUD: the row's key (FName)."))
+	 .Required({TEXT("rowName")});
+}
+
+static void S_GetDataTableRows(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("dataTablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
+	 .String(TEXT("tablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."));
+}
+
+static void S_ImportDataTable(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("dataTablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
+	 .String(TEXT("tablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .String(TEXT("sourceText"), TEXT("import_data_table: the CSV or JSON text to import (replaces all rows)."))
+	 .String(TEXT("csv"), TEXT("import_data_table: alias for sourceText (CSV)."))
+	 .String(TEXT("json"), TEXT("import_data_table: alias for sourceText (JSON)."))
+	 .String(TEXT("content"), TEXT("import_data_table: alias for sourceText."))
+	 .String(TEXT("format"), TEXT("import_data_table: 'csv' or 'json' (inferred from sourceText if omitted)."));
+}
+
+static void S_CreateRenderTarget(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .String(TEXT("renderTargetPath"), TEXT("create_render_target: full asset path (alternative to name+path)."))
+	 .Number(TEXT("width"), TEXT(""))
+	 .Number(TEXT("height"), TEXT(""))
+	 .String(TEXT("format"), TEXT("import_data_table: 'csv' or 'json' (inferred from sourceText if omitted)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("name")});
+}
+
+static void S_GenerateLods(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("landscapePath"), TEXT("generate_lods: landscape asset path (alternative to assetPath/assetPaths)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Array(TEXT("assetPaths"), TEXT(""))
+	 .Array(TEXT("assets"), TEXT("generate_lods: alias for assetPaths."))
+	 .Number(TEXT("lodCount"), TEXT(""))
+	 .Number(TEXT("numLODs"), TEXT("generate_lods: alias for lodCount."))
+	 .FreeformObject(TEXT("reductionSettings"), TEXT("generate_lods: FMeshReductionSettings overrides applied to every generated LOD — percentTriangles/percentVertices (0-1, replace the progressive 50%/25%/... defaults), maxDeviation, pixelError, weldingThreshold, hardAngleThreshold, baseLODModel, recalculateNormals."));
+}
+
+static void S_AddMaterialParameter(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("type"), TEXT(""))
+	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Required({TEXT("assetPath"), TEXT("name"), TEXT("type")});
+}
+
+static void S_ListInstances(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_ResetInstanceParameters(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_Exists(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_GetMaterialStats(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_NaniteRebuildMesh(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("meshPath"), TEXT("Mesh asset path."))
+	 .Bool(TEXT("enableNanite"), TEXT("nanite_rebuild_mesh: enable Nanite virtualized geometry (default true)."))
+	 .Bool(TEXT("preserveArea"), TEXT("nanite_rebuild_mesh: preserve surface area during Nanite fallback mesh reduction (default true)."))
+	 .Number(TEXT("trianglePercent"), TEXT("nanite_rebuild_mesh: Nanite fallback mesh triangle percent 0-100 (default 100)."))
+	 .Number(TEXT("fallbackPercent"), TEXT("nanite_rebuild_mesh: Nanite fallback relative error percent 0-100 (default 0)."))
+	 .Required({TEXT("assetPath"), TEXT("meshPath")});
+}
+
+static void S_BulkRename(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("prefix"), TEXT(""))
+	 .String(TEXT("suffix"), TEXT(""))
+	 .String(TEXT("searchText"), TEXT(""))
+	 .String(TEXT("replaceText"), TEXT(""))
+	 .Bool(TEXT("checkoutFiles"), TEXT(""))
+	 .Array(TEXT("assetPaths"), TEXT(""))
+	 .String(TEXT("folderPath"), TEXT("Path to a directory."))
+	 .Required({TEXT("assetPaths"), TEXT("folderPath")});
+}
+
+static void S_BulkDelete(FMcpSchemaBuilder& B)
+{
+	B.Bool(TEXT("showConfirmation"), TEXT(""))
+	 .Bool(TEXT("fixupRedirectors"), TEXT(""))
+	 .Array(TEXT("assetPaths"), TEXT(""))
+	 .String(TEXT("folderPath"), TEXT("Path to a directory."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .String(TEXT("pattern"), TEXT("bulk_delete: substring filter applied to matching asset names when deleting by folderPath."))
+	 .Required({TEXT("assetPaths"), TEXT("folderPath"), TEXT("path")});
+}
+
+static void S_SourceControlCheckout(FMcpSchemaBuilder& B)
+{
+	B.Array(TEXT("assetPaths"), TEXT(""))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPaths"), TEXT("assetPath")});
+}
+
+static void S_SourceControlSubmit(FMcpSchemaBuilder& B)
+{
+	B.Array(TEXT("assetPaths"), TEXT(""))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("description"), TEXT(""))
+	 .Required({TEXT("assetPaths"), TEXT("assetPath")});
+}
+
+static void S_Save(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_SaveAll(FMcpSchemaBuilder&) {}
+
+static void S_CreateMaterial(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .String(TEXT("materialDomain"), TEXT("create_material/set_material_domain: Surface|DeferredDecal|LightFunction|Volume|PostProcess|UI."))
+	 .String(TEXT("blendMode"), TEXT("create_material/set_blend_mode: Opaque|Masked|Translucent|Additive|Modulate|AlphaComposite|AlphaHoldout. combine_textures: Normal|Multiply|Screen|Overlay|Add."))
+	 .String(TEXT("shadingModel"), TEXT("create_material/set_shading_model: Unlit|DefaultLit|Subsurface|SubsurfaceProfile|PreintegratedSkin|ClearCoat|Hair|Cloth|Eye|TwoSidedFoliage|ThinTranslucent."))
+	 .Bool(TEXT("twoSided"), TEXT("create_material/set_two_sided: render both polygon faces."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("name")});
+}
+
+static void S_SetBlendMode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("blendMode"), TEXT("create_material/set_blend_mode: Opaque|Masked|Translucent|Additive|Modulate|AlphaComposite|AlphaHoldout. combine_textures: Normal|Multiply|Screen|Overlay|Add."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("blendMode")});
+}
+
+static void S_SetShadingModel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("shadingModel"), TEXT("create_material/set_shading_model: Unlit|DefaultLit|Subsurface|SubsurfaceProfile|PreintegratedSkin|ClearCoat|Hair|Cloth|Eye|TwoSidedFoliage|ThinTranslucent."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("shadingModel")});
+}
+
+static void S_SetMaterialDomain(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("materialDomain"), TEXT("create_material/set_material_domain: Surface|DeferredDecal|LightFunction|Volume|PostProcess|UI."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("materialDomain")});
+}
+
+static void S_AddTextureSample(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("texturePath"), TEXT("Texture asset path."))
+	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
+	 .String(TEXT("samplerType"), TEXT("add_texture_sample: Color|LinearColor|Normal|Masks|Alpha (default Color)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddTextureCoordinate(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("coordinateIndex"), TEXT(""))
+	 .Number(TEXT("uTiling"), TEXT("add_texture_coordinate: horizontal tiling (default 1)."))
+	 .Number(TEXT("vTiling"), TEXT("add_texture_coordinate: vertical tiling (default 1)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddScalarParameter(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
+	 .FreeformObject(TEXT("defaultValue"), TEXT("Generic value (any type)."))
+	 .String(TEXT("group"), TEXT("add_scalar_parameter/add_vector_parameter/add_static_switch_parameter: UI group name."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("parameterName")});
+}
+
+static void S_AddVectorParameter(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
+	 .String(TEXT("group"), TEXT("add_scalar_parameter/add_vector_parameter/add_static_switch_parameter: UI group name."))
+	 .FreeformObject(TEXT("defaultValue"), TEXT("Generic value (any type)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("parameterName")});
+}
+
+static void S_AddStaticSwitchParameter(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
+	 .FreeformObject(TEXT("defaultValue"), TEXT("Generic value (any type)."))
+	 .String(TEXT("group"), TEXT("add_scalar_parameter/add_vector_parameter/add_static_switch_parameter: UI group name."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("parameterName")});
+}
+
+static void S_AddMathNode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("operation"), TEXT("add_math_node: Add|Subtract|Multiply|Divide|Lerp|Clamp|Power|Frac|OneMinus|Append."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("operation")});
+}
+
+static void S_AddWorldPosition(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddVertexNormal(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddPixelDepth(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddFresnel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddReflectionVector(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddPanner(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddRotator(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddNoise(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddVoronoi(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddIf(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddSwitch(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddCustomExpression(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("code"), TEXT("add_custom_expression/update_custom_expression: HLSL source code body."))
+	 .String(TEXT("outputType"), TEXT("add_custom_expression/update_custom_expression: Float1|Float2|Float3|Float4|MaterialAttributes (default Float1)."))
+	 .String(TEXT("description"), TEXT(""))
+	 .ArrayOfObjects(TEXT("inputs"), TEXT("add_custom_expression/update_custom_expression: named HLSL input pins, e.g. [{\"name\":\"UV\"}]. Each name becomes a connect_nodes inputName."))
+	 .ArrayOfObjects(TEXT("additionalOutputs"), TEXT("add_custom_expression/update_custom_expression: extra named outputs beyond the primary return, e.g. [{\"name\":\"Mask\",\"type\":\"Float1\"}]."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("code")});
+}
+
+static void S_ConnectNodes(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("sourceNodeId"), TEXT("ID of the source node."))
+	 .String(TEXT("targetNodeId"), TEXT("ID of the target node."))
+	 .String(TEXT("inputName"), TEXT("Name of the pin."))
+	 .String(TEXT("sourcePin"), TEXT("connect_nodes: named output pin on the source node (e.g. an MF call output); defaults to output 0."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("sourceNodeId")});
+}
+
+static void S_DisconnectNodes(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .String(TEXT("pinName"), TEXT("Name of the pin."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .String(TEXT("expressionIndex"), TEXT("ID of the node."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_CreateMaterialFunction(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .String(TEXT("description"), TEXT(""))
+	 .Bool(TEXT("exposeToLibrary"), TEXT("create_material_function: show in the Material Function Library picker (default true)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("name")});
+}
+
+static void S_AddFunctionInput(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("inputName"), TEXT("Name of the pin."))
+	 .String(TEXT("inputType"), TEXT("add_function_input/add_function_output: Float1|Float2|Float3|Float4|Texture2D|TextureCube|Bool|MaterialAttributes."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .String(TEXT("functionPath"), TEXT("use_material_function: material function asset path to call."))
+	 .Required({TEXT("assetPath"), TEXT("inputName")});
+}
+
+static void S_AddFunctionOutput(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("inputName"), TEXT("Name of the pin."))
+	 .String(TEXT("inputType"), TEXT("add_function_input/add_function_output: Float1|Float2|Float3|Float4|Texture2D|TextureCube|Bool|MaterialAttributes."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("inputName")});
+}
+
+static void S_UseMaterialFunction(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("functionPath"), TEXT("use_material_function: material function asset path to call."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("functionPath")});
+}
+
+static void S_GetMaterialFunctionInfo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_CreateMaterialInstance(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("parentMaterial"), TEXT("Material asset path."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("name"), TEXT("parentMaterial")});
+}
+
+static void S_SetScalarParameterValue(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
+	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("parameterName")});
+}
+
+static void S_SetVectorParameterValue(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
+	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("parameterName")});
+}
+
+static void S_SetTextureParameterValue(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
+	 .String(TEXT("texturePath"), TEXT("Texture asset path."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("parameterName"), TEXT("texturePath")});
+}
+
+static void S_CreateLandscapeMaterial(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("name")});
+}
+
+static void S_CreateDecalMaterial(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("name")});
+}
+
+static void S_CreatePostProcessMaterial(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("name")});
+}
+
+static void S_AddLandscapeLayer(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("layerName"), TEXT("add_landscape_layer: landscape layer name."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("materialPath"), TEXT("Material asset path."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Number(TEXT("hardness"), TEXT("add_landscape_layer: layer info hardness 0-1 (default 0.5)."))
+	 .String(TEXT("physicalMaterialPath"), TEXT("add_landscape_layer: optional physical material asset path."))
+	 .Bool(TEXT("noWeightBlend"), TEXT("add_landscape_layer: disable weight-blending for this layer (default false)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("layerName")});
+}
+
+static void S_ConfigureLayerBlend(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("materialPath"), TEXT("Material asset path."))
+	 .ArrayOfObjects(TEXT("layers"), TEXT("configure_layer_blend: layers to add, e.g. [{\"name\":\"Rock\",\"blendType\":\"...\"}]."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("layers")});
+}
+
+static void S_CompileMaterial(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Bool(TEXT("waitForShaders"), TEXT("compile_material: block on the async shader workers so backend (not just translation) errors are reported. Slower; off by default."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_GetMaterialInfo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("filter"), TEXT("get_material_info: what to include — 'parameters'|'expressions'|'connections'|'all' (default all)."))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .Array(TEXT("nodeIds"), TEXT("delete_node: batch-delete multiple node IDs (alternative to nodeId)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_FindNode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("nodeType"), TEXT(""))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_GetNodeConnections(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .String(TEXT("direction"), TEXT("get_node_connections: inputs|outputs|both (default both)."))
+	 .Number(TEXT("depth"), TEXT("list: recursion depth filter relative to the queried path. get_node_connections: BFS hop limit (default 1; -1 unlimited)."))
+	 .Bool(TEXT("upstream"), TEXT("get_node_connections: walk backward to all sources (overrides direction/depth)."))
+	 .Bool(TEXT("downstream"), TEXT("get_node_connections: walk forward to all consumers (overrides direction/depth)."))
+	 .Required({TEXT("assetPath"), TEXT("nodeId")});
+}
+
+static void S_GetNodeProperties(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .Required({TEXT("assetPath"), TEXT("nodeId")});
+}
+
+static void S_SetNodeValue(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Number(TEXT("r"), TEXT("set_node_value: red/X channel of a Constant2/3/4Vector or VectorParameter default."))
+	 .Number(TEXT("g"), TEXT("set_node_value: green/Y channel."))
+	 .Number(TEXT("b"), TEXT("set_node_value: blue/Z channel."))
+	 .Number(TEXT("a"), TEXT("set_node_value: alpha/W channel (Constant4Vector / VectorParameter)."))
+	 .Number(TEXT("constA"), TEXT("set_node_value: ConstA default of an arithmetic node (Add/Multiply/…) when input A is unconnected."))
+	 .Number(TEXT("constB"), TEXT("set_node_value: ConstB default of an arithmetic node when input B is unconnected."))
+	 .Required({TEXT("assetPath"), TEXT("nodeId")});
+}
+
+static void S_SetStaticSwitchParameterValue(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
+	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("parameterName")});
+}
+
+static void S_DeleteNode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .Array(TEXT("nodeIds"), TEXT("delete_node: batch-delete multiple node IDs (alternative to nodeId)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_UpdateCustomExpression(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .String(TEXT("code"), TEXT("add_custom_expression/update_custom_expression: HLSL source code body."))
+	 .String(TEXT("description"), TEXT(""))
+	 .String(TEXT("outputType"), TEXT("add_custom_expression/update_custom_expression: Float1|Float2|Float3|Float4|MaterialAttributes (default Float1)."))
+	 .ArrayOfObjects(TEXT("inputs"), TEXT("add_custom_expression/update_custom_expression: named HLSL input pins, e.g. [{\"name\":\"UV\"}]. Each name becomes a connect_nodes inputName."))
+	 .ArrayOfObjects(TEXT("additionalOutputs"), TEXT("add_custom_expression/update_custom_expression: extra named outputs beyond the primary return, e.g. [{\"name\":\"Mask\",\"type\":\"Float1\"}]."))
+	 .Required({TEXT("assetPath"), TEXT("nodeId")});
+}
+
+static void S_GetNodeChain(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("startNodeId"), TEXT("get_node_chain: node ID to trace the signal path from."))
+	 .String(TEXT("endNodeId"), TEXT("get_node_chain: node ID (or \"Main\") to trace the signal path to."))
+	 .String(TEXT("endPin"), TEXT("get_node_chain: named material main-pin to trace to, e.g. 'BaseColor' (alternative to endNodeId)."))
+	 .Required({TEXT("assetPath"), TEXT("startNodeId")});
+}
+
+static void S_GetConnectedSubgraph(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("orphansOnly"), TEXT("get_connected_subgraph: return all nodes not connected to any output, ignoring nodeId."))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_ArrangeGraph(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddMaterialNode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("nodeType"), TEXT(""))
+	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath"), TEXT("nodeType")});
+}
+
+static void S_RebuildMaterial(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Bool(TEXT("waitForShaders"), TEXT("compile_material: block on the async shader workers so backend (not just translation) errors are reported. Slower; off by default."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_SetMaterialParameter(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
+	 .String(TEXT("parameterType"), TEXT(""))
+	 .Required({TEXT("assetPath"), TEXT("parameterName")});
+}
+
+static void S_GetMaterialNodeDetails(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .String(TEXT("expressionIndex"), TEXT("ID of the node."))
+	 .Required({TEXT("assetPath"), TEXT("nodeId")});
+}
+
+static void S_RemoveMaterialNode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .String(TEXT("expressionIndex"), TEXT("ID of the node."))
+	 .Required({TEXT("assetPath"), TEXT("nodeId")});
+}
+
+static void S_SetTwoSided(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Bool(TEXT("twoSided"), TEXT("create_material/set_two_sided: render both polygon faces."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_CreateNoiseTexture(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .String(TEXT("noiseType"), TEXT("create_noise_texture: Perlin (default) — FBM noise type."))
+	 .Number(TEXT("width"), TEXT(""))
+	 .Number(TEXT("height"), TEXT(""))
+	 .Number(TEXT("scale"), TEXT("create_noise_texture: noise frequency scale (default 1)."))
+	 .Number(TEXT("octaves"), TEXT("create_noise_texture: FBM octave count (default 4)."))
+	 .Number(TEXT("persistence"), TEXT("create_noise_texture: FBM amplitude falloff per octave (default 0.5)."))
+	 .Number(TEXT("lacunarity"), TEXT("create_noise_texture: FBM frequency growth per octave (default 2)."))
+	 .Number(TEXT("seed"), TEXT("create_noise_texture: noise seed (default 0)."))
+	 .Bool(TEXT("seamless"), TEXT("create_noise_texture: tile seamlessly (default false)."))
+	 .Bool(TEXT("hdr"), TEXT("create_noise_texture/create_gradient_texture: create a float/HDR texture (default false)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("name")});
+}
+
+static void S_CreateGradientTexture(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .String(TEXT("gradientType"), TEXT("create_gradient_texture: Linear (default)|Radial|Angular."))
+	 .Number(TEXT("width"), TEXT(""))
+	 .Number(TEXT("height"), TEXT(""))
+	 .Number(TEXT("angle"), TEXT("create_gradient_texture: Linear gradient direction in degrees (default 0)."))
+	 .Number(TEXT("centerX"), TEXT("create_gradient_texture: Radial/Angular center U 0-1 (default 0.5)."))
+	 .Number(TEXT("centerY"), TEXT("create_gradient_texture: Radial/Angular center V 0-1 (default 0.5)."))
+	 .Number(TEXT("radius"), TEXT("create_gradient_texture: Radial falloff radius (default 0.5). blur: box-blur pixel radius 1-10 (default 2)."))
+	 .Bool(TEXT("hdr"), TEXT("create_noise_texture/create_gradient_texture: create a float/HDR texture (default false)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .FreeformObject(TEXT("startColor"), TEXT("create_gradient_texture: {r,g,b,a} start color (default black)."))
+	 .FreeformObject(TEXT("endColor"), TEXT("create_gradient_texture: {r,g,b,a} end color (default white)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_CreatePatternTexture(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .String(TEXT("patternType"), TEXT("create_pattern_texture: Checker (default)|Grid|Brick|Stripes|Dots."))
+	 .Number(TEXT("width"), TEXT(""))
+	 .Number(TEXT("height"), TEXT(""))
+	 .Number(TEXT("tilesX"), TEXT("create_pattern_texture: horizontal tile count (default 8)."))
+	 .Number(TEXT("tilesY"), TEXT("create_pattern_texture: vertical tile count (default 8)."))
+	 .Number(TEXT("lineWidth"), TEXT("create_pattern_texture: Grid/Brick line thickness 0-1 (default 0.02)."))
+	 .Number(TEXT("brickRatio"), TEXT("create_pattern_texture: Brick length-to-height ratio (default 2)."))
+	 .Number(TEXT("offset"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .FreeformObject(TEXT("primaryColor"), TEXT("create_pattern_texture: {r,g,b,a} foreground color (default white)."))
+	 .FreeformObject(TEXT("secondaryColor"), TEXT("create_pattern_texture: {r,g,b,a} background color (default black)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_CreateNormalFromHeight(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("sourceTexture"), TEXT("create_normal_from_height: source height-map texture path."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Number(TEXT("strength"), TEXT("create_normal_from_height: normal map intensity (default 1)."))
+	 .String(TEXT("algorithm"), TEXT("create_normal_from_height: Sobel (default) or finite-difference gradient method."))
+	 .Bool(TEXT("flipY"), TEXT("create_normal_from_height: flip the green channel (DirectX vs OpenGL normal convention)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .String(TEXT("channelMode"), TEXT("create_normal_from_height: height source channel — luminance (default)|red|green|blue|alpha|average."))
+	 .Required({TEXT("sourceTexture")});
+}
+
+static void S_CreateAoFromMesh(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("meshPath"), TEXT("Mesh asset path."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Number(TEXT("width"), TEXT(""))
+	 .Number(TEXT("height"), TEXT(""))
+	 .Number(TEXT("sampleCount"), TEXT("create_ao_from_mesh: vertex samples per pixel (default 64)."))
+	 .Number(TEXT("rayDistance"), TEXT("create_ao_from_mesh: occlusion ray distance (default 100)."))
+	 .Number(TEXT("bias"), TEXT("create_ao_from_mesh: AO bias (default 0.01)."))
+	 .Number(TEXT("uvChannel"), TEXT("create_ao_from_mesh: source UV channel index (default 0)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("meshPath"), TEXT("name")});
+}
+
+static void S_ResizeTexture(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("sourcePath"), TEXT("Source path for import/duplicate/rename/move (assetPath also accepted)."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Number(TEXT("newWidth"), TEXT("resize_texture: output width in pixels (default 512)."))
+	 .Number(TEXT("newHeight"), TEXT("resize_texture: output height in pixels (default 512)."))
+	 .String(TEXT("filterMethod"), TEXT("resize_texture: nearest|bilinear (default)|bicubic|lanczos."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("sourcePath")});
+}
+
+static void S_AdjustLevels(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("inBlack"), TEXT("adjust_levels: input black point 0-1 (default 0)."))
+	 .Number(TEXT("inWhite"), TEXT("adjust_levels: input white point 0-1 (default 1)."))
+	 .Number(TEXT("gamma"), TEXT("adjust_levels: gamma correction (default 1)."))
+	 .Number(TEXT("outBlack"), TEXT("adjust_levels: output black point 0-1 (default 0)."))
+	 .Number(TEXT("outWhite"), TEXT("adjust_levels: output white point 0-1 (default 1)."))
+	 .Bool(TEXT("inPlace"), TEXT("invert/desaturate/adjust_curves: modify the source texture instead of writing a new one (default true)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AdjustCurves(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Bool(TEXT("inPlace"), TEXT("invert/desaturate/adjust_curves: modify the source texture instead of writing a new one (default true)."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Array(TEXT("inputR"), TEXT("adjust_curves: red-channel curve input control points."), TEXT("number"))
+	 .Array(TEXT("outputR"), TEXT("adjust_curves: red-channel curve output control points."), TEXT("number"))
+	 .Array(TEXT("inputG"), TEXT("adjust_curves: green-channel curve input control points."), TEXT("number"))
+	 .Array(TEXT("outputG"), TEXT("adjust_curves: green-channel curve output control points."), TEXT("number"))
+	 .Array(TEXT("inputB"), TEXT("adjust_curves: blue-channel curve input control points."), TEXT("number"))
+	 .Array(TEXT("outputB"), TEXT("adjust_curves: blue-channel curve output control points."), TEXT("number"))
+	 .Array(TEXT("input"), TEXT("adjust_curves: master curve input control points 0-1 (paired with output)."), TEXT("number"))
+	 .Array(TEXT("output"), TEXT("adjust_curves: master curve output control points 0-1 (paired with input)."), TEXT("number"))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_Blur(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("radius"), TEXT("create_gradient_texture: Radial falloff radius (default 0.5). blur: box-blur pixel radius 1-10 (default 2)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_Sharpen(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("amount"), TEXT("desaturate: blend amount 0-1 (default 1). sharpen: unsharp-mask amount 0-5 (default 1)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_Invert(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Bool(TEXT("inPlace"), TEXT("invert/desaturate/adjust_curves: modify the source texture instead of writing a new one (default true)."))
+	 .Bool(TEXT("invertAlpha"), TEXT("invert: also invert the alpha channel (default false)."))
+	 .String(TEXT("channel"), TEXT("invert: All (default)|Red|Green|Blue|Alpha. channel_extract: R (default)|G|B|A."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_Desaturate(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("amount"), TEXT("desaturate: blend amount 0-1 (default 1). sharpen: unsharp-mask amount 0-5 (default 1)."))
+	 .Bool(TEXT("inPlace"), TEXT("invert/desaturate/adjust_curves: modify the source texture instead of writing a new one (default true)."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .FreeformObject(TEXT("luminanceFactors"), TEXT("add_desaturation: optional {r,g,b} luminance weights (default 0.3/0.59/0.11)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_ChannelPack(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("redTexture"), TEXT("channel_pack: source texture for the output red channel."))
+	 .String(TEXT("greenTexture"), TEXT("channel_pack: source texture for the output green channel."))
+	 .String(TEXT("blueTexture"), TEXT("channel_pack: source texture for the output blue channel."))
+	 .String(TEXT("alphaTexture"), TEXT("channel_pack: source texture for the output alpha channel."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("name")});
+}
+
+static void S_ChannelExtract(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("texturePath"), TEXT("Texture asset path."))
+	 .String(TEXT("channel"), TEXT("invert: All (default)|Red|Green|Blue|Alpha. channel_extract: R (default)|G|B|A."))
+	 .String(TEXT("outputPath"), TEXT("create_thumbnail/generate_report: file path (relative to project dir) to write output to. channel_extract: destination texture path."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("texturePath")});
+}
+
+static void S_CombineTextures(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("baseTexture"), TEXT("combine_textures: base texture path."))
+	 .String(TEXT("overlayTexture"), TEXT("combine_textures: overlay texture path (alias blendTexture)."))
+	 .String(TEXT("blendTexture"), TEXT("combine_textures: alias for overlayTexture."))
+	 .String(TEXT("blendMode"), TEXT("create_material/set_blend_mode: Opaque|Masked|Translucent|Additive|Modulate|AlphaComposite|AlphaHoldout. combine_textures: Normal|Multiply|Screen|Overlay|Add."))
+	 .Number(TEXT("opacity"), TEXT("combine_textures: overlay blend opacity 0-1 (default 1)."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("baseTexture")});
+}
+
+static void S_SetCompressionSettings(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("compressionSettings"), TEXT("set_compression_settings: TC_Default|TC_Normalmap|TC_Masks|TC_Grayscale|TC_Displacementmap|TC_VectorDisplacementmap|TC_HDR|TC_EditorIcon|TC_Alpha|TC_DistanceFieldFont|TC_HDR_Compressed|TC_BC7."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_SetTextureGroup(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("textureGroup"), TEXT("set_texture_group: e.g. World (default)|Character|Weapon|Vehicle|Cinematic|Effects|Skybox|UI|Lightmap|RenderTarget|Bokeh|Pixels2D."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_SetLodBias(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("lodBias"), TEXT("set_lod_bias: additional texture LOD bias (default 0)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_ConfigureVirtualTexture(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Bool(TEXT("virtualTextureStreaming"), TEXT("configure_virtual_texture: enable VT streaming (default false)."))
+	 .Number(TEXT("tileSize"), TEXT("configure_virtual_texture: VT tile size (default 128)."))
+	 .Number(TEXT("tileBorderSize"), TEXT("configure_virtual_texture: VT tile border size (default 4)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_SetStreamingPriority(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Bool(TEXT("neverStream"), TEXT("set_streaming_priority: disable mip streaming for this texture (default false)."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_GetTextureInfo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPath")});
+}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // Flags are authored per action (not baked in the macro): RequiresEditor on the
@@ -176,18 +1220,20 @@ inline const FMcpParamDecl P_GetTextureInfo[] = { { TEXT("assetPath"), EMcpParam
 // (whose texture body is the live create_render_target implementation) carries
 // no RequiresEditor. Mutating on everything except pure reads.
 //
-// MCP_MA_CALL forwards to a 3-arg member; MCP_MA_ACTION_CALL passes the action literal
-// to a 4-arg member (self-gating sub-handlers, the shared HandleDataTableRowOp,
-// and the shared material OR-branch members that sub-dispatch on the action).
+// MCP_MA_CALL forwards to a 3-arg member; MCP_MA_ACTION_CALL passes the action
+// literal to a 4-arg member (self-gating sub-handlers, the shared
+// HandleDataTableRowOp, and the shared material OR-branch members that
+// sub-dispatch on the action).
 
-#define MCP_MA_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, Flags)           \
+#define MCP_MA_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                        \
 class FMcpCall_ManageAsset_##ClassSuffix final : public FMcpCall                         \
 {                                                                                        \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }       \
 	const FMcpCallDecl& GetDecl() const override                                         \
 	{                                                                                    \
-		static const FMcpCallDecl Decl{ TEXT("manage_asset"), TEXT(ActionLiteral),       \
-			ParamsArray, (Flags) };                                                      \
-		return Decl;                                                                     \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_asset"),               \
+			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                            \
+		return D;                                                                        \
 	}                                                                                    \
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
@@ -196,14 +1242,15 @@ class FMcpCall_ManageAsset_##ClassSuffix final : public FMcpCall                
 	}                                                                                    \
 };
 
-#define MCP_MA_ACTION_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, Flags)          \
+#define MCP_MA_ACTION_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                 \
 class FMcpCall_ManageAsset_##ClassSuffix final : public FMcpCall                         \
 {                                                                                        \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }       \
 	const FMcpCallDecl& GetDecl() const override                                         \
 	{                                                                                    \
-		static const FMcpCallDecl Decl{ TEXT("manage_asset"), TEXT(ActionLiteral),       \
-			ParamsArray, (Flags) };                                                      \
-		return Decl;                                                                     \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_asset"),               \
+			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                            \
+		return D;                                                                        \
 	}                                                                                    \
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
@@ -213,130 +1260,130 @@ class FMcpCall_ManageAsset_##ClassSuffix final : public FMcpCall                
 };
 
 // Core (AssetWorkflow / AssetQuery members)
-MCP_MA_CALL(List, "list", P_List, HandleListAssets, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(Import, "import", P_Import, HandleImportAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(Duplicate, "duplicate", P_Duplicate, HandleDuplicateAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(Rename, "rename", P_Rename, HandleRenameAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(Move, "move", P_Move, HandleMoveAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(Delete, "delete", P_Delete, HandleDeleteAssets, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(CreateFolder, "create_folder", P_CreateFolder, HandleCreateFolder, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(SearchAssets, "search_assets", P_SearchAssets, HandleSearchAssets, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(GetDependencies, "get_dependencies", P_GetDependencies, HandleGetDependencies, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(GetReferencers, "get_referencers", P_GetReferencers, HandleGetReferencers, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(GetAssetProperties, "get_asset_properties", P_GetAssetProperties, HandleGetAssetProperties, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(SetAssetProperty, "set_asset_property", P_SetAssetProperty, HandleSetAssetProperty, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(GetSourceControlState, "get_source_control_state", P_GetSourceControlState, HandleGetSourceControlState, EMcpCallFlags::RequiresEditor)
-MCP_MA_ACTION_CALL(AnalyzeGraph, "analyze_graph", P_AnalyzeGraph, HandleAnalyzeGraph, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(GetAssetGraph, "get_asset_graph", P_GetAssetGraph, HandleGetAssetGraph, EMcpCallFlags::RequiresEditor)
-MCP_MA_ACTION_CALL(CreateThumbnail, "create_thumbnail", P_CreateThumbnail, HandleGenerateThumbnail, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetTags, "set_tags", P_SetTags, HandleSetTags, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(GetMetadata, "get_metadata", P_GetMetadata, HandleGetMetadata, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(SetMetadata, "set_metadata", P_SetMetadata, HandleSetMetadata, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(Validate, "validate", P_Validate, HandleValidateAsset, EMcpCallFlags::RequiresEditor)
-MCP_MA_ACTION_CALL(FixupRedirectors, "fixup_redirectors", P_FixupRedirectors, HandleFixupRedirectors, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(FindByTag, "find_by_tag", P_FindByTag, HandleFindByTag, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(GenerateReport, "generate_report", P_GenerateReport, HandleGenerateReport, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(CreateDataTable, "create_data_table", P_CreateDataTable, HandleCreateDataTable, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddDataTableRow, "add_data_table_row", P_AddDataTableRow, HandleDataTableRowOp, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(EditDataTableRow, "edit_data_table_row", P_EditDataTableRow, HandleDataTableRowOp, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(RemoveDataTableRow, "remove_data_table_row", P_RemoveDataTableRow, HandleDataTableRowOp, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(GetDataTableRows, "get_data_table_rows", P_GetDataTableRows, HandleDataTableRowOp, EMcpCallFlags::RequiresEditor)
-MCP_MA_ACTION_CALL(ImportDataTable, "import_data_table", P_ImportDataTable, HandleDataTableRowOp, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(CreateRenderTarget, "create_render_target", P_CreateRenderTarget, HandleTextureCreateRenderTarget, EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(GenerateLods, "generate_lods", P_GenerateLods, HandleGenerateLODs, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(AddMaterialParameter, "add_material_parameter", P_AddMaterialParameter, HandleAddMaterialParameter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(ListInstances, "list_instances", P_ListInstances, HandleListMaterialInstances, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(ResetInstanceParameters, "reset_instance_parameters", P_ResetInstanceParameters, HandleResetInstanceParameters, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(Exists, "exists", P_Exists, HandleDoesAssetExist, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(GetMaterialStats, "get_material_stats", P_GetMaterialStats, HandleGetMaterialStats, EMcpCallFlags::RequiresEditor)
-MCP_MA_ACTION_CALL(NaniteRebuildMesh, "nanite_rebuild_mesh", P_NaniteRebuildMesh, HandleNaniteRebuildMesh, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(BulkRename, "bulk_rename", P_BulkRename, HandleBulkRenameAssets, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(BulkDelete, "bulk_delete", P_BulkDelete, HandleBulkDeleteAssets, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(SourceControlCheckout, "source_control_checkout", P_SourceControlCheckout, HandleSourceControlCheckout, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(SourceControlSubmit, "source_control_submit", P_SourceControlSubmit, HandleSourceControlSubmit, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(Save, "save", P_Save, HandleSaveAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(SaveAll, "save_all", P_SaveAll, HandleControlEditorSaveAll, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(List, "list", HandleListAssets, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(Import, "import", HandleImportAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(Duplicate, "duplicate", HandleDuplicateAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(Rename, "rename", HandleRenameAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(Move, "move", HandleMoveAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(Delete, "delete", HandleDeleteAssets, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(CreateFolder, "create_folder", HandleCreateFolder, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(SearchAssets, "search_assets", HandleSearchAssets, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(GetDependencies, "get_dependencies", HandleGetDependencies, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(GetReferencers, "get_referencers", HandleGetReferencers, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(GetAssetProperties, "get_asset_properties", HandleGetAssetProperties, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(SetAssetProperty, "set_asset_property", HandleSetAssetProperty, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(GetSourceControlState, "get_source_control_state", HandleGetSourceControlState, EMcpCallFlags::RequiresEditor)
+MCP_MA_ACTION_CALL(AnalyzeGraph, "analyze_graph", HandleAnalyzeGraph, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(GetAssetGraph, "get_asset_graph", HandleGetAssetGraph, EMcpCallFlags::RequiresEditor)
+MCP_MA_ACTION_CALL(CreateThumbnail, "create_thumbnail", HandleGenerateThumbnail, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetTags, "set_tags", HandleSetTags, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(GetMetadata, "get_metadata", HandleGetMetadata, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(SetMetadata, "set_metadata", HandleSetMetadata, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(Validate, "validate", HandleValidateAsset, EMcpCallFlags::RequiresEditor)
+MCP_MA_ACTION_CALL(FixupRedirectors, "fixup_redirectors", HandleFixupRedirectors, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(FindByTag, "find_by_tag", HandleFindByTag, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(GenerateReport, "generate_report", HandleGenerateReport, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(CreateDataTable, "create_data_table", HandleCreateDataTable, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddDataTableRow, "add_data_table_row", HandleDataTableRowOp, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(EditDataTableRow, "edit_data_table_row", HandleDataTableRowOp, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(RemoveDataTableRow, "remove_data_table_row", HandleDataTableRowOp, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(GetDataTableRows, "get_data_table_rows", HandleDataTableRowOp, EMcpCallFlags::RequiresEditor)
+MCP_MA_ACTION_CALL(ImportDataTable, "import_data_table", HandleDataTableRowOp, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(CreateRenderTarget, "create_render_target", HandleTextureCreateRenderTarget, EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(GenerateLods, "generate_lods", HandleGenerateLODs, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(AddMaterialParameter, "add_material_parameter", HandleAddMaterialParameter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(ListInstances, "list_instances", HandleListMaterialInstances, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(ResetInstanceParameters, "reset_instance_parameters", HandleResetInstanceParameters, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(Exists, "exists", HandleDoesAssetExist, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(GetMaterialStats, "get_material_stats", HandleGetMaterialStats, EMcpCallFlags::RequiresEditor)
+MCP_MA_ACTION_CALL(NaniteRebuildMesh, "nanite_rebuild_mesh", HandleNaniteRebuildMesh, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(BulkRename, "bulk_rename", HandleBulkRenameAssets, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(BulkDelete, "bulk_delete", HandleBulkDeleteAssets, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(SourceControlCheckout, "source_control_checkout", HandleSourceControlCheckout, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(SourceControlSubmit, "source_control_submit", HandleSourceControlSubmit, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(Save, "save", HandleSaveAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(SaveAll, "save_all", HandleControlEditorSaveAll, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Material authoring (MaterialAuthoringHandlers.cpp)
-MCP_MA_CALL(CreateMaterial, "create_material", P_CreateMaterial, HandleMaterialCreateMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetBlendMode, "set_blend_mode", P_SetBlendMode, HandleMaterialSetBlendMode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetShadingModel, "set_shading_model", P_SetShadingModel, HandleMaterialSetShadingModel, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetMaterialDomain, "set_material_domain", P_SetMaterialDomain, HandleMaterialSetMaterialDomain, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(AddTextureSample, "add_texture_sample", P_AddTextureSample, HandleMaterialAddTextureSample, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(AddTextureCoordinate, "add_texture_coordinate", P_AddTextureCoordinate, HandleMaterialAddTextureCoordinate, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(AddScalarParameter, "add_scalar_parameter", P_AddScalarParameter, HandleMaterialAddScalarParameter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(AddVectorParameter, "add_vector_parameter", P_AddVectorParameter, HandleMaterialAddVectorParameter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(AddStaticSwitchParameter, "add_static_switch_parameter", P_AddStaticSwitchParameter, HandleMaterialAddStaticSwitchParameter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(AddMathNode, "add_math_node", P_AddMathNode, HandleMaterialAddMathNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddWorldPosition, "add_world_position", P_AddWorldPosition, HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddVertexNormal, "add_vertex_normal", P_AddVertexNormal, HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddPixelDepth, "add_pixel_depth", P_AddPixelDepth, HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddFresnel, "add_fresnel", P_AddFresnel, HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddReflectionVector, "add_reflection_vector", P_AddReflectionVector, HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddPanner, "add_panner", P_AddPanner, HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddRotator, "add_rotator", P_AddRotator, HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddNoise, "add_noise", P_AddNoise, HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddVoronoi, "add_voronoi", P_AddVoronoi, HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddIf, "add_if", P_AddIf, HandleMaterialAddConditional, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddSwitch, "add_switch", P_AddSwitch, HandleMaterialAddConditional, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(AddCustomExpression, "add_custom_expression", P_AddCustomExpression, HandleMaterialAddCustomExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(ConnectNodes, "connect_nodes", P_ConnectNodes, HandleMaterialConnectNodes, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(DisconnectNodes, "disconnect_nodes", P_DisconnectNodes, HandleMaterialDisconnectNodes, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(CreateMaterialFunction, "create_material_function", P_CreateMaterialFunction, HandleMaterialCreateMaterialFunction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddFunctionInput, "add_function_input", P_AddFunctionInput, HandleMaterialAddFunctionIO, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(AddFunctionOutput, "add_function_output", P_AddFunctionOutput, HandleMaterialAddFunctionIO, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(UseMaterialFunction, "use_material_function", P_UseMaterialFunction, HandleMaterialUseMaterialFunction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(GetMaterialFunctionInfo, "get_material_function_info", P_GetMaterialFunctionInfo, HandleMaterialGetMaterialFunctionInfo, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(CreateMaterialInstance, "create_material_instance", P_CreateMaterialInstance, HandleMaterialCreateMaterialInstance, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetScalarParameterValue, "set_scalar_parameter_value", P_SetScalarParameterValue, HandleMaterialSetScalarParameterValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetVectorParameterValue, "set_vector_parameter_value", P_SetVectorParameterValue, HandleMaterialSetVectorParameterValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetTextureParameterValue, "set_texture_parameter_value", P_SetTextureParameterValue, HandleMaterialSetTextureParameterValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(CreateLandscapeMaterial, "create_landscape_material", P_CreateLandscapeMaterial, HandleMaterialCreateSpecialMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(CreateDecalMaterial, "create_decal_material", P_CreateDecalMaterial, HandleMaterialCreateSpecialMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_ACTION_CALL(CreatePostProcessMaterial, "create_post_process_material", P_CreatePostProcessMaterial, HandleMaterialCreateSpecialMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(AddLandscapeLayer, "add_landscape_layer", P_AddLandscapeLayer, HandleMaterialAddLandscapeLayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(ConfigureLayerBlend, "configure_layer_blend", P_ConfigureLayerBlend, HandleMaterialConfigureLayerBlend, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(CompileMaterial, "compile_material", P_CompileMaterial, HandleMaterialCompileMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(GetMaterialInfo, "get_material_info", P_GetMaterialInfo, HandleMaterialGetMaterialInfo, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(FindNode, "find_node", P_FindNode, HandleMaterialFindNode, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(GetNodeConnections, "get_node_connections", P_GetNodeConnections, HandleMaterialGetNodeConnections, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(GetNodeProperties, "get_node_properties", P_GetNodeProperties, HandleMaterialGetNodeProperties, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(SetNodeValue, "set_node_value", P_SetNodeValue, HandleMaterialSetNodeValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetStaticSwitchParameterValue, "set_static_switch_parameter_value", P_SetStaticSwitchParameterValue, HandleMaterialSetStaticSwitchParameterValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(DeleteNode, "delete_node", P_DeleteNode, HandleMaterialDeleteNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(UpdateCustomExpression, "update_custom_expression", P_UpdateCustomExpression, HandleMaterialUpdateCustomExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(GetNodeChain, "get_node_chain", P_GetNodeChain, HandleMaterialGetNodeChain, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(GetConnectedSubgraph, "get_connected_subgraph", P_GetConnectedSubgraph, HandleMaterialGetConnectedSubgraph, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(ArrangeGraph, "arrange_graph", P_ArrangeGraph, HandleMaterialArrangeGraph, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(AddMaterialNode, "add_material_node", P_AddMaterialNode, HandleMaterialAddMaterialNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(RebuildMaterial, "rebuild_material", P_RebuildMaterial, HandleMaterialCompileMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetMaterialParameter, "set_material_parameter", P_SetMaterialParameter, HandleMaterialSetMaterialParameter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(GetMaterialNodeDetails, "get_material_node_details", P_GetMaterialNodeDetails, HandleMaterialGetMaterialNodeDetails, EMcpCallFlags::RequiresEditor)
-MCP_MA_CALL(RemoveMaterialNode, "remove_material_node", P_RemoveMaterialNode, HandleMaterialRemoveMaterialNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetTwoSided, "set_two_sided", P_SetTwoSided, HandleMaterialSetTwoSided, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(CreateMaterial, "create_material", HandleMaterialCreateMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetBlendMode, "set_blend_mode", HandleMaterialSetBlendMode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetShadingModel, "set_shading_model", HandleMaterialSetShadingModel, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetMaterialDomain, "set_material_domain", HandleMaterialSetMaterialDomain, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(AddTextureSample, "add_texture_sample", HandleMaterialAddTextureSample, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(AddTextureCoordinate, "add_texture_coordinate", HandleMaterialAddTextureCoordinate, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(AddScalarParameter, "add_scalar_parameter", HandleMaterialAddScalarParameter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(AddVectorParameter, "add_vector_parameter", HandleMaterialAddVectorParameter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(AddStaticSwitchParameter, "add_static_switch_parameter", HandleMaterialAddStaticSwitchParameter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(AddMathNode, "add_math_node", HandleMaterialAddMathNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddWorldPosition, "add_world_position", HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddVertexNormal, "add_vertex_normal", HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddPixelDepth, "add_pixel_depth", HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddFresnel, "add_fresnel", HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddReflectionVector, "add_reflection_vector", HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddPanner, "add_panner", HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddRotator, "add_rotator", HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddNoise, "add_noise", HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddVoronoi, "add_voronoi", HandleMaterialAddSimpleExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddIf, "add_if", HandleMaterialAddConditional, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddSwitch, "add_switch", HandleMaterialAddConditional, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(AddCustomExpression, "add_custom_expression", HandleMaterialAddCustomExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(ConnectNodes, "connect_nodes", HandleMaterialConnectNodes, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(DisconnectNodes, "disconnect_nodes", HandleMaterialDisconnectNodes, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(CreateMaterialFunction, "create_material_function", HandleMaterialCreateMaterialFunction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddFunctionInput, "add_function_input", HandleMaterialAddFunctionIO, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(AddFunctionOutput, "add_function_output", HandleMaterialAddFunctionIO, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(UseMaterialFunction, "use_material_function", HandleMaterialUseMaterialFunction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(GetMaterialFunctionInfo, "get_material_function_info", HandleMaterialGetMaterialFunctionInfo, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(CreateMaterialInstance, "create_material_instance", HandleMaterialCreateMaterialInstance, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetScalarParameterValue, "set_scalar_parameter_value", HandleMaterialSetScalarParameterValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetVectorParameterValue, "set_vector_parameter_value", HandleMaterialSetVectorParameterValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetTextureParameterValue, "set_texture_parameter_value", HandleMaterialSetTextureParameterValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(CreateLandscapeMaterial, "create_landscape_material", HandleMaterialCreateSpecialMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(CreateDecalMaterial, "create_decal_material", HandleMaterialCreateSpecialMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_ACTION_CALL(CreatePostProcessMaterial, "create_post_process_material", HandleMaterialCreateSpecialMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(AddLandscapeLayer, "add_landscape_layer", HandleMaterialAddLandscapeLayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(ConfigureLayerBlend, "configure_layer_blend", HandleMaterialConfigureLayerBlend, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(CompileMaterial, "compile_material", HandleMaterialCompileMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(GetMaterialInfo, "get_material_info", HandleMaterialGetMaterialInfo, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(FindNode, "find_node", HandleMaterialFindNode, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(GetNodeConnections, "get_node_connections", HandleMaterialGetNodeConnections, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(GetNodeProperties, "get_node_properties", HandleMaterialGetNodeProperties, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(SetNodeValue, "set_node_value", HandleMaterialSetNodeValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetStaticSwitchParameterValue, "set_static_switch_parameter_value", HandleMaterialSetStaticSwitchParameterValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(DeleteNode, "delete_node", HandleMaterialDeleteNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(UpdateCustomExpression, "update_custom_expression", HandleMaterialUpdateCustomExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(GetNodeChain, "get_node_chain", HandleMaterialGetNodeChain, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(GetConnectedSubgraph, "get_connected_subgraph", HandleMaterialGetConnectedSubgraph, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(ArrangeGraph, "arrange_graph", HandleMaterialArrangeGraph, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(AddMaterialNode, "add_material_node", HandleMaterialAddMaterialNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(RebuildMaterial, "rebuild_material", HandleMaterialCompileMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetMaterialParameter, "set_material_parameter", HandleMaterialSetMaterialParameter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(GetMaterialNodeDetails, "get_material_node_details", HandleMaterialGetMaterialNodeDetails, EMcpCallFlags::RequiresEditor)
+MCP_MA_CALL(RemoveMaterialNode, "remove_material_node", HandleMaterialRemoveMaterialNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetTwoSided, "set_two_sided", HandleMaterialSetTwoSided, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Texture (TextureHandlers.cpp)
-MCP_MA_CALL(CreateNoiseTexture, "create_noise_texture", P_CreateNoiseTexture, HandleTextureCreateNoiseTexture, EMcpCallFlags::Mutating)
-MCP_MA_CALL(CreateGradientTexture, "create_gradient_texture", P_CreateGradientTexture, HandleTextureCreateGradientTexture, EMcpCallFlags::Mutating)
-MCP_MA_CALL(CreatePatternTexture, "create_pattern_texture", P_CreatePatternTexture, HandleTextureCreatePatternTexture, EMcpCallFlags::Mutating)
-MCP_MA_CALL(CreateNormalFromHeight, "create_normal_from_height", P_CreateNormalFromHeight, HandleTextureCreateNormalFromHeight, EMcpCallFlags::Mutating)
-MCP_MA_CALL(CreateAoFromMesh, "create_ao_from_mesh", P_CreateAoFromMesh, HandleTextureCreateAoFromMesh, EMcpCallFlags::Mutating)
-MCP_MA_CALL(ResizeTexture, "resize_texture", P_ResizeTexture, HandleTextureResizeTexture, EMcpCallFlags::Mutating)
-MCP_MA_CALL(AdjustLevels, "adjust_levels", P_AdjustLevels, HandleTextureAdjustLevels, EMcpCallFlags::Mutating)
-MCP_MA_CALL(AdjustCurves, "adjust_curves", P_AdjustCurves, HandleTextureAdjustCurves, EMcpCallFlags::Mutating)
-MCP_MA_CALL(Blur, "blur", P_Blur, HandleTextureBlur, EMcpCallFlags::Mutating)
-MCP_MA_CALL(Sharpen, "sharpen", P_Sharpen, HandleTextureSharpen, EMcpCallFlags::Mutating)
-MCP_MA_CALL(Invert, "invert", P_Invert, HandleTextureInvert, EMcpCallFlags::Mutating)
-MCP_MA_CALL(Desaturate, "desaturate", P_Desaturate, HandleTextureDesaturate, EMcpCallFlags::Mutating)
-MCP_MA_CALL(ChannelPack, "channel_pack", P_ChannelPack, HandleTextureChannelPack, EMcpCallFlags::Mutating)
-MCP_MA_CALL(ChannelExtract, "channel_extract", P_ChannelExtract, HandleTextureChannelExtract, EMcpCallFlags::Mutating)
-MCP_MA_CALL(CombineTextures, "combine_textures", P_CombineTextures, HandleTextureCombineTextures, EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetCompressionSettings, "set_compression_settings", P_SetCompressionSettings, HandleTextureSetCompressionSettings, EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetTextureGroup, "set_texture_group", P_SetTextureGroup, HandleTextureSetTextureGroup, EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetLodBias, "set_lod_bias", P_SetLodBias, HandleTextureSetLodBias, EMcpCallFlags::Mutating)
-MCP_MA_CALL(ConfigureVirtualTexture, "configure_virtual_texture", P_ConfigureVirtualTexture, HandleTextureConfigureVirtualTexture, EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetStreamingPriority, "set_streaming_priority", P_SetStreamingPriority, HandleTextureSetStreamingPriority, EMcpCallFlags::Mutating)
-MCP_MA_CALL(GetTextureInfo, "get_texture_info", P_GetTextureInfo, HandleTextureGetTextureInfo, EMcpCallFlags::None)
+MCP_MA_CALL(CreateNoiseTexture, "create_noise_texture", HandleTextureCreateNoiseTexture, EMcpCallFlags::Mutating)
+MCP_MA_CALL(CreateGradientTexture, "create_gradient_texture", HandleTextureCreateGradientTexture, EMcpCallFlags::Mutating)
+MCP_MA_CALL(CreatePatternTexture, "create_pattern_texture", HandleTextureCreatePatternTexture, EMcpCallFlags::Mutating)
+MCP_MA_CALL(CreateNormalFromHeight, "create_normal_from_height", HandleTextureCreateNormalFromHeight, EMcpCallFlags::Mutating)
+MCP_MA_CALL(CreateAoFromMesh, "create_ao_from_mesh", HandleTextureCreateAoFromMesh, EMcpCallFlags::Mutating)
+MCP_MA_CALL(ResizeTexture, "resize_texture", HandleTextureResizeTexture, EMcpCallFlags::Mutating)
+MCP_MA_CALL(AdjustLevels, "adjust_levels", HandleTextureAdjustLevels, EMcpCallFlags::Mutating)
+MCP_MA_CALL(AdjustCurves, "adjust_curves", HandleTextureAdjustCurves, EMcpCallFlags::Mutating)
+MCP_MA_CALL(Blur, "blur", HandleTextureBlur, EMcpCallFlags::Mutating)
+MCP_MA_CALL(Sharpen, "sharpen", HandleTextureSharpen, EMcpCallFlags::Mutating)
+MCP_MA_CALL(Invert, "invert", HandleTextureInvert, EMcpCallFlags::Mutating)
+MCP_MA_CALL(Desaturate, "desaturate", HandleTextureDesaturate, EMcpCallFlags::Mutating)
+MCP_MA_CALL(ChannelPack, "channel_pack", HandleTextureChannelPack, EMcpCallFlags::Mutating)
+MCP_MA_CALL(ChannelExtract, "channel_extract", HandleTextureChannelExtract, EMcpCallFlags::Mutating)
+MCP_MA_CALL(CombineTextures, "combine_textures", HandleTextureCombineTextures, EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetCompressionSettings, "set_compression_settings", HandleTextureSetCompressionSettings, EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetTextureGroup, "set_texture_group", HandleTextureSetTextureGroup, EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetLodBias, "set_lod_bias", HandleTextureSetLodBias, EMcpCallFlags::Mutating)
+MCP_MA_CALL(ConfigureVirtualTexture, "configure_virtual_texture", HandleTextureConfigureVirtualTexture, EMcpCallFlags::Mutating)
+MCP_MA_CALL(SetStreamingPriority, "set_streaming_priority", HandleTextureSetStreamingPriority, EMcpCallFlags::Mutating)
+MCP_MA_CALL(GetTextureInfo, "get_texture_info", HandleTextureGetTextureInfo, EMcpCallFlags::None)
 
 #undef MCP_MA_CALL
 #undef MCP_MA_ACTION_CALL

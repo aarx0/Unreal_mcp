@@ -3200,10 +3200,6 @@
         "checkoutFiles": {
           "type": "boolean"
         },
-        "childNodeId": {
-          "description": "ID of the node.",
-          "type": "string"
-        },
         "classNames": {
           "items": {
             "type": "string"
@@ -3212,9 +3208,6 @@
         },
         "code": {
           "description": "add_custom_expression/update_custom_expression: HLSL source code body.",
-          "type": "string"
-        },
-        "comment": {
           "type": "string"
         },
         "compressionSettings": {
@@ -3289,10 +3282,6 @@
           "description": "get_node_chain: named material main-pin to trace to, e.g. 'BaseColor' (alternative to endNodeId).",
           "type": "string"
         },
-        "eventName": {
-          "description": "Name of the event.",
-          "type": "string"
-        },
         "exposeToLibrary": {
           "description": "create_material_function: show in the Material Function Library picker (default true).",
           "type": "boolean"
@@ -3342,10 +3331,6 @@
         },
         "gradientType": {
           "description": "create_gradient_texture: Linear (default)|Radial|Angular.",
-          "type": "string"
-        },
-        "graphName": {
-          "description": "Name of the graph.",
           "type": "string"
         },
         "greenTexture": {
@@ -3485,9 +3470,6 @@
           "description": "find_by_tag: result cap (default 100, max 1000).",
           "type": "number"
         },
-        "memberClass": {
-          "type": "string"
-        },
         "meshPath": {
           "description": "Mesh asset path.",
           "type": "string"
@@ -3523,10 +3505,6 @@
             "type": "string"
           },
           "type": "array"
-        },
-        "nodeName": {
-          "description": "Name identifier.",
-          "type": "string"
         },
         "nodeType": {
           "type": "string"
@@ -3610,30 +3588,24 @@
           "description": "combine_textures: overlay texture path (alias blendTexture).",
           "type": "string"
         },
-        "overwrite": {
-          "description": "Overwrite if the asset/file already exists.",
-          "type": "boolean"
-        },
         "packagePaths": {
           "items": {
             "type": "string"
           },
           "type": "array"
         },
+        "pagination": {
+          "description": "list: pagination window {offset, limit}."
+        },
         "parameterName": {
           "description": "Name of the parameter.",
           "type": "string"
         },
-        "parameters": {},
         "parameterType": {
           "type": "string"
         },
         "parentMaterial": {
           "description": "Material asset path.",
-          "type": "string"
-        },
-        "parentNodeId": {
-          "description": "ID of the node.",
           "type": "string"
         },
         "path": {
@@ -3665,12 +3637,6 @@
         "pinName": {
           "description": "Name of the pin.",
           "type": "string"
-        },
-        "posX": {
-          "type": "number"
-        },
-        "posY": {
-          "type": "number"
         },
         "prefix": {
           "type": "string"
@@ -4664,6 +4630,10 @@
           ],
           "type": "string"
         },
+        "activeIndex": {
+          "description": "add_widget_switcher: initially active child index.",
+          "type": "number"
+        },
         "alignment": {
           "description": "set_alignment: pivot (alternative to alignmentX/alignmentY).",
           "properties": {
@@ -4740,9 +4710,6 @@
           "description": "Blueprint asset path for graph actions (create_node/connect_pins/etc.); alias of blueprintPath.",
           "type": "string"
         },
-        "attachTo": {
-          "type": "string"
-        },
         "autoConnect": {
           "description": "add_node: auto-wire the new node's exec-in to an open event chain (default false).",
           "type": "boolean"
@@ -4750,6 +4717,10 @@
         "autoWrap": {
           "description": "add_text_block: enable auto text wrapping.",
           "type": "boolean"
+        },
+        "blueprint_path": {
+          "description": "snake_case alias of blueprintPath.",
+          "type": "string"
         },
         "blueprintCandidates": {
           "description": "Ordered list of candidate blueprint paths to try when blueprintPath/name is absent.",
@@ -4770,9 +4741,34 @@
           "description": "set_margin: bottom margin.",
           "type": "number"
         },
+        "brushColor": {
+          "description": "add_border: border brush color, 0-1 rgba.",
+          "properties": {
+            "a": {
+              "type": "number"
+            },
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
         "buttonClass": {
           "description": "add_common_button: concrete UCommonButtonBase subclass path.",
           "type": "string"
+        },
+        "candidates": {
+          "description": "Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "category": {
           "type": "string"
@@ -4799,9 +4795,21 @@
           },
           "type": "object"
         },
+        "columns": {
+          "description": "create_inventory_ui/create_shop_ui: grid column count.",
+          "type": "number"
+        },
         "compile": {
           "description": "Compile the blueprint(s) after the operation.",
           "type": "boolean"
+        },
+        "component_class": {
+          "description": "snake_case alias of componentClass.",
+          "type": "string"
+        },
+        "component_name": {
+          "description": "snake_case alias of componentName.",
+          "type": "string"
         },
         "componentClass": {
           "type": "string"
@@ -4812,6 +4820,24 @@
         },
         "componentType": {
           "type": "string"
+        },
+        "contentColorAndOpacity": {
+          "description": "add_border: content tint, 0-1 rgba.",
+          "properties": {
+            "a": {
+              "type": "number"
+            },
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "createIfMissing": {
           "description": "ensure_exists: create the blueprint if it doesn't exist (default true).",
@@ -4995,6 +5021,18 @@
           ],
           "type": "object"
         },
+        "loop": {
+          "description": "set_animation_loop: whether the animation loops.",
+          "type": "boolean"
+        },
+        "loopCount": {
+          "description": "set_animation_loop: loop count (0 = infinite).",
+          "type": "number"
+        },
+        "material_path": {
+          "description": "snake_case alias of materialPath.",
+          "type": "string"
+        },
         "materialPath": {
           "description": "Material asset path.",
           "type": "string"
@@ -5015,6 +5053,10 @@
           "type": "string"
         },
         "memberName": {
+          "type": "string"
+        },
+        "mesh_path": {
+          "description": "snake_case alias of meshPath.",
           "type": "string"
         },
         "meshPath": {
@@ -5056,6 +5098,10 @@
         },
         "namespace": {
           "description": "set_localization_key: localization namespace (default \"Game\").",
+          "type": "string"
+        },
+        "new_parent": {
+          "description": "snake_case alias of newParent.",
           "type": "string"
         },
         "newName": {
@@ -5162,6 +5208,10 @@
           },
           "type": "array"
         },
+        "parent_component": {
+          "description": "snake_case alias of parentComponent.",
+          "type": "string"
+        },
         "parentClass": {
           "description": "Path or name of the parent class.",
           "type": "string"
@@ -5201,6 +5251,14 @@
           },
           "type": "object"
         },
+        "positionX": {
+          "description": "add_widget_component: X position in pixels.",
+          "type": "number"
+        },
+        "positionY": {
+          "description": "add_widget_component: Y position in pixels.",
+          "type": "number"
+        },
         "posX": {
           "description": "Node X position (graph units).",
           "type": "number"
@@ -5217,6 +5275,13 @@
         "property": {
           "description": "set_widget_binding: property name to bind (NOT_IMPLEMENTED — validated only).",
           "type": "string"
+        },
+        "property_name": {
+          "description": "snake_case alias of propertyName.",
+          "type": "string"
+        },
+        "property_value": {
+          "description": "snake_case alias of value (any type)."
         },
         "propertyName": {
           "description": "Name of the property.",
@@ -5264,6 +5329,10 @@
           "description": "set_common_button_input_action: row name within dataTable.",
           "type": "string"
         },
+        "rows": {
+          "description": "create_inventory_ui: grid row count.",
+          "type": "number"
+        },
         "save": {
           "description": "Save the asset(s) after the operation.",
           "type": "boolean"
@@ -5301,6 +5370,10 @@
         "scrollBarVisibility": {
           "description": "add_scroll_box: Visible, Collapsed, or Hidden.",
           "type": "string"
+        },
+        "segments": {
+          "description": "create_radial_menu: number of radial segments.",
+          "type": "number"
         },
         "selectedOption": {
           "description": "add_combo_box: initially selected option.",
@@ -5351,6 +5424,10 @@
           },
           "type": "object"
         },
+        "sourceNodeGuid": {
+          "description": "connect_pins: source node GUID (alias of sourceNodeId).",
+          "type": "string"
+        },
         "sourceNodeId": {
           "description": "ID of the source node.",
           "type": "string"
@@ -5358,6 +5435,10 @@
         "sourcePinName": {
           "description": "Name of the source pin.",
           "type": "string"
+        },
+        "speed": {
+          "description": "set_animation_speed: playback speed multiplier.",
+          "type": "number"
         },
         "stateMachine": {
           "description": "get_transition_rule_graph: state machine graph name to search; all state machines searched when omitted.",
@@ -5406,6 +5487,10 @@
           "description": "bind_on_clicked/bind_on_hovered: self UFUNCTION to call (alias functionName).",
           "type": "string"
         },
+        "targetNodeGuid": {
+          "description": "connect_pins: target node GUID (alias of targetNodeId).",
+          "type": "string"
+        },
         "targetNodeId": {
           "description": "ID of the target node.",
           "type": "string"
@@ -5429,6 +5514,10 @@
         "texturePath": {
           "description": "add_image: texture asset path for the brush.",
           "type": "string"
+        },
+        "time": {
+          "description": "add_animation_keyframe: keyframe time in seconds.",
+          "type": "number"
         },
         "title": {
           "description": "create_main_menu: title text (default \"Main Menu\").",
