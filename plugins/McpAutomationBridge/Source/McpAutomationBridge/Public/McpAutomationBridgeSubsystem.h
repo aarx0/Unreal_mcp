@@ -502,11 +502,6 @@ private:
   bool HandleSetClear(const FString &RequestId, const FString &Action,
                       const TSharedPtr<FJsonObject> &Payload,
                       FMcpResponseHandle RequestingSocket);
-  // Asset-related automation actions implemented by the plugin (editor-only
-  // operations)
-  bool HandleAssetAction(const FString &RequestId, const FString &Action,
-                         const TSharedPtr<FJsonObject> &Payload,
-                         FMcpResponseHandle RequestingSocket);
   // Asset dependency graph traversal
   bool
   HandleGetAssetReferences(const FString &RequestId, const FString &Action,
@@ -1202,9 +1197,6 @@ private:
   bool HandleRemoveFoliage(const FString &RequestId, const FString &Action,
                            const TSharedPtr<FJsonObject> &Payload,
                            FMcpResponseHandle RequestingSocket);
-  bool HandleGenerateLODs(const FString &RequestId, const FString &Action,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle RequestingSocket);
   bool HandleBakeLightmap(const FString &RequestId, const FString &Action,
                           const TSharedPtr<FJsonObject> &Payload,
                           FMcpResponseHandle RequestingSocket);
@@ -1217,79 +1209,35 @@ private:
   bool HandleAddFoliageType(const FString &RequestId, const FString &Action,
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle RequestingSocket);
-  // Asset workflow handlers
-  bool
-  HandleSourceControlCheckout(const FString &RequestId, const FString &Action,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle RequestingSocket);
-  bool
-  HandleSourceControlSubmit(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
-  bool
-  HandleGetSourceControlState(const FString &RequestId, const FString &Action,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle RequestingSocket);
-  bool
-  HandleSourceControlEnable(const FString &RequestId, const FString &Action,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle RequestingSocket);
-  bool
-  HandleAnalyzeGraph(const FString &RequestId, const FString &Action,
-                     const TSharedPtr<FJsonObject> &Payload,
-                     FMcpResponseHandle RequestingSocket);
+public:
+  // Asset workflow / query handlers — manage_asset is classed
+  // (MCP/Calls/McpCalls_ManageAsset.cpp); these members are public so the
+  // FMcpCall classes can delegate. Action carries the routed action literal.
+  bool HandleGenerateLODs(const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleSourceControlCheckout(const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleSourceControlSubmit(const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleGetSourceControlState(const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleAnalyzeGraph(const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
   bool HandleFixupRedirectors(const FString &RequestId, const FString &Action,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle RequestingSocket);
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
   bool HandleBulkRenameAssets(const FString &RequestId, const FString &Action,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle RequestingSocket);
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
   bool HandleBulkDeleteAssets(const FString &RequestId, const FString &Action,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle RequestingSocket);
-  bool
-  HandleGenerateThumbnail(const FString &RequestId, const FString &Action,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle RequestingSocket);
-  bool
-  HandleNaniteRebuildMesh(const FString &RequestId, const FString &Action,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle RequestingSocket);
-  bool
-  HandleFindByTag(const FString &RequestId, const FString &Action,
-                  const TSharedPtr<FJsonObject> &Payload,
-                  FMcpResponseHandle RequestingSocket);
-  bool
-  HandleSearchAssets(const FString &RequestId, const FString &Action,
-                     const TSharedPtr<FJsonObject> &Payload,
-                     FMcpResponseHandle RequestingSocket);
-  bool
-  HandleAddMaterialNode(const FString &RequestId, const FString &Action,
-                        const TSharedPtr<FJsonObject> &Payload,
-                        FMcpResponseHandle RequestingSocket);
-  bool
-  HandleConnectMaterialPins(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
-  bool
-  HandleRemoveMaterialNode(const FString &RequestId, const FString &Action,
-                           const TSharedPtr<FJsonObject> &Payload,
-                           FMcpResponseHandle RequestingSocket);
-  bool
-  HandleBreakMaterialConnections(const FString &RequestId,
-                                 const FString &Action,
-                                 const TSharedPtr<FJsonObject> &Payload,
-                                 FMcpResponseHandle
-                                     RequestingSocket);
-  bool
-  HandleGetMaterialNodeDetails(const FString &RequestId, const FString &Action,
-                               const TSharedPtr<FJsonObject> &Payload,
-                               FMcpResponseHandle
-                                   RequestingSocket);
-  bool
-  HandleRebuildMaterial(const FString &RequestId, const FString &Action,
-                        const TSharedPtr<FJsonObject> &Payload,
-                        FMcpResponseHandle RequestingSocket);
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleGenerateThumbnail(const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNaniteRebuildMesh(const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleFindByTag(const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleSearchAssets(const FString &RequestId, const FString &Action,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+private:
   // Landscape, foliage, and Niagara handlers
   bool HandleCreateLandscape(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
@@ -1732,18 +1680,147 @@ private:
   bool HandleAssignClothAssetToMesh(const FString &RequestId,
                                      const TSharedPtr<FJsonObject> &Payload,
                                      FMcpResponseHandle RequestingSocket);
-  // Phase 8: Material Authoring handlers
-  bool HandleManageMaterialAuthoringAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  // Phase 9: Texture handlers
-  bool HandleManageTextureAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  // Internal texture processing helper
-  TSharedPtr<FJsonObject> HandleManageTextureAction(const TSharedPtr<FJsonObject>& Params);
+  // manage_asset is classed — see MCP/Calls/McpCalls_ManageAsset.cpp. Its
+  // per-action members are public so the FMcpCall classes (Private/MCP/Calls/)
+  // can delegate, until the module split de-members them off the subsystem:
+  // MaterialAuthoring actions use HandleMaterial* (MaterialAuthoringHandlers.cpp),
+  // Texture actions use HandleTexture* (TextureHandlers.cpp); the Core actions
+  // keep their existing AssetWorkflow/AssetQuery members (made public elsewhere).
+public:
+  bool HandleSaveAsset(const FString &RequestId,
+                       const TSharedPtr<FJsonObject> &Payload,
+                       FMcpResponseHandle RequestingSocket);
+  bool HandleMaterialCreateMaterial(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialSetBlendMode(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialSetShadingModel(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialSetMaterialDomain(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialAddTextureSample(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialAddTextureCoordinate(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialAddScalarParameter(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialAddVectorParameter(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialAddStaticSwitchParameter(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialAddMathNode(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialAddSimpleExpression(const FString &RequestId, const FString &SubAction,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialAddConditional(const FString &RequestId, const FString &SubAction,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialAddCustomExpression(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialConnectNodes(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialDisconnectNodes(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialCreateMaterialFunction(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialAddFunctionIO(const FString &RequestId, const FString &SubAction,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialUseMaterialFunction(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialCreateMaterialInstance(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialSetScalarParameterValue(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialSetVectorParameterValue(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialSetTextureParameterValue(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialCreateSpecialMaterial(const FString &RequestId, const FString &SubAction,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialAddLandscapeLayer(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialConfigureLayerBlend(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialCompileMaterial(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialGetMaterialInfo(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialGetMaterialFunctionInfo(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialFindNode(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialGetNodeConnections(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialGetNodeProperties(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialSetNodeValue(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialSetStaticSwitchParameterValue(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialDeleteNode(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialUpdateCustomExpression(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialGetNodeChain(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialGetConnectedSubgraph(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialAddMaterialNode(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialRemoveMaterialNode(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialSetMaterialParameter(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialGetMaterialNodeDetails(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialSetTwoSided(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleMaterialArrangeGraph(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
+  bool HandleTextureCreateNoiseTexture(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureCreateGradientTexture(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureCreatePatternTexture(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureCreateNormalFromHeight(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureSetCompressionSettings(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureSetTextureGroup(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureSetLodBias(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureConfigureVirtualTexture(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureSetStreamingPriority(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureGetTextureInfo(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureResizeTexture(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureInvert(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureDesaturate(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureAdjustLevels(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureBlur(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureSharpen(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureChannelPack(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureCombineTextures(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureAdjustCurves(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureChannelExtract(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureCreateRenderTarget(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleTextureCreateAoFromMesh(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+private:
   // Phase 10: Animation Authoring handlers — animation_physics is classed;
   // its HandleAnimAuthoring* members live in the transitional public block
   // above (AnimationAuthoringHandlers.cpp).
@@ -3468,16 +3545,11 @@ private:
                               const TSharedPtr<FJsonObject> &Payload,
                               FMcpResponseHandle Socket, bool bSubscribe);
 
+public:
   // Asset handlers
   bool HandleImportAsset(const FString &RequestId,
                          const TSharedPtr<FJsonObject> &Payload,
                          FMcpResponseHandle Socket);
-  bool HandleCreateMaterial(const FString &RequestId,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle Socket);
-  bool HandleCreateMaterialInstance(const FString &RequestId,
-                                    const TSharedPtr<FJsonObject> &Payload,
-                                    FMcpResponseHandle Socket);
   bool HandleCreateDataTable(const FString &RequestId,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle Socket);
@@ -3558,9 +3630,7 @@ private:
   bool HandleGetMaterialStats(const FString &RequestId,
                               const TSharedPtr<FJsonObject> &Payload,
                               FMcpResponseHandle Socket);
-  bool HandleRebuildMaterial(const FString &RequestId,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle Socket);
+private:
 
   // Lightweight snapshot cache for automation requests (e.g., create_snapshot)
   TMap<FString, FTransform> CachedActorSnapshots;

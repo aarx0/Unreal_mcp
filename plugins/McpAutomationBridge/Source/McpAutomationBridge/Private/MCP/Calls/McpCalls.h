@@ -9,6 +9,7 @@ void McpRegisterControlActorCalls();
 void McpRegisterControlEditorCalls();
 void McpRegisterInspectCalls();
 void McpRegisterManageAiCalls();
+void McpRegisterManageAssetCalls();
 void McpRegisterManageAudioCalls();
 void McpRegisterManageCharacterCalls();
 void McpRegisterManageCombatCalls();

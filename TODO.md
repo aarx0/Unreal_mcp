@@ -1020,6 +1020,20 @@ create_submix_effect) and their seven dedicated members — the registration
 lambda always routed those names to the authoring chain first, so the primary
 copies could never match (animation_physics precedent); recover from git —
 **13 hidden entries remain**.
+manage_asset's classing (2026-07-05) closed eleven ledgered hidden names —
+`source_control_enable` (advertise candidate) plus the "delete at classing"
+stub families now removed: the five MaterialAuthoring per-node conveniences
+(add_component_mask, add_dot_product, add_cross_product, add_desaturation,
+add_append) + set_cast_shadows, and the four texture stubs (import_texture,
+create_cube_texture, create_volume_texture, create_texture_array) —
+`IsMaterialAuthoringAction`/`IsTextureAction` never routed to any of them.
+Also removed (below-radar, not in the sweep inventory, ledgered at deletion):
+the eight shadowed-dead HandleAssetAction copies of MaterialAuthoring-owned
+actions (create_material, create_material_instance, add_material_node,
+connect_material_pins, remove_material_node, break_material_connections,
+get_material_node_details, rebuild_material — MaterialAuthoring routed first)
+and two unrouted texture setters (set_texture_filter, set_texture_wrap);
+recover any from git — **2 hidden entries remain**.
 
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,

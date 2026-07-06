@@ -494,6 +494,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       McpRegisterControlEditorCalls();
       McpRegisterInspectCalls();
       McpRegisterManageAiCalls();
+      McpRegisterManageAssetCalls();
       McpRegisterManageAudioCalls();
       McpRegisterManageCharacterCalls();
       McpRegisterManageCombatCalls();
@@ -1062,20 +1063,8 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   // manage_sequence is fully classed (MCP/Calls/McpCalls_ManageSequence.cpp) —
   // dispatch reaches its FMcpCall instances via the registry, not this map.
 
-  RegisterHandler(TEXT("manage_asset"),
-                  [this](const FString &R, const FString &A,
-                         const TSharedPtr<FJsonObject> &P,
-                         FMcpResponseHandle S) {
-                    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(P);
-                    if (McpConsolidatedActions::IsMaterialAuthoringAction(SubAction)) {
-                      return HandleManageMaterialAuthoringAction(
-                          R, TEXT("manage_material_authoring"), P, S);
-                    }
-                    if (McpConsolidatedActions::IsTextureAction(SubAction)) {
-                      return HandleManageTextureAction(R, TEXT("manage_texture"), P, S);
-                    }
-                    return HandleAssetAction(R, A, P, S);
-                  });
+  // manage_asset is fully classed (MCP/Calls/McpCalls_ManageAsset.cpp) —
+  // dispatch reaches its FMcpCall instances via the registry, not this map.
 
   RegisterHandler(TEXT("manage_blueprint"),
                   [this](const FString &R, const FString &A,

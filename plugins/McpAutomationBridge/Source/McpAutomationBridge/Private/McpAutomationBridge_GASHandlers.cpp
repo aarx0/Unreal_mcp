@@ -111,6 +111,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpGASHandlers, Log, All);
 #include "GameplayCueNotify_Static.h"
 #include "GameplayCueNotify_Actor.h"
 #include "GameplayEffectExecutionCalculation.h"
+#include "GameFramework/PlayerController.h"
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
 // Modular GE components: on 5.3+ the engine's PostCDOCompiled overwrites the
 // legacy Inheritable*/TagRequirements fields FROM these components, so tag

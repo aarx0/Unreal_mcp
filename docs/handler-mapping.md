@@ -27,7 +27,7 @@ subdirectory is shown.
 
 | MCP tool | Routed families (in test order) → handler | Core / fallthrough handler |
 | :-- | :-- | :-- |
-| `manage_asset` | MaterialAuthoring → `HandleManageMaterialAuthoringAction`; Texture → `HandleManageTextureAction` | `HandleAssetAction` @ AssetWorkflowHandlers.cpp |
+| `manage_asset` | — (MaterialAuthoring/Texture stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAsset.cpp (dispatched from the call registry before the handler map; implementations are the existing AssetWorkflow/AssetQuery members for the 43 core actions, the `HandleMaterial*` members @ MaterialAuthoringHandlers.cpp for the 58 material-authoring actions, and the `HandleTexture*` members @ TextureHandlers.cpp for the 21 texture actions) |
 | `manage_blueprint` | CommonUi → `HandleCommonUiAction`; WidgetAuthoring → `HandleManageWidgetAuthoringAction`; BlueprintGraph → `HandleBlueprintGraphAction` | `HandleBlueprintAction` @ BlueprintHandlers.cpp |
 | `build_environment` | — (Lighting/Splines stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp (dispatched from the call registry before the handler map; implementations are the `HandleEnvironment*` members @ EnvironmentHandlers.cpp for the 21 core actions, `HandleLighting*` @ LightingHandlers.cpp for the 12 lighting actions, and the `HandleSpline*` wrappers @ SplineHandlers.cpp for the 22 spline actions) |
 | `animation_physics` | — (AnimationAuthoring/Skeleton stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp (dispatched from the call registry before the handler map; implementations are the `HandleAnimPhys*` members @ AnimationHandlers.cpp for the 14 core actions, `HandleAnimAuthoring*` @ AnimationAuthoringHandlers.cpp for the 42 authoring actions, and the `HandleSkeleton*` members @ SkeletonHandlers.cpp for the 29 skeleton actions) |
@@ -96,7 +96,7 @@ Core (fallthrough) lists:
 
 | List | Owner |
 | :-- | :-- |
-| `ManageAssetCore` | `HandleAssetAction` @ AssetWorkflowHandlers.cpp |
+| `ManageAssetCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAsset.cpp (implementations are the existing AssetWorkflow/AssetQuery members) |
 | `ManageBlueprintCore` | `HandleBlueprintAction` @ BlueprintHandlers.cpp |
 | `BuildEnvironmentCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp (implementations are the `HandleEnvironment*` members @ EnvironmentHandlers.cpp) |
 | `AnimationPhysicsCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp (implementations are the `HandleAnimPhys*` members @ AnimationHandlers.cpp) |

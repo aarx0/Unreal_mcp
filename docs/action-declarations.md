@@ -655,6 +655,84 @@ parser survives only as a lint.
     editor-gated with a NOT_IMPLEMENTED stub, the authoring wrapper answered
     EDITOR_REQUIRED — both stubs replicated per member); `Mutating` on
     everything except the one reader, `get_audio_info`.
+  - **`manage_asset` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_ManageAsset.cpp`).** 122 classes across three
+    routes (43 Core + 58 MaterialAuthoring + 21 Texture) — the second-largest
+    classed family. The registration lambda that split MaterialAuthoring off to
+    `HandleManageMaterialAuthoringAction` and Texture off to
+    `HandleManageTextureAction` died with all three dispatchers
+    (HandleAssetAction too); the `IsMaterialAuthoringAction`/`IsTextureAction`
+    predicates died with their only caller, and the routed lists plus
+    `ManageAssetCore` survive only so boot validation can prove the schema union
+    still matches the published enum. The Core actions keep their existing
+    AssetWorkflow/AssetQuery members (HandleAssetAction only ever delegated —
+    two arms convert to typed calls per rule 5: `save_all` calls the
+    control_editor member `HandleControlEditorSaveAll` directly, and
+    `create_render_target` calls the new texture member
+    `HandleTextureCreateRenderTarget` directly — the manufactured
+    `manage_texture` gate literal died); `save`'s file-static
+    `HandleSaveAssetStatic` gained a thin `HandleSaveAsset` member wrapper.
+    MaterialAuthoring's 58 actions extracted verbatim from the retired
+    `HandleManageMaterialAuthoringAction` if/else chain to `HandleMaterial*`
+    members (each replicating its whole-body `#if WITH_EDITOR` / "Editor only."
+    EDITOR_ONLY stub; the shared expression-creation macros hoisted to file
+    scope, `MCP_NODE_ID` deliberately left un-undef'd for the arrange_graph
+    helpers that consume it downstream; the three prologue alias remaps
+    (`connect_material_pins`→`connect_nodes`,
+    `break_material_connections`→`disconnect_nodes`,
+    `rebuild_material`→`compile_material`) became advertised actions sharing the
+    target's member, and the four OR-branches (the 9 simple expressions, if/
+    switch, function input/output, the three special materials) became shared
+    members that sub-dispatch on a passed action literal). Texture's 21 actions
+    (+ `create_render_target`) became per-action file statics behind
+    `HandleTexture*` members that apply the retired response wrapper's
+    conversion via one shared `SendTextureResult` static (audio precedent);
+    TextureHandlers.cpp carries NO editor gate, so the Texture actions — and
+    `create_render_target`, whose live body is a texture branch — carry NO
+    `RequiresEditor` (networking precedent: flagging would newly reject the
+    GEditor-less runs the shim served). Dead-code haul (ledgered): eight
+    shadowed AssetWorkflow copies of MaterialAuthoring-owned actions
+    (`create_material`, `create_material_instance`, `add_material_node`,
+    `connect_material_pins`, `remove_material_node`,
+    `break_material_connections`, `get_material_node_details`,
+    `rebuild_material` — MaterialAuthoring is routed first, so every copy was
+    unreachable) deleted with their orphaned members; the hidden
+    `source_control_enable` arm+member (transport-dead, advertise candidate);
+    six hidden material branches (`add_component_mask`, `add_dot_product`,
+    `add_cross_product`, `add_desaturation`, `add_append`, `set_cast_shadows`)
+    and six hidden texture branches (`import_texture`, `set_texture_filter`,
+    `set_texture_wrap`, `create_cube_texture`, `create_volume_texture`,
+    `create_texture_array`) that `IsMaterialAuthoringAction`/`IsTextureAction`
+    never routed to. Deleting these orphaned two advertised tool-schema params
+    whose only readers were the removed code — `luminanceFactors`
+    (McpTool_ManageAsset.cpp — only `add_desaturation` read it) and `targetPin`
+    (McpTool_ManageAudio.cpp — only the shadowed HandleConnectMaterialPins read
+    it). Both kept in the published schema (golden byte-identical held),
+    exempted in the param-reconciliation allowlist, parked as advertise-or-
+    remove candidates for Aaron. Decl burn-down — 13 rows
+    fixed with body evidence: the five own-branch shadowed rows re-derived from
+    the LIVE MaterialAuthoring bodies (dropped the dead copies' spellings —
+    `create_material`'s `properties`, `create_material_instance`'s
+    `parameters`, `add_material_node`'s materialPath/posX/posY/value/color/
+    texturePath, remove_material_node's and get_material_node_details's
+    materialPath/expressionIndex, all proven absent from the live bodies); the
+    three alias rows re-derived from their remap targets (dropped
+    materialPath/fromExpression/toExpression/targetPin,
+    materialPath/expressionIndex/inputName, materialPath); the five data-table
+    rows' assetPath/dataTablePath/tablePath/path alias group flipped
+    all-required→optional (McpLoadDataTableArg joint-rejects only when all are
+    absent), plus import_data_table's sourceText/csv/json/content source
+    aliases. `RequiresEditor` on the 43 Core + 58 Material actions (their TUs
+    are editor-gated), NOT on the 21 Texture actions + `create_render_target`;
+    `Mutating` on everything except the pure reads (Core: `list`,
+    `search_assets`, `get_dependencies`, `get_referencers`,
+    `get_asset_properties`, `get_source_control_state`, `analyze_graph`,
+    `get_asset_graph`, `get_metadata`, `validate`, `find_by_tag`,
+    `generate_report`, `get_data_table_rows`, `list_instances`, `exists`,
+    `get_material_stats`; Material: `get_material_info`,
+    `get_material_function_info`, `find_node`, `get_node_connections`,
+    `get_node_properties`, `get_material_node_details`, `get_node_chain`,
+    `get_connected_subgraph`; Texture: `get_texture_info`).
 
 ## Bootstrap state (2026-07-04, complete)
 

@@ -202,41 +202,99 @@ static void FinalizeMaterialHost(UMaterial *Material, UMaterialFunction *Functio
 }
 
 
-bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
-    const FString &RequestId, const FString &Action,
-    const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
-  if (Action != TEXT("manage_material_authoring")) {
-    return false;
-  }
+// =============================================================================
+// Classed manage_asset material-authoring actions
+// =============================================================================
+// One member per action (branch bodies verbatim from the retired
+// HandleManageMaterialAuthoringAction if/else chain), each replicating the
+// chain's whole-body #if WITH_EDITOR / "Editor only." EDITOR_ONLY #else stub.
+// The chain's shared expression-creation macros are hoisted to file scope
+// below (MCP_NODE_ID is deliberately NOT undef'd — the arrange_graph helpers
+// later in this TU consume it, exactly as they did through the chain's leak).
+// Members taking a SubAction parameter serve an OR-branch whose body
+// sub-dispatches on the action; each classed action passes its own literal.
 
 #if WITH_EDITOR
-  if (!Payload.IsValid()) {
-    SendAutomationError(Socket, RequestId, TEXT("Missing payload."),
-                        TEXT("INVALID_PAYLOAD"));
-    return true;
-  }
+  // Helper macro for expression creation - validates path BEFORE loading
+#define LOAD_MATERIAL_OR_RETURN()                                              \
+  FString AssetPath;                                                           \
+  if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||             \
+      AssetPath.IsEmpty()) {                                                   \
+    SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),       \
+                        TEXT("INVALID_ARGUMENT"));                             \
+    return true;                                                               \
+  }                                                                            \
+  /* SECURITY: Validate path BEFORE loading asset */                           \
+  FString ValidatedAssetPath = SanitizeProjectRelativePath(AssetPath);         \
+  if (ValidatedAssetPath.IsEmpty()) {                                          \
+    SendAutomationError(Socket, RequestId,                                     \
+                        FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath), \
+                        TEXT("INVALID_PATH"));                                \
+    return true;                                                               \
+  }                                                                            \
+  AssetPath = ValidatedAssetPath;                                              \
+  UMaterial *Material = LoadObject<UMaterial>(nullptr, *AssetPath);            \
+  if (!Material) {                                                             \
+    SendAutomationError(Socket, RequestId, TEXT("Could not load Material."),   \
+                        TEXT("ASSET_NOT_FOUND"));                              \
+    return true;                                                               \
+  }                                                                            \
+  float X = 0.0f, Y = 0.0f;                                                    \
+  Payload->TryGetNumberField(TEXT("x"), X);                                    \
+  Payload->TryGetNumberField(TEXT("y"), Y)
 
-  FString SubAction;
-  if (!Payload->TryGetStringField(TEXT("subAction"), SubAction) ||
-      SubAction.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
-                        TEXT("Missing 'subAction' for manage_material_authoring"),
-                        TEXT("INVALID_ARGUMENT"));
-    return true;
-  }
-  if (SubAction == TEXT("connect_material_pins")) {
-    SubAction = TEXT("connect_nodes");
-  } else if (SubAction == TEXT("break_material_connections")) {
-    SubAction = TEXT("disconnect_nodes");
-  } else if (SubAction == TEXT("rebuild_material")) {
-    SubAction = TEXT("compile_material");
-  }
+  // MF-aware variant of LOAD_MATERIAL_OR_RETURN.
+  // Declares Material*, Function*, HostOuter (whichever is non-null), and X/Y.
+  // Exactly one of {Material, Function} will be non-null on success.
+#define LOAD_MATERIAL_OR_FUNCTION_OR_RETURN()                                  \
+  FString AssetPath;                                                           \
+  if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||             \
+      AssetPath.IsEmpty()) {                                                   \
+    SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),       \
+                        TEXT("INVALID_ARGUMENT"));                             \
+    return true;                                                               \
+  }                                                                            \
+  FString ValidatedAssetPath = SanitizeProjectRelativePath(AssetPath);         \
+  if (ValidatedAssetPath.IsEmpty()) {                                          \
+    SendAutomationError(Socket, RequestId,                                     \
+                        FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath), \
+                        TEXT("INVALID_PATH"));                                 \
+    return true;                                                               \
+  }                                                                            \
+  AssetPath = ValidatedAssetPath;                                              \
+  UMaterial *Material = nullptr;                                               \
+  UMaterialFunction *Function = nullptr;                                       \
+  LoadMaterialOrFunction(AssetPath, Material, Function);                       \
+  if (!Material && !Function) {                                                \
+    SendAutomationError(Socket, RequestId,                                     \
+                        TEXT("Could not load Material or Material Function."),\
+                        TEXT("ASSET_NOT_FOUND"));                              \
+    return true;                                                               \
+  }                                                                            \
+  UObject *HostOuter = Material ? static_cast<UObject*>(Material)              \
+                                 : static_cast<UObject*>(Function);            \
+  float X = 0.0f, Y = 0.0f;                                                    \
+  Payload->TryGetNumberField(TEXT("x"), X);                                    \
+  Payload->TryGetNumberField(TEXT("y"), Y)
 
-  // ==========================================================================
-  // 8.1 Material Creation Actions
-  // ==========================================================================
-  if (SubAction == TEXT("create_material")) {
+  // Find an expression in either container by GUID / name / parameter name.
+  #define FIND_EXPR_IN_HOST(NodeIdOrName)                                      \
+    (Material ? FindExpressionByIdOrName(Material, (NodeIdOrName))             \
+              : FindExpressionByIdOrNameInFunction(Function, (NodeIdOrName)))
+
+  // Finalize edits for either container — see FinalizeMaterialHost above.
+  #define FINALIZE_HOST() FinalizeMaterialHost(Material, Function, Payload)
+
+  // Stable node ID: use UObject name (e.g. "MaterialExpressionCustom_0")
+  // which is unique within an asset and immune to GUID duplication.
+  // Responses also include "guid" for backwards compatibility.
+  #define MCP_NODE_ID(Expr) ((Expr)->GetName())
+#endif // WITH_EDITOR (macros hoisted from HandleManageMaterialAuthoringAction)
+
+bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterial(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString Name, Path;
     if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
       SendAutomationError(Socket, RequestId, TEXT("Missing 'name'."),
@@ -473,12 +531,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
                            FString::Printf(TEXT("Material '%s' created."), *Name),
                            Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // set_blend_mode
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("set_blend_mode")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialSetBlendMode(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath, BlendMode;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
@@ -564,12 +627,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         Socket, RequestId, true,
         FString::Printf(TEXT("Blend mode set to %s."), *BlendMode), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // set_shading_model
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("set_shading_model")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialSetShadingModel(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath, ShadingModel;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
@@ -667,12 +735,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         Socket, RequestId, true,
         FString::Printf(TEXT("Shading model set to %s."), *ShadingModel), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // set_material_domain
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("set_material_domain")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialSetMaterialDomain(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath, Domain;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
@@ -755,91 +828,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         Socket, RequestId, true,
         FString::Printf(TEXT("Material domain set to %s."), *Domain), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // ==========================================================================
-  // 8.2 Material Expressions
-  // ==========================================================================
-
-  // Helper macro for expression creation - validates path BEFORE loading
-#define LOAD_MATERIAL_OR_RETURN()                                              \
-  FString AssetPath;                                                           \
-  if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||             \
-      AssetPath.IsEmpty()) {                                                   \
-    SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),       \
-                        TEXT("INVALID_ARGUMENT"));                             \
-    return true;                                                               \
-  }                                                                            \
-  /* SECURITY: Validate path BEFORE loading asset */                           \
-  FString ValidatedAssetPath = SanitizeProjectRelativePath(AssetPath);         \
-  if (ValidatedAssetPath.IsEmpty()) {                                          \
-    SendAutomationError(Socket, RequestId,                                     \
-                        FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath), \
-                        TEXT("INVALID_PATH"));                                \
-    return true;                                                               \
-  }                                                                            \
-  AssetPath = ValidatedAssetPath;                                              \
-  UMaterial *Material = LoadObject<UMaterial>(nullptr, *AssetPath);            \
-  if (!Material) {                                                             \
-    SendAutomationError(Socket, RequestId, TEXT("Could not load Material."),   \
-                        TEXT("ASSET_NOT_FOUND"));                              \
-    return true;                                                               \
-  }                                                                            \
-  float X = 0.0f, Y = 0.0f;                                                    \
-  Payload->TryGetNumberField(TEXT("x"), X);                                    \
-  Payload->TryGetNumberField(TEXT("y"), Y)
-
-  // MF-aware variant of LOAD_MATERIAL_OR_RETURN.
-  // Declares Material*, Function*, HostOuter (whichever is non-null), and X/Y.
-  // Exactly one of {Material, Function} will be non-null on success.
-#define LOAD_MATERIAL_OR_FUNCTION_OR_RETURN()                                  \
-  FString AssetPath;                                                           \
-  if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||             \
-      AssetPath.IsEmpty()) {                                                   \
-    SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),       \
-                        TEXT("INVALID_ARGUMENT"));                             \
-    return true;                                                               \
-  }                                                                            \
-  FString ValidatedAssetPath = SanitizeProjectRelativePath(AssetPath);         \
-  if (ValidatedAssetPath.IsEmpty()) {                                          \
-    SendAutomationError(Socket, RequestId,                                     \
-                        FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath), \
-                        TEXT("INVALID_PATH"));                                 \
-    return true;                                                               \
-  }                                                                            \
-  AssetPath = ValidatedAssetPath;                                              \
-  UMaterial *Material = nullptr;                                               \
-  UMaterialFunction *Function = nullptr;                                       \
-  LoadMaterialOrFunction(AssetPath, Material, Function);                       \
-  if (!Material && !Function) {                                                \
-    SendAutomationError(Socket, RequestId,                                     \
-                        TEXT("Could not load Material or Material Function."),\
-                        TEXT("ASSET_NOT_FOUND"));                              \
-    return true;                                                               \
-  }                                                                            \
-  UObject *HostOuter = Material ? static_cast<UObject*>(Material)              \
-                                 : static_cast<UObject*>(Function);            \
-  float X = 0.0f, Y = 0.0f;                                                    \
-  Payload->TryGetNumberField(TEXT("x"), X);                                    \
-  Payload->TryGetNumberField(TEXT("y"), Y)
-
-  // Find an expression in either container by GUID / name / parameter name.
-  #define FIND_EXPR_IN_HOST(NodeIdOrName)                                      \
-    (Material ? FindExpressionByIdOrName(Material, (NodeIdOrName))             \
-              : FindExpressionByIdOrNameInFunction(Function, (NodeIdOrName)))
-
-  // Finalize edits for either container — see FinalizeMaterialHost above.
-  #define FINALIZE_HOST() FinalizeMaterialHost(Material, Function, Payload)
-
-  // Stable node ID: use UObject name (e.g. "MaterialExpressionCustom_0")
-  // which is unique within an asset and immune to GUID duplication.
-  // Responses also include "guid" for backwards compatibility.
-  #define MCP_NODE_ID(Expr) ((Expr)->GetName())
-
-  // --------------------------------------------------------------------------
-  // add_texture_sample
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_texture_sample")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialAddTextureSample(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString TexturePath, ParameterName, SamplerType;
@@ -911,12 +910,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
     Result->SetStringField(TEXT("nodeId"), MCP_NODE_ID(CreatedExpr));
     SendAutomationResponse(Socket, RequestId, true, TEXT("Texture sample added."), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // add_texture_coordinate
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_texture_coordinate")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialAddTextureCoordinate(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     int32 CoordIndex = 0;
@@ -944,12 +948,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
     SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Texture coordinate added."), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // add_scalar_parameter
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_scalar_parameter")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialAddScalarParameter(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString ParamName, Group;
@@ -986,12 +995,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         FString::Printf(TEXT("Scalar parameter '%s' added."), *ParamName),
         Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // add_vector_parameter
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_vector_parameter")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialAddVectorParameter(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString ParamName, Group;
@@ -1037,12 +1051,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         FString::Printf(TEXT("Vector parameter '%s' added."), *ParamName),
         Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // add_static_switch_parameter
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_static_switch_parameter")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialAddStaticSwitchParameter(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString ParamName, Group;
@@ -1078,12 +1097,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         Socket, RequestId, true,
         FString::Printf(TEXT("Static switch '%s' added."), *ParamName), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // add_math_node
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_math_node")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialAddMathNode(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString Operation;
@@ -1155,18 +1179,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         Socket, RequestId, true,
         FString::Printf(TEXT("Math node '%s' added."), *Operation), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // add_world_position, add_vertex_normal, add_pixel_depth, add_fresnel,
-  // add_reflection_vector, add_panner, add_rotator, add_noise, add_voronoi
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_world_position") ||
-      SubAction == TEXT("add_vertex_normal") ||
-      SubAction == TEXT("add_pixel_depth") || SubAction == TEXT("add_fresnel") ||
-      SubAction == TEXT("add_reflection_vector") ||
-      SubAction == TEXT("add_panner") || SubAction == TEXT("add_rotator") ||
-      SubAction == TEXT("add_noise") || SubAction == TEXT("add_voronoi")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialAddSimpleExpression(
+    const FString &RequestId, const FString &SubAction,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     UMaterialExpression *NewExpr = nullptr;
@@ -1250,12 +1273,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
                           TEXT("CREATE_FAILED"));
     }
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // add_if, add_switch
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_if") || SubAction == TEXT("add_switch")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialAddConditional(
+    const FString &RequestId, const FString &SubAction,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     UMaterialExpression *NewExpr = nullptr;
@@ -1287,153 +1315,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
                            FString::Printf(TEXT("%s node added."), *NodeName),
                            Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // add_component_mask
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_component_mask")) {
-    LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
-
-    bool bR = true, bG = true, bB = true, bA = false;
-    Payload->TryGetBoolField(TEXT("r"), bR);
-    Payload->TryGetBoolField(TEXT("g"), bG);
-    Payload->TryGetBoolField(TEXT("b"), bB);
-    Payload->TryGetBoolField(TEXT("a"), bA);
-
-    UMaterialExpressionComponentMask *MaskExpr =
-        NewObject<UMaterialExpressionComponentMask>(
-            HostOuter, UMaterialExpressionComponentMask::StaticClass(), NAME_None,
-            RF_Transactional);
-    MaskExpr->R = bR ? 1 : 0;
-    MaskExpr->G = bG ? 1 : 0;
-    MaskExpr->B = bB ? 1 : 0;
-    MaskExpr->A = bA ? 1 : 0;
-    MaskExpr->MaterialExpressionEditorX = (int32)X;
-    MaskExpr->MaterialExpressionEditorY = (int32)Y;
-
-    AddExpressionToContainer(Material, Function, MaskExpr);
-    FINALIZE_HOST();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("nodeId"),
-                           MCP_NODE_ID(MaskExpr));
-    SendAutomationResponse(Socket, RequestId, true,
-                           TEXT("ComponentMask node added."), Result);
-    return true;
-  }
-
-  // --------------------------------------------------------------------------
-  // add_dot_product
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_dot_product")) {
-    LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
-
-    UMaterialExpressionDotProduct *DotExpr =
-        NewObject<UMaterialExpressionDotProduct>(
-            HostOuter, UMaterialExpressionDotProduct::StaticClass(), NAME_None,
-            RF_Transactional);
-    DotExpr->MaterialExpressionEditorX = (int32)X;
-    DotExpr->MaterialExpressionEditorY = (int32)Y;
-
-    AddExpressionToContainer(Material, Function, DotExpr);
-    FINALIZE_HOST();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("nodeId"),
-                           MCP_NODE_ID(DotExpr));
-    SendAutomationResponse(Socket, RequestId, true,
-                           TEXT("DotProduct node added."), Result);
-    return true;
-  }
-
-  // --------------------------------------------------------------------------
-  // add_cross_product
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_cross_product")) {
-    LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
-
-    UMaterialExpressionCrossProduct *CrossExpr =
-        NewObject<UMaterialExpressionCrossProduct>(
-            HostOuter, UMaterialExpressionCrossProduct::StaticClass(), NAME_None,
-            RF_Transactional);
-    CrossExpr->MaterialExpressionEditorX = (int32)X;
-    CrossExpr->MaterialExpressionEditorY = (int32)Y;
-
-    AddExpressionToContainer(Material, Function, CrossExpr);
-    FINALIZE_HOST();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("nodeId"),
-                           MCP_NODE_ID(CrossExpr));
-    SendAutomationResponse(Socket, RequestId, true,
-                           TEXT("CrossProduct node added."), Result);
-    return true;
-  }
-
-  // --------------------------------------------------------------------------
-  // add_desaturation
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_desaturation")) {
-    LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
-
-    UMaterialExpressionDesaturation *DesatExpr =
-        NewObject<UMaterialExpressionDesaturation>(
-            HostOuter, UMaterialExpressionDesaturation::StaticClass(), NAME_None,
-            RF_Transactional);
-
-    // Set optional luminance factors
-    const TSharedPtr<FJsonObject> *LumObj;
-    if (Payload->TryGetObjectField(TEXT("luminanceFactors"), LumObj)) {
-      double R = 0.3, G = 0.59, B = 0.11;
-      (*LumObj)->TryGetNumberField(TEXT("r"), R);
-      (*LumObj)->TryGetNumberField(TEXT("g"), G);
-      (*LumObj)->TryGetNumberField(TEXT("b"), B);
-      DesatExpr->LuminanceFactors = FLinearColor(R, G, B, 1.0f);
-    }
-
-    DesatExpr->MaterialExpressionEditorX = (int32)X;
-    DesatExpr->MaterialExpressionEditorY = (int32)Y;
-
-    AddExpressionToContainer(Material, Function, DesatExpr);
-    FINALIZE_HOST();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("nodeId"),
-                           MCP_NODE_ID(DesatExpr));
-    SendAutomationResponse(Socket, RequestId, true,
-                           TEXT("Desaturation node added."), Result);
-    return true;
-  }
-
-  // --------------------------------------------------------------------------
-  // add_append (dedicated handler for convenience)
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_append")) {
-    LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
-
-    UMaterialExpressionAppendVector *AppendExpr =
-        NewObject<UMaterialExpressionAppendVector>(
-            HostOuter, UMaterialExpressionAppendVector::StaticClass(), NAME_None,
-            RF_Transactional);
-    AppendExpr->MaterialExpressionEditorX = (int32)X;
-    AppendExpr->MaterialExpressionEditorY = (int32)Y;
-
-    AddExpressionToContainer(Material, Function, AppendExpr);
-    FINALIZE_HOST();
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("nodeId"),
-                           MCP_NODE_ID(AppendExpr));
-    SendAutomationResponse(Socket, RequestId, true,
-                           TEXT("Append node added."), Result);
-    return true;
-  }
-
-  // --------------------------------------------------------------------------
-  // add_custom_expression (Material or MaterialFunction host)
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_custom_expression")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialAddCustomExpression(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString Code, OutputType, Description;
@@ -1533,16 +1425,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
     SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Custom HLSL expression added."), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // ==========================================================================
-  // 8.2 Node Connections
-  // ==========================================================================
-
-  // --------------------------------------------------------------------------
-  // connect_nodes (Material or MaterialFunction host)
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("connect_nodes")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialConnectNodes(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString SourceNodeId, TargetNodeId, InputName, SourcePin;
@@ -1780,12 +1673,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         FString::Printf(TEXT("Input pin '%s' not found."), *InputName),
         TEXT("PIN_NOT_FOUND"));
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // disconnect_nodes
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("disconnect_nodes")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialDisconnectNodes(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString NodeId, PinName;
@@ -1903,16 +1801,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
     SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Disconnect operation completed."));
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // ==========================================================================
-  // 8.3 Material Functions
-  // ==========================================================================
-
-  // --------------------------------------------------------------------------
-  // create_material_function
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("create_material_function")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialFunction(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString Name, Path, Description;
     if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
       SendAutomationError(Socket, RequestId, TEXT("Missing 'name'."),
@@ -2036,13 +1935,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         Socket, RequestId, true,
         FString::Printf(TEXT("Material function '%s' created."), *Name), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // add_function_input / add_function_output
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_function_input") ||
-      SubAction == TEXT("add_function_output")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialAddFunctionIO(
+    const FString &RequestId, const FString &SubAction,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath, InputName, InputType;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
@@ -2148,12 +2051,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
                         *InputName),
         Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // use_material_function (host can be UMaterial OR UMaterialFunction)
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("use_material_function")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialUseMaterialFunction(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
@@ -2254,16 +2162,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
     SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Material function call added."), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // ==========================================================================
-  // 8.4 Material Instances
-  // ==========================================================================
-
-  // --------------------------------------------------------------------------
-  // create_material_instance
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("create_material_instance")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialInstance(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString Name, Path, ParentMaterial;
     if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
       SendAutomationError(Socket, RequestId, TEXT("Missing 'name'."),
@@ -2396,12 +2305,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         Socket, RequestId, true,
         FString::Printf(TEXT("Material instance '%s' created."), *Name), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // set_scalar_parameter_value
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("set_scalar_parameter_value")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialSetScalarParameterValue(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath, ParamName;
     double Value = 0.0;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
@@ -2456,12 +2370,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         FString::Printf(TEXT("Scalar parameter '%s' set to %f."), *ParamName,
                         Value), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // set_vector_parameter_value
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("set_vector_parameter_value")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialSetVectorParameterValue(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath, ParamName;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
@@ -2523,12 +2442,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         Socket, RequestId, true,
         FString::Printf(TEXT("Vector parameter '%s' set."), *ParamName), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // set_texture_parameter_value
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("set_texture_parameter_value")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialSetTextureParameterValue(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath, ParamName, TexturePath;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
@@ -2601,18 +2525,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
         Socket, RequestId, true,
         FString::Printf(TEXT("Texture parameter '%s' set."), *ParamName), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // ==========================================================================
-  // 8.5 Specialized Materials
-  // ==========================================================================
-
-  // --------------------------------------------------------------------------
-  // create_landscape_material, create_decal_material, create_post_process_material
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("create_landscape_material") ||
-      SubAction == TEXT("create_decal_material") ||
-      SubAction == TEXT("create_post_process_material")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateSpecialMaterial(
+    const FString &RequestId, const FString &SubAction,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString Name, Path;
     if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
       SendAutomationError(Socket, RequestId, TEXT("Missing 'name'."),
@@ -2704,12 +2627,17 @@ bool UMcpAutomationBridgeSubsystem::HandleManageMaterialAuthoringAction(
                            FString::Printf(TEXT("Material '%s' created."), *Name),
                            Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // add_landscape_layer, configure_layer_blend
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_landscape_layer")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialAddLandscapeLayer(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
 #if MCP_HAS_LANDSCAPE_LAYER
     FString LayerName;
     if (!Payload->TryGetStringField(TEXT("layerName"), LayerName) || LayerName.IsEmpty()) {
@@ -2835,9 +2763,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     SendAutomationError(Socket, RequestId, TEXT("Landscape module not available."), TEXT("NOT_SUPPORTED"));
     return true;
 #endif
-  }
-  
-  if (SubAction == TEXT("configure_layer_blend")) {
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleMaterialConfigureLayerBlend(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     // Configure layer blend by adding layer weight parameters and blend setup
     FString AssetPath;
     // Accept both assetPath and materialPath as parameter names
@@ -2941,16 +2877,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
                                           CreatedNodeIds.Num()),
                            Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // ==========================================================================
-  // 8.6 Utilities
-  // ==========================================================================
-
-  // --------------------------------------------------------------------------
-  // compile_material
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("compile_material")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialCompileMaterial(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
@@ -3048,12 +2985,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
                                : TEXT("Material function updated."),
                            Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // get_material_info (supports UMaterial and UMaterialFunction)
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("get_material_info")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialInfo(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
@@ -3369,12 +3311,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
                                     : TEXT("Material function info retrieved."),
                            Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // get_material_function_info (explicit MF introspection)
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("get_material_function_info")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialFunctionInfo(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
@@ -3442,12 +3389,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Material function info retrieved."), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // find_node — search expressions by type or name
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("find_node")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialFindNode(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString SearchType, SearchName;
@@ -3544,17 +3496,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
                            FString::Printf(TEXT("Found %d matching node(s)."), Matches.Num()),
                            Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // get_node_connections — get connections for a node with graph traversal
-  //   direction: "inputs"|"outputs"|"both" (default "both")
-  //   depth: int (default 1, -1 = unlimited)
-  //   upstream: bool — walk backward to all sources
-  //   downstream: bool — walk forward to all consumers
-  //   Returns flattened list with "hop" field indicating distance from origin
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("get_node_connections")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialGetNodeConnections(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString NodeId;
@@ -3734,12 +3686,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Node connections retrieved."), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // get_node_properties — read all properties of a specific node
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("get_node_properties")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialGetNodeProperties(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString NodeId;
@@ -3872,19 +3829,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 
     SendAutomationResponse(Socket, RequestId, true, TEXT("Node properties retrieved."), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // set_node_value — write the literal value(s) held by a constant /
-  // parameter-default / arithmetic-const node. Closes the gap where
-  // add_material_node creates these nodes but never sets their value.
-  //   value           Constant.R · ScalarParameter.DefaultValue · (math) ConstA
-  //   r/g/b/a          Constant2/3/4Vector · VectorParameter.DefaultValue channels
-  //   constA / constB  arithmetic-node unconnected-input defaults (Add/Multiply/…)
-  // An omitted vector channel keeps its current value (partial update); a bare
-  // `value` on a vector node sets every colour channel uniformly.
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("set_node_value")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialSetNodeValue(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString NodeId;
@@ -4046,12 +4001,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
         FString::Printf(TEXT("Set %s on '%s'."), *Applied, *MCP_NODE_ID(Expr)),
         Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // set_static_switch_parameter_value — on material instances
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("set_static_switch_parameter_value")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialSetStaticSwitchParameterValue(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath, ParamName;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
       SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
@@ -4120,12 +4080,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
                            FString::Printf(TEXT("Static switch '%s' set to %s."), *ParamName, Value ? TEXT("true") : TEXT("false")),
                            Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // delete_node — batch removal with auto-disconnect
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("delete_node")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialDeleteNode(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     // Accept single nodeId or array of nodeIds
@@ -4229,12 +4194,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
                            FString::Printf(TEXT("Deleted %d node(s)."), Removed.Num()),
                            Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // update_custom_expression — modify code/inputs/outputs of existing CE
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("update_custom_expression")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialUpdateCustomExpression(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString NodeId;
@@ -4329,12 +4299,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     Result->SetNumberField(TEXT("additionalOutputCount"), CustomExpr->AdditionalOutputs.Num());
     SendAutomationResponse(Socket, RequestId, true, TEXT("Custom expression updated."), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // get_node_chain — trace signal path from startNodeId to endNodeId/endPin
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("get_node_chain")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialGetNodeChain(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     FString StartNodeId, EndNodeId, EndPin;
@@ -4478,12 +4453,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
                            bPathFound ? TEXT("Signal path found.") : TEXT("No path found."),
                            Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // get_connected_subgraph — island detection + orphansOnly
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("get_connected_subgraph")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialGetConnectedSubgraph(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     bool bOrphansOnly = false;
@@ -4632,12 +4612,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
                            FString::Printf(TEXT("Subgraph contains %d node(s)."), NodesArr.Num()),
                            Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // add_material_node - Generic node adder
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("add_material_node")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialAddMaterialNode(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath, NodeType;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
       SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
@@ -4819,12 +4804,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Material node '%s' added."), *NodeType), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // remove_material_node
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("remove_material_node")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialRemoveMaterialNode(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath, NodeId;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
       SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
@@ -4897,12 +4887,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 
     SendAutomationResponse(Socket, RequestId, true, TEXT("Material node removed."), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // set_material_parameter
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("set_material_parameter")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialSetMaterialParameter(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath, ParameterName, ParameterType;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
       SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
@@ -4928,12 +4923,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
                         TEXT("set_material_parameter is ambiguous. Use set_scalar_parameter_value, set_vector_parameter_value, or set_texture_parameter_value with a material instance path."),
                         TEXT("AMBIGUOUS_ACTION"));
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // get_material_node_details
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("get_material_node_details")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialNodeDetails(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath, NodeId;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
       SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
@@ -4992,12 +4992,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 
     SendAutomationResponse(Socket, RequestId, true, TEXT("Node details retrieved."), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // set_two_sided
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("set_two_sided")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialSetTwoSided(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     FString AssetPath;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
       SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
@@ -5040,41 +5045,17 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Two-sided set to %s."), bTwoSided ? TEXT("true") : TEXT("false")), Result);
     return true;
-  }
+#else
+  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // --------------------------------------------------------------------------
-  // set_cast_shadows
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("set_cast_shadows")) {
-    FString AssetPath;
-    if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
-      return true;
-    }
-
-    // SECURITY: Validate assetPath before use
-    FString ValidatedAssetPath = SanitizeProjectRelativePath(AssetPath);
-    if (ValidatedAssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
-                          FString::Printf(TEXT("Invalid assetPath '%s': contains traversal sequences or invalid root"), *AssetPath),
-                          TEXT("INVALID_PATH"));
-      return true;
-    }
-    AssetPath = ValidatedAssetPath;
-
-    SendAutomationError(Socket, RequestId,
-                        TEXT("set_cast_shadows cannot be applied to a material asset. Configure shadow casting on a mesh/light component instead."),
-                        TEXT("UNSUPPORTED_OPERATION"));
-    return true;
-  }
-
-  // --------------------------------------------------------------------------
-  // arrange_graph — auto-layout the material/MF expression graph headlessly via
-  // the shared McpGraphLayout core. Sink polarity: the output ("Main" for a
-  // UMaterial, each FunctionOutput for a UMaterialFunction) anchors at the
-  // rightmost column; constants/parameters flow left into it.
-  // --------------------------------------------------------------------------
-  if (SubAction == TEXT("arrange_graph")) {
+bool UMcpAutomationBridgeSubsystem::HandleMaterialArrangeGraph(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle Socket) {
+#if WITH_EDITOR
     LOAD_MATERIAL_OR_FUNCTION_OR_RETURN();
 
     McpGraphLayout::FMcpGraphLayoutInput In;
@@ -5108,25 +5089,19 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     McpHandlerUtils::AddVerification(Result, HostOuter);
     SendAutomationResponse(Socket, RequestId, true, TEXT("Graph arranged."), Result);
     return true;
-  }
-
-#undef LOAD_MATERIAL_OR_RETURN
-#undef LOAD_MATERIAL_OR_FUNCTION_OR_RETURN
-#undef FIND_EXPR_IN_HOST
-#undef FINALIZE_HOST
-
-  // Unknown subAction
-  SendAutomationError(
-      Socket, RequestId,
-      FString::Printf(TEXT("Unknown subAction: %s"), *SubAction),
-      TEXT("INVALID_SUBACTION"));
-  return true;
 #else
   SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
+
+#if WITH_EDITOR
+#undef LOAD_MATERIAL_OR_RETURN
+#undef LOAD_MATERIAL_OR_FUNCTION_OR_RETURN
+#undef FIND_EXPR_IN_HOST
+#undef FINALIZE_HOST
+#endif
 
 // =============================================================================
 // Helper functions

@@ -5,7 +5,6 @@
 #include "MCP/McpCallRegistry.h"
 
 #include "MCP/Decls/McpDecl_ManageBlueprint.h"
-#include "MCP/Decls/McpDecl_ManageAsset.h"
 
 inline void McpRegisterAllActionDecls()
 {
@@ -32,7 +31,8 @@ inline void McpRegisterAllActionDecls()
 	// manage_combat: classed (MCP/Calls/McpCalls_ManageCombat.cpp) —
 	// decls register with the call instances via
 	// McpRegisterManageCombatCalls().
-	FMcpCallRegistry::Get().RegisterDecls(McpDecls::GManageAsset);
+	// manage_asset: classed (MCP/Calls/McpCalls_ManageAsset.cpp) — decls
+	// register with the call instances via McpRegisterManageAssetCalls().
 	// manage_sequence: classed (MCP/Calls/McpCalls_ManageSequence.cpp) — decls
 	// register with the call instances via McpRegisterManageSequenceCalls().
 	// animation_physics: classed (MCP/Calls/McpCalls_AnimationPhysics.cpp) —

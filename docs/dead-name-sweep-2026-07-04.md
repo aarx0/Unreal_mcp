@@ -269,10 +269,15 @@ Quick dispositions:
   animation_physics with action=X" errors for names nothing advertises — DELETED at the
   animation_physics classing), AnimationHandlers NOT_SUPPORTED rig family (DELETED at
   the animation_physics classing), texture create_cube/volume/array
-  (honest UNSUPPORTED stubs), `import_texture` (**fake-success "import queued"** — a lying
-  stub), `preview_physics` (echo stub — DELETED at the animation_physics classing),
-  `set_cast_shadows` (UNSUPPORTED stub),
-  MaterialAuthoring per-node conveniences (generic `add_material_node` covers all five),
+  (honest UNSUPPORTED stubs — DELETED at the manage_asset classing),
+  `import_texture` (**fake-success "import queued"** — a lying stub — DELETED at the
+  manage_asset classing), `set_texture_filter`/`set_texture_wrap` (setters behind
+  unrouted names — DELETED at the manage_asset classing),
+  `preview_physics` (echo stub — DELETED at the animation_physics classing),
+  `set_cast_shadows` (UNSUPPORTED stub — DELETED at the manage_asset classing),
+  MaterialAuthoring per-node conveniences (generic `add_material_node` covers all five —
+  add_component_mask/add_dot_product/add_cross_product/add_desaturation/add_append
+  DELETED at the manage_asset classing, recover from git),
   WorldPartition `create_datalayer`/`set_datalayer` (live differently-spelled siblings
   exist in manage_level_structure).
 - **Advertise candidates (real, no advertised equivalent):** geometry raw DynamicMesh CRUD
@@ -287,7 +292,8 @@ Quick dispositions:
   `set_ai_movement` (DELETED at the manage_ai classing, recover from git),
   `cleanup_invalid_datalayers`, `attach_render_target_to_volume`
   (DELETED at the system_control classing, recover from git),
-  `create_spline_mesh_actor`, Niagara `set_parameter`, `source_control_enable`,
+  `create_spline_mesh_actor`, Niagara `set_parameter`,
+  `source_control_enable` (DELETED at the manage_asset classing, recover from git),
   UiHandlers PIE/widget pokes (DELETED at the system_control classing — raw
   TObjectIterator scans duplicated by newer widget actions; recover from git).
 
@@ -339,6 +345,29 @@ without axis parameters, the sampleX/sampleY blend-sample variant).
 
 ### AssetWorkflowHandlers
 - **source_control_enable** @:418 - Source Control family (McpAutomationBridge_AssetWorkflowHandlers.cpp :838-891, ~54 lines, WITH_EDITOR-gated). HandleSourceControlEnable wraps ISourceControlModule::Get(): if source control is already enabled it returns success with the active provider's name; otherwise it optionally sets the provide…
+
+  Disposition: **deleted at the manage_asset classing (2026-07-05)** — arm +
+  member (HandleSourceControlEnable) removed; advertise candidate parked for
+  Aaron (recover from git).
+
+### AssetWorkflowHandlers — shadowed material copies (found at the manage_asset classing, 2026-07-05)
+The eight entries below are the below-radar shadowed-dead class found at the
+manage_asset classing (audio/animation_physics precedent): each name is in
+`MaterialAuthoring()`, so the registration lambda always routed it to the live
+`HandleManageMaterialAuthoringAction` branch first, and HandleAssetAction's own
+arm + dedicated member could never match. **Deleted at the manage_asset classing
+(2026-07-05)**; the live MaterialAuthoring implementations are unchanged (now the
+`HandleMaterial*` members); the spellings only the shadowed copies read left the
+decl rows with them (see the classing's decl burn-down — 5 own-branch rows + 3
+alias rows re-derived from the live bodies). Recover any copy from git.
+- **create_material** arm @:344 → HandleCreateMaterial @:3448 - dead copy read `properties` the live body never reads.
+- **create_material_instance** arm @:346 → HandleCreateMaterialInstance @:3939 - dead copy read `parameters`.
+- **add_material_node** arm @:425 → HandleAddMaterialNode @:5349 - dead copy read materialPath/posX/posY/value/color/texturePath.
+- **connect_material_pins** arm @:427 → HandleConnectMaterialPins @:5539 - dead copy read materialPath/fromExpression/toExpression/targetPin (live target connect_nodes reads sourceNodeId/targetNodeId/inputName/sourcePin).
+- **remove_material_node** arm @:429 → HandleRemoveMaterialNode @:5758 - dead copy read materialPath/expressionIndex.
+- **break_material_connections** arm @:431 → HandleBreakMaterialConnections @:5913 - dead copy read materialPath/expressionIndex/inputName (live target disconnect_nodes reads nodeId/pinName).
+- **get_material_node_details** arm @:433 → HandleGetMaterialNodeDetails @:6082 - dead copy read materialPath/expressionIndex.
+- **rebuild_material** arm @:435 → HandleRebuildMaterial @:6688 - dead copy read materialPath (live target compile_material reads waitForShaders/save).
 
 ### AudioHandlers (added at the manage_audio classing, 2026-07-05)
 All seven entries below are the below-radar shadowed-dead class found at the
@@ -416,6 +445,18 @@ editing that no advertised action covers — recover from git).
 - **add_desaturation** @:1377 - Desaturation node family: optionally reads a {r,g,b} 'luminanceFactors' object from the payload (default 0.3/0.59/0.11) into an FLinearColor, creates a UMaterialExpressionDesaturation, positions it, adds it to the host, returns nodeId. Extent: lines 1374-1407. The advertised 'add_material_node' (nod…
 - **add_append** @:1412 - AppendVector node family ("dedicated handler for convenience" per its own comment): creates a UMaterialExpressionAppendVector, positions it, adds it to the host, returns nodeId. Extent: lines 1409-1431. Two advertised actions can independently produce the same node class through separate code paths …
 - **set_cast_shadows** @:5048 - Stub family: validates/sanitizes an 'assetPath' string and then unconditionally sends back an UNSUPPORTED_OPERATION error stating shadow casting can't be set on a material asset and should be configured on a mesh/light component instead. Extent: lines 5045-5069. It performs no material mutation at a…
+
+Disposition for all six MaterialAuthoring names above (add_component_mask,
+add_dot_product, add_cross_product, add_desaturation, add_append,
+set_cast_shadows): **deleted at the manage_asset classing (2026-07-05)** —
+`IsMaterialAuthoringAction` never routed them (not in `MaterialAuthoring()`), so
+they were transport-dead; recover from git. `add_desaturation` was the only
+reader of the advertised `luminanceFactors` param — that param is KEPT in
+McpTool_ManageAsset.cpp (so the classing commit holds the golden byte-identical)
+and exempted in the param-reconciliation allowlist; it is now a dead advertised
+param, an advertise-or-remove candidate parked for Aaron. Same for `targetPin`
+(McpTool_ManageAudio.cpp), whose only reader was the shadowed
+HandleConnectMaterialPins deleted alongside the eight material arms.
 
 ### NiagaraGraphHandlers
 - **set_parameter** @:436 - Dead/unreachable 'set exposed Niagara System user parameter' family (lines 436-500): given a parameterName and a numeric/bool value, it looks up the System's exposed user-parameter store (FNiagaraUserRedirectionParameterStore) and sets it if the parameter is typed Float or Bool, returning PARAM_FAIL…

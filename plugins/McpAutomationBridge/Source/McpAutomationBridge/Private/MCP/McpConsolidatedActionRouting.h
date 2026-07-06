@@ -995,8 +995,6 @@ inline const TArray<FString>& ManageInteraction()
 }
 inline TArray<FString> ManageInteractionUnion() { return ManageInteraction(); }
 
-inline bool IsMaterialAuthoringAction(const FString& Action) { return ContainsAction(MaterialAuthoring(), Action); }
-inline bool IsTextureAction(const FString& Action) { return ContainsAction(Texture(), Action); }
 inline bool IsBlueprintGraphAction(const FString& Action) { return ContainsAction(BlueprintGraph(), Action); }
 inline bool IsWidgetAuthoringAction(const FString& Action) { return ContainsAction(WidgetAuthoring(), Action); }
 inline bool IsCommonUiAction(const FString& Action) { return ContainsAction(CommonUi(), Action); }

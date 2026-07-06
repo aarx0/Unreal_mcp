@@ -348,16 +348,18 @@ static float FBMNoise(float X, float Y, int32 Octaves, float Persistence, float 
     return Total / MaxValue;
 }
 
-TSharedPtr<FJsonObject> UMcpAutomationBridgeSubsystem::HandleManageTextureAction(const TSharedPtr<FJsonObject>& Params)
+// =============================================================================
+// Classed manage_asset texture actions
+// =============================================================================
+// One file-static per action (branch bodies verbatim from the retired
+// HandleManageTextureAction(Params) JSON worker), plus the response conversion
+// the retired HandleManageTextureAction response wrapper applied, shared by the
+// per-action members below. create_render_target is a ManageAssetCore action
+// whose live implementation is this texture body (manage_asset routed it here).
+
+static TSharedPtr<FJsonObject> TextureCreateNoiseTexture(const TSharedPtr<FJsonObject>& Params)
 {
     TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
-    
-    FString SubAction = GetJsonStringField(Params, TEXT("subAction"), TEXT(""));
-    
-    // ===== PROCEDURAL GENERATION =====
-    
-    if (SubAction == TEXT("create_noise_texture"))
-    {
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("name"), TEXT("path"), TEXT("noiseType"),
@@ -474,10 +476,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Noise texture '%s' created"), *Name));
         McpHandlerUtils::AddVerification(Response, NewTexture);
         return Response;
-    }
-    
-    if (SubAction == TEXT("create_gradient_texture"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureCreateGradientTexture(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("name"), TEXT("path"), TEXT("gradientType"),
@@ -628,10 +631,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Gradient texture '%s' created"), *Name));
         McpHandlerUtils::AddVerification(Response, NewTexture);
         return Response;
-    }
-    
-    if (SubAction == TEXT("create_pattern_texture"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureCreatePatternTexture(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("name"), TEXT("path"), TEXT("patternType"),
@@ -798,10 +802,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Pattern texture '%s' created"), *Name));
         McpHandlerUtils::AddVerification(Response, NewTexture);
         return Response;
-    }
-    
-    if (SubAction == TEXT("create_normal_from_height"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureCreateNormalFromHeight(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("sourceTexture"), TEXT("name"), TEXT("path"),
@@ -1025,15 +1030,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), TEXT("Normal map created from height map"));
         McpHandlerUtils::AddVerification(Response, NormalMap);
         return Response;
-    }
-    
-    // create_ao_from_mesh is handled later in this file with proper mesh validation
-    // (duplicate removed - see line ~2895 for the correct implementation)
-    
-    // ===== TEXTURE SETTINGS =====
-    
-    if (SubAction == TEXT("set_compression_settings"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureSetCompressionSettings(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("compressionSettings"), TEXT("save")
@@ -1102,10 +1103,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Compression set to %s"), *CompressionSettingsStr));
         McpHandlerUtils::AddVerification(Response, Texture);
         return Response;
-    }
-    
-    if (SubAction == TEXT("set_texture_group"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureSetTextureGroup(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("textureGroup"), TEXT("save")
@@ -1174,10 +1176,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Texture group set to %s"), *TextureGroup));
         McpHandlerUtils::AddVerification(Response, Texture);
         return Response;
-    }
-    
-    if (SubAction == TEXT("set_lod_bias"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureSetLodBias(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("lodBias"), TEXT("save")
@@ -1232,10 +1235,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), FString::Printf(TEXT("LOD bias set to %d"), LODBias));
         McpHandlerUtils::AddVerification(Response, Texture);
         return Response;
-    }
-    
-    if (SubAction == TEXT("configure_virtual_texture"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureConfigureVirtualTexture(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("virtualTextureStreaming"), TEXT("tileSize"), TEXT("tileBorderSize"), TEXT("save")
@@ -1295,10 +1299,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetNumberField(TEXT("tileSize"), TileSize);
         Response->SetNumberField(TEXT("tileBorderSize"), TileBorderSize);
         return Response;
-    }
-    
-    if (SubAction == TEXT("set_streaming_priority"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureSetStreamingPriority(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("neverStream"), TEXT("streamingPriority"), TEXT("save")
@@ -1352,10 +1357,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), TEXT("Streaming priority configured"));
         return Response;
-    }
-    
-    if (SubAction == TEXT("get_texture_info"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureGetTextureInfo(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("assetPath")
@@ -1425,13 +1431,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), TEXT("Texture info retrieved"));
         Response->SetObjectField(TEXT("textureInfo"), TextureInfo);
         return Response;
-    }
-    
-    // ===== TEXTURE PROCESSING =====
-    // Real CPU-based pixel manipulation implementations
-    
-    if (SubAction == TEXT("resize_texture"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureResizeTexture(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("sourcePath"), TEXT("name"), TEXT("path"),
@@ -1671,10 +1675,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("assetPath"), Path / Name);
         Response->SetStringField(TEXT("filterMethod"), FilterMethod);
         return Response;
-    }
-    
-    if (SubAction == TEXT("invert"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureInvert(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("inPlace"), TEXT("name"), TEXT("path"), TEXT("save"),
@@ -1795,10 +1800,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), TEXT("Texture colors inverted"));
         Response->SetStringField(TEXT("assetPath"), bInPlace ? AssetPath : (Path / Name));
         return Response;
-    }
-    
-    if (SubAction == TEXT("desaturate"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureDesaturate(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("amount"), TEXT("inPlace"),
@@ -1917,10 +1923,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Texture desaturated (amount: %.2f)"), Amount));
         Response->SetStringField(TEXT("assetPath"), bInPlace ? AssetPath : (Path / Name));
         return Response;
-    }
-    
-    if (SubAction == TEXT("adjust_levels"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureAdjustLevels(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("inBlack"), TEXT("inWhite"),
@@ -2011,10 +2018,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), TEXT("Levels adjusted"));
         Response->SetStringField(TEXT("assetPath"), AssetPath);
         return Response;
-    }
-    
-    if (SubAction == TEXT("blur"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureBlur(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         // Validate that no unknown/invalid parameters are present
         TSet<FString> ValidParams = {
             TEXT("subAction"), TEXT("action"), TEXT("assetPath"), TEXT("radius"), TEXT("blurType"),
@@ -2126,10 +2134,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Blur applied (radius: %d)"), Radius));
         Response->SetStringField(TEXT("assetPath"), AssetPath);
         return Response;
-    }
-    
-    if (SubAction == TEXT("sharpen"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureSharpen(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = GetJsonStringField(Params, TEXT("assetPath"), TEXT(""));
         float Amount = static_cast<float>(GetJsonNumberField(Params, TEXT("amount"), 1.0));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
@@ -2220,10 +2229,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Sharpen applied (amount: %.2f)"), Amount));
         Response->SetStringField(TEXT("assetPath"), AssetPath);
         return Response;
-    }
-    
-    if (SubAction == TEXT("channel_pack"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureChannelPack(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString RedPath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("redTexture"), TEXT("")));
         FString GreenPath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("greenTexture"), TEXT("")));
         FString BluePath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("blueTexture"), TEXT("")));
@@ -2393,10 +2403,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), TEXT("Channels packed into single texture"));
         Response->SetStringField(TEXT("assetPath"), Path / Name);
         return Response;
-    }
-    
-    if (SubAction == TEXT("combine_textures"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureCombineTextures(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString BaseTexturePath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("baseTexture"), TEXT("")));
         // Support both overlayTexture (C++ naming) and blendTexture (TS handler naming)
                 FString OverlayTexturePath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("overlayTexture"), 
@@ -2524,12 +2535,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Textures combined (mode: %s)"), *BlendMode));
         Response->SetStringField(TEXT("assetPath"), Path / Name);
         return Response;
-    }
-    
-    // ===== adjust_curves =====
-    // Apply RGB curve adjustment using LUT (lookup table) built from control points
-    if (SubAction == TEXT("adjust_curves"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureAdjustCurves(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         bool bInPlace = GetJsonBoolField(Params, TEXT("inPlace"), true);
         FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
@@ -2710,12 +2720,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetStringField(TEXT("message"), TEXT("Curve adjustment applied"));
         Response->SetStringField(TEXT("assetPath"), bInPlace ? AssetPath : (Path / Name));
         return Response;
-    }
-    
-    // ===== channel_extract =====
-    // Extract a single channel (R, G, B, or A) to a new grayscale texture
-    if (SubAction == TEXT("channel_extract"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureChannelExtract(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString SourcePath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("texturePath"), TEXT("")));
         FString Channel = GetJsonStringField(Params, TEXT("channel"), TEXT("R"));
         FString OutputPath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("outputPath"), TEXT("")));
@@ -2847,126 +2856,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetNumberField(TEXT("width"), Width);
         Response->SetNumberField(TEXT("height"), Height);
         return Response;
-    }
-    
-    // ===== Additional Actions for Test Compatibility =====
-    
-    if (SubAction == TEXT("import_texture"))
-    {
-        FString SourcePath = GetJsonStringField(Params, TEXT("sourcePath"), TEXT(""));
-        FString DestinationPath = GetJsonStringField(Params, TEXT("destinationPath"), TEXT(""));
-        
-        if (SourcePath.IsEmpty() || DestinationPath.IsEmpty())
-        {
-            TEXTURE_ERROR_RESPONSE(TEXT("sourcePath and destinationPath are required"));
-        }
-        
-        // Import texture using EditorAssetLibrary
-        UTexture2D* ImportedTexture = Cast<UTexture2D>(UEditorAssetLibrary::LoadAsset(SourcePath));
-        if (!ImportedTexture)
-        {
-            // Try to import from file
-            if (FPaths::FileExists(SourcePath))
-            {
-                // For file import, we would need AssetTools - return success with note
-                Response->SetBoolField(TEXT("success"), true);
-                Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Texture import queued from '%s' to '%s'"), *SourcePath, *DestinationPath));
-                Response->SetStringField(TEXT("note"), TEXT("Use AssetTools for actual file import in editor"));
-                return Response;
-            }
-            TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Failed to import texture from: %s"), *SourcePath));
-        }
-        
-        Response->SetBoolField(TEXT("success"), true);
-        Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Texture imported to '%s'"), *DestinationPath));
-        Response->SetStringField(TEXT("assetPath"), DestinationPath);
-        return Response;
-    }
-    
-    if (SubAction == TEXT("set_texture_filter"))
-    {
-        FString AssetPath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
-        FString FilterMode = GetJsonStringField(Params, TEXT("filter"), TEXT("Default"));
-        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
-        
-        if (AssetPath.IsEmpty())
-        {
-            TEXTURE_ERROR_RESPONSE(TEXT("assetPath is required"));
-        }
-        
-        UTexture2D* Texture = Cast<UTexture2D>(StaticLoadObject(UTexture2D::StaticClass(), nullptr, *AssetPath));
-        if (!Texture)
-        {
-            TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Failed to load texture: %s"), *AssetPath));
-        }
-        
-        // Map filter modes
-        TextureFilter Filter = TF_Default;
-        if (FilterMode == TEXT("Nearest")) Filter = TF_Nearest;
-        else if (FilterMode == TEXT("Bilinear")) Filter = TF_Bilinear;
-        else if (FilterMode == TEXT("Trilinear")) Filter = TF_Trilinear;
-        else if (FilterMode == TEXT("Default")) Filter = TF_Default;
-        
-        // Use PreEditChange/PostEditChange for proper texture property modification lifecycle
-        Texture->PreEditChange(nullptr);
-        Texture->Filter = Filter;
-        Texture->PostEditChange();
-        Texture->UpdateResource();
-        Texture->MarkPackageDirty();
-        
-        if (bSave)
-        {
-            McpSafeAssetSave(Texture);
-        }
-        
-        Response->SetBoolField(TEXT("success"), true);
-        Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Filter set to %s"), *FilterMode));
-        return Response;
-    }
-    
-    if (SubAction == TEXT("set_texture_wrap"))
-    {
-        FString AssetPath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
-        FString WrapMode = GetJsonStringField(Params, TEXT("wrapMode"), TEXT("Wrap"));
-        bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
-        
-        if (AssetPath.IsEmpty())
-        {
-            TEXTURE_ERROR_RESPONSE(TEXT("assetPath is required"));
-        }
-        
-        UTexture2D* Texture = Cast<UTexture2D>(StaticLoadObject(UTexture2D::StaticClass(), nullptr, *AssetPath));
-        if (!Texture)
-        {
-            TEXTURE_ERROR_RESPONSE(FString::Printf(TEXT("Failed to load texture: %s"), *AssetPath));
-        }
-        
-        // Map wrap modes
-        TextureAddress WrapU = TA_Wrap, WrapV = TA_Wrap;
-        if (WrapMode == TEXT("Clamp")) { WrapU = TA_Clamp; WrapV = TA_Clamp; }
-        else if (WrapMode == TEXT("Mirror")) { WrapU = TA_Mirror; WrapV = TA_Mirror; }
-        else if (WrapMode == TEXT("Wrap")) { WrapU = TA_Wrap; WrapV = TA_Wrap; }
-        
-        // Use PreEditChange/PostEditChange for proper texture property modification lifecycle
-        Texture->PreEditChange(nullptr);
-        Texture->AddressX = WrapU;
-        Texture->AddressY = WrapV;
-        Texture->PostEditChange();
-        Texture->UpdateResource();
-        Texture->MarkPackageDirty();
-        
-        if (bSave)
-        {
-            McpSafeAssetSave(Texture);
-        }
-        
-        Response->SetBoolField(TEXT("success"), true);
-        Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Wrap mode set to %s"), *WrapMode));
-        return Response;
-    }
-    
-    if (SubAction == TEXT("create_render_target"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureCreateRenderTarget(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
         FString Path = NormalizeTexturePath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures")));
         
@@ -3177,70 +3071,11 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetNumberField(TEXT("width"), RenderTarget->SizeX);
         Response->SetNumberField(TEXT("height"), RenderTarget->SizeY);
         return Response;
-    }
-    
-    if (SubAction == TEXT("create_cube_texture"))
-    {
-        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeTexturePath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures")));
-        int32 Size = static_cast<int32>(GetJsonNumberField(Params, TEXT("size"), 512));
-        
-        if (Name.IsEmpty())
-        {
-            TEXTURE_ERROR_RESPONSE(TEXT("name is required"));
-        }
-        
-        Response->SetBoolField(TEXT("success"), false);
-        Response->SetStringField(TEXT("error"), TEXT("UNSUPPORTED_OPERATION"));
-        Response->SetStringField(TEXT("errorCode"), TEXT("UNSUPPORTED_OPERATION"));
-        Response->SetStringField(TEXT("message"), TEXT("create_cube_texture is not implemented for generated assets. Import a real cube map source with import_texture instead."));
-        return Response;
-    }
-    
-    if (SubAction == TEXT("create_volume_texture"))
-    {
-        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeTexturePath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures")));
-        int32 Width = static_cast<int32>(GetJsonNumberField(Params, TEXT("width"), 256));
-        int32 Height = static_cast<int32>(GetJsonNumberField(Params, TEXT("height"), 256));
-        int32 Depth = static_cast<int32>(GetJsonNumberField(Params, TEXT("depth"), 256));
-        
-        if (Name.IsEmpty())
-        {
-            TEXTURE_ERROR_RESPONSE(TEXT("name is required"));
-        }
-        
-        Response->SetBoolField(TEXT("success"), false);
-        Response->SetStringField(TEXT("error"), TEXT("UNSUPPORTED_OPERATION"));
-        Response->SetStringField(TEXT("errorCode"), TEXT("UNSUPPORTED_OPERATION"));
-        Response->SetStringField(TEXT("message"), TEXT("create_volume_texture is not implemented for generated assets. Import a real volume texture source instead."));
-        return Response;
-    }
-    
-    if (SubAction == TEXT("create_texture_array"))
-    {
-        FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
-        FString Path = NormalizeTexturePath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures")));
-        int32 Width = static_cast<int32>(GetJsonNumberField(Params, TEXT("width"), 512));
-        int32 Height = static_cast<int32>(GetJsonNumberField(Params, TEXT("height"), 512));
-        int32 NumSlices = static_cast<int32>(GetJsonNumberField(Params, TEXT("numSlices"), 4));
-        
-        if (Name.IsEmpty())
-        {
-            TEXTURE_ERROR_RESPONSE(TEXT("name is required"));
-        }
-        
-        Response->SetBoolField(TEXT("success"), false);
-        Response->SetStringField(TEXT("error"), TEXT("UNSUPPORTED_OPERATION"));
-        Response->SetStringField(TEXT("errorCode"), TEXT("UNSUPPORTED_OPERATION"));
-        Response->SetStringField(TEXT("message"), TEXT("create_texture_array is not implemented for generated assets. Import or assemble real texture slices instead."));
-        return Response;
-    }
-    
-    // ===== create_ao_from_mesh =====
-    // Create ambient occlusion texture from mesh by baking AO using UV unwrapping
-    if (SubAction == TEXT("create_ao_from_mesh"))
-    {
+}
+
+static TSharedPtr<FJsonObject> TextureCreateAoFromMesh(const TSharedPtr<FJsonObject>& Params)
+{
+    TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString MeshPath = GetJsonStringField(Params, TEXT("meshPath"), TEXT(""));
         FString Name = GetJsonStringField(Params, TEXT("name"), TEXT(""));
         FString Path = NormalizeTexturePath(GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Textures")));
@@ -3406,50 +3241,189 @@ Response->SetBoolField(TEXT("success"), true);
         Response->SetNumberField(TEXT("height"), Height);
         Response->SetStringField(TEXT("sourceMesh"), MeshPath);
         return Response;
-    }
-    
-    // Unknown action
-    Response->SetBoolField(TEXT("success"), false);
-    Response->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown texture action: %s"), *SubAction));
-    return Response;
 }
 
-// Wrapper handler that follows the standard signature pattern
-bool UMcpAutomationBridgeSubsystem::HandleManageTextureAction(
-    const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle RequestingSocket)
+// Response conversion shared by the classed members — verbatim from the retired
+// HandleManageTextureAction response wrapper.
+static bool SendTextureResult(UMcpAutomationBridgeSubsystem* Self,
+                              const FString& RequestId,
+                              const TSharedPtr<FJsonObject>& Result,
+                              FMcpResponseHandle RequestingSocket)
 {
-    // Check if this is a texture action
-    if (Action != TEXT("manage_texture"))
-    {
-        return false; // Not handled
-    }
-    
-    // Call the internal processing function
-    TSharedPtr<FJsonObject> Result = HandleManageTextureAction(Payload);
-    
-    // Send response
     if (Result.IsValid())
     {
         bool bSuccess = GetJsonBoolField(Result, TEXT("success"));
         FString Message = GetJsonStringField(Result, TEXT("message"));
-        
+
         if (bSuccess)
         {
-            SendAutomationResponse(RequestingSocket, RequestId, true, Message, Result);
+            Self->SendAutomationResponse(RequestingSocket, RequestId, true, Message, Result);
         }
         else
         {
             FString Error = GetJsonStringField(Result, TEXT("error"), TEXT("Unknown error"));
             FString ErrorCode = GetJsonStringField(Result, TEXT("errorCode"), TEXT("TEXTURE_ERROR"));
-            SendAutomationError(RequestingSocket, RequestId, Error, ErrorCode);
+            Self->SendAutomationError(RequestingSocket, RequestId, Error, ErrorCode);
         }
         return true;
     }
-    
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to process texture action"), TEXT("PROCESSING_FAILED"));
+
+    Self->SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to process texture action"), TEXT("PROCESSING_FAILED"));
     return true;
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureCreateNoiseTexture(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureCreateNoiseTexture(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureCreateGradientTexture(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureCreateGradientTexture(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureCreatePatternTexture(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureCreatePatternTexture(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureCreateNormalFromHeight(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureCreateNormalFromHeight(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureSetCompressionSettings(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureSetCompressionSettings(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureSetTextureGroup(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureSetTextureGroup(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureSetLodBias(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureSetLodBias(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureConfigureVirtualTexture(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureConfigureVirtualTexture(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureSetStreamingPriority(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureSetStreamingPriority(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureGetTextureInfo(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureGetTextureInfo(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureResizeTexture(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureResizeTexture(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureInvert(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureInvert(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureDesaturate(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureDesaturate(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureAdjustLevels(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureAdjustLevels(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureBlur(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureBlur(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureSharpen(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureSharpen(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureChannelPack(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureChannelPack(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureCombineTextures(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureCombineTextures(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureAdjustCurves(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureAdjustCurves(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureChannelExtract(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureChannelExtract(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureCreateRenderTarget(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureCreateRenderTarget(Payload), RequestingSocket);
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleTextureCreateAoFromMesh(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    return SendTextureResult(this, RequestId, TextureCreateAoFromMesh(Payload), RequestingSocket);
 }
 
 #undef TEXTURE_ERROR_RESPONSE
