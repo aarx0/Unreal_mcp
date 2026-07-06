@@ -77,7 +77,7 @@ inline const FMcpParamDecl P_AddPostProcessVolume[] = { { TEXT("actorPath"), EMc
 // stubs in non-editor builds (the two post-process members also answer the
 // UNSUPPORTED_VERSION stub when MCP_HAS_POSTPROCESS_VOLUME is 0). Mutating on
 // all writers — including open_level_blueprint, which lazily creates the
-// Level Script Blueprint — the only readers are get_level_structure_info
+// Level Script Blueprint — the only readers are get_info
 // and get_volumes_info.
 
 #define MCP_LS_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)            \
@@ -121,7 +121,7 @@ MCP_LS_CALL(CreateLevelInstance, "create_level_instance", P_CreateLevelInstance,
 MCP_LS_CALL(CreatePackedLevelActor, "create_packed_level_actor", P_CreatePackedLevelActor, HandleLevelStructureCreatePackedLevelActor, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_LS_CALL(GetInfo, "get_level_structure_info", {}, HandleLevelStructureGetInfo, EMcpCallFlags::None)
+MCP_LS_CALL(GetInfo, "get_info", {}, HandleLevelStructureGetInfo, EMcpCallFlags::None)
 
 // Trigger Volumes
 MCP_LS_CALL(CreateTriggerVolume, "create_trigger_volume", P_CreateTriggerVolume, HandleVolumeCreateTriggerVolume, EMcpCallFlags::Mutating)

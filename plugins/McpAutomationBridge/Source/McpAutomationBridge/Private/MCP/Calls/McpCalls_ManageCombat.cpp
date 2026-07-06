@@ -64,8 +64,8 @@ inline const FMcpParamDecl P_ModifyArmor[] = { { TEXT("blueprintPath"), EMcpPara
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // RequiresEditor is baked into every row (the implementation TU is editor-
 // gated; the members answer the EDITOR_ONLY stub in non-editor builds).
-// Mutating on all writers; the only readers are get_combat_info and
-// get_combat_stats.
+// Mutating on all writers; the only readers are get_info and
+// get_stats.
 
 #define MCP_CB_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)        \
 class FMcpCall_ManageCombat_##ClassSuffix final : public FMcpCall                          \
@@ -128,11 +128,11 @@ MCP_CB_CALL(SetupParryBlockSystem, "setup_parry_block_system", P_SetupParryBlock
 MCP_CB_CALL(ConfigureWeaponTrails, "configure_weapon_trails", P_ConfigureWeaponTrails, HandleCombatConfigureWeaponTrails, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_CB_CALL(GetInfo, "get_combat_info", P_GetCombatInfo, HandleCombatGetInfo, EMcpCallFlags::None)
+MCP_CB_CALL(GetInfo, "get_info", P_GetCombatInfo, HandleCombatGetInfo, EMcpCallFlags::None)
 
 // Aliases
 MCP_CB_CALL(ConfigureHitDetection, "configure_hit_detection", P_ConfigureHitDetection, HandleCombatConfigureHitDetection, EMcpCallFlags::Mutating)
-MCP_CB_CALL(GetStats, "get_combat_stats", P_GetCombatStats, HandleCombatGetStats, EMcpCallFlags::None)
+MCP_CB_CALL(GetStats, "get_stats", P_GetCombatStats, HandleCombatGetStats, EMcpCallFlags::None)
 
 // New sub-actions
 MCP_CB_CALL(CreateDamageEffect, "create_damage_effect", P_CreateDamageEffect, HandleCombatCreateDamageEffect, EMcpCallFlags::Mutating)

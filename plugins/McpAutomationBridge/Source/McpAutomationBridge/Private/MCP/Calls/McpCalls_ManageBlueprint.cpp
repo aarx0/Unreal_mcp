@@ -229,7 +229,7 @@ MCP_BP_ACTION_CALL(AddEvent, "add_event", P_AddEvent, HandleBlueprintAction, "ma
 MCP_BP_ACTION_CALL(RemoveEvent, "remove_event", P_RemoveEvent, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(AddConstructionScript, "add_construction_script", P_AddConstructionScript, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(SetVariableMetadata, "set_variable_metadata", P_SetVariableMetadata, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetMetadata, "set_metadata", P_SetMetadata, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_ACTION_CALL(SetMetadata, "set_blueprint_metadata", P_SetMetadata, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(AddNode, "add_node", P_AddNode, HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // BlueprintGraph (HandleBlueprintGraphAction, Action arg "manage_blueprint")

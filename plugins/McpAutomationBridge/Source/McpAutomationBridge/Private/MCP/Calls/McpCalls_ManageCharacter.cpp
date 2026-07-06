@@ -53,7 +53,7 @@ inline const FMcpParamDecl P_ConfigureSprint[] = { { TEXT("name"), EMcpParamKind
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // RequiresEditor is baked into every row (the implementation TU is editor-
 // gated; the members answer the EDITOR_ONLY stub in non-editor builds).
-// Mutating on all writers; the only reader is get_character_info.
+// Mutating on all writers; the only reader is get_info.
 
 #define MCP_MC_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)        \
 class FMcpCall_ManageCharacter_##ClassSuffix final : public FMcpCall                       \
@@ -98,7 +98,7 @@ MCP_MC_CALL(MapSurfaceToSound, "map_surface_to_sound", P_MapSurfaceToSound, Hand
 MCP_MC_CALL(ConfigureFootstepFx, "configure_footstep_fx", P_ConfigureFootstepFx, HandleCharacterConfigureFootstepFx, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_MC_CALL(GetInfo, "get_character_info", P_GetCharacterInfo, HandleCharacterGetInfo, EMcpCallFlags::None)
+MCP_MC_CALL(GetInfo, "get_info", P_GetCharacterInfo, HandleCharacterGetInfo, EMcpCallFlags::None)
 
 // Aliases & convenience setters
 MCP_MC_CALL(SetupMovement, "setup_movement", P_SetupMovement, HandleCharacterSetupMovement, EMcpCallFlags::Mutating)

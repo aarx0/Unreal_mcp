@@ -137,7 +137,7 @@ inline const TArray<FString>& ManageBlueprintCore()
 		TEXT("remove_function"),
 		TEXT("add_event"), TEXT("remove_event"),
 		TEXT("add_construction_script"), TEXT("set_variable_metadata"),
-		TEXT("set_metadata"), TEXT("add_node")
+		TEXT("set_blueprint_metadata"), TEXT("add_node")
 	};
 	return Actions;
 }
@@ -327,7 +327,7 @@ inline const TArray<FString>& AnimationAuthoring()
 		TEXT("add_montage_notify"), TEXT("bind_anim_notify"), TEXT("set_blend_in"),
 		TEXT("set_blend_out"), TEXT("link_sections"),
 		TEXT("create_blend_space_1d"), TEXT("create_blend_space_2d"),
-		TEXT("add_blend_sample"), TEXT("force_rebuild_blend_space"),
+		TEXT("add_blend_sample"), TEXT("rebuild_blend_space"),
 		TEXT("set_axis_settings"), TEXT("set_interpolation_settings"),
 		TEXT("create_aim_offset"), TEXT("add_aim_offset_sample"),
 		TEXT("create_anim_blueprint"), 
@@ -389,7 +389,7 @@ inline const TArray<FString>& AudioAuthoring()
 		TEXT("create_dialogue_wave"), TEXT("set_dialogue_context"),
 		TEXT("create_reverb_effect"), TEXT("create_source_effect_chain"),
 		TEXT("add_source_effect"), TEXT("create_submix_effect"),
-		TEXT("get_audio_info")
+		TEXT("get_info")
 	};
 	return Actions;
 }
@@ -495,7 +495,7 @@ inline const TArray<FString>& ManageNetworkingCore()
 		TEXT("add_network_prediction_data"),
 		TEXT("configure_movement_prediction"), TEXT("configure_net_driver"),
 		TEXT("set_net_role"), TEXT("configure_replicated_movement"),
-		TEXT("get_networking_info")
+		TEXT("get_info")
 	};
 	return Actions;
 }
@@ -569,7 +569,7 @@ inline const TArray<FString>& ManageLevelStructureCore()
 		TEXT("create_minimap_volume"), TEXT("open_level_blueprint"),
 		TEXT("add_level_blueprint_node"),
 		TEXT("connect_level_blueprint_nodes"), TEXT("create_level_instance"),
-		TEXT("create_packed_level_actor"), TEXT("get_level_structure_info")
+		TEXT("create_packed_level_actor"), TEXT("get_info")
 	};
 	return Actions;
 }
@@ -609,7 +609,7 @@ inline TArray<FString> ManageLevelStructure()
 inline const TArray<FString>& ManageAICore()
 {
 	static const TArray<FString> Actions = {
-		TEXT("create_ai_controller"), TEXT("assign_behavior_tree"),
+		TEXT("create_controller"), TEXT("assign_behavior_tree"),
 		TEXT("assign_blackboard"), TEXT("create_blackboard_asset"),
 		TEXT("add_blackboard_key"), TEXT("set_key_instance_synced"),
 		TEXT("create_behavior_tree"), TEXT("add_composite_node"),
@@ -617,7 +617,7 @@ inline const TArray<FString>& ManageAICore()
 		TEXT("configure_bt_node"), TEXT("create_eqs_query"),
 		TEXT("add_eqs_generator"), TEXT("add_eqs_context"),
 		TEXT("add_eqs_test"), TEXT("configure_test_scoring"),
-		TEXT("add_ai_perception_component"), TEXT("configure_sight_config"),
+		TEXT("add_perception_component"), TEXT("configure_sight_config"),
 		TEXT("configure_hearing_config"),
 		TEXT("configure_damage_sense_config"), TEXT("set_perception_team"),
 		TEXT("create_state_tree"), TEXT("add_state_tree_state"),
@@ -626,7 +626,7 @@ inline const TArray<FString>& ManageAICore()
 		TEXT("add_smart_object_slot"), TEXT("configure_slot_behavior"),
 		TEXT("add_smart_object_component"),
 		TEXT("create_mass_entity_config"), TEXT("configure_mass_entity"),
-		TEXT("add_mass_spawner"), TEXT("get_ai_info"),
+		TEXT("add_mass_spawner"), TEXT("get_info"),
 		TEXT("setup_perception"),
 		TEXT("create_nav_link_proxy"), TEXT("set_focus"), TEXT("clear_focus"),
 		TEXT("set_blackboard_value"), TEXT("get_blackboard_value"),
@@ -883,7 +883,7 @@ inline const TArray<FString>& ManageGAS()
 		TEXT("set_effect_stacking"), TEXT("set_effect_tags"),
 		TEXT("create_gameplay_cue_notify"), TEXT("configure_cue_trigger"),
 		TEXT("set_cue_effects"), TEXT("add_tag_to_asset"),
-		TEXT("get_gas_info"), TEXT("get_attribute"),
+		TEXT("get_info"), TEXT("get_attribute"),
 		TEXT("create_ability_set"), TEXT("add_ability"),
 		TEXT("create_execution_calculation")
 	};
@@ -905,7 +905,7 @@ inline const TArray<FString>& ManageCharacter()
 		TEXT("setup_sliding"), TEXT("setup_wall_running"),
 		TEXT("setup_grappling"), TEXT("setup_footstep_system"),
 		TEXT("map_surface_to_sound"), TEXT("configure_footstep_fx"),
-		TEXT("get_character_info"), TEXT("setup_movement"),
+		TEXT("get_info"), TEXT("setup_movement"),
 		TEXT("set_walk_speed"), TEXT("set_jump_height"),
 		TEXT("set_gravity_scale"), TEXT("set_ground_friction"),
 		TEXT("set_braking_deceleration"), TEXT("configure_crouch"),
@@ -935,8 +935,8 @@ inline const TArray<FString>& ManageCombat()
 		TEXT("create_melee_trace"), TEXT("configure_combo_system"),
 		TEXT("create_hit_pause"), TEXT("configure_hit_reaction"),
 		TEXT("setup_parry_block_system"), TEXT("configure_weapon_trails"),
-		TEXT("get_combat_info"),
-		TEXT("configure_hit_detection"), TEXT("get_combat_stats"),
+		TEXT("get_info"),
+		TEXT("configure_hit_detection"), TEXT("get_stats"),
 		TEXT("create_damage_effect"), TEXT("apply_damage"), TEXT("heal"),
 		TEXT("create_shield"), TEXT("modify_armor")
 	};
@@ -955,7 +955,7 @@ inline const TArray<FString>& ManageInventory()
 		TEXT("set_inventory_replication"), TEXT("create_pickup_actor"),
 		TEXT("configure_pickup_interaction"),
 		TEXT("configure_pickup_respawn"), TEXT("configure_pickup_effects"),
-		TEXT("create_equipment_component"), TEXT("define_equipment_slots"),
+		TEXT("create_equipment_component"), TEXT("configure_equipment_slots"),
 		TEXT("configure_equipment_effects"), TEXT("add_equipment_functions"),
 		TEXT("configure_equipment_visuals"), TEXT("create_loot_table"),
 		TEXT("add_loot_entry"), TEXT("configure_loot_drop"),
@@ -965,7 +965,7 @@ inline const TArray<FString>& ManageInventory()
 		TEXT("configure_item_stacking"), TEXT("set_item_icon"),
 		TEXT("add_recipe_ingredient"), TEXT("remove_loot_entry"),
 		TEXT("configure_inventory_weight"),
-		TEXT("configure_station_recipes"), TEXT("get_inventory_info")
+		TEXT("configure_station_recipes"), TEXT("get_info")
 	};
 	return Actions;
 }
@@ -988,7 +988,7 @@ inline const TArray<FString>& ManageInteraction()
 		TEXT("configure_destruction_damage"),
 		TEXT("add_destruction_component"), TEXT("create_trigger_actor"),
 		TEXT("configure_trigger_events"), TEXT("configure_trigger_filter"),
-		TEXT("configure_trigger_response"), TEXT("get_interaction_info")
+		TEXT("configure_trigger_response"), TEXT("get_info")
 	};
 	return Actions;
 }

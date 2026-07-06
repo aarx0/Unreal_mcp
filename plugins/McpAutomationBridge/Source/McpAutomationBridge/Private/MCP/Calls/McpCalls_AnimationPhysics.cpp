@@ -203,7 +203,7 @@ MCP_AP_CALL(LinkSections, "link_sections", P_LinkSections, HandleAnimAuthoringLi
 MCP_AP_CALL(CreateBlendSpace1D, "create_blend_space_1d", P_CreateBlendSpace1D, HandleAnimAuthoringCreateBlendSpace1D, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreateBlendSpace2D, "create_blend_space_2d", P_CreateBlendSpace2D, HandleAnimAuthoringCreateBlendSpace2D, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(AddBlendSample, "add_blend_sample", P_AddBlendSample, HandleAnimAuthoringAddBlendSample, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(ForceRebuildBlendSpace, "force_rebuild_blend_space", P_ForceRebuildBlendSpace, HandleAnimAuthoringForceRebuildBlendSpace, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(ForceRebuildBlendSpace, "rebuild_blend_space", P_ForceRebuildBlendSpace, HandleAnimAuthoringForceRebuildBlendSpace, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(SetAxisSettings, "set_axis_settings", P_SetAxisSettings, HandleAnimAuthoringSetAxisSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(SetInterpolationSettings, "set_interpolation_settings", P_SetInterpolationSettings, HandleAnimAuthoringSetInterpolationSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreateAimOffset, "create_aim_offset", P_CreateAimOffset, HandleAnimAuthoringCreateAimOffset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)

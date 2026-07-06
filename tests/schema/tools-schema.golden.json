@@ -43,7 +43,7 @@
             "create_blend_space_1d",
             "create_blend_space_2d",
             "add_blend_sample",
-            "force_rebuild_blend_space",
+            "rebuild_blend_space",
             "set_axis_settings",
             "set_interpolation_settings",
             "create_aim_offset",
@@ -260,7 +260,7 @@
           "type": "boolean"
         },
         "compileReferencers": {
-          "description": "force_rebuild_blend_space: recompile AnimBlueprints referencing this blend space (default true).",
+          "description": "rebuild_blend_space: recompile AnimBlueprints referencing this blend space (default true).",
           "type": "boolean"
         },
         "constraintName": {
@@ -540,7 +540,7 @@
           "type": "number"
         },
         "rebuildBlendParameters": {
-          "description": "force_rebuild_blend_space: also revalidate BlendParameters (default false).",
+          "description": "rebuild_blend_space: also revalidate BlendParameters (default false).",
           "type": "boolean"
         },
         "relativeLocation": {
@@ -2064,7 +2064,7 @@
         "action": {
           "description": "AI action to perform",
           "enum": [
-            "create_ai_controller",
+            "create_controller",
             "assign_behavior_tree",
             "assign_blackboard",
             "create_blackboard_asset",
@@ -2081,7 +2081,7 @@
             "add_eqs_context",
             "add_eqs_test",
             "configure_test_scoring",
-            "add_ai_perception_component",
+            "add_perception_component",
             "configure_sight_config",
             "configure_hearing_config",
             "configure_damage_sense_config",
@@ -2097,7 +2097,7 @@
             "create_mass_entity_config",
             "configure_mass_entity",
             "add_mass_spawner",
-            "get_ai_info",
+            "get_info",
             "setup_perception",
             "create_nav_link_proxy",
             "set_focus",
@@ -3823,7 +3823,7 @@
             "create_source_effect_chain",
             "add_source_effect",
             "create_submix_effect",
-            "get_audio_info"
+            "get_info"
           ],
           "type": "string"
         },
@@ -4400,7 +4400,7 @@
             "remove_event",
             "add_construction_script",
             "set_variable_metadata",
-            "set_metadata",
+            "set_blueprint_metadata",
             "add_node",
             "create_node",
             "delete_node",
@@ -5414,7 +5414,7 @@
             "setup_footstep_system",
             "map_surface_to_sound",
             "configure_footstep_fx",
-            "get_character_info",
+            "get_info",
             "setup_movement",
             "set_walk_speed",
             "set_jump_height",
@@ -5755,9 +5755,9 @@
             "configure_hit_reaction",
             "setup_parry_block_system",
             "configure_weapon_trails",
-            "get_combat_info",
+            "get_info",
             "configure_hit_detection",
-            "get_combat_stats",
+            "get_stats",
             "create_damage_effect",
             "apply_damage",
             "heal",
@@ -6713,7 +6713,7 @@
             "configure_cue_trigger",
             "set_cue_effects",
             "add_tag_to_asset",
-            "get_gas_info",
+            "get_info",
             "get_attribute",
             "create_ability_set",
             "add_ability",
@@ -7862,7 +7862,7 @@
             "configure_trigger_events",
             "configure_trigger_filter",
             "configure_trigger_response",
-            "get_interaction_info"
+            "get_info"
           ],
           "type": "string"
         },
@@ -8024,7 +8024,7 @@
             "configure_pickup_respawn",
             "configure_pickup_effects",
             "create_equipment_component",
-            "define_equipment_slots",
+            "configure_equipment_slots",
             "configure_equipment_effects",
             "add_equipment_functions",
             "configure_equipment_visuals",
@@ -8042,7 +8042,7 @@
             "remove_loot_entry",
             "configure_inventory_weight",
             "configure_station_recipes",
-            "get_inventory_info"
+            "get_info"
           ],
           "type": "string"
         },
@@ -8495,7 +8495,7 @@
             "connect_level_blueprint_nodes",
             "create_level_instance",
             "create_packed_level_actor",
-            "get_level_structure_info",
+            "get_info",
             "create_trigger_volume",
             "add_trigger_volume",
             "create_trigger_box",
@@ -9007,7 +9007,7 @@
             "configure_net_driver",
             "set_net_role",
             "configure_replicated_movement",
-            "get_networking_info",
+            "get_info",
             "create_input_action",
             "create_input_mapping_context",
             "add_mapping",

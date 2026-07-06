@@ -65,7 +65,7 @@ inline const FMcpParamDecl P_CreateExecutionCalculation[] = { { TEXT("name"), EM
 // gated; the members answer the EDITOR_ONLY stub in non-editor builds and
 // the GAS_NOT_AVAILABLE stub when the GameplayAbilities headers are absent).
 // Mutating on all writers; the only readers are get_attribute and
-// get_gas_info.
+// get_info.
 
 #define MCP_GA_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)        \
 class FMcpCall_ManageGas_##ClassSuffix final : public FMcpCall                             \
@@ -119,7 +119,7 @@ MCP_GA_CALL(AddTagToAsset, "add_tag_to_asset", P_AddTagToAsset, HandleGasAddTagT
 
 // Utility (13.5)
 MCP_GA_CALL(GetAttribute, "get_attribute", P_GetAttribute, HandleGasGetAttribute, EMcpCallFlags::None)
-MCP_GA_CALL(GetInfo, "get_gas_info", P_GetGasInfo, HandleGasGetInfo, EMcpCallFlags::None)
+MCP_GA_CALL(GetInfo, "get_info", P_GetGasInfo, HandleGasGetInfo, EMcpCallFlags::None)
 
 // Ability sets (13.6)
 MCP_GA_CALL(CreateAbilitySet, "create_ability_set", P_CreateAbilitySet, HandleGasCreateAbilitySet, EMcpCallFlags::Mutating)

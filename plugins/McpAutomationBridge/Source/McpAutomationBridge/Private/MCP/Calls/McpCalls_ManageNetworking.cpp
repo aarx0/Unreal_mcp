@@ -121,7 +121,7 @@ inline const FMcpParamDecl P_ConfigurePushToTalk[] = { { TEXT("pushToTalkEnabled
 // set_voice_channel, set_voice_attenuation, configure_push_to_talk) and the
 // two Input no-ops (enable_input_mapping, disable_input_action);
 // deepen-or-retire is TODO'd for Aaron. The readers are check_has_authority,
-// check_is_locally_controlled, get_networking_info, get_input_info,
+// check_is_locally_controlled, get_info, get_input_info,
 // get_game_framework_info, and get_sessions_info.
 
 #define MCP_NW_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, Flags)           \
@@ -181,7 +181,7 @@ MCP_NW_CALL(SetNetRole, "set_net_role", P_SetNetRole, HandleNetworkingSetNetRole
 MCP_NW_CALL(ConfigureReplicatedMovement, "configure_replicated_movement", P_ConfigureReplicatedMovement, HandleNetworkingConfigureReplicatedMovement, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_NW_CALL(GetInfo, "get_networking_info", P_GetNetworkingInfo, HandleNetworkingGetInfo, EMcpCallFlags::None)
+MCP_NW_CALL(GetInfo, "get_info", P_GetNetworkingInfo, HandleNetworkingGetInfo, EMcpCallFlags::None)
 
 // Input (InputHandlers.cpp)
 MCP_NW_CALL(CreateInputAction, "create_input_action", P_CreateInputAction, HandleInputCreateInputAction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)

@@ -5514,16 +5514,16 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  // blueprint_set_metadata: Set metadata on a blueprint asset
-  if (CleanAction.Equals(TEXT("set_metadata"), ESearchCase::IgnoreCase)) {
+  // set_blueprint_metadata: Set metadata on a blueprint asset
+  if (CleanAction.Equals(TEXT("set_blueprint_metadata"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
-           TEXT("Entered blueprint_set_metadata handler: RequestId=%s"),
+           TEXT("Entered set_blueprint_metadata handler: RequestId=%s"),
            *RequestId);
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
       SendAutomationResponse(
           RequestingSocket, RequestId, false,
-          TEXT("blueprint_set_metadata requires a blueprint path."), nullptr,
+          TEXT("set_blueprint_metadata requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
       return true;
     }
@@ -5598,7 +5598,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #else
     SendAutomationResponse(
         RequestingSocket, RequestId, false,
-        TEXT("blueprint_set_metadata requires editor build"), nullptr,
+        TEXT("set_blueprint_metadata requires editor build"), nullptr,
         TEXT("NOT_AVAILABLE"));
     return true;
 #endif

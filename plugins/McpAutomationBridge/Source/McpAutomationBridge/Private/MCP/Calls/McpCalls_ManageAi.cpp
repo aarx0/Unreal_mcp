@@ -99,7 +99,7 @@ inline const FMcpParamDecl P_GetNavigationInfo[] = { { TEXT("blueprintPath"), EM
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // RequiresEditor on all 61: the three retired dispatchers were whole-editor-
 // gated and every member answers its chain's EDITOR_ONLY stub in non-editor
-// builds. Mutating on the writers; the readers are get_ai_info,
+// builds. Mutating on the writers; the readers are get_info,
 // get_blackboard_value, and get_navigation_info — add_eqs_context is also
 // unflagged (its body is an honest NOT_IMPLEMENTED error that writes
 // nothing).
@@ -121,7 +121,7 @@ class FMcpCall_ManageAi_##ClassSuffix final : public FMcpCall                   
 };
 
 // AI Controllers & Blackboard assets (AIHandlers.cpp)
-MCP_AI_CALL(CreateAiController, "create_ai_controller", P_CreateAiController, HandleAiCreateAiController, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateAiController, "create_controller", P_CreateAiController, HandleAiCreateAiController, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AI_CALL(AssignBehaviorTree, "assign_behavior_tree", P_AssignBehaviorTree, HandleAiAssignBehaviorTree, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AI_CALL(AssignBlackboard, "assign_blackboard", P_AssignBlackboard, HandleAiAssignBlackboard, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AI_CALL(CreateBlackboardAsset, "create_blackboard_asset", P_CreateBlackboardAsset, HandleAiCreateBlackboardAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -144,7 +144,7 @@ MCP_AI_CALL(AddEqsTest, "add_eqs_test", P_AddEqsTest, HandleAiAddEqsTest, EMcpCa
 MCP_AI_CALL(ConfigureTestScoring, "configure_test_scoring", P_ConfigureTestScoring, HandleAiConfigureTestScoring, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Perception
-MCP_AI_CALL(AddAiPerceptionComponent, "add_ai_perception_component", P_AddAiPerceptionComponent, HandleAiAddAiPerceptionComponent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddAiPerceptionComponent, "add_perception_component", P_AddAiPerceptionComponent, HandleAiAddAiPerceptionComponent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AI_CALL(ConfigureSightConfig, "configure_sight_config", P_ConfigureSightConfig, HandleAiConfigureSightConfig, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AI_CALL(ConfigureHearingConfig, "configure_hearing_config", P_ConfigureHearingConfig, HandleAiConfigureHearingConfig, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AI_CALL(ConfigureDamageSenseConfig, "configure_damage_sense_config", P_ConfigureDamageSenseConfig, HandleAiConfigureDamageSenseConfig, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -168,7 +168,7 @@ MCP_AI_CALL(ConfigureMassEntity, "configure_mass_entity", P_ConfigureMassEntity,
 MCP_AI_CALL(AddMassSpawner, "add_mass_spawner", P_AddMassSpawner, HandleAiAddMassSpawner, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Utility & conveniences
-MCP_AI_CALL(GetAiInfo, "get_ai_info", P_GetAiInfo, HandleAiGetAiInfo, EMcpCallFlags::RequiresEditor)
+MCP_AI_CALL(GetAiInfo, "get_info", P_GetAiInfo, HandleAiGetAiInfo, EMcpCallFlags::RequiresEditor)
 MCP_AI_CALL(SetupPerception, "setup_perception", P_SetupPerception, HandleAiSetupPerception, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AI_CALL(SetFocus, "set_focus", P_SetFocus, HandleAiSetFocus, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AI_CALL(ClearFocus, "clear_focus", P_ClearFocus, HandleAiClearFocus, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)

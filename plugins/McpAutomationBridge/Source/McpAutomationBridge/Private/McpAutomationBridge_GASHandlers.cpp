@@ -40,7 +40,7 @@
 //
 // Section 5: Tags & Utility
 //   - add_tag_to_asset                : Add gameplay tag to asset
-//   - get_gas_info                    : Query GAS component info
+//   - get_info                    : Query GAS component info
 //
 // Section 6: Ability Sets
 //   - create_ability_set              : Create UGameplayAbilitySet
@@ -3977,7 +3977,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddTagToAsset(
 
 // get_attribute - read a LIVE actor's GAS attribute value during PIE. This is the
 // verify-loop keystone for combat: enter PIE, act, then assert (e.g. Health dropped).
-// Reads the runtime ASC, NOT an asset CDO (that's get_gas_info).
+// Reads the runtime ASC, NOT an asset CDO (that's get_info).
 bool UMcpAutomationBridgeSubsystem::HandleGasGetAttribute(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
@@ -4135,7 +4135,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasGetAttribute(
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
-// get_gas_info
+// get_info
 bool UMcpAutomationBridgeSubsystem::HandleGasGetInfo(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,

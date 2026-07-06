@@ -3299,7 +3299,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelStructureCreatePackedLevelActor(
 #endif
 }
 
-// get_level_structure_info
+// get_info
 bool UMcpAutomationBridgeSubsystem::HandleLevelStructureGetInfo(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,

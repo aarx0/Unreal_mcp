@@ -118,7 +118,7 @@
 //     Response: { success, message, assetVerification }
 //
 // 20.8 Utility Actions:
-//   - get_networking_info
+//   - get_info
 //     Payload:  { blueprintPath? | actorName? }
 //     Response: { success, networkingInfo }
 //
@@ -2095,7 +2095,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureReplicatedMovement(
 // 20.8 Utility Actions
 // =========================================================================
 
-// ----- get_networking_info -----
+// ----- get_info -----
 // Retrieves comprehensive networking configuration for a Blueprint CDO or
 // a live actor in the world. Returns replication settings, relevancy flags,
 // net update frequency, dormancy, roles, and authority status.

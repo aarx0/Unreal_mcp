@@ -8,7 +8,7 @@
 //
 // HANDLERS BY CATEGORY:
 // ---------------------
-// 16.1  AI Controllers      - create_ai_controller, get_ai_controller_info, possess_pawn,
+// 16.1  AI Controllers      - create_controller, get_ai_controller_info, possess_pawn,
 //                              set_focus, clear_focus, run_behavior_tree
 // 16.2  Blackboard          - create_blackboard, get_blackboard_info, set_blackboard_value,
 //                              get_blackboard_value, clear_blackboard_value, add_blackboard_key
@@ -21,7 +21,7 @@
 // 16.7  Smart Objects (5+)  - create_smart_object_definition, register_smart_object
 // 16.8  Mass AI (5+)        - create_mass_entity, spawn_mass_entities
 // 16.9  Navigation AI       - move_to_location, move_to_actor, get_nav_path, add_nav_modifier
-// 16.10 Utility Actions     - get_ai_info, validate_ai_setup, debug_ai_state
+// 16.10 Utility Actions     - get_info, validate_ai_setup, debug_ai_state
 //
 // VERSION COMPATIBILITY:
 // ----------------------
@@ -1137,7 +1137,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddDecorator(
     if (GetJsonStringField(Payload, TEXT("parentNodeId")).IsEmpty())
     {
         SendAutomationError(RequestingSocket, RequestId,
-            TEXT("add_decorator requires parentNodeId (a node id from add_node/get_ai_info, or 'root')"),
+            TEXT("add_decorator requires parentNodeId (a node id from add_node/get_info, or 'root')"),
             TEXT("INVALID_PARAMS"));
         return true;
     }
@@ -1189,7 +1189,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddService(
     if (GetJsonStringField(Payload, TEXT("parentNodeId")).IsEmpty())
     {
         SendAutomationError(RequestingSocket, RequestId,
-            TEXT("add_service requires parentNodeId (a node id from add_node/get_ai_info, or 'root')"),
+            TEXT("add_service requires parentNodeId (a node id from add_node/get_info, or 'root')"),
             TEXT("INVALID_PARAMS"));
         return true;
     }
@@ -3661,7 +3661,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
         else
         {
             SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("Unsupported asset type '%s' for get_ai_info; expected a Behavior Tree, Blackboard, EQS query, or Blueprint"),
+                FString::Printf(TEXT("Unsupported asset type '%s' for get_info; expected a Behavior Tree, Blackboard, EQS query, or Blueprint"),
                     *Asset->GetClass()->GetName()),
                 TEXT("UNSUPPORTED_ASSET_TYPE"));
             return true;
@@ -3672,7 +3672,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
         BBPath.IsEmpty() && QueryPath.IsEmpty())
     {
         SendAutomationError(RequestingSocket, RequestId,
-            TEXT("get_ai_info requires one of: assetPath, blueprintPath, controllerPath, behaviorTreePath, blackboardPath, queryPath"),
+            TEXT("get_info requires one of: assetPath, blueprintPath, controllerPath, behaviorTreePath, blackboardPath, queryPath"),
             TEXT("INVALID_PARAMS"));
         return true;
     }
@@ -3969,7 +3969,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
 // Aliases & Convenience Actions
 // =========================================================================
 
-// Alias: setup_perception -> add_ai_perception_component (same logic)
+// Alias: setup_perception -> add_perception_component (same logic)
 bool UMcpAutomationBridgeSubsystem::HandleAiSetupPerception(
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)

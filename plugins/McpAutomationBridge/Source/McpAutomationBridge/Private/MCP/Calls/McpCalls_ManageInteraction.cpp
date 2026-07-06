@@ -22,7 +22,7 @@ namespace McpCalls::ManageInteraction
 // HandleInteraction* bodies. The configure door/switch/chest property rows
 // accept blueprintPath as a fallback for their primary path spelling, so
 // both spellings are optional and the "at least one" requirement is
-// handler-enforced — same for get_interaction_info's resolver bag.
+// handler-enforced — same for get_info's resolver bag.
 
 inline const FMcpParamDecl P_CreateInteractionComponent[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("traceDistance"), EMcpParamKind::Number, false } };
 inline const FMcpParamDecl P_ConfigureInteractionTrace[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("traceType"), EMcpParamKind::String, false }, { TEXT("traceDistance"), EMcpParamKind::Number, false }, { TEXT("traceRadius"), EMcpParamKind::Number, false } };
@@ -46,7 +46,7 @@ inline const FMcpParamDecl P_GetInteractionInfo[] = { { TEXT("blueprintPath"), E
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // RequiresEditor is baked into every row (every implementation body is
 // editor-gated). Mutating on all writers; the only reader is
-// get_interaction_info.
+// get_info.
 
 #define MCP_MI_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)        \
 class FMcpCall_ManageInteraction_##ClassSuffix final : public FMcpCall                     \
@@ -94,7 +94,7 @@ MCP_MI_CALL(ConfigureTriggerFilter, "configure_trigger_filter", P_TriggerPathReq
 MCP_MI_CALL(ConfigureTriggerResponse, "configure_trigger_response", P_TriggerPathRequired, HandleInteractionConfigureTriggerResponse, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_MI_CALL(GetInfo, "get_interaction_info", P_GetInteractionInfo, HandleInteractionGetInfo, EMcpCallFlags::None)
+MCP_MI_CALL(GetInfo, "get_info", P_GetInteractionInfo, HandleInteractionGetInfo, EMcpCallFlags::None)
 
 #undef MCP_MI_CALL
 

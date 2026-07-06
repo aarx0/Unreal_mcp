@@ -2540,7 +2540,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureWeaponTrails(
 // UTILITY
 // ============================================================
 
-// get_combat_info
+// get_info
 bool UMcpAutomationBridgeSubsystem::HandleCombatGetInfo(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
@@ -2675,7 +2675,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureHitDetection(
 #endif // WITH_EDITOR
 }
 
-// get_combat_stats -> alias for get_combat_info
+// get_stats -> alias for get_info
 bool UMcpAutomationBridgeSubsystem::HandleCombatGetStats(
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,

@@ -30,7 +30,7 @@
 //   - configure_trigger_events           : Configure trigger event setup
 //
 // Section 5: Utility
-//   - get_interaction_info               : Query interaction info for BP or actor
+//   - get_info               : Query interaction info for BP or actor
 //
 // PAYLOAD/RESPONSE FORMATS:
 // -------------------------
@@ -116,7 +116,7 @@
 //   Payload: { "triggerPath": string }
 //   Response: { "configured": bool }
 //
-// get_interaction_info:
+// get_info:
 //   Payload: { "blueprintPath"?: string, "actorName"?: string, "doorPath"?: string,
 //              "switchPath"?: string, "chestPath"?: string, "triggerPath"?: string }
 //   Response: { "assetType": string, "name"?: string, "variables"?: object,
@@ -2311,7 +2311,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureTriggerResponse(
 // ===========================================================================
 
 /**
- * get_interaction_info
+ * get_info
  * ---------------------
  * Retrieves interaction information for a Blueprint or actor, including the
  * current value of every Blueprint variable (read from the CDO, or from the

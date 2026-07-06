@@ -19,7 +19,7 @@ namespace McpCalls::ManageInventory
 // HandleInventory* bodies — every declared param is read by its member.
 // The retired dispatcher's only shared prologue read was subAction (no
 // common name/path/blueprintPath block), so the rows port unchanged.
-// get_inventory_info's five resolver spellings are all optional with the
+// get_info's five resolver spellings are all optional with the
 // at-least-one requirement handler-enforced; configure_inventory_weight
 // declares both encumbrance spellings because the body reads the
 // historical 'encumberance' (sic) fallbacks; remove_loot_entry's
@@ -65,7 +65,7 @@ inline const FMcpParamDecl P_GetInventoryInfo[] = { { TEXT("blueprintPath"), EMc
 // GEditor read (the module itself is editor-only, so WITH_EDITOR always
 // holds) — and flagging would newly reject GEditor-less commandlet runs the
 // shim family served. Mutating on all writers; the only reader is
-// get_inventory_info.
+// get_info.
 
 #define MCP_IV_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)        \
 class FMcpCall_ManageInventory_##ClassSuffix final : public FMcpCall                       \
@@ -104,7 +104,7 @@ MCP_IV_CALL(ConfigurePickupEffects, "configure_pickup_effects", P_ConfigurePicku
 
 // Equipment system (17.4)
 MCP_IV_CALL(CreateEquipmentComponent, "create_equipment_component", P_CreateEquipmentComponent, HandleInventoryCreateEquipmentComponent, EMcpCallFlags::Mutating)
-MCP_IV_CALL(DefineEquipmentSlots, "define_equipment_slots", P_DefineEquipmentSlots, HandleInventoryDefineEquipmentSlots, EMcpCallFlags::Mutating)
+MCP_IV_CALL(DefineEquipmentSlots, "configure_equipment_slots", P_DefineEquipmentSlots, HandleInventoryDefineEquipmentSlots, EMcpCallFlags::Mutating)
 MCP_IV_CALL(ConfigureEquipmentEffects, "configure_equipment_effects", P_ConfigureEquipmentEffects, HandleInventoryConfigureEquipmentEffects, EMcpCallFlags::Mutating)
 MCP_IV_CALL(AddEquipmentFunctions, "add_equipment_functions", P_AddEquipmentFunctions, HandleInventoryAddEquipmentFunctions, EMcpCallFlags::Mutating)
 MCP_IV_CALL(ConfigureEquipmentVisuals, "configure_equipment_visuals", P_ConfigureEquipmentVisuals, HandleInventoryConfigureEquipmentVisuals, EMcpCallFlags::Mutating)
@@ -130,7 +130,7 @@ MCP_IV_CALL(ConfigureWeight, "configure_inventory_weight", P_ConfigureInventoryW
 MCP_IV_CALL(ConfigureStationRecipes, "configure_station_recipes", P_ConfigureStationRecipes, HandleInventoryConfigureStationRecipes, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_IV_CALL(GetInfo, "get_inventory_info", P_GetInventoryInfo, HandleInventoryGetInfo, EMcpCallFlags::None)
+MCP_IV_CALL(GetInfo, "get_info", P_GetInventoryInfo, HandleInventoryGetInfo, EMcpCallFlags::None)
 
 #undef MCP_IV_CALL
 

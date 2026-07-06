@@ -99,7 +99,7 @@ inline const FMcpParamDecl P_GetAudioInfo[] = { { TEXT("assetPath"), EMcpParamKi
 // EDITOR_REQUIRED outside editor builds (each authoring member replicates
 // that stub), so the members answer exactly as the retired chains did in
 // every build flavor. Mutating on everything except the one reader,
-// get_audio_info.
+// get_info.
 
 #define MCP_AU_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)      \
 class FMcpCall_ManageAudio_##ClassSuffix final : public FMcpCall                         \
@@ -169,7 +169,7 @@ MCP_AU_CALL(CreateReverbEffect, "create_reverb_effect", P_CreateReverbEffect, Ha
 MCP_AU_CALL(CreateSourceEffectChain, "create_source_effect_chain", P_CreateSourceEffectChain, HandleAudioAuthoringCreateSourceEffectChain, EMcpCallFlags::Mutating)
 MCP_AU_CALL(AddSourceEffect, "add_source_effect", P_AddSourceEffect, HandleAudioAuthoringAddSourceEffect, EMcpCallFlags::Mutating)
 MCP_AU_CALL(CreateSubmixEffect, "create_submix_effect", P_CreateSubmixEffect, HandleAudioAuthoringCreateSubmixEffect, EMcpCallFlags::Mutating)
-MCP_AU_CALL(GetAudioInfo, "get_audio_info", P_GetAudioInfo, HandleAudioAuthoringGetAudioInfo, EMcpCallFlags::None)
+MCP_AU_CALL(GetAudioInfo, "get_info", P_GetAudioInfo, HandleAudioAuthoringGetAudioInfo, EMcpCallFlags::None)
 
 #undef MCP_AU_CALL
 

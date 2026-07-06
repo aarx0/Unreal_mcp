@@ -33,7 +33,7 @@
 //   - configure_footstep_fx           : Volume multiplier, particle scale
 //
 // Section 5: Utility
-//   - get_character_info              : Retrieve character movement, capsule, camera info
+//   - get_info              : Retrieve character movement, capsule, camera info
 //
 // Section 6: Aliases & Convenience Sub-Actions
 //   - setup_movement                  : Alias for configure_movement_speeds (subset)
@@ -156,7 +156,7 @@
 //               "particleScale"?: number }
 //   Response: { "blueprintPath": string, "volumeMultiplier": number, "particleScale": number }
 //
-// get_character_info:
+// get_info:
 //   Payload:  { "blueprintPath": string }
 //   Response: { "blueprintPath": string, "assetName": string, "capsuleRadius": number,
 //               "capsuleHalfHeight": number, "walkSpeed": number, "jumpZVelocity": number,
@@ -2017,7 +2017,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureFootstepFx(
 // ============================================================
 
 // -------------------------------------------------------------------------
-// get_character_info
+// get_info
 // -------------------------------------------------------------------------
 // Retrieves comprehensive info about a Character Blueprint including:
 // capsule dimensions, movement speeds/physics, crouch and rotation settings,
