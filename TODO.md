@@ -80,9 +80,16 @@ Not fixed here: naming/consolidation is Aaron's call, and a rename needs the ful
 Dogfood find (read-only probes — all read paths work: get_perf_stats, get_build_status,
 list_tests, get_log all coherent). The issue is surface coherence for the consolidation pass.
 `system_control` (41 actions) fuses several unrelated concerns; the clearest misfit:
-- **UI widgets** (`create_widget`, `add_widget_child`, `spawn_category`) — these belong with
-  the blueprint/UI surface, not a "system" tool. (These were the ones the 2026-07-02 audit
-  found unroutable then fixed — they work, but the home is wrong.)
+- **UI widgets** (`create_widget`, `add_widget_child`, `spawn_category`) — `create_widget`
+  and `add_widget_child` are CONFIRMED DUPLICATES of manage_blueprint's widget surface, via
+  separate divergent handlers: `system_control.create_widget` (`HandleUiCreateWidget`,
+  `UWidgetBlueprintFactory`) creates a WidgetBlueprint asset just like
+  `manage_blueprint.create_widget_blueprint` (`HandleManageWidgetAuthoringAction`); and
+  `system_control.add_widget_child` (`HandleUiAddWidgetChild`, `WidgetTree->AddChild`) edits a
+  WidgetBlueprint tree just like `manage_blueprint.add_widget`/`add_*`. manage_blueprint is the
+  rich proper home (dozens of typed widget actions); these two are a thin redundant parallel —
+  recommend REMOVE them from system_control (not move). `spawn_category` unconfirmed
+  (`HandleDebugSpawnCategory` — name suggests a debug helper that may legitimately stay).
 The looser overload, for the same pass to weigh: **testing** (run_tests/list_tests/
 generate_test_stub/get_test_results/run_benchmark/generate_memory_report), **rendering &
 scalability** (configure_lod/nanite/occlusion_culling/texture_streaming/world_partition,
