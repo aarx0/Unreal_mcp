@@ -995,9 +995,12 @@ inline const TArray<FString>& ManageInteraction()
 }
 inline TArray<FString> ManageInteractionUnion() { return ManageInteraction(); }
 
-inline bool IsBlueprintGraphAction(const FString& Action) { return ContainsAction(BlueprintGraph(), Action); }
-inline bool IsWidgetAuthoringAction(const FString& Action) { return ContainsAction(WidgetAuthoring(), Action); }
-inline bool IsCommonUiAction(const FString& Action) { return ContainsAction(CommonUi(), Action); }
+// manage_blueprint is classed (MCP/Calls/McpCalls_ManageBlueprint.cpp): the
+// IsBlueprintGraphAction/IsWidgetAuthoringAction/IsCommonUiAction predicates
+// died with their only caller, the retired registration lambda. The
+// ManageBlueprintCore()/BlueprintGraph()/WidgetAuthoring()/CommonUi() lists and
+// the routing-table row survive so boot validation can prove the schema union
+// still matches the published enum.
 
 // ─── Routing introspection ───────────────────────────────────────────────────
 // Mirrors what each tool's registration lambda tests, in test order, so startup

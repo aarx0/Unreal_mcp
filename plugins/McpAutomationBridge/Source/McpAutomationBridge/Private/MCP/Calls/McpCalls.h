@@ -11,6 +11,7 @@ void McpRegisterInspectCalls();
 void McpRegisterManageAiCalls();
 void McpRegisterManageAssetCalls();
 void McpRegisterManageAudioCalls();
+void McpRegisterManageBlueprintCalls();
 void McpRegisterManageCharacterCalls();
 void McpRegisterManageCombatCalls();
 void McpRegisterManageEffectCalls();

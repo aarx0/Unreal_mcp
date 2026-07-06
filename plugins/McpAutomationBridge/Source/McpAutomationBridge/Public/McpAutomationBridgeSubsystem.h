@@ -785,9 +785,15 @@ private:
   // manage_effect is classed — see MCP/Calls/McpCalls_ManageEffect.cpp; its
   // member handlers (HandleEffect*) live in the transitional public block
   // below.
+  // manage_blueprint is classed — see MCP/Calls/McpCalls_ManageBlueprint.cpp.
+  // Its four route dispatchers survive (HandleBlueprintAction recurses into
+  // HandleBlueprintGraphAction/HandleSCSAction and is called externally by
+  // EditorFunctionHandlers.cpp); public so the classed Core actions delegate.
+public:
   bool HandleBlueprintAction(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
+private:
   // manage_sequence is classed — see MCP/Calls/McpCalls_ManageSequence.cpp.
   bool CreateNiagaraEffect(const FString &RequestId,
                            const TSharedPtr<FJsonObject> &Payload,
@@ -1353,14 +1359,16 @@ public:
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle RequestingSocket);
 
-private:
+public:
   // 1. Editor Authoring & Graph Editing
+  // manage_blueprint is classed (MCP/Calls/McpCalls_ManageBlueprint.cpp) — this
+  // route dispatcher is public so the classed BlueprintGraph actions delegate;
+  // it survives because HandleBlueprintAction recurses into it.
   bool
   HandleBlueprintGraphAction(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
 
-public:
   // Called directly by the classed manage_effect graph actions (MCP/Calls/);
   // Action carries its manage_niagara_graph gate literal.
   bool
@@ -2516,12 +2524,15 @@ public:
                                 const TSharedPtr<FJsonObject> &Payload,
                                 FMcpResponseHandle Socket);
 
-private:
   // Phase 19: Widget Authoring System handlers
+  // manage_blueprint is classed (MCP/Calls/McpCalls_ManageBlueprint.cpp) — this
+  // route dispatcher is public so the classed WidgetAuthoring actions delegate.
+public:
   bool HandleManageWidgetAuthoringAction(
       const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);
+private:
   // Phase 19 family sub-handlers — each owns one cluster of subactions and
   // returns false if SubAction isn't one of its own (so the dispatcher falls
   // through to the next family). Split out of the former monolithic dispatcher
@@ -2567,10 +2578,14 @@ private:
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);
   // Common UI (CommonUI plugin) authoring handlers
+  // manage_blueprint is classed (MCP/Calls/McpCalls_ManageBlueprint.cpp) — this
+  // route dispatcher is public so the classed CommonUi actions delegate.
+public:
   bool HandleCommonUiAction(
       const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);
+private:
   // manage_networking is classed — see
   // MCP/Calls/McpCalls_ManageNetworking.cpp.
   // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)

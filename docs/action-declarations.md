@@ -733,6 +733,52 @@ parser survives only as a lint.
     `get_material_function_info`, `find_node`, `get_node_connections`,
     `get_node_properties`, `get_material_node_details`, `get_node_chain`,
     `get_connected_subgraph`; Texture: `get_texture_info`).
+  - **`manage_blueprint` (2026-07-05,
+    `Private/MCP/Calls/McpCalls_ManageBlueprint.cpp`).** 145 classes across four
+    routes (31 Core + 14 BlueprintGraph + 92 WidgetAuthoring + 8 CommonUi) — the
+    twenty-first and final classed family. It is the ONE delegation-wired family:
+    unlike the other twenty, no string dispatcher was retired and no branch body
+    was extracted, because all four route dispatchers have callers beyond the
+    registration lambda and so cannot die. `HandleBlueprintAction` is called
+    externally by EditorFunctionHandlers.cpp and recurses into
+    `HandleBlueprintGraphAction` and `HandleSCSAction`; the widget and CommonUi
+    dispatchers are large shared bodies. Each class `Run()` therefore delegates to
+    its route's surviving dispatcher with EXACTLY the args the retired lambda
+    passed — byte-behaviour-identical for canonical inputs: CommonUi to
+    `HandleCommonUiAction` (Action arg `manage_common_ui`), WidgetAuthoring to
+    `HandleManageWidgetAuthoringAction` (`manage_widget_authoring`), BlueprintGraph
+    to `HandleBlueprintGraphAction` and Core to `HandleBlueprintAction` (both
+    `manage_blueprint`). Each dispatcher gates on that Action arg and reads the
+    real sub-action from the payload, so a routed request resolves the same way it
+    did through the lambda. The `IsCommonUiAction`/`IsWidgetAuthoringAction`/
+    `IsBlueprintGraphAction` predicates died with their only caller (the lambda);
+    the four route dispatchers were widened private→public so the classes can
+    delegate, and the `ManageBlueprintCore`/`BlueprintGraph`/`WidgetAuthoring`/
+    `CommonUi` lists plus the routing-table row survive for boot schema-union
+    validation. Zero decl fixes — the 140 param arrays were ported byte-identical
+    from the retired shim rows (the five zero-param bind_* actions pass `{}`); the
+    surviving dispatchers still own the reads, so the shim contracts reconciled
+    clean. Flags: `RequiresEditor` on Core + BlueprintGraph (BlueprintHandlers.cpp
+    and BlueprintGraphHandlers.cpp are whole-body `#if WITH_EDITOR`), NOT on
+    WidgetAuthoring (WidgetAuthoringHandlers.cpp carries no editor gate) or CommonUi
+    (CommonUIHandlers.cpp gates on `MCP_HAS_COMMON_UI`, not `WITH_EDITOR`) —
+    flagging either would newly reject the GEditor-less runs the shim served
+    (networking/asset-Texture precedent); `Mutating` on every action except the 18
+    pure `get_*`/`list_*`/`preview_*`/`probe_*` reads. One hidden name deleted and
+    ledgered: the transport-dead `get_nodes` else-if in BlueprintGraphHandlers.cpp
+    (never advertised; advertise candidate parked for Aaron — see the dead-name
+    sweep). This is the only handler-body edit.
+
+**FMcpCall classing migration COMPLETE — all 21 families classed (2026-07-05).**
+Every tool family now dispatches through the `FMcpCall` registry; the legacy
+string-dispatch chains and shim declaration headers are gone, and
+`McpRegisterAllActionDecls()` is a no-op (all decls register with their call
+instances). Twenty families deleted their dispatch chains at classing;
+`manage_blueprint` is the sole exception — its four route dispatchers survive
+because `HandleBlueprintAction` has an external caller (EditorFunctionHandlers.cpp)
+and recurses into `HandleBlueprintGraphAction`/`HandleSCSAction`, so its classes
+delegate rather than extract. The module-split work that de-members the surviving
+handler bodies off the subsystem is the remaining follow-up.
 
 ## Bootstrap state (2026-07-04, complete)
 

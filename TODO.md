@@ -1035,6 +1035,24 @@ get_material_node_details, rebuild_material — MaterialAuthoring routed first)
 and two unrouted texture setters (set_texture_filter, set_texture_wrap);
 recover any from git — **2 hidden entries remain**.
 
+manage_blueprint's classing (2026-07-05) closed one — the ledger's sole
+BlueprintGraphHandlers entry, `get_nodes` (transport-dead graph node-dump:
+not in the action enum, no decl row, nothing manufactures the literal; the
+BlueprintGraph dispatcher's else-if never matched), deleted-at-classing as the
+family's ONLY handler-body edit (else-if :1790-1859 removed, chain re-spliced
+connect_pins -> break_pin_links, brace-balance net 0); advertise candidate
+parked for Aaron — recover from git. **1 hidden entry remains** (this [~]
+stays open for it — a non-family-tied name whose handler survives with other
+owners). With manage_blueprint — the twenty-first and final family — the
+**FMcpCall classing migration is COMPLETE: all 21 families are classed**, every
+string-dispatch chain and shim decl header is gone, and
+McpRegisterAllActionDecls() is now a no-op. manage_blueprint is the one
+delegation-wired family: its four route dispatchers survive (HandleBlueprintAction
+recurses into HandleBlueprintGraphAction/HandleSCSAction and is called externally
+by EditorFunctionHandlers.cpp), so its classes delegate rather than extract; the
+module split that de-members the surviving handler bodies off the subsystem is
+the remaining follow-up.
+
 ### [x] 2026-07-04g — Rip out `manage_tools` (Aaron leaning yes, 2026-07-04 discussion)
 **CLOSED 2026-07-04, Aaron confirmed ("let's do the rip out").** Deleted: tool definition,
 McpDynamicToolManager (+ per-session overlay machinery and both DropSession expiry hooks),

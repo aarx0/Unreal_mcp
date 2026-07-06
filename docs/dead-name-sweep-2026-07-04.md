@@ -287,7 +287,8 @@ Quick dispositions:
   DELETED at the animation_physics classing, recover from git),
   `export_asset` (~180-line generic exporter — DELETED at the system_control classing,
   recover from git), `batch_console_commands` (blocklist-aware),
-  `get_nodes` (graph node dump), `grant_ability` (DELETED at the manage_gas
+  `get_nodes` (graph node dump — DELETED at the manage_blueprint classing,
+  recover from git), `grant_ability` (DELETED at the manage_gas
   classing, recover from git), sun/skylight intensity pair,
   `set_ai_movement` (DELETED at the manage_ai classing, recover from git),
   `cleanup_invalid_datalayers`, `attach_render_target_to_volume`
@@ -390,8 +391,8 @@ EQ/Reverb/Delay entries).
 - **add_source_effect** arm @:1847 → HandleAddSourceEffect @:2900 - read chainPath/effectType/effectName with typed EQ/Reverb/Delay entries (the live block loads a preset by effectPresetPath or synthesizes one from effectType).
 - **create_submix_effect** arm @:1850 → HandleCreateSubmixEffect @:2980 - read effectName/outputPath/effectType and created a USoundEffectSubmixPreset (the live block creates a USoundSubmix from name/path/save).
 
-### BlueprintGraphHandlers
-- **get_nodes** @:1790 - Family: "list all nodes in a graph" node-dump. Body (lines 1790-1859) iterates TargetGraph->Nodes and, per node, emits nodeId/nodeName/nodeType/nodeTitle/comment/x/y plus a nested pins array (pinName/pinType/direction/pinSubType-for-object-class-struct/linkedTo as {nodeId,pinName} objects), wrapped …
+### BlueprintGraphHandlers (updated at the manage_blueprint classing, 2026-07-05)
+- **get_nodes** @:1790 - Family: "list all nodes in a graph" node-dump. Body (lines 1790-1859) iterates TargetGraph->Nodes and, per node, emits nodeId/nodeName/nodeType/nodeTitle/comment/x/y plus a nested pins array (pinName/pinType/direction/pinSubType-for-object-class-struct/linkedTo as {nodeId,pinName} objects), wrapped … Not in `manage_blueprint`'s action enum, no decl row, and nothing manufactures the literal `get_nodes` (grep confirms only the else-if condition + doc/comment mentions), so the BlueprintGraph dispatcher's else-if was transport-dead. Disposition: **deleted at the manage_blueprint classing (2026-07-05)** — the else-if branch (:1790-1859) removed and the chain re-spliced (connect_pins → break_pin_links, brace-balance net 0); the only handler-body edit of that classing. Advertise candidate parked for Aaron — recover from git.
 
 ### ConsoleCommandHandlers
 - **batch_console_commands** @:189 - Batch console-command family: a fully implemented handler (lines 189-334, ~146 lines) that reads a client-supplied JSON 'commands' array (accepting either raw strings or {command|cmd} objects), runs each command through the same ConsoleCommandSecurity::IsBlockedCommand blocklist used by the single-c…

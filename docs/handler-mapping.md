@@ -28,7 +28,7 @@ subdirectory is shown.
 | MCP tool | Routed families (in test order) → handler | Core / fallthrough handler |
 | :-- | :-- | :-- |
 | `manage_asset` | — (MaterialAuthoring/Texture stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAsset.cpp (dispatched from the call registry before the handler map; implementations are the existing AssetWorkflow/AssetQuery members for the 43 core actions, the `HandleMaterial*` members @ MaterialAuthoringHandlers.cpp for the 58 material-authoring actions, and the `HandleTexture*` members @ TextureHandlers.cpp for the 21 texture actions) |
-| `manage_blueprint` | CommonUi → `HandleCommonUiAction`; WidgetAuthoring → `HandleManageWidgetAuthoringAction`; BlueprintGraph → `HandleBlueprintGraphAction` | `HandleBlueprintAction` @ BlueprintHandlers.cpp |
+| `manage_blueprint` | — (CommonUi/WidgetAuthoring/BlueprintGraph stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp (dispatched from the call registry before the handler map; the one delegation-wired family — each class delegates to a SURVIVING route dispatcher with the retired lambda's exact args: Core → `HandleBlueprintAction` @ BlueprintHandlers.cpp, BlueprintGraph → `HandleBlueprintGraphAction` @ BlueprintGraphHandlers.cpp, WidgetAuthoring → `HandleManageWidgetAuthoringAction` @ WidgetAuthoringHandlers.cpp, CommonUi → `HandleCommonUiAction` @ CommonUIHandlers.cpp; the dispatchers survive because `HandleBlueprintAction` recurses into `HandleBlueprintGraphAction`/`HandleSCSAction` and is called externally by EditorFunctionHandlers.cpp) |
 | `build_environment` | — (Lighting/Splines stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp (dispatched from the call registry before the handler map; implementations are the `HandleEnvironment*` members @ EnvironmentHandlers.cpp for the 21 core actions, `HandleLighting*` @ LightingHandlers.cpp for the 12 lighting actions, and the `HandleSpline*` wrappers @ SplineHandlers.cpp for the 22 spline actions) |
 | `animation_physics` | — (AnimationAuthoring/Skeleton stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp (dispatched from the call registry before the handler map; implementations are the `HandleAnimPhys*` members @ AnimationHandlers.cpp for the 14 core actions, `HandleAnimAuthoring*` @ AnimationAuthoringHandlers.cpp for the 42 authoring actions, and the `HandleSkeleton*` members @ SkeletonHandlers.cpp for the 29 skeleton actions) |
 | `system_control` | — (Performance stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp (dispatched from the call registry before the handler map; implementations spread across PerformanceHandlers.cpp (`HandlePerf*`), SystemControlHandlers.cpp (`HandleSys*`), UiHandlers.cpp (`HandleUi*`), LogHandlers.cpp (`HandleLog*`), DebugHandlers.cpp, RenderHandlers.cpp — see note) |
@@ -76,9 +76,9 @@ Routed family lists:
 | :-- | :-- |
 | `MaterialAuthoring` | `HandleManageMaterialAuthoringAction` @ MaterialAuthoringHandlers.cpp |
 | `Texture` | `HandleManageTextureAction` @ TextureHandlers.cpp |
-| `BlueprintGraph` | `HandleBlueprintGraphAction` @ BlueprintGraphHandlers.cpp |
-| `WidgetAuthoring` | `HandleManageWidgetAuthoringAction` @ WidgetAuthoringHandlers.cpp |
-| `CommonUi` | `HandleCommonUiAction` @ CommonUIHandlers.cpp |
+| `BlueprintGraph` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp delegate to the surviving `HandleBlueprintGraphAction` @ BlueprintGraphHandlers.cpp (list retained for schema-union validation) |
+| `WidgetAuthoring` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp delegate to the surviving `HandleManageWidgetAuthoringAction` @ WidgetAuthoringHandlers.cpp (list retained for schema-union validation) |
+| `CommonUi` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp delegate to the surviving `HandleCommonUiAction` @ CommonUIHandlers.cpp (list retained for schema-union validation) |
 | `Lighting` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp delegate to `HandleLighting*` @ LightingHandlers.cpp (list retained for schema-union validation) |
 | `Splines` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp delegate to `HandleSpline*` wrappers @ SplineHandlers.cpp (list retained for schema-union validation) |
 | `AnimationAuthoring` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp delegate to `HandleAnimAuthoring*` @ AnimationAuthoringHandlers.cpp (list retained for schema-union validation) |
@@ -97,7 +97,7 @@ Core (fallthrough) lists:
 | List | Owner |
 | :-- | :-- |
 | `ManageAssetCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAsset.cpp (implementations are the existing AssetWorkflow/AssetQuery members) |
-| `ManageBlueprintCore` | `HandleBlueprintAction` @ BlueprintHandlers.cpp |
+| `ManageBlueprintCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp delegate to the surviving `HandleBlueprintAction` @ BlueprintHandlers.cpp |
 | `BuildEnvironmentCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp (implementations are the `HandleEnvironment*` members @ EnvironmentHandlers.cpp) |
 | `AnimationPhysicsCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp (implementations are the `HandleAnimPhys*` members @ AnimationHandlers.cpp) |
 | `SystemControlCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp (per-class delegation split in the note above) |
