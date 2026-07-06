@@ -5,6 +5,7 @@
 
 # -- declared in a tool schema, no handler read found --
 attributeSetPath
+boxExtent
 cuePath
 detectFriendly
 effectPath
@@ -16,7 +17,6 @@ output
 outputB
 outputG
 outputR
-targetPin
 
 # -- read from the request payload, not declared in any tool schema --
 activate
@@ -36,7 +36,6 @@ columns
 commands
 component_class
 contentColorAndOpacity
-dataLayerAssetPath
 endTime
 factor
 fixedAreaEnteringCost

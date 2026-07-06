@@ -1,173 +1,782 @@
 // LINT-TOOL: manage_level_structure
-// manage_level_structure as FMcpCall classes — thirteenth classed family
-// (docs/action-declarations.md). Each class co-locates the action's
-// declaration with its implementation. Run() delegates to the subsystem
-// member handlers — HandleLevelStructure* (LevelStructureHandlers.cpp) for
-// the 17 core actions, HandleVolume* (VolumeHandlers.cpp) for the 28 volume
-// actions — until the module split de-members those bodies.
+// LINT-SCHEMA-DERIVED
+// manage_level_structure as FMcpCall classes — adopts schema-from-decls
+// (docs/action-declarations.md). Each class AUTHORS its schema fragment in a
+// S_<Suffix>() function; the published facade schema folds those fragments and
+// GetDecl() derives the validation decl from the same fragment via
+// McpDeriveDecl(), so schema and decl are one source and cannot drift. Run()
+// delegates to the subsystem member handlers — HandleLevelStructure*
+// (LevelStructureHandlers.cpp) for the 17 core actions, HandleVolume*
+// (VolumeHandlers.cpp) for the 28 volume actions — until the module split
+// de-members those bodies.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
+#include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
-// so file-scope param arrays would collide across families otherwise.
+// so file-scope helpers would collide across families otherwise.
 namespace McpCalls::ManageLevelStructure
 {
 
-// ─── Param contracts ─────────────────────────────────────────────────────────
-// Ported from this family's retired shim declarations
-// (McpDecl_ManageLevelStructure.h) and re-verified against the free-function
-// bodies both retired dispatchers delegated to. One decl fix shipped at
-// classing: the shim's set_volume_extent row declared BOTH volumeExtent AND
-// extent required, but the handler resolves them as a one-of alias pair
-// (VolumeHelpers::GetVolumeExtent — first present spelling wins) and rejects
-// only when neither is present, so requiring both false-rejected every
-// payload the handler serves; both are optional now with the at-least-one
-// requirement handler-enforced. The volumeLocation/location and
-// volumeExtent/extent alias pairs the other volume rows carry as optional
-// are handler-true (same first-present-wins read, defaults otherwise).
+// ─── Schema fragments ────────────────────────────────────────────────────────
+// One S_<Suffix>() per action, authoring exactly the params that action reads
+// (the fold dedups shared params to one entry). Descriptions are the tool's
+// authored help text; McpDeriveDecl() reads the param kinds + required-set back
+// out of these to build the transport validation decl.
+//
+// Ported from this family's retired param arrays and re-verified against the
+// handler bodies. The alias pairs volumeLocation/location and
+// volumeExtent/extent (plus boxExtent on create_trigger_box) are one-of reads
+// (VolumeHelpers::GetVolumeExtent / GetVectorFromPayloadAliases — first present
+// spelling wins, default otherwise), so each is authored optional and the
+// requirement is handler-enforced. set_volume_extent's volumeExtent/extent are
+// likewise both optional with the at-least-one requirement handler-enforced.
+// Five params the previous flat facade never advertised are surfaced here
+// because the handlers do read them and the transport validator rejects any
+// undeclared payload key: dataLayerAssetPath, location, extent, boxExtent, path.
 
-inline const FMcpParamDecl P_CreateLevel[] = { { TEXT("levelName"), EMcpParamKind::String, true }, { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("bCreateWorldPartition"), EMcpParamKind::Bool, false }, { TEXT("bUseExternalActors"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("loadAfterCreate"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateSublevel[] = { { TEXT("sublevelName"), EMcpParamKind::String, true }, { TEXT("sublevelPath"), EMcpParamKind::String, false }, { TEXT("parentLevel"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureLevelStreaming[] = { { TEXT("levelName"), EMcpParamKind::String, true }, { TEXT("streamingMethod"), EMcpParamKind::String, false }, { TEXT("bShouldBeVisible"), EMcpParamKind::Bool, false }, { TEXT("bShouldBlockOnLoad"), EMcpParamKind::Bool, false }, { TEXT("bDisableDistanceStreaming"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetStreamingDistance[] = { { TEXT("levelName"), EMcpParamKind::String, true }, { TEXT("streamingDistance"), EMcpParamKind::Number, false }, { TEXT("streamingUsage"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("createVolume"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureLevelBounds[] = { { TEXT("bAutoCalculateBounds"), EMcpParamKind::Bool, false }, { TEXT("boundsOrigin"), EMcpParamKind::Object, false }, { TEXT("boundsExtent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_EnableWorldPartition[] = { { TEXT("bEnableWorldPartition"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureGridSize[] = { { TEXT("gridName"), EMcpParamKind::String, false }, { TEXT("gridCellSize"), EMcpParamKind::Number, false }, { TEXT("loadingRange"), EMcpParamKind::Number, false }, { TEXT("bBlockOnSlowStreaming"), EMcpParamKind::Bool, false }, { TEXT("priority"), EMcpParamKind::Number, false }, { TEXT("createIfMissing"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateDataLayer[] = { { TEXT("dataLayerName"), EMcpParamKind::String, true }, { TEXT("dataLayerAssetPath"), EMcpParamKind::String, false }, { TEXT("bIsInitiallyVisible"), EMcpParamKind::Bool, false }, { TEXT("bIsInitiallyLoaded"), EMcpParamKind::Bool, false }, { TEXT("dataLayerType"), EMcpParamKind::String, false }, { TEXT("bIsPrivate"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AssignActorToDataLayer[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("dataLayerName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ConfigureHlodLayer[] = { { TEXT("hlodLayerName"), EMcpParamKind::String, true }, { TEXT("hlodLayerPath"), EMcpParamKind::String, false }, { TEXT("bIsSpatiallyLoaded"), EMcpParamKind::Bool, false }, { TEXT("cellSize"), EMcpParamKind::Number, false }, { TEXT("loadingDistance"), EMcpParamKind::Number, false }, { TEXT("layerType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateMinimapVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_AddLevelBlueprintNode[] = { { TEXT("nodeClass"), EMcpParamKind::String, true }, { TEXT("nodeName"), EMcpParamKind::String, false }, { TEXT("nodePosition"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_ConnectLevelBlueprintNodes[] = { { TEXT("sourceNodeName"), EMcpParamKind::String, true }, { TEXT("sourcePinName"), EMcpParamKind::String, false }, { TEXT("targetNodeName"), EMcpParamKind::String, true }, { TEXT("targetPinName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateLevelInstance[] = { { TEXT("levelInstanceName"), EMcpParamKind::String, false }, { TEXT("levelAssetPath"), EMcpParamKind::String, true }, { TEXT("instanceLocation"), EMcpParamKind::Object, false }, { TEXT("instanceRotation"), EMcpParamKind::Object, false }, { TEXT("instanceScale"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_CreatePackedLevelActor[] = { { TEXT("packedLevelName"), EMcpParamKind::String, false }, { TEXT("levelAssetPath"), EMcpParamKind::String, false }, { TEXT("instanceLocation"), EMcpParamKind::Object, false }, { TEXT("instanceRotation"), EMcpParamKind::Object, false }, { TEXT("bPackBlueprints"), EMcpParamKind::Bool, false }, { TEXT("bPackStaticMeshes"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateTriggerVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_CreateTriggerBox[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("boxExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_CreateTriggerSphere[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("sphereRadius"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_CreateTriggerCapsule[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("capsuleRadius"), EMcpParamKind::Number, false }, { TEXT("capsuleHalfHeight"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_CreateBlockingVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_CreateKillZVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_CreatePainCausingVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false }, { TEXT("bPainCausing"), EMcpParamKind::Bool, false }, { TEXT("damagePerSec"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_CreatePhysicsVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false }, { TEXT("bWaterVolume"), EMcpParamKind::Bool, false }, { TEXT("fluidFriction"), EMcpParamKind::Number, false }, { TEXT("terminalVelocity"), EMcpParamKind::Number, false }, { TEXT("priority"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_CreateAudioVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false }, { TEXT("bEnabled"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateReverbVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false }, { TEXT("bEnabled"), EMcpParamKind::Bool, false }, { TEXT("reverbVolume"), EMcpParamKind::Number, false }, { TEXT("fadeTime"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_CreatePostProcessVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false }, { TEXT("priority"), EMcpParamKind::Number, false }, { TEXT("blendRadius"), EMcpParamKind::Number, false }, { TEXT("blendWeight"), EMcpParamKind::Number, false }, { TEXT("enabled"), EMcpParamKind::Bool, false }, { TEXT("bUnbound"), EMcpParamKind::Bool, false }, { TEXT("postProcessSettings"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_CreateCullDistanceVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false }, { TEXT("cullDistances"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_CreatePrecomputedVisibilityVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_CreateLightmassImportanceVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_CreateNavMeshBoundsVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_CreateNavModifierVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_CreateCameraBlockingVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_SetVolumeExtent[] = { { TEXT("volumeName"), EMcpParamKind::String, true }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_SetVolumeProperties[] = { { TEXT("volumeName"), EMcpParamKind::String, true }, { TEXT("bWaterVolume"), EMcpParamKind::Bool, false }, { TEXT("fluidFriction"), EMcpParamKind::Number, false }, { TEXT("terminalVelocity"), EMcpParamKind::Number, false }, { TEXT("priority"), EMcpParamKind::Number, false }, { TEXT("bPainCausing"), EMcpParamKind::Bool, false }, { TEXT("damagePerSec"), EMcpParamKind::Number, false }, { TEXT("bEnabled"), EMcpParamKind::Bool, false }, { TEXT("reverbVolume"), EMcpParamKind::Number, false }, { TEXT("fadeTime"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetVolumeBounds[] = { { TEXT("volumeName"), EMcpParamKind::String, true }, { TEXT("bounds"), EMcpParamKind::Array, false }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false }, { TEXT("volumeLocation"), EMcpParamKind::Object, false }, { TEXT("location"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_RemoveVolume[] = { { TEXT("volumeName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_GetVolumesInfo[] = { { TEXT("path"), EMcpParamKind::String, false }, { TEXT("filter"), EMcpParamKind::String, false }, { TEXT("volumeType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddTriggerVolume[] = { { TEXT("actorPath"), EMcpParamKind::String, true }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_AddBlockingVolume[] = { { TEXT("actorPath"), EMcpParamKind::String, true }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_AddKillZVolume[] = { { TEXT("actorPath"), EMcpParamKind::String, true }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false }, { TEXT("killZHeight"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_AddPhysicsVolume[] = { { TEXT("actorPath"), EMcpParamKind::String, true }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false }, { TEXT("bWaterVolume"), EMcpParamKind::Bool, false }, { TEXT("fluidFriction"), EMcpParamKind::Number, false }, { TEXT("terminalVelocity"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_AddCullDistanceVolume[] = { { TEXT("actorPath"), EMcpParamKind::String, true }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false }, { TEXT("cullDistances"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_AddPostProcessVolume[] = { { TEXT("actorPath"), EMcpParamKind::String, true }, { TEXT("volumeExtent"), EMcpParamKind::Object, false }, { TEXT("extent"), EMcpParamKind::Object, false }, { TEXT("priority"), EMcpParamKind::Number, false }, { TEXT("blendRadius"), EMcpParamKind::Number, false }, { TEXT("blendWeight"), EMcpParamKind::Number, false }, { TEXT("enabled"), EMcpParamKind::Bool, false }, { TEXT("bUnbound"), EMcpParamKind::Bool, false } };
+static void S_CreateLevel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelName"), TEXT(""))
+	 .String(TEXT("levelPath"), TEXT("Level asset path."))
+	 .Bool(TEXT("bCreateWorldPartition"), TEXT("Create with World Partition enabled."))
+	 .Bool(TEXT("bUseExternalActors"), TEXT("Enable One File Per Actor (OFPA/External Actors) for Data Layer "
+		"compatibility. Automatically enabled when bCreateWorldPartition is true."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Bool(TEXT("loadAfterCreate"), TEXT("create_level: open the new level in the editor after creation."))
+	 .Required({TEXT("levelName")});
+}
+
+static void S_CreateSublevel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("sublevelName"), TEXT("Name of the sublevel."))
+	 .String(TEXT("sublevelPath"), TEXT("Level asset path."))
+	 .String(TEXT("parentLevel"), TEXT("Parent level path."))
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("sublevelName")});
+}
+
+static void S_ConfigureLevelStreaming(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelName"), TEXT(""))
+	 .StringEnum(TEXT("streamingMethod"), {
+		TEXT("Blueprint"), TEXT("AlwaysLoaded"), TEXT("Disabled")
+	 }, TEXT("Level streaming method."))
+	 .Bool(TEXT("bShouldBeVisible"), TEXT("Level should be visible when loaded."))
+	 .Bool(TEXT("bShouldBlockOnLoad"), TEXT("Block game until level is loaded."))
+	 .Bool(TEXT("bDisableDistanceStreaming"), TEXT("Disable distance-based streaming."))
+	 .Required({TEXT("levelName")});
+}
+
+static void S_SetStreamingDistance(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelName"), TEXT(""))
+	 .Number(TEXT("streamingDistance"), TEXT("Distance/radius for streaming volume "
+		"(creates ALevelStreamingVolume)."))
+	 .StringEnum(TEXT("streamingUsage"), {
+		TEXT("Loading"), TEXT("LoadingAndVisibility"), TEXT("VisibilityBlockingOnLoad"),
+		TEXT("BlockingOnLoad"), TEXT("LoadingNotVisible")
+	 }, TEXT("Streaming volume usage mode (default: LoadingAndVisibility)."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Bool(TEXT("createVolume"), TEXT("Create a streaming volume (true) or just report existing "
+		"volumes (false). Default: true."))
+	 .Required({TEXT("levelName")});
+}
+
+static void S_ConfigureLevelBounds(FMcpSchemaBuilder& B)
+{
+	B.Bool(TEXT("bAutoCalculateBounds"), TEXT("Auto-calculate bounds from content."))
+	 .Object(TEXT("boundsOrigin"), TEXT("Origin of level bounds."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("boundsExtent"), TEXT("Extent of level bounds."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); });
+}
+
+static void S_EnableWorldPartition(FMcpSchemaBuilder& B)
+{
+	B.Bool(TEXT("bEnableWorldPartition"), TEXT("Enable World Partition for level."));
+}
+
+static void S_ConfigureGridSize(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("gridName"), TEXT("configure_grid_size: name of the World Partition runtime grid "
+		"(default grid if omitted)."))
+	 .Number(TEXT("gridCellSize"), TEXT("World Partition grid cell size."))
+	 .Number(TEXT("loadingRange"), TEXT("Loading range for grid cells."))
+	 .Bool(TEXT("bBlockOnSlowStreaming"), TEXT("configure_grid_size: block on slow streaming for this grid."))
+	 .Number(TEXT("priority"), TEXT("configure_grid_size: grid priority. Also create_physics_volume/"
+		"set_volume_properties (physics volume priority) and "
+		"create_post_process_volume/add_post_process_volume (blend priority)."))
+	 .Bool(TEXT("createIfMissing"), TEXT("configure_grid_size: create the named grid if it doesn't exist "
+		"(default: true)."));
+}
+
+static void S_CreateDataLayer(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("dataLayerName"), TEXT("Name of the data layer."))
+	 .String(TEXT("dataLayerAssetPath"), TEXT("create_data_layer: data layer asset directory "
+		"(default: /Game/DataLayers)."))
+	 .Bool(TEXT("bIsInitiallyVisible"), TEXT("Data layer initially visible."))
+	 .Bool(TEXT("bIsInitiallyLoaded"), TEXT("Data layer initially loaded."))
+	 .StringEnum(TEXT("dataLayerType"), {
+		TEXT("Runtime"), TEXT("Editor")
+	 }, TEXT("Type of data layer."))
+	 .Bool(TEXT("bIsPrivate"), TEXT("create_data_layer: mark the data layer private."))
+	 .Required({TEXT("dataLayerName")});
+}
+
+static void S_AssignActorToDataLayer(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("dataLayerName"), TEXT("Name of the data layer."))
+	 .Required({TEXT("actorName"), TEXT("dataLayerName")});
+}
+
+static void S_ConfigureHlodLayer(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("hlodLayerName"), TEXT("Name of the HLOD layer."))
+	 .String(TEXT("hlodLayerPath"), TEXT("Path to HLOD layer."))
+	 .Bool(TEXT("bIsSpatiallyLoaded"), TEXT("HLOD is spatially loaded."))
+	 .Number(TEXT("cellSize"), TEXT("HLOD cell size."))
+	 .Number(TEXT("loadingDistance"), TEXT("HLOD loading distance."))
+	 .StringEnum(TEXT("layerType"), {
+		TEXT("MeshMerge"), TEXT("Instancing"), TEXT("MeshSimplify"), TEXT("MeshApproximate")
+	 }, TEXT("configure_hlod_layer: HLOD generation method (default: MeshMerge). "
+		"Legacy aliases SimplifiedMesh/ApproximatedMesh are also accepted."))
+	 .Required({TEXT("hlodLayerName")});
+}
+
+static void S_CreateMinimapVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); });
+}
+
+static void S_OpenLevelBlueprint(FMcpSchemaBuilder&) {}
+
+static void S_AddLevelBlueprintNode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("nodeClass"), TEXT("Node class path."))
+	 .String(TEXT("nodeName"), TEXT("Name of the node."))
+	 .Object(TEXT("nodePosition"), TEXT("Position of node in graph."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")); })
+	 .Required({TEXT("nodeClass")});
+}
+
+static void S_ConnectLevelBlueprintNodes(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("sourceNodeName"), TEXT("Source node name."))
+	 .String(TEXT("sourcePinName"), TEXT("Name of the source pin."))
+	 .String(TEXT("targetNodeName"), TEXT("Target node name."))
+	 .String(TEXT("targetPinName"), TEXT("Name of the target pin."))
+	 .Required({TEXT("sourceNodeName"), TEXT("targetNodeName")});
+}
+
+static void S_CreateLevelInstance(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelInstanceName"), TEXT("Level instance name."))
+	 .String(TEXT("levelAssetPath"), TEXT("Path to the level asset for instancing."))
+	 .Object(TEXT("instanceLocation"), TEXT("Location of the level instance."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("instanceRotation"), TEXT("Rotation of the level instance."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("instanceScale"), TEXT("Scale of the level instance."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Required({TEXT("levelAssetPath")});
+}
+
+static void S_CreatePackedLevelActor(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("packedLevelName"), TEXT("Name for the packed level actor."))
+	 .String(TEXT("levelAssetPath"), TEXT("Path to the level asset for instancing."))
+	 .Object(TEXT("instanceLocation"), TEXT("Location of the level instance."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("instanceRotation"), TEXT("Rotation of the level instance."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Bool(TEXT("bPackBlueprints"), TEXT("Include blueprints in packed level."))
+	 .Bool(TEXT("bPackStaticMeshes"), TEXT("Include static meshes in packed level."));
+}
+
+static void S_GetInfo(FMcpSchemaBuilder&) {}
+
+static void S_CreateTriggerVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); });
+}
+
+static void S_CreateTriggerBox(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("boxExtent"), TEXT("create_trigger_box: box extent alias for volumeExtent."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); });
+}
+
+static void S_CreateTriggerSphere(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Number(TEXT("sphereRadius"), TEXT("create_trigger_sphere: sphere radius."));
+}
+
+static void S_CreateTriggerCapsule(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Number(TEXT("capsuleRadius"), TEXT("create_trigger_capsule: capsule radius."))
+	 .Number(TEXT("capsuleHalfHeight"), TEXT("create_trigger_capsule: capsule half height."));
+}
+
+static void S_CreateBlockingVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); });
+}
+
+static void S_CreateKillZVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); });
+}
+
+static void S_CreatePainCausingVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Bool(TEXT("bPainCausing"), TEXT("create_pain_causing_volume/set_volume_properties: enable "
+		"damage-over-time."))
+	 .Number(TEXT("damagePerSec"), TEXT("create_pain_causing_volume/set_volume_properties: damage "
+		"per second."));
+}
+
+static void S_CreatePhysicsVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Bool(TEXT("bWaterVolume"), TEXT("create_physics_volume/add_physics_volume/"
+		"set_volume_properties: treat as water."))
+	 .Number(TEXT("fluidFriction"), TEXT("create_physics_volume/add_physics_volume/"
+		"set_volume_properties: fluid friction."))
+	 .Number(TEXT("terminalVelocity"), TEXT("create_physics_volume/add_physics_volume/"
+		"set_volume_properties: terminal velocity."))
+	 .Number(TEXT("priority"), TEXT("configure_grid_size: grid priority. Also create_physics_volume/"
+		"set_volume_properties (physics volume priority) and "
+		"create_post_process_volume/add_post_process_volume (blend priority)."));
+}
+
+static void S_CreateAudioVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Bool(TEXT("bEnabled"), TEXT("create_audio_volume/create_reverb_volume/"
+		"set_volume_properties: enable the volume's effect."));
+}
+
+static void S_CreateReverbVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Bool(TEXT("bEnabled"), TEXT("create_audio_volume/create_reverb_volume/"
+		"set_volume_properties: enable the volume's effect."))
+	 .Number(TEXT("reverbVolume"), TEXT("create_reverb_volume/set_volume_properties: reverb wet "
+		"level (0-1)."))
+	 .Number(TEXT("fadeTime"), TEXT("create_reverb_volume/set_volume_properties: reverb fade "
+		"time in seconds."));
+}
+
+static void S_CreatePostProcessVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Number(TEXT("priority"), TEXT("configure_grid_size: grid priority. Also create_physics_volume/"
+		"set_volume_properties (physics volume priority) and "
+		"create_post_process_volume/add_post_process_volume (blend priority)."))
+	 .Number(TEXT("blendRadius"), TEXT("create_post_process_volume/add_post_process_volume: "
+		"blend radius."))
+	 .Number(TEXT("blendWeight"), TEXT("create_post_process_volume/add_post_process_volume: "
+		"blend weight."))
+	 .Bool(TEXT("enabled"), TEXT("create_post_process_volume/add_post_process_volume: "
+		"whether the volume is enabled."))
+	 .Bool(TEXT("bUnbound"), TEXT("create_post_process_volume/add_post_process_volume: "
+		"affect the whole level regardless of extent."))
+	 .FreeformObject(TEXT("postProcessSettings"), TEXT("create_post_process_volume: post-process override "
+		"key/values (bloomEnabled, exposureBias, vignetteIntensity, saturation, "
+		"contrast, gamma)."));
+}
+
+static void S_CreateCullDistanceVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .ArrayOfObjects(TEXT("cullDistances"), TEXT("create_cull_distance_volume/add_cull_distance_volume: "
+		"size/cullDistance pairs, e.g. [{\"size\": 100, \"cullDistance\": 5000}]."));
+}
+
+static void S_CreatePrecomputedVisibilityVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); });
+}
+
+static void S_CreateLightmassImportanceVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); });
+}
+
+static void S_CreateNavMeshBoundsVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); });
+}
+
+static void S_CreateNavModifierVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); });
+}
+
+static void S_CreateCameraBlockingVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); });
+}
+
+static void S_SetVolumeExtent(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Required({TEXT("volumeName")});
+}
+
+static void S_SetVolumeProperties(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Bool(TEXT("bWaterVolume"), TEXT("create_physics_volume/add_physics_volume/"
+		"set_volume_properties: treat as water."))
+	 .Number(TEXT("fluidFriction"), TEXT("create_physics_volume/add_physics_volume/"
+		"set_volume_properties: fluid friction."))
+	 .Number(TEXT("terminalVelocity"), TEXT("create_physics_volume/add_physics_volume/"
+		"set_volume_properties: terminal velocity."))
+	 .Number(TEXT("priority"), TEXT("configure_grid_size: grid priority. Also create_physics_volume/"
+		"set_volume_properties (physics volume priority) and "
+		"create_post_process_volume/add_post_process_volume (blend priority)."))
+	 .Bool(TEXT("bPainCausing"), TEXT("create_pain_causing_volume/set_volume_properties: enable "
+		"damage-over-time."))
+	 .Number(TEXT("damagePerSec"), TEXT("create_pain_causing_volume/set_volume_properties: damage "
+		"per second."))
+	 .Bool(TEXT("bEnabled"), TEXT("create_audio_volume/create_reverb_volume/"
+		"set_volume_properties: enable the volume's effect."))
+	 .Number(TEXT("reverbVolume"), TEXT("create_reverb_volume/set_volume_properties: reverb wet "
+		"level (0-1)."))
+	 .Number(TEXT("fadeTime"), TEXT("create_reverb_volume/set_volume_properties: reverb fade "
+		"time in seconds."))
+	 .Required({TEXT("volumeName")});
+}
+
+static void S_SetVolumeBounds(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Array(TEXT("bounds"), TEXT("Volume bounds as [minX, minY, minZ, maxX, maxY, maxZ]; "
+		"set_volume_bounds alternative to volumeLocation + volumeExtent."), TEXT("number"))
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
+		"(create_*_volume actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Required({TEXT("volumeName")});
+}
+
+static void S_RemoveVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
+	 .Required({TEXT("volumeName")});
+}
+
+static void S_GetVolumesInfo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("path"), TEXT("get_volumes_info: unused — the handler rejects a path param "
+		"(this action does not scope by path)."))
+	 .String(TEXT("filter"), TEXT("get_volumes_info: filter volumes by actor label substring."))
+	 .String(TEXT("volumeType"), TEXT("get_volumes_info: filter volumes by class name substring."));
+}
+
+static void S_AddTriggerVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorPath"), TEXT("Path to actor."))
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Required({TEXT("actorPath")});
+}
+
+static void S_AddBlockingVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorPath"), TEXT("Path to actor."))
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Required({TEXT("actorPath")});
+}
+
+static void S_AddKillZVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorPath"), TEXT("Path to actor."))
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Number(TEXT("killZHeight"), TEXT("add_kill_z_volume: Z height for the kill volume."))
+	 .Required({TEXT("actorPath")});
+}
+
+static void S_AddPhysicsVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorPath"), TEXT("Path to actor."))
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Bool(TEXT("bWaterVolume"), TEXT("create_physics_volume/add_physics_volume/"
+		"set_volume_properties: treat as water."))
+	 .Number(TEXT("fluidFriction"), TEXT("create_physics_volume/add_physics_volume/"
+		"set_volume_properties: fluid friction."))
+	 .Number(TEXT("terminalVelocity"), TEXT("create_physics_volume/add_physics_volume/"
+		"set_volume_properties: terminal velocity."))
+	 .Required({TEXT("actorPath")});
+}
+
+static void S_AddCullDistanceVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorPath"), TEXT("Path to actor."))
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .ArrayOfObjects(TEXT("cullDistances"), TEXT("create_cull_distance_volume/add_cull_distance_volume: "
+		"size/cullDistance pairs, e.g. [{\"size\": 100, \"cullDistance\": 5000}]."))
+	 .Required({TEXT("actorPath")});
+}
+
+static void S_AddPostProcessVolume(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorPath"), TEXT("Path to actor."))
+	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("extent"), TEXT("Volume extent alias for volumeExtent "
+		"(create_*_volume / set_volume_* actions; first present wins)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Number(TEXT("priority"), TEXT("configure_grid_size: grid priority. Also create_physics_volume/"
+		"set_volume_properties (physics volume priority) and "
+		"create_post_process_volume/add_post_process_volume (blend priority)."))
+	 .Number(TEXT("blendRadius"), TEXT("create_post_process_volume/add_post_process_volume: "
+		"blend radius."))
+	 .Number(TEXT("blendWeight"), TEXT("create_post_process_volume/add_post_process_volume: "
+		"blend weight."))
+	 .Bool(TEXT("enabled"), TEXT("create_post_process_volume/add_post_process_volume: "
+		"whether the volume is enabled."))
+	 .Bool(TEXT("bUnbound"), TEXT("create_post_process_volume/add_post_process_volume: "
+		"affect the whole level regardless of extent."))
+	 .Required({TEXT("actorPath")});
+}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
-// RequiresEditor is baked into every row: both implementation TUs are
-// whole-editor-gated, and the members answer the retired chains' editor-build
-// stubs in non-editor builds (the two post-process members also answer the
-// UNSUPPORTED_VERSION stub when MCP_HAS_POSTPROCESS_VOLUME is 0). Mutating on
-// all writers — including open_level_blueprint, which lazily creates the
-// Level Script Blueprint — the only readers are get_info
-// and get_volumes_info.
+// Flags are authored per action: RequiresEditor is baked into every row (both
+// implementation TUs are whole-editor-gated, and the members answer the retired
+// chains' editor-build stubs in non-editor builds — the two post-process members
+// also answer the UNSUPPORTED_VERSION stub when MCP_HAS_POSTPROCESS_VOLUME is 0).
+// Mutating on all writers — including open_level_blueprint, which lazily creates
+// the Level Script Blueprint — the only readers are get_info and get_volumes_info.
 
-#define MCP_LS_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)            \
-class FMcpCall_ManageLevelStructure_##ClassSuffix final : public FMcpCall                      \
-{                                                                                              \
-	const FMcpCallDecl& GetDecl() const override                                               \
-	{                                                                                          \
-		static const FMcpCallDecl Decl{ TEXT("manage_level_structure"), TEXT(ActionLiteral),   \
-			ParamsArray, EMcpCallFlags::RequiresEditor | (ExtraFlags) };                       \
-		return Decl;                                                                           \
-	}                                                                                          \
-	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                       \
-	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override       \
-	{                                                                                          \
-		return S.HandlerFn(RequestId, Payload, Socket);                                        \
-	}                                                                                          \
+#define MCP_LS_CALL(ClassSuffix, ActionLiteral, HandlerFn, ExtraFlags)                     \
+class FMcpCall_ManageLevelStructure_##ClassSuffix final : public FMcpCall                  \
+{                                                                                         \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
+	const FMcpCallDecl& GetDecl() const override                                          \
+	{                                                                                     \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_level_structure"),      \
+			TEXT(ActionLiteral), EMcpCallFlags::RequiresEditor | (ExtraFlags),           \
+			&S_##ClassSuffix);                                                            \
+		return D;                                                                         \
+	}                                                                                     \
+	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
+	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
+	{                                                                                     \
+		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+	}                                                                                     \
 };
 
 // Levels
-MCP_LS_CALL(CreateLevel, "create_level", P_CreateLevel, HandleLevelStructureCreateLevel, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateSublevel, "create_sublevel", P_CreateSublevel, HandleLevelStructureCreateSublevel, EMcpCallFlags::Mutating)
-MCP_LS_CALL(ConfigureLevelStreaming, "configure_level_streaming", P_ConfigureLevelStreaming, HandleLevelStructureConfigureLevelStreaming, EMcpCallFlags::Mutating)
-MCP_LS_CALL(SetStreamingDistance, "set_streaming_distance", P_SetStreamingDistance, HandleLevelStructureSetStreamingDistance, EMcpCallFlags::Mutating)
-MCP_LS_CALL(ConfigureLevelBounds, "configure_level_bounds", P_ConfigureLevelBounds, HandleLevelStructureConfigureLevelBounds, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateLevel, "create_level", HandleLevelStructureCreateLevel, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateSublevel, "create_sublevel", HandleLevelStructureCreateSublevel, EMcpCallFlags::Mutating)
+MCP_LS_CALL(ConfigureLevelStreaming, "configure_level_streaming", HandleLevelStructureConfigureLevelStreaming, EMcpCallFlags::Mutating)
+MCP_LS_CALL(SetStreamingDistance, "set_streaming_distance", HandleLevelStructureSetStreamingDistance, EMcpCallFlags::Mutating)
+MCP_LS_CALL(ConfigureLevelBounds, "configure_level_bounds", HandleLevelStructureConfigureLevelBounds, EMcpCallFlags::Mutating)
 
 // World Partition
-MCP_LS_CALL(EnableWorldPartition, "enable_world_partition", P_EnableWorldPartition, HandleLevelStructureEnableWorldPartition, EMcpCallFlags::Mutating)
-MCP_LS_CALL(ConfigureGridSize, "configure_grid_size", P_ConfigureGridSize, HandleLevelStructureConfigureGridSize, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateDataLayer, "create_data_layer", P_CreateDataLayer, HandleLevelStructureCreateDataLayer, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AssignActorToDataLayer, "assign_actor_to_data_layer", P_AssignActorToDataLayer, HandleLevelStructureAssignActorToDataLayer, EMcpCallFlags::Mutating)
-MCP_LS_CALL(ConfigureHlodLayer, "configure_hlod_layer", P_ConfigureHlodLayer, HandleLevelStructureConfigureHlodLayer, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateMinimapVolume, "create_minimap_volume", P_CreateMinimapVolume, HandleLevelStructureCreateMinimapVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(EnableWorldPartition, "enable_world_partition", HandleLevelStructureEnableWorldPartition, EMcpCallFlags::Mutating)
+MCP_LS_CALL(ConfigureGridSize, "configure_grid_size", HandleLevelStructureConfigureGridSize, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateDataLayer, "create_data_layer", HandleLevelStructureCreateDataLayer, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AssignActorToDataLayer, "assign_actor_to_data_layer", HandleLevelStructureAssignActorToDataLayer, EMcpCallFlags::Mutating)
+MCP_LS_CALL(ConfigureHlodLayer, "configure_hlod_layer", HandleLevelStructureConfigureHlodLayer, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateMinimapVolume, "create_minimap_volume", HandleLevelStructureCreateMinimapVolume, EMcpCallFlags::Mutating)
 
 // Level Blueprint
-MCP_LS_CALL(OpenLevelBlueprint, "open_level_blueprint", {}, HandleLevelStructureOpenLevelBlueprint, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AddLevelBlueprintNode, "add_level_blueprint_node", P_AddLevelBlueprintNode, HandleLevelStructureAddLevelBlueprintNode, EMcpCallFlags::Mutating)
-MCP_LS_CALL(ConnectLevelBlueprintNodes, "connect_level_blueprint_nodes", P_ConnectLevelBlueprintNodes, HandleLevelStructureConnectLevelBlueprintNodes, EMcpCallFlags::Mutating)
+MCP_LS_CALL(OpenLevelBlueprint, "open_level_blueprint", HandleLevelStructureOpenLevelBlueprint, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddLevelBlueprintNode, "add_level_blueprint_node", HandleLevelStructureAddLevelBlueprintNode, EMcpCallFlags::Mutating)
+MCP_LS_CALL(ConnectLevelBlueprintNodes, "connect_level_blueprint_nodes", HandleLevelStructureConnectLevelBlueprintNodes, EMcpCallFlags::Mutating)
 
 // Level Instances
-MCP_LS_CALL(CreateLevelInstance, "create_level_instance", P_CreateLevelInstance, HandleLevelStructureCreateLevelInstance, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreatePackedLevelActor, "create_packed_level_actor", P_CreatePackedLevelActor, HandleLevelStructureCreatePackedLevelActor, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateLevelInstance, "create_level_instance", HandleLevelStructureCreateLevelInstance, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreatePackedLevelActor, "create_packed_level_actor", HandleLevelStructureCreatePackedLevelActor, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_LS_CALL(GetInfo, "get_info", {}, HandleLevelStructureGetInfo, EMcpCallFlags::None)
+MCP_LS_CALL(GetInfo, "get_info", HandleLevelStructureGetInfo, EMcpCallFlags::None)
 
 // Trigger Volumes
-MCP_LS_CALL(CreateTriggerVolume, "create_trigger_volume", P_CreateTriggerVolume, HandleVolumeCreateTriggerVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateTriggerBox, "create_trigger_box", P_CreateTriggerBox, HandleVolumeCreateTriggerBox, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateTriggerSphere, "create_trigger_sphere", P_CreateTriggerSphere, HandleVolumeCreateTriggerSphere, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateTriggerCapsule, "create_trigger_capsule", P_CreateTriggerCapsule, HandleVolumeCreateTriggerCapsule, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateTriggerVolume, "create_trigger_volume", HandleVolumeCreateTriggerVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateTriggerBox, "create_trigger_box", HandleVolumeCreateTriggerBox, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateTriggerSphere, "create_trigger_sphere", HandleVolumeCreateTriggerSphere, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateTriggerCapsule, "create_trigger_capsule", HandleVolumeCreateTriggerCapsule, EMcpCallFlags::Mutating)
 
 // Gameplay Volumes
-MCP_LS_CALL(CreateBlockingVolume, "create_blocking_volume", P_CreateBlockingVolume, HandleVolumeCreateBlockingVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateKillZVolume, "create_kill_z_volume", P_CreateKillZVolume, HandleVolumeCreateKillZVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreatePainCausingVolume, "create_pain_causing_volume", P_CreatePainCausingVolume, HandleVolumeCreatePainCausingVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreatePhysicsVolume, "create_physics_volume", P_CreatePhysicsVolume, HandleVolumeCreatePhysicsVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateBlockingVolume, "create_blocking_volume", HandleVolumeCreateBlockingVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateKillZVolume, "create_kill_z_volume", HandleVolumeCreateKillZVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreatePainCausingVolume, "create_pain_causing_volume", HandleVolumeCreatePainCausingVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreatePhysicsVolume, "create_physics_volume", HandleVolumeCreatePhysicsVolume, EMcpCallFlags::Mutating)
 
 // Audio Volumes
-MCP_LS_CALL(CreateAudioVolume, "create_audio_volume", P_CreateAudioVolume, HandleVolumeCreateAudioVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateReverbVolume, "create_reverb_volume", P_CreateReverbVolume, HandleVolumeCreateReverbVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateAudioVolume, "create_audio_volume", HandleVolumeCreateAudioVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateReverbVolume, "create_reverb_volume", HandleVolumeCreateReverbVolume, EMcpCallFlags::Mutating)
 
 // Rendering Volumes
-MCP_LS_CALL(CreatePostProcessVolume, "create_post_process_volume", P_CreatePostProcessVolume, HandleVolumeCreatePostProcessVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateCullDistanceVolume, "create_cull_distance_volume", P_CreateCullDistanceVolume, HandleVolumeCreateCullDistanceVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreatePrecomputedVisibilityVolume, "create_precomputed_visibility_volume", P_CreatePrecomputedVisibilityVolume, HandleVolumeCreatePrecomputedVisibilityVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateLightmassImportanceVolume, "create_lightmass_importance_volume", P_CreateLightmassImportanceVolume, HandleVolumeCreateLightmassImportanceVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreatePostProcessVolume, "create_post_process_volume", HandleVolumeCreatePostProcessVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateCullDistanceVolume, "create_cull_distance_volume", HandleVolumeCreateCullDistanceVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreatePrecomputedVisibilityVolume, "create_precomputed_visibility_volume", HandleVolumeCreatePrecomputedVisibilityVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateLightmassImportanceVolume, "create_lightmass_importance_volume", HandleVolumeCreateLightmassImportanceVolume, EMcpCallFlags::Mutating)
 
 // Navigation Volumes
-MCP_LS_CALL(CreateNavMeshBoundsVolume, "create_nav_mesh_bounds_volume", P_CreateNavMeshBoundsVolume, HandleVolumeCreateNavMeshBoundsVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateNavModifierVolume, "create_nav_modifier_volume", P_CreateNavModifierVolume, HandleVolumeCreateNavModifierVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateCameraBlockingVolume, "create_camera_blocking_volume", P_CreateCameraBlockingVolume, HandleVolumeCreateCameraBlockingVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateNavMeshBoundsVolume, "create_nav_mesh_bounds_volume", HandleVolumeCreateNavMeshBoundsVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateNavModifierVolume, "create_nav_modifier_volume", HandleVolumeCreateNavModifierVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateCameraBlockingVolume, "create_camera_blocking_volume", HandleVolumeCreateCameraBlockingVolume, EMcpCallFlags::Mutating)
 
 // Volume Configuration
-MCP_LS_CALL(SetVolumeExtent, "set_volume_extent", P_SetVolumeExtent, HandleVolumeSetVolumeExtent, EMcpCallFlags::Mutating)
-MCP_LS_CALL(SetVolumeProperties, "set_volume_properties", P_SetVolumeProperties, HandleVolumeSetVolumeProperties, EMcpCallFlags::Mutating)
-MCP_LS_CALL(SetVolumeBounds, "set_volume_bounds", P_SetVolumeBounds, HandleVolumeSetVolumeBounds, EMcpCallFlags::Mutating)
+MCP_LS_CALL(SetVolumeExtent, "set_volume_extent", HandleVolumeSetVolumeExtent, EMcpCallFlags::Mutating)
+MCP_LS_CALL(SetVolumeProperties, "set_volume_properties", HandleVolumeSetVolumeProperties, EMcpCallFlags::Mutating)
+MCP_LS_CALL(SetVolumeBounds, "set_volume_bounds", HandleVolumeSetVolumeBounds, EMcpCallFlags::Mutating)
 
 // Volume Removal
-MCP_LS_CALL(RemoveVolume, "remove_volume", P_RemoveVolume, HandleVolumeRemoveVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(RemoveVolume, "remove_volume", HandleVolumeRemoveVolume, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_LS_CALL(GetVolumesInfo, "get_volumes_info", P_GetVolumesInfo, HandleVolumeGetVolumesInfo, EMcpCallFlags::None)
+MCP_LS_CALL(GetVolumesInfo, "get_volumes_info", HandleVolumeGetVolumesInfo, EMcpCallFlags::None)
 
 // Add Volume To Actor handlers
-MCP_LS_CALL(AddTriggerVolume, "add_trigger_volume", P_AddTriggerVolume, HandleVolumeAddTriggerVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AddBlockingVolume, "add_blocking_volume", P_AddBlockingVolume, HandleVolumeAddBlockingVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AddKillZVolume, "add_kill_z_volume", P_AddKillZVolume, HandleVolumeAddKillZVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AddPhysicsVolume, "add_physics_volume", P_AddPhysicsVolume, HandleVolumeAddPhysicsVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AddCullDistanceVolume, "add_cull_distance_volume", P_AddCullDistanceVolume, HandleVolumeAddCullDistanceVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AddPostProcessVolume, "add_post_process_volume", P_AddPostProcessVolume, HandleVolumeAddPostProcessVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddTriggerVolume, "add_trigger_volume", HandleVolumeAddTriggerVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddBlockingVolume, "add_blocking_volume", HandleVolumeAddBlockingVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddKillZVolume, "add_kill_z_volume", HandleVolumeAddKillZVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddPhysicsVolume, "add_physics_volume", HandleVolumeAddPhysicsVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddCullDistanceVolume, "add_cull_distance_volume", HandleVolumeAddCullDistanceVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddPostProcessVolume, "add_post_process_volume", HandleVolumeAddPostProcessVolume, EMcpCallFlags::Mutating)
 
 #undef MCP_LS_CALL
 

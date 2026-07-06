@@ -126,3 +126,9 @@ manage_asset.source_control_submit.path
 manage_asset.validate.checkoutFiles
 manage_asset.validate.directoryPath
 manage_asset.validate.path
+# system_control (schema-from-decls): declared in the action's AppendSchema
+# fragment + reconciles, but the lint derives decls from the MCP_*_CALL param-array
+# arg (now the handler name → empty decl) so it can't see fragment params. Reads
+# live in the legacy HandleTestAction / insights shadow-dispatch branches.
+system_control.run_tests.filter
+system_control.start_session.channels

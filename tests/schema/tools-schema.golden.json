@@ -3936,7 +3936,6 @@
           "description": "create_reverb_effect: decay time in seconds.",
           "type": "number"
         },
-        "defaultValue": {},
         "delay": {
           "description": "add_cue_node (delay node): delay in seconds.",
           "type": "number"
@@ -4308,10 +4307,6 @@
           "description": "Source MetaSound output name.",
           "type": "string"
         },
-        "sourcePin": {
-          "description": "Name of the source pin.",
-          "type": "string"
-        },
         "spatialization": {
           "description": "Spatialization algorithm: 'panner' or 'hrtf' (alias of spatializationAlgorithm).",
           "type": "string"
@@ -4345,10 +4340,6 @@
         },
         "targetNodeId": {
           "description": "ID of the target (feeding child) node.",
-          "type": "string"
-        },
-        "targetPin": {
-          "description": "Name of the target pin.",
           "type": "string"
         },
         "targetVoices": {
@@ -8672,6 +8663,21 @@
           },
           "type": "object"
         },
+        "boxExtent": {
+          "description": "create_trigger_box: box extent alias for volumeExtent.",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
         "bPackBlueprints": {
           "description": "Include blueprints in packed level.",
           "type": "boolean"
@@ -8735,6 +8741,10 @@
           "description": "create_pain_causing_volume/set_volume_properties: damage per second.",
           "type": "number"
         },
+        "dataLayerAssetPath": {
+          "description": "create_data_layer: data layer asset directory (default: /Game/DataLayers).",
+          "type": "string"
+        },
         "dataLayerName": {
           "description": "Name of the data layer.",
           "type": "string"
@@ -8750,6 +8760,21 @@
         "enabled": {
           "description": "create_post_process_volume/add_post_process_volume: whether the volume is enabled.",
           "type": "boolean"
+        },
+        "extent": {
+          "description": "Volume extent alias for volumeExtent (create_*_volume / set_volume_* actions; first present wins).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "fadeTime": {
           "description": "create_reverb_volume/set_volume_properties: reverb fade time in seconds.",
@@ -8865,6 +8890,21 @@
           "description": "Loading range for grid cells.",
           "type": "number"
         },
+        "location": {
+          "description": "Volume location alias for volumeLocation (create_*_volume actions; first present wins).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
         "nodeClass": {
           "description": "Node class path.",
           "type": "string"
@@ -8891,6 +8931,10 @@
         },
         "parentLevel": {
           "description": "Parent level path.",
+          "type": "string"
+        },
+        "path": {
+          "description": "get_volumes_info: unused — the handler rejects a path param (this action does not scope by path).",
           "type": "string"
         },
         "postProcessSettings": {
@@ -9942,6 +9986,10 @@
           "description": "optimize_shaders: changed (default) | material | global.",
           "type": "string"
         },
+        "name": {
+          "description": "create_widget: name for the new widget blueprint asset (written under savePath).",
+          "type": "string"
+        },
         "noUBA": {
           "description": "run_ubt: pass -NoUBA (default true — UBA-built binaries break later Live Coding patches). Set false for faster UBA builds when no LC patching will follow.",
           "type": "boolean"
@@ -9979,10 +10027,6 @@
         "replaceSourceActors": {
           "description": "merge_actors: destroy the source actors once the merge succeeds (default false).",
           "type": "boolean"
-        },
-        "resolution": {
-          "description": "Resolution setting (e.g., 1024x1024).",
-          "type": "string"
         },
         "returnBase64": {
           "description": "screenshot: include the base64-encoded PNG in the response (default true).",
