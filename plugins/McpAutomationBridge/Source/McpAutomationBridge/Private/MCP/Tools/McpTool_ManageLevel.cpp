@@ -38,7 +38,7 @@ public:
 			.String(TEXT("packagePath"), TEXT("Path to a directory."))
 			.String(TEXT("sourcePath"), TEXT("Source path for import/move/copy."))
 			.String(TEXT("sublevelPath"), TEXT("Level asset path."))
-			.String(TEXT("subLevelPath"), TEXT("Level asset path alias for add_sublevel."))
+			.String(TEXT("sublevelPath"), TEXT("Level asset path alias for add_sublevel."))
 			.String(TEXT("parentLevel"), TEXT("Parent level path."))
 			.String(TEXT("parentPath"), TEXT("Path to a directory."))
 			.String(TEXT("streamingMethod"), TEXT(""))

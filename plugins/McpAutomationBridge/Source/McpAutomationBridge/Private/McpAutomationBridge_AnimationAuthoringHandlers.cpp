@@ -75,7 +75,7 @@
 #include "Misc/PackageName.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/Kismet2NameValidators.h"
-// bind_anim_notify: event-graph authoring (notify -> BlueprintCallable function)
+// bind_animation_notify: event-graph authoring (notify -> BlueprintCallable function)
 #include "Kismet2/KismetEditorUtilities.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphPin.h"
@@ -2621,7 +2621,7 @@ static TSharedPtr<FJsonObject> AnimAuthoringCreateAnimBlueprint(const TSharedPtr
                         const FString ExistingParentClassName =
                             ExistingBlueprint->ParentClass ? ExistingBlueprint->ParentClass->GetPathName() : TEXT("<none>");
                         UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
-                            TEXT("create_anim_blueprint: Replacing legacy plain Blueprint at '%s' (parent=%s)"),
+                            TEXT("create_animation_blueprint: Replacing legacy plain Blueprint at '%s' (parent=%s)"),
                             *ObjectPath,
                             *ExistingParentClassName);
 
@@ -2709,7 +2709,7 @@ static TSharedPtr<FJsonObject> AnimAuthoringAddStateMachine(const TSharedPtr<FJs
             ANIM_ERROR_RESPONSE(TEXT("blueprintPath (or assetPath) is required: pass the Anim Blueprint asset path"), TEXT("MISSING_BLUEPRINT_PATH"));
         }
 
-        // Try to find in-memory version first (may have unsaved changes from create_anim_blueprint)
+        // Try to find in-memory version first (may have unsaved changes from create_animation_blueprint)
         UAnimBlueprint* AnimBP = FindObject<UAnimBlueprint>(nullptr, *BlueprintPath);
         if (!AnimBP)
         {

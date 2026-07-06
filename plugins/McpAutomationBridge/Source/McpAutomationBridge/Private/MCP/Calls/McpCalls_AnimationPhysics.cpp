@@ -30,7 +30,7 @@ namespace McpCalls::AnimationPhysics
 // create_ik_rig's savePath (+meshPath), create_aim_offset's is1D,
 // create_pose_library's save — read only by the dead authoring copy); the
 // min/max/grid spellings on create_aim_offset and create_blend_space_1d/2d had
-// no reader in either copy (bootstrap residue), and create_anim_blueprint's
+// no reader in either copy (bootstrap residue), and create_animation_blueprint's
 // meshPath lost its last reader at the 2026-07-04i shadowed-duplicate
 // deletion. Required-flag corrections against the live bodies' rejects:
 // the blueprintPath/assetPath alias pairs (add_state, add_state_machine,
@@ -40,7 +40,7 @@ namespace McpCalls::AnimationPhysics
 // assets/retargetAssets pair, and the notifyClass/notifyName one-ofs
 // (add_notify, add_montage_notify) each joint-reject only when every spelling
 // is absent, so the required spelling went optional (at-least-one stays
-// handler-enforced); create_anim_blueprint's savePath falls back to path with
+// handler-enforced); create_animation_blueprint's savePath falls back to path with
 // a default; create_control_rig's skeletonPath is only consulted when
 // skeletalMeshPath is absent; add_notify's assetPath and set_section_timing's
 // startTime are required by the live bodies' own rejects. setup_ragdoll and
@@ -169,7 +169,7 @@ class FMcpCall_AnimationPhysics_##ClassSuffix final : public FMcpCall           
 MCP_AP_CALL(Cleanup, "cleanup", P_Cleanup, HandleAnimPhysCleanup, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreateBlendSpace, "create_blend_space", P_CreateBlendSpace, HandleAnimPhysCreateBlendSpace, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreateBlendTree, "create_blend_tree", P_CreateBlendTree, HandleAnimPhysCreateBlendTree, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateProceduralAnim, "create_procedural_anim", P_CreateProceduralAnim, HandleAnimPhysCreateProceduralAnim, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateProceduralAnim, "create_procedural_animation", P_CreateProceduralAnim, HandleAnimPhysCreateProceduralAnim, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreateStateMachine, "create_state_machine", P_CreateStateMachine, HandleAnimPhysCreateStateMachine, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(SetupIk, "setup_ik", P_SetupIk, HandleAnimPhysSetupIk, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(ConfigureVehicle, "configure_vehicle", P_ConfigureVehicle, HandleAnimPhysConfigureVehicle, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -208,7 +208,7 @@ MCP_AP_CALL(SetAxisSettings, "set_axis_settings", P_SetAxisSettings, HandleAnimA
 MCP_AP_CALL(SetInterpolationSettings, "set_interpolation_settings", P_SetInterpolationSettings, HandleAnimAuthoringSetInterpolationSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreateAimOffset, "create_aim_offset", P_CreateAimOffset, HandleAnimAuthoringCreateAimOffset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(AddAimOffsetSample, "add_aim_offset_sample", P_AddAimOffsetSample, HandleAnimAuthoringAddAimOffsetSample, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateAnimBlueprint, "create_anim_blueprint", P_CreateAnimBlueprint, HandleAnimAuthoringCreateAnimBlueprint, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateAnimBlueprint, "create_animation_blueprint", P_CreateAnimBlueprint, HandleAnimAuthoringCreateAnimBlueprint, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(AddStateMachine, "add_state_machine", P_AddStateMachine, HandleAnimAuthoringAddStateMachine, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(AddState, "add_state", P_AddState, HandleAnimAuthoringAddState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(AddTransition, "add_transition", P_AddTransition, HandleAnimAuthoringAddTransition, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -217,13 +217,13 @@ MCP_AP_CALL(AddBlendNode, "add_blend_node", P_AddBlendNode, HandleAnimAuthoringA
 MCP_AP_CALL(AddCachedPose, "add_cached_pose", P_AddCachedPose, HandleAnimAuthoringAddCachedPose, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(AddSlotNode, "add_slot_node", P_AddSlotNode, HandleAnimAuthoringAddSlotNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(AddLayeredBlendPerBone, "add_layered_blend_per_bone", P_AddLayeredBlendPerBone, HandleAnimAuthoringAddLayeredBlendPerBone, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetAnimGraphNodeValue, "set_anim_graph_node_value", P_SetAnimGraphNodeValue, HandleAnimAuthoringSetAnimGraphNodeValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetAnimGraphNodeValue, "set_animation_graph_node_value", P_SetAnimGraphNodeValue, HandleAnimAuthoringSetAnimGraphNodeValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreateControlRig, "create_control_rig", P_CreateControlRig, HandleAnimAuthoringCreateControlRig, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreateIkRig, "create_ik_rig", P_CreateIkRig, HandleAnimAuthoringCreateIkRig, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreateIkRetargeter, "create_ik_retargeter", P_CreateIkRetargeter, HandleAnimAuthoringCreateIkRetargeter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(SetRetargetChainMapping, "set_retarget_chain_mapping", P_SetRetargetChainMapping, HandleAnimAuthoringSetRetargetChainMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(GetAnimationInfo, "get_animation_info", P_GetAnimationInfo, HandleAnimAuthoringGetAnimationInfo, EMcpCallFlags::RequiresEditor)
-MCP_AP_CALL(BindAnimNotify, "bind_anim_notify", P_BindAnimNotify, HandleAnimAuthoringBindAnimNotify, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(BindAnimNotify, "bind_animation_notify", P_BindAnimNotify, HandleAnimAuthoringBindAnimNotify, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Skeleton, physics assets, skin weights, cloth, morphs (SkeletonHandlers.cpp)
 MCP_AP_CALL(GetSkeletonInfo, "get_skeleton_info", P_GetSkeletonInfo, HandleSkeletonGetSkeletonInfo, EMcpCallFlags::RequiresEditor)

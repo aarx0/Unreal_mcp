@@ -9,7 +9,7 @@
           "enum": [
             "create_blend_space",
             "create_blend_tree",
-            "create_procedural_anim",
+            "create_procedural_animation",
             "create_state_machine",
             "setup_ik",
             "create_pose_library",
@@ -36,7 +36,7 @@
             "add_montage_slot",
             "set_section_timing",
             "add_montage_notify",
-            "bind_anim_notify",
+            "bind_animation_notify",
             "set_blend_in",
             "set_blend_out",
             "link_sections",
@@ -48,7 +48,7 @@
             "set_interpolation_settings",
             "create_aim_offset",
             "add_aim_offset_sample",
-            "create_anim_blueprint",
+            "create_animation_blueprint",
             "add_state_machine",
             "add_state",
             "add_transition",
@@ -57,7 +57,7 @@
             "add_cached_pose",
             "add_slot_node",
             "add_layered_blend_per_bone",
-            "set_anim_graph_node_value",
+            "set_animation_graph_node_value",
             "create_control_rig",
             "create_ik_rig",
             "create_ik_retargeter",
@@ -199,7 +199,7 @@
           "type": "string"
         },
         "blueprintPath": {
-          "description": "Anim Blueprint asset path (bind_anim_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions).",
+          "description": "Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions).",
           "type": "string"
         },
         "bodyA": {
@@ -219,7 +219,7 @@
           "type": "string"
         },
         "boneTracks": {
-          "description": "create_procedural_anim: per-bone keyframe tracks ({boneName, frames:[{frame, location, rotation}]}).",
+          "description": "create_procedural_animation: per-bone keyframe tracks ({boneName, frames:[{frame, location, rotation}]}).",
           "items": {
             "type": "object"
           },
@@ -320,7 +320,7 @@
           "type": "number"
         },
         "frameRate": {
-          "description": "create_animation_sequence/set_sequence_length/create_procedural_anim: sample rate in fps (default 30).",
+          "description": "create_animation_sequence/set_sequence_length/create_procedural_animation: sample rate in fps (default 30).",
           "type": "number"
         },
         "fromSection": {
@@ -332,7 +332,7 @@
           "type": "string"
         },
         "functionName": {
-          "description": "bind_anim_notify: BlueprintCallable function to call when the notify fires.",
+          "description": "bind_animation_notify: BlueprintCallable function to call when the notify fires.",
           "type": "string"
         },
         "gridDivisions": {
@@ -469,7 +469,7 @@
           "type": "string"
         },
         "nodeName": {
-          "description": "add_blend_node/set_anim_graph_node_value: AnimGraph node name/comment.",
+          "description": "add_blend_node/set_animation_graph_node_value: AnimGraph node name/comment.",
           "type": "string"
         },
         "notifyClass": {
@@ -480,7 +480,7 @@
           "type": "string"
         },
         "numFrames": {
-          "description": "create_animation_sequence/set_sequence_length/create_procedural_anim: explicit frame count (overrides length*frameRate).",
+          "description": "create_animation_sequence/set_sequence_length/create_procedural_animation: explicit frame count (overrides length*frameRate).",
           "type": "number"
         },
         "outputPath": {
@@ -503,7 +503,7 @@
           "type": "string"
         },
         "path": {
-          "description": "Legacy alias of savePath (create_procedural_anim, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_anim_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton).",
+          "description": "Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton).",
           "type": "string"
         },
         "physicsAssetName": {
@@ -532,7 +532,7 @@
           "type": "string"
         },
         "propertyName": {
-          "description": "set_anim_graph_node_value: node property to set (dot-notation for nested structs).",
+          "description": "set_animation_graph_node_value: node property to set (dot-notation for nested structs).",
           "type": "string"
         },
         "radius": {
@@ -734,7 +734,7 @@
           "type": "string"
         },
         "targetClass": {
-          "description": "bind_anim_notify: class to cast the owner to (e.g. /Game/.../BP_CPP_Character or a /Script class).",
+          "description": "bind_animation_notify: class to cast the owner to (e.g. /Game/.../BP_CPP_Character or a /Script class).",
           "type": "string"
         },
         "targetIKRigPath": {
@@ -8452,7 +8452,7 @@
         "streamingMethod": {
           "type": "string"
         },
-        "subLevelPath": {
+        "sublevelPath": {
           "description": "Level asset path alias for add_sublevel.",
           "type": "string"
         },

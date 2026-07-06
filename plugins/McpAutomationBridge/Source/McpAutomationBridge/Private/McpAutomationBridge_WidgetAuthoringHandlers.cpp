@@ -4150,7 +4150,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
 
         // The core binding is event->AddDelegate exec + owner->target + custom-event->delegate.
         // If any failed (e.g. the schema rejected a connection on malformed input), report failure
-        // rather than a false success — same fail-fast discipline as bind_anim_notify.
+        // rather than a false success — same fail-fast discipline as bind_animation_notify.
         if (!bExecWired || !bSelfWired || !bDelegateWired)
         {
             SendAutomationError(RequestingSocket, RequestId,

@@ -5,7 +5,7 @@
 //
 // HANDLERS:
 //   Animation Assets:
-//     - create_anim_blueprint, create_anim_sequence, create_anim_montage
+//     - create_animation_blueprint, create_anim_sequence, create_anim_montage
 //     - create_blend_space, create_blend_space_1d, create_aim_offset
 //     - get_anim_blueprint_info, get_anim_sequence_info
 //     - get_skeleton_info, get_blend_space_info
@@ -883,7 +883,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateProceduralAnim(
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-  Resp->SetStringField(TEXT("action"), TEXT("create_procedural_anim"));
+  Resp->SetStringField(TEXT("action"), TEXT("create_procedural_animation"));
   bool bSuccess = false;
   FString Message;
   FString ErrorCode;
@@ -906,7 +906,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateProceduralAnim(
     FString SkeletonPath;
     if (!Payload->TryGetStringField(TEXT("skeletonPath"), SkeletonPath) ||
         SkeletonPath.IsEmpty()) {
-      Message = TEXT("skeletonPath is required for create_procedural_anim");
+      Message = TEXT("skeletonPath is required for create_procedural_animation");
       ErrorCode = TEXT("INVALID_ARGUMENT");
       Resp->SetStringField(TEXT("error"), Message);
     } else {
@@ -914,7 +914,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateProceduralAnim(
       if (!Payload->TryGetArrayField(TEXT("boneTracks"), BoneTracksArray) ||
           !BoneTracksArray) {
         Message =
-            TEXT("boneTracks array is required for create_procedural_anim");
+            TEXT("boneTracks array is required for create_procedural_animation");
         ErrorCode = TEXT("INVALID_ARGUMENT");
         Resp->SetStringField(TEXT("error"), Message);
       } else {
@@ -1047,7 +1047,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateProceduralAnim(
                     if (BoneIndex == INDEX_NONE)
                     {
                       // Bone doesn't exist in skeleton - skip this track
-                      UE_LOG(LogTemp, Warning, TEXT("create_procedural_anim: Bone '%s' not found in skeleton %s"), 
+                      UE_LOG(LogTemp, Warning, TEXT("create_procedural_animation: Bone '%s' not found in skeleton %s"), 
                              *BoneName, *TargetSkeleton->GetName());
                       continue;
                     }

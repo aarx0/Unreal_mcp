@@ -304,7 +304,7 @@ inline const TArray<FString>& AnimationPhysicsCore()
 {
 	static const TArray<FString> Actions = {
 		TEXT("create_blend_space"), TEXT("create_blend_tree"),
-		TEXT("create_procedural_anim"), TEXT("create_state_machine"),
+		TEXT("create_procedural_animation"), TEXT("create_state_machine"),
 		TEXT("setup_ik"), TEXT("create_pose_library"),
 		TEXT("create_animation_asset"), TEXT("play_montage"),
 		TEXT("setup_ragdoll"),
@@ -324,19 +324,19 @@ inline const TArray<FString>& AnimationAuthoring()
 		TEXT("set_root_motion_settings"), TEXT("set_additive_settings"),
 		TEXT("create_montage"), TEXT("add_montage_section"),
 		TEXT("add_montage_slot"), TEXT("set_section_timing"),
-		TEXT("add_montage_notify"), TEXT("bind_anim_notify"), TEXT("set_blend_in"),
+		TEXT("add_montage_notify"), TEXT("bind_animation_notify"), TEXT("set_blend_in"),
 		TEXT("set_blend_out"), TEXT("link_sections"),
 		TEXT("create_blend_space_1d"), TEXT("create_blend_space_2d"),
 		TEXT("add_blend_sample"), TEXT("rebuild_blend_space"),
 		TEXT("set_axis_settings"), TEXT("set_interpolation_settings"),
 		TEXT("create_aim_offset"), TEXT("add_aim_offset_sample"),
-		TEXT("create_anim_blueprint"), 
+		TEXT("create_animation_blueprint"), 
 		TEXT("add_state_machine"),
 		TEXT("add_state"), TEXT("add_transition"),
 		TEXT("set_transition_rules"), TEXT("add_blend_node"),
 		TEXT("add_cached_pose"), TEXT("add_slot_node"),
 		TEXT("add_layered_blend_per_bone"),
-		TEXT("set_anim_graph_node_value"), TEXT("create_control_rig"),
+		TEXT("set_animation_graph_node_value"), TEXT("create_control_rig"),
 		TEXT("create_ik_rig"), TEXT("create_ik_retargeter"),
 		TEXT("set_retarget_chain_mapping"), TEXT("get_animation_info")
 	};

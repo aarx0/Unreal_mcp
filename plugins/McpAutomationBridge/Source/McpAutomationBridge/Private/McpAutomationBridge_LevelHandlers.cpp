@@ -2030,13 +2030,13 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAddSublevel(
     FMcpResponseHandle Socket) {
   FString SubLevelPath;
   if (Payload.IsValid())
-    Payload->TryGetStringField(TEXT("subLevelPath"), SubLevelPath);
+    Payload->TryGetStringField(TEXT("sublevelPath"), SubLevelPath);
   if (SubLevelPath.IsEmpty() && Payload.IsValid())
     Payload->TryGetStringField(TEXT("levelPath"), SubLevelPath);
 
   if (SubLevelPath.IsEmpty()) {
     SendAutomationError(Socket, RequestId,
-                        TEXT("subLevelPath required"),
+                        TEXT("sublevelPath required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -2044,7 +2044,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAddSublevel(
   SubLevelPath = SanitizeProjectRelativePath(SubLevelPath);
   if (SubLevelPath.IsEmpty()) {
     SendAutomationError(Socket, RequestId,
-                        TEXT("Invalid subLevelPath"),
+                        TEXT("Invalid sublevelPath"),
                         TEXT("SECURITY_VIOLATION"));
     return true;
   }
