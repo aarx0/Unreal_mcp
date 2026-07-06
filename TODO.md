@@ -69,6 +69,27 @@ as they land.
 > Reuses the Phase 2 fragments; the gating unknown is whether the client honors top-level
 > `oneOf` — proposes a one-rebuild `control_editor` pilot to decide before any rollout.
 
+### [ ] 2026-07-06 — dead-handler sweep: ~32 defined-but-unreachable handlers (removal batch)
+Static sweep (no editor): all `Handle*` defs whose name is NOT in any `MCP/Calls/*.cpp`
+(unregistered) AND has only 2 total source refs (its def + header decl, no caller). Verified
+robust: no token-paste `Handle##` dispatch exists; spot-checked 4/32 — each action string
+appears only in the dead handler's own guard (nothing dispatches to it). Some are **superseded
+orphans**: e.g. `create_niagara_system` is a LIVE action now handled by
+`NiagaraAuthoringHandlers` (SubAction dispatch), so `HandleCreateNiagaraSystem` in
+`NiagaraHandlers.cpp` is dead even though the action lives. The 32, grouped:
+- **container ops (16)** — `HandleArray{Append,Clear,GetElement,Insert,Remove,SetElement}`,
+  `HandleMap{Clear,GetKeys,GetValue,HasKey,RemoveKey,SetValue}`, `HandleSet{Add,Clear,Contains,Remove}`
+- **sequencer tracks (5)** — `HandleAddAnimationTrack`, `HandleAddCameraTrack`,
+  `HandleAddSequencerKeyframe`, `HandleAddTransformTrack`, `HandleManageSequencerTrack`
+- **niagara (5)** — `HandleCreateNiagaraEmitter`, `HandleCreateNiagaraRibbon`,
+  `HandleCreateNiagaraSystem`, `HandleModifyNiagaraParameter`, `HandleSpawnNiagaraActor`
+- **asset getters (3)** — `HandleGetAsset`, `HandleGetAssetDependencies`, `HandleGetAssetReferences`
+- **misc (3)** — `HandleBlueprintProbeSubobjectHandle`, `HandleMaterialGraphAction`, `HandleTestAction`
+Removal = delete def + header decl (+ any `#else` stub) per handler, then build + statics. Same
+pattern as the 4 UI/perf handlers removed in ee6e317d (param-reconciliation will confirm the
+finish). Big enough to do as its own gated batch, not a blind unattended sweep — re-verify each
+def's boundaries before cutting (a few may be multi-action dispatchers needing a closer look).
+
 ### [ ] 2026-07-06 — inspect ↔ control_actor: overlapping actor surface + `find_by_class` param split (confusing-names pass input)
 Dogfood find (read-only probes, no build). Two related cross-tool observations for the
 queued confusing-names/consolidation pass — flagged, not acted on (both Aaron-taste):
