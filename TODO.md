@@ -76,6 +76,23 @@ queued confusing-names/consolidation pass — flagged, not acted on (both Aaron-
   match control_actor's tolerance; or standardize the whole pass on one name.
 Not fixed here: naming/consolidation is Aaron's call, and a rename needs the full gate + golden regen.
 
+### [ ] 2026-07-06 — system_control is an overloaded grab-bag; widget actions are misplaced (split candidate)
+Dogfood find (read-only probes — all read paths work: get_perf_stats, get_build_status,
+list_tests, get_log all coherent). The issue is surface coherence for the consolidation pass.
+`system_control` (41 actions) fuses several unrelated concerns; the clearest misfit:
+- **UI widgets** (`create_widget`, `add_widget_child`, `spawn_category`) — these belong with
+  the blueprint/UI surface, not a "system" tool. (These were the ones the 2026-07-02 audit
+  found unroutable then fixed — they work, but the home is wrong.)
+The looser overload, for the same pass to weigh: **testing** (run_tests/list_tests/
+generate_test_stub/get_test_results/run_benchmark/generate_memory_report), **rendering &
+scalability** (configure_lod/nanite/occlusion_culling/texture_streaming/world_partition,
+set_scalability/vsync/resolution_scale, lumen_update_scene — overlaps build_environment),
+**mesh optimization** (merge_actors, optimize_draw_calls/shaders — overlaps manage_geometry),
+and **build** (run_ubt, live_coding_compile, get_build_status). The coherent core that
+actually fits the name: execute_command/python, set_cvar, get/set_project_setting, logging,
+profiling. Same structural call as the manage_input enhanced-input split — Aaron's decision;
+flagged, not acted on.
+
 ### [ ] 2026-07-05 — animation_physics setup_ragdoll/activate_ragdoll: wire the orphans or retire the rows (Aaron's call)
 Dogfood find, preserved exactly at the family's classing (McpCalls_AnimationPhysics.cpp):
 both names are ADVERTISED (schema enum + decl rows) but the retired dispatcher had no
