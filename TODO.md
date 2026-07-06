@@ -58,6 +58,12 @@ as they land.
 > split (step 10, deferred by design — the real surgery is de-membering handlers off the
 > subsystem god object; cleanest first slice is extracting Private/MCP/ as its own module).
 
+> **Consolidation-pass evidence (2026-07-06):** complete cross-tool duplicate-action map in
+> [`docs/consolidation-plan-2026-07-06.md`](docs/consolidation-plan-2026-07-06.md) — every
+> shared action resolved to its per-tool handler, split into benign aliases / real divergent
+> duplicates / legit domain polymorphism, with a suggested tonight execution order. The three
+> dogfood `[ ]` entries below are the individual finds that feed it.
+
 ### [ ] 2026-07-06 — inspect ↔ control_actor: overlapping actor surface + `find_by_class` param split (confusing-names pass input)
 Dogfood find (read-only probes, no build). Two related cross-tool observations for the
 queued confusing-names/consolidation pass — flagged, not acted on (both Aaron-taste):
