@@ -204,49 +204,6 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfShowFps(
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfShowStats(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
-    FString Category;
-    if (Payload->TryGetStringField(TEXT("category"), Category) &&
-        !Category.IsEmpty()) {
-      if (!GEditor)
-      {
-          SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
-          return true;
-      }
-
-      // Sanitize category to prevent console command injection
-      // Only allow alphanumeric characters and underscores
-      bool bIsValidCategory = true;
-      for (int32 i = 0; i < Category.Len(); ++i) {
-        TCHAR C = Category[i];
-        if (!FChar::IsAlnum(C) && C != TEXT('_')) {
-          bIsValidCategory = false;
-          break;
-        }
-      }
-
-      if (!bIsValidCategory) {
-        SendAutomationError(RequestingSocket, RequestId, 
-                            TEXT("Invalid stat category name. Only alphanumeric characters and underscores allowed."),
-                            TEXT("INVALID_CATEGORY"));
-        return true;
-      }
-
-      GEngine->Exec(GEditor->GetEditorWorldContext().World(),
-                    *FString::Printf(TEXT("stat %s"), *Category));
-      SendAutomationResponse(
-          RequestingSocket, RequestId, true,
-          FString::Printf(TEXT("Stat '%s' toggled"), *Category), nullptr);
-    } else {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("Category required"), nullptr,
-                             TEXT("INVALID_ARGUMENT"));
-    }
-    return true;
-}
-
 bool UMcpAutomationBridgeSubsystem::HandlePerfSetScalability(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -994,7 +951,6 @@ MCP_PERF_HANDLER_STUB(HandlePerfGetStats)
 MCP_PERF_HANDLER_STUB(HandlePerfStartProfiling)
 MCP_PERF_HANDLER_STUB(HandlePerfStopProfiling)
 MCP_PERF_HANDLER_STUB(HandlePerfShowFps)
-MCP_PERF_HANDLER_STUB(HandlePerfShowStats)
 MCP_PERF_HANDLER_STUB(HandlePerfSetScalability)
 MCP_PERF_HANDLER_STUB(HandlePerfSetResolutionScale)
 MCP_PERF_HANDLER_STUB(HandlePerfSetVsync)

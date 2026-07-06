@@ -28,9 +28,7 @@ namespace McpCalls::SystemControl
 // family's retired param arrays (fleet-verified against the handler bodies),
 // except: configure_texture_streaming and generate_memory_report never carried
 // the bogus required functionName (mega-bag residue); the facade's dead
-// `resolution` param (no handler reads it) is dropped; and create_widget's
-// required `name` (HandleUiCreateWidget rejects without it) is added — the
-// facade schema had silently lacked it. Shared param names (enabled, category,
+// `resolution` param (no handler reads it) is dropped. Shared param names (enabled, category,
 // section, key, value, outputPath, filter, the get_log/tail_log set) author an
 // identical description in every fragment so the fold is unambiguous.
 
@@ -114,29 +112,6 @@ static void S_SetCvar(FMcpSchemaBuilder& B)
 	 .Required({TEXT("key")});
 }
 
-static void S_CreateWidget(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("create_widget: name for the new widget blueprint asset (written under savePath)."))
-	 .String(TEXT("savePath"), TEXT("create_widget: destination folder for the new widget blueprint (default /Game/UI/Widgets)."))
-	 .String(TEXT("widgetType"), TEXT("create_widget: informational widget-type tag echoed back in the response."))
-	 .Required({TEXT("name")});
-}
-
-static void S_AddWidgetChild(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("widgetPath"), TEXT("Widget blueprint path."))
-	 .String(TEXT("childClass"), TEXT(""))
-	 .String(TEXT("parentName"), TEXT(""))
-	 .Required({TEXT("widgetPath"), TEXT("childClass")});
-}
-
-static void S_Screenshot(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("path"), TEXT("screenshot: output directory, relative to the project (must not escape it); default Saved/Screenshots/WindowsEditor."))
-	 .String(TEXT("filename"), TEXT("screenshot: output PNG filename (sanitized; default a timestamp)."))
-	 .Bool(TEXT("returnBase64"), TEXT("screenshot: include the base64-encoded PNG in the response (default true)."));
-}
-
 static void S_GetProjectSettings(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("section"), TEXT(""))
@@ -185,12 +160,6 @@ static void S_GenerateMemoryReport(FMcpSchemaBuilder& B)
 static void S_ShowFps(FMcpSchemaBuilder& B)
 {
 	B.Bool(TEXT("enabled"), TEXT("Whether the item/feature is enabled."));
-}
-
-static void S_ShowStats(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("category"), TEXT(""))
-	 .Required({TEXT("category")});
 }
 
 static void S_SetScalability(FMcpSchemaBuilder& B)
@@ -323,12 +292,8 @@ MCP_SC_CALL(StartSession, "start_session", HandleSysStartSession, EMcpCallFlags:
 MCP_SC_CALL(ExecuteCommand, "execute_command", HandleSysExecuteCommand, EMcpCallFlags::Mutating)
 MCP_SC_CALL(SetCvar, "set_cvar", HandleSysSetCvar, EMcpCallFlags::Mutating)
 
-// Widgets / screenshot / project settings (McpAutomationBridge_UiHandlers.cpp).
-// screenshot needs a game viewport and get/set_project_settings walk
-// GEngine/GConfig with fallbacks — handler-enforced, not RequiresEditor.
-MCP_SC_CALL(CreateWidget, "create_widget", HandleUiCreateWidget, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(AddWidgetChild, "add_widget_child", HandleUiAddWidgetChild, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(Screenshot, "screenshot", HandleUiScreenshot, EMcpCallFlags::Mutating)
+// Project settings (McpAutomationBridge_UiHandlers.cpp). get/set_project_settings
+// walk GEngine/GConfig with fallbacks — handler-enforced, not RequiresEditor.
 MCP_SC_CALL(GetProjectSettings, "get_project_settings", HandleUiGetProjectSettings, EMcpCallFlags::None)
 MCP_SC_CALL(SetProjectSetting, "set_project_setting", HandleUiSetProjectSetting, EMcpCallFlags::Mutating)
 
@@ -352,7 +317,6 @@ MCP_SC_CALL(GetPerfStats, "get_perf_stats", HandlePerfGetStats, EMcpCallFlags::R
 MCP_SC_CALL(StartProfiling, "start_profiling", HandlePerfStartProfiling, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_SC_CALL(StopProfiling, "stop_profiling", HandlePerfStopProfiling, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_SC_CALL(ShowFps, "show_fps", HandlePerfShowFps, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(ShowStats, "show_stats", HandlePerfShowStats, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_SC_CALL(SetScalability, "set_scalability", HandlePerfSetScalability, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_SC_CALL(SetResolutionScale, "set_resolution_scale", HandlePerfSetResolutionScale, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_SC_CALL(SetVsync, "set_vsync", HandlePerfSetVsync, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -388,9 +352,6 @@ void McpRegisterSystemControlCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_StartSession>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_ExecuteCommand>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_SetCvar>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_CreateWidget>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_AddWidgetChild>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_Screenshot>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_GetProjectSettings>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_SetProjectSetting>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_GetLog>());
@@ -405,7 +366,6 @@ void McpRegisterSystemControlCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_StartProfiling>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_StopProfiling>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_ShowFps>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_ShowStats>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_SetScalability>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_SetResolutionScale>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_SystemControl_SetVsync>());

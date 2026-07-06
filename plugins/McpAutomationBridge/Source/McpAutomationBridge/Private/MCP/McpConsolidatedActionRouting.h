@@ -431,7 +431,6 @@ inline const TArray<FString>& SystemControlCore()
 	// matches the published enum. execute_command/set_cvar delegate to the
 	// console handler under its internal literal "console_command".
 	static const TArray<FString> Actions = {
-		TEXT("screenshot"),
 		TEXT("execute_command"), TEXT("run_ubt"),
 		TEXT("get_build_status"),
 		TEXT("run_tests"), TEXT("list_tests"), TEXT("get_test_results"),
@@ -439,8 +438,7 @@ inline const TArray<FString>& SystemControlCore()
 		TEXT("subscribe"), TEXT("unsubscribe"),
 		TEXT("get_log"), TEXT("tail_log"), TEXT("clear_log"),
 		TEXT("spawn_category"), TEXT("start_session"),
-		TEXT("lumen_update_scene"), TEXT("create_widget"),
-		TEXT("add_widget_child"), TEXT("set_cvar"),
+		TEXT("lumen_update_scene"), TEXT("set_cvar"),
 		TEXT("get_project_settings"),
 		TEXT("set_project_setting"), TEXT("execute_python"),
 		TEXT("live_coding_compile")
@@ -453,7 +451,7 @@ inline const TArray<FString>& Performance()
 	static const TArray<FString> Actions = {
 		TEXT("start_profiling"), TEXT("stop_profiling"),
 		TEXT("get_perf_stats"),
-		TEXT("run_benchmark"), TEXT("show_fps"), TEXT("show_stats"),
+		TEXT("run_benchmark"), TEXT("show_fps"),
 		TEXT("generate_memory_report"), TEXT("set_scalability"),
 		TEXT("set_resolution_scale"), TEXT("set_vsync"),
 		TEXT("set_frame_rate_limit"), TEXT("enable_gpu_timing"),

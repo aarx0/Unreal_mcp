@@ -10100,7 +10100,6 @@
         "action": {
           "description": "Action",
           "enum": [
-            "screenshot",
             "execute_command",
             "run_ubt",
             "get_build_status",
@@ -10116,8 +10115,6 @@
             "spawn_category",
             "start_session",
             "lumen_update_scene",
-            "create_widget",
-            "add_widget_child",
             "set_cvar",
             "get_project_settings",
             "set_project_setting",
@@ -10128,7 +10125,6 @@
             "get_perf_stats",
             "run_benchmark",
             "show_fps",
-            "show_stats",
             "generate_memory_report",
             "set_scalability",
             "set_resolution_scale",
@@ -10187,9 +10183,6 @@
         "channels": {
           "type": "string"
         },
-        "childClass": {
-          "type": "string"
-        },
         "className": {
           "description": "generate_test_stub: C++ class symbol (default derived from testName, e.g. FCombatDamageAppliesTest).",
           "type": "string"
@@ -10226,10 +10219,6 @@
         },
         "file": {
           "description": "Path to .py file to execute",
-          "type": "string"
-        },
-        "filename": {
-          "description": "screenshot: output PNG filename (sanitized; default a timestamp).",
           "type": "string"
         },
         "filter": {
@@ -10282,10 +10271,6 @@
           "description": "optimize_shaders: changed (default) | material | global.",
           "type": "string"
         },
-        "name": {
-          "description": "create_widget: name for the new widget blueprint asset (written under savePath).",
-          "type": "string"
-        },
         "noUBA": {
           "description": "run_ubt: pass -NoUBA (default true — UBA-built binaries break later Live Coding patches). Set false for faster UBA builds when no LC patching will follow.",
           "type": "boolean"
@@ -10300,13 +10285,6 @@
         },
         "packageName": {
           "description": "merge_actors: destination package path for the merged static mesh (alias: outputPath).",
-          "type": "string"
-        },
-        "parentName": {
-          "type": "string"
-        },
-        "path": {
-          "description": "screenshot: output directory, relative to the project (must not escape it); default Saved/Screenshots/WindowsEditor.",
           "type": "string"
         },
         "platform": {
@@ -10324,16 +10302,8 @@
           "description": "merge_actors: destroy the source actors once the merge succeeds (default false).",
           "type": "boolean"
         },
-        "returnBase64": {
-          "description": "screenshot: include the base64-encoded PNG in the response (default true).",
-          "type": "boolean"
-        },
         "runId": {
           "description": "Run identifier returned by run_tests; pass to get_test_results.",
-          "type": "string"
-        },
-        "savePath": {
-          "description": "create_widget: destination folder for the new widget blueprint (default /Game/UI/Widgets).",
           "type": "string"
         },
         "scale": {
@@ -10384,14 +10354,6 @@
         },
         "verbosity": {
           "description": "get_log/tail_log: minimum severity to include — Fatal|Error|Warning|Display|Log|Verbose|VeryVerbose (default Verbose = all).",
-          "type": "string"
-        },
-        "widgetPath": {
-          "description": "Widget blueprint path.",
-          "type": "string"
-        },
-        "widgetType": {
-          "description": "create_widget: informational widget-type tag echoed back in the response.",
           "type": "string"
         }
       },

@@ -3369,9 +3369,6 @@ public:
   bool HandlePerfShowFps(const FString &RequestId,
                          const TSharedPtr<FJsonObject> &Payload,
                          FMcpResponseHandle Socket);
-  bool HandlePerfShowStats(const FString &RequestId,
-                           const TSharedPtr<FJsonObject> &Payload,
-                           FMcpResponseHandle Socket);
   bool HandlePerfSetScalability(const FString &RequestId,
                                 const TSharedPtr<FJsonObject> &Payload,
                                 FMcpResponseHandle Socket);
@@ -3450,15 +3447,6 @@ public:
   bool HandleSysSetCvar(const FString &RequestId,
                         const TSharedPtr<FJsonObject> &Payload,
                         FMcpResponseHandle Socket);
-  bool HandleUiCreateWidget(const FString &RequestId,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle Socket);
-  bool HandleUiAddWidgetChild(const FString &RequestId,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle Socket);
-  bool HandleUiScreenshot(const FString &RequestId,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle Socket);
   bool HandleUiGetProjectSettings(const FString &RequestId,
                                   const TSharedPtr<FJsonObject> &Payload,
                                   FMcpResponseHandle Socket);
