@@ -42,7 +42,6 @@ public:
 			.Number(TEXT("fov"), TEXT(""))
 			.Number(TEXT("width"), TEXT(""))
 			.Number(TEXT("height"), TEXT(""))
-			.String(TEXT("command"), TEXT(""))
 			.Integer(TEXT("steps"), TEXT(""))
 			.Integer(TEXT("id"), TEXT("Bookmark identifier/index."))
 			.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))

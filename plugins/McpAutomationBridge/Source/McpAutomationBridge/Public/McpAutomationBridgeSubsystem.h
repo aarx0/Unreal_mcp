@@ -3225,9 +3225,6 @@ public:
   bool HandleControlEditorResume(const FString &RequestId,
                                  const TSharedPtr<FJsonObject> &Payload,
                                  FMcpResponseHandle Socket);
-  bool HandleControlEditorConsoleCommand(const FString &RequestId,
-                                          const TSharedPtr<FJsonObject> &Payload,
-                                          FMcpResponseHandle Socket);
   bool HandleControlEditorStepFrame(const FString &RequestId,
                                     const TSharedPtr<FJsonObject> &Payload,
                                     FMcpResponseHandle Socket);
@@ -3314,9 +3311,6 @@ public:
   bool HandleLevelUnload(const FString &RequestId,
                          const TSharedPtr<FJsonObject> &Payload,
                          FMcpResponseHandle Socket);
-  bool HandleLevelCreateLight(const FString &RequestId,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle Socket);
   bool HandleLevelBuildLighting(const FString &RequestId,
                                 const TSharedPtr<FJsonObject> &Payload,
                                 FMcpResponseHandle Socket);

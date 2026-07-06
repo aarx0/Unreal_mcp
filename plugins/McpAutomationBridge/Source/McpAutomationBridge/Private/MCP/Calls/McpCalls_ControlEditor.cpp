@@ -43,7 +43,6 @@ inline const FMcpParamDecl P_JumpToBookmark[] = { { TEXT("index"), EMcpParamKind
 inline const FMcpParamDecl P_StartRecording[] = { { TEXT("filename"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_SimulateInput[] = { { TEXT("type"), EMcpParamKind::String, false }, { TEXT("inputType"), EMcpParamKind::String, false }, { TEXT("inputAction"), EMcpParamKind::String, false }, { TEXT("key"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("button"), EMcpParamKind::String, false }, { TEXT("value"), EMcpParamKind::Number, false }, { TEXT("route"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_SimulateNav[] = { { TEXT("direction"), EMcpParamKind::String, false }, { TEXT("device"), EMcpParamKind::String, false }, { TEXT("key"), EMcpParamKind::String, false }, { TEXT("stabilizeFocus"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ExecuteCommand[] = { { TEXT("command"), EMcpParamKind::String, true } };
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
 
@@ -93,7 +92,6 @@ MCP_CE_CALL(StartRecording, "start_recording", P_StartRecording, HandleControlEd
 MCP_CE_CALL(StopRecording, "stop_recording", {}, HandleControlEditorStopRecording, EMcpCallFlags::None)
 MCP_CE_CALL(SimulateInput, "simulate_input", P_SimulateInput, HandleControlEditorSimulateInput, EMcpCallFlags::None)
 MCP_CE_CALL(SimulateNav, "simulate_nav", P_SimulateNav, HandleControlEditorSimulateNav, EMcpCallFlags::None)
-MCP_CE_CALL(ExecuteCommand, "execute_command", P_ExecuteCommand, HandleControlEditorConsoleCommand, EMcpCallFlags::Mutating)
 MCP_CE_CALL(Undo, "undo", {}, HandleControlEditorUndo, EMcpCallFlags::Mutating)
 MCP_CE_CALL(Redo, "redo", {}, HandleControlEditorRedo, EMcpCallFlags::Mutating)
 MCP_CE_CALL(SaveAll, "save_all", {}, HandleControlEditorSaveAll, EMcpCallFlags::Mutating)
@@ -136,7 +134,6 @@ void McpRegisterControlEditorCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_StopRecording>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_SimulateInput>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_SimulateNav>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_ExecuteCommand>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_Undo>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_Redo>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_SaveAll>());

@@ -1712,7 +1712,6 @@
             "set_camera",
             "set_camera_fov",
             "set_view_mode",
-            "execute_command",
             "screenshot",
             "step_frame",
             "start_recording",
@@ -1751,9 +1750,6 @@
           "type": "string"
         },
         "category": {
-          "type": "string"
-        },
-        "command": {
           "type": "string"
         },
         "deltaTime": {
@@ -8391,7 +8387,6 @@
             "stream",
             "unload",
             "create_level",
-            "create_light",
             "build_lighting",
             "set_metadata",
             "export_level",
@@ -8411,13 +8406,6 @@
           "description": "Asset path for metadata or validation aliases.",
           "type": "string"
         },
-        "color": {
-          "description": "RGBA color as an array [r, g, b, a].",
-          "items": {
-            "type": "number"
-          },
-          "type": "array"
-        },
         "destinationPath": {
           "description": "Destination path for move/copy.",
           "type": "string"
@@ -8426,48 +8414,12 @@
           "description": "Export file path.",
           "type": "string"
         },
-        "intensity": {
-          "type": "number"
-        },
         "levelName": {
           "type": "string"
         },
         "levelPath": {
           "description": "Level asset path.",
           "type": "string"
-        },
-        "lightType": {
-          "description": "Light type. Accepts short names (Point), class names (PointLight), or lowercase (point).",
-          "enum": [
-            "Directional",
-            "Point",
-            "Spot",
-            "Rect",
-            "DirectionalLight",
-            "PointLight",
-            "SpotLight",
-            "RectLight",
-            "directional",
-            "point",
-            "spot",
-            "rect"
-          ],
-          "type": "string"
-        },
-        "location": {
-          "description": "3D location (x, y, z).",
-          "properties": {
-            "x": {
-              "type": "number"
-            },
-            "y": {
-              "type": "number"
-            },
-            "z": {
-              "type": "number"
-            }
-          },
-          "type": "object"
         },
         "metadata": {
           "description": "Metadata key/value object."
@@ -8503,21 +8455,6 @@
         "quality": {
           "description": "Lighting build quality label.",
           "type": "string"
-        },
-        "rotation": {
-          "description": "3D rotation (pitch, yaw, roll).",
-          "properties": {
-            "pitch": {
-              "type": "number"
-            },
-            "roll": {
-              "type": "number"
-            },
-            "yaw": {
-              "type": "number"
-            }
-          },
-          "type": "object"
         },
         "saveDirtyPackages": {
           "description": "load: save dirty world/content packages before loading (required in headless/unattended mode).",

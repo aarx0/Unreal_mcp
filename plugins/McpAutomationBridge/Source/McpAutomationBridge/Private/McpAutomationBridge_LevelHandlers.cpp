@@ -1528,12 +1528,6 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelUnload(
   return HandleLevelStreamInternal(RequestId, Payload, Socket, true);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelCreateLight(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
-  return HandleLightingCreateLight(RequestId, Payload, Socket);
-}
-
 bool UMcpAutomationBridgeSubsystem::HandleLevelBuildLighting(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
@@ -2849,7 +2843,6 @@ MCP_LEVEL_HANDLER_STUB(HandleLevelSaveAs)
 MCP_LEVEL_HANDLER_STUB(HandleLevelCreate)
 MCP_LEVEL_HANDLER_STUB(HandleLevelStream)
 MCP_LEVEL_HANDLER_STUB(HandleLevelUnload)
-MCP_LEVEL_HANDLER_STUB(HandleLevelCreateLight)
 MCP_LEVEL_HANDLER_STUB(HandleLevelBuildLighting)
 MCP_LEVEL_HANDLER_STUB(HandleLevelSetMetadata)
 MCP_LEVEL_HANDLER_STUB(HandleLevelValidate)

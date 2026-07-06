@@ -28,7 +28,6 @@ inline const FMcpParamDecl P_SaveAs[] = { { TEXT("savePath"), EMcpParamKind::Str
 inline const FMcpParamDecl P_CreateLevel[] = { { TEXT("levelName"), EMcpParamKind::String, false }, { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("useWorldPartition"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_Stream[] = { { TEXT("levelName"), EMcpParamKind::String, false }, { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("shouldBeLoaded"), EMcpParamKind::Bool, false }, { TEXT("shouldBeVisible"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_Unload[] = { { TEXT("levelName"), EMcpParamKind::String, false }, { TEXT("levelPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateLight[] = { { TEXT("lightClass"), EMcpParamKind::String, false }, { TEXT("lightType"), EMcpParamKind::String, false }, { TEXT("type"), EMcpParamKind::String, false }, { TEXT("location"), EMcpParamKind::Object, true }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("properties"), EMcpParamKind::Object, false } };
 inline const FMcpParamDecl P_BuildLighting[] = { { TEXT("quality"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_SetMetadata[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("metadata"), EMcpParamKind::Object, false } };
 inline const FMcpParamDecl P_Validate[] = { { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false } };
@@ -64,7 +63,6 @@ MCP_ML_CALL(SaveAs, "save_as", P_SaveAs, HandleLevelSaveAs, EMcpCallFlags::Mutat
 MCP_ML_CALL(CreateLevel, "create_level", P_CreateLevel, HandleLevelCreate, EMcpCallFlags::Mutating)
 MCP_ML_CALL(Stream, "stream", P_Stream, HandleLevelStream, EMcpCallFlags::Mutating)
 MCP_ML_CALL(Unload, "unload", P_Unload, HandleLevelUnload, EMcpCallFlags::Mutating)
-MCP_ML_CALL(CreateLight, "create_light", P_CreateLight, HandleLevelCreateLight, EMcpCallFlags::Mutating)
 MCP_ML_CALL(BuildLighting, "build_lighting", P_BuildLighting, HandleLevelBuildLighting, EMcpCallFlags::Mutating)
 MCP_ML_CALL(SetMetadata, "set_metadata", P_SetMetadata, HandleLevelSetMetadata, EMcpCallFlags::Mutating)
 MCP_ML_CALL(ExportLevel, "export_level", P_Export, HandleLevelExport, EMcpCallFlags::Mutating)
@@ -92,7 +90,6 @@ void McpRegisterManageLevelCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevel_CreateLevel>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevel_Stream>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevel_Unload>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevel_CreateLight>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevel_BuildLighting>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevel_SetMetadata>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevel_ExportLevel>());

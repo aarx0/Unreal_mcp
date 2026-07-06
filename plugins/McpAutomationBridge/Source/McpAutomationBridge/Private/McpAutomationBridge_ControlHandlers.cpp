@@ -3405,18 +3405,6 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorResume(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleControlEditorConsoleCommand(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
-#if WITH_EDITOR
-  return HandleConsoleCommandAction(RequestId, TEXT("console_command"), Payload, Socket);
-#else
-  SendStandardErrorResponse(this, Socket, RequestId, TEXT("NOT_IMPLEMENTED"),
-                              TEXT("Console command requires editor build."), nullptr);
-  return true;
-#endif
-}
-
 bool UMcpAutomationBridgeSubsystem::HandleControlEditorStepFrame(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {

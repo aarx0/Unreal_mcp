@@ -44,33 +44,7 @@ public:
 			.String(TEXT("streamingMethod"), TEXT(""))
 			.Bool(TEXT("shouldBeLoaded"), TEXT(""))
 			.Bool(TEXT("shouldBeVisible"), TEXT(""))
-			.StringEnum(TEXT("lightType"), {
-				TEXT("Directional"),
-				TEXT("Point"),
-				TEXT("Spot"),
-				TEXT("Rect"),
-				TEXT("DirectionalLight"),
-				TEXT("PointLight"),
-				TEXT("SpotLight"),
-				TEXT("RectLight"),
-				TEXT("directional"),
-				TEXT("point"),
-				TEXT("spot"),
-				TEXT("rect")
-			}, TEXT("Light type. Accepts short names (Point), class names "
-				"(PointLight), or lowercase (point)."))
 			.String(TEXT("quality"), TEXT("Lighting build quality label."))
-			.Number(TEXT("intensity"), TEXT(""))
-			.Array(TEXT("color"), TEXT("RGBA color as an array [r, g, b, a]."),
-				TEXT("number"))
-			.Object(TEXT("location"), TEXT("3D location (x, y, z)."),
-				[](FMcpSchemaBuilder& S) {
-				S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
-			})
-			.Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
-				[](FMcpSchemaBuilder& S) {
-				S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
-			})
 			.Bool(TEXT("useWorldPartition"), TEXT(""))
 			.FreeformObject(TEXT("metadata"), TEXT("Metadata key/value object."))
 			.Required({TEXT("action")})
