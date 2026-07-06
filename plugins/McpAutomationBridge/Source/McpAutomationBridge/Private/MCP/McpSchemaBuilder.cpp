@@ -195,6 +195,12 @@ FMcpSchemaBuilder& FMcpSchemaBuilder::Required(const TArray<FString>& Names)
 	return *this;
 }
 
+FMcpSchemaBuilder& FMcpSchemaBuilder::ClearRequired()
+{
+	RequiredFields.Empty();
+	return *this;
+}
+
 TSharedPtr<FJsonObject> FMcpSchemaBuilder::Build() const
 {
 	auto Schema = MakeShared<FJsonObject>();

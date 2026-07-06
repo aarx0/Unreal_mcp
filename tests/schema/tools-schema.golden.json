@@ -1774,12 +1774,13 @@
         "fov": {
           "type": "number"
         },
-        "height": {
-          "type": "number"
-        },
         "id": {
           "description": "Bookmark identifier/index.",
           "type": "integer"
+        },
+        "index": {
+          "description": "Bookmark slot index (create_bookmark / jump_to_bookmark).",
+          "type": "number"
         },
         "inputAction": {
           "type": "string"
@@ -1821,6 +1822,10 @@
           "description": "Name identifier.",
           "type": "string"
         },
+        "objectPath": {
+          "description": "possess: object path of the pawn/actor to possess (alternative to actorName).",
+          "type": "string"
+        },
         "path": {
           "description": "Path to a directory.",
           "type": "string"
@@ -1828,10 +1833,6 @@
         "preferences": {},
         "realtime": {
           "type": "boolean"
-        },
-        "resolution": {
-          "description": "Resolution setting (e.g., 1024x1024).",
-          "type": "string"
         },
         "rotation": {
           "description": "3D rotation (pitch, yaw, roll).",
@@ -1859,9 +1860,6 @@
           "description": "simulate_nav: default true — before the nav, focus the PIE game viewport if focus isn't already inside it, so the faithful drive routes through CommonUI deterministically (never steals focus from an already-focused in-game widget). Set false to drive from whatever currently has focus.",
           "type": "boolean"
         },
-        "steps": {
-          "type": "integer"
-        },
         "type": {
           "description": "Input event type for simulate_input: key_down, key_up, mouse_click, mouse_move, analog. analog injects a 1D axis value (key=Gamepad_LeftY/Gamepad_RightX/MouseX/... + value); the value persists in PlayerInput until the next sample, so hold = inject once, release = inject 0.",
           "type": "string"
@@ -1872,9 +1870,6 @@
         },
         "viewMode": {
           "type": "string"
-        },
-        "width": {
-          "type": "number"
         },
         "x": {
           "description": "Mouse X coordinate for simulate_input.",

@@ -48,8 +48,14 @@ $fallbackKeyRegex = [regex]'WithFallback\s*\(\s*[^";]{0,80}?TEXT\("[^"]+"\)\s*,\
 $payloadReadRegex = [regex]('(?:\b[A-Za-z0-9_]*Payload(?:\.Get\(\))?\s*->\s*' + $readFn + '(?:<[^<>]*>)?\s*\(\s*|\b' + $readFn + '\s*\(\s*[A-Za-z0-9_]*Payload\s*,\s*)TEXT\("([^"]+)"\)')
 
 # --- declared params: name -> declaring tool files ---
+# Schema declarations live in the tool facades (McpTool_*.cpp) and, for
+# schema-from-decls families, in their AppendSchema fragments (Calls/McpCalls_*.cpp
+# — same builder DSL; the facade folds them at runtime). Scan both so a param
+# authored in a fragment still counts as declared.
 $declared = [System.Collections.Generic.Dictionary[string, object]]::new([System.StringComparer]::Ordinal)
+$callsDir  = Join-Path $srcRoot 'MCP/Calls'
 $toolFiles = @(Get-ChildItem -Path $toolsDir -Filter 'McpTool_*.cpp')
+if (Test-Path $callsDir) { $toolFiles += @(Get-ChildItem -Path $callsDir -Filter 'McpCalls_*.cpp') }
 if (-not $toolFiles) { throw "no McpTool_*.cpp found under $toolsDir" }
 foreach ($f in $toolFiles) {
   $text = Get-Content $f.FullName -Raw

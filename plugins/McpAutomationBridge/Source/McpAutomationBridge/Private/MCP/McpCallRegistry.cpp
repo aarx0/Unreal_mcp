@@ -93,3 +93,17 @@ FMcpCall* FMcpCallRegistry::FindCall(const FString& Tool, const FString& Action)
 	const TUniquePtr<FMcpCall>* Found = CallsByKey.Find(Tool + TEXT(".") + Action);
 	return Found ? Found->Get() : nullptr;
 }
+
+TArray<FMcpCall*> FMcpCallRegistry::CallsForTool(const FString& Tool) const
+{
+	TArray<FMcpCall*> Result;
+	for (const TPair<FString, TUniquePtr<FMcpCall>>& Pair : CallsByKey)
+	{
+		FMcpCall* Call = Pair.Value.Get();
+		if (Call && Tool.Equals(Call->GetDecl().Tool, ESearchCase::IgnoreCase))
+		{
+			Result.Add(Call);
+		}
+	}
+	return Result;
+}

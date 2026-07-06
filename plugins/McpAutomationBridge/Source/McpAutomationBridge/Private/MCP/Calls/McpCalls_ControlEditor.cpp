@@ -1,59 +1,196 @@
 // LINT-TOOL: control_editor
-// control_editor as FMcpCall classes — third classed family
-// (docs/action-declarations.md). Each class co-locates the action's
-// declaration with its implementation. Run() delegates to the subsystem
-// member handlers until the module split de-members those bodies.
+// LINT-SCHEMA-DERIVED
+// control_editor as FMcpCall classes — third classed family, first to adopt
+// schema-from-decls (docs/action-declarations.md). Each class AUTHORS its schema
+// fragment in a S_<Suffix>() function; the published facade schema folds those
+// fragments and GetDecl() derives the validation decl from the same fragment via
+// McpDeriveDecl(), so schema and decl are one source and cannot drift. Run()
+// delegates to the subsystem member handlers until the module split de-members
+// those bodies.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
+#include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
-// so file-scope param arrays would collide across families otherwise.
+// so file-scope helpers would collide across families otherwise.
 namespace McpCalls::ControlEditor
 {
 
-// ─── Param contracts ─────────────────────────────────────────────────────────
-// Authored from the handler bodies' actual payload reads (the shim decls for
-// this family were the 04e mega-bag class: execute_command carried a
-// 30-param union with required params its handler never read). Actions that accept one-of-several params
-// (possess, open_level, simulate_nav's direction/key) declare each optional:
-// the requirement is "at least one", which the decl vocabulary cannot express
-// and the handler enforces itself. PIE-only preconditions (pause, possess,
-// simulate_nav, ...) are handler-enforced too — RequiresEditor only covers
-// GEditor existing.
+// ─── Schema fragments ────────────────────────────────────────────────────────
+// One S_<Suffix>() per action, authoring exactly the params that action reads
+// (the fold dedups shared params to one entry). Descriptions are the tool's
+// authored help text; McpDeriveDecl() reads the param kinds + required-set back
+// out of these to build the transport validation decl. Actions that accept
+// one-of-several params (possess, open_level, simulate_nav's direction/key)
+// author each optional: the requirement is "at least one", which the decl
+// vocabulary cannot express and the handler enforces itself. PIE-only
+// preconditions (pause, possess, simulate_nav, ...) are handler-enforced too —
+// RequiresEditor only covers GEditor existing.
 
-inline const FMcpParamDecl P_Possess[] = { { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("objectPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetGameSpeed[] = { { TEXT("speed"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetFixedDeltaTime[] = { { TEXT("deltaTime"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetCamera[] = { { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_SetCameraFov[] = { { TEXT("fov"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetViewMode[] = { { TEXT("viewMode"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetViewportRealtime[] = { { TEXT("realtime"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetGameView[] = { { TEXT("enabled"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetImmersiveMode[] = { { TEXT("enabled"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_FocusActor[] = { { TEXT("actorName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_Screenshot[] = { { TEXT("filename"), EMcpParamKind::String, false }, { TEXT("maxWidth"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_OpenAsset[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_CloseAsset[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_OpenLevel[] = { { TEXT("levelPath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetEditorMode[] = { { TEXT("mode"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_SetPreferences[] = { { TEXT("preferences"), EMcpParamKind::Object, false }, { TEXT("category"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateBookmark[] = { { TEXT("index"), EMcpParamKind::Number, false }, { TEXT("id"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_JumpToBookmark[] = { { TEXT("index"), EMcpParamKind::Number, false }, { TEXT("id"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_StartRecording[] = { { TEXT("filename"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SimulateInput[] = { { TEXT("type"), EMcpParamKind::String, false }, { TEXT("inputType"), EMcpParamKind::String, false }, { TEXT("inputAction"), EMcpParamKind::String, false }, { TEXT("key"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("button"), EMcpParamKind::String, false }, { TEXT("value"), EMcpParamKind::Number, false }, { TEXT("route"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SimulateNav[] = { { TEXT("direction"), EMcpParamKind::String, false }, { TEXT("device"), EMcpParamKind::String, false }, { TEXT("key"), EMcpParamKind::String, false }, { TEXT("stabilizeFocus"), EMcpParamKind::Bool, false } };
+static void S_Play(FMcpSchemaBuilder&) {}
+static void S_Stop(FMcpSchemaBuilder&) {}
+static void S_Pause(FMcpSchemaBuilder&) {}
+static void S_Resume(FMcpSchemaBuilder&) {}
+static void S_Eject(FMcpSchemaBuilder&) {}
+static void S_StepFrame(FMcpSchemaBuilder&) {}
+static void S_ShowStats(FMcpSchemaBuilder&) {}
+static void S_HideStats(FMcpSchemaBuilder&) {}
+static void S_StopRecording(FMcpSchemaBuilder&) {}
+static void S_Undo(FMcpSchemaBuilder&) {}
+static void S_Redo(FMcpSchemaBuilder&) {}
+static void S_SaveAll(FMcpSchemaBuilder&) {}
+
+static void S_Possess(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("objectPath"), TEXT("possess: object path of the pawn/actor to possess (alternative to actorName)."));
+}
+
+static void S_SetGameSpeed(FMcpSchemaBuilder& B)
+{
+	B.Number(TEXT("speed"), TEXT(""));
+}
+
+static void S_SetFixedDeltaTime(FMcpSchemaBuilder& B)
+{
+	B.Number(TEXT("deltaTime"), TEXT(""));
+}
+
+static void S_SetCamera(FMcpSchemaBuilder& B)
+{
+	B.Object(TEXT("location"), TEXT("3D location (x, y, z)."),
+		[](FMcpSchemaBuilder& S) {
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		})
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
+		[](FMcpSchemaBuilder& S) {
+			S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
+		});
+}
+
+static void S_SetCameraFov(FMcpSchemaBuilder& B)
+{
+	B.Number(TEXT("fov"), TEXT(""));
+}
+
+static void S_SetViewMode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("viewMode"), TEXT(""));
+}
+
+static void S_SetViewportRealtime(FMcpSchemaBuilder& B)
+{
+	B.Bool(TEXT("realtime"), TEXT(""));
+}
+
+static void S_SetGameView(FMcpSchemaBuilder& B)
+{
+	B.Bool(TEXT("enabled"), TEXT("Whether the item/feature is enabled."));
+}
+
+static void S_SetImmersiveMode(FMcpSchemaBuilder& B)
+{
+	B.Bool(TEXT("enabled"), TEXT("Whether the item/feature is enabled."));
+}
+
+static void S_FocusActor(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_Screenshot(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("filename"), TEXT("screenshot: output PNG name (saved under Saved/Screenshots; defaults to a timestamp)."))
+	 .Integer(TEXT("maxWidth"), TEXT("screenshot: downscale the capture to at most this width in px (0/omit = native viewport size)."));
+}
+
+static void S_OpenAsset(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_CloseAsset(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_OpenLevel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("levelPath"), TEXT("Level asset path."))
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."));
+}
+
+static void S_SetEditorMode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("mode"), TEXT(""))
+	 .Required({TEXT("mode")});
+}
+
+static void S_SetPreferences(FMcpSchemaBuilder& B)
+{
+	B.FreeformObject(TEXT("preferences"), TEXT(""))
+	 .String(TEXT("category"), TEXT(""));
+}
+
+static void S_CreateBookmark(FMcpSchemaBuilder& B)
+{
+	B.Number(TEXT("index"), TEXT("Bookmark slot index (create_bookmark / jump_to_bookmark)."))
+	 .Integer(TEXT("id"), TEXT("Bookmark identifier/index."));
+}
+
+static void S_JumpToBookmark(FMcpSchemaBuilder& B)
+{
+	B.Number(TEXT("index"), TEXT("Bookmark slot index (create_bookmark / jump_to_bookmark)."))
+	 .Integer(TEXT("id"), TEXT("Bookmark identifier/index."));
+}
+
+static void S_StartRecording(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("filename"), TEXT("screenshot: output PNG name (saved under Saved/Screenshots; defaults to a timestamp)."))
+	 .String(TEXT("name"), TEXT("Name identifier."));
+}
+
+static void S_SimulateInput(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("type"), TEXT("Input event type for simulate_input: key_down, key_up, mouse_click, mouse_move, analog. "
+		"analog injects a 1D axis value (key=Gamepad_LeftY/Gamepad_RightX/MouseX/... + value); the value persists in "
+		"PlayerInput until the next sample, so hold = inject once, release = inject 0."))
+	 .String(TEXT("inputType"), TEXT("Alias for type used by simulate_input."))
+	 .String(TEXT("inputAction"), TEXT(""))
+	 .String(TEXT("key"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Mouse X coordinate for simulate_input."))
+	 .Number(TEXT("y"), TEXT("Mouse Y coordinate for simulate_input."))
+	 .String(TEXT("button"), TEXT("Mouse button for simulate_input."))
+	 .Number(TEXT("value"), TEXT("simulate_input analog: axis value (typically -1..1; mouse axes take pixel-ish deltas)."))
+	 .String(TEXT("route"), TEXT("simulate_input analog: 'pie' (default — straight to the PIE player controller, focus-immune) or "
+		"'slate' (through FSlateApplication + input preprocessors, exercising the CommonUI layer)."));
+}
+
+static void S_SimulateNav(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("direction"), TEXT("simulate_nav direction: Up/Down/Left/Right/Accept/Back/Next/Previous (PIE-only; faithfully routes a nav key through CommonUI, then returns the post-nav focus snapshot)."))
+	 .String(TEXT("device"), TEXT("simulate_nav input device: 'gamepad' (default, sends DPad/face-button keys) or 'keyboard' (arrows/Enter/Esc/Tab)."))
+	 .String(TEXT("key"), TEXT(""))
+	 .Bool(TEXT("stabilizeFocus"), TEXT("simulate_nav: default true — before the nav, focus the PIE game viewport if focus isn't already inside it, so the faithful drive routes through CommonUI deterministically (never steals focus from an already-focused in-game widget). Set false to drive from whatever currently has focus."));
+}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
 
-#define MCP_CE_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)       \
+#define MCP_CE_CALL(ClassSuffix, ActionLiteral, HandlerFn, ExtraFlags)                    \
 class FMcpCall_ControlEditor_##ClassSuffix final : public FMcpCall                        \
 {                                                                                         \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
 	const FMcpCallDecl& GetDecl() const override                                          \
 	{                                                                                     \
-		static const FMcpCallDecl Decl{ TEXT("control_editor"), TEXT(ActionLiteral),      \
-			ParamsArray, EMcpCallFlags::RequiresEditor | (ExtraFlags) };                  \
-		return Decl;                                                                      \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("control_editor"),              \
+			TEXT(ActionLiteral), EMcpCallFlags::RequiresEditor | (ExtraFlags),            \
+			&S_##ClassSuffix);                                                            \
+		return D;                                                                         \
 	}                                                                                     \
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
@@ -62,39 +199,39 @@ class FMcpCall_ControlEditor_##ClassSuffix final : public FMcpCall              
 	}                                                                                     \
 };
 
-MCP_CE_CALL(Play, "play", {}, HandleControlEditorPlay, EMcpCallFlags::None)
-MCP_CE_CALL(Stop, "stop", {}, HandleControlEditorStop, EMcpCallFlags::None)
-MCP_CE_CALL(Pause, "pause", {}, HandleControlEditorPause, EMcpCallFlags::None)
-MCP_CE_CALL(Resume, "resume", {}, HandleControlEditorResume, EMcpCallFlags::None)
-MCP_CE_CALL(Eject, "eject", {}, HandleControlEditorEject, EMcpCallFlags::None)
-MCP_CE_CALL(Possess, "possess", P_Possess, HandleControlEditorPossess, EMcpCallFlags::None)
-MCP_CE_CALL(StepFrame, "step_frame", {}, HandleControlEditorStepFrame, EMcpCallFlags::None)
-MCP_CE_CALL(SetGameSpeed, "set_game_speed", P_SetGameSpeed, HandleControlEditorSetGameSpeed, EMcpCallFlags::None)
-MCP_CE_CALL(SetFixedDeltaTime, "set_fixed_delta_time", P_SetFixedDeltaTime, HandleControlEditorSetFixedDeltaTime, EMcpCallFlags::None)
-MCP_CE_CALL(SetCamera, "set_camera", P_SetCamera, HandleControlEditorSetCamera, EMcpCallFlags::None)
-MCP_CE_CALL(SetCameraFov, "set_camera_fov", P_SetCameraFov, HandleControlEditorSetCameraFov, EMcpCallFlags::None)
-MCP_CE_CALL(SetViewMode, "set_view_mode", P_SetViewMode, HandleControlEditorSetViewMode, EMcpCallFlags::None)
-MCP_CE_CALL(SetViewportRealtime, "set_viewport_realtime", P_SetViewportRealtime, HandleControlEditorSetViewportRealtime, EMcpCallFlags::None)
-MCP_CE_CALL(SetGameView, "set_game_view", P_SetGameView, HandleControlEditorSetGameView, EMcpCallFlags::None)
-MCP_CE_CALL(SetImmersiveMode, "set_immersive_mode", P_SetImmersiveMode, HandleControlEditorSetImmersiveMode, EMcpCallFlags::None)
-MCP_CE_CALL(ShowStats, "show_stats", {}, HandleControlEditorShowStats, EMcpCallFlags::None)
-MCP_CE_CALL(HideStats, "hide_stats", {}, HandleControlEditorHideStats, EMcpCallFlags::None)
-MCP_CE_CALL(FocusActor, "focus_actor", P_FocusActor, HandleControlEditorFocusActor, EMcpCallFlags::None)
-MCP_CE_CALL(Screenshot, "screenshot", P_Screenshot, HandleControlEditorScreenshot, EMcpCallFlags::None)
-MCP_CE_CALL(OpenAsset, "open_asset", P_OpenAsset, HandleControlEditorOpenAsset, EMcpCallFlags::None)
-MCP_CE_CALL(CloseAsset, "close_asset", P_CloseAsset, HandleControlEditorCloseAsset, EMcpCallFlags::None)
-MCP_CE_CALL(OpenLevel, "open_level", P_OpenLevel, HandleControlEditorOpenLevel, EMcpCallFlags::None)
-MCP_CE_CALL(SetEditorMode, "set_editor_mode", P_SetEditorMode, HandleControlEditorSetEditorMode, EMcpCallFlags::None)
-MCP_CE_CALL(SetPreferences, "set_preferences", P_SetPreferences, HandleControlEditorSetPreferences, EMcpCallFlags::None)
-MCP_CE_CALL(CreateBookmark, "create_bookmark", P_CreateBookmark, HandleControlEditorCreateBookmark, EMcpCallFlags::None)
-MCP_CE_CALL(JumpToBookmark, "jump_to_bookmark", P_JumpToBookmark, HandleControlEditorJumpToBookmark, EMcpCallFlags::None)
-MCP_CE_CALL(StartRecording, "start_recording", P_StartRecording, HandleControlEditorStartRecording, EMcpCallFlags::None)
-MCP_CE_CALL(StopRecording, "stop_recording", {}, HandleControlEditorStopRecording, EMcpCallFlags::None)
-MCP_CE_CALL(SimulateInput, "simulate_input", P_SimulateInput, HandleControlEditorSimulateInput, EMcpCallFlags::None)
-MCP_CE_CALL(SimulateNav, "simulate_nav", P_SimulateNav, HandleControlEditorSimulateNav, EMcpCallFlags::None)
-MCP_CE_CALL(Undo, "undo", {}, HandleControlEditorUndo, EMcpCallFlags::Mutating)
-MCP_CE_CALL(Redo, "redo", {}, HandleControlEditorRedo, EMcpCallFlags::Mutating)
-MCP_CE_CALL(SaveAll, "save_all", {}, HandleControlEditorSaveAll, EMcpCallFlags::Mutating)
+MCP_CE_CALL(Play, "play", HandleControlEditorPlay, EMcpCallFlags::None)
+MCP_CE_CALL(Stop, "stop", HandleControlEditorStop, EMcpCallFlags::None)
+MCP_CE_CALL(Pause, "pause", HandleControlEditorPause, EMcpCallFlags::None)
+MCP_CE_CALL(Resume, "resume", HandleControlEditorResume, EMcpCallFlags::None)
+MCP_CE_CALL(Eject, "eject", HandleControlEditorEject, EMcpCallFlags::None)
+MCP_CE_CALL(Possess, "possess", HandleControlEditorPossess, EMcpCallFlags::None)
+MCP_CE_CALL(StepFrame, "step_frame", HandleControlEditorStepFrame, EMcpCallFlags::None)
+MCP_CE_CALL(SetGameSpeed, "set_game_speed", HandleControlEditorSetGameSpeed, EMcpCallFlags::None)
+MCP_CE_CALL(SetFixedDeltaTime, "set_fixed_delta_time", HandleControlEditorSetFixedDeltaTime, EMcpCallFlags::None)
+MCP_CE_CALL(SetCamera, "set_camera", HandleControlEditorSetCamera, EMcpCallFlags::None)
+MCP_CE_CALL(SetCameraFov, "set_camera_fov", HandleControlEditorSetCameraFov, EMcpCallFlags::None)
+MCP_CE_CALL(SetViewMode, "set_view_mode", HandleControlEditorSetViewMode, EMcpCallFlags::None)
+MCP_CE_CALL(SetViewportRealtime, "set_viewport_realtime", HandleControlEditorSetViewportRealtime, EMcpCallFlags::None)
+MCP_CE_CALL(SetGameView, "set_game_view", HandleControlEditorSetGameView, EMcpCallFlags::None)
+MCP_CE_CALL(SetImmersiveMode, "set_immersive_mode", HandleControlEditorSetImmersiveMode, EMcpCallFlags::None)
+MCP_CE_CALL(ShowStats, "show_stats", HandleControlEditorShowStats, EMcpCallFlags::None)
+MCP_CE_CALL(HideStats, "hide_stats", HandleControlEditorHideStats, EMcpCallFlags::None)
+MCP_CE_CALL(FocusActor, "focus_actor", HandleControlEditorFocusActor, EMcpCallFlags::None)
+MCP_CE_CALL(Screenshot, "screenshot", HandleControlEditorScreenshot, EMcpCallFlags::None)
+MCP_CE_CALL(OpenAsset, "open_asset", HandleControlEditorOpenAsset, EMcpCallFlags::None)
+MCP_CE_CALL(CloseAsset, "close_asset", HandleControlEditorCloseAsset, EMcpCallFlags::None)
+MCP_CE_CALL(OpenLevel, "open_level", HandleControlEditorOpenLevel, EMcpCallFlags::None)
+MCP_CE_CALL(SetEditorMode, "set_editor_mode", HandleControlEditorSetEditorMode, EMcpCallFlags::None)
+MCP_CE_CALL(SetPreferences, "set_preferences", HandleControlEditorSetPreferences, EMcpCallFlags::None)
+MCP_CE_CALL(CreateBookmark, "create_bookmark", HandleControlEditorCreateBookmark, EMcpCallFlags::None)
+MCP_CE_CALL(JumpToBookmark, "jump_to_bookmark", HandleControlEditorJumpToBookmark, EMcpCallFlags::None)
+MCP_CE_CALL(StartRecording, "start_recording", HandleControlEditorStartRecording, EMcpCallFlags::None)
+MCP_CE_CALL(StopRecording, "stop_recording", HandleControlEditorStopRecording, EMcpCallFlags::None)
+MCP_CE_CALL(SimulateInput, "simulate_input", HandleControlEditorSimulateInput, EMcpCallFlags::None)
+MCP_CE_CALL(SimulateNav, "simulate_nav", HandleControlEditorSimulateNav, EMcpCallFlags::None)
+MCP_CE_CALL(Undo, "undo", HandleControlEditorUndo, EMcpCallFlags::Mutating)
+MCP_CE_CALL(Redo, "redo", HandleControlEditorRedo, EMcpCallFlags::Mutating)
+MCP_CE_CALL(SaveAll, "save_all", HandleControlEditorSaveAll, EMcpCallFlags::Mutating)
 
 #undef MCP_CE_CALL
 

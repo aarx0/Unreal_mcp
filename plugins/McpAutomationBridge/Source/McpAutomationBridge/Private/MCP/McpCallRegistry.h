@@ -21,6 +21,8 @@
 #include "Containers/Map.h"
 #include "McpAutomationBridgeGlobals.h"
 
+class FMcpSchemaBuilder;
+
 enum class EMcpParamKind : uint8
 {
 	String,
@@ -73,6 +75,15 @@ public:
 	virtual ~FMcpCall() = default;
 	virtual const FMcpCallDecl& GetDecl() const = 0;
 
+	/**
+	 * Author this action's schema fragment (schema-from-decls). Migrated classes
+	 * emit their params here; the published facade schema folds every call's
+	 * fragment, and McpDeriveDecl() reads the validation decl back out of the
+	 * same fragment — so schema and decl can never drift. Default no-op leaves
+	 * un-migrated (P_*-array) classes unaffected.
+	 */
+	virtual void AppendSchema(FMcpSchemaBuilder& Builder) const {}
+
 	/** Shared pipeline. Returns true when the call was consumed (a response was sent). */
 	bool Execute(class UMcpAutomationBridgeSubsystem& Subsystem,
 	             const FString& RequestId,
@@ -103,6 +114,9 @@ public:
 	/** nullptr for shimmed actions — dispatch stays with the legacy family handler. */
 	FMcpCall* FindCall(const FString& Tool, const FString& Action) const;
 
+	/** Every classed call belonging to Tool (case-insensitive), for schema folding. */
+	TArray<FMcpCall*> CallsForTool(const FString& Tool) const;
+
 	int32 NumDecls() const { return DeclsByKey.Num(); }
 
 private:
@@ -110,3 +124,12 @@ private:
 	TMap<FString, const FMcpCallDecl*> DeclsByKey;
 	TMap<FString, TUniquePtr<FMcpCall>> CallsByKey;
 };
+
+/**
+ * Derive a lean validation decl from an authored schema fragment. Runs SchemaFn
+ * into a builder, then reads the param kinds/required-set back out of the built
+ * JSON. The returned reference is owned by grow-only static pools and lives for
+ * the process; callers cache it in a function-local static. (schema-from-decls)
+ */
+const FMcpCallDecl& McpDeriveDecl(const TCHAR* Tool, const TCHAR* Action,
+                                  EMcpCallFlags Flags, void (*SchemaFn)(FMcpSchemaBuilder&));

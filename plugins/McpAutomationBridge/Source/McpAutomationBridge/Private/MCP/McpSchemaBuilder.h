@@ -58,6 +58,12 @@ public:
 	/** Declare required property names. Can be called multiple times. */
 	FMcpSchemaBuilder& Required(const TArray<FString>& Names);
 
+	/** Drop all accumulated required names (properties are kept). The
+	 *  schema-from-decls fold uses this: per-action required lives in each
+	 *  action's derived decl, not the flat tool-level 'required' — which would
+	 *  otherwise force one action's required param onto every action. */
+	FMcpSchemaBuilder& ClearRequired();
+
 	/** Build the final inputSchema JSON object. */
 	TSharedPtr<FJsonObject> Build() const;
 
