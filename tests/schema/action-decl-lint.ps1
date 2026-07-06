@@ -49,6 +49,12 @@ foreach ($f in Get-ChildItem $declsDir -Filter 'McpDecl_*.h') {
 # McpCalls_*.cpp carries a '// LINT-TOOL: <tool>' marker; its param arrays use
 # the same FMcpParamDecl shape, and per-action rows are MCP_*_CALL macro
 # invocations: MCP_X_CALL(ClassSuffix, "action", ParamsArray, Handler, Flags).
+# Tools whose Calls file carries '// LINT-SCHEMA-DERIVED' author their schema in
+# AppendSchema fragments, so GetDecl derives the decl at runtime (McpDeriveDecl)
+# and the MCP_*_CALL macro no longer carries a parseable param array. This lint
+# can't see fragment params; param-reconciliation-test.ps1 checks their fragment
+# schema against handler reads instead — so skip charging findings to them.
+$schemaDerivedTools = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 $callsDir = Join-Path $srcRoot 'MCP/Calls'
 if (Test-Path $callsDir) {
   foreach ($f in Get-ChildItem $callsDir -Filter 'McpCalls_*.cpp') {
@@ -56,6 +62,7 @@ if (Test-Path $callsDir) {
     $toolM = [regex]::Match($text, '//\s*LINT-TOOL:\s*([a-z_]+)')
     if (-not $toolM.Success) { throw "$($f.Name): missing '// LINT-TOOL: <tool>' marker" }
     $tool = $toolM.Groups[1].Value
+    if ($text -match '//\s*LINT-SCHEMA-DERIVED') { [void]$schemaDerivedTools.Add($tool) }
     $arrays = @{}
     foreach ($m in [regex]::Matches($text, 'inline const FMcpParamDecl (\w+)\[\] = \{(.*?)\};')) {
       $arrays[$m.Groups[1].Value] = @([regex]::Matches($m.Groups[2].Value, '\{ TEXT\("([^"]+)"\)') | ForEach-Object { $_.Groups[1].Value })
@@ -132,6 +139,7 @@ foreach ($f in $handlerFiles) {
       $owners = @($toolOfAction[$range.Action])
       $chargedTools = if ($owners.Count -eq 1) { $owners } else { @($owners | Where-Object { $affinity.Contains($_) }) }
       foreach ($tool in $chargedTools) {
+        if ($schemaDerivedTools.Contains($tool)) { continue }
         $key = "$tool.$($range.Action)"
         if ($unverified.Contains($key)) { continue }
         if (-not $declParams.ContainsKey($key)) { continue }

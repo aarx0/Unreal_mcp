@@ -1,204 +1,930 @@
 // LINT-TOOL: manage_ai
-// manage_ai as FMcpCall classes — sixteenth classed family
-// (docs/action-declarations.md). Each class co-locates the action's
-// declaration with its implementation. Run() delegates to the subsystem
-// member handlers — HandleAi* (AIHandlers.cpp) for the 42 core actions,
-// HandleBehaviorTree* (BehaviorTreeHandlers.cpp) for the 7 Behavior Tree
-// graph actions, HandleNavigation* (NavigationHandlers.cpp) for the 12
+// LINT-SCHEMA-DERIVED
+// manage_ai as FMcpCall classes — sixteenth classed family, now schema-from-decls
+// (docs/action-declarations.md). Each class AUTHORS its schema fragment in a
+// S_<Suffix>() function; the published facade schema folds those fragments and
+// GetDecl() derives the validation decl from the same fragment via
+// McpDeriveDecl(), so schema and decl are one source and cannot drift. Run()
+// delegates to the subsystem member handlers — HandleAi* (AIHandlers.cpp) for the
+// core actions, HandleBehaviorTree* (BehaviorTreeHandlers.cpp) for the 7 Behavior
+// Tree graph actions, HandleNavigation* (NavigationHandlers.cpp) for the 12
 // navigation actions — until the module split de-members those bodies.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
+#include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
-// so file-scope param arrays would collide across families otherwise.
+// so file-scope helpers would collide across families otherwise.
 namespace McpCalls::ManageAi
 {
 
-// ─── Param contracts ─────────────────────────────────────────────────────────
-// Ported from this family's retired shim declarations (McpDecl_ManageAi.h)
-// and re-verified against the member bodies. Seven rows shipped with decl
-// fixes at classing. The six Behavior Tree graph rows (add_node, add_subnode,
-// break_connections, connect_nodes, remove_node, set_node_properties)
-// declared assetPath required, but the retired dispatcher resolves it through
-// the behaviorTreePath/path fallbacks and joint-rejects only when all three
-// are absent ("Missing 'assetPath' (or 'behaviorTreePath'/'path')"), so
-// requiring assetPath false-rejected every fallback-spelling payload —
-// optional now with the at-least-one requirement handler-enforced.
-// create_nav_link_proxy dropped blueprintPath/name/path: those spellings
-// were read only by the dispatcher's shadowed inline copy (deleted at this
-// classing — the Navigation router always won the name), and the live
-// NavigationHandlers body reads actorName/location/rotation/startPoint/
-// endPoint/direction, so the row now matches create_smart_link's. Its
-// location/startPoint/endPoint required flags STAY — the body rejects when
-// any of the three is missing (the scoping sweep's one-of suspicion did not
-// survive the body evidence; create_smart_link's row is unchanged for the
-// same reason).
+// ─── Schema fragments ────────────────────────────────────────────────────────
+// One S_<Suffix>() per action, authoring exactly the params that action reads
+// (the fold dedups shared params to one entry). Descriptions + builder methods
+// are copied verbatim from the retired facade; McpDeriveDecl() reads the param
+// kinds + required-set back out of these to build the transport validation decl.
+//
+// The path spellings (assetPath/behaviorTreePath/path for the BT graph actions,
+// controllerPath/behaviorTreePath/blackboardPath for assign_blackboard,
+// blueprintPath/controllerPath for get_info/setup_perception) stay optional: the
+// handler resolves the alias fallback itself, so the "at least one" requirement is
+// handler-enforced, not declared.
+//
+// Drift-corrections vs the retired flat facade + P_* decls, re-verified against
+// the member bodies at this classing:
+//   • add_node/connect_nodes/remove_node/break_connections dropped the
+//     material/Niagara graph params carried in from the old shared graph
+//     dispatcher (fromExpression/toExpression/inputName/sourceNodeId/
+//     targetNodeId/emitterName/scriptType/expressionIndex/pinName) plus a
+//     'name'/'save' the BT handlers never read (HandleBehaviorTree* only read
+//     assetPath|behaviorTreePath|path + nodeType/x/y/nodeId/parentNodeId/
+//     childNodeId).
+//   • configure_sight_config authors maxAge/autoSuccessRange/
+//     pointOfViewBackwardOffset/nearClippingRadius/enemies/neutrals/friendlies/
+//     detectionByAffiliation top-level — the facade only exposed them nested
+//     under sightConfig, but ReadSightParams(Payload) reads them top-level too
+//     (dual API; nested wins when both are given).
+//   • configure_test_scoring authors scoringEquation/filterType/clampMin/
+//     clampMax/floatMin/floatMax top-level for the same reason (Settings falls
+//     back to Payload when testSettings is absent).
+//   • configure_nav_area_cost authors fixedAreaEnteringCost — read by the handler
+//     but absent from the old facade entirely.
+//   • create_nav_link_proxy/create_smart_link keep location/startPoint/endPoint
+//     required (the body rejects when any is missing).
+// value + properties author FreeformObject (no "type"): the handlers parse them
+// defensively, so the derived decl is Any (accepts any JSON type) — set_blackboard_value
+// reads value as a string, configure_bt_node/set_node_properties read properties as
+// an object, but neither should reject the other JSON shapes at the transport gate.
+// configure_state_tree_task shares the 'taskType' param name with add_task_node;
+// both author the add_task_node StringEnum verbatim so the folded facade keeps one
+// consistent taskType entry (the State-Tree task string is not enum-constrained at
+// the transport gate — the decl only checks kind=string).
 
-inline const FMcpParamDecl P_CreateAiController[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AssignBehaviorTree[] = { { TEXT("controllerPath"), EMcpParamKind::String, true }, { TEXT("behaviorTreePath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_AssignBlackboard[] = { { TEXT("controllerPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("blackboardPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_CreateBlackboardAsset[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddBlackboardKey[] = { { TEXT("blackboardPath"), EMcpParamKind::String, true }, { TEXT("keyName"), EMcpParamKind::String, false }, { TEXT("keyType"), EMcpParamKind::String, false }, { TEXT("baseObjectClass"), EMcpParamKind::String, false }, { TEXT("isInstanceSynced"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetKeyInstanceSynced[] = { { TEXT("blackboardPath"), EMcpParamKind::String, true }, { TEXT("keyName"), EMcpParamKind::String, true }, { TEXT("isInstanceSynced"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateBehaviorTree[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blackboardPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddCompositeNode[] = { { TEXT("compositeType"), EMcpParamKind::String, true }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("parentNodeId"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddTaskNode[] = { { TEXT("taskType"), EMcpParamKind::String, true }, { TEXT("nodeClass"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("parentNodeId"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddDecorator[] = { { TEXT("parentNodeId"), EMcpParamKind::String, true }, { TEXT("decoratorType"), EMcpParamKind::String, true }, { TEXT("nodeClass"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddService[] = { { TEXT("parentNodeId"), EMcpParamKind::String, true }, { TEXT("serviceType"), EMcpParamKind::String, true }, { TEXT("nodeClass"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ConfigureBtNode[] = { { TEXT("behaviorTreePath"), EMcpParamKind::String, true }, { TEXT("nodeId"), EMcpParamKind::String, true }, { TEXT("properties"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_CreateEqsQuery[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddEqsGenerator[] = { { TEXT("queryPath"), EMcpParamKind::String, true }, { TEXT("generatorType"), EMcpParamKind::String, true }, { TEXT("generatorSettings"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_AddEqsContext[] = { { TEXT("queryPath"), EMcpParamKind::String, true }, { TEXT("contextType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddEqsTest[] = { { TEXT("queryPath"), EMcpParamKind::String, true }, { TEXT("testType"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ConfigureTestScoring[] = { { TEXT("queryPath"), EMcpParamKind::String, true }, { TEXT("testIndex"), EMcpParamKind::Number, false }, { TEXT("testSettings"), EMcpParamKind::Object, false }, { TEXT("scoringEquation"), EMcpParamKind::String, false }, { TEXT("filterType"), EMcpParamKind::String, false }, { TEXT("clampMin"), EMcpParamKind::Number, false }, { TEXT("clampMax"), EMcpParamKind::Number, false }, { TEXT("floatMin"), EMcpParamKind::Number, false }, { TEXT("floatMax"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_AddAiPerceptionComponent[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ConfigureSightConfig[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("sightRadius"), EMcpParamKind::Number, false }, { TEXT("loseSightRadius"), EMcpParamKind::Number, false }, { TEXT("peripheralVisionAngle"), EMcpParamKind::Number, false }, { TEXT("maxAge"), EMcpParamKind::Number, false }, { TEXT("autoSuccessRange"), EMcpParamKind::Number, false }, { TEXT("pointOfViewBackwardOffset"), EMcpParamKind::Number, false }, { TEXT("nearClippingRadius"), EMcpParamKind::Number, false }, { TEXT("enemies"), EMcpParamKind::Bool, false }, { TEXT("neutrals"), EMcpParamKind::Bool, false }, { TEXT("friendlies"), EMcpParamKind::Bool, false }, { TEXT("detectionByAffiliation"), EMcpParamKind::Object, false }, { TEXT("sightConfig"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_ConfigureHearingConfig[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("hearingRange"), EMcpParamKind::Number, false }, { TEXT("hearingConfig"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_ConfigureDamageSenseConfig[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("damageConfig"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_SetPerceptionTeam[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("teamId"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_CreateStateTree[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("schemaType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddStateTreeState[] = { { TEXT("stateTreePath"), EMcpParamKind::String, true }, { TEXT("stateName"), EMcpParamKind::String, true }, { TEXT("parentStateName"), EMcpParamKind::String, false }, { TEXT("stateType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddStateTreeTransition[] = { { TEXT("stateTreePath"), EMcpParamKind::String, true }, { TEXT("fromState"), EMcpParamKind::String, true }, { TEXT("toState"), EMcpParamKind::String, true }, { TEXT("triggerType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ConfigureStateTreeTask[] = { { TEXT("stateTreePath"), EMcpParamKind::String, true }, { TEXT("stateName"), EMcpParamKind::String, true }, { TEXT("taskType"), EMcpParamKind::String, false }, { TEXT("selectionBehavior"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateSmartObjectDefinition[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddSmartObjectSlot[] = { { TEXT("definitionPath"), EMcpParamKind::String, true }, { TEXT("offset"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("enabled"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureSlotBehavior[] = { { TEXT("definitionPath"), EMcpParamKind::String, true }, { TEXT("slotIndex"), EMcpParamKind::Number, false }, { TEXT("behaviorType"), EMcpParamKind::String, false }, { TEXT("activityTags"), EMcpParamKind::Array, false }, { TEXT("enabled"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddSmartObjectComponent[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("definitionPath"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateMassEntityConfig[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ConfigureMassEntity[] = { { TEXT("configPath"), EMcpParamKind::String, true }, { TEXT("parentConfigPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddMassSpawner[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("configPath"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("spawnCount"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_GetAiInfo[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("controllerPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("blackboardPath"), EMcpParamKind::String, false }, { TEXT("queryPath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetupPerception[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("controllerPath"), EMcpParamKind::String, false }, { TEXT("enableSight"), EMcpParamKind::Bool, false }, { TEXT("sightRadius"), EMcpParamKind::Number, false }, { TEXT("loseSightRadius"), EMcpParamKind::Number, false }, { TEXT("peripheralVisionAngle"), EMcpParamKind::Number, false }, { TEXT("enableHearing"), EMcpParamKind::Bool, false }, { TEXT("hearingRange"), EMcpParamKind::Number, false }, { TEXT("enableDamage"), EMcpParamKind::Bool, false }, { TEXT("dominantSense"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetFocus[] = { { TEXT("controllerPath"), EMcpParamKind::String, true }, { TEXT("focusActorName"), EMcpParamKind::String, false }, { TEXT("targetActor"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ClearFocus[] = { { TEXT("controllerPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_SetBlackboardValue[] = { { TEXT("blackboardPath"), EMcpParamKind::String, true }, { TEXT("keyName"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_GetBlackboardValue[] = { { TEXT("blackboardPath"), EMcpParamKind::String, true }, { TEXT("keyName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_RunBehaviorTree[] = { { TEXT("controllerPath"), EMcpParamKind::String, true }, { TEXT("behaviorTreePath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_StopBehaviorTree[] = { { TEXT("controllerPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_Create[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blackboardPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddNode[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("nodeType"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("parentNodeId"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::Any, false }, { TEXT("save"), EMcpParamKind::Any, false } };
-inline const FMcpParamDecl P_ConnectNodes[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("parentNodeId"), EMcpParamKind::String, false }, { TEXT("childNodeId"), EMcpParamKind::String, false }, { TEXT("fromExpression"), EMcpParamKind::Any, false }, { TEXT("inputName"), EMcpParamKind::Any, false }, { TEXT("save"), EMcpParamKind::Any, false }, { TEXT("sourceNodeId"), EMcpParamKind::Any, false }, { TEXT("targetNodeId"), EMcpParamKind::Any, false }, { TEXT("toExpression"), EMcpParamKind::Any, false } };
-inline const FMcpParamDecl P_RemoveNode[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("emitterName"), EMcpParamKind::String, false }, { TEXT("scriptType"), EMcpParamKind::String, false }, { TEXT("expressionIndex"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_BreakConnections[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("pinName"), EMcpParamKind::String, false }, { TEXT("expressionIndex"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetNodeProperties[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("comment"), EMcpParamKind::String, false }, { TEXT("properties"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_AddSubnode[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("parentNodeId"), EMcpParamKind::String, true }, { TEXT("subnodeType"), EMcpParamKind::String, true }, { TEXT("nodeClass"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ConfigureNavMeshSettings[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("tileSizeUU"), EMcpParamKind::Number, false }, { TEXT("minRegionArea"), EMcpParamKind::Number, false }, { TEXT("mergeRegionSize"), EMcpParamKind::Number, false }, { TEXT("maxSimplificationError"), EMcpParamKind::Number, false }, { TEXT("cellSize"), EMcpParamKind::Number, false }, { TEXT("cellHeight"), EMcpParamKind::Number, false }, { TEXT("agentStepHeight"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetNavAgentProperties[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("agentRadius"), EMcpParamKind::Number, false }, { TEXT("agentHeight"), EMcpParamKind::Number, false }, { TEXT("agentMaxSlope"), EMcpParamKind::Number, false }, { TEXT("agentStepHeight"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_RebuildNavigation[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateNavModifierComponent[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("areaClass"), EMcpParamKind::String, false }, { TEXT("failsafeExtent"), EMcpParamKind::Object, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetNavAreaClass[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("areaClass"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ConfigureNavAreaCost[] = { { TEXT("areaClass"), EMcpParamKind::String, true }, { TEXT("areaCost"), EMcpParamKind::Number, false }, { TEXT("fixedAreaEnteringCost"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_CreateNavLinkProxy[] = { { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("location"), EMcpParamKind::Object, true }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("startPoint"), EMcpParamKind::Object, true }, { TEXT("endPoint"), EMcpParamKind::Object, true }, { TEXT("direction"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ConfigureNavLink[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("startPoint"), EMcpParamKind::Object, false }, { TEXT("endPoint"), EMcpParamKind::Object, false }, { TEXT("direction"), EMcpParamKind::String, false }, { TEXT("snapRadius"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetNavLinkType[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("linkType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateSmartLink[] = { { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("location"), EMcpParamKind::Object, true }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("startPoint"), EMcpParamKind::Object, true }, { TEXT("endPoint"), EMcpParamKind::Object, true }, { TEXT("direction"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ConfigureSmartLinkBehavior[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("linkEnabled"), EMcpParamKind::Bool, false }, { TEXT("enabledAreaClass"), EMcpParamKind::String, false }, { TEXT("disabledAreaClass"), EMcpParamKind::String, false }, { TEXT("broadcastRadius"), EMcpParamKind::Number, false }, { TEXT("broadcastInterval"), EMcpParamKind::Number, false }, { TEXT("bCreateBoxObstacle"), EMcpParamKind::Bool, false }, { TEXT("obstacleAreaClass"), EMcpParamKind::String, false }, { TEXT("obstacleExtent"), EMcpParamKind::Object, false }, { TEXT("obstacleOffset"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_GetNavigationInfo[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false } };
+static void S_CreateAiController(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .Required({TEXT("name")});
+}
+
+static void S_AssignBehaviorTree(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("controllerPath"), TEXT("Path to controller blueprint."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .Required({TEXT("controllerPath"), TEXT("behaviorTreePath")});
+}
+
+static void S_AssignBlackboard(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("controllerPath"), TEXT("Path to controller blueprint."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .String(TEXT("blackboardPath"), TEXT("Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned)."))
+	 .Required({TEXT("blackboardPath")});
+}
+
+static void S_CreateBlackboardAsset(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .Required({TEXT("name")});
+}
+
+static void S_AddBlackboardKey(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blackboardPath"), TEXT("Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned)."))
+	 .String(TEXT("keyName"), TEXT("Name of the key."))
+	 .StringEnum(TEXT("keyType"), {
+		TEXT("Bool"),
+		TEXT("Int"),
+		TEXT("Float"),
+		TEXT("Vector"),
+		TEXT("Rotator"),
+		TEXT("Object"),
+		TEXT("Class"),
+		TEXT("Enum"),
+		TEXT("Name"),
+		TEXT("String")
+	 }, TEXT("Blackboard key data type."))
+	 .String(TEXT("baseObjectClass"), TEXT("add_blackboard_key: base class for Object/Class key types (default 'Actor')."))
+	 .Bool(TEXT("isInstanceSynced"), TEXT("Sync key across instances."))
+	 .Required({TEXT("blackboardPath")});
+}
+
+static void S_SetKeyInstanceSynced(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blackboardPath"), TEXT("Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned)."))
+	 .String(TEXT("keyName"), TEXT("Name of the key."))
+	 .Bool(TEXT("isInstanceSynced"), TEXT("Sync key across instances."))
+	 .Required({TEXT("blackboardPath"), TEXT("keyName")});
+}
+
+static void S_CreateBehaviorTree(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blackboardPath"), TEXT("Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_AddCompositeNode(FMcpSchemaBuilder& B)
+{
+	B.StringEnum(TEXT("compositeType"), {
+		TEXT("Selector"),
+		TEXT("Sequence"),
+		TEXT("SimpleParallel")
+	 }, TEXT("Composite node type for add_composite_node."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."))
+	 .Required({TEXT("compositeType")});
+}
+
+static void S_AddTaskNode(FMcpSchemaBuilder& B)
+{
+	B.StringEnum(TEXT("taskType"), {
+		TEXT("MoveTo"),
+		TEXT("MoveDirectlyToward"),
+		TEXT("RotateToFaceBBEntry"),
+		TEXT("Wait"),
+		TEXT("WaitBlackboardTime"),
+		TEXT("PlayAnimation"),
+		TEXT("PlaySound"),
+		TEXT("RunEQSQuery"),
+		TEXT("RunBehavior"),
+		TEXT("RunBehaviorDynamic"),
+		TEXT("SetTagCooldown"),
+		TEXT("FinishWithResult"),
+		TEXT("MakeNoise"),
+		TEXT("Custom")
+	 }, TEXT("Task node type for add_task_node (expands to BTTask_<type>; 'Custom' uses nodeClass)."))
+	 .String(TEXT("nodeClass"), TEXT("Behavior Tree node class: engine name (e.g. 'BTDecorator_Blackboard'), a short name that expands to one, or a Blueprint class path."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."))
+	 .Required({TEXT("taskType")});
+}
+
+static void S_AddDecorator(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."))
+	 .StringEnum(TEXT("decoratorType"), {
+		TEXT("Blackboard"),
+		TEXT("CheckGameplayTagsOnActor"),
+		TEXT("CompareBBEntries"),
+		TEXT("Cooldown"),
+		TEXT("ConeCheck"),
+		TEXT("DoesPathExist"),
+		TEXT("IsAtLocation"),
+		TEXT("IsBBEntryOfClass"),
+		TEXT("KeepInCone"),
+		TEXT("Loop"),
+		TEXT("SetTagCooldown"),
+		TEXT("TagCooldown"),
+		TEXT("TimeLimit"),
+		TEXT("ForceSuccess"),
+		TEXT("ConditionalLoop"),
+		TEXT("Custom")
+	 }, TEXT("Decorator node type for add_decorator (expands to BTDecorator_<type>; 'Custom' uses nodeClass)."))
+	 .String(TEXT("nodeClass"), TEXT("Behavior Tree node class: engine name (e.g. 'BTDecorator_Blackboard'), a short name that expands to one, or a Blueprint class path."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .Required({TEXT("parentNodeId"), TEXT("decoratorType")});
+}
+
+static void S_AddService(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."))
+	 .StringEnum(TEXT("serviceType"), {
+		TEXT("DefaultFocus"),
+		TEXT("RunEQS"),
+		TEXT("Custom")
+	 }, TEXT("Service node type for add_service (expands to BTService_<type>; 'Custom' uses nodeClass)."))
+	 .String(TEXT("nodeClass"), TEXT("Behavior Tree node class: engine name (e.g. 'BTDecorator_Blackboard'), a short name that expands to one, or a Blueprint class path."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .Required({TEXT("parentNodeId"), TEXT("serviceType")});
+}
+
+static void S_ConfigureBtNode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .FreeformObject(TEXT("properties"), TEXT("Properties to set on a graph node."))
+	 .Required({TEXT("behaviorTreePath"), TEXT("nodeId")});
+}
+
+static void S_CreateEqsQuery(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .Required({TEXT("name")});
+}
+
+static void S_AddEqsGenerator(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("queryPath"), TEXT("Path to EQS query asset."))
+	 .StringEnum(TEXT("generatorType"), {
+		TEXT("ActorsOfClass"),
+		TEXT("CurrentLocation"),
+		TEXT("Donut"),
+		TEXT("OnCircle"),
+		TEXT("PathingGrid"),
+		TEXT("SimpleGrid"),
+		TEXT("Composite"),
+		TEXT("Custom")
+	 }, TEXT("EQS generator type."))
+	 .Object(TEXT("generatorSettings"), TEXT("Generator-specific settings."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("searchRadius"))
+		 .String(TEXT("searchCenter"), TEXT(""))
+		 .String(TEXT("actorClass"), TEXT(""))
+		 .Number(TEXT("gridSize"))
+		 .Number(TEXT("spacesBetween"))
+		 .Number(TEXT("innerRadius"))
+		 .Number(TEXT("outerRadius"));
+	})
+	 .Required({TEXT("queryPath"), TEXT("generatorType")});
+}
+
+static void S_AddEqsContext(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("queryPath"), TEXT("Path to EQS query asset."))
+	 .StringEnum(TEXT("contextType"), {
+		TEXT("Querier"),
+		TEXT("Item"),
+		TEXT("EnvQueryContext_BlueprintBase"),
+		TEXT("Custom")
+	 }, TEXT("EQS context type."))
+	 .Required({TEXT("queryPath")});
+}
+
+static void S_AddEqsTest(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("queryPath"), TEXT("Path to EQS query asset."))
+	 .StringEnum(TEXT("testType"), {
+		TEXT("Distance"),
+		TEXT("Dot"),
+		TEXT("GameplayTags"),
+		TEXT("Overlap"),
+		TEXT("Pathfinding"),
+		TEXT("PathfindingBatch"),
+		TEXT("Project"),
+		TEXT("Random"),
+		TEXT("Trace"),
+		TEXT("Custom")
+	 }, TEXT("EQS test type."))
+	 .Required({TEXT("queryPath"), TEXT("testType")});
+}
+
+static void S_ConfigureTestScoring(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("queryPath"), TEXT("Path to EQS query asset."))
+	 .Number(TEXT("testIndex"), TEXT("Index of test to configure."))
+	 .Object(TEXT("testSettings"), TEXT("Test scoring and filter settings."),
+		[](FMcpSchemaBuilder& S) {
+		S.StringEnum(TEXT("scoringEquation"), {
+			TEXT("Linear"),
+			TEXT("Square"),
+			TEXT("InverseLinear"),
+			TEXT("Constant")
+		}, TEXT(""))
+		 .Number(TEXT("clampMin"))
+		 .Number(TEXT("clampMax"))
+		 .StringEnum(TEXT("filterType"), {
+			TEXT("Minimum"),
+			TEXT("Maximum"),
+			TEXT("Range")
+		}, TEXT(""))
+		 .Number(TEXT("floatMin"))
+		 .Number(TEXT("floatMax"));
+	})
+	 .StringEnum(TEXT("scoringEquation"), {
+		TEXT("Linear"),
+		TEXT("Square"),
+		TEXT("InverseLinear"),
+		TEXT("Constant")
+	 }, TEXT("configure_test_scoring: score curve, top-level alias of testSettings.scoringEquation."))
+	 .StringEnum(TEXT("filterType"), {
+		TEXT("Minimum"),
+		TEXT("Maximum"),
+		TEXT("Range")
+	 }, TEXT("configure_test_scoring: filter mode, top-level alias of testSettings.filterType."))
+	 .Number(TEXT("clampMin"), TEXT("configure_test_scoring: lower score clamp, top-level alias of testSettings.clampMin."))
+	 .Number(TEXT("clampMax"), TEXT("configure_test_scoring: upper score clamp, top-level alias of testSettings.clampMax."))
+	 .Number(TEXT("floatMin"), TEXT("configure_test_scoring: lower range-filter bound, top-level alias of testSettings.floatMin."))
+	 .Number(TEXT("floatMax"), TEXT("configure_test_scoring: upper range-filter bound, top-level alias of testSettings.floatMax."))
+	 .Required({TEXT("queryPath")});
+}
+
+static void S_AddAiPerceptionComponent(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_ConfigureSightConfig(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("sightRadius"), TEXT("AI sight radius."))
+	 .Number(TEXT("loseSightRadius"), TEXT("AI sight lose radius."))
+	 .Number(TEXT("peripheralVisionAngle"), TEXT("Sight peripheral vision angle."))
+	 .Number(TEXT("maxAge"), TEXT("configure_sight_config: perception forget time in seconds (0 = never expires); top-level alias of sightConfig.maxAge."))
+	 .Number(TEXT("autoSuccessRange"), TEXT("configure_sight_config: range within which the target is always seen (-1 disables); top-level alias of sightConfig.autoSuccessRange."))
+	 .Number(TEXT("pointOfViewBackwardOffset"), TEXT("configure_sight_config: eye-point backward offset; top-level alias of sightConfig.pointOfViewBackwardOffset."))
+	 .Number(TEXT("nearClippingRadius"), TEXT("configure_sight_config: near clipping radius; top-level alias of sightConfig.nearClippingRadius."))
+	 .Bool(TEXT("enemies"), TEXT("configure_sight_config: detect enemy-affiliated targets; top-level alias of sightConfig.detectionByAffiliation.enemies."))
+	 .Bool(TEXT("neutrals"), TEXT("configure_sight_config: detect neutral-affiliated targets; top-level alias of sightConfig.detectionByAffiliation.neutrals."))
+	 .Bool(TEXT("friendlies"), TEXT("configure_sight_config: detect friendly-affiliated targets; top-level alias of sightConfig.detectionByAffiliation.friendlies."))
+	 .Object(TEXT("detectionByAffiliation"), TEXT("configure_sight_config: which affiliations to detect; top-level alias of sightConfig.detectionByAffiliation."),
+		[](FMcpSchemaBuilder& S) {
+		S.Bool(TEXT("enemies"), TEXT(""))
+		 .Bool(TEXT("neutrals"), TEXT(""))
+		 .Bool(TEXT("friendlies"), TEXT(""));
+	})
+	 .Object(TEXT("sightConfig"), TEXT("AI sight sense configuration."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("sightRadius"))
+		 .Number(TEXT("loseSightRadius"))
+		 .Number(TEXT("peripheralVisionAngle"))
+		 .Number(TEXT("pointOfViewBackwardOffset"))
+		 .Number(TEXT("nearClippingRadius"))
+		 .Number(TEXT("autoSuccessRange"))
+		 .Number(TEXT("maxAge"))
+		 .Object(TEXT("detectionByAffiliation"), TEXT(""),
+			[](FMcpSchemaBuilder& Inner) {
+			Inner.Bool(TEXT("enemies"), TEXT(""))
+				 .Bool(TEXT("neutrals"), TEXT(""))
+				 .Bool(TEXT("friendlies"), TEXT(""));
+		});
+	})
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_ConfigureHearingConfig(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("hearingRange"), TEXT("AI hearing range."))
+	 .Object(TEXT("hearingConfig"), TEXT("AI hearing sense configuration."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("hearingRange"))
+		 .Bool(TEXT("detectFriendly"), TEXT(""))
+		 .Number(TEXT("maxAge"));
+	})
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_ConfigureDamageSenseConfig(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Object(TEXT("damageConfig"), TEXT("AI damage sense configuration."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("maxAge"));
+	})
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_SetPerceptionTeam(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("teamId"), TEXT("Team ID for perception affiliation (0=Neutral, 1=Player, 2=Enemy, etc.)."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_CreateStateTree(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("schemaType"), TEXT("create_state_tree: schema type (default 'Component')."))
+	 .Required({TEXT("name")});
+}
+
+static void S_AddStateTreeState(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("stateTreePath"), TEXT("Path to State Tree asset."))
+	 .String(TEXT("stateName"), TEXT("Name of the state."))
+	 .String(TEXT("parentStateName"), TEXT("Parent state name."))
+	 .String(TEXT("stateType"), TEXT("State Tree state type."))
+	 .Required({TEXT("stateTreePath"), TEXT("stateName")});
+}
+
+static void S_AddStateTreeTransition(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("stateTreePath"), TEXT("Path to State Tree asset."))
+	 .String(TEXT("fromState"), TEXT("Source state name."))
+	 .String(TEXT("toState"), TEXT("Target state name."))
+	 .String(TEXT("triggerType"), TEXT("State Tree transition trigger type."))
+	 .Required({TEXT("stateTreePath"), TEXT("fromState"), TEXT("toState")});
+}
+
+static void S_ConfigureStateTreeTask(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("stateTreePath"), TEXT("Path to State Tree asset."))
+	 .String(TEXT("stateName"), TEXT("Name of the state."))
+	 .StringEnum(TEXT("taskType"), {
+		TEXT("MoveTo"),
+		TEXT("MoveDirectlyToward"),
+		TEXT("RotateToFaceBBEntry"),
+		TEXT("Wait"),
+		TEXT("WaitBlackboardTime"),
+		TEXT("PlayAnimation"),
+		TEXT("PlaySound"),
+		TEXT("RunEQSQuery"),
+		TEXT("RunBehavior"),
+		TEXT("RunBehaviorDynamic"),
+		TEXT("SetTagCooldown"),
+		TEXT("FinishWithResult"),
+		TEXT("MakeNoise"),
+		TEXT("Custom")
+	 }, TEXT("Task node type for add_task_node (expands to BTTask_<type>; 'Custom' uses nodeClass)."))
+	 .String(TEXT("selectionBehavior"), TEXT("configure_state_tree_task: state selection behavior."))
+	 .Required({TEXT("stateTreePath"), TEXT("stateName")});
+}
+
+static void S_CreateSmartObjectDefinition(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .Required({TEXT("name")});
+}
+
+static void S_AddSmartObjectSlot(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("definitionPath"), TEXT("Path to definition asset."))
+	 .Object(TEXT("offset"), TEXT("Generic offset vector."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Object(TEXT("rotation"), TEXT("Rotation for nav link proxy."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
+	})
+	 .Bool(TEXT("enabled"), TEXT("Generic enabled flag."))
+	 .Required({TEXT("definitionPath")});
+}
+
+static void S_ConfigureSlotBehavior(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("definitionPath"), TEXT("Path to definition asset."))
+	 .Number(TEXT("slotIndex"), TEXT("Index of slot to configure."))
+	 .String(TEXT("behaviorType"), TEXT("configure_slot_behavior: behavior definition type for the slot."))
+	 .Array(TEXT("activityTags"), TEXT("configure_slot_behavior: gameplay tags describing slot activity."))
+	 .Bool(TEXT("enabled"), TEXT("Generic enabled flag."))
+	 .Required({TEXT("definitionPath")});
+}
+
+static void S_AddSmartObjectComponent(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("definitionPath"), TEXT("Path to definition asset."))
+	 .String(TEXT("componentName"), TEXT("Name of the component."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_CreateMassEntityConfig(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .Required({TEXT("name")});
+}
+
+static void S_ConfigureMassEntity(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("configPath"), TEXT("Path to config asset."))
+	 .String(TEXT("parentConfigPath"), TEXT("configure_mass_entity: optional parent config to inherit from."))
+	 .Required({TEXT("configPath")});
+}
+
+static void S_AddMassSpawner(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("configPath"), TEXT("Path to config asset."))
+	 .String(TEXT("componentName"), TEXT("Name of the component."))
+	 .Number(TEXT("spawnCount"), TEXT("Mass spawner entity count."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_GetAiInfo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("controllerPath"), TEXT("Path to controller blueprint."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .String(TEXT("blackboardPath"), TEXT("Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned)."))
+	 .String(TEXT("queryPath"), TEXT("Path to EQS query asset."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."));
+}
+
+static void S_SetupPerception(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("controllerPath"), TEXT("Path to controller blueprint."))
+	 .Bool(TEXT("enableSight"), TEXT("Enable sight sense."))
+	 .Number(TEXT("sightRadius"), TEXT("AI sight radius."))
+	 .Number(TEXT("loseSightRadius"), TEXT("AI sight lose radius."))
+	 .Number(TEXT("peripheralVisionAngle"), TEXT("Sight peripheral vision angle."))
+	 .Bool(TEXT("enableHearing"), TEXT("Enable hearing sense."))
+	 .Number(TEXT("hearingRange"), TEXT("AI hearing range."))
+	 .Bool(TEXT("enableDamage"), TEXT("Enable damage sense."))
+	 .StringEnum(TEXT("dominantSense"), {
+		TEXT("Sight"),
+		TEXT("Hearing"),
+		TEXT("Damage"),
+		TEXT("Touch"),
+		TEXT("None")
+	 }, TEXT("Dominant sense for perception prioritization."));
+}
+
+static void S_SetFocus(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("controllerPath"), TEXT("Path to controller blueprint."))
+	 .String(TEXT("focusActorName"), TEXT("Actor name to focus."))
+	 .String(TEXT("targetActor"), TEXT("set_focus: alias for focusActorName (checked as fallback)."))
+	 .Required({TEXT("controllerPath")});
+}
+
+static void S_ClearFocus(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("controllerPath"), TEXT("Path to controller blueprint."))
+	 .Required({TEXT("controllerPath")});
+}
+
+static void S_SetBlackboardValue(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blackboardPath"), TEXT("Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned)."))
+	 .String(TEXT("keyName"), TEXT("Name of the key."))
+	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Required({TEXT("blackboardPath"), TEXT("keyName")});
+}
+
+static void S_GetBlackboardValue(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blackboardPath"), TEXT("Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned)."))
+	 .String(TEXT("keyName"), TEXT("Name of the key."))
+	 .Required({TEXT("blackboardPath"), TEXT("keyName")});
+}
+
+static void S_RunBehaviorTree(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("controllerPath"), TEXT("Path to controller blueprint."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .Required({TEXT("controllerPath"), TEXT("behaviorTreePath")});
+}
+
+static void S_StopBehaviorTree(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("controllerPath"), TEXT("Path to controller blueprint."))
+	 .Required({TEXT("controllerPath")});
+}
+
+static void S_Create(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blackboardPath"), TEXT("Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_AddNode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("nodeType"), TEXT("Behavior Tree graph node type."))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."));
+}
+
+static void S_ConnectNodes(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."))
+	 .String(TEXT("childNodeId"), TEXT("Child node ID."));
+}
+
+static void S_RemoveNode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."));
+}
+
+static void S_BreakConnections(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."));
+}
+
+static void S_SetNodeProperties(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .String(TEXT("comment"), TEXT("Node comment."))
+	 .FreeformObject(TEXT("properties"), TEXT("Properties to set on a graph node."));
+}
+
+static void S_AddSubnode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."))
+	 .String(TEXT("subnodeType"), TEXT("Behavior Tree graph subnode type."))
+	 .String(TEXT("nodeClass"), TEXT("Behavior Tree node class: engine name (e.g. 'BTDecorator_Blackboard'), a short name that expands to one, or a Blueprint class path."))
+	 .Required({TEXT("parentNodeId"), TEXT("subnodeType"), TEXT("nodeClass")});
+}
+
+static void S_ConfigureNavMeshSettings(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("tileSizeUU"), TEXT("NavMesh tile size in UU (default: 1000)."))
+	 .Number(TEXT("minRegionArea"), TEXT("Minimum region area to keep."))
+	 .Number(TEXT("mergeRegionSize"), TEXT("Region merge threshold."))
+	 .Number(TEXT("maxSimplificationError"), TEXT("Edge simplification error."))
+	 .Number(TEXT("cellSize"), TEXT("NavMesh cell size (default: 19)."))
+	 .Number(TEXT("cellHeight"), TEXT("NavMesh cell height (default: 10)."))
+	 .Number(TEXT("agentStepHeight"), TEXT("Maximum step height agent can climb (default: 35)."));
+}
+
+static void S_SetNavAgentProperties(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("agentRadius"), TEXT("Navigation agent radius (default: 35)."))
+	 .Number(TEXT("agentHeight"), TEXT("Navigation agent height (default: 144)."))
+	 .Number(TEXT("agentMaxSlope"), TEXT("Maximum slope angle in degrees (default: 44)."))
+	 .Number(TEXT("agentStepHeight"), TEXT("Maximum step height agent can climb (default: 35)."));
+}
+
+static void S_RebuildNavigation(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."));
+}
+
+static void S_CreateNavModifierComponent(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("componentName"), TEXT("Name of the component."))
+	 .String(TEXT("areaClass"), TEXT("Navigation area class path."))
+	 .Object(TEXT("failsafeExtent"), TEXT("Failsafe extent for nav modifier when actor has no collision."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_SetNavAreaClass(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("componentName"), TEXT("Name of the component."))
+	 .String(TEXT("areaClass"), TEXT("Navigation area class path."))
+	 .Required({TEXT("actorName"), TEXT("areaClass")});
+}
+
+static void S_ConfigureNavAreaCost(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("areaClass"), TEXT("Navigation area class path."))
+	 .Number(TEXT("areaCost"), TEXT("Pathfinding cost multiplier for area (1.0 = normal)."))
+	 .Number(TEXT("fixedAreaEnteringCost"), TEXT("configure_nav_area_cost: flat cost added when entering the area (0 = none)."))
+	 .Required({TEXT("areaClass")});
+}
+
+static void S_CreateNavLinkProxy(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Object(TEXT("location"), TEXT("World location for nav link proxy."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Object(TEXT("rotation"), TEXT("Rotation for nav link proxy."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
+	})
+	 .Object(TEXT("startPoint"), TEXT("Start point of navigation link (relative to actor)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Object(TEXT("endPoint"), TEXT("End point of navigation link (relative to actor)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .StringEnum(TEXT("direction"), {
+		TEXT("BothWays"),
+		TEXT("LeftToRight"),
+		TEXT("RightToLeft")
+	 }, TEXT("Link traversal direction."))
+	 .Required({TEXT("location"), TEXT("startPoint"), TEXT("endPoint")});
+}
+
+static void S_ConfigureNavLink(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Object(TEXT("startPoint"), TEXT("Start point of navigation link (relative to actor)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Object(TEXT("endPoint"), TEXT("End point of navigation link (relative to actor)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .StringEnum(TEXT("direction"), {
+		TEXT("BothWays"),
+		TEXT("LeftToRight"),
+		TEXT("RightToLeft")
+	 }, TEXT("Link traversal direction."))
+	 .Number(TEXT("snapRadius"), TEXT("Snap radius for link endpoints (default: 30)."))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_SetNavLinkType(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .StringEnum(TEXT("linkType"), {
+		TEXT("simple"),
+		TEXT("smart")
+	 }, TEXT("Type of navigation link."))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_CreateSmartLink(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Object(TEXT("location"), TEXT("World location for nav link proxy."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Object(TEXT("rotation"), TEXT("Rotation for nav link proxy."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
+	})
+	 .Object(TEXT("startPoint"), TEXT("Start point of navigation link (relative to actor)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Object(TEXT("endPoint"), TEXT("End point of navigation link (relative to actor)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .StringEnum(TEXT("direction"), {
+		TEXT("BothWays"),
+		TEXT("LeftToRight"),
+		TEXT("RightToLeft")
+	 }, TEXT("Link traversal direction."))
+	 .Required({TEXT("location"), TEXT("startPoint"), TEXT("endPoint")});
+}
+
+static void S_ConfigureSmartLinkBehavior(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Bool(TEXT("linkEnabled"), TEXT("Whether the link is enabled."))
+	 .String(TEXT("enabledAreaClass"), TEXT("Area class when smart link is enabled."))
+	 .String(TEXT("disabledAreaClass"), TEXT("Area class when smart link is disabled."))
+	 .Number(TEXT("broadcastRadius"), TEXT("Radius for state change broadcast."))
+	 .Number(TEXT("broadcastInterval"), TEXT("Interval for state change broadcast (0 = single)."))
+	 .Bool(TEXT("bCreateBoxObstacle"), TEXT("Add box obstacle during nav generation."))
+	 .String(TEXT("obstacleAreaClass"), TEXT("Area class for box obstacle."))
+	 .Object(TEXT("obstacleExtent"), TEXT("Extent of simple box obstacle."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Object(TEXT("obstacleOffset"), TEXT("Offset of simple box obstacle."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Required({TEXT("actorName")});
+}
+
+static void S_GetNavigationInfo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."));
+}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
-// RequiresEditor on all 61: the three retired dispatchers were whole-editor-
-// gated and every member answers its chain's EDITOR_ONLY stub in non-editor
-// builds. Mutating on the writers; the readers are get_info,
-// get_blackboard_value, and get_navigation_info — add_eqs_context is also
-// unflagged (its body is an honest NOT_IMPLEMENTED error that writes
+// RequiresEditor on all rows (baked into the macro): the three retired
+// dispatchers were whole-editor-gated and every member answers its chain's
+// EDITOR_ONLY stub in non-editor builds. Mutating on the writers; the readers
+// are get_info, get_blackboard_value, and get_navigation_info — add_eqs_context
+// is also unflagged (its body is an honest NOT_IMPLEMENTED error that writes
 // nothing).
 
-#define MCP_AI_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, Flags)           \
-class FMcpCall_ManageAi_##ClassSuffix final : public FMcpCall                            \
-{                                                                                        \
-	const FMcpCallDecl& GetDecl() const override                                         \
-	{                                                                                    \
-		static const FMcpCallDecl Decl{ TEXT("manage_ai"), TEXT(ActionLiteral),          \
-			ParamsArray, (Flags) };                                                      \
-		return Decl;                                                                     \
-	}                                                                                    \
-	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
-	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
-	{                                                                                    \
-		return S.HandlerFn(RequestId, Payload, Socket);                                  \
-	}                                                                                    \
+#define MCP_AI_CALL(ClassSuffix, ActionLiteral, HandlerFn, ExtraFlags)                    \
+class FMcpCall_ManageAi_##ClassSuffix final : public FMcpCall                             \
+{                                                                                         \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
+	const FMcpCallDecl& GetDecl() const override                                          \
+	{                                                                                     \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_ai"),                   \
+			TEXT(ActionLiteral), EMcpCallFlags::RequiresEditor | (ExtraFlags),           \
+			&S_##ClassSuffix);                                                           \
+		return D;                                                                         \
+	}                                                                                     \
+	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
+	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
+	{                                                                                     \
+		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+	}                                                                                     \
 };
 
 // AI Controllers & Blackboard assets (AIHandlers.cpp)
-MCP_AI_CALL(CreateAiController, "create_controller", P_CreateAiController, HandleAiCreateAiController, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AssignBehaviorTree, "assign_behavior_tree", P_AssignBehaviorTree, HandleAiAssignBehaviorTree, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AssignBlackboard, "assign_blackboard", P_AssignBlackboard, HandleAiAssignBlackboard, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(CreateBlackboardAsset, "create_blackboard_asset", P_CreateBlackboardAsset, HandleAiCreateBlackboardAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddBlackboardKey, "add_blackboard_key", P_AddBlackboardKey, HandleAiAddBlackboardKey, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetKeyInstanceSynced, "set_key_instance_synced", P_SetKeyInstanceSynced, HandleAiSetKeyInstanceSynced, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateAiController, "create_controller", HandleAiCreateAiController, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AssignBehaviorTree, "assign_behavior_tree", HandleAiAssignBehaviorTree, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AssignBlackboard, "assign_blackboard", HandleAiAssignBlackboard, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateBlackboardAsset, "create_blackboard_asset", HandleAiCreateBlackboardAsset, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddBlackboardKey, "add_blackboard_key", HandleAiAddBlackboardKey, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetKeyInstanceSynced, "set_key_instance_synced", HandleAiSetKeyInstanceSynced, EMcpCallFlags::Mutating)
 
 // Behavior Tree conveniences (AIHandlers.cpp wrappers over the graph members)
-MCP_AI_CALL(CreateBehaviorTree, "create_behavior_tree", P_CreateBehaviorTree, HandleAiCreateBehaviorTree, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddCompositeNode, "add_composite_node", P_AddCompositeNode, HandleAiAddCompositeNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddTaskNode, "add_task_node", P_AddTaskNode, HandleAiAddTaskNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddDecorator, "add_decorator", P_AddDecorator, HandleAiAddDecorator, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddService, "add_service", P_AddService, HandleAiAddService, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureBtNode, "configure_bt_node", P_ConfigureBtNode, HandleAiConfigureBtNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateBehaviorTree, "create_behavior_tree", HandleAiCreateBehaviorTree, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddCompositeNode, "add_composite_node", HandleAiAddCompositeNode, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddTaskNode, "add_task_node", HandleAiAddTaskNode, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddDecorator, "add_decorator", HandleAiAddDecorator, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddService, "add_service", HandleAiAddService, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureBtNode, "configure_bt_node", HandleAiConfigureBtNode, EMcpCallFlags::Mutating)
 
 // EQS
-MCP_AI_CALL(CreateEqsQuery, "create_eqs_query", P_CreateEqsQuery, HandleAiCreateEqsQuery, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddEqsGenerator, "add_eqs_generator", P_AddEqsGenerator, HandleAiAddEqsGenerator, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddEqsContext, "add_eqs_context", P_AddEqsContext, HandleAiAddEqsContext, EMcpCallFlags::RequiresEditor)
-MCP_AI_CALL(AddEqsTest, "add_eqs_test", P_AddEqsTest, HandleAiAddEqsTest, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureTestScoring, "configure_test_scoring", P_ConfigureTestScoring, HandleAiConfigureTestScoring, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateEqsQuery, "create_eqs_query", HandleAiCreateEqsQuery, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddEqsGenerator, "add_eqs_generator", HandleAiAddEqsGenerator, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddEqsContext, "add_eqs_context", HandleAiAddEqsContext, EMcpCallFlags::None)
+MCP_AI_CALL(AddEqsTest, "add_eqs_test", HandleAiAddEqsTest, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureTestScoring, "configure_test_scoring", HandleAiConfigureTestScoring, EMcpCallFlags::Mutating)
 
 // Perception
-MCP_AI_CALL(AddAiPerceptionComponent, "add_perception_component", P_AddAiPerceptionComponent, HandleAiAddAiPerceptionComponent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureSightConfig, "configure_sight_config", P_ConfigureSightConfig, HandleAiConfigureSightConfig, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureHearingConfig, "configure_hearing_config", P_ConfigureHearingConfig, HandleAiConfigureHearingConfig, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureDamageSenseConfig, "configure_damage_sense_config", P_ConfigureDamageSenseConfig, HandleAiConfigureDamageSenseConfig, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetPerceptionTeam, "set_perception_team", P_SetPerceptionTeam, HandleAiSetPerceptionTeam, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddAiPerceptionComponent, "add_perception_component", HandleAiAddAiPerceptionComponent, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureSightConfig, "configure_sight_config", HandleAiConfigureSightConfig, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureHearingConfig, "configure_hearing_config", HandleAiConfigureHearingConfig, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureDamageSenseConfig, "configure_damage_sense_config", HandleAiConfigureDamageSenseConfig, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetPerceptionTeam, "set_perception_team", HandleAiSetPerceptionTeam, EMcpCallFlags::Mutating)
 
 // State Trees (UE 5.3+)
-MCP_AI_CALL(CreateStateTree, "create_state_tree", P_CreateStateTree, HandleAiCreateStateTree, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddStateTreeState, "add_state_tree_state", P_AddStateTreeState, HandleAiAddStateTreeState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddStateTreeTransition, "add_state_tree_transition", P_AddStateTreeTransition, HandleAiAddStateTreeTransition, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureStateTreeTask, "configure_state_tree_task", P_ConfigureStateTreeTask, HandleAiConfigureStateTreeTask, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateStateTree, "create_state_tree", HandleAiCreateStateTree, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddStateTreeState, "add_state_tree_state", HandleAiAddStateTreeState, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddStateTreeTransition, "add_state_tree_transition", HandleAiAddStateTreeTransition, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureStateTreeTask, "configure_state_tree_task", HandleAiConfigureStateTreeTask, EMcpCallFlags::Mutating)
 
 // Smart Objects
-MCP_AI_CALL(CreateSmartObjectDefinition, "create_smart_object_definition", P_CreateSmartObjectDefinition, HandleAiCreateSmartObjectDefinition, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddSmartObjectSlot, "add_smart_object_slot", P_AddSmartObjectSlot, HandleAiAddSmartObjectSlot, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureSlotBehavior, "configure_slot_behavior", P_ConfigureSlotBehavior, HandleAiConfigureSlotBehavior, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddSmartObjectComponent, "add_smart_object_component", P_AddSmartObjectComponent, HandleAiAddSmartObjectComponent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateSmartObjectDefinition, "create_smart_object_definition", HandleAiCreateSmartObjectDefinition, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddSmartObjectSlot, "add_smart_object_slot", HandleAiAddSmartObjectSlot, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureSlotBehavior, "configure_slot_behavior", HandleAiConfigureSlotBehavior, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddSmartObjectComponent, "add_smart_object_component", HandleAiAddSmartObjectComponent, EMcpCallFlags::Mutating)
 
 // Mass AI
-MCP_AI_CALL(CreateMassEntityConfig, "create_mass_entity_config", P_CreateMassEntityConfig, HandleAiCreateMassEntityConfig, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureMassEntity, "configure_mass_entity", P_ConfigureMassEntity, HandleAiConfigureMassEntity, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddMassSpawner, "add_mass_spawner", P_AddMassSpawner, HandleAiAddMassSpawner, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateMassEntityConfig, "create_mass_entity_config", HandleAiCreateMassEntityConfig, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureMassEntity, "configure_mass_entity", HandleAiConfigureMassEntity, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddMassSpawner, "add_mass_spawner", HandleAiAddMassSpawner, EMcpCallFlags::Mutating)
 
 // Utility & conveniences
-MCP_AI_CALL(GetAiInfo, "get_info", P_GetAiInfo, HandleAiGetAiInfo, EMcpCallFlags::RequiresEditor)
-MCP_AI_CALL(SetupPerception, "setup_perception", P_SetupPerception, HandleAiSetupPerception, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetFocus, "set_focus", P_SetFocus, HandleAiSetFocus, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(ClearFocus, "clear_focus", P_ClearFocus, HandleAiClearFocus, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetBlackboardValue, "set_blackboard_value", P_SetBlackboardValue, HandleAiSetBlackboardValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(GetBlackboardValue, "get_blackboard_value", P_GetBlackboardValue, HandleAiGetBlackboardValue, EMcpCallFlags::RequiresEditor)
-MCP_AI_CALL(RunBehaviorTree, "run_behavior_tree", P_RunBehaviorTree, HandleAiRunBehaviorTree, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(StopBehaviorTree, "stop_behavior_tree", P_StopBehaviorTree, HandleAiStopBehaviorTree, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AI_CALL(GetAiInfo, "get_info", HandleAiGetAiInfo, EMcpCallFlags::None)
+MCP_AI_CALL(SetupPerception, "setup_perception", HandleAiSetupPerception, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetFocus, "set_focus", HandleAiSetFocus, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ClearFocus, "clear_focus", HandleAiClearFocus, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetBlackboardValue, "set_blackboard_value", HandleAiSetBlackboardValue, EMcpCallFlags::Mutating)
+MCP_AI_CALL(GetBlackboardValue, "get_blackboard_value", HandleAiGetBlackboardValue, EMcpCallFlags::None)
+MCP_AI_CALL(RunBehaviorTree, "run_behavior_tree", HandleAiRunBehaviorTree, EMcpCallFlags::Mutating)
+MCP_AI_CALL(StopBehaviorTree, "stop_behavior_tree", HandleAiStopBehaviorTree, EMcpCallFlags::Mutating)
 
 // Behavior Tree graph (BehaviorTreeHandlers.cpp)
-MCP_AI_CALL(Create, "create", P_Create, HandleBehaviorTreeCreate, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddNode, "add_node", P_AddNode, HandleBehaviorTreeAddNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConnectNodes, "connect_nodes", P_ConnectNodes, HandleBehaviorTreeConnectNodes, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(RemoveNode, "remove_node", P_RemoveNode, HandleBehaviorTreeRemoveNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(BreakConnections, "break_connections", P_BreakConnections, HandleBehaviorTreeBreakConnections, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetNodeProperties, "set_node_properties", P_SetNodeProperties, HandleBehaviorTreeSetNodeProperties, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddSubnode, "add_subnode", P_AddSubnode, HandleBehaviorTreeAddSubnode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AI_CALL(Create, "create", HandleBehaviorTreeCreate, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddNode, "add_node", HandleBehaviorTreeAddNode, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConnectNodes, "connect_nodes", HandleBehaviorTreeConnectNodes, EMcpCallFlags::Mutating)
+MCP_AI_CALL(RemoveNode, "remove_node", HandleBehaviorTreeRemoveNode, EMcpCallFlags::Mutating)
+MCP_AI_CALL(BreakConnections, "break_connections", HandleBehaviorTreeBreakConnections, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetNodeProperties, "set_node_properties", HandleBehaviorTreeSetNodeProperties, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddSubnode, "add_subnode", HandleBehaviorTreeAddSubnode, EMcpCallFlags::Mutating)
 
 // Navigation (NavigationHandlers.cpp)
-MCP_AI_CALL(ConfigureNavMeshSettings, "configure_nav_mesh_settings", P_ConfigureNavMeshSettings, HandleNavigationConfigureNavMeshSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetNavAgentProperties, "set_nav_agent_properties", P_SetNavAgentProperties, HandleNavigationSetNavAgentProperties, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(RebuildNavigation, "rebuild_navigation", P_RebuildNavigation, HandleNavigationRebuildNavigation, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(CreateNavModifierComponent, "create_nav_modifier_component", P_CreateNavModifierComponent, HandleNavigationCreateNavModifierComponent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetNavAreaClass, "set_nav_area_class", P_SetNavAreaClass, HandleNavigationSetNavAreaClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureNavAreaCost, "configure_nav_area_cost", P_ConfigureNavAreaCost, HandleNavigationConfigureNavAreaCost, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(CreateNavLinkProxy, "create_nav_link_proxy", P_CreateNavLinkProxy, HandleNavigationCreateNavLinkProxy, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureNavLink, "configure_nav_link", P_ConfigureNavLink, HandleNavigationConfigureNavLink, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetNavLinkType, "set_nav_link_type", P_SetNavLinkType, HandleNavigationSetNavLinkType, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(CreateSmartLink, "create_smart_link", P_CreateSmartLink, HandleNavigationCreateSmartLink, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureSmartLinkBehavior, "configure_smart_link_behavior", P_ConfigureSmartLinkBehavior, HandleNavigationConfigureSmartLinkBehavior, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AI_CALL(GetNavigationInfo, "get_navigation_info", P_GetNavigationInfo, HandleNavigationGetNavigationInfo, EMcpCallFlags::RequiresEditor)
+MCP_AI_CALL(ConfigureNavMeshSettings, "configure_nav_mesh_settings", HandleNavigationConfigureNavMeshSettings, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetNavAgentProperties, "set_nav_agent_properties", HandleNavigationSetNavAgentProperties, EMcpCallFlags::Mutating)
+MCP_AI_CALL(RebuildNavigation, "rebuild_navigation", HandleNavigationRebuildNavigation, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateNavModifierComponent, "create_nav_modifier_component", HandleNavigationCreateNavModifierComponent, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetNavAreaClass, "set_nav_area_class", HandleNavigationSetNavAreaClass, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureNavAreaCost, "configure_nav_area_cost", HandleNavigationConfigureNavAreaCost, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateNavLinkProxy, "create_nav_link_proxy", HandleNavigationCreateNavLinkProxy, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureNavLink, "configure_nav_link", HandleNavigationConfigureNavLink, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetNavLinkType, "set_nav_link_type", HandleNavigationSetNavLinkType, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateSmartLink, "create_smart_link", HandleNavigationCreateSmartLink, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureSmartLinkBehavior, "configure_smart_link_behavior", HandleNavigationConfigureSmartLinkBehavior, EMcpCallFlags::Mutating)
+MCP_AI_CALL(GetNavigationInfo, "get_navigation_info", HandleNavigationGetNavigationInfo, EMcpCallFlags::None)
 
 #undef MCP_AI_CALL
 

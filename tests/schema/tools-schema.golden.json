@@ -927,6 +927,10 @@
           },
           "type": "object"
         },
+        "assetPath": {
+          "description": "generate_lods: single static-mesh asset path (alternative to assetPaths/assets).",
+          "type": "string"
+        },
         "assetPaths": {
           "items": {
             "type": "string"
@@ -984,9 +988,6 @@
           "description": "create_landscape: number of components along Y (alternative to componentCount).",
           "type": "integer"
         },
-        "count": {
-          "type": "number"
-        },
         "cubemapPath": {
           "description": "create_sky_light: cubemap asset path when sourceType is SpecifiedCubemap.",
           "type": "string"
@@ -1003,9 +1004,6 @@
         },
         "falloff": {
           "type": "number"
-        },
-        "filename": {
-          "type": "string"
         },
         "foliageType": {
           "type": "string"
@@ -1115,6 +1113,10 @@
             "type": "object"
           },
           "type": "array"
+        },
+        "lodCount": {
+          "description": "generate_lods: number of LODs to generate (alias: numLODs).",
+          "type": "number"
         },
         "material": {
           "description": "Material asset path.",
@@ -1302,6 +1304,9 @@
           "description": "create_sky_light/ensure_single_sky_light: recapture the scene into the sky light.",
           "type": "boolean"
         },
+        "reductionSettings": {
+          "description": "generate_lods: per-LOD FMeshReductionSettings overrides (percentTriangles, percentVertices, maxDeviation, pixelError, weldingThreshold, hardAngleThreshold, baseLODModel, recalculateNormals)."
+        },
         "region": {
           "description": "modify_heightmap/paint_landscape: sub-region to affect (minX, minY, maxX, maxY); defaults to top-level minX/minY/maxX/maxY.",
           "properties": {
@@ -1441,6 +1446,13 @@
           "description": "create_light: alias of lightType.",
           "type": "string"
         },
+        "types": {
+          "description": "create_procedural_foliage: alias of 'foliageTypes'.",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
         "updateNormals": {
           "type": "boolean"
         },
@@ -1456,11 +1468,20 @@
           "description": "configure_shadows: enable Virtual Shadow Maps.",
           "type": "boolean"
         },
-        "volumeName": {
-          "type": "string"
-        },
         "width": {
           "description": "create_road_spline/create_river_spline/create_fence_spline/create_wall_spline/create_cable_spline/create_pipe_spline: template width.",
+          "type": "number"
+        },
+        "x": {
+          "description": "create_landscape/create_fog_volume: flat location X (alternative to the 'location' object).",
+          "type": "number"
+        },
+        "y": {
+          "description": "create_landscape/create_fog_volume: flat location Y (alternative to the 'location' object).",
+          "type": "number"
+        },
+        "z": {
+          "description": "create_landscape/create_fog_volume: flat location Z (alternative to the 'location' object).",
           "type": "number"
         }
       },
@@ -2191,6 +2212,10 @@
           "description": "Asset path (e.g., /Game/Path/Asset).",
           "type": "string"
         },
+        "autoSuccessRange": {
+          "description": "configure_sight_config: range within which the target is always seen (-1 disables); top-level alias of sightConfig.autoSuccessRange.",
+          "type": "number"
+        },
         "baseObjectClass": {
           "description": "add_blackboard_key: base class for Object/Class key types (default 'Actor').",
           "type": "string"
@@ -2234,6 +2259,14 @@
         "childNodeId": {
           "description": "Child node ID.",
           "type": "string"
+        },
+        "clampMax": {
+          "description": "configure_test_scoring: upper score clamp, top-level alias of testSettings.clampMax.",
+          "type": "number"
+        },
+        "clampMin": {
+          "description": "configure_test_scoring: lower score clamp, top-level alias of testSettings.clampMin.",
+          "type": "number"
         },
         "comment": {
           "description": "Node comment.",
@@ -2305,6 +2338,21 @@
           "description": "Path to definition asset.",
           "type": "string"
         },
+        "detectionByAffiliation": {
+          "description": "configure_sight_config: which affiliations to detect; top-level alias of sightConfig.detectionByAffiliation.",
+          "properties": {
+            "enemies": {
+              "type": "boolean"
+            },
+            "friendlies": {
+              "type": "boolean"
+            },
+            "neutrals": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
         "direction": {
           "description": "Link traversal direction.",
           "enum": [
@@ -2364,6 +2412,10 @@
           },
           "type": "object"
         },
+        "enemies": {
+          "description": "configure_sight_config: detect enemy-affiliated targets; top-level alias of sightConfig.detectionByAffiliation.enemies.",
+          "type": "boolean"
+        },
         "failsafeExtent": {
           "description": "Failsafe extent for nav modifier when actor has no collision.",
           "properties": {
@@ -2379,9 +2431,34 @@
           },
           "type": "object"
         },
+        "filterType": {
+          "description": "configure_test_scoring: filter mode, top-level alias of testSettings.filterType.",
+          "enum": [
+            "Minimum",
+            "Maximum",
+            "Range"
+          ],
+          "type": "string"
+        },
+        "fixedAreaEnteringCost": {
+          "description": "configure_nav_area_cost: flat cost added when entering the area (0 = none).",
+          "type": "number"
+        },
+        "floatMax": {
+          "description": "configure_test_scoring: upper range-filter bound, top-level alias of testSettings.floatMax.",
+          "type": "number"
+        },
+        "floatMin": {
+          "description": "configure_test_scoring: lower range-filter bound, top-level alias of testSettings.floatMin.",
+          "type": "number"
+        },
         "focusActorName": {
           "description": "Actor name to focus.",
           "type": "string"
+        },
+        "friendlies": {
+          "description": "configure_sight_config: detect friendly-affiliated targets; top-level alias of sightConfig.detectionByAffiliation.friendlies.",
+          "type": "boolean"
         },
         "fromState": {
           "description": "Source state name.",
@@ -2502,6 +2579,10 @@
           "description": "AI sight lose radius.",
           "type": "number"
         },
+        "maxAge": {
+          "description": "configure_sight_config: perception forget time in seconds (0 = never expires); top-level alias of sightConfig.maxAge.",
+          "type": "number"
+        },
         "maxSimplificationError": {
           "description": "Edge simplification error.",
           "type": "number"
@@ -2517,6 +2598,14 @@
         "name": {
           "description": "Name identifier.",
           "type": "string"
+        },
+        "nearClippingRadius": {
+          "description": "configure_sight_config: near clipping radius; top-level alias of sightConfig.nearClippingRadius.",
+          "type": "number"
+        },
+        "neutrals": {
+          "description": "configure_sight_config: detect neutral-affiliated targets; top-level alias of sightConfig.detectionByAffiliation.neutrals.",
+          "type": "boolean"
         },
         "nodeClass": {
           "description": "Behavior Tree node class: engine name (e.g. 'BTDecorator_Blackboard'), a short name that expands to one, or a Blueprint class path.",
@@ -2599,6 +2688,10 @@
           "description": "Sight peripheral vision angle.",
           "type": "number"
         },
+        "pointOfViewBackwardOffset": {
+          "description": "configure_sight_config: eye-point backward offset; top-level alias of sightConfig.pointOfViewBackwardOffset.",
+          "type": "number"
+        },
         "properties": {
           "description": "Properties to set on a graph node."
         },
@@ -2631,6 +2724,16 @@
         },
         "schemaType": {
           "description": "create_state_tree: schema type (default 'Component').",
+          "type": "string"
+        },
+        "scoringEquation": {
+          "description": "configure_test_scoring: score curve, top-level alias of testSettings.scoringEquation.",
+          "enum": [
+            "Linear",
+            "Square",
+            "InverseLinear",
+            "Constant"
+          ],
           "type": "string"
         },
         "selectionBehavior": {
@@ -6555,6 +6658,13 @@
         "restitution": {
           "type": "number"
         },
+        "rotation": {
+          "description": "particle/spawn_niagara: spawn rotation as [pitch, yaw, roll].",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
         "save": {
           "description": "Whether to save modified assets.",
           "type": "boolean"
@@ -6595,6 +6705,10 @@
           "description": "Niagara source binding, e.g. Emitter.Age.",
           "type": "string"
         },
+        "sourceNodeId": {
+          "description": "connect_niagara_pins: GUID of the source node (paired with sourcePinName).",
+          "type": "string"
+        },
         "sourcePinName": {
           "description": "connect_niagara_pins: name of the source (output) pin.",
           "type": "string"
@@ -6628,6 +6742,10 @@
         },
         "systemPath": {
           "description": "Niagara system asset path.",
+          "type": "string"
+        },
+        "targetNodeId": {
+          "description": "connect_niagara_pins: GUID of the target node (paired with targetPinName).",
           "type": "string"
         },
         "targetPinName": {

@@ -38,7 +38,6 @@ component_class
 contentColorAndOpacity
 endTime
 factor
-fixedAreaEnteringCost
 fromExpression
 function
 includeSoftDependencies
@@ -67,6 +66,5 @@ subsystem
 targetNodeGuid
 threshold
 toExpression
-types
 widget_path
 z_order
