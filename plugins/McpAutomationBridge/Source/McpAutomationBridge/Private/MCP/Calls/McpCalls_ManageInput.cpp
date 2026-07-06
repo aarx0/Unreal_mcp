@@ -1,30 +1,102 @@
 // LINT-TOOL: manage_input
+// LINT-SCHEMA-DERIVED
 // manage_input as FMcpCall classes — Enhanced Input authoring, split out of
-// manage_networking (docs/action-declarations.md). Each class co-locates the
-// action's declaration with its implementation. Run() delegates to the
-// subsystem member handlers — HandleInput* (InputHandlers.cpp) for the 9 input
-// actions — until the module split de-members those bodies.
+// manage_networking (docs/action-declarations.md). Adopts schema-from-decls:
+// each class AUTHORS its schema fragment in a S_<Suffix>() function; the
+// published facade schema folds those fragments and GetDecl() derives the
+// validation decl from the same fragment via McpDeriveDecl(), so schema and
+// decl are one source and cannot drift. Run() delegates to the subsystem member
+// handlers — HandleInput* (InputHandlers.cpp) for the 9 input actions — until
+// the module split de-members those bodies.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
+#include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
-// so file-scope param arrays would collide across families otherwise.
+// so file-scope helpers would collide across families otherwise.
 namespace McpCalls::ManageInput
 {
 
-// ─── Param contracts ─────────────────────────────────────────────────────────
-// Moved verbatim from the manage_networking family when Enhanced Input split
-// out into its own tool.
-inline const FMcpParamDecl P_CreateInputAction[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("valueType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateInputMappingContext[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_AddMapping[] = { { TEXT("contextPath"), EMcpParamKind::String, true }, { TEXT("actionPath"), EMcpParamKind::String, true }, { TEXT("key"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_RemoveMapping[] = { { TEXT("contextPath"), EMcpParamKind::String, true }, { TEXT("actionPath"), EMcpParamKind::String, true }, { TEXT("key"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetInputTrigger[] = { { TEXT("actionPath"), EMcpParamKind::String, true }, { TEXT("triggerType"), EMcpParamKind::String, true }, { TEXT("replace"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetInputModifier[] = { { TEXT("contextPath"), EMcpParamKind::String, false }, { TEXT("actionPath"), EMcpParamKind::String, true }, { TEXT("key"), EMcpParamKind::String, false }, { TEXT("modifierType"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_EnableInputMapping[] = { { TEXT("contextPath"), EMcpParamKind::String, true }, { TEXT("priority"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_DisableInputAction[] = { { TEXT("actionPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_GetInputInfo[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false } };
+// ─── Schema fragments ────────────────────────────────────────────────────────
+// One S_<Suffix>() per action, authoring exactly the params that action reads
+// (the fold dedups shared params to one entry). Descriptions are the tool's
+// authored help text; McpDeriveDecl() reads the param kinds + required-set back
+// out of these to build the transport validation decl. set_input_modifier and
+// remove_mapping author some params optional: the handler enforces the "at
+// least one target" semantics itself.
+
+static void S_CreateInputAction(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_input_action / create_input_mapping_context)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created input asset."))
+	 .StringEnum(TEXT("valueType"), {
+		TEXT("Boolean"), TEXT("Axis1D"), TEXT("Axis2D"), TEXT("Axis3D")
+	 }, TEXT("InputAction value type (create_input_action; default Boolean)."))
+	 .Required({TEXT("name"), TEXT("path")});
+}
+
+static void S_CreateInputMappingContext(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_input_action / create_input_mapping_context)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created input asset."))
+	 .Required({TEXT("name"), TEXT("path")});
+}
+
+static void S_AddMapping(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("contextPath"), TEXT("InputMappingContext asset path (add_mapping / remove_mapping)."))
+	 .String(TEXT("actionPath"), TEXT("InputAction asset path (mappings / triggers)."))
+	 .String(TEXT("key"), TEXT("Key id for a mapping (e.g. SpaceBar, Gamepad_FaceButton_Bottom)."))
+	 .Required({TEXT("contextPath"), TEXT("actionPath"), TEXT("key")});
+}
+
+static void S_RemoveMapping(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("contextPath"), TEXT("InputMappingContext asset path (add_mapping / remove_mapping)."))
+	 .String(TEXT("actionPath"), TEXT("InputAction asset path (mappings / triggers)."))
+	 .String(TEXT("key"), TEXT("Key id for a mapping (e.g. SpaceBar, Gamepad_FaceButton_Bottom)."))
+	 .Required({TEXT("contextPath"), TEXT("actionPath")});
+}
+
+static void S_SetInputTrigger(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actionPath"), TEXT("InputAction asset path (mappings / triggers)."))
+	 .StringEnum(TEXT("triggerType"), {
+		TEXT("Pressed"), TEXT("Released"), TEXT("Down"), TEXT("Tap"), TEXT("Hold"),
+		TEXT("HoldAndRelease"), TEXT("Pulse"), TEXT("RepeatedTap")
+	 }, TEXT("Input trigger class (set_input_trigger)."))
+	 .Bool(TEXT("replace"), TEXT("set_input_trigger: clear existing triggers before adding (default false = idempotent dedupe)."))
+	 .Required({TEXT("actionPath"), TEXT("triggerType")});
+}
+
+static void S_SetInputModifier(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("contextPath"), TEXT("InputMappingContext asset path (add_mapping / remove_mapping)."))
+	 .String(TEXT("actionPath"), TEXT("InputAction asset path (mappings / triggers)."))
+	 .String(TEXT("key"), TEXT("Key id for a mapping (e.g. SpaceBar, Gamepad_FaceButton_Bottom)."))
+	 .String(TEXT("modifierType"), TEXT("Input modifier class (set_input_modifier, e.g. Negate, SwizzleAxis)."))
+	 .Required({TEXT("actionPath"), TEXT("modifierType")});
+}
+
+static void S_EnableInputMapping(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("contextPath"), TEXT("InputMappingContext asset path (add_mapping / remove_mapping)."))
+	 .Number(TEXT("priority"), TEXT("enable_input_mapping: mapping context priority (default 0)."))
+	 .Required({TEXT("contextPath")});
+}
+
+static void S_DisableInputAction(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actionPath"), TEXT("InputAction asset path (mappings / triggers)."))
+	 .Required({TEXT("actionPath")});
+}
+
+static void S_GetInputInfo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Input asset to read (get_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset whose input mappings to read (get_info; accepted as a fallback for assetPath)."));
+}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // Flags are authored per action and carried over verbatim from manage_networking:
@@ -34,32 +106,33 @@ inline const FMcpParamDecl P_GetInputInfo[] = { { TEXT("assetPath"), EMcpParamKi
 // acknowledge without writing anything and stay unflagged alongside the reader
 // get_info (was get_input_info).
 
-#define MCP_MINPUT_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, Flags)       \
-class FMcpCall_ManageInput_##ClassSuffix final : public FMcpCall                         \
-{                                                                                        \
-	const FMcpCallDecl& GetDecl() const override                                         \
-	{                                                                                    \
-		static const FMcpCallDecl Decl{ TEXT("manage_input"), TEXT(ActionLiteral),       \
-			ParamsArray, (Flags) };                                                      \
-		return Decl;                                                                     \
-	}                                                                                    \
-	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
-	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
-	{                                                                                    \
-		return S.HandlerFn(RequestId, Payload, Socket);                                  \
-	}                                                                                    \
+#define MCP_MINPUT_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                     \
+class FMcpCall_ManageInput_##ClassSuffix final : public FMcpCall                          \
+{                                                                                         \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
+	const FMcpCallDecl& GetDecl() const override                                          \
+	{                                                                                     \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_input"),                \
+			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                             \
+		return D;                                                                         \
+	}                                                                                     \
+	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
+	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
+	{                                                                                     \
+		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+	}                                                                                     \
 };
 
 // Input (InputHandlers.cpp)
-MCP_MINPUT_CALL(CreateInputAction, "create_input_action", P_CreateInputAction, HandleInputCreateInputAction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MINPUT_CALL(CreateInputMappingContext, "create_input_mapping_context", P_CreateInputMappingContext, HandleInputCreateInputMappingContext, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MINPUT_CALL(AddMapping, "add_mapping", P_AddMapping, HandleInputAddMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MINPUT_CALL(RemoveMapping, "remove_mapping", P_RemoveMapping, HandleInputRemoveMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MINPUT_CALL(SetInputTrigger, "set_input_trigger", P_SetInputTrigger, HandleInputSetInputTrigger, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MINPUT_CALL(SetInputModifier, "set_input_modifier", P_SetInputModifier, HandleInputSetInputModifier, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MINPUT_CALL(EnableInputMapping, "enable_input_mapping", P_EnableInputMapping, HandleInputEnableInputMapping, EMcpCallFlags::RequiresEditor)
-MCP_MINPUT_CALL(DisableInputAction, "disable_input_action", P_DisableInputAction, HandleInputDisableInputAction, EMcpCallFlags::RequiresEditor)
-MCP_MINPUT_CALL(GetInputInfo, "get_info", P_GetInputInfo, HandleInputGetInputInfo, EMcpCallFlags::RequiresEditor)
+MCP_MINPUT_CALL(CreateInputAction, "create_input_action", HandleInputCreateInputAction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MINPUT_CALL(CreateInputMappingContext, "create_input_mapping_context", HandleInputCreateInputMappingContext, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MINPUT_CALL(AddMapping, "add_mapping", HandleInputAddMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MINPUT_CALL(RemoveMapping, "remove_mapping", HandleInputRemoveMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MINPUT_CALL(SetInputTrigger, "set_input_trigger", HandleInputSetInputTrigger, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MINPUT_CALL(SetInputModifier, "set_input_modifier", HandleInputSetInputModifier, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MINPUT_CALL(EnableInputMapping, "enable_input_mapping", HandleInputEnableInputMapping, EMcpCallFlags::RequiresEditor)
+MCP_MINPUT_CALL(DisableInputAction, "disable_input_action", HandleInputDisableInputAction, EMcpCallFlags::RequiresEditor)
+MCP_MINPUT_CALL(GetInputInfo, "get_info", HandleInputGetInputInfo, EMcpCallFlags::RequiresEditor)
 
 #undef MCP_MINPUT_CALL
 

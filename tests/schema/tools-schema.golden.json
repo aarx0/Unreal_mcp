@@ -7852,6 +7852,10 @@
           "description": "Input asset to read (get_info).",
           "type": "string"
         },
+        "blueprintPath": {
+          "description": "Blueprint asset whose input mappings to read (get_info; accepted as a fallback for assetPath).",
+          "type": "string"
+        },
         "contextPath": {
           "description": "InputMappingContext asset path (add_mapping / remove_mapping).",
           "type": "string"
