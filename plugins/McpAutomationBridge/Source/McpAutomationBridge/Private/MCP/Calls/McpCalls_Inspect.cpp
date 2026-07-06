@@ -1,19 +1,23 @@
 // LINT-TOOL: inspect
-// inspect as FMcpCall classes — sixth classed family
-// (docs/action-declarations.md). Each class co-locates the action's
-// declaration with its implementation. Run() delegates to the subsystem
-// member handlers until the module split de-members those bodies: the global
-// reads live in EnvironmentHandlers.cpp (HandleInspect*), the twelve actor
-// actions delegate to the shared control_actor handlers after normalizing the
-// target aliases, and set_property/get_property/inspect_cdo/diff_asset/
-// ui_focus delegate to their dedicated handlers in PropertyHandlers.cpp /
-// FocusInputHandlers.cpp.
+// LINT-SCHEMA-DERIVED
+// inspect as FMcpCall classes — sixth classed family, now on schema-from-decls
+// (docs/action-declarations.md). Each class AUTHORS its schema fragment in a
+// S_<Suffix>() function; the published facade schema folds those fragments and
+// GetDecl() derives the validation decl from the same fragment via
+// McpDeriveDecl(), so schema and decl are one source and cannot drift. Run()
+// delegates to the subsystem member handlers until the module split de-members
+// those bodies: the global reads live in EnvironmentHandlers.cpp
+// (HandleInspect*), the twelve actor actions delegate to the shared
+// control_actor handlers after normalizing the target aliases, and
+// set_property/get_property/inspect_cdo/diff_asset/ui_focus delegate to their
+// dedicated handlers in PropertyHandlers.cpp / FocusInputHandlers.cpp.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
+#include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
-// so file-scope param arrays would collide across families otherwise.
+// so file-scope helpers would collide across families otherwise.
 namespace McpCalls::Inspect
 {
 
@@ -55,48 +59,216 @@ static void NormalizeActorAlias(const TSharedPtr<FJsonObject> &Payload, bool bAl
 	}
 }
 
-// ─── Param contracts ─────────────────────────────────────────────────────────
-// Ported from this family's retired shim declarations (fleet-verified against
-// the handler bodies), except: list_objects sheds a 33-param mega-bag with
-// seven bogus required fields (the body reads nothing); pie_report shares
+// ─── Schema fragments ────────────────────────────────────────────────────────
+// One S_<Suffix>() per action, authoring exactly the params that action reads
+// (the fold dedups shared params to one entry). Descriptions are the tool's
+// authored help text; McpDeriveDecl() reads the param kinds + required-set back
+// out of these to build the transport validation decl. Notes carried over from
+// the retired shim declarations: list_objects reads nothing (its old 33-param
+// mega-bag with seven bogus required fields is gone); pie_report shares
 // runtime_report's contract like it shares its implementation; the target
 // aliases actorName/name/objectPath are uniformly optional (requiring one
-// spelling would false-reject the others the normalization accepts);
-// get_component_property.propertyName is optional (propertyPath is the
-// alternative, matching control_actor's own row); inspect_object.objectPath
-// is optional (the shared detail body resolves objectPath/actorName/name).
-// The "at least one alias" requirement is beyond the decl vocabulary and
-// stays handler-enforced.
+// spelling would false-reject the others the normalization accepts), and the
+// "at least one alias" requirement is beyond the decl vocabulary and stays
+// handler-enforced; get_component_property.propertyName is optional
+// (propertyPath is the alternative); the detail actions all resolve
+// objectPath/actorName/name, so none is required. Two recurring alias trios are
+// factored into shared appenders.
 
-inline const FMcpParamDecl P_ActorTarget[] = { { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("objectPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ObjectDetail[] = { { TEXT("objectPath"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddTag[] = { { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("objectPath"), EMcpParamKind::String, false }, { TEXT("tag"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_Snapshot[] = { { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("objectPath"), EMcpParamKind::String, false }, { TEXT("snapshotName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_DeleteObject[] = { { TEXT("actorNames"), EMcpParamKind::Array, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("objectPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_GetComponentProperty[] = { { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("objectPath"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, true }, { TEXT("propertyName"), EMcpParamKind::String, false }, { TEXT("propertyPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetComponentProperty[] = { { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("objectPath"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, true }, { TEXT("properties"), EMcpParamKind::Object, false }, { TEXT("propertyName"), EMcpParamKind::String, false }, { TEXT("propertyPath"), EMcpParamKind::String, false }, { TEXT("value"), EMcpParamKind::Any, false } };
-inline const FMcpParamDecl P_GetProperty[] = { { TEXT("objectPath"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("propertyName"), EMcpParamKind::String, false }, { TEXT("propertyPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetProperty[] = { { TEXT("objectPath"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("propertyName"), EMcpParamKind::String, false }, { TEXT("propertyPath"), EMcpParamKind::String, false }, { TEXT("value"), EMcpParamKind::Any, true }, { TEXT("markDirty"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_DiffAsset[] = { { TEXT("oldFilePath"), EMcpParamKind::String, true }, { TEXT("newFilePath"), EMcpParamKind::String, true }, { TEXT("assetName"), EMcpParamKind::String, false }, { TEXT("includeDefaults"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_InspectCdo[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("detailed"), EMcpParamKind::Bool, false }, { TEXT("componentNames"), EMcpParamKind::Array, false }, { TEXT("propertyPath"), EMcpParamKind::String, false }, { TEXT("propertyNames"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_InspectClass[] = { { TEXT("className"), EMcpParamKind::String, false }, { TEXT("classPath"), EMcpParamKind::String, false }, { TEXT("detailed"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_FindObjects[] = { { TEXT("className"), EMcpParamKind::String, true }, { TEXT("pathContains"), EMcpParamKind::String, false }, { TEXT("exactClass"), EMcpParamKind::Bool, false }, { TEXT("includeCdo"), EMcpParamKind::Bool, false }, { TEXT("limit"), EMcpParamKind::Number, false }, { TEXT("propertyNames"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_FindByClass[] = { { TEXT("className"), EMcpParamKind::String, false }, { TEXT("classPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_FindByTag[] = { { TEXT("tag"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_RuntimeReport[] = { { TEXT("filter"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("componentNames"), EMcpParamKind::Array, false }, { TEXT("propertyName"), EMcpParamKind::String, false }, { TEXT("propertyPath"), EMcpParamKind::String, false }, { TEXT("propertyNames"), EMcpParamKind::Array, false } };
+static void AppendActorAliases(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("objectPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."));
+}
+
+static void AppendObjectDetailAliases(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("objectPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("name"), TEXT("Name identifier."));
+}
+
+// Global reads (EnvironmentHandlers.cpp)
+static void S_FindObjects(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("className"), TEXT(""))
+	 .String(TEXT("pathContains"), TEXT("find_objects: case-insensitive substring filter on the object's full path."))
+	 .Bool(TEXT("exactClass"), TEXT("find_objects: require the exact class (default false = IsA semantics)."))
+	 .Bool(TEXT("includeCdo"), TEXT("find_objects: include class default objects (default false)."))
+	 .Integer(TEXT("limit"), TEXT("find_objects: max objects returned (default 50, cap 200)."))
+	 .Array(TEXT("propertyNames"), TEXT(""))
+	 .Required({TEXT("className")});
+}
+
+static void S_GetProjectSettings(FMcpSchemaBuilder&) {}
+static void S_GetEditorSettings(FMcpSchemaBuilder&) {}
+static void S_GetWorldSettings(FMcpSchemaBuilder&) {}
+static void S_GetViewportInfo(FMcpSchemaBuilder&) {}
+static void S_GetSelectedActors(FMcpSchemaBuilder&) {}
+static void S_GetSceneStats(FMcpSchemaBuilder&) {}
+static void S_GetPerformanceStats(FMcpSchemaBuilder&) {}
+static void S_GetMemoryStats(FMcpSchemaBuilder&) {}
+static void S_ListObjects(FMcpSchemaBuilder&) {}
+
+static void S_FindByClass(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("className"), TEXT(""))
+	 .String(TEXT("classPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."));
+}
+
+static void S_FindByTag(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("tag"), TEXT("Name of the tag."));
+}
+
+static void S_InspectClass(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("className"), TEXT(""))
+	 .String(TEXT("classPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Bool(TEXT("detailed"), TEXT(""));
+}
+
+static void S_RuntimeReport(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("filter"), TEXT(""))
+	 .String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("componentName"), TEXT("Name of the component."))
+	 .Array(TEXT("componentNames"), TEXT("Component names to include detailed property readback for."))
+	 .String(TEXT("propertyName"), TEXT("Name of the property."))
+	 .String(TEXT("propertyPath"), TEXT(""))
+	 .Array(TEXT("propertyNames"), TEXT(""));
+}
+
+// pie_report shares runtime_report's contract and implementation.
+static void S_PieReport(FMcpSchemaBuilder& B) { S_RuntimeReport(B); }
+
+// Self-contained delegates (FocusInputHandlers.cpp / PropertyHandlers.cpp)
+static void S_UiFocus(FMcpSchemaBuilder&) {}
+
+static void S_DiffAsset(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("oldFilePath"), TEXT("diff_asset: filesystem path to the OLD .uasset version (e.g. a git revision extracted to a temp file)."))
+	 .String(TEXT("newFilePath"), TEXT("diff_asset: filesystem path to the NEW .uasset version (e.g. the working-tree file)."))
+	 .String(TEXT("assetName"), TEXT("diff_asset: object name inside the package (default = newFilePath filename stem)."))
+	 .Bool(TEXT("includeDefaults"), TEXT("diff_asset: also diff CDO default properties (default true)."))
+	 .Required({TEXT("oldFilePath"), TEXT("newFilePath")});
+}
+
+static void S_InspectCdo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("componentName"), TEXT("Name of the component."))
+	 .Bool(TEXT("detailed"), TEXT(""))
+	 .Array(TEXT("componentNames"), TEXT("Component names to include detailed property readback for."))
+	 .String(TEXT("propertyPath"), TEXT(""))
+	 .Array(TEXT("propertyNames"), TEXT(""))
+	 .Required({TEXT("blueprintPath")});
+}
+
+// Object detail (one generic body, identical output for all eight)
+static void S_InspectObject(FMcpSchemaBuilder& B)       { AppendObjectDetailAliases(B); }
+static void S_GetActorDetails(FMcpSchemaBuilder& B)     { AppendObjectDetailAliases(B); }
+static void S_GetBlueprintDetails(FMcpSchemaBuilder& B) { AppendObjectDetailAliases(B); }
+static void S_GetComponentDetails(FMcpSchemaBuilder& B) { AppendObjectDetailAliases(B); }
+static void S_GetLevelDetails(FMcpSchemaBuilder& B)     { AppendObjectDetailAliases(B); }
+static void S_GetMaterialDetails(FMcpSchemaBuilder& B)  { AppendObjectDetailAliases(B); }
+static void S_GetMeshDetails(FMcpSchemaBuilder& B)      { AppendObjectDetailAliases(B); }
+static void S_GetTextureDetails(FMcpSchemaBuilder& B)   { AppendObjectDetailAliases(B); }
+
+// Actor actions (shared control_actor handlers, ControlHandlers.cpp)
+static void S_GetComponents(FMcpSchemaBuilder& B) { AppendActorAliases(B); }
+
+static void S_GetComponentProperty(FMcpSchemaBuilder& B)
+{
+	AppendActorAliases(B);
+	B.String(TEXT("componentName"), TEXT("Name of the component."))
+	 .String(TEXT("propertyName"), TEXT("Name of the property."))
+	 .String(TEXT("propertyPath"), TEXT(""))
+	 .Required({TEXT("componentName")});
+}
+
+static void S_SetComponentProperty(FMcpSchemaBuilder& B)
+{
+	AppendActorAliases(B);
+	B.String(TEXT("componentName"), TEXT("Name of the component."))
+	 .FreeformObject(TEXT("properties"), TEXT("set_component_property: map of component property name to value (alternative to a single propertyName/value pair)."))
+	 .String(TEXT("propertyName"), TEXT("Name of the property."))
+	 .String(TEXT("propertyPath"), TEXT(""))
+	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Required({TEXT("componentName")});
+}
+
+static void S_GetMetadata(FMcpSchemaBuilder& B) { AppendActorAliases(B); }
+
+static void S_AddTag(FMcpSchemaBuilder& B)
+{
+	AppendActorAliases(B);
+	B.String(TEXT("tag"), TEXT("Name of the tag."))
+	 .Required({TEXT("tag")});
+}
+
+static void S_CreateSnapshot(FMcpSchemaBuilder& B)
+{
+	AppendActorAliases(B);
+	B.String(TEXT("snapshotName"), TEXT(""))
+	 .Required({TEXT("snapshotName")});
+}
+
+static void S_RestoreSnapshot(FMcpSchemaBuilder& B) { S_CreateSnapshot(B); }
+
+static void S_Export(FMcpSchemaBuilder& B) { AppendActorAliases(B); }
+
+static void S_DeleteObject(FMcpSchemaBuilder& B)
+{
+	B.Array(TEXT("actorNames"), TEXT("delete_object: actor names for bulk deletion (alternative to a single actorName)."));
+	AppendActorAliases(B);
+}
+
+static void S_GetBoundingBox(FMcpSchemaBuilder& B) { AppendActorAliases(B); }
+
+// Property pair (PropertyHandlers.cpp)
+static void S_SetProperty(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("objectPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("propertyName"), TEXT("Name of the property."))
+	 .String(TEXT("propertyPath"), TEXT(""))
+	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Bool(TEXT("markDirty"), TEXT("set_property: mark the owning package dirty (default true)."))
+	 .Bool(TEXT("save"), TEXT("set_property: persist the owning asset package to disk after the write (default true; defaults to false when markDirty is false). Level packages are never auto-saved — use control_editor save_all."))
+	 .Required({TEXT("value")});
+}
+
+static void S_GetProperty(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("objectPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("propertyName"), TEXT("Name of the property."))
+	 .String(TEXT("propertyPath"), TEXT(""));
+}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // RequiresEditor is baked into every row: the global bodies read GEditor-owned
-// state and every delegation target resolves through editor-world lookups.
+// state and every delegation target resolves through editor-world lookups. Each
+// class AUTHORS its schema fragment (AppendSchema) and derives its validation
+// decl from the same fragment (McpDeriveDecl), so the two cannot drift.
 
-#define MCP_INSPECT_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)   \
+#define MCP_INSPECT_CALL(ClassSuffix, ActionLiteral, HandlerFn, ExtraFlags)                \
 class FMcpCall_Inspect_##ClassSuffix final : public FMcpCall                              \
 {                                                                                         \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
 	const FMcpCallDecl& GetDecl() const override                                          \
 	{                                                                                     \
-		static const FMcpCallDecl Decl{ TEXT("inspect"), TEXT(ActionLiteral),             \
-			ParamsArray, EMcpCallFlags::RequiresEditor | (ExtraFlags) };                  \
-		return Decl;                                                                      \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("inspect"),                     \
+			TEXT(ActionLiteral), EMcpCallFlags::RequiresEditor | (ExtraFlags),            \
+			&S_##ClassSuffix);                                                            \
+		return D;                                                                         \
 	}                                                                                     \
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
@@ -107,14 +279,16 @@ class FMcpCall_Inspect_##ClassSuffix final : public FMcpCall                    
 
 // Actor actions: normalize the target aliases, then delegate to the shared
 // control_actor handlers (typed direct calls — migration rule 5).
-#define MCP_INSPECT_ACTOR_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags) \
+#define MCP_INSPECT_ACTOR_CALL(ClassSuffix, ActionLiteral, HandlerFn, ExtraFlags)         \
 class FMcpCall_Inspect_##ClassSuffix final : public FMcpCall                              \
 {                                                                                         \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
 	const FMcpCallDecl& GetDecl() const override                                          \
 	{                                                                                     \
-		static const FMcpCallDecl Decl{ TEXT("inspect"), TEXT(ActionLiteral),             \
-			ParamsArray, EMcpCallFlags::RequiresEditor | (ExtraFlags) };                  \
-		return Decl;                                                                      \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("inspect"),                     \
+			TEXT(ActionLiteral), EMcpCallFlags::RequiresEditor | (ExtraFlags),            \
+			&S_##ClassSuffix);                                                            \
+		return D;                                                                         \
 	}                                                                                     \
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
@@ -127,14 +301,16 @@ class FMcpCall_Inspect_##ClassSuffix final : public FMcpCall                    
 // The property pair: aliases also fill objectPath, and the 4-arg property
 // handlers dispatch on their internal set_object_property/get_object_property
 // keys — the literals are load-bearing.
-#define MCP_INSPECT_PROP_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, InternalLiteral, ExtraFlags) \
+#define MCP_INSPECT_PROP_CALL(ClassSuffix, ActionLiteral, HandlerFn, InternalLiteral, ExtraFlags) \
 class FMcpCall_Inspect_##ClassSuffix final : public FMcpCall                              \
 {                                                                                         \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
 	const FMcpCallDecl& GetDecl() const override                                          \
 	{                                                                                     \
-		static const FMcpCallDecl Decl{ TEXT("inspect"), TEXT(ActionLiteral),             \
-			ParamsArray, EMcpCallFlags::RequiresEditor | (ExtraFlags) };                  \
-		return Decl;                                                                      \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("inspect"),                     \
+			TEXT(ActionLiteral), EMcpCallFlags::RequiresEditor | (ExtraFlags),            \
+			&S_##ClassSuffix);                                                            \
+		return D;                                                                         \
 	}                                                                                     \
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
@@ -145,52 +321,52 @@ class FMcpCall_Inspect_##ClassSuffix final : public FMcpCall                    
 };
 
 // Global reads (EnvironmentHandlers.cpp)
-MCP_INSPECT_CALL(FindObjects, "find_objects", P_FindObjects, HandleInspectFindObjects, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetProjectSettings, "get_project_settings", {}, HandleInspectGetProjectSettings, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetEditorSettings, "get_editor_settings", {}, HandleInspectGetEditorSettings, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetWorldSettings, "get_world_settings", {}, HandleInspectGetWorldSettings, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetViewportInfo, "get_viewport_info", {}, HandleInspectGetViewportInfo, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetSelectedActors, "get_selected_actors", {}, HandleInspectGetSelectedActors, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetSceneStats, "get_scene_stats", {}, HandleInspectGetSceneStats, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetPerformanceStats, "get_performance_stats", {}, HandleInspectGetPerformanceStats, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetMemoryStats, "get_memory_stats", {}, HandleInspectGetMemoryStats, EMcpCallFlags::None)
-MCP_INSPECT_CALL(ListObjects, "list_objects", {}, HandleInspectListObjects, EMcpCallFlags::None)
-MCP_INSPECT_CALL(FindByClass, "find_by_class", P_FindByClass, HandleInspectFindByClass, EMcpCallFlags::None)
-MCP_INSPECT_CALL(FindByTag, "find_by_tag", P_FindByTag, HandleInspectFindByTag, EMcpCallFlags::None)
-MCP_INSPECT_CALL(InspectClass, "inspect_class", P_InspectClass, HandleInspectClassInfo, EMcpCallFlags::None)
-MCP_INSPECT_CALL(RuntimeReport, "runtime_report", P_RuntimeReport, HandleInspectRuntimeReport, EMcpCallFlags::None)
-MCP_INSPECT_CALL(PieReport, "pie_report", P_RuntimeReport, HandleInspectRuntimeReport, EMcpCallFlags::None)
+MCP_INSPECT_CALL(FindObjects, "find_objects", HandleInspectFindObjects, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetProjectSettings, "get_project_settings", HandleInspectGetProjectSettings, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetEditorSettings, "get_editor_settings", HandleInspectGetEditorSettings, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetWorldSettings, "get_world_settings", HandleInspectGetWorldSettings, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetViewportInfo, "get_viewport_info", HandleInspectGetViewportInfo, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetSelectedActors, "get_selected_actors", HandleInspectGetSelectedActors, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetSceneStats, "get_scene_stats", HandleInspectGetSceneStats, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetPerformanceStats, "get_performance_stats", HandleInspectGetPerformanceStats, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetMemoryStats, "get_memory_stats", HandleInspectGetMemoryStats, EMcpCallFlags::None)
+MCP_INSPECT_CALL(ListObjects, "list_objects", HandleInspectListObjects, EMcpCallFlags::None)
+MCP_INSPECT_CALL(FindByClass, "find_by_class", HandleInspectFindByClass, EMcpCallFlags::None)
+MCP_INSPECT_CALL(FindByTag, "find_by_tag", HandleInspectFindByTag, EMcpCallFlags::None)
+MCP_INSPECT_CALL(InspectClass, "inspect_class", HandleInspectClassInfo, EMcpCallFlags::None)
+MCP_INSPECT_CALL(RuntimeReport, "runtime_report", HandleInspectRuntimeReport, EMcpCallFlags::None)
+MCP_INSPECT_CALL(PieReport, "pie_report", HandleInspectRuntimeReport, EMcpCallFlags::None)
 
 // Self-contained delegates (FocusInputHandlers.cpp / PropertyHandlers.cpp)
-MCP_INSPECT_CALL(UiFocus, "ui_focus", {}, HandleInspectUiFocus, EMcpCallFlags::None)
-MCP_INSPECT_CALL(DiffAsset, "diff_asset", P_DiffAsset, HandleDiffAssetAction, EMcpCallFlags::None)
-MCP_INSPECT_CALL(InspectCdo, "inspect_cdo", P_InspectCdo, HandleInspectCdoAction, EMcpCallFlags::None)
+MCP_INSPECT_CALL(UiFocus, "ui_focus", HandleInspectUiFocus, EMcpCallFlags::None)
+MCP_INSPECT_CALL(DiffAsset, "diff_asset", HandleDiffAssetAction, EMcpCallFlags::None)
+MCP_INSPECT_CALL(InspectCdo, "inspect_cdo", HandleInspectCdoAction, EMcpCallFlags::None)
 
 // Object detail (one generic body, identical output for all eight)
-MCP_INSPECT_CALL(InspectObject, "inspect_object", P_ObjectDetail, HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetActorDetails, "get_actor_details", P_ObjectDetail, HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetBlueprintDetails, "get_blueprint_details", P_ObjectDetail, HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetComponentDetails, "get_component_details", P_ObjectDetail, HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetLevelDetails, "get_level_details", P_ObjectDetail, HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetMaterialDetails, "get_material_details", P_ObjectDetail, HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetMeshDetails, "get_mesh_details", P_ObjectDetail, HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetTextureDetails, "get_texture_details", P_ObjectDetail, HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(InspectObject, "inspect_object", HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetActorDetails, "get_actor_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetBlueprintDetails, "get_blueprint_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetComponentDetails, "get_component_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetLevelDetails, "get_level_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetMaterialDetails, "get_material_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetMeshDetails, "get_mesh_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetTextureDetails, "get_texture_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
 
 // Actor actions (shared control_actor handlers, ControlHandlers.cpp)
-MCP_INSPECT_ACTOR_CALL(GetComponents, "get_components", P_ActorTarget, HandleControlActorGetComponents, EMcpCallFlags::None)
-MCP_INSPECT_ACTOR_CALL(GetComponentProperty, "get_component_property", P_GetComponentProperty, HandleControlActorGetComponentProperty, EMcpCallFlags::None)
-MCP_INSPECT_ACTOR_CALL(SetComponentProperty, "set_component_property", P_SetComponentProperty, HandleControlActorSetComponentProperties, EMcpCallFlags::Mutating)
-MCP_INSPECT_ACTOR_CALL(GetMetadata, "get_metadata", P_ActorTarget, HandleControlActorGetMetadata, EMcpCallFlags::None)
-MCP_INSPECT_ACTOR_CALL(AddTag, "add_tag", P_AddTag, HandleControlActorAddTag, EMcpCallFlags::Mutating)
-MCP_INSPECT_ACTOR_CALL(CreateSnapshot, "create_snapshot", P_Snapshot, HandleControlActorCreateSnapshot, EMcpCallFlags::Mutating)
-MCP_INSPECT_ACTOR_CALL(RestoreSnapshot, "restore_snapshot", P_Snapshot, HandleControlActorRestoreSnapshot, EMcpCallFlags::Mutating)
-MCP_INSPECT_ACTOR_CALL(Export, "export", P_ActorTarget, HandleControlActorExport, EMcpCallFlags::Mutating)
-MCP_INSPECT_ACTOR_CALL(DeleteObject, "delete_object", P_DeleteObject, HandleControlActorDelete, EMcpCallFlags::Mutating)
-MCP_INSPECT_ACTOR_CALL(GetBoundingBox, "get_bounding_box", P_ActorTarget, HandleControlActorGetBoundingBox, EMcpCallFlags::None)
+MCP_INSPECT_ACTOR_CALL(GetComponents, "get_components", HandleControlActorGetComponents, EMcpCallFlags::None)
+MCP_INSPECT_ACTOR_CALL(GetComponentProperty, "get_component_property", HandleControlActorGetComponentProperty, EMcpCallFlags::None)
+MCP_INSPECT_ACTOR_CALL(SetComponentProperty, "set_component_property", HandleControlActorSetComponentProperties, EMcpCallFlags::Mutating)
+MCP_INSPECT_ACTOR_CALL(GetMetadata, "get_metadata", HandleControlActorGetMetadata, EMcpCallFlags::None)
+MCP_INSPECT_ACTOR_CALL(AddTag, "add_tag", HandleControlActorAddTag, EMcpCallFlags::Mutating)
+MCP_INSPECT_ACTOR_CALL(CreateSnapshot, "create_snapshot", HandleControlActorCreateSnapshot, EMcpCallFlags::Mutating)
+MCP_INSPECT_ACTOR_CALL(RestoreSnapshot, "restore_snapshot", HandleControlActorRestoreSnapshot, EMcpCallFlags::Mutating)
+MCP_INSPECT_ACTOR_CALL(Export, "export", HandleControlActorExport, EMcpCallFlags::Mutating)
+MCP_INSPECT_ACTOR_CALL(DeleteObject, "delete_object", HandleControlActorDelete, EMcpCallFlags::Mutating)
+MCP_INSPECT_ACTOR_CALL(GetBoundingBox, "get_bounding_box", HandleControlActorGetBoundingBox, EMcpCallFlags::None)
 
 // Property pair (PropertyHandlers.cpp)
-MCP_INSPECT_PROP_CALL(SetProperty, "set_property", P_SetProperty, HandleSetObjectProperty, "set_object_property", EMcpCallFlags::Mutating)
-MCP_INSPECT_PROP_CALL(GetProperty, "get_property", P_GetProperty, HandleGetObjectProperty, "get_object_property", EMcpCallFlags::None)
+MCP_INSPECT_PROP_CALL(SetProperty, "set_property", HandleSetObjectProperty, "set_object_property", EMcpCallFlags::Mutating)
+MCP_INSPECT_PROP_CALL(GetProperty, "get_property", HandleGetObjectProperty, "get_object_property", EMcpCallFlags::None)
 
 #undef MCP_INSPECT_CALL
 #undef MCP_INSPECT_ACTOR_CALL

@@ -1,64 +1,577 @@
 // LINT-TOOL: manage_gas
+// LINT-SCHEMA-DERIVED
 // manage_gas as FMcpCall classes — twelfth classed family
-// (docs/action-declarations.md). Each class co-locates the action's
-// declaration with its implementation. Run() delegates to the subsystem
-// member handlers (HandleGas*, GASHandlers.cpp) until the
-// module split de-members those bodies.
+// (docs/action-declarations.md). Adopts schema-from-decls: each class AUTHORS
+// its schema fragment in a S_<Suffix>() function; the published facade schema
+// folds those fragments and GetDecl() derives the validation decl from the same
+// fragment via McpDeriveDecl(), so schema and decl are one source and cannot
+// drift. Run() delegates to the subsystem member handlers (HandleGas*,
+// McpAutomationBridge_GASHandlers.cpp) until the module split de-members those
+// bodies.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
+#include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
-// so file-scope param arrays would collide across families otherwise.
+// so file-scope helpers would collide across families otherwise.
 namespace McpCalls::ManageGas
 {
 
-// ─── Param contracts ─────────────────────────────────────────────────────────
-// Ported from this family's retired shim declarations (McpDecl_ManageGas.h)
-// and re-verified against the extracted HandleGas* bodies. The retired
-// dispatcher resolved blueprintPath through the attributeSetPath/effectPath/
-// abilityPath/cuePath alias fallbacks for every action, so the 21 rows that
-// required blueprintPath were contaminated — a payload passing only an alias
-// satisfied the handler but failed the declared contract; those rows now
-// declare all five spellings optional with the at-least-one requirement
-// handler-enforced. Same fix for the three handler-enforced one-ofs the shim
-// rows declared as all-required: add_tag_to_asset's tag/tagName,
-// add_ability's abilityPath/abilityClass, and create_ability_set's
-// setPath/assetPath. The dispatcher-prologue spellings a body does not read
-// (name/path/assetPath and the alias spellings themselves) stay
-// declared-optional so payloads the family accepts today keep validating.
+// ─── Schema fragments ────────────────────────────────────────────────────────
+// One S_<Suffix>() per action, authoring exactly the params that action reads
+// (the fold dedups shared params to one entry). Descriptions + builder methods
+// are copied verbatim from the retired facade; McpDeriveDecl() reads the param
+// kinds + required-set back out of these to build the transport validation decl.
+// The five path spellings (blueprintPath + attributeSetPath/effectPath/
+// abilityPath/cuePath aliases) and the name/path/assetPath prologue keys stay
+// optional: the handler resolves the alias fallback itself, so the "at least
+// one" requirement is handler-enforced, not declared. Same handler-enforced
+// one-of for add_tag_to_asset (tag/tagName), add_ability (abilityPath/
+// abilityClass), and create_ability_set (setPath/assetPath).
 
-inline const FMcpParamDecl P_AddAbilitySystemComponent[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ConfigureAsc[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("replicationMode"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateAttributeSet[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddAttribute[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("attributeName"), EMcpParamKind::String, true }, { TEXT("baseValue"), EMcpParamKind::Number, false }, { TEXT("defaultValue"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetAttributeBaseValue[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("attributeName"), EMcpParamKind::String, true }, { TEXT("baseValue"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetAttributeClamping[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("attributeName"), EMcpParamKind::String, true }, { TEXT("minValue"), EMcpParamKind::Number, false }, { TEXT("maxValue"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_CreateGameplayAbility[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetAbilityTags[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("abilityTags"), EMcpParamKind::Array, false }, { TEXT("cancelAbilitiesWithTags"), EMcpParamKind::Array, false }, { TEXT("cancelAbilitiesWithTag"), EMcpParamKind::Array, false }, { TEXT("blockAbilitiesWithTags"), EMcpParamKind::Array, false }, { TEXT("blockAbilitiesWithTag"), EMcpParamKind::Array, false }, { TEXT("activationRequiredTags"), EMcpParamKind::Array, false }, { TEXT("activationBlockedTags"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_SetAbilityCosts[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("costEffectPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetAbilityCooldown[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("cooldownEffectPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetAbilityTargeting[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("targetingType"), EMcpParamKind::String, false }, { TEXT("targetingMode"), EMcpParamKind::String, false }, { TEXT("targetingRange"), EMcpParamKind::Number, false }, { TEXT("targetRange"), EMcpParamKind::Number, false }, { TEXT("aoeRadius"), EMcpParamKind::Number, false }, { TEXT("requiresLineOfSight"), EMcpParamKind::Bool, false }, { TEXT("targetingAngle"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_AddAbilityTask[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("taskType"), EMcpParamKind::String, true }, { TEXT("taskClassName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetActivationPolicy[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("activationPolicy"), EMcpParamKind::String, false }, { TEXT("policy"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetInstancingPolicy[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("policy"), EMcpParamKind::String, false }, { TEXT("instancingPolicy"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateGameplayEffect[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("durationType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetEffectDuration[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("durationType"), EMcpParamKind::String, false }, { TEXT("duration"), EMcpParamKind::Number, false }, { TEXT("period"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_AddEffectModifier[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("operation"), EMcpParamKind::String, false }, { TEXT("modifierOperation"), EMcpParamKind::String, false }, { TEXT("magnitude"), EMcpParamKind::Number, false }, { TEXT("modifierMagnitude"), EMcpParamKind::Number, false }, { TEXT("attribute"), EMcpParamKind::String, true }, { TEXT("setByCallerTag"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetModifierMagnitude[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("modifierIndex"), EMcpParamKind::Number, false }, { TEXT("value"), EMcpParamKind::Number, false }, { TEXT("modifierMagnitude"), EMcpParamKind::Number, false }, { TEXT("magnitudeType"), EMcpParamKind::String, false }, { TEXT("magnitudeCalculationType"), EMcpParamKind::String, false }, { TEXT("setByCallerTag"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddEffectExecutionCalculation[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("calculationClass"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_AddEffectCue[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("cueTag"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_SetEffectStacking[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("stackingType"), EMcpParamKind::String, false }, { TEXT("stackLimit"), EMcpParamKind::Number, false }, { TEXT("stackLimitCount"), EMcpParamKind::Number, false }, { TEXT("stackDurationRefreshPolicy"), EMcpParamKind::String, false }, { TEXT("stackPeriodResetPolicy"), EMcpParamKind::String, false }, { TEXT("stackExpirationPolicy"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetEffectTags[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("grantedTags"), EMcpParamKind::Array, false }, { TEXT("applicationRequiredTags"), EMcpParamKind::Array, false }, { TEXT("removalTags"), EMcpParamKind::Array, false }, { TEXT("immunityTags"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_CreateGameplayCueNotify[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("cueType"), EMcpParamKind::String, false }, { TEXT("cueTag"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ConfigureCueTrigger[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("triggerType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetCueEffects[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("particleSystem"), EMcpParamKind::String, false }, { TEXT("particleSystemPath"), EMcpParamKind::String, false }, { TEXT("sound"), EMcpParamKind::String, false }, { TEXT("soundPath"), EMcpParamKind::String, false }, { TEXT("cameraShake"), EMcpParamKind::String, false }, { TEXT("cameraShakePath"), EMcpParamKind::String, false }, { TEXT("decalPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddTagToAsset[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("tag"), EMcpParamKind::String, false }, { TEXT("tagName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_GetAttribute[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("attribute"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_GetGasInfo[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_CreateAbilitySet[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("setPath"), EMcpParamKind::String, false }, { TEXT("setName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddAbility[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("setPath"), EMcpParamKind::String, true }, { TEXT("abilityClass"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateExecutionCalculation[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("attributeSetPath"), EMcpParamKind::String, false }, { TEXT("effectPath"), EMcpParamKind::String, false }, { TEXT("abilityPath"), EMcpParamKind::String, false }, { TEXT("cuePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false } };
+static void S_AddAbilitySystemComponent(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("componentName"), TEXT("add_ability_system_component/configure_asc: SCS component name (default 'AbilitySystemComponent')."));
+}
+
+static void S_ConfigureAsc(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("componentName"), TEXT("add_ability_system_component/configure_asc: SCS component name (default 'AbilitySystemComponent')."))
+	 .StringEnum(TEXT("replicationMode"), {
+		TEXT("Full"),
+		TEXT("Minimal"),
+		TEXT("Mixed")
+	 }, TEXT("ASC replication mode."));
+}
+
+static void S_CreateAttributeSet(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_AddAttribute(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("attributeName"), TEXT("Name of the attribute."))
+	 .Number(TEXT("baseValue"), TEXT("Base value for attribute."))
+	 .Number(TEXT("defaultValue"), TEXT("add_attribute: alias for baseValue."))
+	 .Required({TEXT("attributeName")});
+}
+
+static void S_SetAttributeBaseValue(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("attributeName"), TEXT("Name of the attribute."))
+	 .Number(TEXT("baseValue"), TEXT("Base value for attribute."))
+	 .Required({TEXT("attributeName")});
+}
+
+static void S_SetAttributeClamping(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("attributeName"), TEXT("Name of the attribute."))
+	 .Number(TEXT("minValue"), TEXT("Minimum value for clamping."))
+	 .Number(TEXT("maxValue"), TEXT("Maximum value for clamping."))
+	 .Required({TEXT("attributeName")});
+}
+
+static void S_CreateGameplayAbility(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_SetAbilityTags(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Array(TEXT("abilityTags"), TEXT("Gameplay tags for this ability."))
+	 .Array(TEXT("cancelAbilitiesWithTags"), TEXT("set_ability_tags: alias for cancelAbilitiesWithTag (checked first)."))
+	 .Array(TEXT("cancelAbilitiesWithTag"), TEXT("Tags of abilities to cancel when this activates."))
+	 .Array(TEXT("blockAbilitiesWithTags"), TEXT("set_ability_tags: alias for blockAbilitiesWithTag (checked first)."))
+	 .Array(TEXT("blockAbilitiesWithTag"), TEXT("Tags of abilities blocked while this is active."))
+	 .Array(TEXT("activationRequiredTags"), TEXT("Tags required to activate this ability."))
+	 .Array(TEXT("activationBlockedTags"), TEXT("Tags that block activation of this ability."));
+}
+
+static void S_SetAbilityCosts(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("costEffectPath"), TEXT("Path to cost Gameplay Effect."));
+}
+
+static void S_SetAbilityCooldown(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("cooldownEffectPath"), TEXT("Path to cooldown Gameplay Effect."));
+}
+
+static void S_SetAbilityTargeting(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("targetingType"), TEXT("set_ability_targeting: alias for targetingMode (checked first)."))
+	 .StringEnum(TEXT("targetingMode"), {
+		TEXT("None"),
+		TEXT("SingleTarget"),
+		TEXT("AOE"),
+		TEXT("Directional"),
+		TEXT("Ground"),
+		TEXT("ActorPlacement")
+	 }, TEXT("Targeting mode for ability."))
+	 .Number(TEXT("targetingRange"), TEXT("set_ability_targeting: alias for targetRange (checked first)."))
+	 .Number(TEXT("targetRange"), TEXT("Maximum targeting range."))
+	 .Number(TEXT("aoeRadius"), TEXT("Area of effect radius."))
+	 .Bool(TEXT("requiresLineOfSight"), TEXT("set_ability_targeting: whether targeting requires line of sight (default false)."))
+	 .Number(TEXT("targetingAngle"), TEXT("set_ability_targeting: cone angle in degrees for cone-based targeting (default 360)."));
+}
+
+static void S_AddAbilityTask(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .StringEnum(TEXT("taskType"), {
+		TEXT("WaitDelay"),
+		TEXT("WaitInputPress"),
+		TEXT("WaitInputRelease"),
+		TEXT("WaitGameplayEvent"),
+		TEXT("WaitTargetData"),
+		TEXT("WaitConfirmCancel"),
+		TEXT("PlayMontageAndWait"),
+		TEXT("ApplyRootMotionConstantForce"),
+		TEXT("WaitMovementModeChange")
+	 }, TEXT("Type of ability task to add."))
+	 .String(TEXT("taskClassName"), TEXT("add_ability_task: optional soft class name recorded for the task (informational)."))
+	 .Required({TEXT("taskType")});
+}
+
+static void S_SetActivationPolicy(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .StringEnum(TEXT("activationPolicy"), {
+		TEXT("OnInputPressed"),
+		TEXT("WhileInputActive"),
+		TEXT("OnSpawn"),
+		TEXT("OnGiven")
+	 }, TEXT("When the ability activates."))
+	 .String(TEXT("policy"), TEXT("set_activation_policy/set_instancing_policy: generic alias for activationPolicy/instancingPolicy (checked first)."));
+}
+
+static void S_SetInstancingPolicy(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("policy"), TEXT("set_activation_policy/set_instancing_policy: generic alias for activationPolicy/instancingPolicy (checked first)."))
+	 .StringEnum(TEXT("instancingPolicy"), {
+		TEXT("NonInstanced"),
+		TEXT("InstancedPerActor"),
+		TEXT("InstancedPerExecution")
+	 }, TEXT("How the ability is instanced."));
+}
+
+static void S_CreateGameplayEffect(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .StringEnum(TEXT("durationType"), {
+		TEXT("Instant"),
+		TEXT("Infinite"),
+		TEXT("HasDuration")
+	 }, TEXT("Effect duration type."))
+	 .Required({TEXT("name")});
+}
+
+static void S_SetEffectDuration(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .StringEnum(TEXT("durationType"), {
+		TEXT("Instant"),
+		TEXT("Infinite"),
+		TEXT("HasDuration")
+	 }, TEXT("Effect duration type."))
+	 .Number(TEXT("duration"), TEXT("Duration in seconds."))
+	 .Number(TEXT("period"), TEXT("set_effect_duration: execution period in seconds (> 0) for periodic effects; requires durationType HasDuration or Infinite."));
+}
+
+static void S_AddEffectModifier(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("operation"), TEXT("add_effect_modifier: alias for modifierOperation (checked first)."))
+	 .StringEnum(TEXT("modifierOperation"), {
+		TEXT("Add"),
+		TEXT("Multiply"),
+		TEXT("Divide"),
+		TEXT("Override")
+	 }, TEXT("Modifier operation on attribute."))
+	 .Number(TEXT("magnitude"), TEXT("add_effect_modifier: alias for modifierMagnitude (checked first)."))
+	 .Number(TEXT("modifierMagnitude"), TEXT("Magnitude of the modifier."))
+	 .String(TEXT("attribute"), TEXT("get_attribute: attribute to read at runtime (e.g. 'Health'). add_effect_modifier: REQUIRED target attribute for the modifier - 'AttributeName' or 'SetClassName.AttributeName' (must be unambiguous across loaded AttributeSets)."))
+	 .String(TEXT("setByCallerTag"), TEXT("add_effect_modifier/set_modifier_magnitude: registered gameplay tag for a "
+		"SetByCaller modifier magnitude; mutually exclusive with a numeric magnitude."))
+	 .Required({TEXT("attribute")});
+}
+
+static void S_SetModifierMagnitude(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("modifierIndex"), TEXT("set_modifier_magnitude: index into the effect's Modifiers array (0-based)."))
+	 .Number(TEXT("value"), TEXT("set_modifier_magnitude: alias for modifierMagnitude (checked first)."))
+	 .Number(TEXT("modifierMagnitude"), TEXT("Magnitude of the modifier."))
+	 .String(TEXT("magnitudeType"), TEXT("set_modifier_magnitude: alias for magnitudeCalculationType (checked first)."))
+	 .StringEnum(TEXT("magnitudeCalculationType"), {
+		TEXT("ScalableFloat"),
+		TEXT("AttributeBased"),
+		TEXT("SetByCaller"),
+		TEXT("CustomCalculationClass")
+	 }, TEXT("How magnitude is calculated."))
+	 .String(TEXT("setByCallerTag"), TEXT("add_effect_modifier/set_modifier_magnitude: registered gameplay tag for a "
+		"SetByCaller modifier magnitude; mutually exclusive with a numeric magnitude."));
+}
+
+static void S_AddEffectExecutionCalculation(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("calculationClass"), TEXT("UGameplayEffectExecutionCalculation class path."))
+	 .Required({TEXT("calculationClass")});
+}
+
+static void S_AddEffectCue(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("cueTag"), TEXT("Gameplay Cue tag (e.g., GameplayCue.Damage.Fire)."))
+	 .Required({TEXT("cueTag")});
+}
+
+static void S_SetEffectStacking(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .StringEnum(TEXT("stackingType"), {
+		TEXT("None"),
+		TEXT("AggregateBySource"),
+		TEXT("AggregateByTarget")
+	 }, TEXT("Stacking type for effect."))
+	 .Number(TEXT("stackLimit"), TEXT("set_effect_stacking: alias for stackLimitCount (checked first)."))
+	 .Number(TEXT("stackLimitCount"), TEXT("Maximum stack count."))
+	 .StringEnum(TEXT("stackDurationRefreshPolicy"), {
+		TEXT("RefreshOnSuccessfulApplication"),
+		TEXT("NeverRefresh")
+	 }, TEXT("When to refresh stack duration."))
+	 .StringEnum(TEXT("stackPeriodResetPolicy"), {
+		TEXT("ResetOnSuccessfulApplication"),
+		TEXT("NeverReset")
+	 }, TEXT("When to reset stack period."))
+	 .StringEnum(TEXT("stackExpirationPolicy"), {
+		TEXT("ClearEntireStack"),
+		TEXT("RemoveSingleStackAndRefreshDuration"),
+		TEXT("RefreshDuration")
+	 }, TEXT("What happens when stack expires."));
+}
+
+static void S_SetEffectTags(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Array(TEXT("grantedTags"), TEXT("Tags granted while effect is active."))
+	 .Array(TEXT("applicationRequiredTags"), TEXT("Tags required to apply this effect."))
+	 .Array(TEXT("removalTags"), TEXT("Tags that cause effect removal."))
+	 .Array(TEXT("immunityTags"), TEXT("Tags that block this effect."));
+}
+
+static void S_CreateGameplayCueNotify(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .StringEnum(TEXT("cueType"), {
+		TEXT("Static"),
+		TEXT("Actor")
+	 }, TEXT("Type of gameplay cue notify."))
+	 .String(TEXT("cueTag"), TEXT("Gameplay Cue tag (e.g., GameplayCue.Damage.Fire)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_ConfigureCueTrigger(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .StringEnum(TEXT("triggerType"), {
+		TEXT("OnActive"),
+		TEXT("WhileActive"),
+		TEXT("Executed"),
+		TEXT("OnRemove")
+	 }, TEXT("When the cue triggers."));
+}
+
+static void S_SetCueEffects(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("particleSystem"), TEXT("set_cue_effects: alias for particleSystemPath (checked first)."))
+	 .String(TEXT("particleSystemPath"), TEXT("Path to particle system."))
+	 .String(TEXT("sound"), TEXT("set_cue_effects: alias for soundPath (checked first)."))
+	 .String(TEXT("soundPath"), TEXT("Sound asset path."))
+	 .String(TEXT("cameraShake"), TEXT("set_cue_effects: alias for cameraShakePath (checked first)."))
+	 .String(TEXT("cameraShakePath"), TEXT("Path to camera shake asset."))
+	 .String(TEXT("decalPath"), TEXT("Path to decal material."));
+}
+
+static void S_AddTagToAsset(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("tag"), TEXT("add_tag_to_asset: gameplay tag to add (must be registered in the project's gameplay tag registry)."))
+	 .String(TEXT("tagName"), TEXT("Alias for 'tag'."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_GetAttribute(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("actorName"), TEXT("get_attribute: live PIE actor to read (object name or label; defaults to the player pawn)."))
+	 .String(TEXT("attribute"), TEXT("get_attribute: attribute to read at runtime (e.g. 'Health'). add_effect_modifier: REQUIRED target attribute for the modifier - 'AttributeName' or 'SetClassName.AttributeName' (must be unambiguous across loaded AttributeSets)."))
+	 .Required({TEXT("attribute")});
+}
+
+static void S_GetInfo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_CreateAbilitySet(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("setPath"), TEXT("create_ability_set/add_ability: path of the ability-set data asset. "
+		"Note: create_ability_set scaffolds a PrimaryDataAsset blueprint with GrantedAbilities/"
+		"GrantedEffects/GrantedTags variables; it is not an engine ability-set type."))
+	 .String(TEXT("setName"), TEXT("create_ability_set: display name stored on the set."));
+}
+
+static void S_AddAbility(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("setPath"), TEXT("create_ability_set/add_ability: path of the ability-set data asset. "
+		"Note: create_ability_set scaffolds a PrimaryDataAsset blueprint with GrantedAbilities/"
+		"GrantedEffects/GrantedTags variables; it is not an engine ability-set type."))
+	 .String(TEXT("abilityClass"), TEXT("add_ability: alias for abilityPath."))
+	 .Required({TEXT("setPath")});
+}
+
+static void S_CreateExecutionCalculation(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name of the asset to create."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
+	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
+	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
+	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
+	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("name")});
+}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // RequiresEditor is baked into every row (the implementation TU is editor-
@@ -67,14 +580,16 @@ inline const FMcpParamDecl P_CreateExecutionCalculation[] = { { TEXT("name"), EM
 // Mutating on all writers; the only readers are get_attribute and
 // get_info.
 
-#define MCP_GA_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, ExtraFlags)        \
+#define MCP_GA_CALL(ClassSuffix, ActionLiteral, HandlerFn, ExtraFlags)                     \
 class FMcpCall_ManageGas_##ClassSuffix final : public FMcpCall                             \
 {                                                                                          \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }         \
 	const FMcpCallDecl& GetDecl() const override                                           \
 	{                                                                                      \
-		static const FMcpCallDecl Decl{ TEXT("manage_gas"), TEXT(ActionLiteral),           \
-			ParamsArray, EMcpCallFlags::RequiresEditor | (ExtraFlags) };                   \
-		return Decl;                                                                       \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_gas"),                    \
+			TEXT(ActionLiteral), EMcpCallFlags::RequiresEditor | (ExtraFlags),             \
+			&S_##ClassSuffix);                                                             \
+		return D;                                                                          \
 	}                                                                                      \
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                   \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override   \
@@ -84,49 +599,49 @@ class FMcpCall_ManageGas_##ClassSuffix final : public FMcpCall                  
 };
 
 // Components & attributes (13.1)
-MCP_GA_CALL(AddAbilitySystemComponent, "add_ability_system_component", P_AddAbilitySystemComponent, HandleGasAddAbilitySystemComponent, EMcpCallFlags::Mutating)
-MCP_GA_CALL(ConfigureAsc, "configure_asc", P_ConfigureAsc, HandleGasConfigureAsc, EMcpCallFlags::Mutating)
-MCP_GA_CALL(CreateAttributeSet, "create_attribute_set", P_CreateAttributeSet, HandleGasCreateAttributeSet, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddAttribute, "add_attribute", P_AddAttribute, HandleGasAddAttribute, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetAttributeBaseValue, "set_attribute_base_value", P_SetAttributeBaseValue, HandleGasSetAttributeBaseValue, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetAttributeClamping, "set_attribute_clamping", P_SetAttributeClamping, HandleGasSetAttributeClamping, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddAbilitySystemComponent, "add_ability_system_component", HandleGasAddAbilitySystemComponent, EMcpCallFlags::Mutating)
+MCP_GA_CALL(ConfigureAsc, "configure_asc", HandleGasConfigureAsc, EMcpCallFlags::Mutating)
+MCP_GA_CALL(CreateAttributeSet, "create_attribute_set", HandleGasCreateAttributeSet, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddAttribute, "add_attribute", HandleGasAddAttribute, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetAttributeBaseValue, "set_attribute_base_value", HandleGasSetAttributeBaseValue, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetAttributeClamping, "set_attribute_clamping", HandleGasSetAttributeClamping, EMcpCallFlags::Mutating)
 
 // Gameplay abilities (13.2)
-MCP_GA_CALL(CreateGameplayAbility, "create_gameplay_ability", P_CreateGameplayAbility, HandleGasCreateGameplayAbility, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetAbilityTags, "set_ability_tags", P_SetAbilityTags, HandleGasSetAbilityTags, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetAbilityCosts, "set_ability_costs", P_SetAbilityCosts, HandleGasSetAbilityCosts, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetAbilityCooldown, "set_ability_cooldown", P_SetAbilityCooldown, HandleGasSetAbilityCooldown, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetAbilityTargeting, "set_ability_targeting", P_SetAbilityTargeting, HandleGasSetAbilityTargeting, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddAbilityTask, "add_ability_task", P_AddAbilityTask, HandleGasAddAbilityTask, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetActivationPolicy, "set_activation_policy", P_SetActivationPolicy, HandleGasSetActivationPolicy, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetInstancingPolicy, "set_instancing_policy", P_SetInstancingPolicy, HandleGasSetInstancingPolicy, EMcpCallFlags::Mutating)
+MCP_GA_CALL(CreateGameplayAbility, "create_gameplay_ability", HandleGasCreateGameplayAbility, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetAbilityTags, "set_ability_tags", HandleGasSetAbilityTags, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetAbilityCosts, "set_ability_costs", HandleGasSetAbilityCosts, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetAbilityCooldown, "set_ability_cooldown", HandleGasSetAbilityCooldown, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetAbilityTargeting, "set_ability_targeting", HandleGasSetAbilityTargeting, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddAbilityTask, "add_ability_task", HandleGasAddAbilityTask, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetActivationPolicy, "set_activation_policy", HandleGasSetActivationPolicy, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetInstancingPolicy, "set_instancing_policy", HandleGasSetInstancingPolicy, EMcpCallFlags::Mutating)
 
 // Gameplay effects (13.3)
-MCP_GA_CALL(CreateGameplayEffect, "create_gameplay_effect", P_CreateGameplayEffect, HandleGasCreateGameplayEffect, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetEffectDuration, "set_effect_duration", P_SetEffectDuration, HandleGasSetEffectDuration, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddEffectModifier, "add_effect_modifier", P_AddEffectModifier, HandleGasAddEffectModifier, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetModifierMagnitude, "set_modifier_magnitude", P_SetModifierMagnitude, HandleGasSetModifierMagnitude, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddEffectExecutionCalculation, "add_effect_execution_calculation", P_AddEffectExecutionCalculation, HandleGasAddEffectExecutionCalculation, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddEffectCue, "add_effect_cue", P_AddEffectCue, HandleGasAddEffectCue, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetEffectStacking, "set_effect_stacking", P_SetEffectStacking, HandleGasSetEffectStacking, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetEffectTags, "set_effect_tags", P_SetEffectTags, HandleGasSetEffectTags, EMcpCallFlags::Mutating)
+MCP_GA_CALL(CreateGameplayEffect, "create_gameplay_effect", HandleGasCreateGameplayEffect, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetEffectDuration, "set_effect_duration", HandleGasSetEffectDuration, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddEffectModifier, "add_effect_modifier", HandleGasAddEffectModifier, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetModifierMagnitude, "set_modifier_magnitude", HandleGasSetModifierMagnitude, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddEffectExecutionCalculation, "add_effect_execution_calculation", HandleGasAddEffectExecutionCalculation, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddEffectCue, "add_effect_cue", HandleGasAddEffectCue, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetEffectStacking, "set_effect_stacking", HandleGasSetEffectStacking, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetEffectTags, "set_effect_tags", HandleGasSetEffectTags, EMcpCallFlags::Mutating)
 
 // Gameplay cues + tags (13.4)
-MCP_GA_CALL(CreateGameplayCueNotify, "create_gameplay_cue_notify", P_CreateGameplayCueNotify, HandleGasCreateGameplayCueNotify, EMcpCallFlags::Mutating)
-MCP_GA_CALL(ConfigureCueTrigger, "configure_cue_trigger", P_ConfigureCueTrigger, HandleGasConfigureCueTrigger, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetCueEffects, "set_cue_effects", P_SetCueEffects, HandleGasSetCueEffects, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddTagToAsset, "add_tag_to_asset", P_AddTagToAsset, HandleGasAddTagToAsset, EMcpCallFlags::Mutating)
+MCP_GA_CALL(CreateGameplayCueNotify, "create_gameplay_cue_notify", HandleGasCreateGameplayCueNotify, EMcpCallFlags::Mutating)
+MCP_GA_CALL(ConfigureCueTrigger, "configure_cue_trigger", HandleGasConfigureCueTrigger, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetCueEffects, "set_cue_effects", HandleGasSetCueEffects, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddTagToAsset, "add_tag_to_asset", HandleGasAddTagToAsset, EMcpCallFlags::Mutating)
 
 // Utility (13.5)
-MCP_GA_CALL(GetAttribute, "get_attribute", P_GetAttribute, HandleGasGetAttribute, EMcpCallFlags::None)
-MCP_GA_CALL(GetInfo, "get_info", P_GetGasInfo, HandleGasGetInfo, EMcpCallFlags::None)
+MCP_GA_CALL(GetAttribute, "get_attribute", HandleGasGetAttribute, EMcpCallFlags::None)
+MCP_GA_CALL(GetInfo, "get_info", HandleGasGetInfo, EMcpCallFlags::None)
 
 // Ability sets (13.6)
-MCP_GA_CALL(CreateAbilitySet, "create_ability_set", P_CreateAbilitySet, HandleGasCreateAbilitySet, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddAbility, "add_ability", P_AddAbility, HandleGasAddAbility, EMcpCallFlags::Mutating)
+MCP_GA_CALL(CreateAbilitySet, "create_ability_set", HandleGasCreateAbilitySet, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddAbility, "add_ability", HandleGasAddAbility, EMcpCallFlags::Mutating)
 
 // Execution calculations (13.7)
-MCP_GA_CALL(CreateExecutionCalculation, "create_execution_calculation", P_CreateExecutionCalculation, HandleGasCreateExecutionCalculation, EMcpCallFlags::Mutating)
+MCP_GA_CALL(CreateExecutionCalculation, "create_execution_calculation", HandleGasCreateExecutionCalculation, EMcpCallFlags::Mutating)
 
 #undef MCP_GA_CALL
 

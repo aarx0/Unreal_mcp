@@ -1964,6 +1964,13 @@
           "description": "Name of the actor.",
           "type": "string"
         },
+        "actorNames": {
+          "description": "delete_object: actor names for bulk deletion (alternative to a single actorName).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "assetName": {
           "description": "diff_asset: object name inside the package (default = newFilePath filename stem).",
           "type": "string"
@@ -2035,6 +2042,9 @@
         "pathContains": {
           "description": "find_objects: case-insensitive substring filter on the object's full path.",
           "type": "string"
+        },
+        "properties": {
+          "description": "set_component_property: map of component property name to value (alternative to a single propertyName/value pair)."
         },
         "propertyName": {
           "description": "Name of the property.",

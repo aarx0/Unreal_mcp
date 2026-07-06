@@ -4,6 +4,7 @@
 #include "MCP/McpToolDefinition.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
+#include "MCP/McpCallRegistry.h"
 #include "MCP/McpConsolidatedActionRouting.h"
 
 class FMcpTool_Inspect : public FMcpToolDefinition
@@ -31,40 +32,22 @@ public:
 
 	FString GetCategory() const override { return TEXT("core"); }
 
-	// Pattern A: registered as "inspect" in O(1 map
+	// Pattern A: registered as "inspect" in O(1) map
 
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
-		return FMcpSchemaBuilder()
-			.StringEnum(TEXT("action"), McpConsolidatedActions::Inspect(), TEXT("Action"))
-			.String(TEXT("objectPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-			.String(TEXT("propertyName"), TEXT("Name of the property."))
-			.String(TEXT("propertyPath"), TEXT(""))
-			.FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
-			.Bool(TEXT("save"), TEXT("set_property: persist the owning asset package to disk after the write (default true; defaults to false when markDirty is false). Level packages are never auto-saved — use control_editor save_all."))
-			.Bool(TEXT("markDirty"), TEXT("set_property: mark the owning package dirty (default true)."))
-			.String(TEXT("actorName"), TEXT("Name of the actor."))
-			.String(TEXT("name"), TEXT("Name identifier."))
-			.String(TEXT("componentName"), TEXT("Name of the component."))
-			.String(TEXT("className"), TEXT(""))
-			.String(TEXT("classPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-			.String(TEXT("tag"), TEXT("Name of the tag."))
-			.String(TEXT("filter"), TEXT(""))
-			.String(TEXT("snapshotName"), TEXT(""))
-			.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-			.Bool(TEXT("detailed"), TEXT(""))
-			.String(TEXT("pathContains"), TEXT("find_objects: case-insensitive substring filter on the object's full path."))
-			.Bool(TEXT("exactClass"), TEXT("find_objects: require the exact class (default false = IsA semantics)."))
-			.Bool(TEXT("includeCdo"), TEXT("find_objects: include class default objects (default false)."))
-			.Integer(TEXT("limit"), TEXT("find_objects: max objects returned (default 50, cap 200)."))
-			.Array(TEXT("propertyNames"), TEXT(""))
-			.Array(TEXT("componentNames"), TEXT("Component names to include detailed property readback for."))
-			.String(TEXT("oldFilePath"), TEXT("diff_asset: filesystem path to the OLD .uasset version (e.g. a git revision extracted to a temp file)."))
-			.String(TEXT("newFilePath"), TEXT("diff_asset: filesystem path to the NEW .uasset version (e.g. the working-tree file)."))
-			.String(TEXT("assetName"), TEXT("diff_asset: object name inside the package (default = newFilePath filename stem)."))
-			.Bool(TEXT("includeDefaults"), TEXT("diff_asset: also diff CDO default properties (default true)."))
-			.Required({TEXT("action")})
-			.Build();
+		// schema-from-decls: every param comes from a classed action's authored
+		// AppendSchema() fragment (see Calls/McpCalls_Inspect.cpp). The fold
+		// dedups shared params; this facade only owns the cross-cutting 'action'.
+		FMcpSchemaBuilder B;
+		B.StringEnum(TEXT("action"), McpConsolidatedActions::Inspect(), TEXT("Action"));
+		for (FMcpCall* Call : FMcpCallRegistry::Get().CallsForTool(TEXT("inspect")))
+		{
+			Call->AppendSchema(B);
+		}
+		// Per-action required params live in each action's derived decl; the flat
+		// tool 'required' only carries 'action' (fragments' Required() pollute B).
+		return B.ClearRequired().Required({TEXT("action")}).Build();
 	}
 };
 
