@@ -63,6 +63,11 @@ as they land.
 > shared action resolved to its per-tool handler, split into benign aliases / real divergent
 > duplicates / legit domain polymorphism, with a suggested tonight execution order. The three
 > dogfood `[ ]` entries below are the individual finds that feed it.
+>
+> **Phase 3 design (2026-07-06):** per-action schemas via `oneOf` discriminated union —
+> [`docs/phase3-per-action-schema-design-2026-07-06.md`](docs/phase3-per-action-schema-design-2026-07-06.md).
+> Reuses the Phase 2 fragments; the gating unknown is whether the client honors top-level
+> `oneOf` — proposes a one-rebuild `control_editor` pilot to decide before any rollout.
 
 ### [ ] 2026-07-06 — inspect ↔ control_actor: overlapping actor surface + `find_by_class` param split (confusing-names pass input)
 Dogfood find (read-only probes, no build). Two related cross-tool observations for the
