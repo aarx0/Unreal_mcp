@@ -37,8 +37,6 @@ commands
 component_class
 contentColorAndOpacity
 dataLayerAssetPath
-encumberanceSystem
-encumberanceThreshold
 endTime
 factor
 fixedAreaEnteringCost

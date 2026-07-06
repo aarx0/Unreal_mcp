@@ -5607,16 +5607,6 @@
           "description": "Orient rotation to movement direction.",
           "type": "boolean"
         },
-        "parentClass": {
-          "description": "Parent class for character blueprint.",
-          "enum": [
-            "Character",
-            "ACharacter",
-            "PlayerCharacter",
-            "AICharacter"
-          ],
-          "type": "string"
-        },
         "particleScale": {
           "description": "configure_footstep_fx: footstep particle scale (default 1.0).",
           "type": "number"
@@ -8213,6 +8203,14 @@
           "description": "Enable inventory weight tracking.",
           "type": "boolean"
         },
+        "encumberanceSystem": {
+          "description": "Misspelled alias for encumbranceSystem (accepted for back-compat).",
+          "type": "boolean"
+        },
+        "encumberanceThreshold": {
+          "description": "Misspelled alias for encumbranceThreshold (accepted for back-compat).",
+          "type": "number"
+        },
         "encumbranceSystem": {
           "description": "Enable encumbrance variables.",
           "type": "boolean"
@@ -9689,7 +9687,6 @@
         "locked": {
           "type": "boolean"
         },
-        "metadata": {},
         "muted": {
           "type": "boolean"
         },
@@ -9728,9 +9725,6 @@
           "type": "number"
         },
         "startFrame": {
-          "type": "number"
-        },
-        "startTime": {
           "type": "number"
         },
         "trackName": {
