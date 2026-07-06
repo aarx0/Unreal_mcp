@@ -13,10 +13,9 @@ public:
 
 	FString GetDescription() const override
 	{
-		return TEXT("Multiplayer and input setup: property replication (conditions, "
+		return TEXT("Multiplayer setup: property replication (conditions, "
 			"RepNotify, push model, dormancy, relevancy), RPCs (Server/Client/Multicast), "
-			"authority/ownership, network prediction, net driver settings; Enhanced Input "
-			"authoring (InputActions, mapping contexts, triggers, modifiers); game framework "
+			"authority/ownership, network prediction, net driver settings; game framework "
 			"classes (GameMode/GameState/PlayerController/PlayerState/GameInstance/HUD, match "
 			"and scoring rules); split-screen/local players, LAN host/join, and voice chat.");
 	}
@@ -108,25 +107,12 @@ public:
 			.String(TEXT("replicationPolicy"), TEXT("Replication policy for replication graph."))
 			.Bool(TEXT("customSerialization"), TEXT("Use custom serialization."))
 			.Number(TEXT("predictionThreshold"), TEXT("Prediction threshold for client prediction."))
-			// Enhanced Input authoring (this tool re-dispatches the Input action group).
-			// Handlers read these from the payload regardless; declared here so the params
-			// are discoverable / passable through a schema-validating client.
-			.String(TEXT("name"), TEXT("Asset name (create_input_action / create_input_mapping_context)."))
-			.String(TEXT("path"), TEXT("Destination folder for a created input asset."))
-			.String(TEXT("assetPath"), TEXT("Input asset to read (get_input_info)."))
-			.StringEnum(TEXT("valueType"), {
-				TEXT("Boolean"), TEXT("Axis1D"), TEXT("Axis2D"), TEXT("Axis3D")
-			}, TEXT("InputAction value type (create_input_action; default Boolean)."))
-			.String(TEXT("actionPath"), TEXT("InputAction asset path (mappings / triggers)."))
-			.String(TEXT("contextPath"), TEXT("InputMappingContext asset path (add_mapping / remove_mapping)."))
-			.String(TEXT("key"), TEXT("Key id for a mapping (e.g. SpaceBar, Gamepad_FaceButton_Bottom)."))
-			.StringEnum(TEXT("triggerType"), {
-				TEXT("Pressed"), TEXT("Released"), TEXT("Down"), TEXT("Tap"), TEXT("Hold"),
-				TEXT("HoldAndRelease"), TEXT("Pulse"), TEXT("RepeatedTap")
-			}, TEXT("Input trigger class (set_input_trigger)."))
-			.String(TEXT("modifierType"), TEXT("Input modifier class (set_input_modifier, e.g. Negate, SwizzleAxis)."))
-			.Bool(TEXT("replace"), TEXT("set_input_trigger: clear existing triggers before adding (default false = idempotent dedupe)."))
-			.Number(TEXT("priority"), TEXT("enable_input_mapping: mapping context priority (default 0)."))
+			// Shared asset params: name/path drive the GameFramework create_* actions
+			// below; assetPath is a generic asset-path input. (The Enhanced Input
+			// actions that also used these moved to the manage_input tool.)
+			.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+			.String(TEXT("path"), TEXT("Destination folder for a created asset."))
+			.String(TEXT("assetPath"), TEXT("Asset path to read."))
 			// Game framework authoring (this tool re-dispatches the GameFramework action
 			// group): GameMode/GameState/PlayerController/PlayerState/GameInstance/HUD
 			// creation, match rules, spawn/respawn/spectating.

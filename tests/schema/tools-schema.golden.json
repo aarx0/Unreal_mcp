@@ -7834,6 +7834,94 @@
     "name": "manage_geometry"
   },
   {
+    "category": "utility",
+    "description": "Enhanced Input authoring: InputActions, InputMappingContexts, key mappings, triggers, and modifiers.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "Input action to perform",
+          "enum": [
+            "create_input_action",
+            "create_input_mapping_context",
+            "add_mapping",
+            "remove_mapping",
+            "set_input_trigger",
+            "set_input_modifier",
+            "enable_input_mapping",
+            "disable_input_action",
+            "get_info"
+          ],
+          "type": "string"
+        },
+        "actionPath": {
+          "description": "InputAction asset path (mappings / triggers).",
+          "type": "string"
+        },
+        "assetPath": {
+          "description": "Input asset to read (get_info).",
+          "type": "string"
+        },
+        "contextPath": {
+          "description": "InputMappingContext asset path (add_mapping / remove_mapping).",
+          "type": "string"
+        },
+        "key": {
+          "description": "Key id for a mapping (e.g. SpaceBar, Gamepad_FaceButton_Bottom).",
+          "type": "string"
+        },
+        "modifierType": {
+          "description": "Input modifier class (set_input_modifier, e.g. Negate, SwizzleAxis).",
+          "type": "string"
+        },
+        "name": {
+          "description": "Asset name (create_input_action / create_input_mapping_context).",
+          "type": "string"
+        },
+        "path": {
+          "description": "Destination folder for a created input asset.",
+          "type": "string"
+        },
+        "priority": {
+          "description": "enable_input_mapping: mapping context priority (default 0).",
+          "type": "number"
+        },
+        "replace": {
+          "description": "set_input_trigger: clear existing triggers before adding (default false = idempotent dedupe).",
+          "type": "boolean"
+        },
+        "triggerType": {
+          "description": "Input trigger class (set_input_trigger).",
+          "enum": [
+            "Pressed",
+            "Released",
+            "Down",
+            "Tap",
+            "Hold",
+            "HoldAndRelease",
+            "Pulse",
+            "RepeatedTap"
+          ],
+          "type": "string"
+        },
+        "valueType": {
+          "description": "InputAction value type (create_input_action; default Boolean).",
+          "enum": [
+            "Boolean",
+            "Axis1D",
+            "Axis2D",
+            "Axis3D"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    },
+    "name": "manage_input"
+  },
+  {
     "category": "gameplay",
     "description": "Create interactive objects: doors, switches, chests, levers. Set up destructible meshes and trigger volumes.",
     "inputSchema": {
@@ -8975,7 +9063,7 @@
   },
   {
     "category": "utility",
-    "description": "Multiplayer and input setup: property replication (conditions, RepNotify, push model, dormancy, relevancy), RPCs (Server/Client/Multicast), authority/ownership, network prediction, net driver settings; Enhanced Input authoring (InputActions, mapping contexts, triggers, modifiers); game framework classes (GameMode/GameState/PlayerController/PlayerState/GameInstance/HUD, match and scoring rules); split-screen/local players, LAN host/join, and voice chat.",
+    "description": "Multiplayer setup: property replication (conditions, RepNotify, push model, dormancy, relevancy), RPCs (Server/Client/Multicast), authority/ownership, network prediction, net driver settings; game framework classes (GameMode/GameState/PlayerController/PlayerState/GameInstance/HUD, match and scoring rules); split-screen/local players, LAN host/join, and voice chat.",
     "inputSchema": {
       "properties": {
         "action": {
@@ -9008,15 +9096,6 @@
             "set_net_role",
             "configure_replicated_movement",
             "get_info",
-            "create_input_action",
-            "create_input_mapping_context",
-            "add_mapping",
-            "remove_mapping",
-            "set_input_trigger",
-            "set_input_modifier",
-            "enable_input_mapping",
-            "disable_input_action",
-            "get_input_info",
             "create_game_mode",
             "create_game_state",
             "create_player_controller",
@@ -9056,10 +9135,6 @@
           ],
           "type": "string"
         },
-        "actionPath": {
-          "description": "InputAction asset path (mappings / triggers).",
-          "type": "string"
-        },
         "actorName": {
           "description": "Name of the actor.",
           "type": "string"
@@ -9069,7 +9144,7 @@
           "type": "boolean"
         },
         "assetPath": {
-          "description": "Input asset to read (get_input_info).",
+          "description": "Asset path to read.",
           "type": "string"
         },
         "attenuationFalloff": {
@@ -9153,10 +9228,6 @@
             "COND_SkipReplay",
             "COND_Never"
           ],
-          "type": "string"
-        },
-        "contextPath": {
-          "description": "InputMappingContext asset path (add_mapping / remove_mapping).",
           "type": "string"
         },
         "controllerId": {
@@ -9249,10 +9320,6 @@
           "description": "Configure as autonomous proxy.",
           "type": "boolean"
         },
-        "key": {
-          "description": "Key id for a mapping (e.g. SpaceBar, Gamepad_FaceButton_Bottom).",
-          "type": "string"
-        },
         "localPlayerNum": {
           "description": "mute_player: local player index applying the mute.",
           "type": "number"
@@ -9281,16 +9348,12 @@
           "description": "Minimum update frequency when idle (Hz, default 2).",
           "type": "number"
         },
-        "modifierType": {
-          "description": "Input modifier class (set_input_modifier, e.g. Negate, SwizzleAxis).",
-          "type": "string"
-        },
         "muted": {
           "description": "mute_player: mute (true) or unmute (false), default true.",
           "type": "boolean"
         },
         "name": {
-          "description": "Asset name (create_input_action / create_input_mapping_context).",
+          "description": "Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class).",
           "type": "string"
         },
         "netCullDistanceSquared": {
@@ -9351,7 +9414,7 @@
           "type": "string"
         },
         "path": {
-          "description": "Destination folder for a created input asset.",
+          "description": "Destination folder for a created asset.",
           "type": "string"
         },
         "playerControllerClass": {
@@ -9382,10 +9445,6 @@
           "description": "Prediction threshold for client prediction.",
           "type": "number"
         },
-        "priority": {
-          "description": "enable_input_mapping: mapping context priority (default 0).",
-          "type": "number"
-        },
         "propertyName": {
           "description": "Name of the property.",
           "type": "string"
@@ -9400,10 +9459,6 @@
         },
         "reliable": {
           "description": "Whether the operation is reliable.",
-          "type": "boolean"
-        },
-        "replace": {
-          "description": "set_input_trigger: clear existing triggers before adding (default false = idempotent dedupe).",
           "type": "boolean"
         },
         "replicated": {
@@ -9556,20 +9611,6 @@
           "description": "host_lan_server / join_lan_server: extra URL options appended to the travel string.",
           "type": "string"
         },
-        "triggerType": {
-          "description": "Input trigger class (set_input_trigger).",
-          "enum": [
-            "Pressed",
-            "Released",
-            "Down",
-            "Tap",
-            "Hold",
-            "HoldAndRelease",
-            "Pulse",
-            "RepeatedTap"
-          ],
-          "type": "string"
-        },
         "useOwnerNetRelevancy": {
           "description": "Use owner relevancy.",
           "type": "boolean"
@@ -9581,16 +9622,6 @@
         "usePushModel": {
           "description": "Use push-model replication.",
           "type": "boolean"
-        },
-        "valueType": {
-          "description": "InputAction value type (create_input_action; default Boolean).",
-          "enum": [
-            "Boolean",
-            "Axis1D",
-            "Axis2D",
-            "Axis3D"
-          ],
-          "type": "string"
         },
         "variableName": {
           "description": "add_network_prediction_data: name for the created replicated variable (default PredictionData_<dataType>).",

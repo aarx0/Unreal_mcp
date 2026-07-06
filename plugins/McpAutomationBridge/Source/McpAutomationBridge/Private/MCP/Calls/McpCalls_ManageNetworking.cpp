@@ -3,10 +3,11 @@
 // (docs/action-declarations.md). Each class co-locates the action's
 // declaration with its implementation. Run() delegates to the subsystem
 // member handlers — HandleNetworking* (NetworkingHandlers.cpp) for the 27
-// core actions, HandleInput* (InputHandlers.cpp) for the 9 input actions,
-// HandleGameFramework* (GameFrameworkHandlers.cpp) for the 20 game-framework
-// actions, HandleSessions* (SessionsHandlers.cpp) for the 16 session
-// actions — until the module split de-members those bodies.
+// core actions, HandleGameFramework* (GameFrameworkHandlers.cpp) for the 20
+// game-framework actions, HandleSessions* (SessionsHandlers.cpp) for the 16
+// session actions — until the module split de-members those bodies. The 9
+// Enhanced Input actions split out into manage_input
+// (MCP/Calls/McpCalls_ManageInput.cpp).
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "McpAutomationBridgeSubsystem.h"
@@ -60,15 +61,6 @@ inline const FMcpParamDecl P_ConfigureNetDriver[] = { { TEXT("maxClientRate"), E
 inline const FMcpParamDecl P_SetNetRole[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("role"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_ConfigureReplicatedMovement[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("replicateMovement"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_GetNetworkingInfo[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateInputAction[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true }, { TEXT("valueType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateInputMappingContext[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_AddMapping[] = { { TEXT("contextPath"), EMcpParamKind::String, true }, { TEXT("actionPath"), EMcpParamKind::String, true }, { TEXT("key"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_RemoveMapping[] = { { TEXT("contextPath"), EMcpParamKind::String, true }, { TEXT("actionPath"), EMcpParamKind::String, true }, { TEXT("key"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetInputTrigger[] = { { TEXT("actionPath"), EMcpParamKind::String, true }, { TEXT("triggerType"), EMcpParamKind::String, true }, { TEXT("replace"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetInputModifier[] = { { TEXT("contextPath"), EMcpParamKind::String, false }, { TEXT("actionPath"), EMcpParamKind::String, true }, { TEXT("key"), EMcpParamKind::String, false }, { TEXT("modifierType"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_EnableInputMapping[] = { { TEXT("contextPath"), EMcpParamKind::String, true }, { TEXT("priority"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_DisableInputAction[] = { { TEXT("actionPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_GetInputInfo[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_CreateGameMode[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false }, { TEXT("defaultPawnClass"), EMcpParamKind::String, false }, { TEXT("playerControllerClass"), EMcpParamKind::String, false }, { TEXT("gameStateClass"), EMcpParamKind::String, false }, { TEXT("playerStateClass"), EMcpParamKind::String, false }, { TEXT("hudClass"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_CreateGameState[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_CreatePlayerController[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false } };
@@ -107,22 +99,21 @@ inline const FMcpParamDecl P_ConfigurePushToTalk[] = { { TEXT("pushToTalkEnabled
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // Flags are authored per action and deliberately mixed. RequiresEditor on
-// the 45 Input/GameFramework/Sessions actions — those three chains were
+// the 36 GameFramework/Sessions actions — those two chains were
 // whole-editor-gated and the members answer their editor-build stubs in
 // non-editor builds; NOT on the 27 core networking actions —
 // NetworkingHandlers.cpp carries no editor gate, and flagging them would
 // newly reject GEditor-less runs the shim served (the world-dependent
 // bodies keep their handler-enforced NO_WORLD errors). Mutating on the
-// writers only. Eleven actions parse and acknowledge without writing
+// writers only. Nine actions parse and acknowledge without writing
 // anything and stay unflagged alongside the readers: the nine Sessions
 // echoes (configure_local_session_settings, configure_session_interface,
 // set_split_screen_type, configure_lan_play, join_lan_server — builds the
 // travel URL but never travels — configure_voice_settings,
-// set_voice_channel, set_voice_attenuation, configure_push_to_talk) and the
-// two Input no-ops (enable_input_mapping, disable_input_action);
+// set_voice_channel, set_voice_attenuation, configure_push_to_talk);
 // deepen-or-retire is TODO'd for Aaron. The readers are check_has_authority,
-// check_is_locally_controlled, get_info, get_input_info,
-// get_game_framework_info, and get_sessions_info.
+// check_is_locally_controlled, get_info, get_game_framework_info, and
+// get_sessions_info.
 
 #define MCP_NW_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, Flags)           \
 class FMcpCall_ManageNetworking_##ClassSuffix final : public FMcpCall                    \
@@ -182,17 +173,6 @@ MCP_NW_CALL(ConfigureReplicatedMovement, "configure_replicated_movement", P_Conf
 
 // Utility
 MCP_NW_CALL(GetInfo, "get_info", P_GetNetworkingInfo, HandleNetworkingGetInfo, EMcpCallFlags::None)
-
-// Input (InputHandlers.cpp)
-MCP_NW_CALL(CreateInputAction, "create_input_action", P_CreateInputAction, HandleInputCreateInputAction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(CreateInputMappingContext, "create_input_mapping_context", P_CreateInputMappingContext, HandleInputCreateInputMappingContext, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(AddMapping, "add_mapping", P_AddMapping, HandleInputAddMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(RemoveMapping, "remove_mapping", P_RemoveMapping, HandleInputRemoveMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetInputTrigger, "set_input_trigger", P_SetInputTrigger, HandleInputSetInputTrigger, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetInputModifier, "set_input_modifier", P_SetInputModifier, HandleInputSetInputModifier, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(EnableInputMapping, "enable_input_mapping", P_EnableInputMapping, HandleInputEnableInputMapping, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(DisableInputAction, "disable_input_action", P_DisableInputAction, HandleInputDisableInputAction, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(GetInputInfo, "get_input_info", P_GetInputInfo, HandleInputGetInputInfo, EMcpCallFlags::RequiresEditor)
 
 // Game framework (GameFrameworkHandlers.cpp)
 MCP_NW_CALL(CreateGameMode, "create_game_mode", P_CreateGameMode, HandleGameFrameworkCreateGameMode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -269,15 +249,6 @@ void McpRegisterManageNetworkingCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetNetRole>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureReplicatedMovement>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_GetInfo>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_CreateInputAction>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_CreateInputMappingContext>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_AddMapping>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_RemoveMapping>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetInputTrigger>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetInputModifier>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_EnableInputMapping>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_DisableInputAction>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_GetInputInfo>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_CreateGameMode>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_CreateGameState>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_CreatePlayerController>());

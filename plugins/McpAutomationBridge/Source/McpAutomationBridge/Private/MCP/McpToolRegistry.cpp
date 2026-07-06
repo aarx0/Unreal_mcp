@@ -29,6 +29,7 @@ const TSet<FString>& FMcpToolRegistry::GetCanonicalToolNames()
 		TEXT("manage_inventory"),
 		TEXT("manage_interaction"),
 		TEXT("manage_networking"),
+		TEXT("manage_input"),
 		TEXT("manage_level_structure")
 	};
 

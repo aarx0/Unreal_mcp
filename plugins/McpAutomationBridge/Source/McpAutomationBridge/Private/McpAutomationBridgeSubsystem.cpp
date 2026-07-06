@@ -502,6 +502,7 @@ void UMcpAutomationBridgeSubsystem::Initialize(
       McpRegisterManageEffectCalls();
       McpRegisterManageGasCalls();
       McpRegisterManageGeometryCalls();
+      McpRegisterManageInputCalls();
       McpRegisterManageInteractionCalls();
       McpRegisterManageInventoryCalls();
       McpRegisterManageLevelCalls();

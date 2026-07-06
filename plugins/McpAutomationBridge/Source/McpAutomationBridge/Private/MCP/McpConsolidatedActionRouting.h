@@ -477,7 +477,7 @@ inline const TArray<FString>& ManageNetworkingCore()
 {
 	// manage_networking is classed
 	// (MCP/Calls/McpCalls_ManageNetworking.cpp): this list and the
-	// Input()/GameFramework()/Sessions() lists survive only so boot
+	// GameFramework()/Sessions() lists survive only so boot
 	// validation can prove the schema union still matches the published enum.
 	static const TArray<FString> Actions = {
 		TEXT("set_property_replicated"), TEXT("set_replication_condition"),
@@ -507,7 +507,7 @@ inline const TArray<FString>& Input()
 		TEXT("add_mapping"), TEXT("remove_mapping"),
 		TEXT("set_input_trigger"), TEXT("set_input_modifier"),
 		TEXT("enable_input_mapping"), TEXT("disable_input_action"),
-		TEXT("get_input_info")
+		TEXT("get_info")
 	};
 	return Actions;
 }
@@ -548,10 +548,17 @@ inline const TArray<FString>& Sessions()
 inline TArray<FString> ManageNetworking()
 {
 	TArray<FString> Actions = ManageNetworkingCore();
-	AppendUniqueActions(Actions, Input());
 	AppendUniqueActions(Actions, GameFramework());
 	AppendUniqueActions(Actions, Sessions());
 	return Actions;
+}
+
+// manage_input owns the Enhanced Input action group (classed in
+// MCP/Calls/McpCalls_ManageInput.cpp). No routed sub-families: Input() is the
+// whole tool, so the core-list and schema-union are both the input list.
+inline TArray<FString> ManageInput()
+{
+	return Input();
 }
 
 inline const TArray<FString>& ManageLevelStructureCore()
@@ -1054,15 +1061,19 @@ inline const TArray<FMcpToolRouting>& GetToolRoutingTable()
 		  &SystemControlCore, &SystemControl },
 		// manage_networking is CLASSED: there is no live registration lambda
 		// — RoutedFamilies here documents the per-class delegation split
-		// (Input actions delegate to HandleInput* members in InputHandlers.cpp,
-		// GameFramework to HandleGameFramework* in GameFrameworkHandlers.cpp,
-		// Sessions to HandleSessions* wrappers in SessionsHandlers.cpp), and
-		// the row is retained so the schema-union validation keeps proving
-		// enum coverage.
+		// (GameFramework actions delegate to HandleGameFramework* in
+		// GameFrameworkHandlers.cpp, Sessions to HandleSessions* wrappers in
+		// SessionsHandlers.cpp), and the row is retained so the schema-union
+		// validation keeps proving enum coverage. The Enhanced Input actions
+		// split out into manage_input.
 		{ TEXT("manage_networking"),
-		  { { TEXT("Input"), &Input }, { TEXT("GameFramework"), &GameFramework },
+		  { { TEXT("GameFramework"), &GameFramework },
 		    { TEXT("Sessions"), &Sessions } },
 		  &ManageNetworkingCore, &ManageNetworking },
+		// manage_input is CLASSED (MCP/Calls/McpCalls_ManageInput.cpp) and
+		// single-handler: no routed sub-families, so Input() is both the core
+		// list and the schema union.
+		{ TEXT("manage_input"), {}, &Input, &ManageInput },
 		// manage_level_structure is CLASSED: there is no live registration
 		// lambda — RoutedFamilies here documents the per-class delegation
 		// split (Volume actions delegate to HandleVolume* members in
