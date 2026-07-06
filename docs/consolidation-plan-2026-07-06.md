@@ -36,14 +36,28 @@ drift between tools. Recommended canonical home in **bold**; verify equivalence 
 
 | Action | Tools → handlers | Canonical? |
 |---|---|---|
-| `generate_lods` | BuildEnvironment→`HandleEnvironmentGenerateLODs`, ManageAsset→`HandleGenerateLODs`, **ManageGeometry→`HandleGeometryGenerateLODs`** | ManageGeometry (LODs are a geometry op); alias/drop the other two |
-| `create_widget` / `add_widget_child` | SystemControl→`HandleUiCreateWidget`/`HandleUiAddWidgetChild`, **ManageBlueprint→`HandleManageWidgetAuthoringAction`** | ManageBlueprint owns widgets (dozens of typed actions); **remove** from system_control |
-| `screenshot` | SystemControl→`HandleUiScreenshot`, **ControlEditor→`HandleControlEditorScreenshot`** | ControlEditor (viewport control); drop/alias system_control's |
-| `show_stats` | SystemControl→`HandlePerfShowStats`, **ControlEditor→`HandleControlEditorShowStats`** | ControlEditor (it also has `hide_stats`; system_control does **not** — see asymmetry below) |
-| `get_project_settings` | SystemControl→`HandleUiGetProjectSettings`, Inspect→`HandleInspectGetProjectSettings` | pick one (Inspect fits "introspection"); alias the other |
+| `generate_lods` ⚠️**CORRECTED** | BuildEnvironment→`HandleEnvironmentGenerateLODs` (thin wrapper) → **ManageAsset→`HandleGenerateLODs`** (real mesh-reduction impl: FMeshReductionSettings, static-mesh + landscape); ManageGeometry→`HandleGeometryGenerateLODs` = a **DIFFERENT technique** (GeometryScript remesh, active on 5.7) | **NOT a 3-way dup** (original "collapse to Geometry" was WRONG). Env≡Asset are the SAME handler — Env just delegates to `HandleGenerateLODs`; so drop Env's redundant alias (or keep for discoverability), **Asset canonical**. Geometry is a separate GeometryScript LOD op — **do NOT merge** (would swap mesh-reduction for remeshing); leave it, or rename to disambiguate. |
+| `create_widget` / `add_widget_child` | SystemControl→`HandleUiCreateWidget`/`HandleUiAddWidgetChild`, **ManageBlueprint→`HandleManageWidgetAuthoringAction`** | ✅ **DONE (ee6e317d)**: removed from system_control (+ dead handlers deleted). ManageBlueprint owns widgets. |
+| `screenshot` | SystemControl→`HandleUiScreenshot`, **ControlEditor→`HandleControlEditorScreenshot`** | ✅ **DONE (ee6e317d)**: dropped from system_control; ControlEditor owns it. |
+| `show_stats` | SystemControl→`HandlePerfShowStats`, **ControlEditor→`HandleControlEditorShowStats`** | ✅ **DONE (ee6e317d)**: dropped from system_control (which lacked `hide_stats` anyway); ControlEditor owns the show/hide pair. |
+| `get_project_settings` | SystemControl→`HandleUiGetProjectSettings`, Inspect→`HandleInspectGetProjectSettings` | Genuine divergent dup (VERIFIED: two different impls — Ui walks GEngine, Inspect its own set — likely return **different data**). Pick one home (Inspect fits "introspection"); reconcile the output sets first, don't blind-alias. |
 | `find_by_class` | ControlActor→`HandleControlActorFindByClass`, Inspect→`HandleInspectFindByClass` | + param split: control_actor takes `class`/`className`, inspect only `className`/`classPath`. Pick one home + one param name |
 | `find_by_tag` | ControlActor→`HandleControlActorFindByTag`, Inspect→`HandleInspectFindByTag` (both find **actors**); ManageAsset→`HandleFindByTag` (finds **assets** — genuinely separate) | unify the actor pair |
 | `build_lighting` | BuildEnvironment→`HandleLightingBuildLighting`, ManageLevel→`HandleLevelBuildLighting` | two bakers for the same op — **Aaron previously said don't merge**; flagged for a conscious call, not silent merge |
+
+### Handler-equivalence verification (2026-07-06, static — read the actual handler bodies)
+Before acting on the "canonical home" recommendations, I read each divergent pair's source to
+confirm they're actually the same operation. Results:
+- **`generate_lods` — recommendation was WRONG** (see ⚠️ row). Env just delegates to Asset's
+  `HandleGenerateLODs` (aliases); Geometry is a *different* GeometryScript technique. Not a
+  3-way collapse. This is why "verify equivalence before dropping" is in the header — caught one.
+- **`get_project_settings`** — two genuinely different impls (Ui via GEngine vs Inspect's own);
+  confirm the returned data sets before picking one, or you'll silently drop fields.
+- **`find_by_class` / `find_by_tag`** — genuine divergent dups: separate real impls of the same
+  actor search (ControlActor's vs Inspect's), so the "unify + pick one param name" plan holds.
+- **`create_widget`/`add_widget_child`/`screenshot`/`show_stats`** — shipped (ee6e317d).
+Lesson: a shared *action name* with *different handlers* is only a real dup if the handlers do
+the same thing — some are thin delegations (alias), some are different techniques (leave alone).
 
 ### Structural picture — `system_control` is shedding responsibilities to better homes
 Three of the Category-B rows point the same way: `system_control` accreted actions that already
@@ -72,14 +86,17 @@ material), `delete_node` (material vs BP graph), `arrange_graph` (material vs BP
 
 ## Suggested execution order (tonight — each needs a rebuild, so batch)
 
-1. **Zero-risk drops first** — remove `system_control` `create_widget`/`add_widget_child`
-   (dup of manage_blueprint), `screenshot`, `show_stats` (dups of control_editor). Schema change
-   → golden regen. Biggest surface-area cleanup, lowest behavioral risk.
-2. **generate_lods** — collapse to ManageGeometry after confirming the three handlers agree.
+1. ✅ **DONE (ee6e317d)** — dropped `system_control` `create_widget`/`add_widget_child`
+   (dup of manage_blueprint), `screenshot`, `show_stats` (dups of control_editor), plus the
+   now-dead handlers. Golden re-pinned, statics/live all green.
+2. **generate_lods** — ⚠️ NOT a collapse (see corrected row + verification note). At most: drop
+   `build_environment`'s thin alias of Asset's handler (keep Asset canonical); leave/disambiguate
+   `manage_geometry`'s separate GeometryScript op. Small, optional.
 3. **find_by_class / find_by_tag** — pick canonical home for the actor pair + unify `class`
-   param name (this closes the 2026-07-06 inspect friction find).
+   param name (this closes the 2026-07-06 inspect friction find). Genuine dups (verified).
 4. **inspect alias family (Category A)** — decide keep-or-drop as one batch (same-handler, safe).
-5. **build_lighting, get_project_settings** — Aaron's explicit call each (divergent, some by design).
+5. **get_project_settings** — reconcile the two output sets first (verified divergent), then pick a
+   home. **build_lighting** — Aaron's explicit call (divergent, likely by design).
 
-All of the above are schema/registration edits + golden re-pin behind the normal gate
-(editor closed → Build.bat -NoUBA → relaunch → smoke → golden). None started.
+Remaining items are schema/registration edits + golden re-pin behind the normal gate
+(editor closed → Build.bat -NoUBA → relaunch → smoke → golden).
