@@ -27,13 +27,9 @@ namespace McpCalls::ManageAsset
 //    value/color/texturePath; remove_material_node and get_material_node_details
 //    dropped materialPath/expressionIndex (all proven absent from the live
 //    bodies).
-//  • The three material alias rows re-derived from their remap targets (the
-//    dispatcher rewrites connect_material_pins→connect_nodes,
-//    break_material_connections→disconnect_nodes, rebuild_material→
-//    compile_material before the branch chain): connect_material_pins dropped
-//    materialPath/fromExpression/toExpression/targetPin; break_material_
-//    connections dropped materialPath/expressionIndex/inputName; rebuild_material
-//    dropped materialPath.
+//  • rebuild_material re-derived from its remap target (the dispatcher rewrites
+//    rebuild_material→compile_material before the branch chain): dropped
+//    materialPath.
 //  • The five data-table rows declared the assetPath/dataTablePath/tablePath/
 //    path alias group all-required although McpLoadDataTableArg resolves them
 //    first-present-wins and joint-rejects only when all are absent — flipped
@@ -111,9 +107,7 @@ inline const FMcpParamDecl P_AddIf[] = { { TEXT("assetPath"), EMcpParamKind::Str
 inline const FMcpParamDecl P_AddSwitch[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_AddCustomExpression[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("code"), EMcpParamKind::String, true }, { TEXT("outputType"), EMcpParamKind::String, false }, { TEXT("description"), EMcpParamKind::String, false }, { TEXT("inputs"), EMcpParamKind::Array, false }, { TEXT("additionalOutputs"), EMcpParamKind::Array, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_ConnectNodes[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("sourceNodeId"), EMcpParamKind::String, true }, { TEXT("targetNodeId"), EMcpParamKind::String, false }, { TEXT("inputName"), EMcpParamKind::String, false }, { TEXT("sourcePin"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConnectMaterialPins[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("sourceNodeId"), EMcpParamKind::String, true }, { TEXT("targetNodeId"), EMcpParamKind::String, false }, { TEXT("inputName"), EMcpParamKind::String, false }, { TEXT("sourcePin"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_DisconnectNodes[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("pinName"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_BreakMaterialConnections[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("nodeId"), EMcpParamKind::String, false }, { TEXT("pinName"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_CreateMaterialFunction[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("description"), EMcpParamKind::String, false }, { TEXT("exposeToLibrary"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
 inline const FMcpParamDecl P_AddFunctionInput[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("inputName"), EMcpParamKind::String, true }, { TEXT("inputType"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("functionPath"), EMcpParamKind::Any, false } };
 inline const FMcpParamDecl P_AddFunctionOutput[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("inputName"), EMcpParamKind::String, true }, { TEXT("inputType"), EMcpParamKind::String, false }, { TEXT("x"), EMcpParamKind::Number, false }, { TEXT("y"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
@@ -287,9 +281,7 @@ MCP_MA_ACTION_CALL(AddIf, "add_if", P_AddIf, HandleMaterialAddConditional, EMcpC
 MCP_MA_ACTION_CALL(AddSwitch, "add_switch", P_AddSwitch, HandleMaterialAddConditional, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_CALL(AddCustomExpression, "add_custom_expression", P_AddCustomExpression, HandleMaterialAddCustomExpression, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_CALL(ConnectNodes, "connect_nodes", P_ConnectNodes, HandleMaterialConnectNodes, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(ConnectMaterialPins, "connect_material_pins", P_ConnectMaterialPins, HandleMaterialConnectNodes, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_CALL(DisconnectNodes, "disconnect_nodes", P_DisconnectNodes, HandleMaterialDisconnectNodes, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(BreakMaterialConnections, "break_material_connections", P_BreakMaterialConnections, HandleMaterialDisconnectNodes, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_CALL(CreateMaterialFunction, "create_material_function", P_CreateMaterialFunction, HandleMaterialCreateMaterialFunction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_ACTION_CALL(AddFunctionInput, "add_function_input", P_AddFunctionInput, HandleMaterialAddFunctionIO, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_ACTION_CALL(AddFunctionOutput, "add_function_output", P_AddFunctionOutput, HandleMaterialAddFunctionIO, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -421,9 +413,7 @@ void McpRegisterManageAssetCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_AddSwitch>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_AddCustomExpression>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_ConnectNodes>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_ConnectMaterialPins>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_DisconnectNodes>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_BreakMaterialConnections>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_CreateMaterialFunction>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_AddFunctionInput>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_AddFunctionOutput>());

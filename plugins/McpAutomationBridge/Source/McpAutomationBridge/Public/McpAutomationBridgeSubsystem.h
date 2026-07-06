@@ -2131,9 +2131,6 @@ public:
   bool HandleCombatGetInfo(const FString &RequestId,
                            const TSharedPtr<FJsonObject> &Payload,
                            FMcpResponseHandle Socket);
-  bool HandleCombatSetupDamageType(const FString &RequestId,
-                                   const TSharedPtr<FJsonObject> &Payload,
-                                   FMcpResponseHandle Socket);
   bool HandleCombatConfigureHitDetection(const FString &RequestId,
                                          const TSharedPtr<FJsonObject> &Payload,
                                          FMcpResponseHandle Socket);
@@ -2265,9 +2262,6 @@ public:
   bool HandleAiGetAiInfo(const FString &RequestId,
                          const TSharedPtr<FJsonObject> &Payload,
                          FMcpResponseHandle RequestingSocket);
-  bool HandleAiCreateBlackboard(const FString &RequestId,
-                                const TSharedPtr<FJsonObject> &Payload,
-                                FMcpResponseHandle RequestingSocket);
   bool HandleAiSetupPerception(const FString &RequestId,
                                const TSharedPtr<FJsonObject> &Payload,
                                FMcpResponseHandle RequestingSocket);

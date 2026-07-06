@@ -2617,43 +2617,6 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatGetInfo(
 // ALIASES
 // ============================================================
 
-// setup_damage_type -> alias for create_damage_type
-bool UMcpAutomationBridgeSubsystem::HandleCombatSetupDamageType(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
-    return true;
-#else
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    FString Path = GetJsonStringField(Payload, TEXT("path"), TEXT("/Game"));
-
-    if (Name.IsEmpty())
-    {
-        SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    FString Error;
-    UBlueprint* Blueprint = CreateActorBlueprint(UDamageType::StaticClass(), Path, Name, Error);
-    if (!Blueprint)
-    {
-        SendAutomationError(Socket, RequestId, Error.IsEmpty() ? TEXT("Failed to create damage type.") : Error, TEXT("CREATION_FAILED"));
-        return true;
-    }
-
-    McpSafeCompileBlueprint(Blueprint);
-    McpSafeAssetSave(Blueprint);
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("damageTypePath"), Blueprint->GetPathName());
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Damage type created successfully."), Result);
-    return true;
-#endif // WITH_EDITOR
-}
-
 // configure_hit_detection -> alias for setup_hitbox_component
 bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureHitDetection(
     const FString& RequestId,

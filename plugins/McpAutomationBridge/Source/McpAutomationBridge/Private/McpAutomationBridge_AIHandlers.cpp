@@ -3969,65 +3969,6 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
 // Aliases & Convenience Actions
 // =========================================================================
 
-// Alias: create_blackboard -> create_blackboard_asset
-bool UMcpAutomationBridgeSubsystem::HandleAiCreateBlackboard(
-    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle RequestingSocket)
-{
-#if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("AI management is only available in editor builds"),
-                        TEXT("EDITOR_ONLY"));
-    return true;
-#else
-    // Redirect to existing create_blackboard_asset handler
-    FString Name = GetJsonStringField(Payload, TEXT("name"));
-    if (Name.IsEmpty())
-    {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing name"), TEXT("INVALID_ARGUMENT"));
-        return true;
-    }
-
-    FString Path = GetJsonStringField(Payload, TEXT("path"));
-    if (Path.IsEmpty())
-    {
-        Path = TEXT("/Game/AI/Blackboards");
-    }
-
-    FString AssetPath = Path / Name;
-    FString SanitizedPath, SanitizeError;
-    if (!SanitizeAIAssetPath(AssetPath, SanitizedPath, SanitizeError))
-    {
-        SendAutomationError(RequestingSocket, RequestId, SanitizeError, TEXT("INVALID_PATH"));
-        return true;
-    }
-
-    if (UEditorAssetLibrary::DoesAssetExist(SanitizedPath))
-    {
-        TSharedPtr<FJsonObject> ExistResult = McpHandlerUtils::CreateResultObject();
-        ExistResult->SetStringField(TEXT("blackboardPath"), SanitizedPath);
-        ExistResult->SetBoolField(TEXT("alreadyExisted"), true);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Blackboard already exists"), ExistResult);
-        return true;
-    }
-
-    UBlackboardData* NewBB = NewObject<UBlackboardData>(CreatePackage(*SanitizedPath), *FPaths::GetBaseFilename(SanitizedPath), RF_Public | RF_Standalone);
-    if (!NewBB)
-    {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create blackboard data asset"), TEXT("CREATION_FAILED"));
-        return true;
-    }
-
-    McpSafeAssetSave(NewBB);
-
-    TSharedPtr<FJsonObject> BBResult = McpHandlerUtils::CreateResultObject();
-    BBResult->SetStringField(TEXT("blackboardPath"), SanitizedPath);
-    BBResult->SetBoolField(TEXT("alreadyExisted"), false);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Blackboard created"), BBResult);
-    return true;
-#endif
-}
-
 // Alias: setup_perception -> add_ai_perception_component (same logic)
 bool UMcpAutomationBridgeSubsystem::HandleAiSetupPerception(
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,

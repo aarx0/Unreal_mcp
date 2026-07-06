@@ -69,7 +69,6 @@ inline const FMcpParamDecl P_CreateMassEntityConfig[] = { { TEXT("name"), EMcpPa
 inline const FMcpParamDecl P_ConfigureMassEntity[] = { { TEXT("configPath"), EMcpParamKind::String, true }, { TEXT("parentConfigPath"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_AddMassSpawner[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("configPath"), EMcpParamKind::String, false }, { TEXT("componentName"), EMcpParamKind::String, false }, { TEXT("spawnCount"), EMcpParamKind::Number, false } };
 inline const FMcpParamDecl P_GetAiInfo[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("controllerPath"), EMcpParamKind::String, false }, { TEXT("behaviorTreePath"), EMcpParamKind::String, false }, { TEXT("blackboardPath"), EMcpParamKind::String, false }, { TEXT("queryPath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateBlackboard[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_SetupPerception[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("controllerPath"), EMcpParamKind::String, false }, { TEXT("enableSight"), EMcpParamKind::Bool, false }, { TEXT("sightRadius"), EMcpParamKind::Number, false }, { TEXT("loseSightRadius"), EMcpParamKind::Number, false }, { TEXT("peripheralVisionAngle"), EMcpParamKind::Number, false }, { TEXT("enableHearing"), EMcpParamKind::Bool, false }, { TEXT("hearingRange"), EMcpParamKind::Number, false }, { TEXT("enableDamage"), EMcpParamKind::Bool, false }, { TEXT("dominantSense"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_SetFocus[] = { { TEXT("controllerPath"), EMcpParamKind::String, true }, { TEXT("focusActorName"), EMcpParamKind::String, false }, { TEXT("targetActor"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ClearFocus[] = { { TEXT("controllerPath"), EMcpParamKind::String, true } };
@@ -170,7 +169,6 @@ MCP_AI_CALL(AddMassSpawner, "add_mass_spawner", P_AddMassSpawner, HandleAiAddMas
 
 // Utility & conveniences
 MCP_AI_CALL(GetAiInfo, "get_ai_info", P_GetAiInfo, HandleAiGetAiInfo, EMcpCallFlags::RequiresEditor)
-MCP_AI_CALL(CreateBlackboard, "create_blackboard", P_CreateBlackboard, HandleAiCreateBlackboard, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AI_CALL(SetupPerception, "setup_perception", P_SetupPerception, HandleAiSetupPerception, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AI_CALL(SetFocus, "set_focus", P_SetFocus, HandleAiSetFocus, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AI_CALL(ClearFocus, "clear_focus", P_ClearFocus, HandleAiClearFocus, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -244,7 +242,6 @@ void McpRegisterManageAiCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_ConfigureMassEntity>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_AddMassSpawner>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_GetAiInfo>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_CreateBlackboard>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_SetupPerception>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_SetFocus>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_ClearFocus>());

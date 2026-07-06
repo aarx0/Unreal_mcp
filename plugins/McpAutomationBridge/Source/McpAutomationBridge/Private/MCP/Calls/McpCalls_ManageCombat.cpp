@@ -53,7 +53,6 @@ inline const FMcpParamDecl P_ConfigureHitReaction[] = { { TEXT("blueprintPath"),
 inline const FMcpParamDecl P_SetupParryBlockSystem[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("parryWindowStart"), EMcpParamKind::Number, false }, { TEXT("parryWindowEnd"), EMcpParamKind::Number, false }, { TEXT("parryAnimationPath"), EMcpParamKind::String, false }, { TEXT("blockDamageReduction"), EMcpParamKind::Number, false }, { TEXT("blockStaminaCost"), EMcpParamKind::Number, false } };
 inline const FMcpParamDecl P_ConfigureWeaponTrails[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("weaponTrailParticlePath"), EMcpParamKind::String, false }, { TEXT("weaponTrailStartSocket"), EMcpParamKind::String, false }, { TEXT("weaponTrailEndSocket"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_GetCombatInfo[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_SetupDamageType[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false } };
 inline const FMcpParamDecl P_ConfigureHitDetection[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("hitboxType"), EMcpParamKind::String, false }, { TEXT("damageMultiplier"), EMcpParamKind::Number, false } };
 inline const FMcpParamDecl P_GetCombatStats[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true } };
 inline const FMcpParamDecl P_CreateDamageEffect[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("duration"), EMcpParamKind::Number, false }, { TEXT("damagePerSecond"), EMcpParamKind::Number, false }, { TEXT("effectType"), EMcpParamKind::String, false } };
@@ -132,7 +131,6 @@ MCP_CB_CALL(ConfigureWeaponTrails, "configure_weapon_trails", P_ConfigureWeaponT
 MCP_CB_CALL(GetInfo, "get_combat_info", P_GetCombatInfo, HandleCombatGetInfo, EMcpCallFlags::None)
 
 // Aliases
-MCP_CB_CALL(SetupDamageType, "setup_damage_type", P_SetupDamageType, HandleCombatSetupDamageType, EMcpCallFlags::Mutating)
 MCP_CB_CALL(ConfigureHitDetection, "configure_hit_detection", P_ConfigureHitDetection, HandleCombatConfigureHitDetection, EMcpCallFlags::Mutating)
 MCP_CB_CALL(GetStats, "get_combat_stats", P_GetCombatStats, HandleCombatGetStats, EMcpCallFlags::None)
 
@@ -182,7 +180,6 @@ void McpRegisterManageCombatCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_SetupParryBlockSystem>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureWeaponTrails>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_GetInfo>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_SetupDamageType>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureHitDetection>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_GetStats>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_CreateDamageEffect>());

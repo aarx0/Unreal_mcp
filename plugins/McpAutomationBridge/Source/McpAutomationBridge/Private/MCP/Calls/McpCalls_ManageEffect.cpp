@@ -25,9 +25,8 @@ namespace McpCalls::ManageEffect
 // mis-authored with a set_niagara_parameter-shaped contract (required
 // parameterName); the live branch requires name and reads the same common
 // param block as create_niagara_emitter, so both share P_CreateNiagaraAsset.
-// activate/activate_effect share activate_niagara's contract and handler;
-// deactivate shares deactivate_niagara's (the extracted members ignore the
-// action spelling). One-of pairs the decl vocabulary cannot express stay
+// activate/deactivate reuse P_ActivateNiagara/P_DeactivateNiagara (the handler
+// ignores the action spelling). One-of pairs the decl vocabulary cannot express stay
 // handler-enforced with each member optional: create_particle_trail's
 // systemPath/emitter and get_niagara_info's assetPath/systemPath.
 
@@ -158,8 +157,6 @@ MCP_ME_CALL(ClearDebugShapes, "clear_debug_shapes", {}, HandleEffectClearDebugSh
 MCP_ME_CALL(DebugShape, "debug_shape", P_DebugShape, HandleEffectDebugShape, EMcpCallFlags::None)
 MCP_ME_CALL(Particle, "particle", P_Particle, HandleEffectParticle, EMcpCallFlags::None)
 MCP_ME_CALL(SetNiagaraParameter, "set_niagara_parameter", P_SetNiagaraParameter, HandleEffectSetNiagaraParameter, EMcpCallFlags::Mutating)
-MCP_ME_CALL(ActivateNiagara, "activate_niagara", P_ActivateNiagara, HandleEffectActivateNiagara, EMcpCallFlags::Mutating)
-MCP_ME_CALL(DeactivateNiagara, "deactivate_niagara", P_DeactivateNiagara, HandleEffectDeactivateNiagara, EMcpCallFlags::Mutating)
 MCP_ME_CALL(AdvanceSimulation, "advance_simulation", P_AdvanceSimulation, HandleEffectAdvanceSimulation, EMcpCallFlags::Mutating)
 MCP_ME_CALL(CreateDynamicLight, "create_dynamic_light", P_CreateDynamicLight, HandleEffectCreateDynamicLight, EMcpCallFlags::Mutating)
 MCP_ME_CALL(Cleanup, "cleanup", P_Cleanup, HandleEffectCleanup, EMcpCallFlags::Mutating)
@@ -170,9 +167,7 @@ MCP_ME_CALL(CreateEnvironmentEffect, "create_environment_effect", P_CreateFromSy
 MCP_ME_CALL(CreateImpactEffect, "create_impact_effect", P_CreateFromSystem, HandleEffectCreateImpactEffect, EMcpCallFlags::Mutating)
 MCP_ME_CALL(CreateNiagaraRibbon, "create_niagara_ribbon", P_CreateNiagaraRibbon, HandleEffectCreateNiagaraRibbon, EMcpCallFlags::Mutating)
 
-// Advertised aliases of the activate/deactivate members
 MCP_ME_CALL(Activate, "activate", P_ActivateNiagara, HandleEffectActivateNiagara, EMcpCallFlags::Mutating)
-MCP_ME_CALL(ActivateEffect, "activate_effect", P_ActivateNiagara, HandleEffectActivateNiagara, EMcpCallFlags::Mutating)
 MCP_ME_CALL(Deactivate, "deactivate", P_DeactivateNiagara, HandleEffectDeactivateNiagara, EMcpCallFlags::Mutating)
 
 // Niagara graph actions (NiagaraGraphHandlers.cpp)
@@ -233,8 +228,6 @@ void McpRegisterManageEffectCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_DebugShape>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_Particle>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_SetNiagaraParameter>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_ActivateNiagara>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_DeactivateNiagara>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_AdvanceSimulation>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_CreateDynamicLight>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_Cleanup>());
@@ -245,7 +238,6 @@ void McpRegisterManageEffectCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_CreateImpactEffect>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_CreateNiagaraRibbon>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_Activate>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_ActivateEffect>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_Deactivate>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_AddNiagaraModule>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_ConnectNiagaraPins>());

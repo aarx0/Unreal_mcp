@@ -14,9 +14,8 @@ namespace McpCalls::ControlEditor
 
 // ─── Param contracts ─────────────────────────────────────────────────────────
 // Authored from the handler bodies' actual payload reads (the shim decls for
-// this family were the 04e mega-bag class: execute_command and
-// single_frame_step carried identical 30-param unions with required params
-// their handlers never read). Actions that accept one-of-several params
+// this family were the 04e mega-bag class: execute_command carried a
+// 30-param union with required params its handler never read). Actions that accept one-of-several params
 // (possess, open_level, simulate_nav's direction/key) declare each optional:
 // the requirement is "at least one", which the decl vocabulary cannot express
 // and the handler enforces itself. PIE-only preconditions (pause, possess,
@@ -71,7 +70,6 @@ MCP_CE_CALL(Resume, "resume", {}, HandleControlEditorResume, EMcpCallFlags::None
 MCP_CE_CALL(Eject, "eject", {}, HandleControlEditorEject, EMcpCallFlags::None)
 MCP_CE_CALL(Possess, "possess", P_Possess, HandleControlEditorPossess, EMcpCallFlags::None)
 MCP_CE_CALL(StepFrame, "step_frame", {}, HandleControlEditorStepFrame, EMcpCallFlags::None)
-MCP_CE_CALL(SingleFrameStep, "single_frame_step", {}, HandleControlEditorStepFrame, EMcpCallFlags::None)
 MCP_CE_CALL(SetGameSpeed, "set_game_speed", P_SetGameSpeed, HandleControlEditorSetGameSpeed, EMcpCallFlags::None)
 MCP_CE_CALL(SetFixedDeltaTime, "set_fixed_delta_time", P_SetFixedDeltaTime, HandleControlEditorSetFixedDeltaTime, EMcpCallFlags::None)
 MCP_CE_CALL(SetCamera, "set_camera", P_SetCamera, HandleControlEditorSetCamera, EMcpCallFlags::None)
@@ -115,7 +113,6 @@ void McpRegisterControlEditorCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_Eject>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_Possess>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_StepFrame>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_SingleFrameStep>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_SetGameSpeed>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_SetFixedDeltaTime>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ControlEditor_SetCamera>());
