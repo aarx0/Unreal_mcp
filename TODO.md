@@ -58,6 +58,24 @@ as they land.
 > split (step 10, deferred by design — the real surgery is de-membering handlers off the
 > subsystem god object; cleanest first slice is extracting Private/MCP/ as its own module).
 
+### [ ] 2026-07-06 — inspect ↔ control_actor: overlapping actor surface + `find_by_class` param split (confusing-names pass input)
+Dogfood find (read-only probes, no build). Two related cross-tool observations for the
+queued confusing-names/consolidation pass — flagged, not acted on (both Aaron-taste):
+- **Shared handlers, two tool names.** `inspect`'s actor family delegates to the SAME
+  `HandleControlActor*` handlers as `control_actor`'s same-named actions — verified for
+  get_components, get_component_property, set_component_property, get_metadata, add_tag,
+  create_snapshot, restore_snapshot, export, delete_object, get_bounding_box (`inspect`
+  only runs `NormalizeActorAlias` first). One implementation, two surfaces. Decide: keep
+  the dual surface by design (inspect = read-convenience, control_actor = control) or pick a
+  canonical home and alias/drop the other.
+- **`find_by_class` param split (live-verified).** `control_actor.find_by_class` accepts
+  `class` OR `className`; `inspect.find_by_class` accepts only `className`/`classPath` and
+  REJECTS `class` (INVALID_PARAMS). Same verb, same concept, different accepted param — a
+  user moving between the two tools hits friction. Cheapest fix: add `class` as an alias on
+  `inspect`'s fragment + handler (`HandleInspectFindByClass`, reads className→classPath) to
+  match control_actor's tolerance; or standardize the whole pass on one name.
+Not fixed here: naming/consolidation is Aaron's call, and a rename needs the full gate + golden regen.
+
 ### [ ] 2026-07-05 — animation_physics setup_ragdoll/activate_ragdoll: wire the orphans or retire the rows (Aaron's call)
 Dogfood find, preserved exactly at the family's classing (McpCalls_AnimationPhysics.cpp):
 both names are ADVERTISED (schema enum + decl rows) but the retired dispatcher had no
