@@ -19,24 +19,16 @@ outputG
 outputR
 
 # -- read from the request payload, not declared in any tool schema --
-animSequencePath
 args
-bindingGuid
-cameraActorPath
 class_path
 commands
-endTime
-fromExpression
 function
 includeSoftDependencies
-op
 origin
 params
 payloadBase64
 player_index
-sequencePath
 subAction
 subsystem
-toExpression
 widget_path
 z_order

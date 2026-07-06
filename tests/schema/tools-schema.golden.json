@@ -3286,10 +3286,6 @@
           "description": "create_material_function: show in the Material Function Library picker (default true).",
           "type": "boolean"
         },
-        "expressionIndex": {
-          "description": "ID of the node.",
-          "type": "string"
-        },
         "fallbackPercent": {
           "description": "nanite_rebuild_mesh: Nanite fallback relative error percent 0-100 (default 0).",
           "type": "number"

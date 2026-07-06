@@ -643,7 +643,6 @@ static void S_DisconnectNodes(FMcpSchemaBuilder& B)
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("pinName"), TEXT("Name of the pin."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .String(TEXT("expressionIndex"), TEXT("ID of the node."))
 	 .Required({TEXT("assetPath")});
 }
 
@@ -939,7 +938,6 @@ static void S_GetMaterialNodeDetails(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
-	 .String(TEXT("expressionIndex"), TEXT("ID of the node."))
 	 .Required({TEXT("assetPath"), TEXT("nodeId")});
 }
 
@@ -948,7 +946,6 @@ static void S_RemoveMaterialNode(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .String(TEXT("expressionIndex"), TEXT("ID of the node."))
 	 .Required({TEXT("assetPath"), TEXT("nodeId")});
 }
 

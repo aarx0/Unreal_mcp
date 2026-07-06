@@ -69,7 +69,14 @@ as they land.
 > Reuses the Phase 2 fragments; the gating unknown is whether the client honors top-level
 > `oneOf` — proposes a one-rebuild `control_editor` pilot to decide before any rollout.
 
-### [ ] 2026-07-06 — dead-handler sweep: ~32 defined-but-unreachable handlers (removal batch)
+### [x] 2026-07-06 — dead-handler sweep: 31 removed (~4.6k lines); 1 was a false positive
+DONE. Removed 31 of the 32 (−4638 lines) — `HandleBlueprintProbeSubobjectHandle` was
+EXCLUDED: re-verification found it IS called (`BlueprintHandlers.cpp:4508`); the sweep's
+"2 refs" was def+call, not def+decl. Removing the 31 exposed + fixed downstream drift:
+manage_asset's `expressionIndex` (dead dispatcher's redundant alias of `nodeId`, no live
+reader) dropped from 3 fragments + golden re-pinned; 8 stale allowlist entries pruned.
+Verified: build+link clean (clean link proves no live callers), all 3 statics PASS.
+Original finding below.
 Static sweep (no editor): all `Handle*` defs whose name is NOT in any `MCP/Calls/*.cpp`
 (unregistered) AND has only 2 total source refs (its def + header decl, no caller). Verified
 robust: no token-paste `Handle##` dispatch exists; spot-checked 4/32 — each action string

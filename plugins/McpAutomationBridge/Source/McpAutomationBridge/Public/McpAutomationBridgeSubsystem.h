@@ -452,56 +452,8 @@ public:
 
 private:
   // Array manipulation operations
-  bool HandleArrayAppend(const FString &RequestId, const FString &Action,
-                         const TSharedPtr<FJsonObject> &Payload,
-                         FMcpResponseHandle RequestingSocket);
-  bool HandleArrayRemove(const FString &RequestId, const FString &Action,
-                         const TSharedPtr<FJsonObject> &Payload,
-                         FMcpResponseHandle RequestingSocket);
-  bool HandleArrayInsert(const FString &RequestId, const FString &Action,
-                         const TSharedPtr<FJsonObject> &Payload,
-                         FMcpResponseHandle RequestingSocket);
-  bool HandleArrayGetElement(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
-  bool HandleArraySetElement(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
-  bool HandleArrayClear(const FString &RequestId, const FString &Action,
-                        const TSharedPtr<FJsonObject> &Payload,
-                        FMcpResponseHandle RequestingSocket);
   // Map manipulation operations
-  bool HandleMapSetValue(const FString &RequestId, const FString &Action,
-                         const TSharedPtr<FJsonObject> &Payload,
-                         FMcpResponseHandle RequestingSocket);
-  bool HandleMapGetValue(const FString &RequestId, const FString &Action,
-                         const TSharedPtr<FJsonObject> &Payload,
-                         FMcpResponseHandle RequestingSocket);
-  bool HandleMapRemoveKey(const FString &RequestId, const FString &Action,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle RequestingSocket);
-  bool HandleMapHasKey(const FString &RequestId, const FString &Action,
-                       const TSharedPtr<FJsonObject> &Payload,
-                       FMcpResponseHandle RequestingSocket);
-  bool HandleMapGetKeys(const FString &RequestId, const FString &Action,
-                        const TSharedPtr<FJsonObject> &Payload,
-                        FMcpResponseHandle RequestingSocket);
-  bool HandleMapClear(const FString &RequestId, const FString &Action,
-                      const TSharedPtr<FJsonObject> &Payload,
-                      FMcpResponseHandle RequestingSocket);
   // Set manipulation operations
-  bool HandleSetAdd(const FString &RequestId, const FString &Action,
-                    const TSharedPtr<FJsonObject> &Payload,
-                    FMcpResponseHandle RequestingSocket);
-  bool HandleSetRemove(const FString &RequestId, const FString &Action,
-                       const TSharedPtr<FJsonObject> &Payload,
-                       FMcpResponseHandle RequestingSocket);
-  bool HandleSetContains(const FString &RequestId, const FString &Action,
-                         const TSharedPtr<FJsonObject> &Payload,
-                         FMcpResponseHandle RequestingSocket);
-  bool HandleSetClear(const FString &RequestId, const FString &Action,
-                      const TSharedPtr<FJsonObject> &Payload,
-                      FMcpResponseHandle RequestingSocket);
   // Asset dependency graph traversal
   bool
   HandleGetAssetReferences(const FString &RequestId, const FString &Action,
@@ -1300,10 +1252,6 @@ private:
   HandleSpawnNiagaraActor(const FString &RequestId, const FString &Action,
                           const TSharedPtr<FJsonObject> &Payload,
                           FMcpResponseHandle RequestingSocket);
-  bool HandleModifyNiagaraParameter(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
   // Animation blueprint handlers
   bool HandlePlayAnimMontage(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
@@ -1315,9 +1263,6 @@ private:
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
   // Sequencer track handlers
-  bool HandleAddCameraTrack(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
   bool
   HandleAddAnimationTrack(const FString &RequestId, const FString &Action,
                           const TSharedPtr<FJsonObject> &Payload,
@@ -1377,10 +1322,6 @@ public:
                            FMcpResponseHandle RequestingSocket);
 
 private:
-  bool HandleMaterialGraphAction(const FString &RequestId,
-                                 const FString &Action,
-                                 const TSharedPtr<FJsonObject> &Payload,
-                                 FMcpResponseHandle Socket);
   bool
   HandleWorldPartitionAction(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
@@ -2952,9 +2893,6 @@ public:
 
 private:
   // 2. Execution & Build / Test Pipeline
-  bool HandleTestAction(const FString &RequestId, const FString &Action,
-                        const TSharedPtr<FJsonObject> &Payload,
-                        FMcpResponseHandle RequestingSocket);
 
   // 3. Observability, Logs, Debugging & History
   bool HandleAssetQueryAction(const FString &RequestId, const FString &Action,
@@ -3567,9 +3505,6 @@ public:
   bool HandleListAssets(const FString &RequestId,
                         const TSharedPtr<FJsonObject> &Payload,
                         FMcpResponseHandle Socket);
-  bool HandleGetAsset(const FString &RequestId,
-                      const TSharedPtr<FJsonObject> &Payload,
-                      FMcpResponseHandle Socket);
   bool HandleCreateFolder(const FString &RequestId,
                           const TSharedPtr<FJsonObject> &Payload,
                           FMcpResponseHandle Socket);
