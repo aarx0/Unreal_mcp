@@ -95,6 +95,10 @@
           ],
           "type": "string"
         },
+        "activate": {
+          "description": "activate_ragdoll: activate (true) or deactivate the ragdoll.",
+          "type": "boolean"
+        },
         "actorName": {
           "description": "Name of the actor.",
           "type": "string"
@@ -197,6 +201,10 @@
         "blendType": {
           "description": "add_blend_node: node type, e.g. TwoWayBlend (default).",
           "type": "string"
+        },
+        "blendWeight": {
+          "description": "setup_ragdoll: physics blend weight.",
+          "type": "number"
         },
         "blueprintPath": {
           "description": "Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions).",
@@ -514,6 +522,10 @@
           "description": "Existing physics asset path (list_physics_bodies, add_physics_body, configure_physics_body, add_physics_constraint, configure_constraint_limits).",
           "type": "string"
         },
+        "pitch": {
+          "description": "add_aim_offset_sample: sample pitch angle.",
+          "type": "number"
+        },
         "playRate": {
           "type": "number"
         },
@@ -591,6 +603,13 @@
         "removeChildren": {
           "description": "remove_bone: also remove child bones (default false).",
           "type": "boolean"
+        },
+        "retargetAssets": {
+          "description": "setup_retargeting: alias of 'assets'.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "rootBoneName": {
           "description": "create_skeleton: name for the initial root bone (default 'Root').",
@@ -753,6 +772,10 @@
           "description": "set_interpolation_settings: blend weight interpolation speed per second (default 5).",
           "type": "number"
         },
+        "threshold": {
+          "description": "prune_weights: influence weight threshold below which weights are pruned.",
+          "type": "number"
+        },
         "time": {
           "type": "number"
         },
@@ -825,6 +848,10 @@
         },
         "width": {
           "description": "add_physics_body: box width.",
+          "type": "number"
+        },
+        "yaw": {
+          "description": "add_aim_offset_sample: sample yaw angle.",
           "type": "number"
         }
       },
@@ -7354,13 +7381,13 @@
           "description": "smooth: per-iteration smoothing factor.",
           "type": "number"
         },
-        "amount": {
-          "description": "Generic amount for operations (bevel size, inset distance, etc.).",
-          "type": "number"
-        },
         "angle": {
           "description": "Angle in degrees.",
           "type": "number"
+        },
+        "areaWeighted": {
+          "description": "recalculate_normals: legacy alias of computeWeightedNormals (area-weighted normals).",
+          "type": "boolean"
         },
         "assetPath": {
           "description": "Destination asset path for convert_to_static_mesh/convert_to_nanite (e.g. /Game/Meshes/SM_Rock).",
@@ -7386,6 +7413,21 @@
         "capped": {
           "description": "revolve: cap the ends of the revolved profile.",
           "type": "boolean"
+        },
+        "center": {
+          "description": "array_radial: center of the radial array (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "collisionType": {
           "description": "generate_collision: shape/method to generate.",
@@ -7441,6 +7483,21 @@
           },
           "type": "object"
         },
+        "direction": {
+          "description": "extrude: direction vector (x, y, z) to extrude along (default +Z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
         "distance": {
           "description": "Distance value.",
           "type": "number"
@@ -7466,6 +7523,10 @@
         },
         "extent": {
           "description": "bend/twist: warp extent along the axis.",
+          "type": "number"
+        },
+        "factor": {
+          "description": "stretch/spherify/cylindrify: deformation strength factor.",
           "type": "number"
         },
         "featureAngleThreshold": {
@@ -7640,6 +7701,10 @@
           "type": "number"
         },
         "outputPath": {
+          "description": "Alias of assetPath.",
+          "type": "string"
+        },
+        "path": {
           "description": "Alias of assetPath.",
           "type": "string"
         },
@@ -9265,13 +9330,13 @@
           "description": "Name of the actor.",
           "type": "string"
         },
+        "allowSpectating": {
+          "description": "configure_spectating: allow players to spectate (default true).",
+          "type": "boolean"
+        },
         "alwaysRelevant": {
           "description": "Always relevant to all clients.",
           "type": "boolean"
-        },
-        "assetPath": {
-          "description": "Asset path to read.",
-          "type": "string"
         },
         "attenuationFalloff": {
           "description": "set_voice_attenuation: falloff curve exponent, 0.1-10.0 (default 1.0).",
@@ -9304,6 +9369,10 @@
         "blueprintPath": {
           "description": "Blueprint asset path.",
           "type": "string"
+        },
+        "bPlayerOnly": {
+          "description": "configure_player_start: restrict the PlayerStart to player pawns only.",
+          "type": "boolean"
         },
         "bShouldAdvertise": {
           "description": "configure_local_session_settings: advertise the session publicly.",
@@ -9450,6 +9519,10 @@
           "description": "mute_player: local player index applying the mute.",
           "type": "number"
         },
+        "location": {
+          "description": "configure_player_start: PlayerStart world location (x, y, z).",
+          "type": "object"
+        },
         "mapName": {
           "description": "host_lan_server: map to travel to when hosting.",
           "type": "string"
@@ -9543,6 +9616,10 @@
           "description": "Destination folder for a created asset.",
           "type": "string"
         },
+        "pawnClass": {
+          "description": "set_default_pawn_class: default pawn class path (alias of defaultPawnClass; first present wins).",
+          "type": "string"
+        },
         "playerControllerClass": {
           "description": "create_game_mode / set_player_controller_class: PlayerController class path.",
           "type": "string"
@@ -9625,6 +9702,10 @@
           ],
           "type": "string"
         },
+        "rotation": {
+          "description": "configure_player_start: PlayerStart world rotation (pitch, yaw, roll).",
+          "type": "object"
+        },
         "roundTime": {
           "description": "configure_round_system: seconds per round.",
           "type": "number"
@@ -9694,6 +9775,10 @@
           "description": "configure_spectating: SpectatorPawn class path.",
           "type": "string"
         },
+        "spectatorViewMode": {
+          "description": "configure_spectating: spectator view mode (default FreeCam).",
+          "type": "string"
+        },
         "splitScreenType": {
           "description": "configure_split_screen / set_split_screen_type: split-screen layout.",
           "enum": [
@@ -9705,6 +9790,10 @@
             "FourPlayer_Grid"
           ],
           "type": "string"
+        },
+        "startPlayersNeeded": {
+          "description": "configure_game_rules: NOT IMPLEMENTED — rejected as an unsupported field (not a native GameMode property, not a generated Blueprint variable).",
+          "type": "number"
         },
         "states": {
           "description": "setup_match_states: match state names to record on the Blueprint.",

@@ -1,137 +1,951 @@
 // LINT-TOOL: animation_physics
-// animation_physics as FMcpCall classes — seventeenth classed family
-// (docs/action-declarations.md). Each class co-locates the action's
-// declaration with its implementation. Run() delegates to the subsystem
-// member handlers — HandleAnimPhys* (AnimationHandlers.cpp) for the 14 core
-// actions, HandleAnimAuthoring* (AnimationAuthoringHandlers.cpp) for the 42
-// authoring actions, HandleSkeleton* (SkeletonHandlers.cpp) for the 29
+// LINT-SCHEMA-DERIVED
+// animation_physics as FMcpCall classes — seventeenth classed family, adopting
+// schema-from-decls (docs/action-declarations.md). Each class AUTHORS its schema
+// fragment in a S_<Suffix>() function; the published facade schema folds those
+// fragments and GetDecl() derives the validation decl from the same fragment via
+// McpDeriveDecl(), so schema and decl are one source and cannot drift. Run()
+// delegates to the subsystem member handlers — HandleAnimPhys* (AnimationHandlers.cpp)
+// for the 14 core actions, HandleAnimAuthoring* (AnimationAuthoringHandlers.cpp)
+// for the 42 authoring actions, HandleSkeleton* (SkeletonHandlers.cpp) for the 29
 // skeleton actions — until the module split de-members those bodies.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
+#include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
-// so file-scope param arrays would collide across families otherwise.
+// so file-scope helpers would collide across families otherwise.
 namespace McpCalls::AnimationPhysics
 {
 
-// ─── Param contracts ─────────────────────────────────────────────────────────
-// Ported from this family's retired shim declarations
-// (McpDecl_AnimationPhysics.h) and re-verified against the member bodies.
-// 27 rows shipped with decl fixes at classing — the deleted shadowed copies
-// in the retired animation_physics dispatcher were the only readers of a
-// number of spellings the fleet had unioned into the rows (sequenceName,
-// montageName, add_notify's animationPath/time, set_bone_key's time/position,
-// set_curve_key's time, add_blend_sample's sampleX/sampleY, set_axis_settings'
-// axisIndex/gridNum, set_interpolation_settings' interpolationSpeed,
-// add_state's animationPath/isEntry/isExit, add_transition's and
-// set_transition_rules' sourceState/targetState (+condition), add_blend_node's
-// nodeType, add_cached_pose's poseName, create_control_rig's and
-// create_ik_rig's savePath (+meshPath), create_aim_offset's is1D,
-// create_pose_library's save — read only by the dead authoring copy); the
-// min/max/grid spellings on create_aim_offset and create_blend_space_1d/2d had
-// no reader in either copy (bootstrap residue), and create_animation_blueprint's
-// meshPath lost its last reader at the 2026-07-04i shadowed-duplicate
-// deletion. Required-flag corrections against the live bodies' rejects:
-// the blueprintPath/assetPath alias pairs (add_state, add_state_machine,
-// add_transition, set_transition_rules), create_state_machine's
-// blueprintPath/name pair, play_montage's montagePath/assetPath pair,
-// add_montage_section's assetPath/montagePath/name triple, setup_retargeting's
-// assets/retargetAssets pair, and the notifyClass/notifyName one-ofs
-// (add_notify, add_montage_notify) each joint-reject only when every spelling
-// is absent, so the required spelling went optional (at-least-one stays
-// handler-enforced); create_animation_blueprint's savePath falls back to path with
-// a default; create_control_rig's skeletonPath is only consulted when
-// skeletalMeshPath is absent; add_notify's assetPath and set_section_timing's
-// startTime are required by the live bodies' own rejects. setup_ragdoll and
-// activate_ragdoll keep their rows AS-IS (advertised-but-unwired — see the
-// class comment below).
+// ─── Schema fragments ────────────────────────────────────────────────────────
+// One S_<Suffix>() per action, authoring exactly the params that action reads;
+// the facade fold dedups shared params to one entry and McpDeriveDecl() reads the
+// param kinds + required-set back out to build the transport validation decl.
+// Actions that accept one-of-several spellings (assets/retargetAssets, the
+// state-machine blueprintPath/assetPath aliases, play_montage's montagePath/
+// assetPath, add_montage_section's assetPath/montagePath/name, the notifyClass/
+// notifyName one-ofs, create_socket's attachBoneName/boneName, ...) author each
+// optional: the requirement is "at least one", which the decl vocabulary cannot
+// express and each handler enforces itself. setup_ragdoll/activate_ragdoll are
+// advertised-but-unwired stubs (see the class comment below) — their fragments
+// are authored from their contract like any other action.
 
-inline const FMcpParamDecl P_Cleanup[] = { { TEXT("artifacts"), EMcpParamKind::Array, true } };
-inline const FMcpParamDecl P_CreateBlendSpace[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("skeletonPath"), EMcpParamKind::String, true }, { TEXT("dimensions"), EMcpParamKind::Number, false }, { TEXT("minX"), EMcpParamKind::Number, false }, { TEXT("maxX"), EMcpParamKind::Number, false }, { TEXT("gridX"), EMcpParamKind::Number, false }, { TEXT("minY"), EMcpParamKind::Number, false }, { TEXT("maxY"), EMcpParamKind::Number, false }, { TEXT("gridY"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_CreateBlendTree[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("treeName"), EMcpParamKind::String, false }, { TEXT("blendParameters"), EMcpParamKind::Array, false }, { TEXT("children"), EMcpParamKind::Array, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateProceduralAnim[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("skeletonPath"), EMcpParamKind::String, true }, { TEXT("boneTracks"), EMcpParamKind::Array, true }, { TEXT("numFrames"), EMcpParamKind::Number, false }, { TEXT("frameRate"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateStateMachine[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("machineName"), EMcpParamKind::String, false }, { TEXT("states"), EMcpParamKind::Array, false }, { TEXT("transitions"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_SetupIk[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("skeletonPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ConfigureVehicle[] = { { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("vehicleName"), EMcpParamKind::String, false }, { TEXT("vehicleType"), EMcpParamKind::String, false }, { TEXT("wheels"), EMcpParamKind::Array, false }, { TEXT("engine"), EMcpParamKind::Object, false }, { TEXT("transmission"), EMcpParamKind::Object, false }, { TEXT("mass"), EMcpParamKind::Number, false }, { TEXT("dragCoefficient"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetupPhysicsSimulation[] = { { TEXT("skeletonPath"), EMcpParamKind::String, false }, { TEXT("skeletalMeshPath"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("physicsAssetName"), EMcpParamKind::String, false }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("assignToMesh"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateAnimationAsset[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("skeletonPath"), EMcpParamKind::String, true }, { TEXT("assetType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetupRetargeting[] = { { TEXT("sourceSkeleton"), EMcpParamKind::String, true }, { TEXT("targetSkeleton"), EMcpParamKind::String, true }, { TEXT("assets"), EMcpParamKind::Array, false }, { TEXT("retargetAssets"), EMcpParamKind::Array, false }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("suffix"), EMcpParamKind::String, false }, { TEXT("overwrite"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_PlayMontage[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("montagePath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("playRate"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_CreatePoseLibrary[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("directory"), EMcpParamKind::String, false }, { TEXT("skeletonPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_SetupRagdoll[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("blendWeight"), EMcpParamKind::Number, false }, { TEXT("skeletonPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ActivateRagdoll[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("activate"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateAnimationSequence[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("skeletonPath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("frameRate"), EMcpParamKind::Number, false }, { TEXT("numFrames"), EMcpParamKind::Number, false }, { TEXT("length"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetSequenceLength[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("length"), EMcpParamKind::Number, true }, { TEXT("frameRate"), EMcpParamKind::Number, false }, { TEXT("numFrames"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddBoneTrack[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("boneName"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetBoneKey[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("boneName"), EMcpParamKind::String, true }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("scale"), EMcpParamKind::Object, false }, { TEXT("frame"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("location"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_SetCurveKey[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("curveName"), EMcpParamKind::String, true }, { TEXT("value"), EMcpParamKind::Number, false }, { TEXT("frame"), EMcpParamKind::Number, false }, { TEXT("createIfMissing"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddNotify[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("notifyName"), EMcpParamKind::String, false }, { TEXT("notifyClass"), EMcpParamKind::String, false }, { TEXT("frame"), EMcpParamKind::Number, false }, { TEXT("trackIndex"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddNotifyState[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("notifyClass"), EMcpParamKind::String, false }, { TEXT("startFrame"), EMcpParamKind::Number, false }, { TEXT("endFrame"), EMcpParamKind::Number, false }, { TEXT("trackIndex"), EMcpParamKind::Number, false }, { TEXT("notifyName"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddSyncMarker[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("markerName"), EMcpParamKind::String, true }, { TEXT("frame"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetRootMotionSettings[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("enableRootMotion"), EMcpParamKind::Bool, false }, { TEXT("rootMotionRootLock"), EMcpParamKind::String, false }, { TEXT("forceRootLock"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetAdditiveSettings[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("additiveAnimType"), EMcpParamKind::String, false }, { TEXT("basePoseType"), EMcpParamKind::String, false }, { TEXT("basePoseAnimation"), EMcpParamKind::String, false }, { TEXT("basePoseFrame"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateMontage[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("skeletonPath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("slotName"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("length"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_AddMontageSection[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("sectionName"), EMcpParamKind::String, true }, { TEXT("startTime"), EMcpParamKind::Number, false }, { TEXT("montagePath"), EMcpParamKind::String, false }, { TEXT("name"), EMcpParamKind::String, false }, { TEXT("time"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddMontageSlot[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("slotName"), EMcpParamKind::String, false }, { TEXT("animationPath"), EMcpParamKind::String, true }, { TEXT("startTime"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetSectionTiming[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("sectionName"), EMcpParamKind::String, true }, { TEXT("startTime"), EMcpParamKind::Number, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddMontageNotify[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("notifyName"), EMcpParamKind::String, false }, { TEXT("time"), EMcpParamKind::Number, false }, { TEXT("notifyClass"), EMcpParamKind::String, false }, { TEXT("trackIndex"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetBlendIn[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("blendTime"), EMcpParamKind::Number, false }, { TEXT("time"), EMcpParamKind::Number, false }, { TEXT("blendOption"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetBlendOut[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("blendTime"), EMcpParamKind::Number, false }, { TEXT("time"), EMcpParamKind::Number, false }, { TEXT("blendOption"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_LinkSections[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("fromSection"), EMcpParamKind::String, true }, { TEXT("toSection"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateBlendSpace1D[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("skeletonPath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("axisName"), EMcpParamKind::String, false }, { TEXT("axisMin"), EMcpParamKind::Number, false }, { TEXT("axisMax"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateBlendSpace2D[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("skeletonPath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("horizontalAxisName"), EMcpParamKind::String, false }, { TEXT("horizontalMin"), EMcpParamKind::Number, false }, { TEXT("horizontalMax"), EMcpParamKind::Number, false }, { TEXT("verticalAxisName"), EMcpParamKind::String, false }, { TEXT("verticalMin"), EMcpParamKind::Number, false }, { TEXT("verticalMax"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddBlendSample[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("animationPath"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("sampleValue"), EMcpParamKind::Any, false } };
-inline const FMcpParamDecl P_ForceRebuildBlendSpace[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("rebuildBlendParameters"), EMcpParamKind::Bool, false }, { TEXT("compileReferencers"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetAxisSettings[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("minValue"), EMcpParamKind::Number, false }, { TEXT("maxValue"), EMcpParamKind::Number, false }, { TEXT("axisName"), EMcpParamKind::String, false }, { TEXT("axis"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gridDivisions"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetInterpolationSettings[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("interpolationType"), EMcpParamKind::String, false }, { TEXT("targetWeightInterpolationSpeed"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateAimOffset[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("skeletonPath"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddAimOffsetSample[] = { { TEXT("assetPath"), EMcpParamKind::String, true }, { TEXT("animationPath"), EMcpParamKind::String, true }, { TEXT("yaw"), EMcpParamKind::Number, false }, { TEXT("pitch"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateAnimBlueprint[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("skeletonPath"), EMcpParamKind::String, false }, { TEXT("savePath"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddStateMachine[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("machineName"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("stateMachineName"), EMcpParamKind::String, false }, { TEXT("positionX"), EMcpParamKind::Number, false }, { TEXT("positionY"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddState[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("stateName"), EMcpParamKind::String, true }, { TEXT("machineName"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("stateMachineName"), EMcpParamKind::String, false }, { TEXT("positionX"), EMcpParamKind::Number, false }, { TEXT("positionY"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddTransition[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("machineName"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("stateMachineName"), EMcpParamKind::String, false }, { TEXT("fromState"), EMcpParamKind::String, true }, { TEXT("toState"), EMcpParamKind::String, true }, { TEXT("crossfadeDuration"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetTransitionRules[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("machineName"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("stateMachineName"), EMcpParamKind::String, false }, { TEXT("fromState"), EMcpParamKind::String, false }, { TEXT("toState"), EMcpParamKind::String, false }, { TEXT("crossfadeDuration"), EMcpParamKind::Number, false }, { TEXT("priorityOrder"), EMcpParamKind::Number, false }, { TEXT("automaticRule"), EMcpParamKind::Bool, false }, { TEXT("bidirectional"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddBlendNode[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("nodeName"), EMcpParamKind::String, false }, { TEXT("blendType"), EMcpParamKind::String, false }, { TEXT("positionX"), EMcpParamKind::Number, false }, { TEXT("positionY"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddCachedPose[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("cacheName"), EMcpParamKind::String, true }, { TEXT("positionX"), EMcpParamKind::Number, false }, { TEXT("positionY"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddSlotNode[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("slotName"), EMcpParamKind::String, false }, { TEXT("groupName"), EMcpParamKind::String, false }, { TEXT("positionX"), EMcpParamKind::Number, false }, { TEXT("positionY"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddLayeredBlendPerBone[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("boneName"), EMcpParamKind::String, false }, { TEXT("positionX"), EMcpParamKind::Number, false }, { TEXT("positionY"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetAnimGraphNodeValue[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("nodeName"), EMcpParamKind::String, true }, { TEXT("propertyName"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("value"), EMcpParamKind::Any, true } };
-inline const FMcpParamDecl P_CreateControlRig[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("skeletonPath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("skeletalMeshPath"), EMcpParamKind::String, false }, { TEXT("modularRig"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateIkRig[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("skeletonPath"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("skeletalMeshPath"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateIkRetargeter[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("sourceIKRigPath"), EMcpParamKind::String, false }, { TEXT("targetIKRigPath"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetRetargetChainMapping[] = { { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("sourceChain"), EMcpParamKind::String, true }, { TEXT("targetChain"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_GetAnimationInfo[] = { { TEXT("assetPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_BindAnimNotify[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("assetPath"), EMcpParamKind::String, false }, { TEXT("notifyName"), EMcpParamKind::String, true }, { TEXT("functionName"), EMcpParamKind::String, true }, { TEXT("targetClass"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("positionX"), EMcpParamKind::Number, false }, { TEXT("positionY"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_GetSkeletonInfo[] = { { TEXT("skeletonPath"), EMcpParamKind::String, false }, { TEXT("skeletalMeshPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ListBones[] = { { TEXT("skeletonPath"), EMcpParamKind::String, false }, { TEXT("skeletalMeshPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ListSockets[] = { { TEXT("skeletonPath"), EMcpParamKind::String, false }, { TEXT("skeletalMeshPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateSocket[] = { { TEXT("skeletonPath"), EMcpParamKind::String, false }, { TEXT("skeletalMeshPath"), EMcpParamKind::String, false }, { TEXT("socketName"), EMcpParamKind::String, true }, { TEXT("attachBoneName"), EMcpParamKind::String, false }, { TEXT("boneName"), EMcpParamKind::String, false }, { TEXT("relativeLocation"), EMcpParamKind::Object, false }, { TEXT("relativeRotation"), EMcpParamKind::Object, false }, { TEXT("relativeScale"), EMcpParamKind::Object, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureSocket[] = { { TEXT("skeletonPath"), EMcpParamKind::String, false }, { TEXT("skeletalMeshPath"), EMcpParamKind::String, false }, { TEXT("socketName"), EMcpParamKind::String, true }, { TEXT("attachBoneName"), EMcpParamKind::String, false }, { TEXT("relativeLocation"), EMcpParamKind::Object, false }, { TEXT("relativeRotation"), EMcpParamKind::Object, false }, { TEXT("relativeScale"), EMcpParamKind::Object, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateVirtualBone[] = { { TEXT("skeletonPath"), EMcpParamKind::String, true }, { TEXT("sourceBoneName"), EMcpParamKind::String, true }, { TEXT("targetBoneName"), EMcpParamKind::String, true }, { TEXT("boneName"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreatePhysicsAsset[] = { { TEXT("skeletalMeshPath"), EMcpParamKind::String, false }, { TEXT("skeletonPath"), EMcpParamKind::String, false }, { TEXT("outputPath"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ListPhysicsBodies[] = { { TEXT("physicsAssetPath"), EMcpParamKind::String, false }, { TEXT("skeletalMeshPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddPhysicsBody[] = { { TEXT("physicsAssetPath"), EMcpParamKind::String, true }, { TEXT("boneName"), EMcpParamKind::String, true }, { TEXT("bodyType"), EMcpParamKind::String, false }, { TEXT("radius"), EMcpParamKind::Number, false }, { TEXT("length"), EMcpParamKind::Number, false }, { TEXT("width"), EMcpParamKind::Number, false }, { TEXT("height"), EMcpParamKind::Number, false }, { TEXT("depth"), EMcpParamKind::Number, false }, { TEXT("center"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigurePhysicsBody[] = { { TEXT("physicsAssetPath"), EMcpParamKind::String, true }, { TEXT("boneName"), EMcpParamKind::String, true }, { TEXT("mass"), EMcpParamKind::Number, false }, { TEXT("linearDamping"), EMcpParamKind::Number, false }, { TEXT("angularDamping"), EMcpParamKind::Number, false }, { TEXT("collisionEnabled"), EMcpParamKind::Bool, false }, { TEXT("simulatePhysics"), EMcpParamKind::Bool, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_AddPhysicsConstraint[] = { { TEXT("physicsAssetPath"), EMcpParamKind::String, true }, { TEXT("bodyA"), EMcpParamKind::String, true }, { TEXT("bodyB"), EMcpParamKind::String, true }, { TEXT("constraintName"), EMcpParamKind::String, false }, { TEXT("limits"), EMcpParamKind::Object, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureConstraintLimits[] = { { TEXT("physicsAssetPath"), EMcpParamKind::String, true }, { TEXT("bodyA"), EMcpParamKind::String, true }, { TEXT("bodyB"), EMcpParamKind::String, true }, { TEXT("limits"), EMcpParamKind::Object, false }, { TEXT("swing1LimitAngle"), EMcpParamKind::Number, false }, { TEXT("swing2LimitAngle"), EMcpParamKind::Number, false }, { TEXT("twistLimitAngle"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_RenameBone[] = { { TEXT("skeletonPath"), EMcpParamKind::String, true }, { TEXT("boneName"), EMcpParamKind::String, true }, { TEXT("newBoneName"), EMcpParamKind::String, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetBoneTransform[] = { { TEXT("skeletalMeshPath"), EMcpParamKind::String, false }, { TEXT("skeletonPath"), EMcpParamKind::String, false }, { TEXT("boneName"), EMcpParamKind::String, true }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("scale"), EMcpParamKind::Object, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CreateMorphTarget[] = { { TEXT("skeletalMeshPath"), EMcpParamKind::String, true }, { TEXT("morphTargetName"), EMcpParamKind::String, true }, { TEXT("deltas"), EMcpParamKind::Array, true }, { TEXT("lodIndex"), EMcpParamKind::Number, false }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetMorphTargetDeltas[] = { { TEXT("skeletalMeshPath"), EMcpParamKind::String, true }, { TEXT("morphTargetName"), EMcpParamKind::String, true }, { TEXT("deltas"), EMcpParamKind::Array, true }, { TEXT("save"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ImportMorphTargets[] = { { TEXT("skeletalMeshPath"), EMcpParamKind::String, true }, { TEXT("morphTargetPath"), EMcpParamKind::String, false }, { TEXT("sourcePath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_NormalizeWeights[] = { { TEXT("skeletalMeshPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_PruneWeights[] = { { TEXT("skeletalMeshPath"), EMcpParamKind::String, true }, { TEXT("threshold"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_BindClothToSkeletalMesh[] = { { TEXT("skeletalMeshPath"), EMcpParamKind::String, true }, { TEXT("clothAssetName"), EMcpParamKind::String, false }, { TEXT("meshLodIndex"), EMcpParamKind::Number, false }, { TEXT("sectionIndex"), EMcpParamKind::Number, false }, { TEXT("assetLodIndex"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_AssignClothAssetToMesh[] = { { TEXT("skeletalMeshPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_CreateSkeleton[] = { { TEXT("path"), EMcpParamKind::String, false }, { TEXT("skeletonPath"), EMcpParamKind::String, false }, { TEXT("rootBoneName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_AddBone[] = { { TEXT("skeletonPath"), EMcpParamKind::String, true }, { TEXT("boneName"), EMcpParamKind::String, true }, { TEXT("parentBone"), EMcpParamKind::String, false }, { TEXT("parentBoneName"), EMcpParamKind::String, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("scale"), EMcpParamKind::Object, false } };
-inline const FMcpParamDecl P_RemoveBone[] = { { TEXT("skeletonPath"), EMcpParamKind::String, true }, { TEXT("boneName"), EMcpParamKind::String, true }, { TEXT("removeChildren"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetBoneParent[] = { { TEXT("skeletonPath"), EMcpParamKind::String, true }, { TEXT("boneName"), EMcpParamKind::String, true }, { TEXT("parentBone"), EMcpParamKind::String, false }, { TEXT("newParentBone"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetVertexWeights[] = { { TEXT("skeletalMeshPath"), EMcpParamKind::String, true }, { TEXT("profileName"), EMcpParamKind::String, false }, { TEXT("weights"), EMcpParamKind::Array, true }, { TEXT("lodIndex"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_AutoSkinWeights[] = { { TEXT("skeletalMeshPath"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_CopyWeights[] = { { TEXT("sourceMeshPath"), EMcpParamKind::String, true }, { TEXT("targetMeshPath"), EMcpParamKind::String, true }, { TEXT("profileName"), EMcpParamKind::String, false }, { TEXT("lodIndex"), EMcpParamKind::Number, false }, { TEXT("skeletalMeshPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_MirrorWeights[] = { { TEXT("skeletalMeshPath"), EMcpParamKind::String, true }, { TEXT("axis"), EMcpParamKind::String, false }, { TEXT("profileName"), EMcpParamKind::String, false }, { TEXT("lodIndex"), EMcpParamKind::Number, false } };
+// Core (AnimationHandlers.cpp)
+
+static void S_Cleanup(FMcpSchemaBuilder& B)
+{
+	B.Array(TEXT("artifacts"), TEXT(""))
+	 .Required({TEXT("artifacts")});
+}
+
+static void S_CreateBlendSpace(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Number(TEXT("dimensions"), TEXT("create_blend_space: 1 or 2 (default 1)."))
+	 .Number(TEXT("minX"), TEXT("create_blend_space: axis-0 minimum (default 0)."))
+	 .Number(TEXT("maxX"), TEXT("create_blend_space: axis-0 maximum (default 1)."))
+	 .Number(TEXT("gridX"), TEXT("create_blend_space: axis-0 grid divisions (default 3)."))
+	 .Number(TEXT("minY"), TEXT("create_blend_space: axis-1 minimum when dimensions=2 (default 0)."))
+	 .Number(TEXT("maxY"), TEXT("create_blend_space: axis-1 maximum when dimensions=2 (default 1)."))
+	 .Number(TEXT("gridY"), TEXT("create_blend_space: axis-1 grid divisions when dimensions=2 (default 3)."))
+	 .Required({TEXT("name"), TEXT("skeletonPath")});
+}
+
+static void S_CreateBlendTree(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions)."))
+	 .String(TEXT("treeName"), TEXT("create_blend_tree: name for the new blend tree node."))
+	 .ArrayOfObjects(TEXT("blendParameters"), TEXT("create_blend_tree: blend axis configs ({name, min, max})."))
+	 .ArrayOfObjects(TEXT("children"), TEXT("create_blend_tree: child samples ({animationPath, blendWeight})."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_CreateProceduralAnim(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .ArrayOfObjects(TEXT("boneTracks"), TEXT("create_procedural_animation: per-bone keyframe tracks ({boneName, frames:[{frame, location, rotation}]})."))
+	 .Number(TEXT("numFrames"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: explicit frame count (overrides length*frameRate)."))
+	 .Number(TEXT("frameRate"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: sample rate in fps (default 30)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("name"), TEXT("skeletonPath"), TEXT("boneTracks")});
+}
+
+static void S_CreateStateMachine(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions)."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("machineName"), TEXT("Alias of stateMachineName."))
+	 .ArrayOfObjects(TEXT("states"), TEXT("create_state_machine: states to add ({name})."))
+	 .ArrayOfObjects(TEXT("transitions"), TEXT("create_state_machine: transitions to add ({sourceState, targetState, crossfadeDuration})."));
+}
+
+static void S_SetupIk(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("name"), TEXT("skeletonPath")});
+}
+
+static void S_ConfigureVehicle(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("vehicleName"), TEXT("Legacy alias of actorName for configure_vehicle."))
+	 .String(TEXT("vehicleType"), TEXT(""))
+	 .ArrayOfObjects(TEXT("wheels"), TEXT("configure_vehicle: per-wheel configs ({boneName, offset, radius, width, friction})."))
+	 .Object(TEXT("engine"), TEXT("configure_vehicle: engine settings (maxRPM, maxTorque, gears)."))
+	 .Object(TEXT("transmission"), TEXT("configure_vehicle: transmission settings (finalDrive/finalDriveRatio, gearRatios array)."))
+	 .Number(TEXT("mass"), TEXT(""))
+	 .Number(TEXT("dragCoefficient"), TEXT(""));
+}
+
+static void S_SetupPhysicsSimulation(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("physicsAssetName"), TEXT("Physics asset name for setup_physics_simulation."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .Bool(TEXT("assignToMesh"), TEXT("Assign the created physics asset to the skeletal mesh."));
+}
+
+static void S_CreateAnimationAsset(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("assetType"), TEXT("create_animation_asset: 'sequence' (default) or 'montage'."))
+	 .Required({TEXT("name"), TEXT("skeletonPath")});
+}
+
+static void S_SetupRetargeting(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("sourceSkeleton"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("targetSkeleton"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Array(TEXT("assets"), TEXT("setup_retargeting: source animation sequence paths to duplicate onto targetSkeleton ('retargetAssets' accepted as fallback)."))
+	 .Array(TEXT("retargetAssets"), TEXT("setup_retargeting: alias of 'assets'."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("suffix"), TEXT("setup_retargeting: filename suffix for duplicated assets (default '_Retargeted')."))
+	 .Bool(TEXT("overwrite"), TEXT("setup_retargeting: overwrite an existing retarget destination asset (default false)."))
+	 .Required({TEXT("sourceSkeleton"), TEXT("targetSkeleton")});
+}
+
+static void S_PlayMontage(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("montagePath"), TEXT("play_montage: montage to play; add_montage_section: montage to edit ('assetPath'/'name' accepted as fallback)."))
+	 .String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .Number(TEXT("playRate"), TEXT(""))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_CreatePoseLibrary(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
+	 .String(TEXT("directory"), TEXT("Alias of savePath for create_pose_library."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("name"), TEXT("skeletonPath")});
+}
+
+static void S_SetupRagdoll(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Number(TEXT("blendWeight"), TEXT("setup_ragdoll: physics blend weight."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_ActivateRagdoll(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Bool(TEXT("activate"), TEXT("activate_ragdoll: activate (true) or deactivate the ragdoll."))
+	 .Required({TEXT("actorName")});
+}
+
+// Animation authoring (AnimationAuthoringHandlers.cpp)
+
+static void S_CreateAnimationSequence(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
+	 .Number(TEXT("frameRate"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: sample rate in fps (default 30)."))
+	 .Number(TEXT("numFrames"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: explicit frame count (overrides length*frameRate)."))
+	 .Number(TEXT("length"), TEXT("Length in seconds (create_animation_sequence, set_sequence_length, create_montage)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("name"), TEXT("skeletonPath")});
+}
+
+static void S_SetSequenceLength(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .Number(TEXT("length"), TEXT("Length in seconds (create_animation_sequence, set_sequence_length, create_montage)."))
+	 .Number(TEXT("frameRate"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: sample rate in fps (default 30)."))
+	 .Number(TEXT("numFrames"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: explicit frame count (overrides length*frameRate)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath"), TEXT("length")});
+}
+
+static void S_AddBoneTrack(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("boneName"), TEXT("Name of the bone."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath"), TEXT("boneName")});
+}
+
+static void S_SetBoneKey(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("boneName"), TEXT("Name of the bone."))
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
+	})
+	 .Object(TEXT("scale"), TEXT("3D scale (x, y, z)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Number(TEXT("frame"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Required({TEXT("assetPath"), TEXT("boneName")});
+}
+
+static void S_SetCurveKey(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("curveName"), TEXT(""))
+	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Number(TEXT("frame"), TEXT(""))
+	 .Bool(TEXT("createIfMissing"), TEXT("set_curve_key: create the curve if it doesn't exist yet (default true)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath"), TEXT("curveName")});
+}
+
+static void S_AddNotify(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("notifyName"), TEXT(""))
+	 .String(TEXT("notifyClass"), TEXT("add_notify/add_notify_state/add_montage_notify: AnimNotify(State) class name (e.g. PlaySound; 'AnimNotify_' prefix optional)."))
+	 .Number(TEXT("frame"), TEXT(""))
+	 .Number(TEXT("trackIndex"), TEXT("add_notify/add_notify_state/add_montage_notify: notify track index (default 0)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddNotifyState(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("notifyClass"), TEXT("add_notify/add_notify_state/add_montage_notify: AnimNotify(State) class name (e.g. PlaySound; 'AnimNotify_' prefix optional)."))
+	 .Number(TEXT("startFrame"), TEXT("add_notify_state: start frame."))
+	 .Number(TEXT("endFrame"), TEXT("add_notify_state: end frame."))
+	 .Number(TEXT("trackIndex"), TEXT("add_notify/add_notify_state/add_montage_notify: notify track index (default 0)."))
+	 .String(TEXT("notifyName"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_AddSyncMarker(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("markerName"), TEXT("add_sync_marker: marker name."))
+	 .Number(TEXT("frame"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath"), TEXT("markerName")});
+}
+
+static void S_SetRootMotionSettings(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .Bool(TEXT("enableRootMotion"), TEXT("set_root_motion_settings: enable root motion (default true)."))
+	 .String(TEXT("rootMotionRootLock"), TEXT("set_root_motion_settings: root lock mode (default RefPose)."))
+	 .Bool(TEXT("forceRootLock"), TEXT("set_root_motion_settings: force root lock even when not additive (default false)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_SetAdditiveSettings(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("additiveAnimType"), TEXT("set_additive_settings: additive type (default NoAdditive)."))
+	 .String(TEXT("basePoseType"), TEXT("set_additive_settings: base pose type (default RefPose)."))
+	 .String(TEXT("basePoseAnimation"), TEXT("set_additive_settings: base pose animation asset path."))
+	 .Number(TEXT("basePoseFrame"), TEXT("set_additive_settings: base pose frame index."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_CreateMontage(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
+	 .String(TEXT("slotName"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Number(TEXT("length"), TEXT("Length in seconds (create_animation_sequence, set_sequence_length, create_montage)."))
+	 .Required({TEXT("name"), TEXT("skeletonPath")});
+}
+
+static void S_AddMontageSection(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("sectionName"), TEXT(""))
+	 .Number(TEXT("startTime"), TEXT("Section start time in seconds (alias of 'time')."))
+	 .String(TEXT("montagePath"), TEXT("play_montage: montage to play; add_montage_section: montage to edit ('assetPath'/'name' accepted as fallback)."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .Number(TEXT("time"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("sectionName")});
+}
+
+static void S_AddMontageSlot(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("slotName"), TEXT(""))
+	 .String(TEXT("animationPath"), TEXT("add_montage_slot/add_blend_sample/add_aim_offset_sample: animation sequence asset path."))
+	 .Number(TEXT("startTime"), TEXT("Section start time in seconds (alias of 'time')."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath"), TEXT("animationPath")});
+}
+
+static void S_SetSectionTiming(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("sectionName"), TEXT(""))
+	 .Number(TEXT("startTime"), TEXT("Section start time in seconds (alias of 'time')."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath"), TEXT("sectionName"), TEXT("startTime")});
+}
+
+static void S_AddMontageNotify(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("notifyName"), TEXT(""))
+	 .Number(TEXT("time"), TEXT(""))
+	 .String(TEXT("notifyClass"), TEXT("add_notify/add_notify_state/add_montage_notify: AnimNotify(State) class name (e.g. PlaySound; 'AnimNotify_' prefix optional)."))
+	 .Number(TEXT("trackIndex"), TEXT("add_notify/add_notify_state/add_montage_notify: notify track index (default 0)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_SetBlendIn(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .Number(TEXT("blendTime"), TEXT("set_blend_in/set_blend_out: blend duration in seconds ('time' accepted as alias)."))
+	 .Number(TEXT("time"), TEXT(""))
+	 .String(TEXT("blendOption"), TEXT("set_blend_in/set_blend_out: Linear, Cubic, or Sinusoidal."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_SetBlendOut(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .Number(TEXT("blendTime"), TEXT("set_blend_in/set_blend_out: blend duration in seconds ('time' accepted as alias)."))
+	 .Number(TEXT("time"), TEXT(""))
+	 .String(TEXT("blendOption"), TEXT("set_blend_in/set_blend_out: Linear, Cubic, or Sinusoidal."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_LinkSections(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("fromSection"), TEXT("link_sections: section to link from."))
+	 .String(TEXT("toSection"), TEXT("link_sections: section to link to."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath"), TEXT("fromSection"), TEXT("toSection")});
+}
+
+static void S_CreateBlendSpace1D(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
+	 .String(TEXT("axisName"), TEXT(""))
+	 .Number(TEXT("axisMin"), TEXT("create_blend_space_1d: axis minimum (default 0)."))
+	 .Number(TEXT("axisMax"), TEXT("create_blend_space_1d: axis maximum (default 600)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("name"), TEXT("skeletonPath")});
+}
+
+static void S_CreateBlendSpace2D(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
+	 .String(TEXT("horizontalAxisName"), TEXT("create_blend_space_2d: horizontal axis name (default Direction)."))
+	 .Number(TEXT("horizontalMin"), TEXT("create_blend_space_2d: horizontal axis minimum (default -180)."))
+	 .Number(TEXT("horizontalMax"), TEXT("create_blend_space_2d: horizontal axis maximum (default 180)."))
+	 .String(TEXT("verticalAxisName"), TEXT("create_blend_space_2d: vertical axis name (default Speed)."))
+	 .Number(TEXT("verticalMin"), TEXT("create_blend_space_2d: vertical axis minimum (default 0)."))
+	 .Number(TEXT("verticalMax"), TEXT("create_blend_space_2d: vertical axis maximum (default 600)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("name"), TEXT("skeletonPath")});
+}
+
+static void S_AddBlendSample(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("animationPath"), TEXT("add_montage_slot/add_blend_sample/add_aim_offset_sample: animation sequence asset path."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .FreeformObject(TEXT("sampleValue"), TEXT("add_blend_sample: sample coordinate — a number for 1D blend spaces or {x, y} for 2D."))
+	 .Required({TEXT("assetPath"), TEXT("animationPath")});
+}
+
+static void S_ForceRebuildBlendSpace(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .Bool(TEXT("rebuildBlendParameters"), TEXT("rebuild_blend_space: also revalidate BlendParameters (default false)."))
+	 .Bool(TEXT("compileReferencers"), TEXT("rebuild_blend_space: recompile AnimBlueprints referencing this blend space (default true)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_SetAxisSettings(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .Number(TEXT("minValue"), TEXT("set_axis_settings: axis minimum."))
+	 .Number(TEXT("maxValue"), TEXT("set_axis_settings: axis maximum."))
+	 .String(TEXT("axisName"), TEXT(""))
+	 .String(TEXT("axis"), TEXT("mirror_weights: mirror axis X/Y/Z (default X); set_axis_settings: Horizontal/Vertical (default Horizontal)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Number(TEXT("gridDivisions"), TEXT("set_axis_settings: axis grid divisions."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_SetInterpolationSettings(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("interpolationType"), TEXT(""))
+	 .Number(TEXT("targetWeightInterpolationSpeed"), TEXT("set_interpolation_settings: blend weight interpolation speed per second (default 5)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_CreateAimOffset(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("name"), TEXT("skeletonPath")});
+}
+
+static void S_AddAimOffsetSample(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("animationPath"), TEXT("add_montage_slot/add_blend_sample/add_aim_offset_sample: animation sequence asset path."))
+	 .Number(TEXT("yaw"), TEXT("add_aim_offset_sample: sample yaw angle."))
+	 .Number(TEXT("pitch"), TEXT("add_aim_offset_sample: sample pitch angle."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("assetPath"), TEXT("animationPath")});
+}
+
+static void S_CreateAnimBlueprint(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
+	 .String(TEXT("parentClass"), TEXT(""))
+	 .Required({TEXT("name")});
+}
+
+static void S_AddStateMachine(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions)."))
+	 .String(TEXT("machineName"), TEXT("Alias of stateMachineName."))
+	 .String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("stateMachineName"), TEXT("State machine name for add_state_machine/add_state/add_transition/set_transition_rules."))
+	 .Number(TEXT("positionX"), TEXT(""))
+	 .Number(TEXT("positionY"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."));
+}
+
+static void S_AddState(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions)."))
+	 .String(TEXT("stateName"), TEXT(""))
+	 .String(TEXT("machineName"), TEXT("Alias of stateMachineName."))
+	 .String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("stateMachineName"), TEXT("State machine name for add_state_machine/add_state/add_transition/set_transition_rules."))
+	 .Number(TEXT("positionX"), TEXT(""))
+	 .Number(TEXT("positionY"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("stateName")});
+}
+
+static void S_AddTransition(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions)."))
+	 .String(TEXT("machineName"), TEXT("Alias of stateMachineName."))
+	 .String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("stateMachineName"), TEXT("State machine name for add_state_machine/add_state/add_transition/set_transition_rules."))
+	 .String(TEXT("fromState"), TEXT("add_transition/set_transition_rules: source state name."))
+	 .String(TEXT("toState"), TEXT("add_transition/set_transition_rules: target state name."))
+	 .Number(TEXT("crossfadeDuration"), TEXT("add_transition/set_transition_rules: crossfade time in seconds."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("fromState"), TEXT("toState")});
+}
+
+static void S_SetTransitionRules(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions)."))
+	 .String(TEXT("machineName"), TEXT("Alias of stateMachineName."))
+	 .String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("stateMachineName"), TEXT("State machine name for add_state_machine/add_state/add_transition/set_transition_rules."))
+	 .String(TEXT("fromState"), TEXT("add_transition/set_transition_rules: source state name."))
+	 .String(TEXT("toState"), TEXT("add_transition/set_transition_rules: target state name."))
+	 .Number(TEXT("crossfadeDuration"), TEXT("add_transition/set_transition_rules: crossfade time in seconds."))
+	 .Number(TEXT("priorityOrder"), TEXT("set_transition_rules: transition priority order."))
+	 .Bool(TEXT("automaticRule"), TEXT("set_transition_rules: auto-trigger when the source sequence player finishes (default false)."))
+	 .Bool(TEXT("bidirectional"), TEXT("set_transition_rules: also allow the reverse transition (default false)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."));
+}
+
+static void S_AddBlendNode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions)."))
+	 .String(TEXT("nodeName"), TEXT("add_blend_node/set_animation_graph_node_value: AnimGraph node name/comment."))
+	 .String(TEXT("blendType"), TEXT("add_blend_node: node type, e.g. TwoWayBlend (default)."))
+	 .Number(TEXT("positionX"), TEXT(""))
+	 .Number(TEXT("positionY"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_AddCachedPose(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions)."))
+	 .String(TEXT("cacheName"), TEXT("add_cached_pose: cached-pose node name."))
+	 .Number(TEXT("positionX"), TEXT(""))
+	 .Number(TEXT("positionY"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("blueprintPath"), TEXT("cacheName")});
+}
+
+static void S_AddSlotNode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions)."))
+	 .String(TEXT("slotName"), TEXT(""))
+	 .String(TEXT("groupName"), TEXT("add_slot_node: slot group name (default DefaultGroup)."))
+	 .Number(TEXT("positionX"), TEXT(""))
+	 .Number(TEXT("positionY"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_AddLayeredBlendPerBone(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions)."))
+	 .String(TEXT("boneName"), TEXT("Name of the bone."))
+	 .Number(TEXT("positionX"), TEXT(""))
+	 .Number(TEXT("positionY"), TEXT(""))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_SetAnimGraphNodeValue(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions)."))
+	 .String(TEXT("nodeName"), TEXT("add_blend_node/set_animation_graph_node_value: AnimGraph node name/comment."))
+	 .String(TEXT("propertyName"), TEXT("set_animation_graph_node_value: node property to set (dot-notation for nested structs)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Required({TEXT("blueprintPath"), TEXT("nodeName"), TEXT("propertyName"), TEXT("value")});
+}
+
+static void S_CreateControlRig(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .Bool(TEXT("modularRig"), TEXT("create_control_rig: create as a modular rig (default false)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_CreateIkRig(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_CreateIkRetargeter(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
+	 .String(TEXT("sourceIKRigPath"), TEXT("Source IK Rig asset path for create_ik_retargeter."))
+	 .String(TEXT("targetIKRigPath"), TEXT("Target IK Rig asset path for create_ik_retargeter."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_SetRetargetChainMapping(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("sourceChain"), TEXT("set_retarget_chain_mapping: source IK Rig chain name."))
+	 .String(TEXT("targetChain"), TEXT("set_retarget_chain_mapping: target IK Rig chain name."))
+	 .Required({TEXT("sourceChain"), TEXT("targetChain")});
+}
+
+static void S_GetAnimationInfo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .Required({TEXT("assetPath")});
+}
+
+static void S_BindAnimNotify(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions)."))
+	 .String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
+	 .String(TEXT("notifyName"), TEXT(""))
+	 .String(TEXT("functionName"), TEXT("bind_animation_notify: BlueprintCallable function to call when the notify fires."))
+	 .String(TEXT("targetClass"), TEXT("bind_animation_notify: class to cast the owner to (e.g. /Game/.../BP_CPP_Character or a /Script class)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Number(TEXT("positionX"), TEXT(""))
+	 .Number(TEXT("positionY"), TEXT(""))
+	 .Required({TEXT("notifyName"), TEXT("functionName")});
+}
+
+// Skeleton, physics assets, skin weights, cloth, morphs (SkeletonHandlers.cpp)
+
+static void S_GetSkeletonInfo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."));
+}
+
+static void S_ListBones(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."));
+}
+
+static void S_ListSockets(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."));
+}
+
+static void S_CreateSocket(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .String(TEXT("socketName"), TEXT("create_socket/configure_socket: socket name."))
+	 .String(TEXT("attachBoneName"), TEXT("create_socket/configure_socket: bone the socket attaches to ('boneName' accepted as fallback)."))
+	 .String(TEXT("boneName"), TEXT("Name of the bone."))
+	 .Object(TEXT("relativeLocation"), TEXT("create_socket/configure_socket: socket location relative to its bone (x, y, z)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Object(TEXT("relativeRotation"), TEXT("create_socket/configure_socket: socket rotation relative to its bone (pitch, yaw, roll)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
+	})
+	 .Object(TEXT("relativeScale"), TEXT("create_socket/configure_socket: socket scale relative to its bone (x, y, z; default 1,1,1)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("socketName")});
+}
+
+static void S_ConfigureSocket(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .String(TEXT("socketName"), TEXT("create_socket/configure_socket: socket name."))
+	 .String(TEXT("attachBoneName"), TEXT("create_socket/configure_socket: bone the socket attaches to ('boneName' accepted as fallback)."))
+	 .Object(TEXT("relativeLocation"), TEXT("create_socket/configure_socket: socket location relative to its bone (x, y, z)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Object(TEXT("relativeRotation"), TEXT("create_socket/configure_socket: socket rotation relative to its bone (pitch, yaw, roll)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
+	})
+	 .Object(TEXT("relativeScale"), TEXT("create_socket/configure_socket: socket scale relative to its bone (x, y, z; default 1,1,1)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("socketName")});
+}
+
+static void S_CreateVirtualBone(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("sourceBoneName"), TEXT("create_virtual_bone: source bone."))
+	 .String(TEXT("targetBoneName"), TEXT("create_virtual_bone: target bone."))
+	 .String(TEXT("boneName"), TEXT("Name of the bone."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("skeletonPath"), TEXT("sourceBoneName"), TEXT("targetBoneName")});
+}
+
+static void S_CreatePhysicsAsset(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("outputPath"), TEXT("create_physics_asset: output asset path (default: <mesh>_PhysicsAsset next to the mesh)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."));
+}
+
+static void S_ListPhysicsBodies(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("physicsAssetPath"), TEXT("Existing physics asset path (list_physics_bodies, add_physics_body, configure_physics_body, add_physics_constraint, configure_constraint_limits)."))
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."));
+}
+
+static void S_AddPhysicsBody(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("physicsAssetPath"), TEXT("Existing physics asset path (list_physics_bodies, add_physics_body, configure_physics_body, add_physics_constraint, configure_constraint_limits)."))
+	 .String(TEXT("boneName"), TEXT("Name of the bone."))
+	 .String(TEXT("bodyType"), TEXT("add_physics_body: Sphere, Box, or Capsule/Sphyl (default Capsule)."))
+	 .Number(TEXT("radius"), TEXT("add_physics_body: sphere/capsule radius."))
+	 .Number(TEXT("length"), TEXT("Length in seconds (create_animation_sequence, set_sequence_length, create_montage)."))
+	 .Number(TEXT("width"), TEXT("add_physics_body: box width."))
+	 .Number(TEXT("height"), TEXT("add_physics_body: box height."))
+	 .Number(TEXT("depth"), TEXT("add_physics_body: box depth."))
+	 .Object(TEXT("center"), TEXT("add_physics_body: primitive center offset (x, y, z)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
+	})
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("physicsAssetPath"), TEXT("boneName")});
+}
+
+static void S_ConfigurePhysicsBody(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("physicsAssetPath"), TEXT("Existing physics asset path (list_physics_bodies, add_physics_body, configure_physics_body, add_physics_constraint, configure_constraint_limits)."))
+	 .String(TEXT("boneName"), TEXT("Name of the bone."))
+	 .Number(TEXT("mass"), TEXT(""))
+	 .Number(TEXT("linearDamping"), TEXT("configure_physics_body: linear damping."))
+	 .Number(TEXT("angularDamping"), TEXT("configure_physics_body: angular damping."))
+	 .Bool(TEXT("collisionEnabled"), TEXT("configure_physics_body: enable query+physics collision (default true)."))
+	 .Bool(TEXT("simulatePhysics"), TEXT("configure_physics_body: enable physics simulation on this body (default true)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("physicsAssetPath"), TEXT("boneName")});
+}
+
+static void S_AddPhysicsConstraint(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("physicsAssetPath"), TEXT("Existing physics asset path (list_physics_bodies, add_physics_body, configure_physics_body, add_physics_constraint, configure_constraint_limits)."))
+	 .String(TEXT("bodyA"), TEXT("add_physics_constraint/configure_constraint_limits: first body's bone name."))
+	 .String(TEXT("bodyB"), TEXT("add_physics_constraint/configure_constraint_limits: second body's bone name."))
+	 .String(TEXT("constraintName"), TEXT("add_physics_constraint: joint name for the new constraint."))
+	 .Object(TEXT("limits"), TEXT("add_physics_constraint/configure_constraint_limits: angular limits (swing1LimitAngle, swing2LimitAngle, twistLimitAngle, swing1Motion, swing2Motion, twistMotion); falls back to the flat swing/twist fields below when omitted."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("physicsAssetPath"), TEXT("bodyA"), TEXT("bodyB")});
+}
+
+static void S_ConfigureConstraintLimits(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("physicsAssetPath"), TEXT("Existing physics asset path (list_physics_bodies, add_physics_body, configure_physics_body, add_physics_constraint, configure_constraint_limits)."))
+	 .String(TEXT("bodyA"), TEXT("add_physics_constraint/configure_constraint_limits: first body's bone name."))
+	 .String(TEXT("bodyB"), TEXT("add_physics_constraint/configure_constraint_limits: second body's bone name."))
+	 .Object(TEXT("limits"), TEXT("add_physics_constraint/configure_constraint_limits: angular limits (swing1LimitAngle, swing2LimitAngle, twistLimitAngle, swing1Motion, swing2Motion, twistMotion); falls back to the flat swing/twist fields below when omitted."))
+	 .Number(TEXT("swing1LimitAngle"), TEXT("configure_constraint_limits: swing1 angle when 'limits' is omitted."))
+	 .Number(TEXT("swing2LimitAngle"), TEXT("configure_constraint_limits: swing2 angle when 'limits' is omitted."))
+	 .Number(TEXT("twistLimitAngle"), TEXT("configure_constraint_limits: twist angle when 'limits' is omitted."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("physicsAssetPath"), TEXT("bodyA"), TEXT("bodyB")});
+}
+
+static void S_RenameBone(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("boneName"), TEXT("Name of the bone."))
+	 .String(TEXT("newBoneName"), TEXT("rename_bone: new name for the (virtual) bone."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("skeletonPath"), TEXT("boneName"), TEXT("newBoneName")});
+}
+
+static void S_SetBoneTransform(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("boneName"), TEXT("Name of the bone."))
+	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
+	})
+	 .Object(TEXT("scale"), TEXT("3D scale (x, y, z)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("boneName")});
+}
+
+static void S_CreateMorphTarget(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .String(TEXT("morphTargetName"), TEXT("create_morph_target/set_morph_target_deltas: morph target name."))
+	 .ArrayOfObjects(TEXT("deltas"), TEXT("create_morph_target/set_morph_target_deltas: vertex deltas ({vertexIndex, positionDelta, tangentDelta})."))
+	 .Number(TEXT("lodIndex"), TEXT("set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0)."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("skeletalMeshPath"), TEXT("morphTargetName"), TEXT("deltas")});
+}
+
+static void S_SetMorphTargetDeltas(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .String(TEXT("morphTargetName"), TEXT("create_morph_target/set_morph_target_deltas: morph target name."))
+	 .ArrayOfObjects(TEXT("deltas"), TEXT("create_morph_target/set_morph_target_deltas: vertex deltas ({vertexIndex, positionDelta, tangentDelta})."))
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .Required({TEXT("skeletalMeshPath"), TEXT("morphTargetName"), TEXT("deltas")});
+}
+
+static void S_ImportMorphTargets(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .String(TEXT("morphTargetPath"), TEXT("import_morph_targets: source FBX file path."))
+	 .String(TEXT("sourcePath"), TEXT("Alias of morphTargetPath for import_morph_targets."))
+	 .Required({TEXT("skeletalMeshPath")});
+}
+
+static void S_NormalizeWeights(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .Required({TEXT("skeletalMeshPath")});
+}
+
+static void S_PruneWeights(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .Number(TEXT("threshold"), TEXT("prune_weights: influence weight threshold below which weights are pruned."))
+	 .Required({TEXT("skeletalMeshPath")});
+}
+
+static void S_BindClothToSkeletalMesh(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .String(TEXT("clothAssetName"), TEXT("bind_cloth_to_skeletal_mesh: cloth asset to bind (omit to list available cloth assets)."))
+	 .Number(TEXT("meshLodIndex"), TEXT("bind_cloth_to_skeletal_mesh: skeletal mesh LOD index."))
+	 .Number(TEXT("sectionIndex"), TEXT("bind_cloth_to_skeletal_mesh: mesh section index to bind."))
+	 .Number(TEXT("assetLodIndex"), TEXT("bind_cloth_to_skeletal_mesh: cloth asset LOD index."))
+	 .Required({TEXT("skeletalMeshPath")});
+}
+
+static void S_AssignClothAssetToMesh(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .Required({TEXT("skeletalMeshPath")});
+}
+
+static void S_CreateSkeleton(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("rootBoneName"), TEXT("create_skeleton: name for the initial root bone (default 'Root')."));
+}
+
+static void S_AddBone(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("boneName"), TEXT("Name of the bone."))
+	 .String(TEXT("parentBone"), TEXT("add_bone: parent bone name; set_bone_parent: new parent bone (empty unparents to root; 'parentBoneName'/'newParentBone' accepted as fallback)."))
+	 .String(TEXT("parentBoneName"), TEXT("Alias of parentBone for add_bone."))
+	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
+	})
+	 .Object(TEXT("scale"), TEXT("3D scale (x, y, z)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+	})
+	 .Required({TEXT("skeletonPath"), TEXT("boneName")});
+}
+
+static void S_RemoveBone(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("boneName"), TEXT("Name of the bone."))
+	 .Bool(TEXT("removeChildren"), TEXT("remove_bone: also remove child bones (default false)."))
+	 .Required({TEXT("skeletonPath"), TEXT("boneName")});
+}
+
+static void S_SetBoneParent(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .String(TEXT("boneName"), TEXT("Name of the bone."))
+	 .String(TEXT("parentBone"), TEXT("add_bone: parent bone name; set_bone_parent: new parent bone (empty unparents to root; 'parentBoneName'/'newParentBone' accepted as fallback)."))
+	 .String(TEXT("newParentBone"), TEXT("Alias of parentBone for set_bone_parent."))
+	 .Required({TEXT("skeletonPath"), TEXT("boneName")});
+}
+
+static void S_SetVertexWeights(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .String(TEXT("profileName"), TEXT("set_vertex_weights/copy_weights/mirror_weights: skin weight profile name."))
+	 .ArrayOfObjects(TEXT("weights"), TEXT("set_vertex_weights: per-vertex influences ({vertexIndex, influences:[{boneIndex, weight}]})."))
+	 .Number(TEXT("lodIndex"), TEXT("set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0)."))
+	 .Required({TEXT("skeletalMeshPath"), TEXT("weights")});
+}
+
+static void S_AutoSkinWeights(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .Required({TEXT("skeletalMeshPath")});
+}
+
+static void S_CopyWeights(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("sourceMeshPath"), TEXT("copy_weights: source skeletal mesh path."))
+	 .String(TEXT("targetMeshPath"), TEXT("copy_weights: target skeletal mesh path."))
+	 .String(TEXT("profileName"), TEXT("set_vertex_weights/copy_weights/mirror_weights: skin weight profile name."))
+	 .Number(TEXT("lodIndex"), TEXT("set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0)."))
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .Required({TEXT("sourceMeshPath"), TEXT("targetMeshPath")});
+}
+
+static void S_MirrorWeights(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .String(TEXT("axis"), TEXT("mirror_weights: mirror axis X/Y/Z (default X); set_axis_settings: Horizontal/Vertical (default Horizontal)."))
+	 .String(TEXT("profileName"), TEXT("set_vertex_weights/copy_weights/mirror_weights: skin weight profile name."))
+	 .Number(TEXT("lodIndex"), TEXT("set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0)."))
+	 .Required({TEXT("skeletalMeshPath")});
+}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // RequiresEditor on 83 of 85: all three retired chains were whole-editor-gated
@@ -149,14 +963,15 @@ inline const FMcpParamDecl P_MirrorWeights[] = { { TEXT("skeletalMeshPath"), EMc
 // auto_skin_weights, copy_weights, assign_cloth_asset_to_mesh (honest
 // MANUAL_INTERVENTION_REQUIRED errors), and the two ragdoll stubs.
 
-#define MCP_AP_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, Flags)           \
-class FMcpCall_AnimationPhysics_##ClassSuffix final : public FMcpCall                    \
+#define MCP_AP_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                         \
+class FMcpCall_AnimationPhysics_##ClassSuffix final : public FMcpCall                     \
 {                                                                                        \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }       \
 	const FMcpCallDecl& GetDecl() const override                                         \
 	{                                                                                    \
-		static const FMcpCallDecl Decl{ TEXT("animation_physics"), TEXT(ActionLiteral),  \
-			ParamsArray, (Flags) };                                                      \
-		return Decl;                                                                     \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("animation_physics"),          \
+			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                             \
+		return D;                                                                        \
 	}                                                                                    \
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
@@ -166,95 +981,95 @@ class FMcpCall_AnimationPhysics_##ClassSuffix final : public FMcpCall           
 };
 
 // Core (AnimationHandlers.cpp)
-MCP_AP_CALL(Cleanup, "cleanup", P_Cleanup, HandleAnimPhysCleanup, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateBlendSpace, "create_blend_space", P_CreateBlendSpace, HandleAnimPhysCreateBlendSpace, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateBlendTree, "create_blend_tree", P_CreateBlendTree, HandleAnimPhysCreateBlendTree, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateProceduralAnim, "create_procedural_animation", P_CreateProceduralAnim, HandleAnimPhysCreateProceduralAnim, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateStateMachine, "create_state_machine", P_CreateStateMachine, HandleAnimPhysCreateStateMachine, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetupIk, "setup_ik", P_SetupIk, HandleAnimPhysSetupIk, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(ConfigureVehicle, "configure_vehicle", P_ConfigureVehicle, HandleAnimPhysConfigureVehicle, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetupPhysicsSimulation, "setup_physics_simulation", P_SetupPhysicsSimulation, HandleAnimPhysSetupPhysicsSimulation, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateAnimationAsset, "create_animation_asset", P_CreateAnimationAsset, HandleAnimPhysCreateAnimationAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetupRetargeting, "setup_retargeting", P_SetupRetargeting, HandleAnimPhysSetupRetargeting, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(PlayMontage, "play_montage", P_PlayMontage, HandleAnimPhysPlayMontage, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreatePoseLibrary, "create_pose_library", P_CreatePoseLibrary, HandleAnimPhysCreatePoseLibrary, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetupRagdoll, "setup_ragdoll", P_SetupRagdoll, HandleAnimPhysSetupRagdoll, EMcpCallFlags::None)
-MCP_AP_CALL(ActivateRagdoll, "activate_ragdoll", P_ActivateRagdoll, HandleAnimPhysActivateRagdoll, EMcpCallFlags::None)
+MCP_AP_CALL(Cleanup, "cleanup", HandleAnimPhysCleanup, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateBlendSpace, "create_blend_space", HandleAnimPhysCreateBlendSpace, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateBlendTree, "create_blend_tree", HandleAnimPhysCreateBlendTree, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateProceduralAnim, "create_procedural_animation", HandleAnimPhysCreateProceduralAnim, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateStateMachine, "create_state_machine", HandleAnimPhysCreateStateMachine, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetupIk, "setup_ik", HandleAnimPhysSetupIk, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(ConfigureVehicle, "configure_vehicle", HandleAnimPhysConfigureVehicle, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetupPhysicsSimulation, "setup_physics_simulation", HandleAnimPhysSetupPhysicsSimulation, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateAnimationAsset, "create_animation_asset", HandleAnimPhysCreateAnimationAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetupRetargeting, "setup_retargeting", HandleAnimPhysSetupRetargeting, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(PlayMontage, "play_montage", HandleAnimPhysPlayMontage, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreatePoseLibrary, "create_pose_library", HandleAnimPhysCreatePoseLibrary, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetupRagdoll, "setup_ragdoll", HandleAnimPhysSetupRagdoll, EMcpCallFlags::None)
+MCP_AP_CALL(ActivateRagdoll, "activate_ragdoll", HandleAnimPhysActivateRagdoll, EMcpCallFlags::None)
 
 // Animation authoring (AnimationAuthoringHandlers.cpp)
-MCP_AP_CALL(CreateAnimationSequence, "create_animation_sequence", P_CreateAnimationSequence, HandleAnimAuthoringCreateAnimationSequence, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetSequenceLength, "set_sequence_length", P_SetSequenceLength, HandleAnimAuthoringSetSequenceLength, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddBoneTrack, "add_bone_track", P_AddBoneTrack, HandleAnimAuthoringAddBoneTrack, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetBoneKey, "set_bone_key", P_SetBoneKey, HandleAnimAuthoringSetBoneKey, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetCurveKey, "set_curve_key", P_SetCurveKey, HandleAnimAuthoringSetCurveKey, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddNotify, "add_notify", P_AddNotify, HandleAnimAuthoringAddNotify, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddNotifyState, "add_notify_state", P_AddNotifyState, HandleAnimAuthoringAddNotifyState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddSyncMarker, "add_sync_marker", P_AddSyncMarker, HandleAnimAuthoringAddSyncMarker, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetRootMotionSettings, "set_root_motion_settings", P_SetRootMotionSettings, HandleAnimAuthoringSetRootMotionSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetAdditiveSettings, "set_additive_settings", P_SetAdditiveSettings, HandleAnimAuthoringSetAdditiveSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateMontage, "create_montage", P_CreateMontage, HandleAnimAuthoringCreateMontage, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddMontageSection, "add_montage_section", P_AddMontageSection, HandleAnimAuthoringAddMontageSection, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddMontageSlot, "add_montage_slot", P_AddMontageSlot, HandleAnimAuthoringAddMontageSlot, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetSectionTiming, "set_section_timing", P_SetSectionTiming, HandleAnimAuthoringSetSectionTiming, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddMontageNotify, "add_montage_notify", P_AddMontageNotify, HandleAnimAuthoringAddMontageNotify, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetBlendIn, "set_blend_in", P_SetBlendIn, HandleAnimAuthoringSetBlendIn, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetBlendOut, "set_blend_out", P_SetBlendOut, HandleAnimAuthoringSetBlendOut, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(LinkSections, "link_sections", P_LinkSections, HandleAnimAuthoringLinkSections, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateBlendSpace1D, "create_blend_space_1d", P_CreateBlendSpace1D, HandleAnimAuthoringCreateBlendSpace1D, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateBlendSpace2D, "create_blend_space_2d", P_CreateBlendSpace2D, HandleAnimAuthoringCreateBlendSpace2D, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddBlendSample, "add_blend_sample", P_AddBlendSample, HandleAnimAuthoringAddBlendSample, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(ForceRebuildBlendSpace, "rebuild_blend_space", P_ForceRebuildBlendSpace, HandleAnimAuthoringForceRebuildBlendSpace, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetAxisSettings, "set_axis_settings", P_SetAxisSettings, HandleAnimAuthoringSetAxisSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetInterpolationSettings, "set_interpolation_settings", P_SetInterpolationSettings, HandleAnimAuthoringSetInterpolationSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateAimOffset, "create_aim_offset", P_CreateAimOffset, HandleAnimAuthoringCreateAimOffset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddAimOffsetSample, "add_aim_offset_sample", P_AddAimOffsetSample, HandleAnimAuthoringAddAimOffsetSample, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateAnimBlueprint, "create_animation_blueprint", P_CreateAnimBlueprint, HandleAnimAuthoringCreateAnimBlueprint, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddStateMachine, "add_state_machine", P_AddStateMachine, HandleAnimAuthoringAddStateMachine, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddState, "add_state", P_AddState, HandleAnimAuthoringAddState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddTransition, "add_transition", P_AddTransition, HandleAnimAuthoringAddTransition, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetTransitionRules, "set_transition_rules", P_SetTransitionRules, HandleAnimAuthoringSetTransitionRules, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddBlendNode, "add_blend_node", P_AddBlendNode, HandleAnimAuthoringAddBlendNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddCachedPose, "add_cached_pose", P_AddCachedPose, HandleAnimAuthoringAddCachedPose, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddSlotNode, "add_slot_node", P_AddSlotNode, HandleAnimAuthoringAddSlotNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddLayeredBlendPerBone, "add_layered_blend_per_bone", P_AddLayeredBlendPerBone, HandleAnimAuthoringAddLayeredBlendPerBone, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetAnimGraphNodeValue, "set_animation_graph_node_value", P_SetAnimGraphNodeValue, HandleAnimAuthoringSetAnimGraphNodeValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateControlRig, "create_control_rig", P_CreateControlRig, HandleAnimAuthoringCreateControlRig, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateIkRig, "create_ik_rig", P_CreateIkRig, HandleAnimAuthoringCreateIkRig, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateIkRetargeter, "create_ik_retargeter", P_CreateIkRetargeter, HandleAnimAuthoringCreateIkRetargeter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetRetargetChainMapping, "set_retarget_chain_mapping", P_SetRetargetChainMapping, HandleAnimAuthoringSetRetargetChainMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(GetAnimationInfo, "get_animation_info", P_GetAnimationInfo, HandleAnimAuthoringGetAnimationInfo, EMcpCallFlags::RequiresEditor)
-MCP_AP_CALL(BindAnimNotify, "bind_animation_notify", P_BindAnimNotify, HandleAnimAuthoringBindAnimNotify, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateAnimationSequence, "create_animation_sequence", HandleAnimAuthoringCreateAnimationSequence, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetSequenceLength, "set_sequence_length", HandleAnimAuthoringSetSequenceLength, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddBoneTrack, "add_bone_track", HandleAnimAuthoringAddBoneTrack, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetBoneKey, "set_bone_key", HandleAnimAuthoringSetBoneKey, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetCurveKey, "set_curve_key", HandleAnimAuthoringSetCurveKey, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddNotify, "add_notify", HandleAnimAuthoringAddNotify, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddNotifyState, "add_notify_state", HandleAnimAuthoringAddNotifyState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddSyncMarker, "add_sync_marker", HandleAnimAuthoringAddSyncMarker, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetRootMotionSettings, "set_root_motion_settings", HandleAnimAuthoringSetRootMotionSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetAdditiveSettings, "set_additive_settings", HandleAnimAuthoringSetAdditiveSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateMontage, "create_montage", HandleAnimAuthoringCreateMontage, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddMontageSection, "add_montage_section", HandleAnimAuthoringAddMontageSection, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddMontageSlot, "add_montage_slot", HandleAnimAuthoringAddMontageSlot, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetSectionTiming, "set_section_timing", HandleAnimAuthoringSetSectionTiming, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddMontageNotify, "add_montage_notify", HandleAnimAuthoringAddMontageNotify, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetBlendIn, "set_blend_in", HandleAnimAuthoringSetBlendIn, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetBlendOut, "set_blend_out", HandleAnimAuthoringSetBlendOut, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(LinkSections, "link_sections", HandleAnimAuthoringLinkSections, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateBlendSpace1D, "create_blend_space_1d", HandleAnimAuthoringCreateBlendSpace1D, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateBlendSpace2D, "create_blend_space_2d", HandleAnimAuthoringCreateBlendSpace2D, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddBlendSample, "add_blend_sample", HandleAnimAuthoringAddBlendSample, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(ForceRebuildBlendSpace, "rebuild_blend_space", HandleAnimAuthoringForceRebuildBlendSpace, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetAxisSettings, "set_axis_settings", HandleAnimAuthoringSetAxisSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetInterpolationSettings, "set_interpolation_settings", HandleAnimAuthoringSetInterpolationSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateAimOffset, "create_aim_offset", HandleAnimAuthoringCreateAimOffset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddAimOffsetSample, "add_aim_offset_sample", HandleAnimAuthoringAddAimOffsetSample, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateAnimBlueprint, "create_animation_blueprint", HandleAnimAuthoringCreateAnimBlueprint, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddStateMachine, "add_state_machine", HandleAnimAuthoringAddStateMachine, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddState, "add_state", HandleAnimAuthoringAddState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddTransition, "add_transition", HandleAnimAuthoringAddTransition, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetTransitionRules, "set_transition_rules", HandleAnimAuthoringSetTransitionRules, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddBlendNode, "add_blend_node", HandleAnimAuthoringAddBlendNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddCachedPose, "add_cached_pose", HandleAnimAuthoringAddCachedPose, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddSlotNode, "add_slot_node", HandleAnimAuthoringAddSlotNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddLayeredBlendPerBone, "add_layered_blend_per_bone", HandleAnimAuthoringAddLayeredBlendPerBone, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetAnimGraphNodeValue, "set_animation_graph_node_value", HandleAnimAuthoringSetAnimGraphNodeValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateControlRig, "create_control_rig", HandleAnimAuthoringCreateControlRig, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateIkRig, "create_ik_rig", HandleAnimAuthoringCreateIkRig, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateIkRetargeter, "create_ik_retargeter", HandleAnimAuthoringCreateIkRetargeter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetRetargetChainMapping, "set_retarget_chain_mapping", HandleAnimAuthoringSetRetargetChainMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(GetAnimationInfo, "get_animation_info", HandleAnimAuthoringGetAnimationInfo, EMcpCallFlags::RequiresEditor)
+MCP_AP_CALL(BindAnimNotify, "bind_animation_notify", HandleAnimAuthoringBindAnimNotify, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Skeleton, physics assets, skin weights, cloth, morphs (SkeletonHandlers.cpp)
-MCP_AP_CALL(GetSkeletonInfo, "get_skeleton_info", P_GetSkeletonInfo, HandleSkeletonGetSkeletonInfo, EMcpCallFlags::RequiresEditor)
-MCP_AP_CALL(ListBones, "list_bones", P_ListBones, HandleSkeletonListBones, EMcpCallFlags::RequiresEditor)
-MCP_AP_CALL(ListSockets, "list_sockets", P_ListSockets, HandleSkeletonListSockets, EMcpCallFlags::RequiresEditor)
-MCP_AP_CALL(CreateSocket, "create_socket", P_CreateSocket, HandleSkeletonCreateSocket, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(ConfigureSocket, "configure_socket", P_ConfigureSocket, HandleSkeletonConfigureSocket, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateVirtualBone, "create_virtual_bone", P_CreateVirtualBone, HandleSkeletonCreateVirtualBone, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreatePhysicsAsset, "create_physics_asset", P_CreatePhysicsAsset, HandleSkeletonCreatePhysicsAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(ListPhysicsBodies, "list_physics_bodies", P_ListPhysicsBodies, HandleSkeletonListPhysicsBodies, EMcpCallFlags::RequiresEditor)
-MCP_AP_CALL(AddPhysicsBody, "add_physics_body", P_AddPhysicsBody, HandleSkeletonAddPhysicsBody, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(ConfigurePhysicsBody, "configure_physics_body", P_ConfigurePhysicsBody, HandleSkeletonConfigurePhysicsBody, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddPhysicsConstraint, "add_physics_constraint", P_AddPhysicsConstraint, HandleSkeletonAddPhysicsConstraint, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(ConfigureConstraintLimits, "configure_constraint_limits", P_ConfigureConstraintLimits, HandleSkeletonConfigureConstraintLimits, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(RenameBone, "rename_bone", P_RenameBone, HandleSkeletonRenameBone, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetBoneTransform, "set_bone_transform", P_SetBoneTransform, HandleSkeletonSetBoneTransform, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(CreateMorphTarget, "create_morph_target", P_CreateMorphTarget, HandleSkeletonCreateMorphTarget, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetMorphTargetDeltas, "set_morph_target_deltas", P_SetMorphTargetDeltas, HandleSkeletonSetMorphTargetDeltas, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(ImportMorphTargets, "import_morph_targets", P_ImportMorphTargets, HandleSkeletonImportMorphTargets, EMcpCallFlags::RequiresEditor)
-MCP_AP_CALL(NormalizeWeights, "normalize_weights", P_NormalizeWeights, HandleSkeletonNormalizeWeights, EMcpCallFlags::RequiresEditor)
-MCP_AP_CALL(PruneWeights, "prune_weights", P_PruneWeights, HandleSkeletonPruneWeights, EMcpCallFlags::RequiresEditor)
-MCP_AP_CALL(BindClothToSkeletalMesh, "bind_cloth_to_skeletal_mesh", P_BindClothToSkeletalMesh, HandleSkeletonBindClothToSkeletalMesh, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AssignClothAssetToMesh, "assign_cloth_asset_to_mesh", P_AssignClothAssetToMesh, HandleSkeletonAssignClothAssetToMesh, EMcpCallFlags::RequiresEditor)
-MCP_AP_CALL(CreateSkeleton, "create_skeleton", P_CreateSkeleton, HandleSkeletonCreateSkeleton, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AddBone, "add_bone", P_AddBone, HandleSkeletonAddBone, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(RemoveBone, "remove_bone", P_RemoveBone, HandleSkeletonRemoveBone, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetBoneParent, "set_bone_parent", P_SetBoneParent, HandleSkeletonSetBoneParent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetVertexWeights, "set_vertex_weights", P_SetVertexWeights, HandleSkeletonSetVertexWeights, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(AutoSkinWeights, "auto_skin_weights", P_AutoSkinWeights, HandleSkeletonAutoSkinWeights, EMcpCallFlags::RequiresEditor)
-MCP_AP_CALL(CopyWeights, "copy_weights", P_CopyWeights, HandleSkeletonCopyWeights, EMcpCallFlags::RequiresEditor)
-MCP_AP_CALL(MirrorWeights, "mirror_weights", P_MirrorWeights, HandleSkeletonMirrorWeights, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(GetSkeletonInfo, "get_skeleton_info", HandleSkeletonGetSkeletonInfo, EMcpCallFlags::RequiresEditor)
+MCP_AP_CALL(ListBones, "list_bones", HandleSkeletonListBones, EMcpCallFlags::RequiresEditor)
+MCP_AP_CALL(ListSockets, "list_sockets", HandleSkeletonListSockets, EMcpCallFlags::RequiresEditor)
+MCP_AP_CALL(CreateSocket, "create_socket", HandleSkeletonCreateSocket, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(ConfigureSocket, "configure_socket", HandleSkeletonConfigureSocket, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateVirtualBone, "create_virtual_bone", HandleSkeletonCreateVirtualBone, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreatePhysicsAsset, "create_physics_asset", HandleSkeletonCreatePhysicsAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(ListPhysicsBodies, "list_physics_bodies", HandleSkeletonListPhysicsBodies, EMcpCallFlags::RequiresEditor)
+MCP_AP_CALL(AddPhysicsBody, "add_physics_body", HandleSkeletonAddPhysicsBody, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(ConfigurePhysicsBody, "configure_physics_body", HandleSkeletonConfigurePhysicsBody, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddPhysicsConstraint, "add_physics_constraint", HandleSkeletonAddPhysicsConstraint, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(ConfigureConstraintLimits, "configure_constraint_limits", HandleSkeletonConfigureConstraintLimits, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(RenameBone, "rename_bone", HandleSkeletonRenameBone, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetBoneTransform, "set_bone_transform", HandleSkeletonSetBoneTransform, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(CreateMorphTarget, "create_morph_target", HandleSkeletonCreateMorphTarget, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetMorphTargetDeltas, "set_morph_target_deltas", HandleSkeletonSetMorphTargetDeltas, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(ImportMorphTargets, "import_morph_targets", HandleSkeletonImportMorphTargets, EMcpCallFlags::RequiresEditor)
+MCP_AP_CALL(NormalizeWeights, "normalize_weights", HandleSkeletonNormalizeWeights, EMcpCallFlags::RequiresEditor)
+MCP_AP_CALL(PruneWeights, "prune_weights", HandleSkeletonPruneWeights, EMcpCallFlags::RequiresEditor)
+MCP_AP_CALL(BindClothToSkeletalMesh, "bind_cloth_to_skeletal_mesh", HandleSkeletonBindClothToSkeletalMesh, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AssignClothAssetToMesh, "assign_cloth_asset_to_mesh", HandleSkeletonAssignClothAssetToMesh, EMcpCallFlags::RequiresEditor)
+MCP_AP_CALL(CreateSkeleton, "create_skeleton", HandleSkeletonCreateSkeleton, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AddBone, "add_bone", HandleSkeletonAddBone, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(RemoveBone, "remove_bone", HandleSkeletonRemoveBone, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetBoneParent, "set_bone_parent", HandleSkeletonSetBoneParent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetVertexWeights, "set_vertex_weights", HandleSkeletonSetVertexWeights, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(AutoSkinWeights, "auto_skin_weights", HandleSkeletonAutoSkinWeights, EMcpCallFlags::RequiresEditor)
+MCP_AP_CALL(CopyWeights, "copy_weights", HandleSkeletonCopyWeights, EMcpCallFlags::RequiresEditor)
+MCP_AP_CALL(MirrorWeights, "mirror_weights", HandleSkeletonMirrorWeights, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 #undef MCP_AP_CALL
 

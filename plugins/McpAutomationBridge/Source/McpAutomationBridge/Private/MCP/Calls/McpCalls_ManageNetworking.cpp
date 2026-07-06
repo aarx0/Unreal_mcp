@@ -1,101 +1,652 @@
 // LINT-TOOL: manage_networking
-// manage_networking as FMcpCall classes — fourteenth classed family
-// (docs/action-declarations.md). Each class co-locates the action's
-// declaration with its implementation. Run() delegates to the subsystem
-// member handlers — HandleNetworking* (NetworkingHandlers.cpp) for the 27
-// core actions, HandleGameFramework* (GameFrameworkHandlers.cpp) for the 20
-// game-framework actions, HandleSessions* (SessionsHandlers.cpp) for the 16
-// session actions — until the module split de-members those bodies. The 9
-// Enhanced Input actions split out into manage_input
-// (MCP/Calls/McpCalls_ManageInput.cpp).
+// LINT-SCHEMA-DERIVED
+// manage_networking as FMcpCall classes — adopts schema-from-decls
+// (docs/action-declarations.md). Each class AUTHORS its schema fragment in a
+// S_<Suffix>() function; the published facade schema folds those fragments and
+// GetDecl() derives the validation decl from the same fragment via
+// McpDeriveDecl(), so schema and decl are one source and cannot drift. Run()
+// delegates to the subsystem member handlers — HandleNetworking*
+// (NetworkingHandlers.cpp) for the 27 core actions, HandleGameFramework*
+// (GameFrameworkHandlers.cpp) for the 20 game-framework actions, HandleSessions*
+// (SessionsHandlers.cpp) for the 16 session actions — until the module split
+// de-members those bodies. The 9 Enhanced Input actions split out into
+// manage_input (MCP/Calls/McpCalls_ManageInput.cpp).
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
+#include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
-// so file-scope param arrays would collide across families otherwise.
+// so file-scope helpers would collide across families otherwise.
 namespace McpCalls::ManageNetworking
 {
 
-// ─── Param contracts ─────────────────────────────────────────────────────────
-// Ported from this family's retired shim declarations
-// (McpDecl_ManageNetworking.h) and re-verified against the extracted member
-// bodies. Thirteen GameFramework rows shipped with decl fixes at classing:
-// the retired dispatcher resolved gameModeBlueprint through the
-// blueprintPath fallback (first present spelling wins) and each body rejects
-// only when BOTH are absent, so the shim rows that declared the pair
-// all-required false-rejected every one-spelling payload the handler serves
-// — both spellings are optional now with the at-least-one requirement
-// handler-enforced. set_default_pawn_class needed the same fix twice: its
-// pawnClass/defaultPawnClass pair is resolved and joint-rejected the same
-// way. The single class-path spellings that stay required
-// (gameStateClass/playerControllerClass/playerStateClass) have their own
-// per-spelling rejects. The dispatcher-prologue spellings a body does not
-// read (name/path/save on the GameFramework rows) stay declared-optional so
-// payloads the family accepts today keep validating.
+// ─── Schema fragments ────────────────────────────────────────────────────────
+// One S_<Suffix>() per action, authoring exactly the params that action reads
+// (the fold dedups shared params to one entry). Descriptions are the tool's
+// authored help text; McpDeriveDecl() reads the param kinds + required-set back
+// out of these to build the transport validation decl. GameFramework actions
+// resolve gameModeBlueprint/blueprintPath first-present-wins and reject only
+// when both are absent, so both stay optional (the at-least-one requirement is
+// handler-enforced); set_default_pawn_class resolves pawnClass/defaultPawnClass
+// the same way. The dispatcher-prologue spellings a body does not read
+// (name/path/save on the Set*/Configure* GameFramework rows) stay declared so
+// payloads the family accepts keep validating. Nine Sessions echoes and the
+// readers take one-of-several params optional and enforce it themselves.
 
-inline const FMcpParamDecl P_SetPropertyReplicated[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("propertyName"), EMcpParamKind::String, true }, { TEXT("replicated"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetReplicationCondition[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("propertyName"), EMcpParamKind::String, true }, { TEXT("condition"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ConfigureNetUpdateFrequency[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("netUpdateFrequency"), EMcpParamKind::Number, false }, { TEXT("minNetUpdateFrequency"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_ConfigureNetPriority[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("netPriority"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetNetDormancy[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("dormancy"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ConfigureReplicationGraph[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("spatiallyLoaded"), EMcpParamKind::Bool, false }, { TEXT("netLoadOnClient"), EMcpParamKind::Bool, false }, { TEXT("replicationPolicy"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateRpcFunction[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("functionName"), EMcpParamKind::String, true }, { TEXT("rpcType"), EMcpParamKind::String, true }, { TEXT("reliable"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureRpcValidation[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("functionName"), EMcpParamKind::String, true }, { TEXT("withValidation"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetRpcReliability[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("functionName"), EMcpParamKind::String, true }, { TEXT("reliable"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetOwner[] = { { TEXT("actorName"), EMcpParamKind::String, true }, { TEXT("ownerActorName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetAutonomousProxy[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("isAutonomousProxy"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_CheckHasAuthority[] = { { TEXT("actorName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_CheckIsLocallyControlled[] = { { TEXT("actorName"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ConfigureNetCullDistance[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("netCullDistanceSquared"), EMcpParamKind::Number, false }, { TEXT("useOwnerNetRelevancy"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetAlwaysRelevant[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("alwaysRelevant"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetOnlyRelevantToOwner[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("onlyRelevantToOwner"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureNetSerialization[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("structName"), EMcpParamKind::String, false }, { TEXT("customSerialization"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetReplicatedUsing[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("propertyName"), EMcpParamKind::String, true }, { TEXT("repNotifyFunc"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ConfigurePushModel[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("usePushModel"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureClientPrediction[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("enablePrediction"), EMcpParamKind::Bool, false }, { TEXT("predictionThreshold"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_ConfigureServerCorrection[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("correctionThreshold"), EMcpParamKind::Number, false }, { TEXT("smoothingRate"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_AddNetworkPredictionData[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("dataType"), EMcpParamKind::String, true }, { TEXT("variableName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ConfigureMovementPrediction[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("networkSmoothingMode"), EMcpParamKind::String, false }, { TEXT("networkMaxSmoothUpdateDistance"), EMcpParamKind::Number, false }, { TEXT("networkNoSmoothUpdateDistance"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_ConfigureNetDriver[] = { { TEXT("maxClientRate"), EMcpParamKind::Number, false }, { TEXT("maxInternetClientRate"), EMcpParamKind::Number, false }, { TEXT("netServerMaxTickRate"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_SetNetRole[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("role"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ConfigureReplicatedMovement[] = { { TEXT("blueprintPath"), EMcpParamKind::String, true }, { TEXT("replicateMovement"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_GetNetworkingInfo[] = { { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateGameMode[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false }, { TEXT("defaultPawnClass"), EMcpParamKind::String, false }, { TEXT("playerControllerClass"), EMcpParamKind::String, false }, { TEXT("gameStateClass"), EMcpParamKind::String, false }, { TEXT("playerStateClass"), EMcpParamKind::String, false }, { TEXT("hudClass"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateGameState[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreatePlayerController[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreatePlayerState[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateGameInstance[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_CreateHudClass[] = { { TEXT("name"), EMcpParamKind::String, true }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("parentClass"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetDefaultPawnClass[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("pawnClass"), EMcpParamKind::String, false }, { TEXT("defaultPawnClass"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetPlayerControllerClass[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("playerControllerClass"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_SetGameStateClass[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("gameStateClass"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_SetPlayerStateClass[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("playerStateClass"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ConfigureGameRules[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("bDelayedStart"), EMcpParamKind::Bool, false }, { TEXT("startPlayersNeeded"), EMcpParamKind::Any, false } };
-inline const FMcpParamDecl P_SetupMatchStates[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("states"), EMcpParamKind::Array, false } };
-inline const FMcpParamDecl P_ConfigureRoundSystem[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("numRounds"), EMcpParamKind::Number, false }, { TEXT("roundTime"), EMcpParamKind::Number, false }, { TEXT("intermissionTime"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_ConfigureTeamSystem[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("numTeams"), EMcpParamKind::Number, false }, { TEXT("teamSize"), EMcpParamKind::Number, false }, { TEXT("autoBalance"), EMcpParamKind::Bool, false }, { TEXT("friendlyFire"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureScoringSystem[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("scorePerKill"), EMcpParamKind::Number, false }, { TEXT("scorePerObjective"), EMcpParamKind::Number, false }, { TEXT("scorePerAssist"), EMcpParamKind::Number, false }, { TEXT("winScore"), EMcpParamKind::Number, false }, { TEXT("scorePerDeath"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_ConfigureSpawnSystem[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("spawnSelectionMethod"), EMcpParamKind::String, false }, { TEXT("respawnDelay"), EMcpParamKind::Number, false }, { TEXT("usePlayerStarts"), EMcpParamKind::Bool, false }, { TEXT("canRespawn"), EMcpParamKind::Bool, false }, { TEXT("maxRespawns"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_ConfigurePlayerStart[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("location"), EMcpParamKind::Object, false }, { TEXT("rotation"), EMcpParamKind::Object, false }, { TEXT("teamIndex"), EMcpParamKind::Number, false }, { TEXT("bPlayerOnly"), EMcpParamKind::Bool, false }, { TEXT("playerStartName"), EMcpParamKind::String, false }, { TEXT("actorName"), EMcpParamKind::String, false }, { TEXT("playerStartTag"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetRespawnRules[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("respawnDelay"), EMcpParamKind::Number, false }, { TEXT("respawnLocation"), EMcpParamKind::String, false }, { TEXT("forceRespawn"), EMcpParamKind::Bool, false }, { TEXT("respawnLives"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_ConfigureSpectating[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false }, { TEXT("spectatorClass"), EMcpParamKind::String, false }, { TEXT("allowSpectating"), EMcpParamKind::Bool, false }, { TEXT("spectatorViewMode"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_GetGameFrameworkInfo[] = { { TEXT("name"), EMcpParamKind::String, false }, { TEXT("path"), EMcpParamKind::String, false }, { TEXT("save"), EMcpParamKind::Bool, false }, { TEXT("gameModeBlueprint"), EMcpParamKind::String, false }, { TEXT("blueprintPath"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_ConfigureLocalSessionSettings[] = { { TEXT("sessionName"), EMcpParamKind::String, false }, { TEXT("maxPlayers"), EMcpParamKind::Number, false }, { TEXT("bIsLANMatch"), EMcpParamKind::Bool, false }, { TEXT("bAllowJoinInProgress"), EMcpParamKind::Bool, false }, { TEXT("bAllowInvites"), EMcpParamKind::Bool, false }, { TEXT("bUsesPresence"), EMcpParamKind::Bool, false }, { TEXT("bUseLobbiesIfAvailable"), EMcpParamKind::Bool, false }, { TEXT("bShouldAdvertise"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_ConfigureSessionInterface[] = { { TEXT("interfaceType"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_ConfigureSplitScreen[] = { { TEXT("enabled"), EMcpParamKind::Bool, false }, { TEXT("splitScreenType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_SetSplitScreenType[] = { { TEXT("splitScreenType"), EMcpParamKind::String, true } };
-inline const FMcpParamDecl P_AddLocalPlayer[] = { { TEXT("controllerId"), EMcpParamKind::Number, true } };
-inline const FMcpParamDecl P_RemoveLocalPlayer[] = { { TEXT("playerIndex"), EMcpParamKind::Number, true } };
-inline const FMcpParamDecl P_ConfigureLanPlay[] = { { TEXT("enabled"), EMcpParamKind::Bool, false }, { TEXT("serverPort"), EMcpParamKind::Number, false }, { TEXT("serverPassword"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_HostLanServer[] = { { TEXT("serverName"), EMcpParamKind::String, false }, { TEXT("mapName"), EMcpParamKind::String, true }, { TEXT("maxPlayers"), EMcpParamKind::Number, false }, { TEXT("travelOptions"), EMcpParamKind::String, false }, { TEXT("executeTravel"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_JoinLanServer[] = { { TEXT("serverAddress"), EMcpParamKind::String, true }, { TEXT("serverPort"), EMcpParamKind::Number, false }, { TEXT("serverPassword"), EMcpParamKind::String, false }, { TEXT("travelOptions"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_EnableVoiceChat[] = { { TEXT("voiceEnabled"), EMcpParamKind::Bool, true } };
-inline const FMcpParamDecl P_ConfigureVoiceSettings[] = { { TEXT("voiceSettings"), EMcpParamKind::Object, true } };
-inline const FMcpParamDecl P_SetVoiceChannel[] = { { TEXT("channelName"), EMcpParamKind::String, true }, { TEXT("channelType"), EMcpParamKind::String, false } };
-inline const FMcpParamDecl P_MutePlayer[] = { { TEXT("playerName"), EMcpParamKind::String, false }, { TEXT("targetPlayerId"), EMcpParamKind::String, false }, { TEXT("muted"), EMcpParamKind::Bool, false }, { TEXT("localPlayerNum"), EMcpParamKind::Number, false }, { TEXT("systemWide"), EMcpParamKind::Bool, false } };
-inline const FMcpParamDecl P_SetVoiceAttenuation[] = { { TEXT("attenuationRadius"), EMcpParamKind::Number, true }, { TEXT("attenuationFalloff"), EMcpParamKind::Number, false } };
-inline const FMcpParamDecl P_ConfigurePushToTalk[] = { { TEXT("pushToTalkEnabled"), EMcpParamKind::Bool, true }, { TEXT("pushToTalkKey"), EMcpParamKind::String, false } };
+// Replication (NetworkingHandlers.cpp)
+static void S_SetPropertyReplicated(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("propertyName"), TEXT("Name of the property."))
+	 .Bool(TEXT("replicated"), TEXT("Whether property should be replicated."))
+	 .Required({TEXT("blueprintPath"), TEXT("propertyName")});
+}
+
+static void S_SetReplicationCondition(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("propertyName"), TEXT("Name of the property."))
+	 .StringEnum(TEXT("condition"), {
+		TEXT("COND_None"),
+		TEXT("COND_InitialOnly"),
+		TEXT("COND_OwnerOnly"),
+		TEXT("COND_SkipOwner"),
+		TEXT("COND_SimulatedOnly"),
+		TEXT("COND_AutonomousOnly"),
+		TEXT("COND_SimulatedOrPhysics"),
+		TEXT("COND_InitialOrOwner"),
+		TEXT("COND_Custom"),
+		TEXT("COND_ReplayOrOwner"),
+		TEXT("COND_ReplayOnly"),
+		TEXT("COND_SimulatedOnlyNoReplay"),
+		TEXT("COND_SimulatedOrPhysicsNoReplay"),
+		TEXT("COND_SkipReplay"),
+		TEXT("COND_Never")
+	 }, TEXT("Replication condition."))
+	 .Required({TEXT("blueprintPath"), TEXT("propertyName"), TEXT("condition")});
+}
+
+static void S_ConfigureNetUpdateFrequency(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("netUpdateFrequency"), TEXT("How often actor replicates (Hz, default 100)."))
+	 .Number(TEXT("minNetUpdateFrequency"), TEXT("Minimum update frequency when idle (Hz, default 2)."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_ConfigureNetPriority(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("netPriority"), TEXT("Network priority for bandwidth (default 1.0)."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_SetNetDormancy(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .StringEnum(TEXT("dormancy"), {
+		TEXT("DORM_Never"),
+		TEXT("DORM_Awake"),
+		TEXT("DORM_DormantAll"),
+		TEXT("DORM_DormantPartial"),
+		TEXT("DORM_Initial")
+	 }, TEXT("Net dormancy mode."))
+	 .Required({TEXT("blueprintPath"), TEXT("dormancy")});
+}
+
+static void S_ConfigureReplicationGraph(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Bool(TEXT("spatiallyLoaded"), TEXT("Spatially loaded for replication graph."))
+	 .Bool(TEXT("netLoadOnClient"), TEXT("Net load on client for replication graph."))
+	 .String(TEXT("replicationPolicy"), TEXT("Replication policy for replication graph."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+// RPCs
+static void S_CreateRpcFunction(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("functionName"), TEXT("Name of the function."))
+	 .StringEnum(TEXT("rpcType"), {
+		TEXT("Server"),
+		TEXT("Client"),
+		TEXT("NetMulticast")
+	 }, TEXT("Type of RPC."))
+	 .Bool(TEXT("reliable"), TEXT("Whether the operation is reliable."))
+	 .Required({TEXT("blueprintPath"), TEXT("functionName"), TEXT("rpcType")});
+}
+
+static void S_ConfigureRpcValidation(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("functionName"), TEXT("Name of the function."))
+	 .Bool(TEXT("withValidation"), TEXT("Enable RPC validation."))
+	 .Required({TEXT("blueprintPath"), TEXT("functionName")});
+}
+
+static void S_SetRpcReliability(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("functionName"), TEXT("Name of the function."))
+	 .Bool(TEXT("reliable"), TEXT("Whether the operation is reliable."))
+	 .Required({TEXT("blueprintPath"), TEXT("functionName")});
+}
+
+// Authority & ownership
+static void S_SetOwner(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("ownerActorName"), TEXT("Name of owner actor (null to clear)."))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_SetAutonomousProxy(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Bool(TEXT("isAutonomousProxy"), TEXT("Configure as autonomous proxy."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_CheckHasAuthority(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Required({TEXT("actorName")});
+}
+
+static void S_CheckIsLocallyControlled(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Required({TEXT("actorName")});
+}
+
+// Network relevancy
+static void S_ConfigureNetCullDistance(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("netCullDistanceSquared"), TEXT("Network cull distance squared."))
+	 .Bool(TEXT("useOwnerNetRelevancy"), TEXT("Use owner relevancy."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_SetAlwaysRelevant(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Bool(TEXT("alwaysRelevant"), TEXT("Always relevant to all clients."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_SetOnlyRelevantToOwner(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Bool(TEXT("onlyRelevantToOwner"), TEXT("Only relevant to owner."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+// Net serialization
+static void S_ConfigureNetSerialization(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("structName"), TEXT("Name of struct for custom serialization."))
+	 .Bool(TEXT("customSerialization"), TEXT("Use custom serialization."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_SetReplicatedUsing(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("propertyName"), TEXT("Name of the property."))
+	 .String(TEXT("repNotifyFunc"), TEXT("RepNotify function name."))
+	 .Required({TEXT("blueprintPath"), TEXT("propertyName"), TEXT("repNotifyFunc")});
+}
+
+static void S_ConfigurePushModel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Bool(TEXT("usePushModel"), TEXT("Use push-model replication."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+// Network prediction
+static void S_ConfigureClientPrediction(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Bool(TEXT("enablePrediction"), TEXT("Enable client-side prediction."))
+	 .Number(TEXT("predictionThreshold"), TEXT("Prediction threshold for client prediction."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_ConfigureServerCorrection(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("correctionThreshold"), TEXT("Server correction threshold."))
+	 .Number(TEXT("smoothingRate"), TEXT("Smoothing rate for corrections."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+static void S_AddNetworkPredictionData(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .StringEnum(TEXT("dataType"), {
+		TEXT("Transform"),
+		TEXT("Vector"),
+		TEXT("Rotator"),
+		TEXT("Float")
+	 }, TEXT("Network prediction data type."))
+	 .String(TEXT("variableName"), TEXT("add_network_prediction_data: name for the created replicated variable (default PredictionData_<dataType>)."))
+	 .Required({TEXT("blueprintPath"), TEXT("dataType")});
+}
+
+static void S_ConfigureMovementPrediction(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .StringEnum(TEXT("networkSmoothingMode"), {
+		TEXT("Disabled"),
+		TEXT("Linear"),
+		TEXT("Exponential")
+	 }, TEXT("Movement smoothing mode."))
+	 .Number(TEXT("networkMaxSmoothUpdateDistance"), TEXT("Max smooth update distance."))
+	 .Number(TEXT("networkNoSmoothUpdateDistance"), TEXT("No smooth update distance."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+// Connection & net driver
+static void S_ConfigureNetDriver(FMcpSchemaBuilder& B)
+{
+	B.Number(TEXT("maxClientRate"), TEXT("Max client rate."))
+	 .Number(TEXT("maxInternetClientRate"), TEXT("Max internet client rate."))
+	 .Number(TEXT("netServerMaxTickRate"), TEXT("Server max tick rate."));
+}
+
+static void S_SetNetRole(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .StringEnum(TEXT("role"), {
+		TEXT("ROLE_None"),
+		TEXT("ROLE_SimulatedProxy"),
+		TEXT("ROLE_AutonomousProxy"),
+		TEXT("ROLE_Authority")
+	 }, TEXT("Net role."))
+	 .Required({TEXT("blueprintPath"), TEXT("role")});
+}
+
+static void S_ConfigureReplicatedMovement(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Bool(TEXT("replicateMovement"), TEXT("Replicate movement."))
+	 .Required({TEXT("blueprintPath")});
+}
+
+// Utility
+static void S_GetInfo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("actorName"), TEXT("Name of the actor."));
+}
+
+// Game framework (GameFrameworkHandlers.cpp)
+static void S_CreateGameMode(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("parentClass"), TEXT("create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class: parent class path (defaults to the native base class)."))
+	 .String(TEXT("defaultPawnClass"), TEXT("create_game_mode: default pawn class path. Alias: pawnClass (set_default_pawn_class)."))
+	 .String(TEXT("playerControllerClass"), TEXT("create_game_mode / set_player_controller_class: PlayerController class path."))
+	 .String(TEXT("gameStateClass"), TEXT("create_game_mode / set_game_state_class: GameState class path."))
+	 .String(TEXT("playerStateClass"), TEXT("create_game_mode / set_player_state_class: PlayerState class path."))
+	 .String(TEXT("hudClass"), TEXT("create_game_mode: HUD class path."))
+	 .Required({TEXT("name")});
+}
+
+static void S_CreateGameState(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("parentClass"), TEXT("create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class: parent class path (defaults to the native base class)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_CreatePlayerController(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("parentClass"), TEXT("create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class: parent class path (defaults to the native base class)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_CreatePlayerState(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("parentClass"), TEXT("create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class: parent class path (defaults to the native base class)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_CreateGameInstance(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("parentClass"), TEXT("create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class: parent class path (defaults to the native base class)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_CreateHudClass(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("parentClass"), TEXT("create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class: parent class path (defaults to the native base class)."))
+	 .Required({TEXT("name")});
+}
+
+static void S_SetDefaultPawnClass(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("pawnClass"), TEXT("set_default_pawn_class: default pawn class path (alias of defaultPawnClass; first present wins)."))
+	 .String(TEXT("defaultPawnClass"), TEXT("create_game_mode: default pawn class path. Alias: pawnClass (set_default_pawn_class)."));
+}
+
+static void S_SetPlayerControllerClass(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("playerControllerClass"), TEXT("create_game_mode / set_player_controller_class: PlayerController class path."))
+	 .Required({TEXT("playerControllerClass")});
+}
+
+static void S_SetGameStateClass(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("gameStateClass"), TEXT("create_game_mode / set_game_state_class: GameState class path."))
+	 .Required({TEXT("gameStateClass")});
+}
+
+static void S_SetPlayerStateClass(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("playerStateClass"), TEXT("create_game_mode / set_player_state_class: PlayerState class path."))
+	 .Required({TEXT("playerStateClass")});
+}
+
+static void S_ConfigureGameRules(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Bool(TEXT("bDelayedStart"), TEXT("configure_game_rules: sets AGameMode::bDelayedStart when the property exists on the class."))
+	 .Number(TEXT("startPlayersNeeded"), TEXT("configure_game_rules: NOT IMPLEMENTED — rejected as an unsupported field (not a native GameMode property, not a generated Blueprint variable)."));
+}
+
+static void S_SetupMatchStates(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Array(TEXT("states"), TEXT("setup_match_states: match state names to record on the Blueprint."));
+}
+
+static void S_ConfigureRoundSystem(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("numRounds"), TEXT("configure_round_system: total rounds in the match."))
+	 .Number(TEXT("roundTime"), TEXT("configure_round_system: seconds per round."))
+	 .Number(TEXT("intermissionTime"), TEXT("configure_round_system: seconds between rounds."));
+}
+
+static void S_ConfigureTeamSystem(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("numTeams"), TEXT("configure_team_system: number of teams (default 2)."))
+	 .Number(TEXT("teamSize"), TEXT("configure_team_system: maximum players per team."))
+	 .Bool(TEXT("autoBalance"), TEXT("configure_team_system: auto-balance team sizes."))
+	 .Bool(TEXT("friendlyFire"), TEXT("configure_team_system: allow damage to teammates."));
+}
+
+static void S_ConfigureScoringSystem(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("scorePerKill"), TEXT("configure_scoring_system: points awarded per kill."))
+	 .Number(TEXT("scorePerObjective"), TEXT("configure_scoring_system: points awarded per objective completion."))
+	 .Number(TEXT("scorePerAssist"), TEXT("configure_scoring_system: points awarded per assist."))
+	 .Number(TEXT("winScore"), TEXT("configure_scoring_system: score required to win the match."))
+	 .Number(TEXT("scorePerDeath"), TEXT("configure_scoring_system: score penalty for dying."));
+}
+
+static void S_ConfigureSpawnSystem(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("spawnSelectionMethod"), TEXT("configure_spawn_system: how spawn points are chosen (default Random)."))
+	 .Number(TEXT("respawnDelay"), TEXT("configure_spawn_system / set_respawn_rules: seconds before a player respawns (default 5)."))
+	 .Bool(TEXT("usePlayerStarts"), TEXT("configure_spawn_system: spawn at PlayerStart actors."))
+	 .Bool(TEXT("canRespawn"), TEXT("configure_spawn_system: whether respawning is allowed."))
+	 .Number(TEXT("maxRespawns"), TEXT("configure_spawn_system: maximum respawns per player (-1 = unlimited)."));
+}
+
+static void S_ConfigurePlayerStart(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Object(TEXT("location"), TEXT("configure_player_start: PlayerStart world location (x, y, z)."))
+	 .Object(TEXT("rotation"), TEXT("configure_player_start: PlayerStart world rotation (pitch, yaw, roll)."))
+	 .Number(TEXT("teamIndex"), TEXT("configure_player_start: team index used to build the default PlayerStartTag."))
+	 .Bool(TEXT("bPlayerOnly"), TEXT("configure_player_start: restrict the PlayerStart to player pawns only."))
+	 .String(TEXT("playerStartName"), TEXT("configure_player_start: specific PlayerStart actor to configure (falls back to actorName)."))
+	 .String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .String(TEXT("playerStartTag"), TEXT("configure_player_start: PlayerStartTag to assign (default derived from teamIndex)."));
+}
+
+static void S_SetRespawnRules(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .Number(TEXT("respawnDelay"), TEXT("configure_spawn_system / set_respawn_rules: seconds before a player respawns (default 5)."))
+	 .String(TEXT("respawnLocation"), TEXT("set_respawn_rules: named respawn location strategy (default PlayerStart)."))
+	 .Bool(TEXT("forceRespawn"), TEXT("set_respawn_rules: whether respawn is forced rather than optional."))
+	 .Number(TEXT("respawnLives"), TEXT("set_respawn_rules: lives per player (-1 = unlimited)."));
+}
+
+static void S_ConfigureSpectating(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
+	 .String(TEXT("spectatorClass"), TEXT("configure_spectating: SpectatorPawn class path."))
+	 .Bool(TEXT("allowSpectating"), TEXT("configure_spectating: allow players to spectate (default true)."))
+	 .String(TEXT("spectatorViewMode"), TEXT("configure_spectating: spectator view mode (default FreeCam)."));
+}
+
+static void S_GetGameFrameworkInfo(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
+	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
+	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
+	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
+	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."));
+}
+
+// Sessions (SessionsHandlers.cpp)
+static void S_ConfigureLocalSessionSettings(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("sessionName"), TEXT("configure_local_session_settings: session name (default DefaultSession)."))
+	 .Number(TEXT("maxPlayers"), TEXT("configure_local_session_settings / host_lan_server: max player count (default 4)."))
+	 .Bool(TEXT("bIsLANMatch"), TEXT("configure_local_session_settings: mark the session as a LAN match."))
+	 .Bool(TEXT("bAllowJoinInProgress"), TEXT("configure_local_session_settings: allow players to join after start."))
+	 .Bool(TEXT("bAllowInvites"), TEXT("configure_local_session_settings: allow session invites."))
+	 .Bool(TEXT("bUsesPresence"), TEXT("configure_local_session_settings: advertise via presence."))
+	 .Bool(TEXT("bUseLobbiesIfAvailable"), TEXT("configure_local_session_settings: prefer lobbies when supported."))
+	 .Bool(TEXT("bShouldAdvertise"), TEXT("configure_local_session_settings: advertise the session publicly."));
+}
+
+static void S_ConfigureSessionInterface(FMcpSchemaBuilder& B)
+{
+	B.StringEnum(TEXT("interfaceType"), {
+		TEXT("Default"), TEXT("LAN"), TEXT("Null")
+	 }, TEXT("configure_session_interface: online subsystem interface to use."))
+	 .Required({TEXT("interfaceType")});
+}
+
+static void S_ConfigureSplitScreen(FMcpSchemaBuilder& B)
+{
+	B.Bool(TEXT("enabled"), TEXT("configure_split_screen / configure_lan_play: enable flag for the feature being configured."))
+	 .StringEnum(TEXT("splitScreenType"), {
+		TEXT("None"), TEXT("TwoPlayer_Horizontal"), TEXT("TwoPlayer_Vertical"),
+		TEXT("ThreePlayer_FavorTop"), TEXT("ThreePlayer_FavorBottom"), TEXT("FourPlayer_Grid")
+	 }, TEXT("configure_split_screen / set_split_screen_type: split-screen layout."));
+}
+
+static void S_SetSplitScreenType(FMcpSchemaBuilder& B)
+{
+	B.StringEnum(TEXT("splitScreenType"), {
+		TEXT("None"), TEXT("TwoPlayer_Horizontal"), TEXT("TwoPlayer_Vertical"),
+		TEXT("ThreePlayer_FavorTop"), TEXT("ThreePlayer_FavorBottom"), TEXT("FourPlayer_Grid")
+	 }, TEXT("configure_split_screen / set_split_screen_type: split-screen layout."))
+	 .Required({TEXT("splitScreenType")});
+}
+
+static void S_AddLocalPlayer(FMcpSchemaBuilder& B)
+{
+	B.Number(TEXT("controllerId"), TEXT("add_local_player: controller id for the new local player."))
+	 .Required({TEXT("controllerId")});
+}
+
+static void S_RemoveLocalPlayer(FMcpSchemaBuilder& B)
+{
+	B.Number(TEXT("playerIndex"), TEXT("remove_local_player: local player index to remove (cannot be 0)."))
+	 .Required({TEXT("playerIndex")});
+}
+
+static void S_ConfigureLanPlay(FMcpSchemaBuilder& B)
+{
+	B.Bool(TEXT("enabled"), TEXT("configure_split_screen / configure_lan_play: enable flag for the feature being configured."))
+	 .Number(TEXT("serverPort"), TEXT("configure_lan_play / join_lan_server: port number (default 7777)."))
+	 .String(TEXT("serverPassword"), TEXT("configure_lan_play / join_lan_server: LAN server password."));
+}
+
+static void S_HostLanServer(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("serverName"), TEXT("host_lan_server: display name for the hosted server."))
+	 .String(TEXT("mapName"), TEXT("host_lan_server: map to travel to when hosting."))
+	 .Number(TEXT("maxPlayers"), TEXT("configure_local_session_settings / host_lan_server: max player count (default 4)."))
+	 .String(TEXT("travelOptions"), TEXT("host_lan_server / join_lan_server: extra URL options appended to the travel string."))
+	 .Bool(TEXT("executeTravel"), TEXT("host_lan_server: actually perform ServerTravel instead of just building the URL (default false)."))
+	 .Required({TEXT("mapName")});
+}
+
+static void S_JoinLanServer(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("serverAddress"), TEXT("join_lan_server: address of the LAN server to connect to."))
+	 .Number(TEXT("serverPort"), TEXT("configure_lan_play / join_lan_server: port number (default 7777)."))
+	 .String(TEXT("serverPassword"), TEXT("configure_lan_play / join_lan_server: LAN server password."))
+	 .String(TEXT("travelOptions"), TEXT("host_lan_server / join_lan_server: extra URL options appended to the travel string."))
+	 .Required({TEXT("serverAddress")});
+}
+
+static void S_EnableVoiceChat(FMcpSchemaBuilder& B)
+{
+	B.Bool(TEXT("voiceEnabled"), TEXT("enable_voice_chat: enable or disable voice chat."))
+	 .Required({TEXT("voiceEnabled")});
+}
+
+static void S_ConfigureVoiceSettings(FMcpSchemaBuilder& B)
+{
+	B.Object(TEXT("voiceSettings"), TEXT("configure_voice_settings: nested settings object ({volume, noiseGateThreshold, noiseSuppression, echoCancellation, sampleRate})."))
+	 .Required({TEXT("voiceSettings")});
+}
+
+static void S_SetVoiceChannel(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("channelName"), TEXT("set_voice_channel: voice channel name."))
+	 .StringEnum(TEXT("channelType"), {
+		TEXT("Team"), TEXT("Global"), TEXT("Proximity"), TEXT("Party")
+	 }, TEXT("set_voice_channel: channel type (default Global)."))
+	 .Required({TEXT("channelName")});
+}
+
+static void S_MutePlayer(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("playerName"), TEXT("mute_player: player name to mute/unmute (or use targetPlayerId)."))
+	 .String(TEXT("targetPlayerId"), TEXT("mute_player: player id to mute/unmute (or use playerName)."))
+	 .Bool(TEXT("muted"), TEXT("mute_player: mute (true) or unmute (false), default true."))
+	 .Number(TEXT("localPlayerNum"), TEXT("mute_player: local player index applying the mute."))
+	 .Bool(TEXT("systemWide"), TEXT("mute_player: apply the mute system-wide rather than just locally."));
+}
+
+static void S_SetVoiceAttenuation(FMcpSchemaBuilder& B)
+{
+	B.Number(TEXT("attenuationRadius"), TEXT("set_voice_attenuation: distance at which voice starts attenuating (default 2000)."))
+	 .Number(TEXT("attenuationFalloff"), TEXT("set_voice_attenuation: falloff curve exponent, 0.1-10.0 (default 1.0)."))
+	 .Required({TEXT("attenuationRadius")});
+}
+
+static void S_ConfigurePushToTalk(FMcpSchemaBuilder& B)
+{
+	B.Bool(TEXT("pushToTalkEnabled"), TEXT("configure_push_to_talk: enable push-to-talk."))
+	 .String(TEXT("pushToTalkKey"), TEXT("configure_push_to_talk: key bound to push-to-talk (default V)."))
+	 .Required({TEXT("pushToTalkEnabled")});
+}
+
+static void S_GetSessionsInfo(FMcpSchemaBuilder&) {}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // Flags are authored per action and deliberately mixed. RequiresEditor on
@@ -115,14 +666,15 @@ inline const FMcpParamDecl P_ConfigurePushToTalk[] = { { TEXT("pushToTalkEnabled
 // check_is_locally_controlled, get_info, get_game_framework_info, and
 // get_sessions_info.
 
-#define MCP_NW_CALL(ClassSuffix, ActionLiteral, ParamsArray, HandlerFn, Flags)           \
+#define MCP_NW_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                        \
 class FMcpCall_ManageNetworking_##ClassSuffix final : public FMcpCall                    \
 {                                                                                        \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }       \
 	const FMcpCallDecl& GetDecl() const override                                         \
 	{                                                                                    \
-		static const FMcpCallDecl Decl{ TEXT("manage_networking"), TEXT(ActionLiteral),  \
-			ParamsArray, (Flags) };                                                      \
-		return Decl;                                                                     \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_networking"),          \
+			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                            \
+		return D;                                                                        \
 	}                                                                                    \
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
@@ -132,87 +684,87 @@ class FMcpCall_ManageNetworking_##ClassSuffix final : public FMcpCall           
 };
 
 // Replication (NetworkingHandlers.cpp)
-MCP_NW_CALL(SetPropertyReplicated, "set_property_replicated", P_SetPropertyReplicated, HandleNetworkingSetPropertyReplicated, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetReplicationCondition, "set_replication_condition", P_SetReplicationCondition, HandleNetworkingSetReplicationCondition, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureNetUpdateFrequency, "configure_net_update_frequency", P_ConfigureNetUpdateFrequency, HandleNetworkingConfigureNetUpdateFrequency, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureNetPriority, "configure_net_priority", P_ConfigureNetPriority, HandleNetworkingConfigureNetPriority, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetNetDormancy, "set_net_dormancy", P_SetNetDormancy, HandleNetworkingSetNetDormancy, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureReplicationGraph, "configure_replication_graph", P_ConfigureReplicationGraph, HandleNetworkingConfigureReplicationGraph, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetPropertyReplicated, "set_property_replicated", HandleNetworkingSetPropertyReplicated, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetReplicationCondition, "set_replication_condition", HandleNetworkingSetReplicationCondition, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureNetUpdateFrequency, "configure_net_update_frequency", HandleNetworkingConfigureNetUpdateFrequency, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureNetPriority, "configure_net_priority", HandleNetworkingConfigureNetPriority, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetNetDormancy, "set_net_dormancy", HandleNetworkingSetNetDormancy, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureReplicationGraph, "configure_replication_graph", HandleNetworkingConfigureReplicationGraph, EMcpCallFlags::Mutating)
 
 // RPCs
-MCP_NW_CALL(CreateRpcFunction, "create_rpc_function", P_CreateRpcFunction, HandleNetworkingCreateRpcFunction, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureRpcValidation, "configure_rpc_validation", P_ConfigureRpcValidation, HandleNetworkingConfigureRpcValidation, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetRpcReliability, "set_rpc_reliability", P_SetRpcReliability, HandleNetworkingSetRpcReliability, EMcpCallFlags::Mutating)
+MCP_NW_CALL(CreateRpcFunction, "create_rpc_function", HandleNetworkingCreateRpcFunction, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureRpcValidation, "configure_rpc_validation", HandleNetworkingConfigureRpcValidation, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetRpcReliability, "set_rpc_reliability", HandleNetworkingSetRpcReliability, EMcpCallFlags::Mutating)
 
 // Authority & ownership
-MCP_NW_CALL(SetOwner, "set_owner", P_SetOwner, HandleNetworkingSetOwner, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetAutonomousProxy, "set_autonomous_proxy", P_SetAutonomousProxy, HandleNetworkingSetAutonomousProxy, EMcpCallFlags::Mutating)
-MCP_NW_CALL(CheckHasAuthority, "check_has_authority", P_CheckHasAuthority, HandleNetworkingCheckHasAuthority, EMcpCallFlags::None)
-MCP_NW_CALL(CheckIsLocallyControlled, "check_is_locally_controlled", P_CheckIsLocallyControlled, HandleNetworkingCheckIsLocallyControlled, EMcpCallFlags::None)
+MCP_NW_CALL(SetOwner, "set_owner", HandleNetworkingSetOwner, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetAutonomousProxy, "set_autonomous_proxy", HandleNetworkingSetAutonomousProxy, EMcpCallFlags::Mutating)
+MCP_NW_CALL(CheckHasAuthority, "check_has_authority", HandleNetworkingCheckHasAuthority, EMcpCallFlags::None)
+MCP_NW_CALL(CheckIsLocallyControlled, "check_is_locally_controlled", HandleNetworkingCheckIsLocallyControlled, EMcpCallFlags::None)
 
 // Network relevancy
-MCP_NW_CALL(ConfigureNetCullDistance, "configure_net_cull_distance", P_ConfigureNetCullDistance, HandleNetworkingConfigureNetCullDistance, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetAlwaysRelevant, "set_always_relevant", P_SetAlwaysRelevant, HandleNetworkingSetAlwaysRelevant, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetOnlyRelevantToOwner, "set_only_relevant_to_owner", P_SetOnlyRelevantToOwner, HandleNetworkingSetOnlyRelevantToOwner, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureNetCullDistance, "configure_net_cull_distance", HandleNetworkingConfigureNetCullDistance, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetAlwaysRelevant, "set_always_relevant", HandleNetworkingSetAlwaysRelevant, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetOnlyRelevantToOwner, "set_only_relevant_to_owner", HandleNetworkingSetOnlyRelevantToOwner, EMcpCallFlags::Mutating)
 
 // Net serialization
-MCP_NW_CALL(ConfigureNetSerialization, "configure_net_serialization", P_ConfigureNetSerialization, HandleNetworkingConfigureNetSerialization, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetReplicatedUsing, "set_replicated_using", P_SetReplicatedUsing, HandleNetworkingSetReplicatedUsing, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigurePushModel, "configure_push_model", P_ConfigurePushModel, HandleNetworkingConfigurePushModel, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureNetSerialization, "configure_net_serialization", HandleNetworkingConfigureNetSerialization, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetReplicatedUsing, "set_replicated_using", HandleNetworkingSetReplicatedUsing, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigurePushModel, "configure_push_model", HandleNetworkingConfigurePushModel, EMcpCallFlags::Mutating)
 
 // Network prediction
-MCP_NW_CALL(ConfigureClientPrediction, "configure_client_prediction", P_ConfigureClientPrediction, HandleNetworkingConfigureClientPrediction, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureServerCorrection, "configure_server_correction", P_ConfigureServerCorrection, HandleNetworkingConfigureServerCorrection, EMcpCallFlags::Mutating)
-MCP_NW_CALL(AddNetworkPredictionData, "add_network_prediction_data", P_AddNetworkPredictionData, HandleNetworkingAddNetworkPredictionData, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureMovementPrediction, "configure_movement_prediction", P_ConfigureMovementPrediction, HandleNetworkingConfigureMovementPrediction, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureClientPrediction, "configure_client_prediction", HandleNetworkingConfigureClientPrediction, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureServerCorrection, "configure_server_correction", HandleNetworkingConfigureServerCorrection, EMcpCallFlags::Mutating)
+MCP_NW_CALL(AddNetworkPredictionData, "add_network_prediction_data", HandleNetworkingAddNetworkPredictionData, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureMovementPrediction, "configure_movement_prediction", HandleNetworkingConfigureMovementPrediction, EMcpCallFlags::Mutating)
 
 // Connection & net driver
-MCP_NW_CALL(ConfigureNetDriver, "configure_net_driver", P_ConfigureNetDriver, HandleNetworkingConfigureNetDriver, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetNetRole, "set_net_role", P_SetNetRole, HandleNetworkingSetNetRole, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureReplicatedMovement, "configure_replicated_movement", P_ConfigureReplicatedMovement, HandleNetworkingConfigureReplicatedMovement, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureNetDriver, "configure_net_driver", HandleNetworkingConfigureNetDriver, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetNetRole, "set_net_role", HandleNetworkingSetNetRole, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureReplicatedMovement, "configure_replicated_movement", HandleNetworkingConfigureReplicatedMovement, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_NW_CALL(GetInfo, "get_info", P_GetNetworkingInfo, HandleNetworkingGetInfo, EMcpCallFlags::None)
+MCP_NW_CALL(GetInfo, "get_info", HandleNetworkingGetInfo, EMcpCallFlags::None)
 
 // Game framework (GameFrameworkHandlers.cpp)
-MCP_NW_CALL(CreateGameMode, "create_game_mode", P_CreateGameMode, HandleGameFrameworkCreateGameMode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(CreateGameState, "create_game_state", P_CreateGameState, HandleGameFrameworkCreateGameState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(CreatePlayerController, "create_player_controller", P_CreatePlayerController, HandleGameFrameworkCreatePlayerController, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(CreatePlayerState, "create_player_state", P_CreatePlayerState, HandleGameFrameworkCreatePlayerState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(CreateGameInstance, "create_game_instance", P_CreateGameInstance, HandleGameFrameworkCreateGameInstance, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(CreateHudClass, "create_hud_class", P_CreateHudClass, HandleGameFrameworkCreateHudClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetDefaultPawnClass, "set_default_pawn_class", P_SetDefaultPawnClass, HandleGameFrameworkSetDefaultPawnClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetPlayerControllerClass, "set_player_controller_class", P_SetPlayerControllerClass, HandleGameFrameworkSetPlayerControllerClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetGameStateClass, "set_game_state_class", P_SetGameStateClass, HandleGameFrameworkSetGameStateClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetPlayerStateClass, "set_player_state_class", P_SetPlayerStateClass, HandleGameFrameworkSetPlayerStateClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureGameRules, "configure_game_rules", P_ConfigureGameRules, HandleGameFrameworkConfigureGameRules, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetupMatchStates, "setup_match_states", P_SetupMatchStates, HandleGameFrameworkSetupMatchStates, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureRoundSystem, "configure_round_system", P_ConfigureRoundSystem, HandleGameFrameworkConfigureRoundSystem, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureTeamSystem, "configure_team_system", P_ConfigureTeamSystem, HandleGameFrameworkConfigureTeamSystem, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureScoringSystem, "configure_scoring_system", P_ConfigureScoringSystem, HandleGameFrameworkConfigureScoringSystem, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureSpawnSystem, "configure_spawn_system", P_ConfigureSpawnSystem, HandleGameFrameworkConfigureSpawnSystem, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigurePlayerStart, "configure_player_start", P_ConfigurePlayerStart, HandleGameFrameworkConfigurePlayerStart, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetRespawnRules, "set_respawn_rules", P_SetRespawnRules, HandleGameFrameworkSetRespawnRules, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureSpectating, "configure_spectating", P_ConfigureSpectating, HandleGameFrameworkConfigureSpectating, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(GetGameFrameworkInfo, "get_game_framework_info", P_GetGameFrameworkInfo, HandleGameFrameworkGetGameFrameworkInfo, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(CreateGameMode, "create_game_mode", HandleGameFrameworkCreateGameMode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(CreateGameState, "create_game_state", HandleGameFrameworkCreateGameState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(CreatePlayerController, "create_player_controller", HandleGameFrameworkCreatePlayerController, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(CreatePlayerState, "create_player_state", HandleGameFrameworkCreatePlayerState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(CreateGameInstance, "create_game_instance", HandleGameFrameworkCreateGameInstance, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(CreateHudClass, "create_hud_class", HandleGameFrameworkCreateHudClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetDefaultPawnClass, "set_default_pawn_class", HandleGameFrameworkSetDefaultPawnClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetPlayerControllerClass, "set_player_controller_class", HandleGameFrameworkSetPlayerControllerClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetGameStateClass, "set_game_state_class", HandleGameFrameworkSetGameStateClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetPlayerStateClass, "set_player_state_class", HandleGameFrameworkSetPlayerStateClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureGameRules, "configure_game_rules", HandleGameFrameworkConfigureGameRules, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetupMatchStates, "setup_match_states", HandleGameFrameworkSetupMatchStates, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureRoundSystem, "configure_round_system", HandleGameFrameworkConfigureRoundSystem, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureTeamSystem, "configure_team_system", HandleGameFrameworkConfigureTeamSystem, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureScoringSystem, "configure_scoring_system", HandleGameFrameworkConfigureScoringSystem, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureSpawnSystem, "configure_spawn_system", HandleGameFrameworkConfigureSpawnSystem, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigurePlayerStart, "configure_player_start", HandleGameFrameworkConfigurePlayerStart, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetRespawnRules, "set_respawn_rules", HandleGameFrameworkSetRespawnRules, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureSpectating, "configure_spectating", HandleGameFrameworkConfigureSpectating, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(GetGameFrameworkInfo, "get_game_framework_info", HandleGameFrameworkGetGameFrameworkInfo, EMcpCallFlags::RequiresEditor)
 
 // Sessions (SessionsHandlers.cpp)
-MCP_NW_CALL(ConfigureLocalSessionSettings, "configure_local_session_settings", P_ConfigureLocalSessionSettings, HandleSessionsConfigureLocalSessionSettings, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(ConfigureSessionInterface, "configure_session_interface", P_ConfigureSessionInterface, HandleSessionsConfigureSessionInterface, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(ConfigureSplitScreen, "configure_split_screen", P_ConfigureSplitScreen, HandleSessionsConfigureSplitScreen, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetSplitScreenType, "set_split_screen_type", P_SetSplitScreenType, HandleSessionsSetSplitScreenType, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(AddLocalPlayer, "add_local_player", P_AddLocalPlayer, HandleSessionsAddLocalPlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(RemoveLocalPlayer, "remove_local_player", P_RemoveLocalPlayer, HandleSessionsRemoveLocalPlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureLanPlay, "configure_lan_play", P_ConfigureLanPlay, HandleSessionsConfigureLanPlay, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(HostLanServer, "host_lan_server", P_HostLanServer, HandleSessionsHostLanServer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(JoinLanServer, "join_lan_server", P_JoinLanServer, HandleSessionsJoinLanServer, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(EnableVoiceChat, "enable_voice_chat", P_EnableVoiceChat, HandleSessionsEnableVoiceChat, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureVoiceSettings, "configure_voice_settings", P_ConfigureVoiceSettings, HandleSessionsConfigureVoiceSettings, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(SetVoiceChannel, "set_voice_channel", P_SetVoiceChannel, HandleSessionsSetVoiceChannel, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(MutePlayer, "mute_player", P_MutePlayer, HandleSessionsMutePlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetVoiceAttenuation, "set_voice_attenuation", P_SetVoiceAttenuation, HandleSessionsSetVoiceAttenuation, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(ConfigurePushToTalk, "configure_push_to_talk", P_ConfigurePushToTalk, HandleSessionsConfigurePushToTalk, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(GetSessionsInfo, "get_sessions_info", {}, HandleSessionsGetSessionsInfo, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(ConfigureLocalSessionSettings, "configure_local_session_settings", HandleSessionsConfigureLocalSessionSettings, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(ConfigureSessionInterface, "configure_session_interface", HandleSessionsConfigureSessionInterface, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(ConfigureSplitScreen, "configure_split_screen", HandleSessionsConfigureSplitScreen, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetSplitScreenType, "set_split_screen_type", HandleSessionsSetSplitScreenType, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(AddLocalPlayer, "add_local_player", HandleSessionsAddLocalPlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(RemoveLocalPlayer, "remove_local_player", HandleSessionsRemoveLocalPlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureLanPlay, "configure_lan_play", HandleSessionsConfigureLanPlay, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(HostLanServer, "host_lan_server", HandleSessionsHostLanServer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(JoinLanServer, "join_lan_server", HandleSessionsJoinLanServer, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(EnableVoiceChat, "enable_voice_chat", HandleSessionsEnableVoiceChat, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureVoiceSettings, "configure_voice_settings", HandleSessionsConfigureVoiceSettings, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(SetVoiceChannel, "set_voice_channel", HandleSessionsSetVoiceChannel, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(MutePlayer, "mute_player", HandleSessionsMutePlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetVoiceAttenuation, "set_voice_attenuation", HandleSessionsSetVoiceAttenuation, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(ConfigurePushToTalk, "configure_push_to_talk", HandleSessionsConfigurePushToTalk, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(GetSessionsInfo, "get_sessions_info", HandleSessionsGetSessionsInfo, EMcpCallFlags::RequiresEditor)
 
 #undef MCP_NW_CALL
 

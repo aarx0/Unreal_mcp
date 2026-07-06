@@ -19,15 +19,11 @@ outputG
 outputR
 
 # -- read from the request payload, not declared in any tool schema --
-activate
 activeIndex
-allowSpectating
 animSequencePath
-areaWeighted
 args
 bindingGuid
 blueprint_path
-bPlayerOnly
 brushColor
 cameraActorPath
 candidates
@@ -37,7 +33,6 @@ commands
 component_class
 contentColorAndOpacity
 endTime
-factor
 fromExpression
 function
 includeSoftDependencies
@@ -50,21 +45,16 @@ origin
 pagination
 params
 parent_component
-pawnClass
 payloadBase64
 player_index
 property_name
 property_value
-retargetAssets
 rows
 sequencePath
 sourceNodeGuid
-spectatorViewMode
-startPlayersNeeded
 subAction
 subsystem
 targetNodeGuid
-threshold
 toExpression
 widget_path
 z_order
