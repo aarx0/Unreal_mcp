@@ -2330,7 +2330,11 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetScalarParameterValue(
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
-    Payload->TryGetNumberField(TEXT("value"), Value);
+    if (!Payload->TryGetNumberField(TEXT("floatValue"), Value)) {
+      SendAutomationError(Socket, RequestId, TEXT("Missing 'floatValue'."),
+                          TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
 
     // SECURITY: Validate path BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
@@ -2414,16 +2418,19 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetVectorParameterValue(
       return true;
     }
 
-    FLinearColor Color(1.0f, 1.0f, 1.0f, 1.0f);
-    const TSharedPtr<FJsonObject> *ValueObj;
-    if (Payload->TryGetObjectField(TEXT("value"), ValueObj)) {
-      double R = 1.0, G = 1.0, B = 1.0, A = 1.0;
-      (*ValueObj)->TryGetNumberField(TEXT("r"), R);
-      (*ValueObj)->TryGetNumberField(TEXT("g"), G);
-      (*ValueObj)->TryGetNumberField(TEXT("b"), B);
-      (*ValueObj)->TryGetNumberField(TEXT("a"), A);
-      Color = FLinearColor(R, G, B, A);
+    const TSharedPtr<FJsonObject> *ColorObj = nullptr;
+    if (!Payload->TryGetObjectField(TEXT("colorValue"), ColorObj) || !ColorObj) {
+      SendAutomationError(Socket, RequestId,
+                          TEXT("Missing 'colorValue' (RGBA object, channels 0..1)."),
+                          TEXT("INVALID_ARGUMENT"));
+      return true;
     }
+    double R = 1.0, G = 1.0, B = 1.0, A = 1.0;
+    (*ColorObj)->TryGetNumberField(TEXT("r"), R);
+    (*ColorObj)->TryGetNumberField(TEXT("g"), G);
+    (*ColorObj)->TryGetNumberField(TEXT("b"), B);
+    (*ColorObj)->TryGetNumberField(TEXT("a"), A);
+    const FLinearColor Color(R, G, B, A);
 
     Instance->SetVectorParameterValueEditorOnly(FName(*ParamName), Color);
     Instance->PostEditChange();
@@ -4022,7 +4029,11 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetStaticSwitchParameterValue(
       return true;
     }
     bool Value = false;
-    Payload->TryGetBoolField(TEXT("value"), Value);
+    if (!Payload->TryGetBoolField(TEXT("boolValue"), Value)) {
+      SendAutomationError(Socket, RequestId, TEXT("Missing 'boolValue'."),
+                          TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
 
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {

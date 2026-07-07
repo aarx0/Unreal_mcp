@@ -708,18 +708,19 @@ static void S_SetScalarParameterValue(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Number(TEXT("floatValue"), TEXT("Scalar value to set."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .Required({TEXT("assetPath"), TEXT("parameterName")});
+	 .Required({TEXT("assetPath"), TEXT("parameterName"), TEXT("floatValue")});
 }
 
 static void S_SetVectorParameterValue(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Object(TEXT("colorValue"), TEXT("RGBA color, each channel 0..1."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .Required({TEXT("assetPath"), TEXT("parameterName")});
+	 .Required({TEXT("assetPath"), TEXT("parameterName"), TEXT("colorValue")});
 }
 
 static void S_SetTextureParameterValue(FMcpSchemaBuilder& B)
@@ -848,9 +849,9 @@ static void S_SetStaticSwitchParameterValue(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Bool(TEXT("boolValue"), TEXT("Static switch value (on/off)."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .Required({TEXT("assetPath"), TEXT("parameterName")});
+	 .Required({TEXT("assetPath"), TEXT("parameterName"), TEXT("boolValue")});
 }
 
 static void S_DeleteNode(FMcpSchemaBuilder& B)
