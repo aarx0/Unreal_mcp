@@ -128,13 +128,26 @@ tolerance on the escapes: a stringified escape is a fail-loud bug, not a rescue.
   `value` (handler never read it → now rejected). All schema-only. Verified: dead
   value rejected per-action; published `type=object` with sub-props.
 
-Remaining in **manage_asset**: **Category D** `add_material_parameter` value (4-way
-polymorphic: scalar→float / vector→color / texture→string / switch→bool, driven by
-`parameterType`) + `set_node_value` value (scalar float, but messy handler w/
-r/g/b/a/constA/constB companions + error texts) — both need per-handler work, neither
-is a live bug. **Category E** `metadata` (keep). Then **other tools** (manage_blueprint
-16 params, etc.) + **Phase B** (boundary type-check + delete string-reparse) + **Phase
-C** (nested strict struct import).
+- **`b2066c74`** — Phase A / batch 5: `add_material_parameter` value → `floatValue`/
+  `colorValue`/`stringValue`/`boolValue` (selected by `type`); `set_node_value` value
+  → `floatValue` (r/g/b/a/constA/constB companions unchanged). **✅ manage_asset fully
+  migrated** — no free-form value/default params remain (only `metadata`, Category E,
+  intentionally an open key→string map). Verified: old `value` rejected per-action for
+  both; typed fields accepted.
+
+## Remaining work
+1. **Other tools' free-form value params** — grep found `value` reads in
+   manage_blueprint (BlueprintHandlers/BlueprintGraphHandlers), manage_effect
+   (EffectHandlers, incl. array/object/bool branches), manage_sequence
+   (SequenceHandlers), niagara (NiagaraGraphHandlers), system_control, UI, and
+   control_actor's remaining spots. Each = its own schema decl(s) + handler(s);
+   convert per the same discriminated-union / typed-field pattern.
+2. **Category E** `metadata` across tools — keep as open key→string maps.
+3. **Phase B** — boundary type-check (`FJsonValue->Type` vs the derived
+   `EMcpParamKind` in the per-action check) + delete the string-reparse band-aid
+   (McpPropertyReflection.cpp:1125-1141) once no value param stringifies.
+4. **Phase C** — generalize the strict field-by-field struct import to all structs
+   (not just instanced) so unknown nested fields fail loud.
 
 ## Pending re-publish
 add_component's decl change is Live-Coding-patched but not yet re-published to the
