@@ -132,7 +132,9 @@ static void S_AddKeyframe(FMcpSchemaBuilder& B)
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("property"), TEXT("Name of the property."))
 	 .Number(TEXT("frame"), TEXT(""))
-	 .FreeformObject(TEXT("value"), TEXT(""))
+	 // Transform tracks: structValue {location,rotation,scale}. Float property tracks: floatValue.
+	 .Number(TEXT("floatValue"), TEXT("Keyframe value for a float property track."))
+	 .Object(TEXT("structValue"), TEXT("Keyframe value for a transform track: {location:{x,y,z}, rotation:{roll,pitch,yaw}, scale:{x,y,z}}."))
 	 .Required({TEXT("path"), TEXT("frame")});
 }
 

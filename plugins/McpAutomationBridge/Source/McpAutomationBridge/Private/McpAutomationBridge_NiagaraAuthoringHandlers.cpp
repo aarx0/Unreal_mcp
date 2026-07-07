@@ -2187,8 +2187,8 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
 
         double NumVal = 0;
         bool BoolVal = false;
-        Payload->TryGetNumberField(TEXT("parameterValue"), NumVal);
-        Payload->TryGetBoolField(TEXT("parameterValue"), BoolVal);
+        Payload->TryGetNumberField(TEXT("floatValue"), NumVal);
+        Payload->TryGetBoolField(TEXT("boolValue"), BoolVal);
 
         if (UserStore.FindParameterVariable(FloatVar))
         {
@@ -2205,7 +2205,7 @@ bool UMcpAutomationBridgeSubsystem::HandleManageNiagaraAuthoringAction(
         else if (UserStore.FindParameterVariable(VecVar))
         {
             const TSharedPtr<FJsonObject>* ValObj;
-            if (Payload->TryGetObjectField(TEXT("parameterValue"), ValObj))
+            if (Payload->TryGetObjectField(TEXT("vectorValue"), ValObj))
             {
                 FVector Vec = GetVectorFromJsonNiag(*ValObj);
                 UserStore.SetParameterValue(Vec, VecVar);

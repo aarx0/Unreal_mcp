@@ -1701,7 +1701,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
             TArrayView<FMovieSceneDoubleChannel *> Channels =
                 Proxy.GetChannels<FMovieSceneDoubleChannel>();
 
-            if (LocalPayload->TryGetObjectField(TEXT("value"), ValueObj) &&
+            if (LocalPayload->TryGetObjectField(TEXT("structValue"), ValueObj) &&
                 ValueObj && Channels.Num() >= 9) {
               const TSharedPtr<FJsonObject> *LocObj = nullptr;
               if ((*ValueObj)->TryGetObjectField(TEXT("location"), LocObj)) {
@@ -1780,7 +1780,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
       } else {
         // Try generic property tracks
         const TSharedPtr<FJsonValue> Val =
-            LocalPayload->TryGetField(TEXT("value"));
+            LocalPayload->TryGetField(TEXT("floatValue"));
         if (Val.IsValid() && Val->Type == EJson::Number) {
           UMovieSceneFloatTrack *Track =
               MovieScene->FindTrack<UMovieSceneFloatTrack>(

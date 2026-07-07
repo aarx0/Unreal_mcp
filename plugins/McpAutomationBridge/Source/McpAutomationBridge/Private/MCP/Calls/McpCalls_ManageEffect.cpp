@@ -99,8 +99,14 @@ static void S_SetNiagaraParameter(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("systemName"), TEXT("Niagara actor/system label."))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
-	 .String(TEXT("parameterType"), TEXT(""))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .String(TEXT("parameterType"), TEXT("Float | Vector | Color | Bool -- selects which typed value field is read."))
+	 // parameterType is the discriminant; supply the matching typed field.
+	 .Number(TEXT("floatValue"), TEXT("Value when parameterType=Float."))
+	 .Object(TEXT("vectorValue"), TEXT("Value when parameterType=Vector (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("colorValue"), TEXT("Value when parameterType=Color (r, g, b, a, 0..1)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
+	 .Bool(TEXT("boolValue"), TEXT("Value when parameterType=Bool."))
 	 .Required({TEXT("parameterName")});
 }
 
@@ -598,7 +604,11 @@ static void S_SetParameterValue(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
-	 .FreeformObject(TEXT("parameterValue"), TEXT("Generic parameter value (any type)."))
+	 // Typed value; the Niagara user-parameter's declared type selects which field is read.
+	 .Number(TEXT("floatValue"), TEXT("Value for a Float/Int Niagara parameter."))
+	 .Bool(TEXT("boolValue"), TEXT("Value for a Bool Niagara parameter."))
+	 .Object(TEXT("vectorValue"), TEXT("Value for a Vector Niagara parameter (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
 	 .Required({TEXT("systemPath"), TEXT("parameterName")});
 }
 

@@ -777,8 +777,6 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSetNiagaraParameter(
   }
 
   const FName ParamName(*ParameterName);
-  const TSharedPtr<FJsonValue> ValueField =
-      Payload->TryGetField(TEXT("value"));
 
   TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
   bool bApplied = false;
@@ -815,46 +813,15 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSetNiagaraParameter(
 
     if (ParameterType.Equals(TEXT("Float"), ESearchCase::IgnoreCase)) {
       double NumberValue = 0.0;
-      bool bHasNumber =
-          Payload->TryGetNumberField(TEXT("value"), NumberValue);
-      if (!bHasNumber && ValueField.IsValid()) {
-        if (ValueField->Type == EJson::Number) {
-          NumberValue = ValueField->AsNumber();
-          bHasNumber = true;
-        } else if (ValueField->Type == EJson::Object) {
-          const TSharedPtr<FJsonObject> Obj = ValueField->AsObject();
-          if (Obj.IsValid())
-            bHasNumber = Obj->TryGetNumberField(TEXT("v"), NumberValue);
-        }
-      }
-      if (bHasNumber) {
-        NiComp->SetVariableFloat(ParamName,
-                                 static_cast<float>(NumberValue));
+      if (Payload->TryGetNumberField(TEXT("floatValue"), NumberValue)) {
+        NiComp->SetVariableFloat(ParamName, static_cast<float>(NumberValue));
         bApplied = true;
       }
     } else if (ParameterType.Equals(TEXT("Vector"),
                                     ESearchCase::IgnoreCase)) {
-      const TSharedPtr<FJsonValue> Val =
-          Payload->TryGetField(TEXT("value"));
-      UE_LOG(
-          LogMcpAutomationBridgeSubsystem, Verbose,
-          TEXT("SetNiagaraParameter: Processing Vector for '%s'"),
-          *ParamName.ToString());
-      const TArray<TSharedPtr<FJsonValue>> *ArrValue = nullptr;
       const TSharedPtr<FJsonObject> *ObjValue = nullptr;
-      if (Payload->TryGetArrayField(TEXT("value"), ArrValue) &&
-          ArrValue && ArrValue->Num() >= 3) {
-        const float X = static_cast<float>((*ArrValue)[0]->AsNumber());
-        const float Y = static_cast<float>((*ArrValue)[1]->AsNumber());
-        const float Z = static_cast<float>((*ArrValue)[2]->AsNumber());
-        NiComp->SetVariableVec3(ParamName, FVector(X, Y, Z));
-        bApplied = true;
-        UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
-               TEXT("SetNiagaraParameter: Applied Vector from "
-                    "Array: %f, %f, %f"),
-               X, Y, Z);
-    } else if (Payload->TryGetObjectField(TEXT("value"), ObjValue) &&
-               ObjValue && (*ObjValue).IsValid()) {
+      if (Payload->TryGetObjectField(TEXT("vectorValue"), ObjValue) &&
+          ObjValue && (*ObjValue).IsValid()) {
         double VX = 0, VY = 0, VZ = 0;
         (*ObjValue)->TryGetNumberField(TEXT("x"), VX);
         (*ObjValue)->TryGetNumberField(TEXT("y"), VY);
@@ -862,35 +829,25 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSetNiagaraParameter(
         NiComp->SetVariableVec3(ParamName,
                                 FVector((float)VX, (float)VY, (float)VZ));
         bApplied = true;
-        UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
-               TEXT("SetNiagaraParameter: Applied Vector from "
-                    "Object: %f, %f, %f"),
-               VX, VY, VZ);
-    } else {
-      UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
-             TEXT("SetNiagaraParameter: Failed to parse Vector value."));
-    }
-  } else if (ParameterType.Equals(TEXT("Color"),
-                                  ESearchCase::IgnoreCase)) {
-      const TArray<TSharedPtr<FJsonValue>> *ArrValue = nullptr;
-      if (Payload->TryGetArrayField(TEXT("value"), ArrValue) &&
-          ArrValue && ArrValue->Num() >= 3) {
-        const float R = static_cast<float>((*ArrValue)[0]->AsNumber());
-        const float G = static_cast<float>((*ArrValue)[1]->AsNumber());
-        const float B = static_cast<float>((*ArrValue)[2]->AsNumber());
-        const float Alpha =
-            ArrValue->Num() > 3
-                ? static_cast<float>((*ArrValue)[3]->AsNumber())
-                : 1.0f;
-        NiComp->SetVariableLinearColor(ParamName,
-                                       FLinearColor(R, G, B, Alpha));
+      }
+    } else if (ParameterType.Equals(TEXT("Color"),
+                                    ESearchCase::IgnoreCase)) {
+      const TSharedPtr<FJsonObject> *ObjValue = nullptr;
+      if (Payload->TryGetObjectField(TEXT("colorValue"), ObjValue) &&
+          ObjValue && (*ObjValue).IsValid()) {
+        double R = 0, G = 0, B = 0, A = 1;
+        (*ObjValue)->TryGetNumberField(TEXT("r"), R);
+        (*ObjValue)->TryGetNumberField(TEXT("g"), G);
+        (*ObjValue)->TryGetNumberField(TEXT("b"), B);
+        (*ObjValue)->TryGetNumberField(TEXT("a"), A);
+        NiComp->SetVariableLinearColor(
+            ParamName, FLinearColor((float)R, (float)G, (float)B, (float)A));
         bApplied = true;
       }
     } else if (ParameterType.Equals(TEXT("Bool"),
                                     ESearchCase::IgnoreCase)) {
       bool bValue = false;
-      bool bHasBool = Payload->TryGetBoolField(TEXT("value"), bValue);
-      if (bHasBool) {
+      if (Payload->TryGetBoolField(TEXT("boolValue"), bValue)) {
         NiComp->SetVariableBool(ParamName, bValue);
         bApplied = true;
       }
