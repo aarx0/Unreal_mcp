@@ -113,9 +113,20 @@ tolerance on the escapes: a stringified escape is a fail-loud bug, not a rescue.
   `reductionSettings` even fails loud "must be a JSON object"). Verified: old
   `defaultValue` rejected; published schema shows `type=object` with sub-props.
 
+- **`c806e279`** — Phase A / batch 3: `set_asset_property` → full discriminated
+  union (`boolValue`/`intValue`/`floatValue`/`stringValue`/`colorValue`/
+  `vectorValue`/**`structValue`**/`arrayValue`) via the shared helper. **First real
+  `structValue` proof.** No up-front kind cross-check (general setter's lenient
+  coercions would false-reject); apply path UNCHANGED (TypedValue.Json == the old
+  `value` object). Verified via direct HTTP: old `value` rejected; instanced
+  `{"__class":"InputTriggerHold",…}` structValue transmitted+read (reaches asset
+  resolve); NO_CHANGES / AMBIGUOUS handled; published `structValue type=object`.
+
 Remaining in manage_asset: **Category B/C** `reductionSettings` (em-dash, exact
-read) + `luminanceFactors` (desat handler); **Category D** `value`×4 + `rowData`×2
-→ `structValue`; **Category E** `metadata` (keep). Then other tools per the plan.
+read) + `luminanceFactors` (desat handler); **Category D** `find_by_tag` value +
+`add_material_parameter` value + `set_node_value` value + `rowData`×2 (DataTable);
+**Category E** `metadata` (keep). Then other tools (manage_blueprint etc.) + Phase
+B (boundary type-check + delete string-reparse) + Phase C (nested strict import).
 
 ## Pending re-publish
 add_component's decl change is Live-Coding-patched but not yet re-published to the
