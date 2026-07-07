@@ -1053,9 +1053,14 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetVisibility(
     return true;
   }
 
+  // visible must be explicitly requested — never silently apply the default.
+  if (!Payload->HasField(TEXT("visible"))) {
+    SendStandardErrorResponse(this, Socket, RequestId, TEXT("NO_CHANGES_REQUESTED"),
+                              TEXT("visible is required"), nullptr);
+    return true;
+  }
   bool bVisible = true;
-  if (Payload->HasField(TEXT("visible")))
-    Payload->TryGetBoolField(TEXT("visible"), bVisible);
+  Payload->TryGetBoolField(TEXT("visible"), bVisible);
 
   AActor *Found = FindActorByName(TargetName);
   if (!Found) {
@@ -1080,25 +1085,24 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetVisibility(
   Found->MarkComponentsRenderStateDirty();
   Found->MarkPackageDirty();
 
-  // Verify visibility state
   const bool bIsHidden = Found->IsHidden();
-  const bool bStateMatches = (bIsHidden == !bVisible);
-
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   Data->SetBoolField(TEXT("visible"), !bIsHidden);
   Data->SetStringField(TEXT("actorName"), Found->GetActorLabel());
 
-  if (!bStateMatches) {
+  if (bIsHidden != !bVisible) {
     SendStandardErrorResponse(this, Socket, RequestId,
                               TEXT("VISIBILITY_MISMATCH"),
                               TEXT("Failed to set actor visibility"), Data);
     return true;
   }
 
-  // Add verification data
-	McpHandlerUtils::AddVerification(Data, Found);
+  TArray<TSharedPtr<FJsonValue>> AppliedProperties;
+  AppliedProperties.Add(MakeShared<FJsonValueString>(TEXT("visible")));
+  Data->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
+  McpHandlerUtils::AddVerification(Data, Found);
 
-	SendAutomationResponse(Socket, RequestId, true, TEXT("Actor visibility updated"), Data);
+  SendAutomationResponse(Socket, RequestId, true, TEXT("Actor visibility updated"), Data);
   return true;
 #else
   return false;
