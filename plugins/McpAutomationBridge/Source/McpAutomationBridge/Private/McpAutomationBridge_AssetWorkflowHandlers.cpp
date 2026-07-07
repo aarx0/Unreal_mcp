@@ -3693,7 +3693,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialParameter(
             Cast<UMaterialExpressionScalarParameter>(NewExpression)) {
       ScalarParam->ParameterName = FName(*Name);
       double Val = 0.0;
-      if (Payload->TryGetNumberField(TEXT("value"), Val)) {
+      if (Payload->TryGetNumberField(TEXT("floatValue"), Val)) {
         ScalarParam->DefaultValue = (float)Val;
       }
     }
@@ -3703,7 +3703,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialParameter(
             Cast<UMaterialExpressionVectorParameter>(NewExpression)) {
       VectorParam->ParameterName = FName(*Name);
       const TSharedPtr<FJsonObject> *VecObj;
-      if (Payload->TryGetObjectField(TEXT("value"), VecObj)) {
+      if (Payload->TryGetObjectField(TEXT("colorValue"), VecObj)) {
         double R = 0, G = 0, B = 0, A = 1;
         (*VecObj)->TryGetNumberField(TEXT("r"), R);
         (*VecObj)->TryGetNumberField(TEXT("g"), G);
@@ -3719,7 +3719,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialParameter(
             Cast<UMaterialExpressionTextureSampleParameter2D>(NewExpression)) {
       TexParam->ParameterName = FName(*Name);
       FString TexPath;
-      if (Payload->TryGetStringField(TEXT("value"), TexPath) &&
+      if (Payload->TryGetStringField(TEXT("stringValue"), TexPath) &&
           !TexPath.IsEmpty()) {
         TexPath = SanitizeProjectRelativePath(TexPath);
         if (TexPath.IsEmpty()) {
@@ -3740,7 +3740,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialParameter(
             Cast<UMaterialExpressionStaticSwitchParameter>(NewExpression)) {
       SwitchParam->ParameterName = FName(*Name);
       bool Val = false;
-      if (Payload->TryGetBoolField(TEXT("value"), Val)) {
+      if (Payload->TryGetBoolField(TEXT("boolValue"), Val)) {
         SwitchParam->DefaultValue = Val;
       }
     }

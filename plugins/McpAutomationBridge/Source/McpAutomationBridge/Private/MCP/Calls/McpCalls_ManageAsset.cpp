@@ -331,8 +331,14 @@ static void S_AddMaterialParameter(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
-	 .String(TEXT("type"), TEXT(""))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .String(TEXT("type"), TEXT("scalar | vector | texture | staticswitch."))
+	 // Default value, typed per `type`: scalar->floatValue, vector->colorValue,
+	 // texture->stringValue (asset path), staticswitch->boolValue.
+	 .Number(TEXT("floatValue"), TEXT("type=scalar: default scalar value."))
+	 .Object(TEXT("colorValue"), TEXT("type=vector: default RGBA color (0..1)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
+	 .String(TEXT("stringValue"), TEXT("type=texture: default texture asset path."))
+	 .Bool(TEXT("boolValue"), TEXT("type=staticswitch: default switch value."))
 	 .Required({TEXT("assetPath"), TEXT("name"), TEXT("type")});
 }
 
@@ -850,7 +856,7 @@ static void S_SetNodeValue(FMcpSchemaBuilder& B)
 	 .Number(TEXT("x"), TEXT(""))
 	 .Number(TEXT("y"), TEXT(""))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Number(TEXT("floatValue"), TEXT("set_node_value: scalar value for a Constant / named-float property / arithmetic ConstA."))
 	 .Number(TEXT("r"), TEXT("set_node_value: red/X channel of a Constant2/3/4Vector or VectorParameter default."))
 	 .Number(TEXT("g"), TEXT("set_node_value: green/Y channel."))
 	 .Number(TEXT("b"), TEXT("set_node_value: blue/Z channel."))

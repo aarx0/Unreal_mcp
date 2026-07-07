@@ -3865,7 +3865,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetNodeValue(
     }
 
     double ValueNum = 0.0;
-    const bool bHasValue = Payload->TryGetNumberField(TEXT("value"), ValueNum);
+    const bool bHasValue = Payload->TryGetNumberField(TEXT("floatValue"), ValueNum);
     double Rin = 0, Gin = 0, Bin = 0, Ain = 0;
     const bool bHasR = Payload->TryGetNumberField(TEXT("r"), Rin);
     const bool bHasG = Payload->TryGetNumberField(TEXT("g"), Gin);
@@ -3878,7 +3878,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetNodeValue(
     if (!bHasValue && !bHasR && !bHasG && !bHasB && !bHasA && !bHasConstA &&
         !bHasConstB) {
       SendAutomationError(Socket, RequestId,
-                          TEXT("No value provided. Supply 'value', any of "
+                          TEXT("No value provided. Supply 'floatValue', any of "
                                "'r'/'g'/'b'/'a', or 'constA'/'constB'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -3901,7 +3901,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetNodeValue(
 
     if (UMaterialExpressionConstant *C = Cast<UMaterialExpressionConstant>(Expr)) {
       if (!bHasValue) {
-        SendAutomationError(Socket, RequestId, TEXT("Constant needs 'value'."),
+        SendAutomationError(Socket, RequestId, TEXT("Constant needs 'floatValue'."),
                             TEXT("INVALID_ARGUMENT"));
         return true;
       }
@@ -3943,7 +3943,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetNodeValue(
                    Cast<UMaterialExpressionScalarParameter>(Expr)) {
       if (!bHasValue) {
         SendAutomationError(Socket, RequestId,
-                            TEXT("ScalarParameter needs 'value'."),
+                            TEXT("ScalarParameter needs 'floatValue'."),
                             TEXT("INVALID_ARGUMENT"));
         return true;
       }
@@ -3965,7 +3965,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetNodeValue(
                                 VP->DefaultValue.A);
       bHandled = true;
     } else {
-      // Arithmetic / other node: set ConstA/ConstB (a bare `value` maps to ConstA).
+      // Arithmetic / other node: set ConstA/ConstB (a bare `floatValue` maps to ConstA).
       TArray<FString> SetParts;
       const bool bWantA = bHasConstA || bHasValue;
       const float ValA = bHasConstA ? (float)ConstAin : (float)ValueNum;
