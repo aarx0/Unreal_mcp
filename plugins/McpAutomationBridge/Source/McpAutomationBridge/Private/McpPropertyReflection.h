@@ -176,7 +176,7 @@ namespace McpPropertyReflection
     struct FMcpTypedValue
     {
         FString Field;                 // e.g. "floatValue"
-        FString Kind;                  // "bool"|"int"|"float"|"string"|"vector"
+        FString Kind;                  // bool|int|float|string|color|vector|vector2|vector4|struct|array
         TSharedPtr<FJsonValue> Json;   // value, as the correct JSON type
         bool IsValid() const { return Json.IsValid(); }
     };
@@ -185,9 +185,13 @@ namespace McpPropertyReflection
 
     /**
      * Read exactly one typed value field from a payload:
-     * boolValue / intValue / floatValue / stringValue / vectorValue{x,y,z}.
-     * Each field is a real schema type, so it transmits correctly (no stringified
-     * blobs) and the populated field names the caller's intended type.
+     * boolValue / intValue / floatValue / stringValue / colorValue{r,g,b,a} /
+     * vector2Value{x,y} / vectorValue{x,y,z} / vector4Value{x,y,z,w} /
+     * structValue{...} / arrayValue[...]. Each field is a real schema type, so it
+     * transmits correctly and the populated field names the caller's intended type.
+     * structValue/arrayValue are the open escape for runtime-defined shapes; they
+     * also accept a JSON-text string so a client that stringifies the container
+     * still round-trips (ApplyJsonValueToProperty's struct path re-parses it).
      * @return Ok (Out filled) on exactly one; None on zero; Ambiguous on >1
      *         (OutDetail lists the offending field names).
      */
@@ -198,8 +202,10 @@ namespace McpPropertyReflection
 
     /**
      * Cross-check: does the property's real reflected type match the caller's
-     * intended value kind ("bool"/"int"/"float"/"string"/"vector")? A mismatch
-     * should fail loud rather than silently coerce.
+     * intended value kind (bool/int/float/string/color/vector/vector2/vector4/
+     * struct/array)? A mismatch should fail loud rather than silently coerce.
+     * The open kinds (struct/array) match any struct/object/map or array/set
+     * property respectively — the importer is the real structural gate.
      */
     MCPAUTOMATIONBRIDGE_API bool PropertyMatchesValueKind(
         const FProperty* Property,

@@ -1341,8 +1341,25 @@ EMcpTypedValueParse ReadDiscriminatedValue(const TSharedPtr<FJsonObject>& Payloa
         Present.Add({TEXT("floatValue"), TEXT("float"), MakeShared<FJsonValueNumber>(N)});
     if (Payload->TryGetStringField(TEXT("stringValue"), S))
         Present.Add({TEXT("stringValue"), TEXT("string"), MakeShared<FJsonValueString>(S)});
+    if (Payload->TryGetObjectField(TEXT("colorValue"), Obj) && Obj && Obj->IsValid())
+        Present.Add({TEXT("colorValue"), TEXT("color"), MakeShared<FJsonValueObject>(*Obj)});
+    if (Payload->TryGetObjectField(TEXT("vector2Value"), Obj) && Obj && Obj->IsValid())
+        Present.Add({TEXT("vector2Value"), TEXT("vector2"), MakeShared<FJsonValueObject>(*Obj)});
     if (Payload->TryGetObjectField(TEXT("vectorValue"), Obj) && Obj && Obj->IsValid())
         Present.Add({TEXT("vectorValue"), TEXT("vector"), MakeShared<FJsonValueObject>(*Obj)});
+    if (Payload->TryGetObjectField(TEXT("vector4Value"), Obj) && Obj && Obj->IsValid())
+        Present.Add({TEXT("vector4Value"), TEXT("vector4"), MakeShared<FJsonValueObject>(*Obj)});
+
+    // Open escapes for runtime-defined shapes (structs/maps/instanced, arrays).
+    // Declared type:object / type:array so they transmit as REAL containers. A
+    // stringified escape is a fail-loud bug, not something to rescue here -- no
+    // content-sniffing of strings for hidden JSON. The importer is the structural
+    // gate for what's inside.
+    if (Payload->TryGetObjectField(TEXT("structValue"), Obj) && Obj && Obj->IsValid())
+        Present.Add({TEXT("structValue"), TEXT("struct"), MakeShared<FJsonValueObject>(*Obj)});
+    const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+    if (Payload->TryGetArrayField(TEXT("arrayValue"), Arr) && Arr)
+        Present.Add({TEXT("arrayValue"), TEXT("array"), MakeShared<FJsonValueArray>(*Arr)});
 
     if (Present.Num() == 0)
         return EMcpTypedValueParse::None;
@@ -1377,6 +1394,29 @@ bool PropertyMatchesValueKind(const FProperty* P, const FString& Kind)
         const FStructProperty* SP = CastField<FStructProperty>(P);
         return SP && SP->Struct == TBaseStructure<FVector>::Get();
     }
+    if (Kind == TEXT("vector2"))
+    {
+        const FStructProperty* SP = CastField<FStructProperty>(P);
+        return SP && SP->Struct == TBaseStructure<FVector2D>::Get();
+    }
+    if (Kind == TEXT("vector4"))
+    {
+        const FStructProperty* SP = CastField<FStructProperty>(P);
+        return SP && SP->Struct == TBaseStructure<FVector4>::Get();
+    }
+    if (Kind == TEXT("color"))
+    {
+        const FStructProperty* SP = CastField<FStructProperty>(P);
+        return SP && (SP->Struct == TBaseStructure<FLinearColor>::Get() ||
+                      SP->Struct == TBaseStructure<FColor>::Get());
+    }
+    // Open escapes: match the container families and let the importer be the real
+    // structural gate (a struct/map value at a float still fails loud here).
+    if (Kind == TEXT("struct"))
+        return CastField<FStructProperty>(P) || CastField<FObjectProperty>(P) ||
+               CastField<FMapProperty>(P);
+    if (Kind == TEXT("array"))
+        return CastField<FArrayProperty>(P) || CastField<FSetProperty>(P);
     return false;
 }
 
