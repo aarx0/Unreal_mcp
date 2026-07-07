@@ -196,7 +196,13 @@ static void S_SetComponentProperty(FMcpSchemaBuilder& B)
 	 .Object(TEXT("properties"), TEXT("set_component_property: map of component property name to value (alternative to a single propertyName/value pair)."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
 	 .String(TEXT("propertyPath"), TEXT(""))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 // Discriminated value (single propertyName/value form): populate exactly ONE.
+	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
+	 .Number(TEXT("intValue"), TEXT("Set an integer property."))
+	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
+	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum / object-path property."))
+	 .Object(TEXT("vectorValue"), TEXT("Set an FVector property (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
 	 .Required({TEXT("componentName")});
 }
 
@@ -237,10 +243,20 @@ static void S_SetProperty(FMcpSchemaBuilder& B)
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
 	 .String(TEXT("propertyPath"), TEXT(""))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 // Discriminated value: populate exactly ONE typed field matching the target property.
+	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
+	 .Number(TEXT("intValue"), TEXT("Set an integer property."))
+	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
+	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum / object-reference-by-path property."))
+	 .Object(TEXT("colorValue"), TEXT("Set an FLinearColor/FColor property (r,g,b,a, 0..1)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
+	 .Object(TEXT("vectorValue"), TEXT("Set an FVector property (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("structValue"), TEXT("Set a struct / instanced subobject ({\"__class\",...}) / map property."))
+	 .Array(TEXT("arrayValue"), TEXT("Set an array property (items are structs/instanced objects)."), TEXT("object"))
 	 .Bool(TEXT("markDirty"), TEXT("set_property: mark the owning package dirty (default true)."))
 	 .Bool(TEXT("save"), TEXT("set_property: persist the owning asset package to disk after the write (default true; defaults to false when markDirty is false). Level packages are never auto-saved — use control_editor save_all."))
-	 .Required({TEXT("value")});
+	 .Required({TEXT("propertyName")});
 }
 
 static void S_GetProperty(FMcpSchemaBuilder& B)

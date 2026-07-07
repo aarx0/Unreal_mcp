@@ -2458,8 +2458,26 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 
     FString VarType;
     LocalPayload->TryGetStringField(TEXT("variableType"), VarType);
-    const TSharedPtr<FJsonValue> DefaultVal =
-        LocalPayload->TryGetField(TEXT("defaultValue"));
+    TSharedPtr<FJsonValue> DefaultVal;
+    {
+      McpPropertyReflection::FMcpTypedValue DefTyped;
+      FString DefParseDetail;
+      switch (McpPropertyReflection::ReadDiscriminatedValue(LocalPayload, DefTyped,
+                                                            DefParseDetail)) {
+      case McpPropertyReflection::EMcpTypedValueParse::None:
+        break; // defaultValue is optional
+      case McpPropertyReflection::EMcpTypedValueParse::Ambiguous:
+        SendAutomationResponse(
+            RequestingSocket, RequestId, false,
+            *FString::Printf(TEXT("set exactly one typed default value field, got: %s"),
+                             *DefParseDetail),
+            nullptr, TEXT("AMBIGUOUS_VALUE"));
+        return true;
+      case McpPropertyReflection::EMcpTypedValueParse::Ok:
+        DefaultVal = DefTyped.Json;
+        break;
+      }
+    }
     FString Category;
     LocalPayload->TryGetStringField(TEXT("category"), Category);
     const bool bReplicated =

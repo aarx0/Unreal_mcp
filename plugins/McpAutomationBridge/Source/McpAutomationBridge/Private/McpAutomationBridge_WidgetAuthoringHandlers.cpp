@@ -3130,14 +3130,25 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
             // Generic property setter via UE reflection — works on any widget class, any property
             FString PropertyName = GetJsonStringField(Payload, TEXT("propertyName"));
             FString Value;
-            bool bHasValueField = Payload->HasField(TEXT("value"));
             bool bUseJsonConverter = false;
             TSharedPtr<FJsonValue> RawJsonValue;
 
-            // Extract value from JSON — handle string, number, bool, object, and array types
+            McpPropertyReflection::FMcpTypedValue StyleTyped;
+            FString StyleParseDetail;
+            const McpPropertyReflection::EMcpTypedValueParse StyleParse =
+                McpPropertyReflection::ReadDiscriminatedValue(Payload, StyleTyped, StyleParseDetail);
+            if (StyleParse == McpPropertyReflection::EMcpTypedValueParse::Ambiguous)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    *FString::Printf(TEXT("set exactly one typed value field, got: %s"), *StyleParseDetail),
+                    TEXT("AMBIGUOUS_VALUE"));
+                return true;
+            }
+            bool bHasValueField = (StyleParse == McpPropertyReflection::EMcpTypedValueParse::Ok);
+            // Extract value from the typed field — handle string, number, bool, object, and array types
             if (bHasValueField)
             {
-                const TSharedPtr<FJsonValue> ValField = Payload->TryGetField(TEXT("value"));
+                const TSharedPtr<FJsonValue> ValField = StyleTyped.Json;
                 if (ValField.IsValid())
                 {
                     if (ValField->Type == EJson::String)

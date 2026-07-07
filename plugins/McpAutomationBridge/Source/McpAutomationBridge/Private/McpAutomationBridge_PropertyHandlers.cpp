@@ -176,13 +176,23 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       return true;
   }
 
-  const TSharedPtr<FJsonValue> ValueField = Payload->TryGetField(TEXT("value"));
-  if (!ValueField.IsValid()) {
+  McpPropertyReflection::FMcpTypedValue PropTyped;
+  FString PropParseDetail;
+  switch (McpPropertyReflection::ReadDiscriminatedValue(Payload, PropTyped, PropParseDetail)) {
+  case McpPropertyReflection::EMcpTypedValueParse::None:
       SendAutomationError(RequestingSocket, RequestId,
-          TEXT("set_object_property payload missing value field."),
+          TEXT("set exactly one typed value field: boolValue, intValue, floatValue, stringValue, colorValue, vectorValue, structValue, or arrayValue."),
           TEXT("INVALID_VALUE"));
       return true;
+  case McpPropertyReflection::EMcpTypedValueParse::Ambiguous:
+      SendAutomationError(RequestingSocket, RequestId,
+          *FString::Printf(TEXT("set exactly one typed value field, got: %s"), *PropParseDetail),
+          TEXT("AMBIGUOUS_VALUE"));
+      return true;
+  case McpPropertyReflection::EMcpTypedValueParse::Ok:
+      break;
   }
+  const TSharedPtr<FJsonValue> ValueField = PropTyped.Json;
 
   // --- Object Resolution ---
   UObject* RootObject = nullptr;

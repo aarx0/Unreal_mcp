@@ -268,7 +268,17 @@ static void S_AddVariable(FMcpSchemaBuilder& B)
 	 .String(TEXT("variableName"), TEXT("Name of the variable."))
 	 .String(TEXT("variableType"),
 		TEXT("Variable type (e.g., Boolean, Float, Integer, Vector, String, Object)"))
-	 .FreeformObject(TEXT("defaultValue"), TEXT("Generic value (any type)."))
+	 // Discriminated default value: populate exactly ONE typed field matching variableType.
+	 .Bool(TEXT("boolValue"), TEXT("Default for a Boolean variable."))
+	 .Number(TEXT("intValue"), TEXT("Default for an Integer variable."))
+	 .Number(TEXT("floatValue"), TEXT("Default for a Float variable."))
+	 .String(TEXT("stringValue"), TEXT("Default for a String / Name / enum / object-path variable."))
+	 .Object(TEXT("colorValue"), TEXT("Default for an FLinearColor/FColor variable (r,g,b,a)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
+	 .Object(TEXT("vectorValue"), TEXT("Default for an FVector variable (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("structValue"), TEXT("Default for a struct / instanced subobject variable."))
+	 .Array(TEXT("arrayValue"), TEXT("Default for an array variable."), TEXT("object"))
 	 .String(TEXT("category"), TEXT(""))
 	 .Bool(TEXT("isReplicated"), TEXT(""))
 	 .Bool(TEXT("isPublic"), TEXT(""))
@@ -1050,7 +1060,17 @@ static void S_SetStyle(FMcpSchemaBuilder& B)
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("widgetName"), TEXT("Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget; get_widget_info: return this widget's property values + objectPath)."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 // Discriminated value (set_style): populate exactly ONE typed field.
+	 .Bool(TEXT("boolValue"), TEXT("Set a bool style property."))
+	 .Number(TEXT("intValue"), TEXT("Set an integer style property."))
+	 .Number(TEXT("floatValue"), TEXT("Set a float style property."))
+	 .String(TEXT("stringValue"), TEXT("Set a string / enum / brush-path style property."))
+	 .Object(TEXT("colorValue"), TEXT("Set an FLinearColor/FColor style property (r,g,b,a)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
+	 .Object(TEXT("vectorValue"), TEXT("Set an FVector style property (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("structValue"), TEXT("Set a struct style property (e.g. a Slate brush/margin)."))
+	 .Array(TEXT("arrayValue"), TEXT("Set an array style property."), TEXT("object"))
 	 .String(TEXT("style"), TEXT("set_style: legacy value alias for propertyName=\"Style\" when propertyName is omitted."))
 	 .Required({TEXT("widgetPath"), TEXT("slotName")});
 }

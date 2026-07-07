@@ -3543,11 +3543,19 @@ static TSharedPtr<FJsonObject> AnimAuthoringSetAnimGraphNodeValue(const TSharedP
         }
         
         // Get the value from params and apply it
-        TSharedPtr<FJsonValue> ValueField = Params->TryGetField(TEXT("value"));
-        if (!ValueField.IsValid())
+        McpPropertyReflection::FMcpTypedValue NodeTyped;
+        FString NodeParseDetail;
+        const McpPropertyReflection::EMcpTypedValueParse NodeParse =
+            McpPropertyReflection::ReadDiscriminatedValue(Params, NodeTyped, NodeParseDetail);
+        if (NodeParse == McpPropertyReflection::EMcpTypedValueParse::None)
         {
-            ANIM_ERROR_RESPONSE(TEXT("value parameter is required"), TEXT("MISSING_VALUE"));
+            ANIM_ERROR_RESPONSE(TEXT("set exactly one typed value field: boolValue, intValue, floatValue, stringValue, colorValue, vectorValue, structValue, or arrayValue"), TEXT("MISSING_VALUE"));
         }
+        if (NodeParse == McpPropertyReflection::EMcpTypedValueParse::Ambiguous)
+        {
+            ANIM_ERROR_RESPONSE(FString::Printf(TEXT("set exactly one typed value field, got: %s"), *NodeParseDetail), TEXT("AMBIGUOUS_VALUE"));
+        }
+        TSharedPtr<FJsonValue> ValueField = NodeTyped.Json;
         
         FString ApplyError;
         if (!ApplyJsonValueToProperty(FoundNode, Property, ValueField, ApplyError))

@@ -567,8 +567,18 @@ static void S_SetAnimGraphNodeValue(FMcpSchemaBuilder& B)
 	 .String(TEXT("nodeName"), TEXT("add_blend_node/set_animation_graph_node_value: AnimGraph node name/comment."))
 	 .String(TEXT("propertyName"), TEXT("set_animation_graph_node_value: node property to set (dot-notation for nested structs)."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
-	 .Required({TEXT("blueprintPath"), TEXT("nodeName"), TEXT("propertyName"), TEXT("value")});
+	 // Discriminated value: populate exactly ONE typed field matching the node property.
+	 .Bool(TEXT("boolValue"), TEXT("Set a bool node property."))
+	 .Number(TEXT("intValue"), TEXT("Set an integer node property."))
+	 .Number(TEXT("floatValue"), TEXT("Set a float/double node property."))
+	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum / object-path node property."))
+	 .Object(TEXT("colorValue"), TEXT("Set an FLinearColor/FColor node property (r,g,b,a)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
+	 .Object(TEXT("vectorValue"), TEXT("Set an FVector node property (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("structValue"), TEXT("Set a struct / instanced subobject node property."))
+	 .Array(TEXT("arrayValue"), TEXT("Set an array node property."), TEXT("object"))
+	 .Required({TEXT("blueprintPath"), TEXT("nodeName"), TEXT("propertyName")});
 }
 
 static void S_CreateControlRig(FMcpSchemaBuilder& B)
