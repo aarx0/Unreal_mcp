@@ -1007,6 +1007,18 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] 2026-07-07 — Two shadowed `set_default` / `set_scs_property` duplicates in HandleBlueprintAction (dead code)
+Found during the typed-params migration. `manage_blueprint` dispatch routes both actions to
+`HandleBlueprintAction`, which matches each at its FIRST `if (CleanAction.Equals(...))` and
+returns — so the second copy is unreachable:
+- `set_default`: live block ~L2806; a second identical block at ~L4239 (same function, both
+  above `HandleSCSAction` at L5639) is dead.
+- `set_scs_property`: live block ~L2132 (delegates to `FSCSHandlers::SetSCSComponentProperty`,
+  which applies via `ApplyJsonValueToProperty`); the 157-line hand-rolled type-switch at ~L6148
+  (in `HandleSCSAction`) is dead.
+Both dead blocks still read the removed free-form `value`, so they're harmless but misleading.
+Delete during the legacy-dispatcher cleanup — they're byte-behaviour shadows of the live blocks.
+
 ### [x] 2026-07-04j — action/subAction mismatch bypassed schema-enum validation
 **FIXED same day (found during the 04h sweep).** The transport mirrors `action`<->`subAction`
 when one is missing, but when a client sent BOTH, `subAction` was never validated: it is

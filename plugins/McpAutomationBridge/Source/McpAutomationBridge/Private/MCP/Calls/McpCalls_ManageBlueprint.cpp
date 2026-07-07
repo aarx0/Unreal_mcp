@@ -222,8 +222,20 @@ static void S_SetScsProperty(FMcpSchemaBuilder& B)
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
 	 .String(TEXT("property_name"), TEXT("snake_case alias of propertyName."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
-	 .FreeformObject(TEXT("property_value"), TEXT("snake_case alias of value (any type)."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."));
+	 // Discriminated value: populate exactly ONE typed field matching the target
+	 // property's reflected type. structValue/arrayValue are the escape for structs,
+	 // instanced subobjects ({"__class",...}) and arrays; ApplyJsonValueToProperty
+	 // is the gate for whether the value fits the resolved property.
+	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
+	 .Number(TEXT("intValue"), TEXT("Set an integer property."))
+	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
+	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum / object-reference-by-path property."))
+	 .Object(TEXT("colorValue"), TEXT("Set an FLinearColor/FColor property (r,g,b,a, 0..1)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
+	 .Object(TEXT("vectorValue"), TEXT("Set an FVector property (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("structValue"), TEXT("Set a struct / instanced subobject ({\"__class\",...}) / map property."))
+	 .Array(TEXT("arrayValue"), TEXT("Set an array property (items are structs/instanced objects)."), TEXT("object"));
 }
 
 static void S_EnsureExists(FMcpSchemaBuilder& B)

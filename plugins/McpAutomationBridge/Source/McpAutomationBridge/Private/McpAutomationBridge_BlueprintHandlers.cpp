@@ -2145,12 +2145,30 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     if (PropName.IsEmpty()) {
       Payload->TryGetStringField(TEXT("propertyName"), PropName);
     }
-    const TSharedPtr<FJsonValue> PropVal =
-        Payload->TryGetField(TEXT("property_value"));
-    const TSharedPtr<FJsonValue> ResolvedPropVal =
-        PropVal.IsValid() ? PropVal : Payload->TryGetField(TEXT("value"));
+    McpPropertyReflection::FMcpTypedValue TypedValue;
+    FString ValueParseDetail;
+    switch (McpPropertyReflection::ReadDiscriminatedValue(Payload, TypedValue,
+                                                          ValueParseDetail)) {
+    case McpPropertyReflection::EMcpTypedValueParse::None:
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("set exactly one typed value field: boolValue, intValue, "
+               "floatValue, stringValue, colorValue, vectorValue, structValue, "
+               "or arrayValue"),
+          nullptr, TEXT("NO_CHANGES_REQUESTED"));
+      return true;
+    case McpPropertyReflection::EMcpTypedValueParse::Ambiguous:
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          *FString::Printf(TEXT("set exactly one typed value field, got: %s"),
+                           *ValueParseDetail),
+          nullptr, TEXT("AMBIGUOUS_VALUE"));
+      return true;
+    case McpPropertyReflection::EMcpTypedValueParse::Ok:
+      break;
+    }
     TSharedPtr<FJsonObject> Result = FSCSHandlers::SetSCSComponentProperty(
-        BPPath, CompName, PropName, ResolvedPropVal);
+        BPPath, CompName, PropName, TypedValue.Json);
     SendAutomationResponse(RequestingSocket, RequestId,
                            GetJsonBoolField(Result, TEXT("success")),
                            SafeGetStr(Result, TEXT("message")), Result,
