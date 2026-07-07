@@ -969,7 +969,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddScalarParameter(
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
-    Payload->TryGetNumberField(TEXT("defaultValue"), DefaultValue);
+    Payload->TryGetNumberField(TEXT("floatValue"), DefaultValue);
     Payload->TryGetStringField(TEXT("group"), Group);
 
     UMaterialExpressionScalarParameter *ScalarParam =
@@ -1028,7 +1028,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddVectorParameter(
 
     // Parse default value
     const TSharedPtr<FJsonObject> *DefaultObj;
-    if (Payload->TryGetObjectField(TEXT("defaultValue"), DefaultObj)) {
+    if (Payload->TryGetObjectField(TEXT("colorValue"), DefaultObj)) {
       double R = 1.0, G = 1.0, B = 1.0, A = 1.0;
       (*DefaultObj)->TryGetNumberField(TEXT("r"), R);
       (*DefaultObj)->TryGetNumberField(TEXT("g"), G);
@@ -1072,7 +1072,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddStaticSwitchParameter(
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
-    Payload->TryGetBoolField(TEXT("defaultValue"), DefaultValue);
+    Payload->TryGetBoolField(TEXT("boolValue"), DefaultValue);
     Payload->TryGetStringField(TEXT("group"), Group);
 
     UMaterialExpressionStaticSwitchParameter *SwitchParam =

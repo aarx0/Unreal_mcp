@@ -45,7 +45,8 @@ static void S_List(FMcpSchemaBuilder& B)
 	 .String(TEXT("directoryPath"), TEXT("Path to a directory."))
 	 .Bool(TEXT("recursive"), TEXT("list: recurse into subfolders (default true)."))
 	 .Bool(TEXT("recursivePaths"), TEXT(""))
-	 .FreeformObject(TEXT("pagination"), TEXT("list: pagination window {offset, limit}."))
+	 .Object(TEXT("pagination"), TEXT("list: pagination window."),
+		[](FMcpSchemaBuilder& S) { S.Integer(TEXT("offset")).Integer(TEXT("limit")); })
 	 .Number(TEXT("depth"), TEXT("list: recursion depth filter relative to the queried path. get_node_connections: BFS hop limit (default 1; -1 unlimited)."));
 }
 
@@ -469,7 +470,7 @@ static void S_AddScalarParameter(FMcpSchemaBuilder& B)
 	 .Number(TEXT("x"), TEXT(""))
 	 .Number(TEXT("y"), TEXT(""))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
-	 .FreeformObject(TEXT("defaultValue"), TEXT("Generic value (any type)."))
+	 .Number(TEXT("floatValue"), TEXT("Default value for the new scalar parameter (optional)."))
 	 .String(TEXT("group"), TEXT("add_scalar_parameter/add_vector_parameter/add_static_switch_parameter: UI group name."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath"), TEXT("parameterName")});
@@ -482,7 +483,8 @@ static void S_AddVectorParameter(FMcpSchemaBuilder& B)
 	 .Number(TEXT("y"), TEXT(""))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
 	 .String(TEXT("group"), TEXT("add_scalar_parameter/add_vector_parameter/add_static_switch_parameter: UI group name."))
-	 .FreeformObject(TEXT("defaultValue"), TEXT("Generic value (any type)."))
+	 .Object(TEXT("colorValue"), TEXT("Default RGBA color, each channel 0..1 (optional)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath"), TEXT("parameterName")});
 }
@@ -493,7 +495,7 @@ static void S_AddStaticSwitchParameter(FMcpSchemaBuilder& B)
 	 .Number(TEXT("x"), TEXT(""))
 	 .Number(TEXT("y"), TEXT(""))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
-	 .FreeformObject(TEXT("defaultValue"), TEXT("Generic value (any type)."))
+	 .Bool(TEXT("boolValue"), TEXT("Default value for the new static switch parameter (optional)."))
 	 .String(TEXT("group"), TEXT("add_scalar_parameter/add_vector_parameter/add_static_switch_parameter: UI group name."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath"), TEXT("parameterName")});
@@ -989,8 +991,10 @@ static void S_CreateGradientTexture(FMcpSchemaBuilder& B)
 	 .Number(TEXT("radius"), TEXT("create_gradient_texture: Radial falloff radius (default 0.5). blur: box-blur pixel radius 1-10 (default 2)."))
 	 .Bool(TEXT("hdr"), TEXT("create_noise_texture/create_gradient_texture: create a float/HDR texture (default false)."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .FreeformObject(TEXT("startColor"), TEXT("create_gradient_texture: {r,g,b,a} start color (default black)."))
-	 .FreeformObject(TEXT("endColor"), TEXT("create_gradient_texture: {r,g,b,a} end color (default white)."))
+	 .Object(TEXT("startColor"), TEXT("create_gradient_texture: start color, channels 0..1 (default black)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
+	 .Object(TEXT("endColor"), TEXT("create_gradient_texture: end color, channels 0..1 (default white)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
 	 .Required({TEXT("name")});
 }
 
@@ -1007,8 +1011,10 @@ static void S_CreatePatternTexture(FMcpSchemaBuilder& B)
 	 .Number(TEXT("brickRatio"), TEXT("create_pattern_texture: Brick length-to-height ratio (default 2)."))
 	 .Number(TEXT("offset"), TEXT(""))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .FreeformObject(TEXT("primaryColor"), TEXT("create_pattern_texture: {r,g,b,a} foreground color (default white)."))
-	 .FreeformObject(TEXT("secondaryColor"), TEXT("create_pattern_texture: {r,g,b,a} background color (default black)."))
+	 .Object(TEXT("primaryColor"), TEXT("create_pattern_texture: foreground color, channels 0..1 (default white)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
+	 .Object(TEXT("secondaryColor"), TEXT("create_pattern_texture: background color, channels 0..1 (default black)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
 	 .Required({TEXT("name")});
 }
 
