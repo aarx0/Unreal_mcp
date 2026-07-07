@@ -11,12 +11,19 @@ Legend: ✅ shipped · 🟢 decided, ready to run · 🟡 needs an Aaron decisio
 - **system_control duplicate drops** — create_widget/add_widget_child/screenshot/show_stats (`ee6e317d`).
 - **Scaffold + no-op rip** — 55 actions removed (~5k lines), `7c6947df`. Kept the two real
   component-builders. Closed interaction's 5 scaffolds + networking's 11 no-ops.
+- **Silent-success convention set (no rollback)** — `set_transform` + `set_component_property`
+  reworked; `set_actor_collision`/`set_visibility` already align (`844cd076` + earlier). See ②.
 
 ## 🟡 Handler-side sequence (the three you set)
 - **① dead code** — done (above).
-- **② silent-success → all-or-nothing/transactional** — pick guard model (hard error vs soft
-  warning) + rollout order; apply to the ~27 cohesive + real-write actions.
-  [`silent-success-convention-2026-07-06.md`](silent-success-convention-2026-07-06.md).
+- **② silent-success — CONVENTION: fail-in-place, NO rollback.** Aaron rejected transactional
+  rollback (`Cancel()`) as unverifiable per-setter — a reported "rolled back" can leave live
+  side-effect state (SetMobility/SetSimulatePhysics). House rule: writes that land **stay**; on
+  any failure, error with `applied`+`failed` (`PROPERTY_WRITE_FAILED`) and the caller re-reads
+  fresh state; `NO_CHANGES_REQUESTED` on an empty request; pre-validate-before-write is fine (it
+  never starts, so nothing to revert); prefer atomic actions so partial can't arise. Done on
+  set_transform + set_component_property; **~24 real-write handlers remain.** Error names + the
+  `silent-success-convention-2026-07-06.md` doc's guard-model section need reconciling to this.
 - **③ delete legacy dispatchers** — manage_blueprint's recursive `HandleBlueprintAction` +
   niagara/material/sequencer authoring subsystems. Biggest refactor; awaiting appetite.
 
