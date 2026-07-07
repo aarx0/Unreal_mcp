@@ -34,19 +34,22 @@ verified mid-session (it stringifies off the stale cache). Fresh sessions /
 - **`b0f2fda0`** — `control_actor.set_component_property` → discriminated union
   (pile 1 + 3 on one handler). Killed `properties` map + polymorphic `value`.
   Verified live: floatValue applies; boolValue→float fails loud; two fields →
-  AMBIGUOUS; Mobility(string)/SimulatePhysics(bool) special-cases land. Also
-  set_blueprint_variables → fail-in-place (no rollback).
+  AMBIGUOUS; Mobility(string)/SimulatePhysics(bool) special-cases land.
+- **`65e0141f`** — shared helper `ReadDiscriminatedValue` +
+  `PropertyMatchesValueKind` in McpPropertyReflection (DRY for the rollout). And
+  `control_actor.set_blueprint_variables` → single-variable discriminated union
+  (killed `variables` map). Verified live: boolValue on bCanBeDamaged applies
+  (=False); floatValue on it (uint8) → VALUE_TYPE_MISMATCH.
 
 ## Next steps (in order)
-1. **Shared helper** for the discriminated-value read + cross-check + special
-   setters, so every handler conversion is small + consistent (DRY before
-   replicating across ~14 tools).
-2. `control_actor.set_blueprint_variables` — `variables` map → discriminated union.
-3. `control_actor.add_component` — `properties` init-map. **DECISION (Aaron):**
-   drop init-props entirely (create only; set props via set_component_property
-   after), or keep a single discriminated init value? Leaning drop (atomic).
-4. Bounded-shapes pass across tools (colors/sizes/bounds) → typed objects.
-5. `manage_asset` (20 free-form params) and `manage_blueprint` (16) — the big two.
+1. `control_actor.add_component` — its `properties` init-map. **Doing: drop it**
+   (create + register + keep meshPath convenience; set props afterward via
+   set_component_property — atomic, and the map is broken/transmission anyway).
+   Aaron: confirm/revert in the morning. → finishes control_actor.
+2. Refactor `set_component_property` to use the shared helper too (low-priority
+   DRY; it works inline today).
+3. Bounded-shapes pass across tools (colors/sizes/bounds) → typed objects.
+4. `manage_asset` (20 free-form params) and `manage_blueprint` (16) — the big two.
 
 ## Decisions parked for Aaron
 - **add_component init-props**: drop vs single-value (leaning drop).
