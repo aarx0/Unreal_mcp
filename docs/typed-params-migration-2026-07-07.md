@@ -29,6 +29,61 @@ verified mid-session (it stringifies off the stale cache). Fresh sessions /
 `/mcp` reconnect get it. Handler logic is still verifiable via
 `bypassParamCheck:true`. Each schema batch needs a rebuild+restart to re-publish.
 
+## Settled plan (sequenced)
+
+Two layers of checking, by construction:
+- **Static boundary** (schema-driven): validates TOP-LEVEL param JSON types
+  (`structValue` is an object, `intValue` a number). Cannot see inside an open
+  escape — the inner shape is runtime-defined.
+- **Runtime reflection** (`ApplyJsonValueToProperty`): validates the INNER shape
+  against the destination's reflected type — the only layer that CAN, since the
+  shape isn't known statically. Per-field type correctness (cat 1) and
+  unknown-field rejection (cat 2) live here.
+
+Kind-set: `boolValue`/`intValue`/`floatValue`/`stringValue` + `colorValue{r,g,b,a}`
++ `vector2Value{x,y}`/`vectorValue{x,y,z}`/`vector4Value{x,y,z,w}` + open escapes
+`structValue{...}` (object-only) / `arrayValue[...]` (array-only). No string
+tolerance on the escapes: a stringified escape is a fail-loud bug, not a rescue.
+
+### Phase A — finish the value-typing migration (core capability)
+1. Correct the WIP helper: read `structValue`/`arrayValue` as object/array ONLY
+   (strip the string tolerance from the uncommitted edit).
+2. Category A/B — material params + colors → typed fields (`colorValue`, float,
+   bool). Convert handlers + schema decls.
+3. Category C — bounded shapes (`pagination{offset,limit}`, `size`) → typed objects.
+4. Category D — general setters (`set_asset_property`, `set_default`,
+   `set_scs_property`, `set_node_property`, `set_pin_default_value`, `rowData`, …)
+   → `structValue`/`arrayValue`, pointed at the existing reflection importer.
+5. Category E — `metadata` open maps: keep (genuine key→string) unless a reason
+   to type them appears.
+   As each tool's LAST FreeformObject value param dies, that path is fully typed.
+
+### Phase B — make the boundary loud (small, high-value)
+6. Add JSON-TYPE validation to `CollectSchemaViolations`
+   (McpNativeTransport.cpp:1268): each declared prop with a `type` → the incoming
+   `FJsonValue->Type` must match, else reject `expected object, got string`. Turns
+   the whole stringification class into a front-door diagnosis.
+7. Delete the string-reparse band-aid (McpPropertyReflection.cpp:1125-1141) —
+   provably dead once no value param stringifies.
+
+### Phase C — tighten the runtime shape check (cat-2 nested sliver)
+8. Generalize the strict field-by-field struct import (already errors on unknown
+   fields for instanced structs, :1099-1113) to ALL structs, so a typo'd nested
+   field fails loud instead of being silently dropped by `JsonObjectToUStruct`
+   (:1117), which ignores unknowns.
+
+### Phase D — unify the contracts — ALREADY DONE (McpDeriveDecl)
+9. RESOLVED (corrected after reading McpDeriveDecl.cpp): the classed families do
+   NOT carry two hand-authored contracts. The `S_<Action>` schema fragment is the
+   single source; `McpDeriveDecl()` reads the per-action validation decl (name +
+   `EMcpParamKind` + required) back out of the built schema, so schema and decl
+   cannot drift. Editing the fragment is enough — the decl re-derives. Nothing to
+   do here.
+   Consequence for Phase B: the derived decl ALREADY carries a kind per param, so
+   the boundary type-check is just wiring the comparison into the existing
+   per-action check. A `FreeformObject` derives to `Any` (uncheckable) — one more
+   reason to finish killing them.
+
 ## Progress log
 
 - **`b0f2fda0`** — `control_actor.set_component_property` → discriminated union
@@ -43,15 +98,17 @@ verified mid-session (it stringifies off the stale cache). Fresh sessions /
 - **`d129520d`** — `control_actor.add_component` drops its `properties` init-map
   (create + register only; keeps meshPath). Verified: creates a PointLight that
   attaches/registers. **✅ control_actor fully migrated.**
+- **`155ff933`** — helper extended: color/vec2/vec4/struct/array kinds added to
+  ReadDiscriminatedValue + PropertyMatchesValueKind (escapes object/array-only).
+- **`a26698ac`** — Phase A / batch 1: material `set_scalar/vector/static_switch`
+  param setters → `floatValue`/`colorValue`/`boolValue`. Fixes a live silent
+  no-op (vector color object stringified → handler fell back to white). Verified
+  via direct HTTP: old `value` rejected per-action; typed fields accepted (reach
+  asset load); missing value fails loud.
 
-## Next steps (in order)
-1. `manage_asset.set_asset_property` — polymorphic `value` → discriminated union
-   via the shared helper (direct analog of set_component_property, no special
-   cases since it's a plain asset object). Then the rest of manage_asset's ~20
-   free-form params (many are bounded shapes: reductionSettings, size, …).
-2. `manage_blueprint` (16 params) — overlaps with the ③ legacy dispatcher
-   (recursive HandleBlueprintAction); careful, smaller batches.
-3. Bounded-shapes pass across the remaining tools (colors/sizes/bounds).
+Remaining work tracked in "Settled plan" above (Phase A cont.: `add_*` param
+defaults + Category B colors + Category C bounded shapes + Category D general
+setters onto `structValue`/`arrayValue`).
 
 ## Pending re-publish
 add_component's decl change is Live-Coding-patched but not yet re-published to the
