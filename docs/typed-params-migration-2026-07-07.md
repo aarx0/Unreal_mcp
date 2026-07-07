@@ -40,16 +40,23 @@ verified mid-session (it stringifies off the stale cache). Fresh sessions /
   `control_actor.set_blueprint_variables` → single-variable discriminated union
   (killed `variables` map). Verified live: boolValue on bCanBeDamaged applies
   (=False); floatValue on it (uint8) → VALUE_TYPE_MISMATCH.
+- **`d129520d`** — `control_actor.add_component` drops its `properties` init-map
+  (create + register only; keeps meshPath). Verified: creates a PointLight that
+  attaches/registers. **✅ control_actor fully migrated.**
 
 ## Next steps (in order)
-1. `control_actor.add_component` — its `properties` init-map. **Doing: drop it**
-   (create + register + keep meshPath convenience; set props afterward via
-   set_component_property — atomic, and the map is broken/transmission anyway).
-   Aaron: confirm/revert in the morning. → finishes control_actor.
-2. Refactor `set_component_property` to use the shared helper too (low-priority
-   DRY; it works inline today).
-3. Bounded-shapes pass across tools (colors/sizes/bounds) → typed objects.
-4. `manage_asset` (20 free-form params) and `manage_blueprint` (16) — the big two.
+1. `manage_asset.set_asset_property` — polymorphic `value` → discriminated union
+   via the shared helper (direct analog of set_component_property, no special
+   cases since it's a plain asset object). Then the rest of manage_asset's ~20
+   free-form params (many are bounded shapes: reductionSettings, size, …).
+2. `manage_blueprint` (16 params) — overlaps with the ③ legacy dispatcher
+   (recursive HandleBlueprintAction); careful, smaller batches.
+3. Bounded-shapes pass across the remaining tools (colors/sizes/bounds).
+
+## Pending re-publish
+add_component's decl change is Live-Coding-patched but not yet re-published to the
+running editor's schema (still advertises `properties` until the next restart) —
+harmless (handler ignores it); the next rebuild picks it up.
 
 ## Decisions parked for Aaron
 - **add_component init-props**: drop vs single-value (leaning drop).
