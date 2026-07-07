@@ -53,7 +53,7 @@ static void S_Create(FMcpSchemaBuilder& B)
 	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
 	 .String(TEXT("parentClass"), TEXT("Path or name of the parent class."))
 	 .String(TEXT("blueprintType"), TEXT("Path or name of the parent class."))
-	 .FreeformObject(TEXT("properties"), TEXT(""))
+	 .Object(TEXT("properties"), TEXT(""))
 	 .Bool(TEXT("waitForCompletion"), TEXT("create/create_blueprint: wait for a coalesced concurrent creation to finish before responding."))
 	 .Required({TEXT("name")});
 }
@@ -375,7 +375,7 @@ static void S_SetVariableMetadata(FMcpSchemaBuilder& B)
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
 	 .Array(TEXT("candidates"), TEXT("Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try."))
 	 .String(TEXT("variableName"), TEXT("Name of the variable."))
-	 .FreeformObject(TEXT("metadata"), TEXT(""))
+	 .Object(TEXT("metadata"), TEXT(""))
 	 .Required({TEXT("variableName"), TEXT("metadata")});
 }
 
@@ -386,7 +386,7 @@ static void S_SetMetadata(FMcpSchemaBuilder& B)
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
 	 .Array(TEXT("candidates"), TEXT("Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try."))
-	 .FreeformObject(TEXT("metadata"), TEXT(""))
+	 .Object(TEXT("metadata"), TEXT(""))
 	 .Required({TEXT("metadata")});
 }
 
@@ -971,7 +971,8 @@ static void S_SetSize(FMcpSchemaBuilder& B)
 	 .String(TEXT("slotName"), TEXT("Name for the widget being added / the slot to target."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("widgetName"), TEXT("Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget; get_widget_info: return this widget's property values + objectPath)."))
-	 .FreeformObject(TEXT("size"), TEXT("Either a number (add_crosshair/add_minimap/add_ammo_counter: icon size) or an {x,y} object (set_size: canvas slot pixel size)."))
+	 .Object(TEXT("size"), TEXT("set_size: canvas slot pixel size as an {x,y} object."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")); })
 	 .Number(TEXT("x"), TEXT(""))
 	 .Number(TEXT("y"), TEXT(""))
 	 .Bool(TEXT("fill"), TEXT("set_size: stretch a HBox/VBox child to fill (vs Automatic)."))

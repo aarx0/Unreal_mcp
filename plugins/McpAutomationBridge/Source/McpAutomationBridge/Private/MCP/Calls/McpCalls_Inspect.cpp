@@ -193,7 +193,7 @@ static void S_SetComponentProperty(FMcpSchemaBuilder& B)
 {
 	AppendActorAliases(B);
 	B.String(TEXT("componentName"), TEXT("Name of the component."))
-	 .FreeformObject(TEXT("properties"), TEXT("set_component_property: map of component property name to value (alternative to a single propertyName/value pair)."))
+	 .Object(TEXT("properties"), TEXT("set_component_property: map of component property name to value (alternative to a single propertyName/value pair)."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
 	 .String(TEXT("propertyPath"), TEXT(""))
 	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))

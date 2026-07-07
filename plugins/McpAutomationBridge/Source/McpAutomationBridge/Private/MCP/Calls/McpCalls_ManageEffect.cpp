@@ -316,7 +316,7 @@ static void S_SetEmitterProperties(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .FreeformObject(TEXT("emitterProperties"), TEXT("Emitter properties to update."))
+	 .Object(TEXT("emitterProperties"), TEXT("Emitter properties to update."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 

@@ -31,7 +31,7 @@ static void S_CreateItemDataAsset(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("name"), TEXT("Name of the asset to create."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .FreeformObject(TEXT("properties"), TEXT("Properties to apply to an item data asset "
+	 .Object(TEXT("properties"), TEXT("Properties to apply to an item data asset "
 		"(create_item_data_asset, set_item_properties). Keys matching native properties are "
 		"written via reflection; other string/number/bool values are stored in the asset's "
 		"string property bag (reported as storedInPropertyBag)."))
@@ -42,7 +42,7 @@ static void S_CreateItemDataAsset(FMcpSchemaBuilder& B)
 static void S_SetItemProperties(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("itemPath"), TEXT("Path to item data asset."))
-	 .FreeformObject(TEXT("properties"), TEXT("Properties to apply to an item data asset "
+	 .Object(TEXT("properties"), TEXT("Properties to apply to an item data asset "
 		"(create_item_data_asset, set_item_properties). Keys matching native properties are "
 		"written via reflection; other string/number/bool values are stored in the asset's "
 		"string property bag (reported as storedInPropertyBag)."))

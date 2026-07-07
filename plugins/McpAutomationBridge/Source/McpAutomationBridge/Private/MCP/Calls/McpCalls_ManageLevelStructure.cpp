@@ -408,7 +408,7 @@ static void S_CreatePostProcessVolume(FMcpSchemaBuilder& B)
 		"whether the volume is enabled."))
 	 .Bool(TEXT("bUnbound"), TEXT("create_post_process_volume/add_post_process_volume: "
 		"affect the whole level regardless of extent."))
-	 .FreeformObject(TEXT("postProcessSettings"), TEXT("create_post_process_volume: post-process override "
+	 .Object(TEXT("postProcessSettings"), TEXT("create_post_process_volume: post-process override "
 		"key/values (bloomEnabled, exposureBias, vignetteIntensity, saturation, "
 		"contrast, gamma)."));
 }

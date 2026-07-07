@@ -75,7 +75,7 @@ static void S_SetMetadata(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path for metadata or validation aliases."))
 	 .String(TEXT("levelPath"), TEXT("Level asset path."))
-	 .FreeformObject(TEXT("metadata"), TEXT("Metadata key/value object."));
+	 .Object(TEXT("metadata"), TEXT("Metadata key/value object."));
 }
 
 static void S_ExportLevel(FMcpSchemaBuilder& B)

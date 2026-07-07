@@ -221,7 +221,7 @@ static void S_ConfigureBtNode(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
-	 .FreeformObject(TEXT("properties"), TEXT("Properties to set on a graph node."))
+	 .Object(TEXT("properties"), TEXT("Properties to set on a graph node."))
 	 .Required({TEXT("behaviorTreePath"), TEXT("nodeId")});
 }
 
@@ -641,7 +641,7 @@ static void S_SetNodeProperties(FMcpSchemaBuilder& B)
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("comment"), TEXT("Node comment."))
-	 .FreeformObject(TEXT("properties"), TEXT("Properties to set on a graph node."));
+	 .Object(TEXT("properties"), TEXT("Properties to set on a graph node."));
 }
 
 static void S_AddSubnode(FMcpSchemaBuilder& B)

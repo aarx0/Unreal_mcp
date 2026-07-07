@@ -133,7 +133,7 @@ static void S_SetEditorMode(FMcpSchemaBuilder& B)
 
 static void S_SetPreferences(FMcpSchemaBuilder& B)
 {
-	B.FreeformObject(TEXT("preferences"), TEXT(""))
+	B.Object(TEXT("preferences"), TEXT(""))
 	 .String(TEXT("category"), TEXT(""));
 }
 

@@ -199,7 +199,7 @@ static void S_GetMetadata(FMcpSchemaBuilder& B)
 static void S_SetMetadata(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .FreeformObject(TEXT("metadata"), TEXT(""))
+	 .Object(TEXT("metadata"), TEXT(""))
 	 .Required({TEXT("assetPath")});
 }
 

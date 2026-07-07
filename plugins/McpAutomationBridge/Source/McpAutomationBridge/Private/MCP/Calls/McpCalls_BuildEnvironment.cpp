@@ -76,7 +76,7 @@ static void S_PaintFoliage(FMcpSchemaBuilder& B)
 static void S_CreateProceduralFoliage(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("name"), TEXT("Name identifier."))
-	 .FreeformObject(TEXT("bounds"), TEXT(""))
+	 .Object(TEXT("bounds"), TEXT(""))
 	 .ArrayOfObjects(TEXT("foliageTypes"), TEXT(""))
 	 .ArrayOfObjects(TEXT("types"),
 		TEXT("create_procedural_foliage: alias of 'foliageTypes'."))
@@ -284,7 +284,7 @@ static void S_GenerateLods(FMcpSchemaBuilder& B)
 	 .Number(TEXT("lodCount"),
 		TEXT("generate_lods: number of LODs to generate (alias: numLODs)."))
 	 .Number(TEXT("numLODs"), TEXT(""))
-	 .FreeformObject(TEXT("reductionSettings"),
+	 .Object(TEXT("reductionSettings"),
 		TEXT("generate_lods: per-LOD FMeshReductionSettings overrides "
 			"(percentTriangles, percentVertices, maxDeviation, pixelError, "
 			"weldingThreshold, hardAngleThreshold, baseLODModel, "
@@ -372,7 +372,7 @@ static void S_CreateLight(FMcpSchemaBuilder& B)
 		})
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .FreeformObject(TEXT("properties"),
+	 .Object(TEXT("properties"),
 		TEXT("create_light: light component overrides (intensity, color, "
 			"castShadows, useAsAtmosphereSunLight, attenuationRadius, "
 			"innerConeAngle, outerConeAngle, sourceWidth, sourceHeight)."));

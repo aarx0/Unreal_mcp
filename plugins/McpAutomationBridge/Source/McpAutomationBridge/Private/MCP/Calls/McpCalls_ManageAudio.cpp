@@ -53,7 +53,7 @@ static void S_CreateSoundClass(FMcpSchemaBuilder& B)
 	 .String(TEXT("packagePath"), TEXT("Directory path for asset creation (alias of path)."))
 	 .String(TEXT("savePath"), TEXT("Directory path for asset creation (alias of path)."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .FreeformObject(TEXT("properties"), TEXT(""))
+	 .Object(TEXT("properties"), TEXT(""))
 	 .String(TEXT("parentClass"), TEXT(""))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation. Default true."))
 	 .Required({TEXT("name")});
