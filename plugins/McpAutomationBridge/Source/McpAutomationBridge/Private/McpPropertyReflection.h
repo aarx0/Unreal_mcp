@@ -169,6 +169,43 @@ namespace McpPropertyReflection
     }
 
     // =========================================================================
+    // Discriminated typed-value helpers (typed-params migration)
+    // =========================================================================
+
+    /** A single typed value pulled from a discriminated-union payload. */
+    struct FMcpTypedValue
+    {
+        FString Field;                 // e.g. "floatValue"
+        FString Kind;                  // "bool"|"int"|"float"|"string"|"vector"
+        TSharedPtr<FJsonValue> Json;   // value, as the correct JSON type
+        bool IsValid() const { return Json.IsValid(); }
+    };
+
+    enum class EMcpTypedValueParse : uint8 { Ok, None, Ambiguous };
+
+    /**
+     * Read exactly one typed value field from a payload:
+     * boolValue / intValue / floatValue / stringValue / vectorValue{x,y,z}.
+     * Each field is a real schema type, so it transmits correctly (no stringified
+     * blobs) and the populated field names the caller's intended type.
+     * @return Ok (Out filled) on exactly one; None on zero; Ambiguous on >1
+     *         (OutDetail lists the offending field names).
+     */
+    MCPAUTOMATIONBRIDGE_API EMcpTypedValueParse ReadDiscriminatedValue(
+        const TSharedPtr<FJsonObject>& Payload,
+        FMcpTypedValue& Out,
+        FString& OutDetail);
+
+    /**
+     * Cross-check: does the property's real reflected type match the caller's
+     * intended value kind ("bool"/"int"/"float"/"string"/"vector")? A mismatch
+     * should fail loud rather than silently coerce.
+     */
+    MCPAUTOMATIONBRIDGE_API bool PropertyMatchesValueKind(
+        const FProperty* Property,
+        const FString& Kind);
+
+    // =========================================================================
     // Struct Utilities
     // =========================================================================
 

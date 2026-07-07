@@ -1979,12 +1979,37 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetBlueprintVariables(
     return true;
   }
 
-  const TSharedPtr<FJsonObject> *VariablesPtr = nullptr;
-  if (!(Payload->TryGetObjectField(TEXT("variables"), VariablesPtr) &&
-        VariablesPtr && VariablesPtr->IsValid())) {
+  FString VariableName;
+  Payload->TryGetStringField(TEXT("variableName"), VariableName);
+  if (VariableName.IsEmpty())
+    Payload->TryGetStringField(TEXT("propertyName"), VariableName);
+  if (VariableName.IsEmpty()) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("variables object required"), nullptr);
+                              TEXT("variableName required"), nullptr);
     return true;
+  }
+
+  // Discriminated typed value (kills the old free-form `variables` map): set one
+  // variable per call, atomically, via a real typed field that transmits cleanly.
+  McpPropertyReflection::FMcpTypedValue Value;
+  FString Detail;
+  switch (McpPropertyReflection::ReadDiscriminatedValue(Payload, Value, Detail)) {
+  case McpPropertyReflection::EMcpTypedValueParse::None:
+    SendStandardErrorResponse(
+        this, Socket, RequestId, TEXT("NO_CHANGES_REQUESTED"),
+        TEXT("set exactly one typed value field: boolValue, intValue, "
+             "floatValue, stringValue, or vectorValue"),
+        nullptr);
+    return true;
+  case McpPropertyReflection::EMcpTypedValueParse::Ambiguous:
+    SendStandardErrorResponse(
+        this, Socket, RequestId, TEXT("AMBIGUOUS_VALUE"),
+        *FString::Printf(TEXT("set exactly one typed value field, got: %s"),
+                         *Detail),
+        nullptr);
+    return true;
+  case McpPropertyReflection::EMcpTypedValueParse::Ok:
+    break;
   }
 
   AActor *Found = FindActorByName(TargetName);
@@ -1994,67 +2019,41 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetBlueprintVariables(
     return true;
   }
 
-  if ((*VariablesPtr)->Values.Num() == 0) {
-    SendStandardErrorResponse(this, Socket, RequestId, TEXT("NO_CHANGES_REQUESTED"),
-                              TEXT("No variables provided to set"), nullptr);
+  FProperty *Property = Found->GetClass()->FindPropertyByName(*VariableName);
+  if (!Property) {
+    SendStandardErrorResponse(
+        this, Socket, RequestId, TEXT("PROPERTY_NOT_FOUND"),
+        *FString::Printf(TEXT("Variable not found: %s"), *VariableName), nullptr);
+    return true;
+  }
+  if (!McpPropertyReflection::PropertyMatchesValueKind(Property, Value.Kind)) {
+    SendStandardErrorResponse(
+        this, Socket, RequestId, TEXT("VALUE_TYPE_MISMATCH"),
+        *FString::Printf(TEXT("%s: you sent %sValue but the variable type is '%s'"),
+                         *VariableName, *Value.Kind, *Property->GetCPPType()),
+        nullptr);
     return true;
   }
 
-  UClass *ActorClass = Found->GetClass();
   Found->Modify();
-  TArray<FString> Applied;
-  TArray<FString> FailedFields;
-
-  for (const auto &Pair : (*VariablesPtr)->Values) {
-    const FString VariableName(*Pair.Key);
-    FProperty *Property = ActorClass->FindPropertyByName(*VariableName);
-    if (!Property) {
-      FailedFields.Add(FString::Printf(TEXT("Property not found: %s"), *VariableName));
-      continue;
-    }
-
-    FString ApplyError;
-    if (ApplyJsonValueToProperty(Found, Property, Pair.Value, ApplyError))
-      Applied.Add(VariableName);
-    else
-      FailedFields.Add(FString::Printf(TEXT("Failed to set %s: %s"), *VariableName,
-                                       *ApplyError));
-  }
-
-  if (Applied.Num() > 0) {
-    Found->MarkComponentsRenderStateDirty();
-    Found->MarkPackageDirty();
-  }
-
-  // No rollback: variables that landed stay. On any failure, report applied +
-  // failed and let the caller re-read fresh state and decide.
-  if (FailedFields.Num() > 0) {
-    TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
-    TArray<TSharedPtr<FJsonValue>> FailedArray;
-    for (const FString &F : FailedFields)
-      FailedArray.Add(MakeShared<FJsonValueString>(F));
-    Data->SetArrayField(TEXT("failedFields"), FailedArray);
-    TArray<TSharedPtr<FJsonValue>> AppliedArray;
-    for (const FString &Name : Applied)
-      AppliedArray.Add(MakeShared<FJsonValueString>(Name));
-    Data->SetArrayField(TEXT("appliedProperties"), AppliedArray);
+  FString ApplyError;
+  if (!ApplyJsonValueToProperty(Found, Property, Value.Json, ApplyError)) {
     SendStandardErrorResponse(
         this, Socket, RequestId, TEXT("PROPERTY_WRITE_FAILED"),
-        *FString::Printf(TEXT("%d of %d variables could not be set; %d applied — "
-                              "re-read actor state"),
-                         FailedFields.Num(), (*VariablesPtr)->Values.Num(),
-                         Applied.Num()),
-        Data);
+        *FString::Printf(TEXT("Failed to set %s: %s"), *VariableName, *ApplyError),
+        nullptr);
     return true;
   }
+  Found->MarkComponentsRenderStateDirty();
+  Found->MarkPackageDirty();
 
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   TArray<TSharedPtr<FJsonValue>> AppliedArray;
-  for (const FString &Name : Applied)
-    AppliedArray.Add(MakeShared<FJsonValueString>(Name));
+  AppliedArray.Add(MakeShared<FJsonValueString>(VariableName));
   Data->SetArrayField(TEXT("appliedProperties"), AppliedArray);
+  McpHandlerUtils::AddVerification(Data, Found);
 
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Variables updated"), Data);
+  SendAutomationResponse(Socket, RequestId, true, TEXT("Variable updated"), Data);
   return true;
 #else
   return false;

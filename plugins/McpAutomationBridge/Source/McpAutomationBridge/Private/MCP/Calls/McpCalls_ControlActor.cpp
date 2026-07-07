@@ -210,8 +210,16 @@ static void S_List(FMcpSchemaBuilder& B)
 static void S_SetBlueprintVariables(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .FreeformObject(TEXT("variables"), TEXT(""))
-	 .Required({TEXT("actorName"), TEXT("variables")});
+	 .String(TEXT("variableName"), TEXT("Name of the variable / actor property to set."))
+	 // Discriminated value: populate exactly ONE typed field (same shape as
+	 // set_component_property). Sets one variable per call, atomically.
+	 .Bool(TEXT("boolValue"), TEXT("Set a bool variable."))
+	 .Number(TEXT("intValue"), TEXT("Set an integer variable."))
+	 .Number(TEXT("floatValue"), TEXT("Set a float/double variable."))
+	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum variable."))
+	 .Object(TEXT("vectorValue"), TEXT("Set an FVector variable (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Required({TEXT("actorName"), TEXT("variableName")});
 }
 
 static void S_CreateSnapshot(FMcpSchemaBuilder& B)

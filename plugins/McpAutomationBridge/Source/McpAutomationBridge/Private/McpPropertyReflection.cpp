@@ -1321,4 +1321,63 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
     return false;
 }
 
+// =============================================================================
+// Discriminated typed-value helpers (typed-params migration)
+// =============================================================================
+
+EMcpTypedValueParse ReadDiscriminatedValue(const TSharedPtr<FJsonObject>& Payload,
+                                           FMcpTypedValue& Out, FString& OutDetail)
+{
+    TArray<FMcpTypedValue> Present;
+    bool B = false;
+    double N = 0.0;
+    FString S;
+    const TSharedPtr<FJsonObject>* Obj = nullptr;
+    if (Payload->TryGetBoolField(TEXT("boolValue"), B))
+        Present.Add({TEXT("boolValue"), TEXT("bool"), MakeShared<FJsonValueBoolean>(B)});
+    if (Payload->TryGetNumberField(TEXT("intValue"), N))
+        Present.Add({TEXT("intValue"), TEXT("int"), MakeShared<FJsonValueNumber>(N)});
+    if (Payload->TryGetNumberField(TEXT("floatValue"), N))
+        Present.Add({TEXT("floatValue"), TEXT("float"), MakeShared<FJsonValueNumber>(N)});
+    if (Payload->TryGetStringField(TEXT("stringValue"), S))
+        Present.Add({TEXT("stringValue"), TEXT("string"), MakeShared<FJsonValueString>(S)});
+    if (Payload->TryGetObjectField(TEXT("vectorValue"), Obj) && Obj && Obj->IsValid())
+        Present.Add({TEXT("vectorValue"), TEXT("vector"), MakeShared<FJsonValueObject>(*Obj)});
+
+    if (Present.Num() == 0)
+        return EMcpTypedValueParse::None;
+    if (Present.Num() > 1)
+    {
+        TArray<FString> Names;
+        for (const FMcpTypedValue& V : Present)
+            Names.Add(V.Field);
+        OutDetail = FString::Join(Names, TEXT(", "));
+        return EMcpTypedValueParse::Ambiguous;
+    }
+    Out = Present[0];
+    return EMcpTypedValueParse::Ok;
+}
+
+bool PropertyMatchesValueKind(const FProperty* P, const FString& Kind)
+{
+    if (Kind == TEXT("bool"))
+        return CastField<FBoolProperty>(P) != nullptr;
+    if (Kind == TEXT("int"))
+        return CastField<FIntProperty>(P) || CastField<FInt64Property>(P) ||
+               CastField<FInt16Property>(P) || CastField<FInt8Property>(P) ||
+               CastField<FUInt32Property>(P) || CastField<FByteProperty>(P);
+    if (Kind == TEXT("float"))
+        return CastField<FFloatProperty>(P) || CastField<FDoubleProperty>(P);
+    if (Kind == TEXT("string"))
+        return CastField<FStrProperty>(P) || CastField<FNameProperty>(P) ||
+               CastField<FTextProperty>(P) || CastField<FEnumProperty>(P) ||
+               CastField<FByteProperty>(P);
+    if (Kind == TEXT("vector"))
+    {
+        const FStructProperty* SP = CastField<FStructProperty>(P);
+        return SP && SP->Struct == TBaseStructure<FVector>::Get();
+    }
+    return false;
+}
+
 } // namespace McpPropertyReflection
