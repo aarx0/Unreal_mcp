@@ -135,7 +135,33 @@ tolerance on the escapes: a stringified escape is a fail-loud bug, not a rescue.
   intentionally an open key→string map). Verified: old `value` rejected per-action for
   both; typed fields accepted.
 
-## Remaining work
+- **`463b09c9`** — Phase A / batch 6: `manage_blueprint` `add_slider`/`add_spin_box`
+  value → `floatValue`. Small, because this batch surfaced a **structural constraint**
+  (below) that reshapes the rest.
+
+## KEY CONSTRAINT — shared param names must be one type per tool
+The tool schema fold is **last-write-wins**: each action's `AppendSchema` calls the
+same builder, and `AddProperty` does `SetObjectField` (McpSchemaBuilder.cpp:13), which
+overwrites. So a param name shared across a tool's actions gets ONE published type —
+if two actions declare it with different types, the client mis-serializes the losing
+action(s). Consequences:
+- **kind-named fields are collision-safe by construction** — `floatValue` is Number,
+  `colorValue` is Object, `structValue` is Object *in every action*. This is why the
+  migration renames polymorphic `value`→kind-fields rather than typing `value` in place.
+- **Semantic-named polymorphic params collide** — e.g. `size` is Object for `set_size`
+  but Number for HUD icon widgets. Typing them in place breaks the fold. They need a
+  **rename to distinct names** (e.g. HUD `size`→`iconSize`) — an API-shape decision.
+  (Batch 6 reverted a `size` attempt after catching this.)
+
+## Remaining work — needs decisions (paused here for Aaron)
+0. **`size`→`iconSize` rename?** HUD `add_crosshair/add_minimap/add_ammo_counter` `size`
+   (a Number) collides with `set_size` `size` ({x,y} Object). Rename the HUD ones to a
+   distinct name to make both typable? (small public-API change).
+0b. **manage_blueprint `value` setters vs. the legacy dispatcher.** `set_default`,
+   `set_scs_property`, `set_node_property`, `set_pin_default_value` read `value`
+   polymorphically and are entangled with the recursive `HandleBlueprintAction`
+   (the pending "delete legacy dispatchers" ③ workstream). Convert in place now, or
+   fold into that refactor?
 1. **Other tools' free-form value params** — grep found `value` reads in
    manage_blueprint (BlueprintHandlers/BlueprintGraphHandlers), manage_effect
    (EffectHandlers, incl. array/object/bool branches), manage_sequence
