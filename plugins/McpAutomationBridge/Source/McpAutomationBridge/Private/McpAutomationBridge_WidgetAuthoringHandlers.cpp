@@ -4478,7 +4478,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString AnimationName = GetJsonStringField(Payload, TEXT("animationName"));
         double Time = GetJsonNumberField(Payload, TEXT("time"), 0.0);
-        double Value = GetJsonNumberField(Payload, TEXT("value"), 1.0);
+        double Value = GetJsonNumberField(Payload, TEXT("floatValue"), 1.0);
         
         if (WidgetPath.IsEmpty() || AnimationName.IsEmpty())
         {

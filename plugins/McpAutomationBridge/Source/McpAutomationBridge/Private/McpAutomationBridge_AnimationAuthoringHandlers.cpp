@@ -979,7 +979,7 @@ static TSharedPtr<FJsonObject> AnimAuthoringSetCurveKey(const TSharedPtr<FJsonOb
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
         FString CurveName = GetJsonStringField(Params, TEXT("curveName"), TEXT(""));
         int32 Frame = static_cast<int32>(GetJsonNumberField(Params, TEXT("frame"), 0));
-        float Value = static_cast<float>(GetJsonNumberField(Params, TEXT("value"), 0.0));
+        float Value = static_cast<float>(GetJsonNumberField(Params, TEXT("floatValue"), 0.0));
         bool bCreateIfMissing = GetJsonBoolField(Params, TEXT("createIfMissing"), true);
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
@@ -2188,24 +2188,18 @@ static TSharedPtr<FJsonObject> AnimAuthoringAddBlendSample(const TSharedPtr<FJso
         
         // Get sample value
         FVector SampleValue = FVector::ZeroVector;
-        if (Params->HasField(TEXT("sampleValue")))
+        double SampleNum = 0.0;
+        const TSharedPtr<FJsonObject>* SampleObjPtr = nullptr;
+        if (Params->TryGetNumberField(TEXT("floatValue"), SampleNum))
         {
-            TSharedPtr<FJsonValue> SampleVal = Params->TryGetField(TEXT("sampleValue"));
-            if (SampleVal.IsValid())
-            {
-                if (SampleVal->Type == EJson::Number)
-                {
-                    // 1D blend space
-                    SampleValue.X = SampleVal->AsNumber();
-                }
-                else if (SampleVal->Type == EJson::Object)
-                {
-                    // 2D blend space
-                    TSharedPtr<FJsonObject> SampleObj = SampleVal->AsObject();
-                    SampleValue.X = GetJsonNumberField(SampleObj, TEXT("x"), 0.0);
-                    SampleValue.Y = GetJsonNumberField(SampleObj, TEXT("y"), 0.0);
-                }
-            }
+            // 1D blend space
+            SampleValue.X = SampleNum;
+        }
+        else if (Params->TryGetObjectField(TEXT("vector2Value"), SampleObjPtr) && SampleObjPtr && (*SampleObjPtr).IsValid())
+        {
+            // 2D blend space
+            SampleValue.X = GetJsonNumberField(*SampleObjPtr, TEXT("x"), 0.0);
+            SampleValue.Y = GetJsonNumberField(*SampleObjPtr, TEXT("y"), 0.0);
         }
         
         // Add sample

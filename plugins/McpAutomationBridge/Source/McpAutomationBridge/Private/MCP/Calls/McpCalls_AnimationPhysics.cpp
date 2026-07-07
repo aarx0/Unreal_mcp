@@ -223,7 +223,7 @@ static void S_SetCurveKey(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
 	 .String(TEXT("curveName"), TEXT(""))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Number(TEXT("floatValue"), TEXT("Curve key value."))
 	 .Number(TEXT("frame"), TEXT(""))
 	 .Bool(TEXT("createIfMissing"), TEXT("set_curve_key: create the curve if it doesn't exist yet (default true)."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
@@ -400,7 +400,9 @@ static void S_AddBlendSample(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
 	 .String(TEXT("animationPath"), TEXT("add_montage_slot/add_blend_sample/add_aim_offset_sample: animation sequence asset path."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
-	 .FreeformObject(TEXT("sampleValue"), TEXT("add_blend_sample: sample coordinate — a number for 1D blend spaces or {x, y} for 2D."))
+	 .Number(TEXT("floatValue"), TEXT("add_blend_sample: 1D blend space sample coordinate."))
+	 .Object(TEXT("vector2Value"), TEXT("add_blend_sample: 2D blend space sample coordinate (x, y)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")); })
 	 .Required({TEXT("assetPath"), TEXT("animationPath")});
 }
 

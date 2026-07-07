@@ -564,7 +564,7 @@ static void S_SetBlackboardValue(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("blackboardPath"), TEXT("Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned)."))
 	 .String(TEXT("keyName"), TEXT("Name of the key."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .String(TEXT("stringValue"), TEXT("Blackboard value, parsed per key type (bool true/false, int, float, vector \"X= Y= Z=\", name)."))
 	 .Required({TEXT("blackboardPath"), TEXT("keyName")});
 }
 

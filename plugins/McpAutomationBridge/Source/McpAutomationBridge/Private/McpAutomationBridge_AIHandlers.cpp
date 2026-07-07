@@ -4237,7 +4237,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetBlackboardValue(
     // Find the key and set its value
     bool bKeyFound = false;
     bool bValueSet = false;
-    FString ValueStr = GetJsonStringField(Payload, TEXT("value"));
+    FString ValueStr = GetJsonStringField(Payload, TEXT("stringValue"));
     
     for (FBlackboardEntry& Key : BBData->Keys)
     {

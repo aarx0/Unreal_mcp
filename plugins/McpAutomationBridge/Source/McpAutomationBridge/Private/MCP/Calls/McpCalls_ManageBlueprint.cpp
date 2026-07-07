@@ -1146,7 +1146,7 @@ static void S_AddAnimationKeyframe(FMcpSchemaBuilder& B)
 	B.String(TEXT("widgetPath"), TEXT("Widget Blueprint asset path (widget-authoring actions)."))
 	 .String(TEXT("animationName"), TEXT("Widget animation name (create_widget_animation default NewAnimation; add_animation_track/get_animation_info/delete_animation/etc.)."))
 	 .Number(TEXT("time"), TEXT("add_animation_keyframe: keyframe time in seconds."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .Number(TEXT("floatValue"), TEXT("add_animation_keyframe: keyframe value."))
 	 .Required({TEXT("widgetPath"), TEXT("animationName")});
 }
 
