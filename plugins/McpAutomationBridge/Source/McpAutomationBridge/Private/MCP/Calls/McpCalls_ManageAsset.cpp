@@ -135,9 +135,22 @@ static void S_GetAssetProperties(FMcpSchemaBuilder& B)
 static void S_SetAssetProperty(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("propertyName"), TEXT("set_asset_property: name of the reflected UPROPERTY to write."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
-	 .Required({TEXT("assetPath"), TEXT("propertyName"), TEXT("value")});
+	 .String(TEXT("propertyName"), TEXT("set_asset_property: reflected UPROPERTY name or dotted/indexed path (e.g. Mappings[0].Triggers[0])."))
+	 // Discriminated value: populate exactly ONE typed field matching the target
+	 // property's reflected type. structValue/arrayValue are the escape for structs,
+	 // instanced subobjects ({"__class",...}) and arrays; ApplyJsonValueToProperty
+	 // is the gate for whether the value actually fits the resolved property.
+	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
+	 .Number(TEXT("intValue"), TEXT("Set an integer property."))
+	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
+	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum / object-reference-by-path property."))
+	 .Object(TEXT("colorValue"), TEXT("Set an FLinearColor/FColor property (r,g,b,a, 0..1)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
+	 .Object(TEXT("vectorValue"), TEXT("Set an FVector property (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("structValue"), TEXT("Set a struct / instanced subobject ({\"__class\",...}) / map property."))
+	 .Array(TEXT("arrayValue"), TEXT("Set an array property (items are structs/instanced objects)."), TEXT("object"))
+	 .Required({TEXT("assetPath"), TEXT("propertyName")});
 }
 
 static void S_GetSourceControlState(FMcpSchemaBuilder& B)

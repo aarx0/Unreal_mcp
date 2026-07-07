@@ -2439,10 +2439,31 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
                            TEXT("INVALID_ARGUMENT"));
     return true;
   }
-  if (!Payload->HasField(TEXT("value"))) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("value required"),
-                           nullptr, TEXT("INVALID_ARGUMENT"));
+  // Discriminated typed value (replaces the free-form `value`): read exactly one
+  // typed field. The property path can resolve to any reflected type, so
+  // ApplyJsonValueToProperty (below) is the authoritative gate for whether the
+  // value fits -- no up-front kind cross-check, which would false-reject the
+  // lenient coercions this general setter supports (string->object-path, etc.).
+  McpPropertyReflection::FMcpTypedValue TypedValue;
+  FString ValueParseDetail;
+  switch (McpPropertyReflection::ReadDiscriminatedValue(Payload, TypedValue,
+                                                        ValueParseDetail)) {
+  case McpPropertyReflection::EMcpTypedValueParse::None:
+    SendAutomationResponse(
+        Socket, RequestId, false,
+        TEXT("set exactly one typed value field: boolValue, intValue, floatValue, "
+             "stringValue, colorValue, vectorValue, structValue, or arrayValue"),
+        nullptr, TEXT("NO_CHANGES_REQUESTED"));
     return true;
+  case McpPropertyReflection::EMcpTypedValueParse::Ambiguous:
+    SendAutomationResponse(
+        Socket, RequestId, false,
+        *FString::Printf(TEXT("set exactly one typed value field, got: %s"),
+                         *ValueParseDetail),
+        nullptr, TEXT("AMBIGUOUS_VALUE"));
+    return true;
+  case McpPropertyReflection::EMcpTypedValueParse::Ok:
+    break;
   }
 
   FString ResolvedPath;
@@ -2469,7 +2490,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
   }
   FProperty *Prop = Resolved.Prop;
 
-  const TSharedPtr<FJsonValue> ValueField = Payload->TryGetField(TEXT("value"));
+  const TSharedPtr<FJsonValue> ValueField = TypedValue.Json;
   Asset->Modify();
   if (Resolved.OwnerObject && Resolved.OwnerObject != Asset) {
     Resolved.OwnerObject->Modify();
