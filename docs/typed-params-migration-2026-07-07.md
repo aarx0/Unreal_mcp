@@ -122,11 +122,19 @@ tolerance on the escapes: a stringified escape is a fail-loud bug, not a rescue.
   `{"__class":"InputTriggerHold",…}` structValue transmitted+read (reaches asset
   resolve); NO_CHANGES / AMBIGUOUS handled; published `structValue type=object`.
 
-Remaining in manage_asset: **Category B/C** `reductionSettings` (em-dash, exact
-read) + `luminanceFactors` (desat handler); **Category D** `find_by_tag` value +
-`add_material_parameter` value + `set_node_value` value + `rowData`×2 (DataTable);
-**Category E** `metadata` (keep). Then other tools (manage_blueprint etc.) + Phase
-B (boundary type-check + delete string-reparse) + Phase C (nested strict import).
+- **`655e7fe9`** — Phase A / batch 4: `rowData`×2 → `Object` escape; `reductionSettings`
+  → `Object` (8 fields; was failing loud when stringified); `luminanceFactors` →
+  `Object{r,g,b}` (unread/allowlisted, typed forward); removed **dead** `find_by_tag`
+  `value` (handler never read it → now rejected). All schema-only. Verified: dead
+  value rejected per-action; published `type=object` with sub-props.
+
+Remaining in **manage_asset**: **Category D** `add_material_parameter` value (4-way
+polymorphic: scalar→float / vector→color / texture→string / switch→bool, driven by
+`parameterType`) + `set_node_value` value (scalar float, but messy handler w/
+r/g/b/a/constA/constB companions + error texts) — both need per-handler work, neither
+is a live bug. **Category E** `metadata` (keep). Then **other tools** (manage_blueprint
+16 params, etc.) + **Phase B** (boundary type-check + delete string-reparse) + **Phase
+C** (nested strict struct import).
 
 ## Pending re-publish
 add_component's decl change is Live-Coding-patched but not yet re-published to the
