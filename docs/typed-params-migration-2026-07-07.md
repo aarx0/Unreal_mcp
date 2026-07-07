@@ -105,10 +105,17 @@ tolerance on the escapes: a stringified escape is a fail-loud bug, not a rescue.
   no-op (vector color object stringified → handler fell back to white). Verified
   via direct HTTP: old `value` rejected per-action; typed fields accepted (reach
   asset load); missing value fails loud.
+- **`dde3d63b`** — Phase A / batch 2: `add_scalar/vector/static_switch_parameter`
+  `defaultValue` → `floatValue`/`colorValue`/`boolValue` (optional). Plus Category
+  B/C schema-only: `startColor`/`endColor`/`primaryColor`/`secondaryColor`/
+  `pagination` `FreeformObject` → declared `Object` shapes (handlers already read
+  them as objects; the stringified freeform silently fell back to defaults —
+  `reductionSettings` even fails loud "must be a JSON object"). Verified: old
+  `defaultValue` rejected; published schema shows `type=object` with sub-props.
 
-Remaining work tracked in "Settled plan" above (Phase A cont.: `add_*` param
-defaults + Category B colors + Category C bounded shapes + Category D general
-setters onto `structValue`/`arrayValue`).
+Remaining in manage_asset: **Category B/C** `reductionSettings` (em-dash, exact
+read) + `luminanceFactors` (desat handler); **Category D** `value`×4 + `rowData`×2
+→ `structValue`; **Category E** `metadata` (keep). Then other tools per the plan.
 
 ## Pending re-publish
 add_component's decl change is Live-Coding-patched but not yet re-published to the
