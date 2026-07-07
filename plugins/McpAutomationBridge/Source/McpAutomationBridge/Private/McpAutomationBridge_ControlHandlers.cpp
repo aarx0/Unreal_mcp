@@ -1245,26 +1245,62 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetComponentProperties(
     return true;
   }
 
-  TSharedPtr<FJsonObject> PropertiesObject;
-  const TSharedPtr<FJsonObject> *PropertiesPtr = nullptr;
-  if (Payload->TryGetObjectField(TEXT("properties"), PropertiesPtr) &&
-      PropertiesPtr && PropertiesPtr->IsValid()) {
-    PropertiesObject = *PropertiesPtr;
-  } else {
-    FString PropertyName;
-    Payload->TryGetStringField(TEXT("propertyName"), PropertyName);
-    if (PropertyName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("propertyPath"), PropertyName);
-    }
-    const TSharedPtr<FJsonValue> ValueField = Payload->TryGetField(TEXT("value"));
-    if (PropertyName.IsEmpty() || !ValueField.IsValid()) {
-      SendStandardErrorResponse(this, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                                TEXT("properties object or propertyName/propertyPath and value required"), nullptr);
-      return true;
-    }
-    PropertiesObject = MakeShared<FJsonObject>();
-    PropertiesObject->SetField(PropertyName, ValueField);
+  FString PropertyName;
+  Payload->TryGetStringField(TEXT("propertyName"), PropertyName);
+  if (PropertyName.IsEmpty())
+    Payload->TryGetStringField(TEXT("propertyPath"), PropertyName);
+  if (PropertyName.IsEmpty()) {
+    SendStandardErrorResponse(this, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
+                              TEXT("propertyName (or propertyPath) required"), nullptr);
+    return true;
   }
+
+  // Discriminated value: exactly one typed field carries both the value and the
+  // caller's intended type. Each field is a real schema type, so it transmits
+  // correctly (no stringified blobs) — vectorValue arrives as a real object.
+  struct FTypedValue {
+    const TCHAR *Field;
+    const TCHAR *Kind;
+    TSharedPtr<FJsonValue> Json;
+  };
+  TArray<FTypedValue> Present;
+  {
+    bool B = false;
+    double N = 0.0;
+    FString S;
+    const TSharedPtr<FJsonObject> *Obj = nullptr;
+    if (Payload->TryGetBoolField(TEXT("boolValue"), B))
+      Present.Add({TEXT("boolValue"), TEXT("bool"), MakeShared<FJsonValueBoolean>(B)});
+    if (Payload->TryGetNumberField(TEXT("intValue"), N))
+      Present.Add({TEXT("intValue"), TEXT("int"), MakeShared<FJsonValueNumber>(N)});
+    if (Payload->TryGetNumberField(TEXT("floatValue"), N))
+      Present.Add({TEXT("floatValue"), TEXT("float"), MakeShared<FJsonValueNumber>(N)});
+    if (Payload->TryGetStringField(TEXT("stringValue"), S))
+      Present.Add({TEXT("stringValue"), TEXT("string"), MakeShared<FJsonValueString>(S)});
+    if (Payload->TryGetObjectField(TEXT("vectorValue"), Obj) && Obj && Obj->IsValid())
+      Present.Add({TEXT("vectorValue"), TEXT("vector"), MakeShared<FJsonValueObject>(*Obj)});
+  }
+
+  if (Present.Num() == 0) {
+    SendStandardErrorResponse(
+        this, Socket, RequestId, TEXT("NO_CHANGES_REQUESTED"),
+        TEXT("set exactly one typed value field: boolValue, intValue, "
+             "floatValue, stringValue, or vectorValue"),
+        nullptr);
+    return true;
+  }
+  if (Present.Num() > 1) {
+    TArray<FString> Names;
+    for (const FTypedValue &V : Present)
+      Names.Add(V.Field);
+    SendStandardErrorResponse(
+        this, Socket, RequestId, TEXT("AMBIGUOUS_VALUE"),
+        *FString::Printf(TEXT("set exactly one typed value field, got %d: %s"),
+                         Present.Num(), *FString::Join(Names, TEXT(", "))),
+        nullptr);
+    return true;
+  }
+  const FTypedValue &Value = Present[0];
 
   AActor *Found = FindActorByName(TargetName);
   if (!Found) {
@@ -1273,153 +1309,127 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetComponentProperties(
     return true;
   }
 
-  // CRITICAL FIX: Use FindComponentByName helper which supports fuzzy matching
   UActorComponent *TargetComponent = FindComponentByName(Found, ComponentName);
-
   if (!TargetComponent) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("COMPONENT_NOT_FOUND"),
                               TEXT("Component not found"), nullptr);
     return true;
   }
 
-  if (PropertiesObject->Values.Num() == 0) {
-    SendStandardErrorResponse(this, Socket, RequestId, TEXT("NO_CHANGES_REQUESTED"),
-                              TEXT("No properties provided to set"), nullptr);
-    return true;
-  }
+  // Cross-check helper: the caller's intended type (which typed field they set)
+  // must match a property's real reflected type. A mismatch fails loud.
+  auto MatchesKind = [](FProperty *P, const FString &Kind) -> bool {
+    if (Kind == TEXT("bool"))
+      return CastField<FBoolProperty>(P) != nullptr;
+    if (Kind == TEXT("int"))
+      return CastField<FIntProperty>(P) || CastField<FInt64Property>(P) ||
+             CastField<FInt16Property>(P) || CastField<FInt8Property>(P) ||
+             CastField<FUInt32Property>(P) || CastField<FByteProperty>(P);
+    if (Kind == TEXT("float"))
+      return CastField<FFloatProperty>(P) || CastField<FDoubleProperty>(P);
+    if (Kind == TEXT("string"))
+      return CastField<FStrProperty>(P) || CastField<FNameProperty>(P) ||
+             CastField<FTextProperty>(P) || CastField<FEnumProperty>(P) ||
+             CastField<FByteProperty>(P);
+    if (Kind == TEXT("vector")) {
+      FStructProperty *SP = CastField<FStructProperty>(P);
+      return SP && SP->Struct == TBaseStructure<FVector>::Get();
+    }
+    return false;
+  };
 
-  TArray<FString> AppliedProperties;
-  TArray<FString> FailedFields;
-  UClass *ComponentClass = TargetComponent->GetClass();
+  const FString ValueKind(Value.Kind);
   TargetComponent->Modify();
+  bool bApplied = false;
 
-  // PRIORITY: Apply Mobility FIRST.
-  // Physics simulation fails if the component is generic "Static".
-  // Scan for Mobility key case-insensitively to ensure we find it regardless of
-  // JSON casing
-  const TSharedPtr<FJsonValue> *MobilityVal = nullptr;
-  FString MobilityKey;
-  for (const auto &Pair : PropertiesObject->Values) {
-    const FString PropertyName(*Pair.Key);
-    if (PropertyName.Equals(TEXT("Mobility"), ESearchCase::IgnoreCase)) {
-      MobilityVal = &Pair.Value;
-      MobilityKey = PropertyName;
-      break;
+  // Special-cased setters handled BEFORE generic reflection: SimulatePhysics
+  // lives inside BodyInstance (no direct FProperty), and Mobility needs component
+  // re-registration -- both must go through their real setters.
+  if (PropertyName.Equals(TEXT("SimulatePhysics"), ESearchCase::IgnoreCase) ||
+      PropertyName.Equals(TEXT("bSimulatePhysics"), ESearchCase::IgnoreCase)) {
+    UPrimitiveComponent *Prim = Cast<UPrimitiveComponent>(TargetComponent);
+    if (!Prim || ValueKind != TEXT("bool")) {
+      SendStandardErrorResponse(
+          this, Socket, RequestId, TEXT("VALUE_TYPE_MISMATCH"),
+          TEXT("SimulatePhysics expects boolValue on a primitive component"),
+          nullptr);
+      return true;
     }
+    bool bSim = false;
+    Value.Json->TryGetBool(bSim);
+    Prim->SetSimulatePhysics(bSim);
+    bApplied = true;
+  } else if (PropertyName.Equals(TEXT("Mobility"), ESearchCase::IgnoreCase)) {
+    USceneComponent *SC = Cast<USceneComponent>(TargetComponent);
+    if (!SC || ValueKind != TEXT("string")) {
+      SendStandardErrorResponse(
+          this, Socket, RequestId, TEXT("VALUE_TYPE_MISMATCH"),
+          TEXT("Mobility expects stringValue (Static, Stationary, or Movable) on "
+               "a scene component"),
+          nullptr);
+      return true;
+    }
+    const int64 MobVal =
+        StaticEnum<EComponentMobility::Type>()->GetValueByNameString(
+            Value.Json->AsString());
+    if (MobVal == INDEX_NONE) {
+      SendStandardErrorResponse(
+          this, Socket, RequestId, TEXT("VALUE_TYPE_MISMATCH"),
+          *FString::Printf(TEXT("Mobility: '%s' is not valid (Static, Stationary, "
+                                "Movable)"),
+                           *Value.Json->AsString()),
+          nullptr);
+      return true;
+    }
+    SC->SetMobility((EComponentMobility::Type)MobVal);
+    bApplied = true;
   }
 
-  if (MobilityVal) {
-    if (USceneComponent *SC = Cast<USceneComponent>(TargetComponent)) {
-      FString EnumVal;
-      if ((*MobilityVal)->TryGetString(EnumVal)) {
-        // Parse enum string
-        int64 Val =
-            StaticEnum<EComponentMobility::Type>()->GetValueByNameString(
-                EnumVal);
-        if (Val != INDEX_NONE) {
-          SC->SetMobility((EComponentMobility::Type)Val);
-		AppliedProperties.Add(MobilityKey);
-		}
-	} else {
-		double Val;
-		if ((*MobilityVal)->TryGetNumber(Val)) {
-			SC->SetMobility((EComponentMobility::Type)(int32)Val);
-			AppliedProperties.Add(MobilityKey);
-		}
-      }
-    }
-  }
-
-  // Mobility was requested but no branch above applied it (not a scene
-  // component, or an unparseable value) → record a failure so all-or-nothing
-  // rolls back instead of silently dropping the request.
-  if (MobilityVal && !AppliedProperties.Contains(MobilityKey)) {
-    FailedFields.Add(FString::Printf(
-        TEXT("%s: not applied (component is not a scene component or the value "
-             "could not be parsed as a mobility)"),
-        *MobilityKey));
-  }
-
-  for (const auto &Pair : PropertiesObject->Values) {
-    const FString PropertyName(*Pair.Key);
-    // Skip Mobility as we already handled it
-    if (PropertyName.Equals(TEXT("Mobility"), ESearchCase::IgnoreCase))
-      continue;
-
-    // Special handling for SimulatePhysics
-    if (PropertyName.Equals(TEXT("SimulatePhysics"), ESearchCase::IgnoreCase) ||
-        PropertyName.Equals(TEXT("bSimulatePhysics"), ESearchCase::IgnoreCase)) {
-      if (UPrimitiveComponent *Prim =
-              Cast<UPrimitiveComponent>(TargetComponent)) {
-        bool bVal = false;
-        if (Pair.Value->TryGetBool(bVal)) {
-			Prim->SetSimulatePhysics(bVal);
-				AppliedProperties.Add(PropertyName);
-				continue;
-        }
-      }
-    }
-
-    FProperty *Property = ComponentClass->FindPropertyByName(*PropertyName);
+  // Generic reflection path for everything else.
+  if (!bApplied) {
+    FProperty *Property =
+        TargetComponent->GetClass()->FindPropertyByName(*PropertyName);
     if (!Property) {
-      FailedFields.Add(
-          FString::Printf(TEXT("Property not found: %s"), *PropertyName));
-      continue;
+      SendStandardErrorResponse(
+          this, Socket, RequestId, TEXT("PROPERTY_NOT_FOUND"),
+          *FString::Printf(TEXT("Property not found: %s"), *PropertyName), nullptr);
+      return true;
+    }
+    if (!MatchesKind(Property, ValueKind)) {
+      SendStandardErrorResponse(
+          this, Socket, RequestId, TEXT("VALUE_TYPE_MISMATCH"),
+          *FString::Printf(
+              TEXT("%s: you sent %sValue but the property type is '%s'"),
+              *PropertyName, Value.Kind, *Property->GetCPPType()),
+          nullptr);
+      return true;
     }
     FString ApplyError;
-    if (ApplyJsonValueToProperty(TargetComponent, Property, Pair.Value,
-                                 ApplyError))
-      AppliedProperties.Add(PropertyName);
-    else
-      FailedFields.Add(FString::Printf(TEXT("Failed to set %s: %s"),
-                                       *PropertyName, *ApplyError));
-  }
-
-  // Refresh render/transform state for whatever actually applied.
-  if (AppliedProperties.Num() > 0) {
-    if (USceneComponent *SceneComponent =
-            Cast<USceneComponent>(TargetComponent)) {
-      SceneComponent->MarkRenderStateDirty();
-      SceneComponent->UpdateComponentToWorld();
+    if (!ApplyJsonValueToProperty(TargetComponent, Property, Value.Json,
+                                  ApplyError)) {
+      SendStandardErrorResponse(
+          this, Socket, RequestId, TEXT("PROPERTY_WRITE_FAILED"),
+          *FString::Printf(TEXT("Failed to set %s: %s"), *PropertyName, *ApplyError),
+          nullptr);
+      return true;
     }
-    TargetComponent->MarkPackageDirty();
   }
 
-  // No rollback: writes that landed stay. On any failure, report which
-  // properties applied and which failed so the caller can re-read fresh state
-  // and decide how to proceed — no revert machinery to itself go wrong.
-  if (FailedFields.Num() > 0) {
-    TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
-    TArray<TSharedPtr<FJsonValue>> FailedArray;
-    for (const FString &F : FailedFields)
-      FailedArray.Add(MakeShared<FJsonValueString>(F));
-    Data->SetArrayField(TEXT("failedFields"), FailedArray);
-
-    TArray<TSharedPtr<FJsonValue>> AppliedArray;
-    for (const FString &PropName : AppliedProperties)
-      AppliedArray.Add(MakeShared<FJsonValueString>(PropName));
-    Data->SetArrayField(TEXT("appliedProperties"), AppliedArray);
-
-    SendStandardErrorResponse(
-        this, Socket, RequestId, TEXT("PROPERTY_WRITE_FAILED"),
-        *FString::Printf(TEXT("%d of %d component properties could not be set; "
-                              "%d applied — re-read component state"),
-                         FailedFields.Num(), PropertiesObject->Values.Num(),
-                         AppliedProperties.Num()),
-        Data);
-    return true;
+  if (USceneComponent *SceneComponent =
+          Cast<USceneComponent>(TargetComponent)) {
+    SceneComponent->MarkRenderStateDirty();
+    SceneComponent->UpdateComponentToWorld();
   }
+  TargetComponent->MarkPackageDirty();
 
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   TArray<TSharedPtr<FJsonValue>> PropsArray;
-  for (const FString &PropName : AppliedProperties)
-    PropsArray.Add(MakeShared<FJsonValueString>(PropName));
+  PropsArray.Add(MakeShared<FJsonValueString>(PropertyName));
   Data->SetArrayField(TEXT("appliedProperties"), PropsArray);
-
   McpHandlerUtils::AddVerification(Data, Found);
 
   SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Component properties updated"), Data);
+                         TEXT("Component property updated"), Data);
   return true;
 #else
   return false;
@@ -1984,16 +1994,22 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetBlueprintVariables(
     return true;
   }
 
+  if ((*VariablesPtr)->Values.Num() == 0) {
+    SendStandardErrorResponse(this, Socket, RequestId, TEXT("NO_CHANGES_REQUESTED"),
+                              TEXT("No variables provided to set"), nullptr);
+    return true;
+  }
+
   UClass *ActorClass = Found->GetClass();
   Found->Modify();
   TArray<FString> Applied;
-  TArray<FString> Warnings;
+  TArray<FString> FailedFields;
 
   for (const auto &Pair : (*VariablesPtr)->Values) {
     const FString VariableName(*Pair.Key);
     FProperty *Property = ActorClass->FindPropertyByName(*VariableName);
     if (!Property) {
-      Warnings.Add(FString::Printf(TEXT("Property not found: %s"), *VariableName));
+      FailedFields.Add(FString::Printf(TEXT("Property not found: %s"), *VariableName));
       continue;
     }
 
@@ -2001,23 +2017,44 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetBlueprintVariables(
     if (ApplyJsonValueToProperty(Found, Property, Pair.Value, ApplyError))
       Applied.Add(VariableName);
     else
-      Warnings.Add(FString::Printf(TEXT("Failed to set %s: %s"), *VariableName,
-                                   *ApplyError));
+      FailedFields.Add(FString::Printf(TEXT("Failed to set %s: %s"), *VariableName,
+                                       *ApplyError));
   }
 
-  Found->MarkComponentsRenderStateDirty();
-  Found->MarkPackageDirty();
-
-  TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   if (Applied.Num() > 0) {
+    Found->MarkComponentsRenderStateDirty();
+    Found->MarkPackageDirty();
+  }
+
+  // No rollback: variables that landed stay. On any failure, report applied +
+  // failed and let the caller re-read fresh state and decide.
+  if (FailedFields.Num() > 0) {
+    TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
+    TArray<TSharedPtr<FJsonValue>> FailedArray;
+    for (const FString &F : FailedFields)
+      FailedArray.Add(MakeShared<FJsonValueString>(F));
+    Data->SetArrayField(TEXT("failedFields"), FailedArray);
     TArray<TSharedPtr<FJsonValue>> AppliedArray;
     for (const FString &Name : Applied)
       AppliedArray.Add(MakeShared<FJsonValueString>(Name));
-    Data->SetArrayField(TEXT("updated"), AppliedArray);
+    Data->SetArrayField(TEXT("appliedProperties"), AppliedArray);
+    SendStandardErrorResponse(
+        this, Socket, RequestId, TEXT("PROPERTY_WRITE_FAILED"),
+        *FString::Printf(TEXT("%d of %d variables could not be set; %d applied — "
+                              "re-read actor state"),
+                         FailedFields.Num(), (*VariablesPtr)->Values.Num(),
+                         Applied.Num()),
+        Data);
+    return true;
   }
 
-  SendStandardSuccessResponse(this, Socket, RequestId,
-                              TEXT("Variables updated"), Data, Warnings);
+  TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
+  TArray<TSharedPtr<FJsonValue>> AppliedArray;
+  for (const FString &Name : Applied)
+    AppliedArray.Add(MakeShared<FJsonValueString>(Name));
+  Data->SetArrayField(TEXT("appliedProperties"), AppliedArray);
+
+  SendAutomationResponse(Socket, RequestId, true, TEXT("Variables updated"), Data);
   return true;
 #else
   return false;

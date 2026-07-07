@@ -132,10 +132,18 @@ static void S_SetComponentProperty(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
-	 .FreeformObject(TEXT("properties"), TEXT(""))
-	 .String(TEXT("propertyName"), TEXT("Name of the property."))
-	 .String(TEXT("propertyPath"), TEXT("Dotted path to the property (alternative to propertyName)."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .String(TEXT("propertyName"), TEXT("Name of the property to set."))
+	 .String(TEXT("propertyPath"), TEXT("Dotted path to a scalar leaf (alternative to propertyName)."))
+	 // Discriminated value: populate exactly ONE typed field. Each field is both a
+	 // type tag and a real schema type, so it transmits correctly -- vectorValue
+	 // arrives as a real object, never a stringified blob. The server cross-checks
+	 // the populated field against the property's reflected type.
+	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
+	 .Number(TEXT("intValue"), TEXT("Set an integer property."))
+	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
+	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum property."))
+	 .Object(TEXT("vectorValue"), TEXT("Set an FVector property (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
 	 .Required({TEXT("actorName"), TEXT("componentName")});
 }
 
