@@ -9,13 +9,8 @@ Legend: ✅ shipped · 🟢 decided, ready to run · 🟡 needs an Aaron decisio
 - **schema-from-decls Phase 2** — all 22 tools single-source schema+validation (`b1c73a20`).
 - **Dead-code removal** — 31 unreachable handlers, −4,638 lines (`f395330b`).
 - **system_control duplicate drops** — create_widget/add_widget_child/screenshot/show_stats (`ee6e317d`).
-
-## 🟢 Ready to run (decided)
-- **Rip scaffolds + no-ops** — ~40 var-scaffolds + ~15 silent no-ops. Keep the two real
-  component-builders (`setup_hitbox_component`, `setup_attachment_system`). Closes the older
-  TODO items for interaction's 5 scaffolds + networking's 11 no-ops. Evidence:
-  [`compound-action-triage-2026-07-06.md`](compound-action-triage-2026-07-06.md).
-  **Blocking Q:** scope = both (~55) or scaffolds-only (~40)?
+- **Scaffold + no-op rip** — 55 actions removed (~5k lines), `7c6947df`. Kept the two real
+  component-builders. Closed interaction's 5 scaffolds + networking's 11 no-ops.
 
 ## 🟡 Handler-side sequence (the three you set)
 - **① dead code** — done (above).
