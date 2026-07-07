@@ -721,24 +721,6 @@ static void S_AddEventReceiver(FMcpSchemaBuilder& B)
 	 .Required({TEXT("systemPath"), TEXT("emitterName"), TEXT("eventName")});
 }
 
-static void S_ConfigureEventPayload(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Name identifier."))
-	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
-	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset.Asset)."))
-	 .String(TEXT("systemPath"), TEXT("Niagara system asset path."))
-	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
-	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
-	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .String(TEXT("eventName"), TEXT("Name of the event."))
-	 .ArrayOfObjects(TEXT("eventPayload"), TEXT("Niagara event payload attributes."),
-		[](FMcpSchemaBuilder& S) {
-		S.String(TEXT("name"), TEXT("Attribute name."))
-		 .String(TEXT("type"), TEXT("Attribute Niagara type."));
-	})
-	 .Required({TEXT("systemPath"), TEXT("eventName")});
-}
 
 static void S_EnableGpuSimulation(FMcpSchemaBuilder& B)
 {
@@ -920,7 +902,6 @@ MCP_ME_NA_CALL(AddAudioSpectrumDataInterface, "add_audio_spectrum_data_interface
 MCP_ME_NA_CALL(AddCollisionQueryDataInterface, "add_collision_query_data_interface", EMcpCallFlags::Mutating)
 MCP_ME_NA_CALL(AddEventGenerator, "add_event_generator", EMcpCallFlags::Mutating)
 MCP_ME_NA_CALL(AddEventReceiver, "add_event_receiver", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(ConfigureEventPayload, "configure_event_payload", EMcpCallFlags::Mutating)
 MCP_ME_NA_CALL(EnableGpuSimulation, "enable_gpu_simulation", EMcpCallFlags::Mutating)
 MCP_ME_NA_CALL(AddSimulationStage, "add_simulation_stage", EMcpCallFlags::Mutating)
 MCP_ME_NA_CALL(GetNiagaraInfo, "get_niagara_info", EMcpCallFlags::None)
@@ -986,7 +967,6 @@ void McpRegisterManageEffectCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_AddCollisionQueryDataInterface>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_AddEventGenerator>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_AddEventReceiver>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_ConfigureEventPayload>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_EnableGpuSimulation>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_AddSimulationStage>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_GetNiagaraInfo>());

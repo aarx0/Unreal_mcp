@@ -15,7 +15,6 @@
             "create_pose_library",
             "create_animation_asset",
             "play_montage",
-            "setup_ragdoll",
             "activate_ragdoll",
             "configure_vehicle",
             "setup_physics_simulation",
@@ -201,10 +200,6 @@
         "blendType": {
           "description": "add_blend_node: node type, e.g. TwoWayBlend (default).",
           "type": "string"
-        },
-        "blendWeight": {
-          "description": "setup_ragdoll: physics blend weight.",
-          "type": "number"
         },
         "blueprintPath": {
           "description": "Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions).",
@@ -916,8 +911,6 @@
             "configure_spline_mesh_axis",
             "set_spline_mesh_material",
             "scatter_meshes_along_spline",
-            "configure_mesh_spacing",
-            "configure_mesh_randomization",
             "create_road_spline",
             "create_river_spline",
             "create_fence_spline",
@@ -5636,15 +5629,7 @@
             "configure_rotation",
             "add_custom_movement_mode",
             "configure_nav_movement",
-            "setup_mantling",
-            "setup_vaulting",
-            "setup_climbing",
-            "setup_sliding",
-            "setup_wall_running",
-            "setup_grappling",
-            "setup_footstep_system",
             "map_surface_to_sound",
-            "configure_footstep_fx",
             "get_info",
             "setup_movement",
             "set_walk_speed",
@@ -5652,8 +5637,7 @@
             "set_gravity_scale",
             "set_ground_friction",
             "set_braking_deceleration",
-            "configure_crouch",
-            "configure_sprint"
+            "configure_crouch"
           ],
           "type": "string"
         },
@@ -5690,13 +5674,6 @@
         "capsuleRadius": {
           "type": "number"
         },
-        "climbableTag": {
-          "description": "Tag for climbable surfaces.",
-          "type": "string"
-        },
-        "climbSpeed": {
-          "type": "number"
-        },
         "crouchedHalfHeight": {
           "description": "configure_crouch: capsule half-height while crouched (default 44).",
           "type": "number"
@@ -5718,34 +5695,6 @@
         "flySpeed": {
           "type": "number"
         },
-        "footstepEnabled": {
-          "description": "Enable footstep system.",
-          "type": "boolean"
-        },
-        "footstepSocketLeft": {
-          "description": "Left foot socket name.",
-          "type": "string"
-        },
-        "footstepSocketRight": {
-          "description": "Right foot socket name.",
-          "type": "string"
-        },
-        "footstepTraceDistance": {
-          "description": "Ground trace distance.",
-          "type": "number"
-        },
-        "grappleRange": {
-          "description": "Maximum grapple distance.",
-          "type": "number"
-        },
-        "grappleSpeed": {
-          "description": "Grapple pull speed.",
-          "type": "number"
-        },
-        "grappleTargetTag": {
-          "description": "Tag for grapple targets.",
-          "type": "string"
-        },
         "gravityScale": {
           "type": "number"
         },
@@ -5758,14 +5707,6 @@
         },
         "jumpHoldTime": {
           "description": "Max hold time for variable jump.",
-          "type": "number"
-        },
-        "mantleHeight": {
-          "description": "Maximum mantle height.",
-          "type": "number"
-        },
-        "mantleReachDistance": {
-          "description": "Forward reach for mantle check.",
           "type": "number"
         },
         "maxJumpCount": {
@@ -5823,10 +5764,6 @@
           "description": "Orient rotation to movement direction.",
           "type": "boolean"
         },
-        "particleScale": {
-          "description": "configure_footstep_fx: footstep particle scale (default 1.0).",
-          "type": "number"
-        },
         "path": {
           "description": "Directory path for asset creation.",
           "type": "string"
@@ -5841,15 +5778,6 @@
         "skeletalMeshPath": {
           "description": "Skeletal mesh path.",
           "type": "string"
-        },
-        "slideCooldown": {
-          "type": "number"
-        },
-        "slideDuration": {
-          "type": "number"
-        },
-        "slideSpeed": {
-          "type": "number"
         },
         "soundPath": {
           "description": "Sound asset path (SoundBase) mapped to surfaceType by map_surface_to_sound.",
@@ -5902,32 +5830,8 @@
           "description": "Use controller yaw rotation.",
           "type": "boolean"
         },
-        "vaultDepth": {
-          "description": "Obstacle depth to check.",
-          "type": "number"
-        },
-        "vaultHeight": {
-          "description": "Maximum vault obstacle height.",
-          "type": "number"
-        },
-        "volumeMultiplier": {
-          "description": "configure_footstep_fx: footstep sound volume multiplier (default 1.0).",
-          "type": "number"
-        },
         "walkSpeed": {
           "description": "Ground speed; writes CharacterMovement MaxWalkSpeed.",
-          "type": "number"
-        },
-        "wallRunDuration": {
-          "description": "Maximum wall run duration.",
-          "type": "number"
-        },
-        "wallRunGravityScale": {
-          "description": "Gravity during wall run.",
-          "type": "number"
-        },
-        "wallRunSpeed": {
-          "description": "Wall running speed.",
           "type": "number"
         }
       },
@@ -5948,34 +5852,16 @@
           "enum": [
             "create_weapon_blueprint",
             "configure_weapon_mesh",
-            "configure_weapon_sockets",
             "set_weapon_stats",
-            "configure_hitscan",
-            "configure_projectile",
-            "configure_spread_pattern",
-            "configure_recoil_pattern",
-            "configure_aim_down_sights",
             "create_projectile_blueprint",
             "configure_projectile_movement",
             "configure_projectile_collision",
             "configure_projectile_homing",
             "create_damage_type",
-            "configure_damage_execution",
             "setup_hitbox_component",
-            "setup_reload_system",
-            "setup_ammo_system",
             "setup_attachment_system",
-            "setup_weapon_switching",
-            "configure_muzzle_flash",
-            "configure_tracer",
-            "configure_impact_effects",
-            "configure_shell_ejection",
             "create_melee_trace",
-            "configure_combo_system",
             "create_hit_pause",
-            "configure_hit_reaction",
-            "setup_parry_block_system",
-            "configure_weapon_trails",
             "get_info",
             "configure_hit_detection",
             "get_stats",
@@ -5985,30 +5871,6 @@
             "create_shield",
             "modify_armor"
           ],
-          "type": "string"
-        },
-        "adsEnabled": {
-          "description": "Enable aim down sights.",
-          "type": "boolean"
-        },
-        "adsFov": {
-          "description": "FOV when aiming.",
-          "type": "number"
-        },
-        "adsSpeed": {
-          "description": "Time to aim down sights.",
-          "type": "number"
-        },
-        "adsSpreadMultiplier": {
-          "description": "Spread multiplier when aiming.",
-          "type": "number"
-        },
-        "ammoPerShot": {
-          "description": "Ammo consumed per shot.",
-          "type": "number"
-        },
-        "ammoType": {
-          "description": "Ammo type identifier.",
           "type": "string"
         },
         "armorValue": {
@@ -6023,14 +5885,6 @@
           "type": "array"
         },
         "baseDamage": {
-          "type": "number"
-        },
-        "blockDamageReduction": {
-          "description": "Damage reduction when blocking (0-1).",
-          "type": "number"
-        },
-        "blockStaminaCost": {
-          "description": "Stamina cost per blocked hit.",
           "type": "number"
         },
         "blueprintPath": {
@@ -6048,20 +5902,12 @@
         "collisionRadius": {
           "type": "number"
         },
-        "comboWindowTime": {
-          "description": "Time window for combo input.",
-          "type": "number"
-        },
         "criticalMultiplier": {
           "description": "Critical hit damage multiplier (consumed by configure_damage_execution, not set_weapon_stats).",
           "type": "number"
         },
         "damageAmount": {
           "description": "Damage amount to apply.",
-          "type": "number"
-        },
-        "damageImpulse": {
-          "description": "Impulse applied on hit.",
           "type": "number"
         },
         "damageMultiplier": {
@@ -6086,14 +5932,6 @@
         },
         "effectType": {
           "description": "Damage effect type.",
-          "type": "string"
-        },
-        "ejectionSocketName": {
-          "description": "Shell ejection socket name.",
-          "type": "string"
-        },
-        "equipAnimationPath": {
-          "description": "Path to equip animation montage.",
           "type": "string"
         },
         "fireRate": {
@@ -6155,18 +5993,6 @@
           "description": "Time dilation during hitstop.",
           "type": "number"
         },
-        "hitReactionMontage": {
-          "description": "Path to hit reaction montage.",
-          "type": "string"
-        },
-        "hitReactionStunTime": {
-          "description": "Stun duration on hit.",
-          "type": "number"
-        },
-        "hitscanEnabled": {
-          "description": "Enable hitscan firing.",
-          "type": "boolean"
-        },
         "homingAcceleration": {
           "description": "Homing turn rate.",
           "type": "number"
@@ -6175,36 +6001,9 @@
           "description": "Enable homing behavior.",
           "type": "boolean"
         },
-        "impactDecalPath": {
-          "description": "Path to impact decal.",
-          "type": "string"
-        },
-        "impactParticlePath": {
-          "description": "Path to impact particle.",
-          "type": "string"
-        },
-        "impactSoundPath": {
-          "description": "Path to impact sound.",
-          "type": "string"
-        },
-        "infiniteAmmo": {
-          "description": "Whether ammo is infinite.",
-          "type": "boolean"
-        },
         "isDamageZoneHead": {
           "description": "Mark as headshot zone.",
           "type": "boolean"
-        },
-        "magazineSize": {
-          "type": "number"
-        },
-        "maxAmmo": {
-          "description": "Total reserve ammo (consumed by setup_ammo_system, not setup_reload_system).",
-          "type": "number"
-        },
-        "maxComboCount": {
-          "description": "Maximum combo length.",
-          "type": "number"
         },
         "maxHealth": {
           "description": "Maximum health value.",
@@ -6226,44 +6025,12 @@
           "description": "Socket for trace start.",
           "type": "string"
         },
-        "muzzleFlashParticlePath": {
-          "description": "Path to muzzle flash particle.",
-          "type": "string"
-        },
-        "muzzleFlashScale": {
-          "description": "Muzzle flash scale.",
-          "type": "number"
-        },
-        "muzzleSocketName": {
-          "description": "Muzzle socket name.",
-          "type": "string"
-        },
-        "muzzleSoundPath": {
-          "description": "Path to firing sound.",
-          "type": "string"
-        },
         "name": {
           "description": "Name identifier: asset name for create actions; hitbox component name for setup_hitbox_component.",
           "type": "string"
         },
-        "parryAnimationPath": {
-          "description": "Path to parry animation.",
-          "type": "string"
-        },
-        "parryWindowEnd": {
-          "description": "Parry window end time (normalized).",
-          "type": "number"
-        },
-        "parryWindowStart": {
-          "description": "Parry window start time (normalized).",
-          "type": "number"
-        },
         "path": {
           "description": "Directory path for asset creation.",
-          "type": "string"
-        },
-        "projectileClass": {
-          "description": "Projectile class path.",
           "type": "string"
         },
         "projectileGravityScale": {
@@ -6282,37 +6049,6 @@
         "range": {
           "type": "number"
         },
-        "recoilPitch": {
-          "description": "Vertical recoil (degrees).",
-          "type": "number"
-        },
-        "recoilRecovery": {
-          "description": "Recoil recovery speed.",
-          "type": "number"
-        },
-        "recoilYaw": {
-          "description": "Horizontal recoil (degrees).",
-          "type": "number"
-        },
-        "reloadAnimationPath": {
-          "description": "Path to reload animation.",
-          "type": "string"
-        },
-        "reloadTime": {
-          "type": "number"
-        },
-        "shellEjectionForce": {
-          "description": "Shell ejection impulse.",
-          "type": "number"
-        },
-        "shellLifespan": {
-          "description": "Shell casing lifetime.",
-          "type": "number"
-        },
-        "shellMeshPath": {
-          "description": "Path to shell casing mesh.",
-          "type": "string"
-        },
         "shieldAmount": {
           "description": "Initial shield value; stored by create_shield as the CurrentShield variable default.",
           "type": "number"
@@ -6328,71 +6064,8 @@
         "spread": {
           "type": "number"
         },
-        "spreadIncrease": {
-          "description": "Spread increase per shot.",
-          "type": "number"
-        },
-        "spreadPattern": {
-          "description": "Spread pattern type.",
-          "enum": [
-            "Random",
-            "Fixed",
-            "FixedWithRandom",
-            "Shotgun"
-          ],
-          "type": "string"
-        },
-        "spreadRecovery": {
-          "description": "Spread recovery rate.",
-          "type": "number"
-        },
-        "startingAmmo": {
-          "type": "number"
-        },
-        "switchInTime": {
-          "description": "Time to equip weapon.",
-          "type": "number"
-        },
-        "switchOutTime": {
-          "description": "Time to unequip weapon.",
-          "type": "number"
-        },
-        "traceChannel": {
-          "description": "Trace channel for hitscan.",
-          "enum": [
-            "Visibility",
-            "Camera",
-            "Weapon",
-            "Custom"
-          ],
-          "type": "string"
-        },
-        "tracerParticlePath": {
-          "description": "Path to tracer particle.",
-          "type": "string"
-        },
-        "tracerSpeed": {
-          "description": "Tracer travel speed.",
-          "type": "number"
-        },
-        "unequipAnimationPath": {
-          "description": "Path to unequip animation montage.",
-          "type": "string"
-        },
         "weaponMeshPath": {
           "description": "Path to weapon static/skeletal mesh.",
-          "type": "string"
-        },
-        "weaponTrailEndSocket": {
-          "description": "Trail end socket.",
-          "type": "string"
-        },
-        "weaponTrailParticlePath": {
-          "description": "Path to weapon trail particle.",
-          "type": "string"
-        },
-        "weaponTrailStartSocket": {
-          "description": "Trail start socket.",
           "type": "string"
         }
       },
@@ -6476,7 +6149,6 @@
             "add_collision_query_data_interface",
             "add_event_generator",
             "add_event_receiver",
-            "configure_event_payload",
             "enable_gpu_simulation",
             "add_simulation_stage",
             "get_niagara_info",
@@ -6604,23 +6276,6 @@
         "eventName": {
           "description": "Name of the event.",
           "type": "string"
-        },
-        "eventPayload": {
-          "description": "Niagara event payload attributes.",
-          "items": {
-            "properties": {
-              "name": {
-                "description": "Attribute name.",
-                "type": "string"
-              },
-              "type": {
-                "description": "Attribute Niagara type.",
-                "type": "string"
-              }
-            },
-            "type": "object"
-          },
-          "type": "array"
         },
         "eventSpawnCount": {
           "type": "number"
@@ -6946,7 +6601,6 @@
             "set_effect_stacking",
             "set_effect_tags",
             "create_gameplay_cue_notify",
-            "configure_cue_trigger",
             "set_cue_effects",
             "add_tag_to_asset",
             "get_info",
@@ -7342,16 +6996,6 @@
             "PlayMontageAndWait",
             "ApplyRootMotionConstantForce",
             "WaitMovementModeChange"
-          ],
-          "type": "string"
-        },
-        "triggerType": {
-          "description": "When the cue triggers.",
-          "enum": [
-            "OnActive",
-            "WhileActive",
-            "Executed",
-            "OnRemove"
           ],
           "type": "string"
         },
@@ -8219,15 +7863,8 @@
             "create_chest_actor",
             "configure_chest_properties",
             "create_lever_actor",
-            "setup_destructible_mesh",
-            "configure_destruction_levels",
-            "configure_destruction_effects",
-            "configure_destruction_damage",
             "add_destruction_component",
             "create_trigger_actor",
-            "configure_trigger_events",
-            "configure_trigger_filter",
-            "configure_trigger_response",
             "get_info"
           ],
           "type": "string"
@@ -8391,14 +8028,12 @@
             "create_inventory_component",
             "configure_inventory_slots",
             "add_inventory_functions",
-            "configure_inventory_events",
             "set_inventory_replication",
             "create_pickup_actor",
             "configure_pickup_interaction",
             "configure_pickup_respawn",
             "configure_pickup_effects",
             "create_equipment_component",
-            "configure_equipment_slots",
             "configure_equipment_effects",
             "add_equipment_functions",
             "configure_equipment_visuals",
@@ -8415,7 +8050,6 @@
             "add_recipe_ingredient",
             "remove_loot_entry",
             "configure_inventory_weight",
-            "configure_station_recipes",
             "get_info"
           ],
           "type": "string"
@@ -8443,10 +8077,6 @@
         "componentName": {
           "description": "Name of the component.",
           "type": "string"
-        },
-        "craftingSpeedMultiplier": {
-          "description": "Crafting speed multiplier.",
-          "type": "number"
         },
         "craftTime": {
           "description": "Time in seconds to craft.",
@@ -8580,13 +8210,6 @@
           "description": "Path to crafting recipe asset.",
           "type": "string"
         },
-        "recipePaths": {
-          "description": "Recipe paths for crafting station.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
         "replicated": {
           "description": "Whether to replicate.",
           "type": "boolean"
@@ -8629,20 +8252,9 @@
         "slotCount": {
           "type": "number"
         },
-        "slots": {
-          "description": "Equipment slot names to configure.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
         "stackable": {
           "description": "Whether the item can stack.",
           "type": "boolean"
-        },
-        "stationPath": {
-          "description": "Path to crafting station blueprint.",
-          "type": "string"
         },
         "stationType": {
           "description": "Type of crafting station.",
@@ -8794,7 +8406,6 @@
             "create_sublevel",
             "configure_level_streaming",
             "set_streaming_distance",
-            "configure_level_bounds",
             "enable_world_partition",
             "configure_grid_size",
             "create_data_layer",
@@ -8846,10 +8457,6 @@
           "description": "Path to actor.",
           "type": "string"
         },
-        "bAutoCalculateBounds": {
-          "description": "Auto-calculate bounds from content.",
-          "type": "boolean"
-        },
         "bBlockOnSlowStreaming": {
           "description": "configure_grid_size: block on slow streaming for this grid.",
           "type": "boolean"
@@ -8900,36 +8507,6 @@
             "type": "number"
           },
           "type": "array"
-        },
-        "boundsExtent": {
-          "description": "Extent of level bounds.",
-          "properties": {
-            "x": {
-              "type": "number"
-            },
-            "y": {
-              "type": "number"
-            },
-            "z": {
-              "type": "number"
-            }
-          },
-          "type": "object"
-        },
-        "boundsOrigin": {
-          "description": "Origin of level bounds.",
-          "properties": {
-            "x": {
-              "type": "number"
-            },
-            "y": {
-              "type": "number"
-            },
-            "z": {
-              "type": "number"
-            }
-          },
-          "type": "object"
         },
         "boxExtent": {
           "description": "create_trigger_box: box extent alias for volumeExtent.",
@@ -9361,7 +8938,6 @@
             "configure_net_cull_distance",
             "set_always_relevant",
             "set_only_relevant_to_owner",
-            "configure_net_serialization",
             "set_replicated_using",
             "configure_push_model",
             "configure_client_prediction",
@@ -9383,30 +8959,19 @@
             "set_game_state_class",
             "set_player_state_class",
             "configure_game_rules",
-            "setup_match_states",
-            "configure_round_system",
-            "configure_team_system",
-            "configure_scoring_system",
-            "configure_spawn_system",
             "configure_player_start",
             "set_respawn_rules",
             "configure_spectating",
             "get_game_framework_info",
-            "configure_local_session_settings",
-            "configure_session_interface",
-            "configure_split_screen",
             "set_split_screen_type",
             "add_local_player",
             "remove_local_player",
-            "configure_lan_play",
             "host_lan_server",
             "join_lan_server",
             "enable_voice_chat",
-            "configure_voice_settings",
             "set_voice_channel",
             "mute_player",
             "set_voice_attenuation",
-            "configure_push_to_talk",
             "get_sessions_info"
           ],
           "type": "string"
@@ -9431,24 +8996,8 @@
           "description": "set_voice_attenuation: distance at which voice starts attenuating (default 2000).",
           "type": "number"
         },
-        "autoBalance": {
-          "description": "configure_team_system: auto-balance team sizes.",
-          "type": "boolean"
-        },
-        "bAllowInvites": {
-          "description": "configure_local_session_settings: allow session invites.",
-          "type": "boolean"
-        },
-        "bAllowJoinInProgress": {
-          "description": "configure_local_session_settings: allow players to join after start.",
-          "type": "boolean"
-        },
         "bDelayedStart": {
           "description": "configure_game_rules: sets AGameMode::bDelayedStart when the property exists on the class.",
-          "type": "boolean"
-        },
-        "bIsLANMatch": {
-          "description": "configure_local_session_settings: mark the session as a LAN match.",
           "type": "boolean"
         },
         "blueprintPath": {
@@ -9457,22 +9006,6 @@
         },
         "bPlayerOnly": {
           "description": "configure_player_start: restrict the PlayerStart to player pawns only.",
-          "type": "boolean"
-        },
-        "bShouldAdvertise": {
-          "description": "configure_local_session_settings: advertise the session publicly.",
-          "type": "boolean"
-        },
-        "bUseLobbiesIfAvailable": {
-          "description": "configure_local_session_settings: prefer lobbies when supported.",
-          "type": "boolean"
-        },
-        "bUsesPresence": {
-          "description": "configure_local_session_settings: advertise via presence.",
-          "type": "boolean"
-        },
-        "canRespawn": {
-          "description": "configure_spawn_system: whether respawning is allowed.",
           "type": "boolean"
         },
         "channelName": {
@@ -9518,10 +9051,6 @@
           "description": "Server correction threshold.",
           "type": "number"
         },
-        "customSerialization": {
-          "description": "Use custom serialization.",
-          "type": "boolean"
-        },
         "dataType": {
           "description": "Network prediction data type.",
           "enum": [
@@ -9547,10 +9076,6 @@
           ],
           "type": "string"
         },
-        "enabled": {
-          "description": "configure_split_screen / configure_lan_play: enable flag for the feature being configured.",
-          "type": "boolean"
-        },
         "enablePrediction": {
           "description": "Enable client-side prediction.",
           "type": "boolean"
@@ -9561,10 +9086,6 @@
         },
         "forceRespawn": {
           "description": "set_respawn_rules: whether respawn is forced rather than optional.",
-          "type": "boolean"
-        },
-        "friendlyFire": {
-          "description": "configure_team_system: allow damage to teammates.",
           "type": "boolean"
         },
         "functionName": {
@@ -9582,19 +9103,6 @@
         "hudClass": {
           "description": "create_game_mode: HUD class path.",
           "type": "string"
-        },
-        "interfaceType": {
-          "description": "configure_session_interface: online subsystem interface to use.",
-          "enum": [
-            "Default",
-            "LAN",
-            "Null"
-          ],
-          "type": "string"
-        },
-        "intermissionTime": {
-          "description": "configure_round_system: seconds between rounds.",
-          "type": "number"
         },
         "isAutonomousProxy": {
           "description": "Configure as autonomous proxy.",
@@ -9622,10 +9130,6 @@
         },
         "maxPlayers": {
           "description": "configure_local_session_settings / host_lan_server: max player count (default 4).",
-          "type": "number"
-        },
-        "maxRespawns": {
-          "description": "configure_spawn_system: maximum respawns per player (-1 = unlimited).",
           "type": "number"
         },
         "minNetUpdateFrequency": {
@@ -9676,14 +9180,6 @@
             "Exponential"
           ],
           "type": "string"
-        },
-        "numRounds": {
-          "description": "configure_round_system: total rounds in the match.",
-          "type": "number"
-        },
-        "numTeams": {
-          "description": "configure_team_system: number of teams (default 2).",
-          "type": "number"
         },
         "onlyRelevantToOwner": {
           "description": "Only relevant to owner.",
@@ -9737,14 +9233,6 @@
           "description": "Name of the property.",
           "type": "string"
         },
-        "pushToTalkEnabled": {
-          "description": "configure_push_to_talk: enable push-to-talk.",
-          "type": "boolean"
-        },
-        "pushToTalkKey": {
-          "description": "configure_push_to_talk: key bound to push-to-talk (default V).",
-          "type": "string"
-        },
         "reliable": {
           "description": "Whether the operation is reliable.",
           "type": "boolean"
@@ -9791,10 +9279,6 @@
           "description": "configure_player_start: PlayerStart world rotation (pitch, yaw, roll).",
           "type": "object"
         },
-        "roundTime": {
-          "description": "configure_round_system: seconds per round.",
-          "type": "number"
-        },
         "rpcType": {
           "description": "Type of RPC.",
           "enum": [
@@ -9807,22 +9291,6 @@
         "save": {
           "description": "Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false).",
           "type": "boolean"
-        },
-        "scorePerAssist": {
-          "description": "configure_scoring_system: points awarded per assist.",
-          "type": "number"
-        },
-        "scorePerDeath": {
-          "description": "configure_scoring_system: score penalty for dying.",
-          "type": "number"
-        },
-        "scorePerKill": {
-          "description": "configure_scoring_system: points awarded per kill.",
-          "type": "number"
-        },
-        "scorePerObjective": {
-          "description": "configure_scoring_system: points awarded per objective completion.",
-          "type": "number"
         },
         "serverAddress": {
           "description": "join_lan_server: address of the LAN server to connect to.",
@@ -9840,10 +9308,6 @@
           "description": "configure_lan_play / join_lan_server: port number (default 7777).",
           "type": "number"
         },
-        "sessionName": {
-          "description": "configure_local_session_settings: session name (default DefaultSession).",
-          "type": "string"
-        },
         "smoothingRate": {
           "description": "Smoothing rate for corrections.",
           "type": "number"
@@ -9851,10 +9315,6 @@
         "spatiallyLoaded": {
           "description": "Spatially loaded for replication graph.",
           "type": "boolean"
-        },
-        "spawnSelectionMethod": {
-          "description": "configure_spawn_system: how spawn points are chosen (default Random).",
-          "type": "string"
         },
         "spectatorClass": {
           "description": "configure_spectating: SpectatorPawn class path.",
@@ -9880,17 +9340,6 @@
           "description": "configure_game_rules: NOT IMPLEMENTED — rejected as an unsupported field (not a native GameMode property, not a generated Blueprint variable).",
           "type": "number"
         },
-        "states": {
-          "description": "setup_match_states: match state names to record on the Blueprint.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "structName": {
-          "description": "Name of struct for custom serialization.",
-          "type": "string"
-        },
         "systemWide": {
           "description": "mute_player: apply the mute system-wide rather than just locally.",
           "type": "boolean"
@@ -9903,20 +9352,12 @@
           "description": "configure_player_start: team index used to build the default PlayerStartTag.",
           "type": "number"
         },
-        "teamSize": {
-          "description": "configure_team_system: maximum players per team.",
-          "type": "number"
-        },
         "travelOptions": {
           "description": "host_lan_server / join_lan_server: extra URL options appended to the travel string.",
           "type": "string"
         },
         "useOwnerNetRelevancy": {
           "description": "Use owner relevancy.",
-          "type": "boolean"
-        },
-        "usePlayerStarts": {
-          "description": "configure_spawn_system: spawn at PlayerStart actors.",
           "type": "boolean"
         },
         "usePushModel": {
@@ -9930,14 +9371,6 @@
         "voiceEnabled": {
           "description": "enable_voice_chat: enable or disable voice chat.",
           "type": "boolean"
-        },
-        "voiceSettings": {
-          "description": "configure_voice_settings: nested settings object ({volume, noiseGateThreshold, noiseSuppression, echoCancellation, sampleRate}).",
-          "type": "object"
-        },
-        "winScore": {
-          "description": "configure_scoring_system: score required to win the match.",
-          "type": "number"
         },
         "withValidation": {
           "description": "Enable RPC validation.",

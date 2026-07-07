@@ -47,13 +47,6 @@ static void S_ConfigureWeaponMesh(FMcpSchemaBuilder& B)
 	 .Required({TEXT("blueprintPath")});
 }
 
-static void S_ConfigureWeaponSockets(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .String(TEXT("muzzleSocketName"), TEXT("Muzzle socket name."))
-	 .String(TEXT("ejectionSocketName"), TEXT("Shell ejection socket name."))
-	 .Required({TEXT("blueprintPath")});
-}
 
 static void S_SetWeaponStats(FMcpSchemaBuilder& B)
 {
@@ -67,54 +60,10 @@ static void S_SetWeaponStats(FMcpSchemaBuilder& B)
 	 .Required({TEXT("blueprintPath")});
 }
 
-static void S_ConfigureHitscan(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Bool(TEXT("hitscanEnabled"), TEXT("Enable hitscan firing."))
-	 .StringEnum(TEXT("traceChannel"), {
-		TEXT("Visibility"), TEXT("Camera"), TEXT("Weapon"), TEXT("Custom")
-	 }, TEXT("Trace channel for hitscan."))
-	 .Number(TEXT("range"), TEXT(""))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_ConfigureProjectile(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .String(TEXT("projectileClass"), TEXT("Projectile class path."))
-	 .Number(TEXT("projectileSpeed"), TEXT(""))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_ConfigureSpreadPattern(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .StringEnum(TEXT("spreadPattern"), {
-		TEXT("Random"), TEXT("Fixed"), TEXT("FixedWithRandom"), TEXT("Shotgun")
-	 }, TEXT("Spread pattern type."))
-	 .Number(TEXT("spreadIncrease"), TEXT("Spread increase per shot."))
-	 .Number(TEXT("spreadRecovery"), TEXT("Spread recovery rate."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_ConfigureRecoilPattern(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("recoilPitch"), TEXT("Vertical recoil (degrees)."))
-	 .Number(TEXT("recoilYaw"), TEXT("Horizontal recoil (degrees)."))
-	 .Number(TEXT("recoilRecovery"), TEXT("Recoil recovery speed."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_ConfigureAimDownSights(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Bool(TEXT("adsEnabled"), TEXT("Enable aim down sights."))
-	 .Number(TEXT("adsFov"), TEXT("FOV when aiming."))
-	 .Number(TEXT("adsSpeed"), TEXT("Time to aim down sights."))
-	 .Number(TEXT("adsSpreadMultiplier"), TEXT("Spread multiplier when aiming."))
-	 .Required({TEXT("blueprintPath")});
-}
 
 static void S_CreateProjectileBlueprint(FMcpSchemaBuilder& B)
 {
@@ -160,14 +109,6 @@ static void S_CreateDamageType(FMcpSchemaBuilder& B)
 	 .Required({TEXT("name")});
 }
 
-static void S_ConfigureDamageExecution(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("damageImpulse"), TEXT("Impulse applied on hit."))
-	 .Number(TEXT("criticalMultiplier"), TEXT("Critical hit damage multiplier (consumed by configure_damage_execution, not set_weapon_stats)."))
-	 .Number(TEXT("headshotMultiplier"), TEXT("Headshot damage multiplier (consumed by configure_damage_execution, not set_weapon_stats)."))
-	 .Required({TEXT("blueprintPath")});
-}
 
 static void S_SetupHitboxComponent(FMcpSchemaBuilder& B)
 {
@@ -191,26 +132,7 @@ static void S_SetupHitboxComponent(FMcpSchemaBuilder& B)
 	 .Required({TEXT("blueprintPath")});
 }
 
-static void S_SetupReloadSystem(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("magazineSize"), TEXT(""))
-	 .Number(TEXT("reloadTime"), TEXT(""))
-	 .String(TEXT("reloadAnimationPath"), TEXT("Path to reload animation."))
-	 .Number(TEXT("maxAmmo"), TEXT("Total reserve ammo (consumed by setup_ammo_system, not setup_reload_system)."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_SetupAmmoSystem(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .String(TEXT("ammoType"), TEXT("Ammo type identifier."))
-	 .Number(TEXT("maxAmmo"), TEXT("Total reserve ammo (consumed by setup_ammo_system, not setup_reload_system)."))
-	 .Number(TEXT("startingAmmo"), TEXT(""))
-	 .Number(TEXT("ammoPerShot"), TEXT("Ammo consumed per shot."))
-	 .Bool(TEXT("infiniteAmmo"), TEXT("Whether ammo is infinite."))
-	 .Required({TEXT("blueprintPath")});
-}
 
 static void S_SetupAttachmentSystem(FMcpSchemaBuilder& B)
 {
@@ -219,50 +141,10 @@ static void S_SetupAttachmentSystem(FMcpSchemaBuilder& B)
 	 .Required({TEXT("blueprintPath")});
 }
 
-static void S_SetupWeaponSwitching(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("switchInTime"), TEXT("Time to equip weapon."))
-	 .Number(TEXT("switchOutTime"), TEXT("Time to unequip weapon."))
-	 .String(TEXT("equipAnimationPath"), TEXT("Path to equip animation montage."))
-	 .String(TEXT("unequipAnimationPath"), TEXT("Path to unequip animation montage."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_ConfigureMuzzleFlash(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .String(TEXT("muzzleFlashParticlePath"), TEXT("Path to muzzle flash particle."))
-	 .Number(TEXT("muzzleFlashScale"), TEXT("Muzzle flash scale."))
-	 .String(TEXT("muzzleSoundPath"), TEXT("Path to firing sound."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_ConfigureTracer(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .String(TEXT("tracerParticlePath"), TEXT("Path to tracer particle."))
-	 .Number(TEXT("tracerSpeed"), TEXT("Tracer travel speed."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_ConfigureImpactEffects(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .String(TEXT("impactParticlePath"), TEXT("Path to impact particle."))
-	 .String(TEXT("impactSoundPath"), TEXT("Path to impact sound."))
-	 .String(TEXT("impactDecalPath"), TEXT("Path to impact decal."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_ConfigureShellEjection(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .String(TEXT("shellMeshPath"), TEXT("Path to shell casing mesh."))
-	 .Number(TEXT("shellEjectionForce"), TEXT("Shell ejection impulse."))
-	 .Number(TEXT("shellLifespan"), TEXT("Shell casing lifetime."))
-	 .Required({TEXT("blueprintPath")});
-}
 
 static void S_CreateMeleeTrace(FMcpSchemaBuilder& B)
 {
@@ -273,13 +155,6 @@ static void S_CreateMeleeTrace(FMcpSchemaBuilder& B)
 	 .Required({TEXT("blueprintPath")});
 }
 
-static void S_ConfigureComboSystem(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("comboWindowTime"), TEXT("Time window for combo input."))
-	 .Number(TEXT("maxComboCount"), TEXT("Maximum combo length."))
-	 .Required({TEXT("blueprintPath")});
-}
 
 static void S_CreateHitPause(FMcpSchemaBuilder& B)
 {
@@ -289,33 +164,8 @@ static void S_CreateHitPause(FMcpSchemaBuilder& B)
 	 .Required({TEXT("blueprintPath")});
 }
 
-static void S_ConfigureHitReaction(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .String(TEXT("hitReactionMontage"), TEXT("Path to hit reaction montage."))
-	 .Number(TEXT("hitReactionStunTime"), TEXT("Stun duration on hit."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_SetupParryBlockSystem(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("parryWindowStart"), TEXT("Parry window start time (normalized)."))
-	 .Number(TEXT("parryWindowEnd"), TEXT("Parry window end time (normalized)."))
-	 .String(TEXT("parryAnimationPath"), TEXT("Path to parry animation."))
-	 .Number(TEXT("blockDamageReduction"), TEXT("Damage reduction when blocking (0-1)."))
-	 .Number(TEXT("blockStaminaCost"), TEXT("Stamina cost per blocked hit."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_ConfigureWeaponTrails(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .String(TEXT("weaponTrailParticlePath"), TEXT("Path to weapon trail particle."))
-	 .String(TEXT("weaponTrailStartSocket"), TEXT("Trail start socket."))
-	 .String(TEXT("weaponTrailEndSocket"), TEXT("Trail end socket."))
-	 .Required({TEXT("blueprintPath")});
-}
 
 static void S_GetInfo(FMcpSchemaBuilder& B)
 {
@@ -410,15 +260,9 @@ class FMcpCall_ManageCombat_##ClassSuffix final : public FMcpCall               
 // Weapon base (15.1)
 MCP_CB_CALL(CreateWeaponBlueprint, "create_weapon_blueprint", HandleCombatCreateWeaponBlueprint, EMcpCallFlags::Mutating)
 MCP_CB_CALL(ConfigureWeaponMesh, "configure_weapon_mesh", HandleCombatConfigureWeaponMesh, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureWeaponSockets, "configure_weapon_sockets", HandleCombatConfigureWeaponSockets, EMcpCallFlags::Mutating)
 MCP_CB_CALL(SetWeaponStats, "set_weapon_stats", HandleCombatSetWeaponStats, EMcpCallFlags::Mutating)
 
 // Firing modes (15.2)
-MCP_CB_CALL(ConfigureHitscan, "configure_hitscan", HandleCombatConfigureHitscan, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureProjectile, "configure_projectile", HandleCombatConfigureProjectile, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureSpreadPattern, "configure_spread_pattern", HandleCombatConfigureSpreadPattern, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureRecoilPattern, "configure_recoil_pattern", HandleCombatConfigureRecoilPattern, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureAimDownSights, "configure_aim_down_sights", HandleCombatConfigureAimDownSights, EMcpCallFlags::Mutating)
 
 // Projectiles (15.3)
 MCP_CB_CALL(CreateProjectileBlueprint, "create_projectile_blueprint", HandleCombatCreateProjectileBlueprint, EMcpCallFlags::Mutating)
@@ -428,28 +272,16 @@ MCP_CB_CALL(ConfigureProjectileHoming, "configure_projectile_homing", HandleComb
 
 // Damage system (15.4)
 MCP_CB_CALL(CreateDamageType, "create_damage_type", HandleCombatCreateDamageType, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureDamageExecution, "configure_damage_execution", HandleCombatConfigureDamageExecution, EMcpCallFlags::Mutating)
 MCP_CB_CALL(SetupHitboxComponent, "setup_hitbox_component", HandleCombatSetupHitboxComponent, EMcpCallFlags::Mutating)
 
 // Weapon features (15.5)
-MCP_CB_CALL(SetupReloadSystem, "setup_reload_system", HandleCombatSetupReloadSystem, EMcpCallFlags::Mutating)
-MCP_CB_CALL(SetupAmmoSystem, "setup_ammo_system", HandleCombatSetupAmmoSystem, EMcpCallFlags::Mutating)
 MCP_CB_CALL(SetupAttachmentSystem, "setup_attachment_system", HandleCombatSetupAttachmentSystem, EMcpCallFlags::Mutating)
-MCP_CB_CALL(SetupWeaponSwitching, "setup_weapon_switching", HandleCombatSetupWeaponSwitching, EMcpCallFlags::Mutating)
 
 // Effects (15.6)
-MCP_CB_CALL(ConfigureMuzzleFlash, "configure_muzzle_flash", HandleCombatConfigureMuzzleFlash, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureTracer, "configure_tracer", HandleCombatConfigureTracer, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureImpactEffects, "configure_impact_effects", HandleCombatConfigureImpactEffects, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureShellEjection, "configure_shell_ejection", HandleCombatConfigureShellEjection, EMcpCallFlags::Mutating)
 
 // Melee combat (15.7)
 MCP_CB_CALL(CreateMeleeTrace, "create_melee_trace", HandleCombatCreateMeleeTrace, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureComboSystem, "configure_combo_system", HandleCombatConfigureComboSystem, EMcpCallFlags::Mutating)
 MCP_CB_CALL(CreateHitPause, "create_hit_pause", HandleCombatCreateHitPause, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureHitReaction, "configure_hit_reaction", HandleCombatConfigureHitReaction, EMcpCallFlags::Mutating)
-MCP_CB_CALL(SetupParryBlockSystem, "setup_parry_block_system", HandleCombatSetupParryBlockSystem, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureWeaponTrails, "configure_weapon_trails", HandleCombatConfigureWeaponTrails, EMcpCallFlags::Mutating)
 
 // Utility
 MCP_CB_CALL(GetInfo, "get_info", HandleCombatGetInfo, EMcpCallFlags::None)
@@ -475,34 +307,16 @@ void McpRegisterManageCombatCalls()
 	FMcpCallRegistry& Registry = FMcpCallRegistry::Get();
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_CreateWeaponBlueprint>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureWeaponMesh>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureWeaponSockets>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_SetWeaponStats>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureHitscan>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureProjectile>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureSpreadPattern>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureRecoilPattern>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureAimDownSights>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_CreateProjectileBlueprint>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureProjectileMovement>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureProjectileCollision>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureProjectileHoming>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_CreateDamageType>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureDamageExecution>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_SetupHitboxComponent>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_SetupReloadSystem>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_SetupAmmoSystem>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_SetupAttachmentSystem>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_SetupWeaponSwitching>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureMuzzleFlash>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureTracer>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureImpactEffects>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureShellEjection>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_CreateMeleeTrace>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureComboSystem>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_CreateHitPause>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureHitReaction>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_SetupParryBlockSystem>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureWeaponTrails>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_GetInfo>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_ConfigureHitDetection>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCombat_GetStats>());

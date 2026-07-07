@@ -148,11 +148,6 @@ static void S_CreateLeverActor(FMcpSchemaBuilder& B)
 	 .Required({TEXT("name")});
 }
 
-static void S_SetupDestructibleMesh(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .Required({TEXT("actorName")});
-}
 
 static void S_AddDestructionComponent(FMcpSchemaBuilder& B)
 {
@@ -160,23 +155,8 @@ static void S_AddDestructionComponent(FMcpSchemaBuilder& B)
 	 .String(TEXT("componentName"), TEXT("Name of the component."));
 }
 
-static void S_ConfigureDestructionLevels(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .Required({TEXT("actorName")});
-}
 
-static void S_ConfigureDestructionEffects(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .Required({TEXT("actorName")});
-}
 
-static void S_ConfigureDestructionDamage(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .Required({TEXT("actorName")});
-}
 
 static void S_CreateTriggerActor(FMcpSchemaBuilder& B)
 {
@@ -188,22 +168,8 @@ static void S_CreateTriggerActor(FMcpSchemaBuilder& B)
 	 .Required({TEXT("name")});
 }
 
-static void S_ConfigureTriggerEvents(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("triggerPath"), TEXT("Path to trigger actor blueprint."));
-}
 
-static void S_ConfigureTriggerFilter(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("triggerPath"), TEXT("Path to trigger actor blueprint."))
-	 .Required({TEXT("triggerPath")});
-}
 
-static void S_ConfigureTriggerResponse(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("triggerPath"), TEXT("Path to trigger actor blueprint."))
-	 .Required({TEXT("triggerPath")});
-}
 
 static void S_GetInfo(FMcpSchemaBuilder& B)
 {
@@ -254,17 +220,10 @@ MCP_MI_CALL(ConfigureChestProperties, "configure_chest_properties", HandleIntera
 MCP_MI_CALL(CreateLeverActor, "create_lever_actor", HandleInteractionCreateLeverActor, EMcpCallFlags::Mutating)
 
 // Destructibles (18.3; the configure_destruction_* trio are marker-tag scaffolds)
-MCP_MI_CALL(SetupDestructibleMesh, "setup_destructible_mesh", HandleInteractionSetupDestructibleMesh, EMcpCallFlags::Mutating)
 MCP_MI_CALL(AddDestructionComponent, "add_destruction_component", HandleInteractionAddDestructionComponent, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureDestructionLevels, "configure_destruction_levels", HandleInteractionConfigureDestructionLevels, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureDestructionEffects, "configure_destruction_effects", HandleInteractionConfigureDestructionEffects, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureDestructionDamage, "configure_destruction_damage", HandleInteractionConfigureDestructionDamage, EMcpCallFlags::Mutating)
 
 // Trigger system (18.4; filter/response are variable scaffolds)
 MCP_MI_CALL(CreateTriggerActor, "create_trigger_actor", HandleInteractionCreateTriggerActor, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureTriggerEvents, "configure_trigger_events", HandleInteractionConfigureTriggerEvents, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureTriggerFilter, "configure_trigger_filter", HandleInteractionConfigureTriggerFilter, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureTriggerResponse, "configure_trigger_response", HandleInteractionConfigureTriggerResponse, EMcpCallFlags::Mutating)
 
 // Utility
 MCP_MI_CALL(GetInfo, "get_info", HandleInteractionGetInfo, EMcpCallFlags::None)
@@ -289,14 +248,7 @@ void McpRegisterManageInteractionCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInteraction_CreateChestActor>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInteraction_ConfigureChestProperties>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInteraction_CreateLeverActor>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInteraction_SetupDestructibleMesh>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInteraction_AddDestructionComponent>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInteraction_ConfigureDestructionLevels>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInteraction_ConfigureDestructionEffects>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInteraction_ConfigureDestructionDamage>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInteraction_CreateTriggerActor>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInteraction_ConfigureTriggerEvents>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInteraction_ConfigureTriggerFilter>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInteraction_ConfigureTriggerResponse>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInteraction_GetInfo>());
 }

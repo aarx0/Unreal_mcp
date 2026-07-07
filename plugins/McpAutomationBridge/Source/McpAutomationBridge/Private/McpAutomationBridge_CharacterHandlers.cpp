@@ -1386,58 +1386,6 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureNavMovement(
 //             "mantleReachDistance": number, "stateVariable": string,
 //             "targetVariable": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupMantling(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
-    return true;
-#else
-    FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
-
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
-    if (!Blueprint) return true;
-
-    float MantleHeight = static_cast<float>(GetJsonNumberField(Payload, TEXT("mantleHeight"), 200.0));
-    float MantleReach = static_cast<float>(GetJsonNumberField(Payload, TEXT("mantleReachDistance"), 100.0));
-    // Add mantling state and configuration variables
-    FEdGraphPinType BoolPinType;
-    BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-    AddBlueprintVariableChar(Blueprint, TEXT("bIsMantling"), BoolPinType, TEXT("Mantling"));
-    AddBlueprintVariableChar(Blueprint, TEXT("bCanMantle"), BoolPinType, TEXT("Mantling"));
-
-    FEdGraphPinType FloatPinType;
-    FloatPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-    FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-    AddBlueprintVariableChar(Blueprint, TEXT("MantleHeight"), FloatPinType, TEXT("Mantling"));
-    AddBlueprintVariableChar(Blueprint, TEXT("MantleReachDistance"), FloatPinType, TEXT("Mantling"));
-
-    // Set default values for mantling configuration
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("bCanMantle")), TEXT("true"));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("MantleHeight")), FString::SanitizeFloat(MantleHeight));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("MantleReachDistance")), FString::SanitizeFloat(MantleReach));
-
-    // Add mantle target location variable
-    FEdGraphPinType VectorPinType;
-    VectorPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-    VectorPinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
-    AddBlueprintVariableChar(Blueprint, TEXT("MantleTargetLocation"), VectorPinType, TEXT("Mantling"));
-
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetNumberField(TEXT("mantleHeight"), MantleHeight);
-    Result->SetNumberField(TEXT("mantleReachDistance"), MantleReach);
-    Result->SetStringField(TEXT("stateVariable"), TEXT("bIsMantling"));
-    Result->SetStringField(TEXT("targetVariable"), TEXT("MantleTargetLocation"));
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Mantling system configured with state variables"), Result);
-    return true;
-#endif // WITH_EDITOR
-}
 
 // -------------------------------------------------------------------------
 // setup_vaulting
@@ -1451,58 +1399,6 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupMantling(
 // Response: { "blueprintPath": string, "vaultHeight": number, "vaultDepth": number,
 //             "stateVariable": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupVaulting(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
-    return true;
-#else
-    FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
-
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
-    if (!Blueprint) return true;
-
-    float VaultHeight = static_cast<float>(GetJsonNumberField(Payload, TEXT("vaultHeight"), 100.0));
-    float VaultDepth = static_cast<float>(GetJsonNumberField(Payload, TEXT("vaultDepth"), 100.0));
-    // Add vaulting state and configuration variables
-    FEdGraphPinType BoolPinType;
-    BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-    AddBlueprintVariableChar(Blueprint, TEXT("bIsVaulting"), BoolPinType, TEXT("Vaulting"));
-    AddBlueprintVariableChar(Blueprint, TEXT("bCanVault"), BoolPinType, TEXT("Vaulting"));
-
-    FEdGraphPinType FloatPinType;
-    FloatPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-    FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-    AddBlueprintVariableChar(Blueprint, TEXT("VaultHeight"), FloatPinType, TEXT("Vaulting"));
-    AddBlueprintVariableChar(Blueprint, TEXT("VaultDepth"), FloatPinType, TEXT("Vaulting"));
-
-    // Set default values for vaulting configuration
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("bCanVault")), TEXT("true"));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("VaultHeight")), FString::SanitizeFloat(VaultHeight));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("VaultDepth")), FString::SanitizeFloat(VaultDepth));
-
-    // Add vault start and end location variables
-    FEdGraphPinType VectorPinType;
-    VectorPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-    VectorPinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
-    AddBlueprintVariableChar(Blueprint, TEXT("VaultStartLocation"), VectorPinType, TEXT("Vaulting"));
-    AddBlueprintVariableChar(Blueprint, TEXT("VaultEndLocation"), VectorPinType, TEXT("Vaulting"));
-
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetNumberField(TEXT("vaultHeight"), VaultHeight);
-    Result->SetNumberField(TEXT("vaultDepth"), VaultDepth);
-    Result->SetStringField(TEXT("stateVariable"), TEXT("bIsVaulting"));
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Vaulting system configured with state variables"), Result);
-    return true;
-#endif // WITH_EDITOR
-}
 
 // -------------------------------------------------------------------------
 // setup_climbing
@@ -1517,61 +1413,6 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupVaulting(
 // Response: { "blueprintPath": string, "climbSpeed": number,
 //             "climbableTag": string, "stateVariable": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupClimbing(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
-    return true;
-#else
-    FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
-
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
-    if (!Blueprint) return true;
-
-    float ClimbSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("climbSpeed"), 300.0));
-    FString ClimbableTag = GetJsonStringField(Payload, TEXT("climbableTag"), TEXT("Climbable"));
-    // Add climbing state and configuration variables
-    FEdGraphPinType BoolPinType;
-    BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-    AddBlueprintVariableChar(Blueprint, TEXT("bIsClimbing"), BoolPinType, TEXT("Climbing"));
-    AddBlueprintVariableChar(Blueprint, TEXT("bCanClimb"), BoolPinType, TEXT("Climbing"));
-
-    FEdGraphPinType FloatPinType;
-    FloatPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-    FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-    AddBlueprintVariableChar(Blueprint, TEXT("ClimbSpeed"), FloatPinType, TEXT("Climbing"));
-
-    FEdGraphPinType NamePinType;
-    NamePinType.PinCategory = UEdGraphSchema_K2::PC_Name;
-    AddBlueprintVariableChar(Blueprint, TEXT("ClimbableTag"), NamePinType, TEXT("Climbing"));
-
-    // Add climb surface normal for proper orientation
-    FEdGraphPinType VectorPinType;
-    VectorPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-    VectorPinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
-    AddBlueprintVariableChar(Blueprint, TEXT("ClimbSurfaceNormal"), VectorPinType, TEXT("Climbing"));
-
-    // Set default values for climbing configuration
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("bCanClimb")), TEXT("true"));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("ClimbSpeed")), FString::SanitizeFloat(ClimbSpeed));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("ClimbableTag")), ClimbableTag);
-
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetNumberField(TEXT("climbSpeed"), ClimbSpeed);
-    Result->SetStringField(TEXT("climbableTag"), ClimbableTag);
-    Result->SetStringField(TEXT("stateVariable"), TEXT("bIsClimbing"));
-    Result->SetStringField(TEXT("speedVariable"), TEXT("ClimbSpeed"));
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Climbing system configured with state variables"), Result);
-    return true;
-#endif // WITH_EDITOR
-}
 
 // -------------------------------------------------------------------------
 // setup_sliding
@@ -1585,57 +1426,6 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupClimbing(
 // Response: { "blueprintPath": string, "slideSpeed": number, "slideDuration": number,
 //             "slideCooldown": number, "stateVariable": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupSliding(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
-    return true;
-#else
-    FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
-
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
-    if (!Blueprint) return true;
-
-    float SlideSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("slideSpeed"), 800.0));
-    float SlideDuration = static_cast<float>(GetJsonNumberField(Payload, TEXT("slideDuration"), 1.0));
-    float SlideCooldown = static_cast<float>(GetJsonNumberField(Payload, TEXT("slideCooldown"), 0.5));
-    // Add sliding state and configuration variables
-    FEdGraphPinType BoolPinType;
-    BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-    AddBlueprintVariableChar(Blueprint, TEXT("bIsSliding"), BoolPinType, TEXT("Sliding"));
-    AddBlueprintVariableChar(Blueprint, TEXT("bCanSlide"), BoolPinType, TEXT("Sliding"));
-
-    FEdGraphPinType FloatPinType;
-    FloatPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-    FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-    AddBlueprintVariableChar(Blueprint, TEXT("SlideSpeed"), FloatPinType, TEXT("Sliding"));
-    AddBlueprintVariableChar(Blueprint, TEXT("SlideDuration"), FloatPinType, TEXT("Sliding"));
-    AddBlueprintVariableChar(Blueprint, TEXT("SlideCooldown"), FloatPinType, TEXT("Sliding"));
-    AddBlueprintVariableChar(Blueprint, TEXT("SlideTimeRemaining"), FloatPinType, TEXT("Sliding"));
-    AddBlueprintVariableChar(Blueprint, TEXT("SlideCooldownRemaining"), FloatPinType, TEXT("Sliding"));
-
-    // Set default values for sliding configuration
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("bCanSlide")), TEXT("true"));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("SlideSpeed")), FString::SanitizeFloat(SlideSpeed));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("SlideDuration")), FString::SanitizeFloat(SlideDuration));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("SlideCooldown")), FString::SanitizeFloat(SlideCooldown));
-
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetNumberField(TEXT("slideSpeed"), SlideSpeed);
-    Result->SetNumberField(TEXT("slideDuration"), SlideDuration);
-    Result->SetNumberField(TEXT("slideCooldown"), SlideCooldown);
-    Result->SetStringField(TEXT("stateVariable"), TEXT("bIsSliding"));
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Sliding system configured with state and timing variables"), Result);
-    return true;
-#endif // WITH_EDITOR
-}
 
 // -------------------------------------------------------------------------
 // setup_wall_running
@@ -1653,63 +1443,6 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupSliding(
 //             "wallRunDuration": number, "wallRunGravityScale": number,
 //             "stateVariable": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupWallRunning(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
-    return true;
-#else
-    FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
-
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
-    if (!Blueprint) return true;
-
-    float WallRunSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("wallRunSpeed"), 600.0));
-    float WallRunDuration = static_cast<float>(GetJsonNumberField(Payload, TEXT("wallRunDuration"), 2.0));
-    float WallRunGravity = static_cast<float>(GetJsonNumberField(Payload, TEXT("wallRunGravityScale"), 0.25));
-    // Add wall running state and configuration variables
-    FEdGraphPinType BoolPinType;
-    BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-    AddBlueprintVariableChar(Blueprint, TEXT("bIsWallRunning"), BoolPinType, TEXT("Wall Running"));
-    AddBlueprintVariableChar(Blueprint, TEXT("bIsWallRunningLeft"), BoolPinType, TEXT("Wall Running"));
-    AddBlueprintVariableChar(Blueprint, TEXT("bIsWallRunningRight"), BoolPinType, TEXT("Wall Running"));
-
-    FEdGraphPinType FloatPinType;
-    FloatPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-    FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-    AddBlueprintVariableChar(Blueprint, TEXT("WallRunSpeed"), FloatPinType, TEXT("Wall Running"));
-    AddBlueprintVariableChar(Blueprint, TEXT("WallRunDuration"), FloatPinType, TEXT("Wall Running"));
-    AddBlueprintVariableChar(Blueprint, TEXT("WallRunGravityScale"), FloatPinType, TEXT("Wall Running"));
-    AddBlueprintVariableChar(Blueprint, TEXT("WallRunTimeRemaining"), FloatPinType, TEXT("Wall Running"));
-
-    // Add wall normal for orientation
-    FEdGraphPinType VectorPinType;
-    VectorPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-    VectorPinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
-    AddBlueprintVariableChar(Blueprint, TEXT("WallRunNormal"), VectorPinType, TEXT("Wall Running"));
-
-    // Set default values for wall running configuration
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("WallRunSpeed")), FString::SanitizeFloat(WallRunSpeed));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("WallRunDuration")), FString::SanitizeFloat(WallRunDuration));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("WallRunGravityScale")), FString::SanitizeFloat(WallRunGravity));
-
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetNumberField(TEXT("wallRunSpeed"), WallRunSpeed);
-    Result->SetNumberField(TEXT("wallRunDuration"), WallRunDuration);
-    Result->SetNumberField(TEXT("wallRunGravityScale"), WallRunGravity);
-    Result->SetStringField(TEXT("stateVariable"), TEXT("bIsWallRunning"));
-    Result->SetStringField(TEXT("speedVariable"), TEXT("WallRunSpeed"));
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Wall running system configured with state variables"), Result);
-    return true;
-#endif // WITH_EDITOR
-}
 
 // -------------------------------------------------------------------------
 // setup_grappling
@@ -1724,63 +1457,6 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupWallRunning(
 //             "grappleSpeed": number, "grappleTargetTag": string,
 //             "stateVariable": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupGrappling(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
-    return true;
-#else
-    FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
-
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
-    if (!Blueprint) return true;
-
-    float GrappleRange = static_cast<float>(GetJsonNumberField(Payload, TEXT("grappleRange"), 2000.0));
-    float GrappleSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("grappleSpeed"), 1500.0));
-    FString GrappleTarget = GetJsonStringField(Payload, TEXT("grappleTargetTag"), TEXT("Grapple"));
-    // Add grappling state and configuration variables
-    FEdGraphPinType BoolPinType;
-    BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-    AddBlueprintVariableChar(Blueprint, TEXT("bIsGrappling"), BoolPinType, TEXT("Grappling"));
-    AddBlueprintVariableChar(Blueprint, TEXT("bHasGrappleTarget"), BoolPinType, TEXT("Grappling"));
-
-    FEdGraphPinType FloatPinType;
-    FloatPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-    FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-    AddBlueprintVariableChar(Blueprint, TEXT("GrappleRange"), FloatPinType, TEXT("Grappling"));
-    AddBlueprintVariableChar(Blueprint, TEXT("GrappleSpeed"), FloatPinType, TEXT("Grappling"));
-
-    FEdGraphPinType NamePinType;
-    NamePinType.PinCategory = UEdGraphSchema_K2::PC_Name;
-    AddBlueprintVariableChar(Blueprint, TEXT("GrappleTargetTag"), NamePinType, TEXT("Grappling"));
-
-    // Add grapple target location
-    FEdGraphPinType VectorPinType;
-    VectorPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-    VectorPinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
-    AddBlueprintVariableChar(Blueprint, TEXT("GrappleTargetLocation"), VectorPinType, TEXT("Grappling"));
-
-    // Set default values for grappling configuration
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("GrappleRange")), FString::SanitizeFloat(GrappleRange));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("GrappleSpeed")), FString::SanitizeFloat(GrappleSpeed));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("GrappleTargetTag")), GrappleTarget);
-
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetNumberField(TEXT("grappleRange"), GrappleRange);
-    Result->SetNumberField(TEXT("grappleSpeed"), GrappleSpeed);
-    Result->SetStringField(TEXT("grappleTargetTag"), GrappleTarget);
-    Result->SetStringField(TEXT("stateVariable"), TEXT("bIsGrappling"));
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Grappling system configured with state variables"), Result);
-    return true;
-#endif // WITH_EDITOR
-}
 
 // ============================================================
 // 14.4 FOOTSTEPS SYSTEM
@@ -1799,58 +1475,6 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupGrappling(
 // Response: { "blueprintPath": string, "enabled": bool, "socketLeft": string,
 //             "socketRight": string, "traceDistance": number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupFootstepSystem(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
-    return true;
-#else
-    FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
-
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
-    if (!Blueprint) return true;
-
-    bool Enabled = GetJsonBoolField(Payload, TEXT("footstepEnabled"), true);
-    FString SocketLeft = GetJsonStringField(Payload, TEXT("footstepSocketLeft"), TEXT("foot_l"));
-    FString SocketRight = GetJsonStringField(Payload, TEXT("footstepSocketRight"), TEXT("foot_r"));
-    float TraceDistance = static_cast<float>(GetJsonNumberField(Payload, TEXT("footstepTraceDistance"), 50.0));
-
-    // Add footstep system variables
-    FEdGraphPinType BoolPinType;
-    BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-    AddBlueprintVariableChar(Blueprint, TEXT("bFootstepSystemEnabled"), BoolPinType, TEXT("Footsteps"));
-
-    FEdGraphPinType NamePinType;
-    NamePinType.PinCategory = UEdGraphSchema_K2::PC_Name;
-    AddBlueprintVariableChar(Blueprint, TEXT("FootstepSocketLeft"), NamePinType, TEXT("Footsteps"));
-    AddBlueprintVariableChar(Blueprint, TEXT("FootstepSocketRight"), NamePinType, TEXT("Footsteps"));
-
-    FEdGraphPinType FloatPinType;
-    FloatPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-    FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-    AddBlueprintVariableChar(Blueprint, TEXT("FootstepTraceDistance"), FloatPinType, TEXT("Footsteps"));
-
-    // Set default values for footstep configuration
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("bFootstepSystemEnabled")), Enabled ? TEXT("true") : TEXT("false"));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("FootstepSocketLeft")), SocketLeft);
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("FootstepSocketRight")), SocketRight);
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("FootstepTraceDistance")), FString::SanitizeFloat(TraceDistance));
-
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetBoolField(TEXT("enabled"), Enabled);
-    Result->SetStringField(TEXT("socketLeft"), SocketLeft);
-    Result->SetStringField(TEXT("socketRight"), SocketRight);
-    Result->SetNumberField(TEXT("traceDistance"), TraceDistance);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Footstep system configured with tracking variables"), Result);
-    return true;
-#endif // WITH_EDITOR
-}
 
 // -------------------------------------------------------------------------
 // map_surface_to_sound
@@ -1973,44 +1597,6 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterMapSurfaceToSound(
 // Response: { "blueprintPath": string, "volumeMultiplier": number,
 //             "particleScale": number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureFootstepFx(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
-    return true;
-#else
-    FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
-
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
-    if (!Blueprint) return true;
-
-    float VolumeMultiplier = static_cast<float>(GetJsonNumberField(Payload, TEXT("volumeMultiplier"), 1.0));
-    float ParticleScale = static_cast<float>(GetJsonNumberField(Payload, TEXT("particleScale"), 1.0));
-
-    // Add FX configuration variables
-    FEdGraphPinType FloatPinType;
-    FloatPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-    FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-    AddBlueprintVariableChar(Blueprint, TEXT("FootstepVolumeMultiplier"), FloatPinType, TEXT("Footsteps"));
-    AddBlueprintVariableChar(Blueprint, TEXT("FootstepParticleScale"), FloatPinType, TEXT("Footsteps"));
-
-    // Set default values for footstep FX configuration
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("FootstepVolumeMultiplier")), FString::SanitizeFloat(VolumeMultiplier));
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("FootstepParticleScale")), FString::SanitizeFloat(ParticleScale));
-
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetNumberField(TEXT("volumeMultiplier"), VolumeMultiplier);
-    Result->SetNumberField(TEXT("particleScale"), ParticleScale);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Footstep FX configured with scale variables"), Result);
-    return true;
-#endif // WITH_EDITOR
-}
 
 // ============================================================
 // UTILITY
@@ -2600,45 +2186,6 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCrouch(
 // Response: { "blueprintPath": string, "sprintSpeed": number,
 //             "stateVariable": string, "speedVariable": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureSprint(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
-    return true;
-#else
-    FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
-
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
-    if (!Blueprint) return true;
-
-    double SprintSpeed = GetJsonNumberField(Payload, TEXT("sprintSpeed"), 900.0);
-
-    // Add sprint state variables
-    FEdGraphPinType BoolPinType;
-    BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-    AddBlueprintVariableChar(Blueprint, TEXT("bIsSprinting"), BoolPinType, TEXT("Sprint"));
-
-    FEdGraphPinType FloatPinType;
-    FloatPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-    FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-    AddBlueprintVariableChar(Blueprint, TEXT("SprintSpeed"), FloatPinType, TEXT("Sprint"));
-
-    SetBPVarDefaultValue(Blueprint, FName(TEXT("SprintSpeed")), FString::SanitizeFloat(SprintSpeed));
-
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetNumberField(TEXT("sprintSpeed"), SprintSpeed);
-    Result->SetStringField(TEXT("stateVariable"), TEXT("bIsSprinting"));
-    Result->SetStringField(TEXT("speedVariable"), TEXT("SprintSpeed"));
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Sprint configured; SprintSpeed stored as variable default"), Result);
-    return true;
-#endif // WITH_EDITOR
-}
 
 // =============================================================================
 // Cleanup: Undefine local macro aliases

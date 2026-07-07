@@ -142,80 +142,12 @@ static void S_ConfigureNavMovement(FMcpSchemaBuilder& B)
 	 .Required({TEXT("blueprintPath")});
 }
 
-static void S_SetupMantling(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Name of the asset to create."))
-	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("mantleHeight"), TEXT("Maximum mantle height."))
-	 .Number(TEXT("mantleReachDistance"), TEXT("Forward reach for mantle check."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_SetupVaulting(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Name of the asset to create."))
-	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("vaultHeight"), TEXT("Maximum vault obstacle height."))
-	 .Number(TEXT("vaultDepth"), TEXT("Obstacle depth to check."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_SetupClimbing(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Name of the asset to create."))
-	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("climbSpeed"), TEXT(""))
-	 .String(TEXT("climbableTag"), TEXT("Tag for climbable surfaces."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_SetupSliding(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Name of the asset to create."))
-	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("slideSpeed"), TEXT(""))
-	 .Number(TEXT("slideDuration"), TEXT(""))
-	 .Number(TEXT("slideCooldown"), TEXT(""))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_SetupWallRunning(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Name of the asset to create."))
-	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("wallRunSpeed"), TEXT("Wall running speed."))
-	 .Number(TEXT("wallRunDuration"), TEXT("Maximum wall run duration."))
-	 .Number(TEXT("wallRunGravityScale"), TEXT("Gravity during wall run."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_SetupGrappling(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Name of the asset to create."))
-	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("grappleRange"), TEXT("Maximum grapple distance."))
-	 .Number(TEXT("grappleSpeed"), TEXT("Grapple pull speed."))
-	 .String(TEXT("grappleTargetTag"), TEXT("Tag for grapple targets."))
-	 .Required({TEXT("blueprintPath")});
-}
 
-static void S_SetupFootstepSystem(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Name of the asset to create."))
-	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Bool(TEXT("footstepEnabled"), TEXT("Enable footstep system."))
-	 .String(TEXT("footstepSocketLeft"), TEXT("Left foot socket name."))
-	 .String(TEXT("footstepSocketRight"), TEXT("Right foot socket name."))
-	 .Number(TEXT("footstepTraceDistance"), TEXT("Ground trace distance."))
-	 .Required({TEXT("blueprintPath")});
-}
 
 static void S_MapSurfaceToSound(FMcpSchemaBuilder& B)
 {
@@ -239,15 +171,6 @@ static void S_MapSurfaceToSound(FMcpSchemaBuilder& B)
 	 .Required({TEXT("blueprintPath"), TEXT("surfaceType"), TEXT("soundPath")});
 }
 
-static void S_ConfigureFootstepFx(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Name of the asset to create."))
-	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("volumeMultiplier"), TEXT("configure_footstep_fx: footstep sound volume multiplier (default 1.0)."))
-	 .Number(TEXT("particleScale"), TEXT("configure_footstep_fx: footstep particle scale (default 1.0)."))
-	 .Required({TEXT("blueprintPath")});
-}
 
 static void S_GetInfo(FMcpSchemaBuilder& B)
 {
@@ -324,14 +247,6 @@ static void S_ConfigureCrouch(FMcpSchemaBuilder& B)
 	 .Required({TEXT("blueprintPath")});
 }
 
-static void S_ConfigureSprint(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Name of the asset to create."))
-	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("sprintSpeed"), TEXT("Sprint speed; stored as the SprintSpeed variable default (no CharacterMovement property)."))
-	 .Required({TEXT("blueprintPath")});
-}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // RequiresEditor is baked into every row (the implementation TU is editor-
@@ -370,17 +285,9 @@ MCP_MC_CALL(AddCustomMovementMode, "add_custom_movement_mode", HandleCharacterAd
 MCP_MC_CALL(ConfigureNavMovement, "configure_nav_movement", HandleCharacterConfigureNavMovement, EMcpCallFlags::Mutating)
 
 // Advanced movement (14.3)
-MCP_MC_CALL(SetupMantling, "setup_mantling", HandleCharacterSetupMantling, EMcpCallFlags::Mutating)
-MCP_MC_CALL(SetupVaulting, "setup_vaulting", HandleCharacterSetupVaulting, EMcpCallFlags::Mutating)
-MCP_MC_CALL(SetupClimbing, "setup_climbing", HandleCharacterSetupClimbing, EMcpCallFlags::Mutating)
-MCP_MC_CALL(SetupSliding, "setup_sliding", HandleCharacterSetupSliding, EMcpCallFlags::Mutating)
-MCP_MC_CALL(SetupWallRunning, "setup_wall_running", HandleCharacterSetupWallRunning, EMcpCallFlags::Mutating)
-MCP_MC_CALL(SetupGrappling, "setup_grappling", HandleCharacterSetupGrappling, EMcpCallFlags::Mutating)
 
 // Footstep system (14.4)
-MCP_MC_CALL(SetupFootstepSystem, "setup_footstep_system", HandleCharacterSetupFootstepSystem, EMcpCallFlags::Mutating)
 MCP_MC_CALL(MapSurfaceToSound, "map_surface_to_sound", HandleCharacterMapSurfaceToSound, EMcpCallFlags::Mutating)
-MCP_MC_CALL(ConfigureFootstepFx, "configure_footstep_fx", HandleCharacterConfigureFootstepFx, EMcpCallFlags::Mutating)
 
 // Utility
 MCP_MC_CALL(GetInfo, "get_info", HandleCharacterGetInfo, EMcpCallFlags::None)
@@ -393,7 +300,6 @@ MCP_MC_CALL(SetGravityScale, "set_gravity_scale", HandleCharacterSetGravityScale
 MCP_MC_CALL(SetGroundFriction, "set_ground_friction", HandleCharacterSetGroundFriction, EMcpCallFlags::Mutating)
 MCP_MC_CALL(SetBrakingDeceleration, "set_braking_deceleration", HandleCharacterSetBrakingDeceleration, EMcpCallFlags::Mutating)
 MCP_MC_CALL(ConfigureCrouch, "configure_crouch", HandleCharacterConfigureCrouch, EMcpCallFlags::Mutating)
-MCP_MC_CALL(ConfigureSprint, "configure_sprint", HandleCharacterConfigureSprint, EMcpCallFlags::Mutating)
 
 #undef MCP_MC_CALL
 
@@ -412,15 +318,7 @@ void McpRegisterManageCharacterCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_ConfigureRotation>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_AddCustomMovementMode>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_ConfigureNavMovement>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_SetupMantling>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_SetupVaulting>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_SetupClimbing>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_SetupSliding>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_SetupWallRunning>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_SetupGrappling>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_SetupFootstepSystem>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_MapSurfaceToSound>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_ConfigureFootstepFx>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_GetInfo>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_SetupMovement>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_SetWalkSpeed>());
@@ -429,5 +327,4 @@ void McpRegisterManageCharacterCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_SetGroundFriction>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_SetBrakingDeceleration>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_ConfigureCrouch>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageCharacter_ConfigureSprint>());
 }

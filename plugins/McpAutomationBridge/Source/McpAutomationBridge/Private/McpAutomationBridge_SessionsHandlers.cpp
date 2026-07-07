@@ -164,186 +164,12 @@ namespace SessionsHelpers
 
 #if WITH_EDITOR
 
-static bool HandleConfigureLocalSessionSettings(
-    UMcpAutomationBridgeSubsystem* Subsystem,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-    using namespace SessionsHelpers;
 
-    // VALIDATION: Require at least one session setting parameter
-    // Check for actual session parameters, not just field count
-    // Note: The MCP layer adds 'action' and 'subAction' fields, so we can't just count fields
-    const TArray<FString> SettingParams = {
-        TEXT("sessionName"), TEXT("maxPlayers"), TEXT("bIsLANMatch"),
-        TEXT("bAllowJoinInProgress"), TEXT("bAllowInvites"), TEXT("bUsesPresence"),
-        TEXT("bUseLobbiesIfAvailable"), TEXT("bShouldAdvertise")
-    };
-    
-    bool bHasAnySetting = false;
-    if (Payload.IsValid())
-    {
-        for (const FString& Param : SettingParams)
-        {
-            if (Payload->HasField(Param))
-            {
-                bHasAnySetting = true;
-                break;
-            }
-        }
-    }
-    
-    if (!bHasAnySetting)
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("At least one session setting parameter is required (sessionName, maxPlayers, bIsLANMatch, bAllowJoinInProgress, bAllowInvites, bUsesPresence, bUseLobbiesIfAvailable, or bShouldAdvertise)"), nullptr);
-        return true;
-    }
-
-    // Extract session settings from payload
-    FString SessionName = GetJsonStringField(Payload, TEXT("sessionName"), TEXT("DefaultSession"));
-    int32 MaxPlayers = static_cast<int32>(GetJsonNumberField(Payload, TEXT("maxPlayers"), 4.0));
-    bool bIsLANMatch = GetJsonBoolField(Payload, TEXT("bIsLANMatch"), false);
-    bool bAllowJoinInProgress = GetJsonBoolField(Payload, TEXT("bAllowJoinInProgress"), true);
-    bool bAllowInvites = GetJsonBoolField(Payload, TEXT("bAllowInvites"), true);
-    bool bUsesPresence = GetJsonBoolField(Payload, TEXT("bUsesPresence"), true);
-    bool bUseLobbiesIfAvailable = GetJsonBoolField(Payload, TEXT("bUseLobbiesIfAvailable"), true);
-    bool bShouldAdvertise = GetJsonBoolField(Payload, TEXT("bShouldAdvertise"), true);
-
-    // Build response with session configuration
-    TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
-    ResponseJson->SetStringField(TEXT("sessionName"), SessionName);
-    ResponseJson->SetNumberField(TEXT("maxPlayers"), MaxPlayers);
-    ResponseJson->SetBoolField(TEXT("bIsLANMatch"), bIsLANMatch);
-    ResponseJson->SetBoolField(TEXT("bAllowJoinInProgress"), bAllowJoinInProgress);
-    ResponseJson->SetBoolField(TEXT("bAllowInvites"), bAllowInvites);
-    ResponseJson->SetBoolField(TEXT("bUsesPresence"), bUsesPresence);
-    ResponseJson->SetBoolField(TEXT("bUseLobbiesIfAvailable"), bUseLobbiesIfAvailable);
-    ResponseJson->SetBoolField(TEXT("bShouldAdvertise"), bShouldAdvertise);
-
-    FString Message = FString::Printf(TEXT("Local session settings configured: '%s' with max %d players (LAN: %s)"),
-        *SessionName, MaxPlayers, bIsLANMatch ? TEXT("Yes") : TEXT("No"));
-
-    Subsystem->SendAutomationResponse(Socket, RequestId, true, Message, ResponseJson);
-    return true;
-}
-
-static bool HandleConfigureSessionInterface(
-    UMcpAutomationBridgeSubsystem* Subsystem,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-    using namespace SessionsHelpers;
-
-    // VALIDATION: Require interfaceType parameter
-    if (!Payload.IsValid() || !Payload->HasField(TEXT("interfaceType")))
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("interfaceType is required. Valid types: Default, LAN, Null"), nullptr);
-        return true;
-    }
-
-    FString InterfaceType = GetJsonStringField(Payload, TEXT("interfaceType"), TEXT("Default"));
-
-    // Validate interface type
-    TArray<FString> ValidTypes = { TEXT("Default"), TEXT("LAN"), TEXT("Null") };
-    if (!ValidTypes.Contains(InterfaceType))
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            FString::Printf(TEXT("Invalid session interface type: %s. Valid types: Default, LAN, Null"), *InterfaceType), nullptr);
-        return false;
-    }
-
-    TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
-    ResponseJson->SetStringField(TEXT("interfaceType"), InterfaceType);
-    ResponseJson->SetStringField(TEXT("status"), TEXT("configured"));
-
-    FString Message = FString::Printf(TEXT("Session interface configured to: %s"), *InterfaceType);
-    Subsystem->SendAutomationResponse(Socket, RequestId, true, Message, ResponseJson);
-    return true;
-}
 
 // ============================================================================
 // Local Multiplayer Actions
 // ============================================================================
 
-static bool HandleConfigureSplitScreen(
-    UMcpAutomationBridgeSubsystem* Subsystem,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-    using namespace SessionsHelpers;
-
-    // VALIDATION: Require at least one split screen parameter
-    if (!Payload.IsValid() || (!Payload->HasField(TEXT("enabled")) && !Payload->HasField(TEXT("splitScreenType"))))
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("At least one split screen parameter is required (enabled or splitScreenType)"), nullptr);
-        return true;
-    }
-
-    bool bEnabled = GetJsonBoolField(Payload, TEXT("enabled"), true);
-    FString SplitScreenType = GetJsonStringField(Payload, TEXT("splitScreenType"), TEXT("TwoPlayer_Horizontal"));
-    bool bVerticalSplit = SplitScreenType.Contains(TEXT("Vertical"));
-    bool bSuccess = false;
-    FString StatusMessage;
-
-    // Configure split screen via game user settings
-    UGameUserSettings* Settings = GEngine ? GEngine->GetGameUserSettings() : nullptr;
-    if (Settings)
-    {
-        // Apply settings that affect split-screen behavior
-        // Note: UE doesn't have a direct "split screen enabled" toggle in GameUserSettings
-        // Split-screen is typically controlled by the GameMode and player controller spawning
-        // We can configure related settings and save them
-        
-        // Save the current settings to persist the configuration
-        Settings->ApplySettings(false);
-        Settings->SaveSettings();
-        
-        bSuccess = true;
-        StatusMessage = TEXT("Game user settings configured and saved");
-        
-        // Log the configuration for debugging
-        UE_LOG(LogMcpSessionsHandlers, Log, TEXT("Split-screen configured: Enabled=%s, Type=%s"), 
-            bEnabled ? TEXT("true") : TEXT("false"), *SplitScreenType);
-    }
-    else
-    {
-        StatusMessage = TEXT("GameUserSettings not available");
-    }
-    
-    // Additionally, we can configure the GameViewportClient if in PIE
-    UGameInstance* GI = GetGameInstance();
-    if (GI)
-    {
-        // The actual split-screen layout is controlled by UGameViewportClient
-        // and is typically set up automatically when local players are added
-        int32 CurrentPlayers = GI->GetLocalPlayers().Num();
-        
-        // If we have multiple players, split-screen is implicitly enabled
-        bSuccess = true;
-        StatusMessage = FString::Printf(TEXT("Split-screen %s with %d local players"),
-            bEnabled ? TEXT("configured") : TEXT("disabled"), CurrentPlayers);
-    }
-    
-    TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
-    ResponseJson->SetBoolField(TEXT("enabled"), bEnabled);
-    ResponseJson->SetStringField(TEXT("splitScreenType"), SplitScreenType);
-    ResponseJson->SetBoolField(TEXT("verticalSplit"), bVerticalSplit);
-    ResponseJson->SetBoolField(TEXT("success"), bSuccess);
-    ResponseJson->SetStringField(TEXT("status"), StatusMessage);
-    ResponseJson->SetBoolField(TEXT("settingsSaved"), Settings != nullptr);
-
-    FString Message = FString::Printf(TEXT("Split-screen %s with type: %s - %s"),
-        bEnabled ? TEXT("enabled") : TEXT("disabled"), *SplitScreenType, *StatusMessage);
-
-    Subsystem->SendAutomationResponse(Socket, RequestId, bSuccess, Message, ResponseJson);
-    return true;
-}
 
 static bool HandleSetSplitScreenType(
     UMcpAutomationBridgeSubsystem* Subsystem,
@@ -498,39 +324,6 @@ static bool HandleRemoveLocalPlayer(
 // LAN Actions
 // ============================================================================
 
-static bool HandleConfigureLanPlay(
-    UMcpAutomationBridgeSubsystem* Subsystem,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-    using namespace SessionsHelpers;
-
-    // VALIDATION: Require at least one LAN play parameter
-    if (!Payload.IsValid() || (!Payload->HasField(TEXT("enabled")) && !Payload->HasField(TEXT("serverPort")) && !Payload->HasField(TEXT("serverPassword"))))
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("At least one LAN play parameter is required (enabled, serverPort, or serverPassword)"), nullptr);
-        return true;
-    }
-
-    bool bEnabled = GetJsonBoolField(Payload, TEXT("enabled"), true);
-    int32 ServerPort = static_cast<int32>(GetJsonNumberField(Payload, TEXT("serverPort"), 7777));
-    FString ServerPassword = GetJsonStringField(Payload, TEXT("serverPassword"), TEXT(""));
-
-    TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
-    ResponseJson->SetBoolField(TEXT("enabled"), bEnabled);
-    ResponseJson->SetNumberField(TEXT("serverPort"), ServerPort);
-    ResponseJson->SetBoolField(TEXT("hasPassword"), !ServerPassword.IsEmpty());
-
-    FString Message = FString::Printf(TEXT("LAN play %s on port %d%s"),
-        bEnabled ? TEXT("enabled") : TEXT("disabled"),
-        ServerPort,
-        ServerPassword.IsEmpty() ? TEXT("") : TEXT(" (password protected)"));
-
-    Subsystem->SendAutomationResponse(Socket, RequestId, true, Message, ResponseJson);
-    return true;
-}
 
 static bool HandleHostLanServer(
     UMcpAutomationBridgeSubsystem* Subsystem,
@@ -770,57 +563,6 @@ static bool HandleEnableVoiceChat(
     return true;
 }
 
-static bool HandleConfigureVoiceSettings(
-    UMcpAutomationBridgeSubsystem* Subsystem,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-    using namespace SessionsHelpers;
-
-    // VALIDATION: Require voiceSettings parameter
-    if (!Payload.IsValid() || !Payload->HasField(TEXT("voiceSettings")))
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("voiceSettings is required with at least one setting (volume, noiseGateThreshold, noiseSuppression, echoCancellation, or sampleRate)"), nullptr);
-        return true;
-    }
-
-    TSharedPtr<FJsonObject> VoiceSettings = GetObjectField(Payload, TEXT("voiceSettings"));
-    
-    if (!VoiceSettings.IsValid())
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("voiceSettings must be a valid object"), nullptr);
-        return true;
-    }
-    
-    double Volume = 1.0;
-    double NoiseGateThreshold = 0.01;
-    bool bNoiseSuppression = true;
-    bool bEchoCancellation = true;
-    int32 SampleRate = 16000;
-
-    Volume = FMath::Clamp(GetJsonNumberField(VoiceSettings, TEXT("volume"), 1.0), 0.0, 1.0);
-    NoiseGateThreshold = GetJsonNumberField(VoiceSettings, TEXT("noiseGateThreshold"), 0.01);
-    bNoiseSuppression = GetJsonBoolField(VoiceSettings, TEXT("noiseSuppression"), true);
-    bEchoCancellation = GetJsonBoolField(VoiceSettings, TEXT("echoCancellation"), true);
-    SampleRate = static_cast<int32>(GetJsonNumberField(VoiceSettings, TEXT("sampleRate"), 16000));
-
-    TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
-    
-    TSharedPtr<FJsonObject> ConfiguredSettings = McpHandlerUtils::CreateResultObject();
-    ConfiguredSettings->SetNumberField(TEXT("volume"), Volume);
-    ConfiguredSettings->SetNumberField(TEXT("noiseGateThreshold"), NoiseGateThreshold);
-    ConfiguredSettings->SetBoolField(TEXT("noiseSuppression"), bNoiseSuppression);
-    ConfiguredSettings->SetBoolField(TEXT("echoCancellation"), bEchoCancellation);
-    ConfiguredSettings->SetNumberField(TEXT("sampleRate"), SampleRate);
-    ResponseJson->SetObjectField(TEXT("voiceSettings"), ConfiguredSettings);
-
-    FString Message = TEXT("Voice chat settings configured successfully");
-    Subsystem->SendAutomationResponse(Socket, RequestId, true, Message, ResponseJson);
-    return true;
-}
 
 static bool HandleSetVoiceChannel(
     UMcpAutomationBridgeSubsystem* Subsystem,
@@ -1071,36 +813,6 @@ static bool HandleSetVoiceAttenuation(
     return true;
 }
 
-static bool HandleConfigurePushToTalk(
-    UMcpAutomationBridgeSubsystem* Subsystem,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-    using namespace SessionsHelpers;
-
-    // VALIDATION: Require pushToTalkEnabled parameter
-    if (!Payload.IsValid() || !Payload->HasField(TEXT("pushToTalkEnabled")))
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("pushToTalkEnabled is required. Optionally provide pushToTalkKey (e.g., 'V', 'Space', 'LeftShift')"), nullptr);
-        return true;
-    }
-
-    bool bPushToTalkEnabled = GetJsonBoolField(Payload, TEXT("pushToTalkEnabled"), false);
-    FString PushToTalkKey = GetJsonStringField(Payload, TEXT("pushToTalkKey"), TEXT("V"));
-
-    TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
-    ResponseJson->SetBoolField(TEXT("pushToTalkEnabled"), bPushToTalkEnabled);
-    ResponseJson->SetStringField(TEXT("pushToTalkKey"), PushToTalkKey);
-
-    FString Message = FString::Printf(TEXT("Push-to-talk %s%s"),
-        bPushToTalkEnabled ? TEXT("enabled") : TEXT("disabled"),
-        bPushToTalkEnabled ? *FString::Printf(TEXT(" (key: %s)"), *PushToTalkKey) : TEXT(""));
-
-    Subsystem->SendAutomationResponse(Socket, RequestId, true, Message, ResponseJson);
-    return true;
-}
 
 // ============================================================================
 // Utility Actions
@@ -1160,46 +872,10 @@ static bool HandleGetSessionsInfo(
 // replicating the retired chain's editor-build stub.
 
 // configure_local_session_settings
-bool UMcpAutomationBridgeSubsystem::HandleSessionsConfigureLocalSessionSettings(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if WITH_EDITOR
-    return HandleConfigureLocalSessionSettings(this, RequestId, Payload, Socket);
-#else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
-    return true;  // Return true: request was handled (error response sent)
-#endif
-}
 
 // configure_session_interface
-bool UMcpAutomationBridgeSubsystem::HandleSessionsConfigureSessionInterface(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if WITH_EDITOR
-    return HandleConfigureSessionInterface(this, RequestId, Payload, Socket);
-#else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
-    return true;  // Return true: request was handled (error response sent)
-#endif
-}
 
 // configure_split_screen
-bool UMcpAutomationBridgeSubsystem::HandleSessionsConfigureSplitScreen(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if WITH_EDITOR
-    return HandleConfigureSplitScreen(this, RequestId, Payload, Socket);
-#else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
-    return true;  // Return true: request was handled (error response sent)
-#endif
-}
 
 // set_split_screen_type
 bool UMcpAutomationBridgeSubsystem::HandleSessionsSetSplitScreenType(
@@ -1244,18 +920,6 @@ bool UMcpAutomationBridgeSubsystem::HandleSessionsRemoveLocalPlayer(
 }
 
 // configure_lan_play
-bool UMcpAutomationBridgeSubsystem::HandleSessionsConfigureLanPlay(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if WITH_EDITOR
-    return HandleConfigureLanPlay(this, RequestId, Payload, Socket);
-#else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
-    return true;  // Return true: request was handled (error response sent)
-#endif
-}
 
 // host_lan_server
 bool UMcpAutomationBridgeSubsystem::HandleSessionsHostLanServer(
@@ -1300,18 +964,6 @@ bool UMcpAutomationBridgeSubsystem::HandleSessionsEnableVoiceChat(
 }
 
 // configure_voice_settings
-bool UMcpAutomationBridgeSubsystem::HandleSessionsConfigureVoiceSettings(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if WITH_EDITOR
-    return HandleConfigureVoiceSettings(this, RequestId, Payload, Socket);
-#else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
-    return true;  // Return true: request was handled (error response sent)
-#endif
-}
 
 // set_voice_channel
 bool UMcpAutomationBridgeSubsystem::HandleSessionsSetVoiceChannel(
@@ -1356,18 +1008,6 @@ bool UMcpAutomationBridgeSubsystem::HandleSessionsSetVoiceAttenuation(
 }
 
 // configure_push_to_talk
-bool UMcpAutomationBridgeSubsystem::HandleSessionsConfigurePushToTalk(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if WITH_EDITOR
-    return HandleConfigurePushToTalk(this, RequestId, Payload, Socket);
-#else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
-    return true;  // Return true: request was handled (error response sent)
-#endif
-}
 
 // get_sessions_info
 bool UMcpAutomationBridgeSubsystem::HandleSessionsGetSessionsInfo(

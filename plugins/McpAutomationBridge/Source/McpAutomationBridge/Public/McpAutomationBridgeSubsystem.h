@@ -513,9 +513,6 @@ public:
   bool HandleAnimPhysCreatePoseLibrary(const FString &RequestId,
                                        const TSharedPtr<FJsonObject> &Payload,
                                        FMcpResponseHandle RequestingSocket);
-  bool HandleAnimPhysSetupRagdoll(const FString &RequestId,
-                                  const TSharedPtr<FJsonObject> &Payload,
-                                  FMcpResponseHandle RequestingSocket);
   bool HandleAnimPhysActivateRagdoll(const FString &RequestId,
                                      const TSharedPtr<FJsonObject> &Payload,
                                      FMcpResponseHandle RequestingSocket);
@@ -1116,12 +1113,6 @@ public:
   bool HandleSplineScatterMeshesAlongSpline(const FString &RequestId,
                                             const TSharedPtr<FJsonObject> &Payload,
                                             FMcpResponseHandle Socket);
-  bool HandleSplineConfigureMeshSpacing(const FString &RequestId,
-                                        const TSharedPtr<FJsonObject> &Payload,
-                                        FMcpResponseHandle Socket);
-  bool HandleSplineConfigureMeshRandomization(const FString &RequestId,
-                                              const TSharedPtr<FJsonObject> &Payload,
-                                              FMcpResponseHandle Socket);
   bool HandleSplineCreateRoadSpline(const FString &RequestId,
                                     const TSharedPtr<FJsonObject> &Payload,
                                     FMcpResponseHandle Socket);
@@ -1860,9 +1851,6 @@ public:
   bool HandleGasCreateGameplayCueNotify(const FString &RequestId,
                                         const TSharedPtr<FJsonObject> &Payload,
                                         FMcpResponseHandle Socket);
-  bool HandleGasConfigureCueTrigger(const FString &RequestId,
-                                    const TSharedPtr<FJsonObject> &Payload,
-                                    FMcpResponseHandle Socket);
   bool HandleGasSetCueEffects(const FString &RequestId,
                               const TSharedPtr<FJsonObject> &Payload,
                               FMcpResponseHandle Socket);
@@ -1918,33 +1906,9 @@ public:
   bool HandleCharacterConfigureNavMovement(const FString &RequestId,
                                            const TSharedPtr<FJsonObject> &Payload,
                                            FMcpResponseHandle Socket);
-  bool HandleCharacterSetupMantling(const FString &RequestId,
-                                    const TSharedPtr<FJsonObject> &Payload,
-                                    FMcpResponseHandle Socket);
-  bool HandleCharacterSetupVaulting(const FString &RequestId,
-                                    const TSharedPtr<FJsonObject> &Payload,
-                                    FMcpResponseHandle Socket);
-  bool HandleCharacterSetupClimbing(const FString &RequestId,
-                                    const TSharedPtr<FJsonObject> &Payload,
-                                    FMcpResponseHandle Socket);
-  bool HandleCharacterSetupSliding(const FString &RequestId,
-                                   const TSharedPtr<FJsonObject> &Payload,
-                                   FMcpResponseHandle Socket);
-  bool HandleCharacterSetupWallRunning(const FString &RequestId,
-                                       const TSharedPtr<FJsonObject> &Payload,
-                                       FMcpResponseHandle Socket);
-  bool HandleCharacterSetupGrappling(const FString &RequestId,
-                                     const TSharedPtr<FJsonObject> &Payload,
-                                     FMcpResponseHandle Socket);
-  bool HandleCharacterSetupFootstepSystem(const FString &RequestId,
-                                          const TSharedPtr<FJsonObject> &Payload,
-                                          FMcpResponseHandle Socket);
   bool HandleCharacterMapSurfaceToSound(const FString &RequestId,
                                         const TSharedPtr<FJsonObject> &Payload,
                                         FMcpResponseHandle Socket);
-  bool HandleCharacterConfigureFootstepFx(const FString &RequestId,
-                                          const TSharedPtr<FJsonObject> &Payload,
-                                          FMcpResponseHandle Socket);
   bool HandleCharacterGetInfo(const FString &RequestId,
                               const TSharedPtr<FJsonObject> &Payload,
                               FMcpResponseHandle Socket);
@@ -1969,9 +1933,6 @@ public:
   bool HandleCharacterConfigureCrouch(const FString &RequestId,
                                       const TSharedPtr<FJsonObject> &Payload,
                                       FMcpResponseHandle Socket);
-  bool HandleCharacterConfigureSprint(const FString &RequestId,
-                                      const TSharedPtr<FJsonObject> &Payload,
-                                      FMcpResponseHandle Socket);
 
 private:
   // manage_combat is classed — see MCP/Calls/McpCalls_ManageCombat.cpp.
@@ -1985,27 +1946,9 @@ public:
   bool HandleCombatConfigureWeaponMesh(const FString &RequestId,
                                        const TSharedPtr<FJsonObject> &Payload,
                                        FMcpResponseHandle Socket);
-  bool HandleCombatConfigureWeaponSockets(const FString &RequestId,
-                                          const TSharedPtr<FJsonObject> &Payload,
-                                          FMcpResponseHandle Socket);
   bool HandleCombatSetWeaponStats(const FString &RequestId,
                                   const TSharedPtr<FJsonObject> &Payload,
                                   FMcpResponseHandle Socket);
-  bool HandleCombatConfigureHitscan(const FString &RequestId,
-                                    const TSharedPtr<FJsonObject> &Payload,
-                                    FMcpResponseHandle Socket);
-  bool HandleCombatConfigureProjectile(const FString &RequestId,
-                                       const TSharedPtr<FJsonObject> &Payload,
-                                       FMcpResponseHandle Socket);
-  bool HandleCombatConfigureSpreadPattern(const FString &RequestId,
-                                          const TSharedPtr<FJsonObject> &Payload,
-                                          FMcpResponseHandle Socket);
-  bool HandleCombatConfigureRecoilPattern(const FString &RequestId,
-                                          const TSharedPtr<FJsonObject> &Payload,
-                                          FMcpResponseHandle Socket);
-  bool HandleCombatConfigureAimDownSights(const FString &RequestId,
-                                          const TSharedPtr<FJsonObject> &Payload,
-                                          FMcpResponseHandle Socket);
   bool HandleCombatCreateProjectileBlueprint(const FString &RequestId,
                                              const TSharedPtr<FJsonObject> &Payload,
                                              FMcpResponseHandle Socket);
@@ -2021,54 +1964,18 @@ public:
   bool HandleCombatCreateDamageType(const FString &RequestId,
                                     const TSharedPtr<FJsonObject> &Payload,
                                     FMcpResponseHandle Socket);
-  bool HandleCombatConfigureDamageExecution(const FString &RequestId,
-                                            const TSharedPtr<FJsonObject> &Payload,
-                                            FMcpResponseHandle Socket);
   bool HandleCombatSetupHitboxComponent(const FString &RequestId,
                                         const TSharedPtr<FJsonObject> &Payload,
                                         FMcpResponseHandle Socket);
-  bool HandleCombatSetupReloadSystem(const FString &RequestId,
-                                     const TSharedPtr<FJsonObject> &Payload,
-                                     FMcpResponseHandle Socket);
-  bool HandleCombatSetupAmmoSystem(const FString &RequestId,
-                                   const TSharedPtr<FJsonObject> &Payload,
-                                   FMcpResponseHandle Socket);
   bool HandleCombatSetupAttachmentSystem(const FString &RequestId,
                                          const TSharedPtr<FJsonObject> &Payload,
                                          FMcpResponseHandle Socket);
-  bool HandleCombatSetupWeaponSwitching(const FString &RequestId,
-                                        const TSharedPtr<FJsonObject> &Payload,
-                                        FMcpResponseHandle Socket);
-  bool HandleCombatConfigureMuzzleFlash(const FString &RequestId,
-                                        const TSharedPtr<FJsonObject> &Payload,
-                                        FMcpResponseHandle Socket);
-  bool HandleCombatConfigureTracer(const FString &RequestId,
-                                   const TSharedPtr<FJsonObject> &Payload,
-                                   FMcpResponseHandle Socket);
-  bool HandleCombatConfigureImpactEffects(const FString &RequestId,
-                                          const TSharedPtr<FJsonObject> &Payload,
-                                          FMcpResponseHandle Socket);
-  bool HandleCombatConfigureShellEjection(const FString &RequestId,
-                                          const TSharedPtr<FJsonObject> &Payload,
-                                          FMcpResponseHandle Socket);
   bool HandleCombatCreateMeleeTrace(const FString &RequestId,
                                     const TSharedPtr<FJsonObject> &Payload,
                                     FMcpResponseHandle Socket);
-  bool HandleCombatConfigureComboSystem(const FString &RequestId,
-                                        const TSharedPtr<FJsonObject> &Payload,
-                                        FMcpResponseHandle Socket);
   bool HandleCombatCreateHitPause(const FString &RequestId,
                                   const TSharedPtr<FJsonObject> &Payload,
                                   FMcpResponseHandle Socket);
-  bool HandleCombatConfigureHitReaction(const FString &RequestId,
-                                        const TSharedPtr<FJsonObject> &Payload,
-                                        FMcpResponseHandle Socket);
-  bool HandleCombatSetupParryBlockSystem(const FString &RequestId,
-                                         const TSharedPtr<FJsonObject> &Payload,
-                                         FMcpResponseHandle Socket);
-  bool HandleCombatConfigureWeaponTrails(const FString &RequestId,
-                                         const TSharedPtr<FJsonObject> &Payload,
-                                         FMcpResponseHandle Socket);
   bool HandleCombatGetInfo(const FString &RequestId,
                            const TSharedPtr<FJsonObject> &Payload,
                            FMcpResponseHandle Socket);
@@ -2307,9 +2214,6 @@ public:
   bool HandleInventoryAddFunctions(const FString &RequestId,
                                    const TSharedPtr<FJsonObject> &Payload,
                                    FMcpResponseHandle Socket);
-  bool HandleInventoryConfigureEvents(const FString &RequestId,
-                                      const TSharedPtr<FJsonObject> &Payload,
-                                      FMcpResponseHandle Socket);
   bool HandleInventorySetReplication(const FString &RequestId,
                                      const TSharedPtr<FJsonObject> &Payload,
                                      FMcpResponseHandle Socket);
@@ -2328,9 +2232,6 @@ public:
   bool HandleInventoryCreateEquipmentComponent(const FString &RequestId,
                                                const TSharedPtr<FJsonObject> &Payload,
                                                FMcpResponseHandle Socket);
-  bool HandleInventoryDefineEquipmentSlots(const FString &RequestId,
-                                           const TSharedPtr<FJsonObject> &Payload,
-                                           FMcpResponseHandle Socket);
   bool HandleInventoryConfigureEquipmentEffects(const FString &RequestId,
                                                 const TSharedPtr<FJsonObject> &Payload,
                                                 FMcpResponseHandle Socket);
@@ -2379,9 +2280,6 @@ public:
   bool HandleInventoryConfigureWeight(const FString &RequestId,
                                       const TSharedPtr<FJsonObject> &Payload,
                                       FMcpResponseHandle Socket);
-  bool HandleInventoryConfigureStationRecipes(const FString &RequestId,
-                                              const TSharedPtr<FJsonObject> &Payload,
-                                              FMcpResponseHandle Socket);
   bool HandleInventoryGetInfo(const FString &RequestId,
                               const TSharedPtr<FJsonObject> &Payload,
                               FMcpResponseHandle Socket);
@@ -2428,33 +2326,12 @@ public:
   bool HandleInteractionCreateLeverActor(const FString &RequestId,
                                          const TSharedPtr<FJsonObject> &Payload,
                                          FMcpResponseHandle Socket);
-  bool HandleInteractionSetupDestructibleMesh(const FString &RequestId,
-                                              const TSharedPtr<FJsonObject> &Payload,
-                                              FMcpResponseHandle Socket);
   bool HandleInteractionAddDestructionComponent(const FString &RequestId,
                                                 const TSharedPtr<FJsonObject> &Payload,
                                                 FMcpResponseHandle Socket);
   bool HandleInteractionCreateTriggerActor(const FString &RequestId,
                                            const TSharedPtr<FJsonObject> &Payload,
                                            FMcpResponseHandle Socket);
-  bool HandleInteractionConfigureTriggerEvents(const FString &RequestId,
-                                               const TSharedPtr<FJsonObject> &Payload,
-                                               FMcpResponseHandle Socket);
-  bool HandleInteractionConfigureDestructionLevels(const FString &RequestId,
-                                                   const TSharedPtr<FJsonObject> &Payload,
-                                                   FMcpResponseHandle Socket);
-  bool HandleInteractionConfigureDestructionEffects(const FString &RequestId,
-                                                    const TSharedPtr<FJsonObject> &Payload,
-                                                    FMcpResponseHandle Socket);
-  bool HandleInteractionConfigureDestructionDamage(const FString &RequestId,
-                                                   const TSharedPtr<FJsonObject> &Payload,
-                                                   FMcpResponseHandle Socket);
-  bool HandleInteractionConfigureTriggerFilter(const FString &RequestId,
-                                               const TSharedPtr<FJsonObject> &Payload,
-                                               FMcpResponseHandle Socket);
-  bool HandleInteractionConfigureTriggerResponse(const FString &RequestId,
-                                                 const TSharedPtr<FJsonObject> &Payload,
-                                                 FMcpResponseHandle Socket);
   bool HandleInteractionGetInfo(const FString &RequestId,
                                 const TSharedPtr<FJsonObject> &Payload,
                                 FMcpResponseHandle Socket);
@@ -2578,9 +2455,6 @@ public:
   bool HandleNetworkingSetOnlyRelevantToOwner(const FString &RequestId,
                                               const TSharedPtr<FJsonObject> &Payload,
                                               FMcpResponseHandle Socket);
-  bool HandleNetworkingConfigureNetSerialization(const FString &RequestId,
-                                                 const TSharedPtr<FJsonObject> &Payload,
-                                                 FMcpResponseHandle Socket);
   bool HandleNetworkingSetReplicatedUsing(const FString &RequestId,
                                           const TSharedPtr<FJsonObject> &Payload,
                                           FMcpResponseHandle Socket);
@@ -2671,21 +2545,6 @@ public:
   bool HandleGameFrameworkConfigureGameRules(const FString &RequestId,
                                              const TSharedPtr<FJsonObject> &Payload,
                                              FMcpResponseHandle Socket);
-  bool HandleGameFrameworkSetupMatchStates(const FString &RequestId,
-                                           const TSharedPtr<FJsonObject> &Payload,
-                                           FMcpResponseHandle Socket);
-  bool HandleGameFrameworkConfigureRoundSystem(const FString &RequestId,
-                                               const TSharedPtr<FJsonObject> &Payload,
-                                               FMcpResponseHandle Socket);
-  bool HandleGameFrameworkConfigureTeamSystem(const FString &RequestId,
-                                              const TSharedPtr<FJsonObject> &Payload,
-                                              FMcpResponseHandle Socket);
-  bool HandleGameFrameworkConfigureScoringSystem(const FString &RequestId,
-                                                 const TSharedPtr<FJsonObject> &Payload,
-                                                 FMcpResponseHandle Socket);
-  bool HandleGameFrameworkConfigureSpawnSystem(const FString &RequestId,
-                                               const TSharedPtr<FJsonObject> &Payload,
-                                               FMcpResponseHandle Socket);
   bool HandleGameFrameworkConfigurePlayerStart(const FString &RequestId,
                                                const TSharedPtr<FJsonObject> &Payload,
                                                FMcpResponseHandle Socket);
@@ -2698,15 +2557,6 @@ public:
   bool HandleGameFrameworkGetGameFrameworkInfo(const FString &RequestId,
                                                const TSharedPtr<FJsonObject> &Payload,
                                                FMcpResponseHandle Socket);
-  bool HandleSessionsConfigureLocalSessionSettings(const FString &RequestId,
-                                                   const TSharedPtr<FJsonObject> &Payload,
-                                                   FMcpResponseHandle Socket);
-  bool HandleSessionsConfigureSessionInterface(const FString &RequestId,
-                                               const TSharedPtr<FJsonObject> &Payload,
-                                               FMcpResponseHandle Socket);
-  bool HandleSessionsConfigureSplitScreen(const FString &RequestId,
-                                          const TSharedPtr<FJsonObject> &Payload,
-                                          FMcpResponseHandle Socket);
   bool HandleSessionsSetSplitScreenType(const FString &RequestId,
                                         const TSharedPtr<FJsonObject> &Payload,
                                         FMcpResponseHandle Socket);
@@ -2716,9 +2566,6 @@ public:
   bool HandleSessionsRemoveLocalPlayer(const FString &RequestId,
                                        const TSharedPtr<FJsonObject> &Payload,
                                        FMcpResponseHandle Socket);
-  bool HandleSessionsConfigureLanPlay(const FString &RequestId,
-                                      const TSharedPtr<FJsonObject> &Payload,
-                                      FMcpResponseHandle Socket);
   bool HandleSessionsHostLanServer(const FString &RequestId,
                                    const TSharedPtr<FJsonObject> &Payload,
                                    FMcpResponseHandle Socket);
@@ -2728,9 +2575,6 @@ public:
   bool HandleSessionsEnableVoiceChat(const FString &RequestId,
                                      const TSharedPtr<FJsonObject> &Payload,
                                      FMcpResponseHandle Socket);
-  bool HandleSessionsConfigureVoiceSettings(const FString &RequestId,
-                                            const TSharedPtr<FJsonObject> &Payload,
-                                            FMcpResponseHandle Socket);
   bool HandleSessionsSetVoiceChannel(const FString &RequestId,
                                      const TSharedPtr<FJsonObject> &Payload,
                                      FMcpResponseHandle Socket);
@@ -2738,9 +2582,6 @@ public:
                                 const TSharedPtr<FJsonObject> &Payload,
                                 FMcpResponseHandle Socket);
   bool HandleSessionsSetVoiceAttenuation(const FString &RequestId,
-                                         const TSharedPtr<FJsonObject> &Payload,
-                                         FMcpResponseHandle Socket);
-  bool HandleSessionsConfigurePushToTalk(const FString &RequestId,
                                          const TSharedPtr<FJsonObject> &Payload,
                                          FMcpResponseHandle Socket);
   bool HandleSessionsGetSessionsInfo(const FString &RequestId,
@@ -2765,9 +2606,6 @@ public:
                                                    const TSharedPtr<FJsonObject> &Payload,
                                                    FMcpResponseHandle Socket);
   bool HandleLevelStructureSetStreamingDistance(const FString &RequestId,
-                                                const TSharedPtr<FJsonObject> &Payload,
-                                                FMcpResponseHandle Socket);
-  bool HandleLevelStructureConfigureLevelBounds(const FString &RequestId,
                                                 const TSharedPtr<FJsonObject> &Payload,
                                                 FMcpResponseHandle Socket);
   bool HandleLevelStructureEnableWorldPartition(const FString &RequestId,

@@ -185,13 +185,6 @@ static void S_SetOnlyRelevantToOwner(FMcpSchemaBuilder& B)
 }
 
 // Net serialization
-static void S_ConfigureNetSerialization(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .String(TEXT("structName"), TEXT("Name of struct for custom serialization."))
-	 .Bool(TEXT("customSerialization"), TEXT("Use custom serialization."))
-	 .Required({TEXT("blueprintPath")});
-}
 
 static void S_SetReplicatedUsing(FMcpSchemaBuilder& B)
 {
@@ -412,68 +405,10 @@ static void S_ConfigureGameRules(FMcpSchemaBuilder& B)
 	 .Number(TEXT("startPlayersNeeded"), TEXT("configure_game_rules: NOT IMPLEMENTED — rejected as an unsupported field (not a native GameMode property, not a generated Blueprint variable)."));
 }
 
-static void S_SetupMatchStates(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
-	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
-	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
-	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Array(TEXT("states"), TEXT("setup_match_states: match state names to record on the Blueprint."));
-}
 
-static void S_ConfigureRoundSystem(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
-	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
-	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
-	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("numRounds"), TEXT("configure_round_system: total rounds in the match."))
-	 .Number(TEXT("roundTime"), TEXT("configure_round_system: seconds per round."))
-	 .Number(TEXT("intermissionTime"), TEXT("configure_round_system: seconds between rounds."));
-}
 
-static void S_ConfigureTeamSystem(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
-	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
-	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
-	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("numTeams"), TEXT("configure_team_system: number of teams (default 2)."))
-	 .Number(TEXT("teamSize"), TEXT("configure_team_system: maximum players per team."))
-	 .Bool(TEXT("autoBalance"), TEXT("configure_team_system: auto-balance team sizes."))
-	 .Bool(TEXT("friendlyFire"), TEXT("configure_team_system: allow damage to teammates."));
-}
 
-static void S_ConfigureScoringSystem(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
-	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
-	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
-	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("scorePerKill"), TEXT("configure_scoring_system: points awarded per kill."))
-	 .Number(TEXT("scorePerObjective"), TEXT("configure_scoring_system: points awarded per objective completion."))
-	 .Number(TEXT("scorePerAssist"), TEXT("configure_scoring_system: points awarded per assist."))
-	 .Number(TEXT("winScore"), TEXT("configure_scoring_system: score required to win the match."))
-	 .Number(TEXT("scorePerDeath"), TEXT("configure_scoring_system: score penalty for dying."));
-}
 
-static void S_ConfigureSpawnSystem(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Asset name (create_game_mode / create_game_state / create_player_controller / create_player_state / create_game_instance / create_hud_class)."))
-	 .String(TEXT("path"), TEXT("Destination folder for a created asset."))
-	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
-	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .String(TEXT("spawnSelectionMethod"), TEXT("configure_spawn_system: how spawn points are chosen (default Random)."))
-	 .Number(TEXT("respawnDelay"), TEXT("configure_spawn_system / set_respawn_rules: seconds before a player respawns (default 5)."))
-	 .Bool(TEXT("usePlayerStarts"), TEXT("configure_spawn_system: spawn at PlayerStart actors."))
-	 .Bool(TEXT("canRespawn"), TEXT("configure_spawn_system: whether respawning is allowed."))
-	 .Number(TEXT("maxRespawns"), TEXT("configure_spawn_system: maximum respawns per player (-1 = unlimited)."));
-}
 
 static void S_ConfigurePlayerStart(FMcpSchemaBuilder& B)
 {
@@ -526,34 +461,8 @@ static void S_GetGameFrameworkInfo(FMcpSchemaBuilder& B)
 }
 
 // Sessions (SessionsHandlers.cpp)
-static void S_ConfigureLocalSessionSettings(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("sessionName"), TEXT("configure_local_session_settings: session name (default DefaultSession)."))
-	 .Number(TEXT("maxPlayers"), TEXT("configure_local_session_settings / host_lan_server: max player count (default 4)."))
-	 .Bool(TEXT("bIsLANMatch"), TEXT("configure_local_session_settings: mark the session as a LAN match."))
-	 .Bool(TEXT("bAllowJoinInProgress"), TEXT("configure_local_session_settings: allow players to join after start."))
-	 .Bool(TEXT("bAllowInvites"), TEXT("configure_local_session_settings: allow session invites."))
-	 .Bool(TEXT("bUsesPresence"), TEXT("configure_local_session_settings: advertise via presence."))
-	 .Bool(TEXT("bUseLobbiesIfAvailable"), TEXT("configure_local_session_settings: prefer lobbies when supported."))
-	 .Bool(TEXT("bShouldAdvertise"), TEXT("configure_local_session_settings: advertise the session publicly."));
-}
 
-static void S_ConfigureSessionInterface(FMcpSchemaBuilder& B)
-{
-	B.StringEnum(TEXT("interfaceType"), {
-		TEXT("Default"), TEXT("LAN"), TEXT("Null")
-	 }, TEXT("configure_session_interface: online subsystem interface to use."))
-	 .Required({TEXT("interfaceType")});
-}
 
-static void S_ConfigureSplitScreen(FMcpSchemaBuilder& B)
-{
-	B.Bool(TEXT("enabled"), TEXT("configure_split_screen / configure_lan_play: enable flag for the feature being configured."))
-	 .StringEnum(TEXT("splitScreenType"), {
-		TEXT("None"), TEXT("TwoPlayer_Horizontal"), TEXT("TwoPlayer_Vertical"),
-		TEXT("ThreePlayer_FavorTop"), TEXT("ThreePlayer_FavorBottom"), TEXT("FourPlayer_Grid")
-	 }, TEXT("configure_split_screen / set_split_screen_type: split-screen layout."));
-}
 
 static void S_SetSplitScreenType(FMcpSchemaBuilder& B)
 {
@@ -576,12 +485,6 @@ static void S_RemoveLocalPlayer(FMcpSchemaBuilder& B)
 	 .Required({TEXT("playerIndex")});
 }
 
-static void S_ConfigureLanPlay(FMcpSchemaBuilder& B)
-{
-	B.Bool(TEXT("enabled"), TEXT("configure_split_screen / configure_lan_play: enable flag for the feature being configured."))
-	 .Number(TEXT("serverPort"), TEXT("configure_lan_play / join_lan_server: port number (default 7777)."))
-	 .String(TEXT("serverPassword"), TEXT("configure_lan_play / join_lan_server: LAN server password."));
-}
 
 static void S_HostLanServer(FMcpSchemaBuilder& B)
 {
@@ -608,11 +511,6 @@ static void S_EnableVoiceChat(FMcpSchemaBuilder& B)
 	 .Required({TEXT("voiceEnabled")});
 }
 
-static void S_ConfigureVoiceSettings(FMcpSchemaBuilder& B)
-{
-	B.Object(TEXT("voiceSettings"), TEXT("configure_voice_settings: nested settings object ({volume, noiseGateThreshold, noiseSuppression, echoCancellation, sampleRate})."))
-	 .Required({TEXT("voiceSettings")});
-}
 
 static void S_SetVoiceChannel(FMcpSchemaBuilder& B)
 {
@@ -639,12 +537,6 @@ static void S_SetVoiceAttenuation(FMcpSchemaBuilder& B)
 	 .Required({TEXT("attenuationRadius")});
 }
 
-static void S_ConfigurePushToTalk(FMcpSchemaBuilder& B)
-{
-	B.Bool(TEXT("pushToTalkEnabled"), TEXT("configure_push_to_talk: enable push-to-talk."))
-	 .String(TEXT("pushToTalkKey"), TEXT("configure_push_to_talk: key bound to push-to-talk (default V)."))
-	 .Required({TEXT("pushToTalkEnabled")});
-}
 
 static void S_GetSessionsInfo(FMcpSchemaBuilder&) {}
 
@@ -708,7 +600,6 @@ MCP_NW_CALL(SetAlwaysRelevant, "set_always_relevant", HandleNetworkingSetAlwaysR
 MCP_NW_CALL(SetOnlyRelevantToOwner, "set_only_relevant_to_owner", HandleNetworkingSetOnlyRelevantToOwner, EMcpCallFlags::Mutating)
 
 // Net serialization
-MCP_NW_CALL(ConfigureNetSerialization, "configure_net_serialization", HandleNetworkingConfigureNetSerialization, EMcpCallFlags::Mutating)
 MCP_NW_CALL(SetReplicatedUsing, "set_replicated_using", HandleNetworkingSetReplicatedUsing, EMcpCallFlags::Mutating)
 MCP_NW_CALL(ConfigurePushModel, "configure_push_model", HandleNetworkingConfigurePushModel, EMcpCallFlags::Mutating)
 
@@ -738,32 +629,21 @@ MCP_NW_CALL(SetPlayerControllerClass, "set_player_controller_class", HandleGameF
 MCP_NW_CALL(SetGameStateClass, "set_game_state_class", HandleGameFrameworkSetGameStateClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_NW_CALL(SetPlayerStateClass, "set_player_state_class", HandleGameFrameworkSetPlayerStateClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_NW_CALL(ConfigureGameRules, "configure_game_rules", HandleGameFrameworkConfigureGameRules, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetupMatchStates, "setup_match_states", HandleGameFrameworkSetupMatchStates, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureRoundSystem, "configure_round_system", HandleGameFrameworkConfigureRoundSystem, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureTeamSystem, "configure_team_system", HandleGameFrameworkConfigureTeamSystem, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureScoringSystem, "configure_scoring_system", HandleGameFrameworkConfigureScoringSystem, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureSpawnSystem, "configure_spawn_system", HandleGameFrameworkConfigureSpawnSystem, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_NW_CALL(ConfigurePlayerStart, "configure_player_start", HandleGameFrameworkConfigurePlayerStart, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_NW_CALL(SetRespawnRules, "set_respawn_rules", HandleGameFrameworkSetRespawnRules, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_NW_CALL(ConfigureSpectating, "configure_spectating", HandleGameFrameworkConfigureSpectating, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_NW_CALL(GetGameFrameworkInfo, "get_game_framework_info", HandleGameFrameworkGetGameFrameworkInfo, EMcpCallFlags::RequiresEditor)
 
 // Sessions (SessionsHandlers.cpp)
-MCP_NW_CALL(ConfigureLocalSessionSettings, "configure_local_session_settings", HandleSessionsConfigureLocalSessionSettings, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(ConfigureSessionInterface, "configure_session_interface", HandleSessionsConfigureSessionInterface, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(ConfigureSplitScreen, "configure_split_screen", HandleSessionsConfigureSplitScreen, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_NW_CALL(SetSplitScreenType, "set_split_screen_type", HandleSessionsSetSplitScreenType, EMcpCallFlags::RequiresEditor)
 MCP_NW_CALL(AddLocalPlayer, "add_local_player", HandleSessionsAddLocalPlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_NW_CALL(RemoveLocalPlayer, "remove_local_player", HandleSessionsRemoveLocalPlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureLanPlay, "configure_lan_play", HandleSessionsConfigureLanPlay, EMcpCallFlags::RequiresEditor)
 MCP_NW_CALL(HostLanServer, "host_lan_server", HandleSessionsHostLanServer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_NW_CALL(JoinLanServer, "join_lan_server", HandleSessionsJoinLanServer, EMcpCallFlags::RequiresEditor)
 MCP_NW_CALL(EnableVoiceChat, "enable_voice_chat", HandleSessionsEnableVoiceChat, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureVoiceSettings, "configure_voice_settings", HandleSessionsConfigureVoiceSettings, EMcpCallFlags::RequiresEditor)
 MCP_NW_CALL(SetVoiceChannel, "set_voice_channel", HandleSessionsSetVoiceChannel, EMcpCallFlags::RequiresEditor)
 MCP_NW_CALL(MutePlayer, "mute_player", HandleSessionsMutePlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_NW_CALL(SetVoiceAttenuation, "set_voice_attenuation", HandleSessionsSetVoiceAttenuation, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(ConfigurePushToTalk, "configure_push_to_talk", HandleSessionsConfigurePushToTalk, EMcpCallFlags::RequiresEditor)
 MCP_NW_CALL(GetSessionsInfo, "get_sessions_info", HandleSessionsGetSessionsInfo, EMcpCallFlags::RequiresEditor)
 
 #undef MCP_NW_CALL
@@ -790,7 +670,6 @@ void McpRegisterManageNetworkingCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureNetCullDistance>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetAlwaysRelevant>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetOnlyRelevantToOwner>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureNetSerialization>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetReplicatedUsing>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigurePushModel>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureClientPrediction>());
@@ -812,29 +691,18 @@ void McpRegisterManageNetworkingCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetGameStateClass>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetPlayerStateClass>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureGameRules>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetupMatchStates>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureRoundSystem>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureTeamSystem>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureScoringSystem>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureSpawnSystem>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigurePlayerStart>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetRespawnRules>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureSpectating>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_GetGameFrameworkInfo>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureLocalSessionSettings>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureSessionInterface>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureSplitScreen>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetSplitScreenType>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_AddLocalPlayer>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_RemoveLocalPlayer>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureLanPlay>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_HostLanServer>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_JoinLanServer>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_EnableVoiceChat>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureVoiceSettings>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetVoiceChannel>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_MutePlayer>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetVoiceAttenuation>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigurePushToTalk>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_GetSessionsInfo>());
 }

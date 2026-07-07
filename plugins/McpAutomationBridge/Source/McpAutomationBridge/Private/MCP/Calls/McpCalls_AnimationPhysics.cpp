@@ -157,13 +157,6 @@ static void S_CreatePoseLibrary(FMcpSchemaBuilder& B)
 	 .Required({TEXT("name"), TEXT("skeletonPath")});
 }
 
-static void S_SetupRagdoll(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .Number(TEXT("blendWeight"), TEXT("setup_ragdoll: physics blend weight."))
-	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Required({TEXT("actorName")});
-}
 
 static void S_ActivateRagdoll(FMcpSchemaBuilder& B)
 {
@@ -993,7 +986,6 @@ MCP_AP_CALL(CreateAnimationAsset, "create_animation_asset", HandleAnimPhysCreate
 MCP_AP_CALL(SetupRetargeting, "setup_retargeting", HandleAnimPhysSetupRetargeting, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(PlayMontage, "play_montage", HandleAnimPhysPlayMontage, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreatePoseLibrary, "create_pose_library", HandleAnimPhysCreatePoseLibrary, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(SetupRagdoll, "setup_ragdoll", HandleAnimPhysSetupRagdoll, EMcpCallFlags::None)
 MCP_AP_CALL(ActivateRagdoll, "activate_ragdoll", HandleAnimPhysActivateRagdoll, EMcpCallFlags::None)
 
 // Animation authoring (AnimationAuthoringHandlers.cpp)
@@ -1091,7 +1083,6 @@ void McpRegisterAnimationPhysicsCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_SetupRetargeting>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_PlayMontage>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_CreatePoseLibrary>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_SetupRagdoll>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_ActivateRagdoll>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_CreateAnimationSequence>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_SetSequenceLength>());

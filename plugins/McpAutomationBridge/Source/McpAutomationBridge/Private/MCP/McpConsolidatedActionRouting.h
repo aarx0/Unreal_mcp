@@ -283,8 +283,8 @@ inline const TArray<FString>& Splines()
 		TEXT("configure_spline_mesh_axis"),
 		TEXT("set_spline_mesh_material"),
 		TEXT("scatter_meshes_along_spline"),
-		TEXT("configure_mesh_spacing"),
-		TEXT("configure_mesh_randomization"), TEXT("create_road_spline"),
+		
+		TEXT("create_road_spline"),
 		TEXT("create_river_spline"), TEXT("create_fence_spline"),
 		TEXT("create_wall_spline"), TEXT("create_cable_spline"),
 		TEXT("create_pipe_spline"), TEXT("get_splines_info")
@@ -307,7 +307,7 @@ inline const TArray<FString>& AnimationPhysicsCore()
 		TEXT("create_procedural_animation"), TEXT("create_state_machine"),
 		TEXT("setup_ik"), TEXT("create_pose_library"),
 		TEXT("create_animation_asset"), TEXT("play_montage"),
-		TEXT("setup_ragdoll"),
+		
 		TEXT("activate_ragdoll"), TEXT("configure_vehicle"),
 		TEXT("setup_physics_simulation"), TEXT("setup_retargeting"),
 		TEXT("cleanup")
@@ -487,7 +487,7 @@ inline const TArray<FString>& ManageNetworkingCore()
 		TEXT("check_is_locally_controlled"),
 		TEXT("configure_net_cull_distance"), TEXT("set_always_relevant"),
 		TEXT("set_only_relevant_to_owner"),
-		TEXT("configure_net_serialization"), TEXT("set_replicated_using"),
+		TEXT("set_replicated_using"),
 		TEXT("configure_push_model"), TEXT("configure_client_prediction"),
 		TEXT("configure_server_correction"),
 		TEXT("add_network_prediction_data"),
@@ -518,9 +518,9 @@ inline const TArray<FString>& GameFramework()
 		TEXT("create_game_instance"), TEXT("create_hud_class"),
 		TEXT("set_default_pawn_class"), TEXT("set_player_controller_class"),
 		TEXT("set_game_state_class"), TEXT("set_player_state_class"),
-		TEXT("configure_game_rules"), TEXT("setup_match_states"),
-		TEXT("configure_round_system"), TEXT("configure_team_system"),
-		TEXT("configure_scoring_system"), TEXT("configure_spawn_system"),
+		TEXT("configure_game_rules"), 
+		
+		
 		TEXT("configure_player_start"), TEXT("set_respawn_rules"),
 		TEXT("configure_spectating"), TEXT("get_game_framework_info")
 	};
@@ -530,14 +530,14 @@ inline const TArray<FString>& GameFramework()
 inline const TArray<FString>& Sessions()
 {
 	static const TArray<FString> Actions = {
-		TEXT("configure_local_session_settings"),
-		TEXT("configure_session_interface"), TEXT("configure_split_screen"),
+		
+		
 		TEXT("set_split_screen_type"), TEXT("add_local_player"),
-		TEXT("remove_local_player"), TEXT("configure_lan_play"),
+		TEXT("remove_local_player"), 
 		TEXT("host_lan_server"), TEXT("join_lan_server"),
-		TEXT("enable_voice_chat"), TEXT("configure_voice_settings"),
+		TEXT("enable_voice_chat"), 
 		TEXT("set_voice_channel"), TEXT("mute_player"),
-		TEXT("set_voice_attenuation"), TEXT("configure_push_to_talk"),
+		TEXT("set_voice_attenuation"), 
 		TEXT("get_sessions_info")
 	};
 	return Actions;
@@ -568,7 +568,7 @@ inline const TArray<FString>& ManageLevelStructureCore()
 	static const TArray<FString> Actions = {
 		TEXT("create_level"), TEXT("create_sublevel"),
 		TEXT("configure_level_streaming"), TEXT("set_streaming_distance"),
-		TEXT("configure_level_bounds"), TEXT("enable_world_partition"),
+		TEXT("enable_world_partition"),
 		TEXT("configure_grid_size"), TEXT("create_data_layer"),
 		TEXT("assign_actor_to_data_layer"), TEXT("configure_hlod_layer"),
 		TEXT("create_minimap_volume"), TEXT("open_level_blueprint"),
@@ -863,7 +863,7 @@ inline const TArray<FString>& ManageEffect()
 		TEXT("add_audio_spectrum_data_interface"),
 		TEXT("add_collision_query_data_interface"),
 		TEXT("add_event_generator"), TEXT("add_event_receiver"),
-		TEXT("configure_event_payload"), TEXT("enable_gpu_simulation"),
+		TEXT("enable_gpu_simulation"),
 		TEXT("add_simulation_stage"), TEXT("get_niagara_info"),
 		TEXT("validate_niagara_system")
 	};
@@ -885,7 +885,7 @@ inline const TArray<FString>& ManageGAS()
 		TEXT("add_effect_modifier"), TEXT("set_modifier_magnitude"),
 		TEXT("add_effect_execution_calculation"), TEXT("add_effect_cue"),
 		TEXT("set_effect_stacking"), TEXT("set_effect_tags"),
-		TEXT("create_gameplay_cue_notify"), TEXT("configure_cue_trigger"),
+		TEXT("create_gameplay_cue_notify"), 
 		TEXT("set_cue_effects"), TEXT("add_tag_to_asset"),
 		TEXT("get_info"), TEXT("get_attribute"),
 		TEXT("create_ability_set"), TEXT("add_ability"),
@@ -904,16 +904,16 @@ inline const TArray<FString>& ManageCharacter()
 		TEXT("configure_camera_component"),
 		TEXT("configure_movement_speeds"), TEXT("configure_jump"),
 		TEXT("configure_rotation"), TEXT("add_custom_movement_mode"),
-		TEXT("configure_nav_movement"), TEXT("setup_mantling"),
-		TEXT("setup_vaulting"), TEXT("setup_climbing"),
-		TEXT("setup_sliding"), TEXT("setup_wall_running"),
-		TEXT("setup_grappling"), TEXT("setup_footstep_system"),
-		TEXT("map_surface_to_sound"), TEXT("configure_footstep_fx"),
+		TEXT("configure_nav_movement"), 
+		
+		
+		
+		TEXT("map_surface_to_sound"), 
 		TEXT("get_info"), TEXT("setup_movement"),
 		TEXT("set_walk_speed"), TEXT("set_jump_height"),
 		TEXT("set_gravity_scale"), TEXT("set_ground_friction"),
 		TEXT("set_braking_deceleration"), TEXT("configure_crouch"),
-		TEXT("configure_sprint")
+		
 	};
 	return Actions;
 }
@@ -923,22 +923,22 @@ inline const TArray<FString>& ManageCombat()
 {
 	static const TArray<FString> Actions = {
 		TEXT("create_weapon_blueprint"), TEXT("configure_weapon_mesh"),
-		TEXT("configure_weapon_sockets"), TEXT("set_weapon_stats"),
-		TEXT("configure_hitscan"), TEXT("configure_projectile"),
-		TEXT("configure_spread_pattern"), TEXT("configure_recoil_pattern"),
-		TEXT("configure_aim_down_sights"),
+		TEXT("set_weapon_stats"),
+		
+		
+		
 		TEXT("create_projectile_blueprint"),
 		TEXT("configure_projectile_movement"),
 		TEXT("configure_projectile_collision"),
 		TEXT("configure_projectile_homing"), TEXT("create_damage_type"),
-		TEXT("configure_damage_execution"), TEXT("setup_hitbox_component"),
-		TEXT("setup_reload_system"), TEXT("setup_ammo_system"),
-		TEXT("setup_attachment_system"), TEXT("setup_weapon_switching"),
-		TEXT("configure_muzzle_flash"), TEXT("configure_tracer"),
-		TEXT("configure_impact_effects"), TEXT("configure_shell_ejection"),
-		TEXT("create_melee_trace"), TEXT("configure_combo_system"),
-		TEXT("create_hit_pause"), TEXT("configure_hit_reaction"),
-		TEXT("setup_parry_block_system"), TEXT("configure_weapon_trails"),
+		TEXT("setup_hitbox_component"),
+		
+		TEXT("setup_attachment_system"), 
+		
+		
+		TEXT("create_melee_trace"), 
+		TEXT("create_hit_pause"), 
+		
 		TEXT("get_info"),
 		TEXT("configure_hit_detection"), TEXT("get_stats"),
 		TEXT("create_damage_effect"), TEXT("apply_damage"), TEXT("heal"),
@@ -955,11 +955,11 @@ inline const TArray<FString>& ManageInventory()
 		TEXT("create_item_category"), TEXT("assign_item_category"),
 		TEXT("create_inventory_component"),
 		TEXT("configure_inventory_slots"), TEXT("add_inventory_functions"),
-		TEXT("configure_inventory_events"),
+		
 		TEXT("set_inventory_replication"), TEXT("create_pickup_actor"),
 		TEXT("configure_pickup_interaction"),
 		TEXT("configure_pickup_respawn"), TEXT("configure_pickup_effects"),
-		TEXT("create_equipment_component"), TEXT("configure_equipment_slots"),
+		TEXT("create_equipment_component"), 
 		TEXT("configure_equipment_effects"), TEXT("add_equipment_functions"),
 		TEXT("configure_equipment_visuals"), TEXT("create_loot_table"),
 		TEXT("add_loot_entry"), TEXT("configure_loot_drop"),
@@ -969,7 +969,7 @@ inline const TArray<FString>& ManageInventory()
 		TEXT("configure_item_stacking"), TEXT("set_item_icon"),
 		TEXT("add_recipe_ingredient"), TEXT("remove_loot_entry"),
 		TEXT("configure_inventory_weight"),
-		TEXT("configure_station_recipes"), TEXT("get_info")
+		TEXT("get_info")
 	};
 	return Actions;
 }
@@ -986,13 +986,13 @@ inline const TArray<FString>& ManageInteraction()
 		TEXT("configure_door_properties"), TEXT("create_switch_actor"),
 		TEXT("configure_switch_properties"), TEXT("create_chest_actor"),
 		TEXT("configure_chest_properties"), TEXT("create_lever_actor"),
-		TEXT("setup_destructible_mesh"),
-		TEXT("configure_destruction_levels"),
-		TEXT("configure_destruction_effects"),
-		TEXT("configure_destruction_damage"),
+		
+		
+		
+		
 		TEXT("add_destruction_component"), TEXT("create_trigger_actor"),
-		TEXT("configure_trigger_events"), TEXT("configure_trigger_filter"),
-		TEXT("configure_trigger_response"), TEXT("get_info")
+		
+		TEXT("get_info")
 	};
 	return Actions;
 }

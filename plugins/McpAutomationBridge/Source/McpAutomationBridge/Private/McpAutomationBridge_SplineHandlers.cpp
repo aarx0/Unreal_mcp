@@ -2033,34 +2033,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSplineScatterMeshesAlongSpline(
 }
 
 // configure_mesh_spacing
-bool UMcpAutomationBridgeSubsystem::HandleSplineConfigureMeshSpacing(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if WITH_EDITOR
-    return HandleConfigureMeshSpacing(this, RequestId, Payload, Socket);
-#else
-    SendAutomationResponse(Socket, RequestId, false,
-        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
-    return true;
-#endif
-}
 
 // configure_mesh_randomization
-bool UMcpAutomationBridgeSubsystem::HandleSplineConfigureMeshRandomization(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if WITH_EDITOR
-    return HandleConfigureMeshRandomization(this, RequestId, Payload, Socket);
-#else
-    SendAutomationResponse(Socket, RequestId, false,
-        TEXT("Spline operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
-    return true;
-#endif
-}
 
 // create_road_spline
 bool UMcpAutomationBridgeSubsystem::HandleSplineCreateRoadSpline(

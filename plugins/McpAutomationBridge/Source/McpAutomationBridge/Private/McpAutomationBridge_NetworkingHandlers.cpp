@@ -1430,55 +1430,6 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetOnlyRelevantToOwner(
 //
 // Payload:  { blueprintPath: string, structName?: string, customSerialization?: bool }
 // Response: { success: bool, customSerialization, structName?, message, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetSerialization(
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-    using namespace NetworkingHelpers;
-
-    TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
-
-    FString BlueprintPath = GetStringField(Payload, TEXT("blueprintPath"));
-    FString StructName = GetStringField(Payload, TEXT("structName"));
-    bool bCustomSerialization = GetBoolField(Payload, TEXT("customSerialization"), false);
-
-    if (BlueprintPath.IsEmpty())
-    {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
-        return true;
-    }
-
-    UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
-    if (!Blueprint)
-    {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
-        return true;
-    }
-
-    AActor* CDO = Cast<AActor>(Blueprint->GeneratedClass->GetDefaultObject());
-    if (CDO)
-    {
-        // Configure net serialization flags on the actor
-        // bReplicateUsingRegisteredSubObjectList controls whether actor uses custom subobject replication
-        // Note: This is protected in both UE 5.6 and 5.7, cannot access directly
-        UE_LOG(LogMcpNetworkingHandlers, Log, TEXT("bReplicateUsingRegisteredSubObjectList is protected. Use Actor defaults in Blueprint instead."));
-    }
-
-    Blueprint->Modify();
-    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
-
-    ResultJson->SetBoolField(TEXT("success"), true);
-    ResultJson->SetBoolField(TEXT("customSerialization"), bCustomSerialization);
-    if (!StructName.IsEmpty())
-    {
-        ResultJson->SetStringField(TEXT("structName"), StructName);
-    }
-    ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Net serialization configured (customSerialization=%s)"), bCustomSerialization ? TEXT("true") : TEXT("false")));
-    McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Net serialization configured"), ResultJson);
-    return true;
-}
 
 // ----- set_replicated_using -----
 // Sets a RepNotify function on a Blueprint variable. Enables CPF_Net and

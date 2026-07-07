@@ -706,33 +706,7 @@ static void S_ScatterMeshesAlongSpline(FMcpSchemaBuilder& B)
 	 .Required({TEXT("actorName"), TEXT("meshPath")});
 }
 
-static void S_ConfigureMeshSpacing(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .Number(TEXT("spacing"), TEXT(""))
-	 .Bool(TEXT("useRandomOffset"),
-		TEXT("scatter_meshes_along_spline/configure_mesh_spacing: "
-			"randomize mesh spacing along the spline."))
-	 .Number(TEXT("randomOffsetRange"),
-		TEXT("scatter_meshes_along_spline/configure_mesh_spacing: max "
-			"random offset distance."));
-}
 
-static void S_ConfigureMeshRandomization(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .Bool(TEXT("randomizeScale"),
-		TEXT("scatter_meshes_along_spline/configure_mesh_randomization: "
-			"randomize instance scale between minScale/maxScale."))
-	 .Number(TEXT("minScale"), TEXT(""))
-	 .Number(TEXT("maxScale"), TEXT(""))
-	 .Bool(TEXT("randomizeRotation"),
-		TEXT("scatter_meshes_along_spline/configure_mesh_randomization: "
-			"randomize instance yaw."))
-	 .Number(TEXT("rotationRange"),
-		TEXT("scatter_meshes_along_spline/configure_mesh_randomization: "
-			"max random yaw offset in degrees."));
-}
 
 static void S_CreateRoadSpline(FMcpSchemaBuilder& B)
 {
@@ -911,8 +885,6 @@ MCP_BE_CALL(SetSplineMeshMaterial, "set_spline_mesh_material", HandleSplineSetSp
 
 // Mesh scattering
 MCP_BE_CALL(ScatterMeshesAlongSpline, "scatter_meshes_along_spline", HandleSplineScatterMeshesAlongSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(ConfigureMeshSpacing, "configure_mesh_spacing", HandleSplineConfigureMeshSpacing, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(ConfigureMeshRandomization, "configure_mesh_randomization", HandleSplineConfigureMeshRandomization, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Quick templates
 MCP_BE_CALL(CreateRoadSpline, "create_road_spline", HandleSplineCreateRoadSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -979,8 +951,6 @@ void McpRegisterBuildEnvironmentCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_BuildEnvironment_ConfigureSplineMeshAxis>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_BuildEnvironment_SetSplineMeshMaterial>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_BuildEnvironment_ScatterMeshesAlongSpline>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_BuildEnvironment_ConfigureMeshSpacing>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_BuildEnvironment_ConfigureMeshRandomization>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_BuildEnvironment_CreateRoadSpline>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_BuildEnvironment_CreateRiverSpline>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_BuildEnvironment_CreateFenceSpline>());

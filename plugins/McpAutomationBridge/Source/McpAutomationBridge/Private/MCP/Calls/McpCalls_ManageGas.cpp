@@ -447,23 +447,6 @@ static void S_CreateGameplayCueNotify(FMcpSchemaBuilder& B)
 	 .Required({TEXT("name")});
 }
 
-static void S_ConfigureCueTrigger(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("name"), TEXT("Name of the asset to create."))
-	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path. attributeSetPath/effectPath/abilityPath/cuePath are accepted aliases."))
-	 .String(TEXT("attributeSetPath"), TEXT("Path to Attribute Set asset (alias for blueprintPath)."))
-	 .String(TEXT("effectPath"), TEXT("Path to effect asset (alias for blueprintPath)."))
-	 .String(TEXT("abilityPath"), TEXT("Path to ability asset. add_ability: the ability class to add to the set; elsewhere an alias for blueprintPath."))
-	 .String(TEXT("cuePath"), TEXT("Path to Gameplay Cue asset (alias for blueprintPath)."))
-	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .StringEnum(TEXT("triggerType"), {
-		TEXT("OnActive"),
-		TEXT("WhileActive"),
-		TEXT("Executed"),
-		TEXT("OnRemove")
-	 }, TEXT("When the cue triggers."));
-}
 
 static void S_SetCueEffects(FMcpSchemaBuilder& B)
 {
@@ -628,7 +611,6 @@ MCP_GA_CALL(SetEffectTags, "set_effect_tags", HandleGasSetEffectTags, EMcpCallFl
 
 // Gameplay cues + tags (13.4)
 MCP_GA_CALL(CreateGameplayCueNotify, "create_gameplay_cue_notify", HandleGasCreateGameplayCueNotify, EMcpCallFlags::Mutating)
-MCP_GA_CALL(ConfigureCueTrigger, "configure_cue_trigger", HandleGasConfigureCueTrigger, EMcpCallFlags::Mutating)
 MCP_GA_CALL(SetCueEffects, "set_cue_effects", HandleGasSetCueEffects, EMcpCallFlags::Mutating)
 MCP_GA_CALL(AddTagToAsset, "add_tag_to_asset", HandleGasAddTagToAsset, EMcpCallFlags::Mutating)
 
@@ -674,7 +656,6 @@ void McpRegisterManageGasCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageGas_SetEffectStacking>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageGas_SetEffectTags>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageGas_CreateGameplayCueNotify>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageGas_ConfigureCueTrigger>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageGas_SetCueEffects>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageGas_AddTagToAsset>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageGas_GetAttribute>());

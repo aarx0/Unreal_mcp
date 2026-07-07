@@ -85,14 +85,6 @@ static void S_SetStreamingDistance(FMcpSchemaBuilder& B)
 	 .Required({TEXT("levelName")});
 }
 
-static void S_ConfigureLevelBounds(FMcpSchemaBuilder& B)
-{
-	B.Bool(TEXT("bAutoCalculateBounds"), TEXT("Auto-calculate bounds from content."))
-	 .Object(TEXT("boundsOrigin"), TEXT("Origin of level bounds."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
-	 .Object(TEXT("boundsExtent"), TEXT("Extent of level bounds."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); });
-}
 
 static void S_EnableWorldPartition(FMcpSchemaBuilder& B)
 {
@@ -710,7 +702,6 @@ MCP_LS_CALL(CreateLevel, "create_level", HandleLevelStructureCreateLevel, EMcpCa
 MCP_LS_CALL(CreateSublevel, "create_sublevel", HandleLevelStructureCreateSublevel, EMcpCallFlags::Mutating)
 MCP_LS_CALL(ConfigureLevelStreaming, "configure_level_streaming", HandleLevelStructureConfigureLevelStreaming, EMcpCallFlags::Mutating)
 MCP_LS_CALL(SetStreamingDistance, "set_streaming_distance", HandleLevelStructureSetStreamingDistance, EMcpCallFlags::Mutating)
-MCP_LS_CALL(ConfigureLevelBounds, "configure_level_bounds", HandleLevelStructureConfigureLevelBounds, EMcpCallFlags::Mutating)
 
 // World Partition
 MCP_LS_CALL(EnableWorldPartition, "enable_world_partition", HandleLevelStructureEnableWorldPartition, EMcpCallFlags::Mutating)
@@ -790,7 +781,6 @@ void McpRegisterManageLevelStructureCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevelStructure_CreateSublevel>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevelStructure_ConfigureLevelStreaming>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevelStructure_SetStreamingDistance>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevelStructure_ConfigureLevelBounds>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevelStructure_EnableWorldPartition>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevelStructure_ConfigureGridSize>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageLevelStructure_CreateDataLayer>());

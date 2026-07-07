@@ -2784,27 +2784,6 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreatePoseLibrary(
 // preserves that response exactly. The orphaned HandleSetupRagdoll implementation
 // below has no call site and is the wire-up candidate — wiring it up vs
 // retiring the schema row is an open product decision (TODO.md).
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysSetupRagdoll(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
-#if WITH_EDITOR
-  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-  Resp->SetStringField(TEXT("action"), TEXT("setup_ragdoll"));
-  const FString Message =
-      TEXT("Animation/Physics action 'setup_ragdoll' not implemented");
-  Resp->SetStringField(TEXT("error"), Message);
-  Resp->SetBoolField(TEXT("success"), false);
-  SendAutomationResponse(RequestingSocket, RequestId, false, Message, Resp,
-                         TEXT("NOT_IMPLEMENTED"));
-  return true;
-#else
-  SendAutomationResponse(
-      RequestingSocket, RequestId, false,
-      TEXT("Animation/Physics actions require editor build."), nullptr,
-      TEXT("NOT_IMPLEMENTED"));
-  return true;
-#endif
-}
 
 // activate_ragdoll is advertised but the retired dispatcher had no branch for it, so
 // it always fell through to the terminal NOT_IMPLEMENTED else. This stub

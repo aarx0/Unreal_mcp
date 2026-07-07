@@ -90,12 +90,6 @@ static void S_AddFunctions(FMcpSchemaBuilder& B)
 	 .Required({TEXT("blueprintPath")});
 }
 
-static void S_ConfigureEvents(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .Required({TEXT("blueprintPath")});
-}
 
 static void S_SetReplication(FMcpSchemaBuilder& B)
 {
@@ -162,13 +156,6 @@ static void S_CreateEquipmentComponent(FMcpSchemaBuilder& B)
 	 .Required({TEXT("blueprintPath")});
 }
 
-static void S_DefineEquipmentSlots(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Array(TEXT("slots"), TEXT("Equipment slot names to configure."))
-	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .Required({TEXT("blueprintPath")});
-}
 
 static void S_ConfigureEquipmentEffects(FMcpSchemaBuilder& B)
 {
@@ -320,15 +307,6 @@ static void S_ConfigureWeight(FMcpSchemaBuilder& B)
 	 .Required({TEXT("blueprintPath")});
 }
 
-static void S_ConfigureStationRecipes(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("stationPath"), TEXT("Path to crafting station blueprint."))
-	 .Array(TEXT("recipePaths"), TEXT("Recipe paths for crafting station."))
-	 .String(TEXT("stationType"), TEXT("Type of crafting station."))
-	 .Number(TEXT("craftingSpeedMultiplier"), TEXT("Crafting speed multiplier."))
-	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .Required({TEXT("stationPath")});
-}
 
 static void S_GetInfo(FMcpSchemaBuilder& B)
 {
@@ -374,7 +352,6 @@ MCP_IV_CALL(AssignItemCategory, "assign_item_category", HandleInventoryAssignIte
 MCP_IV_CALL(CreateComponent, "create_inventory_component", HandleInventoryCreateComponent, EMcpCallFlags::Mutating)
 MCP_IV_CALL(ConfigureSlots, "configure_inventory_slots", HandleInventoryConfigureSlots, EMcpCallFlags::Mutating)
 MCP_IV_CALL(AddFunctions, "add_inventory_functions", HandleInventoryAddFunctions, EMcpCallFlags::Mutating)
-MCP_IV_CALL(ConfigureEvents, "configure_inventory_events", HandleInventoryConfigureEvents, EMcpCallFlags::Mutating)
 MCP_IV_CALL(SetReplication, "set_inventory_replication", HandleInventorySetReplication, EMcpCallFlags::Mutating)
 
 // Pickups (17.3)
@@ -385,7 +362,6 @@ MCP_IV_CALL(ConfigurePickupEffects, "configure_pickup_effects", HandleInventoryC
 
 // Equipment system (17.4)
 MCP_IV_CALL(CreateEquipmentComponent, "create_equipment_component", HandleInventoryCreateEquipmentComponent, EMcpCallFlags::Mutating)
-MCP_IV_CALL(DefineEquipmentSlots, "configure_equipment_slots", HandleInventoryDefineEquipmentSlots, EMcpCallFlags::Mutating)
 MCP_IV_CALL(ConfigureEquipmentEffects, "configure_equipment_effects", HandleInventoryConfigureEquipmentEffects, EMcpCallFlags::Mutating)
 MCP_IV_CALL(AddEquipmentFunctions, "add_equipment_functions", HandleInventoryAddEquipmentFunctions, EMcpCallFlags::Mutating)
 MCP_IV_CALL(ConfigureEquipmentVisuals, "configure_equipment_visuals", HandleInventoryConfigureEquipmentVisuals, EMcpCallFlags::Mutating)
@@ -408,7 +384,6 @@ MCP_IV_CALL(SetItemIcon, "set_item_icon", HandleInventorySetItemIcon, EMcpCallFl
 MCP_IV_CALL(AddRecipeIngredient, "add_recipe_ingredient", HandleInventoryAddRecipeIngredient, EMcpCallFlags::Mutating)
 MCP_IV_CALL(RemoveLootEntry, "remove_loot_entry", HandleInventoryRemoveLootEntry, EMcpCallFlags::Mutating)
 MCP_IV_CALL(ConfigureWeight, "configure_inventory_weight", HandleInventoryConfigureWeight, EMcpCallFlags::Mutating)
-MCP_IV_CALL(ConfigureStationRecipes, "configure_station_recipes", HandleInventoryConfigureStationRecipes, EMcpCallFlags::Mutating)
 
 // Utility
 MCP_IV_CALL(GetInfo, "get_info", HandleInventoryGetInfo, EMcpCallFlags::None)
@@ -428,14 +403,12 @@ void McpRegisterManageInventoryCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_CreateComponent>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_ConfigureSlots>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_AddFunctions>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_ConfigureEvents>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_SetReplication>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_CreatePickupActor>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_ConfigurePickupInteraction>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_ConfigurePickupRespawn>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_ConfigurePickupEffects>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_CreateEquipmentComponent>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_DefineEquipmentSlots>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_ConfigureEquipmentEffects>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_AddEquipmentFunctions>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_ConfigureEquipmentVisuals>());
@@ -452,6 +425,5 @@ void McpRegisterManageInventoryCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_AddRecipeIngredient>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_RemoveLootEntry>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_ConfigureWeight>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_ConfigureStationRecipes>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInventory_GetInfo>());
 }
