@@ -909,8 +909,8 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetTransform(
     return true;
   }
 
-  // Only the fields the caller actually sent are "requested"; each must land or
-  // the whole call rolls back and fails — no partial transforms, no skipped checks.
+  // Only the fields the caller actually sent are applied; a call with none is a
+  // no-op and errors rather than faking success.
   const bool bHasLocation = Payload->HasField(TEXT("location"));
   const bool bHasRotation = Payload->HasField(TEXT("rotation"));
   const bool bHasScale = Payload->HasField(TEXT("scale"));
@@ -921,6 +921,9 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetTransform(
     return true;
   }
 
+  // Omitted fields default to the actor's current value, so applying all three
+  // is a no-op for the ones not requested. Setting a transform is atomic — the
+  // response echoes the resulting transform for the caller to confirm.
   const FVector Location =
       ExtractVectorField(Payload, TEXT("location"), Found->GetActorLocation());
   const FRotator Rotation =
@@ -928,38 +931,10 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetTransform(
   const FVector Scale =
       ExtractVectorField(Payload, TEXT("scale"), Found->GetActorScale3D());
 
-  // Snapshot so a failed apply restores the actor exactly as it was.
-  const FTransform OriginalTransform = Found->GetActorTransform();
   Found->Modify();
   Found->SetActorLocation(Location, false, nullptr, ETeleportType::TeleportPhysics);
   Found->SetActorRotation(Rotation, ETeleportType::TeleportPhysics);
   Found->SetActorScale3D(Scale);
-
-  // Verify each requested field landed; quaternion compare dodges the
-  // Euler-normalization ambiguity the old code skipped for rotation.
-  TArray<FString> FailedFields;
-  if (bHasLocation && !Found->GetActorLocation().Equals(Location, 1.0f)) {
-    FailedFields.Add(TEXT("location"));
-  }
-  if (bHasRotation &&
-      !Found->GetActorRotation().Quaternion().Equals(Rotation.Quaternion(), 0.01f)) {
-    FailedFields.Add(TEXT("rotation"));
-  }
-  if (bHasScale && !Found->GetActorScale3D().Equals(Scale, 0.01f)) {
-    FailedFields.Add(TEXT("scale"));
-  }
-
-  if (FailedFields.Num() > 0) {
-    Found->SetActorTransform(OriginalTransform); // roll back — leave it untouched
-    TSharedPtr<FJsonObject> ErrData = McpHandlerUtils::CreateResultObject();
-    ErrData->SetStringField(TEXT("failedFields"), FString::Join(FailedFields, TEXT(", ")));
-    SendStandardErrorResponse(
-        this, Socket, RequestId, TEXT("PARTIAL_APPLY_ROLLED_BACK"),
-        FString::Printf(TEXT("Could not apply %s; no changes were made."),
-                        *FString::Join(FailedFields, TEXT(", "))),
-        ErrData);
-    return true;
-  }
 
   Found->MarkComponentsRenderStateDirty();
   Found->MarkPackageDirty();
@@ -1307,8 +1282,14 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetComponentProperties(
     return true;
   }
 
+  if (PropertiesObject->Values.Num() == 0) {
+    SendStandardErrorResponse(this, Socket, RequestId, TEXT("NO_CHANGES_REQUESTED"),
+                              TEXT("No properties provided to set"), nullptr);
+    return true;
+  }
+
   TArray<FString> AppliedProperties;
-  TArray<FString> PropertyWarnings;
+  TArray<FString> FailedFields;
   UClass *ComponentClass = TargetComponent->GetClass();
   TargetComponent->Modify();
 
@@ -1349,6 +1330,16 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetComponentProperties(
     }
   }
 
+  // Mobility was requested but no branch above applied it (not a scene
+  // component, or an unparseable value) → record a failure so all-or-nothing
+  // rolls back instead of silently dropping the request.
+  if (MobilityVal && !AppliedProperties.Contains(MobilityKey)) {
+    FailedFields.Add(FString::Printf(
+        TEXT("%s: not applied (component is not a scene component or the value "
+             "could not be parsed as a mobility)"),
+        *MobilityKey));
+  }
+
   for (const auto &Pair : PropertiesObject->Values) {
     const FString PropertyName(*Pair.Key);
     // Skip Mobility as we already handled it
@@ -1371,7 +1362,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetComponentProperties(
 
     FProperty *Property = ComponentClass->FindPropertyByName(*PropertyName);
     if (!Property) {
-      PropertyWarnings.Add(
+      FailedFields.Add(
           FString::Printf(TEXT("Property not found: %s"), *PropertyName));
       continue;
     }
@@ -1380,29 +1371,55 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetComponentProperties(
                                  ApplyError))
       AppliedProperties.Add(PropertyName);
     else
-      PropertyWarnings.Add(FString::Printf(TEXT("Failed to set %s: %s"),
-                                           *PropertyName, *ApplyError));
+      FailedFields.Add(FString::Printf(TEXT("Failed to set %s: %s"),
+                                       *PropertyName, *ApplyError));
   }
 
-  if (USceneComponent *SceneComponent =
-          Cast<USceneComponent>(TargetComponent)) {
-    SceneComponent->MarkRenderStateDirty();
-    SceneComponent->UpdateComponentToWorld();
+  // Refresh render/transform state for whatever actually applied.
+  if (AppliedProperties.Num() > 0) {
+    if (USceneComponent *SceneComponent =
+            Cast<USceneComponent>(TargetComponent)) {
+      SceneComponent->MarkRenderStateDirty();
+      SceneComponent->UpdateComponentToWorld();
+    }
+    TargetComponent->MarkPackageDirty();
   }
-  TargetComponent->MarkPackageDirty();
+
+  // No rollback: writes that landed stay. On any failure, report which
+  // properties applied and which failed so the caller can re-read fresh state
+  // and decide how to proceed — no revert machinery to itself go wrong.
+  if (FailedFields.Num() > 0) {
+    TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
+    TArray<TSharedPtr<FJsonValue>> FailedArray;
+    for (const FString &F : FailedFields)
+      FailedArray.Add(MakeShared<FJsonValueString>(F));
+    Data->SetArrayField(TEXT("failedFields"), FailedArray);
+
+    TArray<TSharedPtr<FJsonValue>> AppliedArray;
+    for (const FString &PropName : AppliedProperties)
+      AppliedArray.Add(MakeShared<FJsonValueString>(PropName));
+    Data->SetArrayField(TEXT("appliedProperties"), AppliedArray);
+
+    SendStandardErrorResponse(
+        this, Socket, RequestId, TEXT("PROPERTY_WRITE_FAILED"),
+        *FString::Printf(TEXT("%d of %d component properties could not be set; "
+                              "%d applied — re-read component state"),
+                         FailedFields.Num(), PropertiesObject->Values.Num(),
+                         AppliedProperties.Num()),
+        Data);
+    return true;
+  }
 
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
-  if (AppliedProperties.Num() > 0) {
-    TArray<TSharedPtr<FJsonValue>> PropsArray;
-    for (const FString &PropName : AppliedProperties)
-      PropsArray.Add(MakeShared<FJsonValueString>(PropName));
-    Data->SetArrayField(TEXT("applied"), PropsArray);
-  }
+  TArray<TSharedPtr<FJsonValue>> PropsArray;
+  for (const FString &PropName : AppliedProperties)
+    PropsArray.Add(MakeShared<FJsonValueString>(PropName));
+  Data->SetArrayField(TEXT("appliedProperties"), PropsArray);
 
-  // Add verification data
-	McpHandlerUtils::AddVerification(Data, Found);
+  McpHandlerUtils::AddVerification(Data, Found);
 
-	SendAutomationResponse(Socket, RequestId, true, TEXT("Component properties updated"), Data);
+  SendAutomationResponse(Socket, RequestId, true,
+                         TEXT("Component properties updated"), Data);
   return true;
 #else
   return false;
