@@ -909,33 +909,60 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetTransform(
     return true;
   }
 
-  FVector Location =
+  // Only the fields the caller actually sent are "requested"; each must land or
+  // the whole call rolls back and fails — no partial transforms, no skipped checks.
+  const bool bHasLocation = Payload->HasField(TEXT("location"));
+  const bool bHasRotation = Payload->HasField(TEXT("rotation"));
+  const bool bHasScale = Payload->HasField(TEXT("scale"));
+  if (!bHasLocation && !bHasRotation && !bHasScale) {
+    SendStandardErrorResponse(this, Socket, RequestId, TEXT("NO_CHANGES_REQUESTED"),
+                              TEXT("set_transform needs at least one of location, rotation, scale"),
+                              nullptr);
+    return true;
+  }
+
+  const FVector Location =
       ExtractVectorField(Payload, TEXT("location"), Found->GetActorLocation());
-  FRotator Rotation =
+  const FRotator Rotation =
       ExtractRotatorField(Payload, TEXT("rotation"), Found->GetActorRotation());
-  FVector Scale =
+  const FVector Scale =
       ExtractVectorField(Payload, TEXT("scale"), Found->GetActorScale3D());
 
+  // Snapshot so a failed apply restores the actor exactly as it was.
+  const FTransform OriginalTransform = Found->GetActorTransform();
   Found->Modify();
-  Found->SetActorLocation(Location, false, nullptr,
-                          ETeleportType::TeleportPhysics);
+  Found->SetActorLocation(Location, false, nullptr, ETeleportType::TeleportPhysics);
   Found->SetActorRotation(Rotation, ETeleportType::TeleportPhysics);
   Found->SetActorScale3D(Scale);
+
+  // Verify each requested field landed; quaternion compare dodges the
+  // Euler-normalization ambiguity the old code skipped for rotation.
+  TArray<FString> FailedFields;
+  if (bHasLocation && !Found->GetActorLocation().Equals(Location, 1.0f)) {
+    FailedFields.Add(TEXT("location"));
+  }
+  if (bHasRotation &&
+      !Found->GetActorRotation().Quaternion().Equals(Rotation.Quaternion(), 0.01f)) {
+    FailedFields.Add(TEXT("rotation"));
+  }
+  if (bHasScale && !Found->GetActorScale3D().Equals(Scale, 0.01f)) {
+    FailedFields.Add(TEXT("scale"));
+  }
+
+  if (FailedFields.Num() > 0) {
+    Found->SetActorTransform(OriginalTransform); // roll back — leave it untouched
+    TSharedPtr<FJsonObject> ErrData = McpHandlerUtils::CreateResultObject();
+    ErrData->SetStringField(TEXT("failedFields"), FString::Join(FailedFields, TEXT(", ")));
+    SendStandardErrorResponse(
+        this, Socket, RequestId, TEXT("PARTIAL_APPLY_ROLLED_BACK"),
+        FString::Printf(TEXT("Could not apply %s; no changes were made."),
+                        *FString::Join(FailedFields, TEXT(", "))),
+        ErrData);
+    return true;
+  }
+
   Found->MarkComponentsRenderStateDirty();
   Found->MarkPackageDirty();
-
-  // Verify transform
-  const FVector NewLoc = Found->GetActorLocation();
-  const FRotator NewRot = Found->GetActorRotation();
-  const FVector NewScale = Found->GetActorScale3D();
-
-  const bool bLocMatch = NewLoc.Equals(Location, 1.0f); // 1 unit tolerance
-  // Rotation comparison is tricky due to normalization, skipping strict check
-  // for now but logging if very different
-  const bool bScaleMatch = NewScale.Equals(Scale, 0.01f);
-
-  TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
-  Data->SetStringField(TEXT("actorName"), Found->GetActorLabel());
 
   auto MakeArray = [](const FVector &Vec) {
     TArray<TSharedPtr<FJsonValue>> Arr;
@@ -945,20 +972,19 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetTransform(
     return Arr;
   };
 
-  Data->SetArrayField(TEXT("location"), MakeArray(NewLoc));
-  Data->SetArrayField(TEXT("scale"), MakeArray(NewScale));
+  TArray<TSharedPtr<FJsonValue>> AppliedProperties;
+  if (bHasLocation) AppliedProperties.Add(MakeShared<FJsonValueString>(TEXT("location")));
+  if (bHasRotation) AppliedProperties.Add(MakeShared<FJsonValueString>(TEXT("rotation")));
+  if (bHasScale) AppliedProperties.Add(MakeShared<FJsonValueString>(TEXT("scale")));
 
-  if (!bLocMatch || !bScaleMatch) {
-    SendStandardErrorResponse(this, Socket, RequestId,
-                              TEXT("TRANSFORM_MISMATCH"),
-                              TEXT("Failed to set transform exactly"), Data);
-    return true;
-  }
+  TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
+  Data->SetStringField(TEXT("actorName"), Found->GetActorLabel());
+  Data->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
+  Data->SetArrayField(TEXT("location"), MakeArray(Found->GetActorLocation()));
+  Data->SetArrayField(TEXT("scale"), MakeArray(Found->GetActorScale3D()));
+  McpHandlerUtils::AddVerification(Data, Found);
 
-  // Add verification data
-	McpHandlerUtils::AddVerification(Data, Found);
-
-	SendAutomationResponse(Socket, RequestId, true, TEXT("Actor transform updated"), Data);
+  SendAutomationResponse(Socket, RequestId, true, TEXT("Actor transform updated"), Data);
   return true;
 #else
   return false;
