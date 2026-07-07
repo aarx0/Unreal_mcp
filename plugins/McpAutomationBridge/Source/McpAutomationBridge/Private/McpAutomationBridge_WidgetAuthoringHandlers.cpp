@@ -2304,9 +2304,9 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
         USlider* SliderWidget = Cast<USlider>(NewWidget);
 
         // Set value if provided
-        if (Payload->HasField(TEXT("value")))
+        if (Payload->HasField(TEXT("floatValue")))
         {
-            SliderWidget->SetValue(static_cast<float>(GetJsonNumberField(Payload, TEXT("value"), 0.5)));
+            SliderWidget->SetValue(static_cast<float>(GetJsonNumberField(Payload, TEXT("floatValue"), 0.5)));
         }
 
         // Set min/max values if provided
@@ -2416,9 +2416,9 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
         USpinBox* SpinBox = Cast<USpinBox>(NewWidget);
 
         // Set value
-        if (Payload->HasField(TEXT("value")))
+        if (Payload->HasField(TEXT("floatValue")))
         {
-            SpinBox->SetValue(static_cast<float>(GetJsonNumberField(Payload, TEXT("value"), 0.0)));
+            SpinBox->SetValue(static_cast<float>(GetJsonNumberField(Payload, TEXT("floatValue"), 0.0)));
         }
         // Set min/max
         if (Payload->HasField(TEXT("minValue")))
