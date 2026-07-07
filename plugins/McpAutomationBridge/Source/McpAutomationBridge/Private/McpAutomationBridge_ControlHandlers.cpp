@@ -2560,51 +2560,65 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetCollision(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString ActorName;
-  bool bCollisionEnabled = true;
-  
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
   if (ActorName.IsEmpty()) {
     Payload->TryGetStringField(TEXT("actor_name"), ActorName);
   }
-  
-  if (Payload->HasField(TEXT("collisionEnabled"))) {
-    bCollisionEnabled = GetJsonBoolField(Payload, TEXT("collisionEnabled"), true);
-  } else if (Payload->HasField(TEXT("collision_enabled"))) {
-    bCollisionEnabled = GetJsonBoolField(Payload, TEXT("collision_enabled"), true);
-  }
-  
   if (ActorName.IsEmpty()) {
     SendAutomationError(Socket, RequestId, TEXT("actorName is required"), TEXT("MISSING_PARAM"));
     return true;
   }
-  
+
+  // collisionEnabled must be explicitly requested — never silently apply the default.
+  const bool bHasCollision = Payload->HasField(TEXT("collisionEnabled")) ||
+                             Payload->HasField(TEXT("collision_enabled"));
+  if (!bHasCollision) {
+    SendAutomationError(Socket, RequestId, TEXT("collisionEnabled is required"),
+                        TEXT("NO_CHANGES_REQUESTED"));
+    return true;
+  }
+  const bool bCollisionEnabled =
+      Payload->HasField(TEXT("collisionEnabled"))
+          ? GetJsonBoolField(Payload, TEXT("collisionEnabled"), true)
+          : GetJsonBoolField(Payload, TEXT("collision_enabled"), true);
+
   AActor* Actor = FindActorByName(ActorName);
   if (!Actor) {
     SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Actor not found: %s"), *ActorName), TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
-  
-  const ECollisionEnabled::Type NewCollision =
-      bCollisionEnabled ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision;
-  int32 ModifiedCount = 0;
+
+  // Pre-validate before touching anything: an actor with no primitive component
+  // fails cleanly with nothing applied (all-or-nothing without needing rollback).
+  TArray<UPrimitiveComponent*> PrimComps;
   for (UActorComponent* Comp : Actor->GetComponents()) {
     if (UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(Comp)) {
-      PrimComp->SetCollisionEnabled(NewCollision);
-      ++ModifiedCount;
+      PrimComps.Add(PrimComp);
     }
   }
-
-  if (ModifiedCount == 0) {
+  if (PrimComps.Num() == 0) {
     SendAutomationError(Socket, RequestId,
         FString::Printf(TEXT("Actor has no primitive component to set collision on: %s"), *ActorName),
         TEXT("NO_PRIMITIVE_COMPONENT"));
     return true;
   }
 
+  const ECollisionEnabled::Type NewCollision =
+      bCollisionEnabled ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision;
+  Actor->Modify();
+  for (UPrimitiveComponent* PrimComp : PrimComps) {
+    PrimComp->Modify();
+    PrimComp->SetCollisionEnabled(NewCollision);
+  }
+  Actor->MarkPackageDirty();
+
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   Data->SetStringField(TEXT("actorName"), ActorName);
+  TArray<TSharedPtr<FJsonValue>> AppliedProperties;
+  AppliedProperties.Add(MakeShared<FJsonValueString>(TEXT("collisionEnabled")));
+  Data->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
   Data->SetBoolField(TEXT("collisionEnabled"), bCollisionEnabled);
-  Data->SetNumberField(TEXT("componentsModified"), ModifiedCount);
+  Data->SetNumberField(TEXT("componentsModified"), PrimComps.Num());
   SendStandardSuccessResponse(this, Socket, RequestId, TEXT("Collision setting updated"), Data);
   return true;
 #else
