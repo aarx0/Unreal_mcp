@@ -220,7 +220,6 @@ static void S_FixupRedirectors(FMcpSchemaBuilder& B)
 static void S_FindByTag(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("tag"), TEXT("find_by_tag: tag key to match (set_tags metadata or asset-registry tag)."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .Number(TEXT("maxResults"), TEXT("find_by_tag: result cap (default 100, max 1000)."))
 	 .Bool(TEXT("searchActors"), TEXT("find_by_tag: match level-actor tags (default true)."))
@@ -254,7 +253,7 @@ static void S_AddDataTableRow(FMcpSchemaBuilder& B)
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .String(TEXT("rowName"), TEXT("DataTable row CRUD: the row's key (FName)."))
-	 .FreeformObject(TEXT("rowData"), TEXT("DataTable add/edit row: JSON object of row-struct fields (partial edit merges)."))
+	 .Object(TEXT("rowData"), TEXT("DataTable add/edit row: JSON object of row-struct fields (partial edit merges)."))
 	 .Required({TEXT("rowName")});
 }
 
@@ -266,7 +265,7 @@ static void S_EditDataTableRow(FMcpSchemaBuilder& B)
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .String(TEXT("rowName"), TEXT("DataTable row CRUD: the row's key (FName)."))
-	 .FreeformObject(TEXT("rowData"), TEXT("DataTable add/edit row: JSON object of row-struct fields (partial edit merges)."))
+	 .Object(TEXT("rowData"), TEXT("DataTable add/edit row: JSON object of row-struct fields (partial edit merges)."))
 	 .Required({TEXT("rowName")});
 }
 
@@ -324,7 +323,8 @@ static void S_GenerateLods(FMcpSchemaBuilder& B)
 	 .Array(TEXT("assets"), TEXT("generate_lods: alias for assetPaths."))
 	 .Number(TEXT("lodCount"), TEXT(""))
 	 .Number(TEXT("numLODs"), TEXT("generate_lods: alias for lodCount."))
-	 .FreeformObject(TEXT("reductionSettings"), TEXT("generate_lods: FMeshReductionSettings overrides applied to every generated LOD — percentTriangles/percentVertices (0-1, replace the progressive 50%/25%/... defaults), maxDeviation, pixelError, weldingThreshold, hardAngleThreshold, baseLODModel, recalculateNormals."));
+	 .Object(TEXT("reductionSettings"), TEXT("generate_lods: FMeshReductionSettings overrides for every generated LOD (percentTriangles/percentVertices 0-1 replace the progressive defaults)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("percentTriangles")).Number(TEXT("percentVertices")).Number(TEXT("maxDeviation")).Number(TEXT("pixelError")).Number(TEXT("weldingThreshold")).Number(TEXT("hardAngleThreshold")).Integer(TEXT("baseLODModel")).Bool(TEXT("recalculateNormals")); });
 }
 
 static void S_AddMaterialParameter(FMcpSchemaBuilder& B)
@@ -1138,7 +1138,8 @@ static void S_Desaturate(FMcpSchemaBuilder& B)
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .FreeformObject(TEXT("luminanceFactors"), TEXT("add_desaturation: optional {r,g,b} luminance weights (default 0.3/0.59/0.11)."))
+	 .Object(TEXT("luminanceFactors"), TEXT("add_desaturation: optional luminance weights, channels 0..1 (default 0.3/0.59/0.11)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")); })
 	 .Required({TEXT("assetPath")});
 }
 
