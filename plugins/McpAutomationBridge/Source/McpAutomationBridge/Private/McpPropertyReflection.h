@@ -189,9 +189,10 @@ namespace McpPropertyReflection
      * vector2Value{x,y} / vectorValue{x,y,z} / vector4Value{x,y,z,w} /
      * structValue{...} / arrayValue[...]. Each field is a real schema type, so it
      * transmits correctly and the populated field names the caller's intended type.
-     * structValue/arrayValue are the open escape for runtime-defined shapes; they
-     * also accept a JSON-text string so a client that stringifies the container
-     * still round-trips (ApplyJsonValueToProperty's struct path re-parses it).
+     * structValue/arrayValue are the open escape for runtime-defined shapes
+     * (structs / instanced {"__class",...} / maps and arrays); they are read as a
+     * real JSON object/array ONLY -- a stringified container is a fail-loud bug, not
+     * rescued here. ApplyJsonValueToProperty is the structural gate for the contents.
      * @return Ok (Out filled) on exactly one; None on zero; Ambiguous on >1
      *         (OutDetail lists the offending field names).
      */

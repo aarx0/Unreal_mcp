@@ -1889,7 +1889,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     FString PropertyName;
     Payload->TryGetStringField(TEXT("propertyName"), PropertyName);
     FString Value;
-    Payload->TryGetStringField(TEXT("value"), Value);
+    Payload->TryGetStringField(TEXT("stringValue"), Value);
 
     UEdGraphNode *TargetNode = FindNodeByIdOrName(NodeId);
 
@@ -2224,7 +2224,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphAction(
     FString NodeId, PinName, Value;
     Payload->TryGetStringField(TEXT("nodeId"), NodeId);
     Payload->TryGetStringField(TEXT("pinName"), PinName);
-    Payload->TryGetStringField(TEXT("value"), Value);
+    Payload->TryGetStringField(TEXT("stringValue"), Value);
 
     UEdGraphNode *TargetNode = FindNodeByIdOrName(NodeId);
     if (!TargetNode) {

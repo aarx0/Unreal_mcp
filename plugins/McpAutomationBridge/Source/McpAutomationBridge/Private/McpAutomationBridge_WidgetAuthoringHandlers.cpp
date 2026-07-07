@@ -5873,7 +5873,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
     {
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString ParentName = GetJsonStringField(Payload, TEXT("parentName"));
-        double Size = GetJsonNumberField(Payload, TEXT("size"), 32.0);
+        double Size = GetJsonNumberField(Payload, TEXT("iconSize"), 32.0);
         
         if (WidgetPath.IsEmpty())
         {
@@ -6221,7 +6221,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
     {
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("Minimap"));
-        float Size = GetJsonNumberField(Payload, TEXT("size"), 200.0f);
+        float Size = GetJsonNumberField(Payload, TEXT("iconSize"), 200.0f);
 
         if (WidgetPath.IsEmpty())
         {
@@ -6283,7 +6283,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
         ResultJson->SetStringField(TEXT("slotName"), SlotName);
-        ResultJson->SetNumberField(TEXT("size"), Size);
+        ResultJson->SetNumberField(TEXT("iconSize"), Size);
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added minimap widget"), ResultJson);
         return true;

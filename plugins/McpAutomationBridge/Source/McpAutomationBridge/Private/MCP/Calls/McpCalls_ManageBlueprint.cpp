@@ -96,8 +96,21 @@ static void S_SetDefault(FMcpSchemaBuilder& B)
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
 	 .Array(TEXT("candidates"), TEXT("Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
-	 .Required({TEXT("propertyName"), TEXT("value")});
+	 // Discriminated value: populate exactly ONE typed field matching the target
+	 // property's reflected type. structValue/arrayValue are the escape for structs,
+	 // instanced subobjects ({"__class",...}) and arrays; ApplyJsonValueToProperty
+	 // is the gate for whether the value fits the resolved property.
+	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
+	 .Number(TEXT("intValue"), TEXT("Set an integer property."))
+	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
+	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum / object-reference-by-path property."))
+	 .Object(TEXT("colorValue"), TEXT("Set an FLinearColor/FColor property (r,g,b,a, 0..1)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
+	 .Object(TEXT("vectorValue"), TEXT("Set an FVector property (x, y, z)."),
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+	 .Object(TEXT("structValue"), TEXT("Set a struct / instanced subobject ({\"__class\",...}) / map property."))
+	 .Array(TEXT("arrayValue"), TEXT("Set an array property (items are structs/instanced objects)."), TEXT("object"))
+	 .Required({TEXT("propertyName")});
 }
 
 static void S_GetDefault(FMcpSchemaBuilder& B)
@@ -455,7 +468,7 @@ static void S_SetNodeProperty(FMcpSchemaBuilder& B)
 	 .String(TEXT("graphName"), TEXT("Name of the graph."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .String(TEXT("stringValue"), TEXT("Property value (node properties like Comment are string-serialized)."))
 	 .Required({TEXT("assetPath"), TEXT("blueprintPath"), TEXT("nodeId"), TEXT("propertyName")});
 }
 
@@ -512,7 +525,7 @@ static void S_SetPinDefaultValue(FMcpSchemaBuilder& B)
 	 .String(TEXT("graphName"), TEXT("Name of the graph."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("pinName"), TEXT("Name of the pin."))
-	 .FreeformObject(TEXT("value"), TEXT("Generic value (any type)."))
+	 .String(TEXT("stringValue"), TEXT("Pin default value (UE serializes pin defaults as strings)."))
 	 .Required({TEXT("assetPath"), TEXT("blueprintPath"), TEXT("nodeId"), TEXT("pinName")});
 }
 
@@ -1188,7 +1201,7 @@ static void S_AddMinimap(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("widgetPath"), TEXT("Widget Blueprint asset path (widget-authoring actions)."))
 	 .String(TEXT("slotName"), TEXT("Name for the widget being added / the slot to target."))
-	 .FreeformObject(TEXT("size"), TEXT("Either a number (add_crosshair/add_minimap/add_ammo_counter: icon size) or an {x,y} object (set_size: canvas slot pixel size)."))
+	 .Number(TEXT("iconSize"), TEXT("Icon size in pixels (add_crosshair/add_minimap)."))
 	 .Required({TEXT("widgetPath")});
 }
 
@@ -1196,7 +1209,7 @@ static void S_AddCrosshair(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("widgetPath"), TEXT("Widget Blueprint asset path (widget-authoring actions)."))
 	 .String(TEXT("parentName"), TEXT("Name of an existing panel widget to attach into (add_widget_component, add_health_bar/add_crosshair/add_minimap/etc.)."))
-	 .FreeformObject(TEXT("size"), TEXT("Either a number (add_crosshair/add_minimap/add_ammo_counter: icon size) or an {x,y} object (set_size: canvas slot pixel size)."))
+	 .Number(TEXT("iconSize"), TEXT("Icon size in pixels (add_crosshair/add_minimap)."))
 	 .Required({TEXT("widgetPath")});
 }
 
