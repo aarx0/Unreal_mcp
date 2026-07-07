@@ -1146,16 +1146,14 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorAddComponent(
     }
   }
 
-  // Force lights to be movable to ensure they work without baking (Issue #6
-  // fix) We check for "LightComponent" class name to avoid dependency issues if
-  // header is obscure, but ULightComponent is standard.
+  // Lights must be movable to work without baking.
   if (NewComponent->IsA(ULightComponent::StaticClass())) {
     if (USceneComponent *SC = Cast<USceneComponent>(NewComponent)) {
       SC->SetMobility(EComponentMobility::Movable);
     }
   }
 
-  // Special handling for StaticMeshComponent meshPath convenience
+  // meshPath convenience for a static mesh component.
   if (UStaticMeshComponent *SMC = Cast<UStaticMeshComponent>(NewComponent)) {
     FString MeshPath;
     if (Payload->TryGetStringField(TEXT("meshPath"), MeshPath) &&
@@ -1171,53 +1169,20 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorAddComponent(
     }
   }
 
-  TArray<FString> AppliedProperties;
-  TArray<FString> PropertyWarnings;
-  const TSharedPtr<FJsonObject> *PropertiesPtr = nullptr;
-  if (Payload->TryGetObjectField(TEXT("properties"), PropertiesPtr) &&
-      PropertiesPtr && (*PropertiesPtr).IsValid()) {
-    for (const auto &Pair : (*PropertiesPtr)->Values) {
-      const FString PropertyName(*Pair.Key);
-      FProperty *Property = ComponentClass->FindPropertyByName(*PropertyName);
-      if (!Property) {
-        PropertyWarnings.Add(
-            FString::Printf(TEXT("Property not found: %s"), *PropertyName));
-        continue;
-      }
-      FString ApplyError;
-      if (ApplyJsonValueToProperty(NewComponent, Property, Pair.Value,
-                                   ApplyError))
-        AppliedProperties.Add(PropertyName);
-      else
-        PropertyWarnings.Add(FString::Printf(TEXT("Failed to set %s: %s"),
-                                             *PropertyName, *ApplyError));
-    }
-  }
-
   NewComponent->RegisterComponent();
   if (USceneComponent *SceneComp = Cast<USceneComponent>(NewComponent))
     SceneComp->UpdateComponentToWorld();
   NewComponent->MarkPackageDirty();
   Found->MarkPackageDirty();
 
+  // add_component creates + registers only; set initial properties atomically
+  // afterwards via set_component_property (typed-params migration -- no init map).
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetBoolField(TEXT("success"), true);
   Resp->SetStringField(TEXT("componentName"), NewComponent->GetName());
   Resp->SetStringField(TEXT("componentPath"), NewComponent->GetPathName());
   Resp->SetStringField(TEXT("componentClass"), ComponentClass->GetPathName());
-  if (AppliedProperties.Num() > 0) {
-    TArray<TSharedPtr<FJsonValue>> PropsArray;
-    for (const FString &PropName : AppliedProperties)
-      PropsArray.Add(MakeShared<FJsonValueString>(PropName));
-    Resp->SetArrayField(TEXT("appliedProperties"), PropsArray);
-  }
-  if (PropertyWarnings.Num() > 0) {
-    TArray<TSharedPtr<FJsonValue>> WarnArray;
-    for (const FString &Warning : PropertyWarnings)
-      WarnArray.Add(MakeShared<FJsonValueString>(Warning));
-    Resp->SetArrayField(TEXT("warnings"), WarnArray);
-	}
-	SendAutomationResponse(Socket, RequestId, true, TEXT("Component added"), Resp,
+  SendAutomationResponse(Socket, RequestId, true, TEXT("Component added"), Resp,
                          FString());
   return true;
 #else

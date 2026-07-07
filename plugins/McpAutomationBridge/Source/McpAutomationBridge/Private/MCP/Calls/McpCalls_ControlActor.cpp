@@ -115,8 +115,7 @@ static void S_AddComponent(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("componentType"), TEXT(""))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
-	 .String(TEXT("meshPath"), TEXT("Mesh asset path."))
-	 .FreeformObject(TEXT("properties"), TEXT(""))
+	 .String(TEXT("meshPath"), TEXT("Mesh asset path (StaticMeshComponent convenience)."))
 	 .Required({TEXT("actorName"), TEXT("componentType")});
 }
 
