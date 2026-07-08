@@ -1125,22 +1125,12 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
         if (SP->Struct && ValueField->Type == EJson::String)
         {
             const FString Txt = ValueField->AsString();
-            // Clients that stringify the freeform `value` param (the Claude MCP
-            // client does) deliver the same object/array forms as JSON text. Parse
-            // and RE-ENTER the importer so the parsed form takes the identical
-            // code path (incl. the instanced field-by-field import above, which
-            // this branch previously bypassed straight into JsonObjectToUStruct).
-            {
-                TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Txt);
-                TSharedPtr<FJsonValue> ParsedVal;
-                if (FJsonSerializer::Deserialize(Reader, ParsedVal) && ParsedVal.IsValid() &&
-                    (ParsedVal->Type == EJson::Object || ParsedVal->Type == EJson::Array))
-                {
-                    return ApplyJsonValueToProperty(TargetContainer, Property, ParsedVal, OutError, Depth, OwnerForInstancing);
-                }
-            }
-            // Not JSON text: try the engine's textual struct import so UE-syntax
-            // forms ("(X=1,Y=2,Z=3)", FGuid hex, FKey names) keep working.
+            // A struct delivered as a stringified JSON blob no longer reaches
+            // here: every object-valued param is schema-typed and the transport
+            // rejects a stringified object/array before dispatch. A string at a
+            // struct property is a UE-syntax textual form ("(X=1,Y=2,Z=3)", FGuid
+            // hex, FKey name) — import it directly; anything else is a genuine
+            // error, surfaced rather than rescued.
             const TCHAR* ImportResult = nullptr;
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
             ImportResult = Property->ImportText_Direct(*Txt, StructPtr, nullptr, PPF_None, nullptr);
@@ -1151,7 +1141,7 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
             {
                 return true;
             }
-            OutError = FString::Printf(TEXT("String value for struct '%s' is neither JSON nor an importable UE text form"), *TypeName);
+            OutError = FString::Printf(TEXT("String value for struct '%s' is not an importable UE text form"), *TypeName);
             return false;
         }
 
@@ -1164,29 +1154,15 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
     // primitive, struct and object-reference inner types uniformly.
     if (FArrayProperty* AP = CastField<FArrayProperty>(Property))
     {
-        // Accept either a JSON array, or a JSON string that itself encodes an array.
-        // The FreeformObject "value" param carries no schema type, so some clients
-        // stringify arrays/objects (the struct branch above tolerates the same).
-        TArray<TSharedPtr<FJsonValue>> ParsedArr;
-        const TArray<TSharedPtr<FJsonValue>>* SrcPtr = nullptr;
-        if (ValueField->Type == EJson::Array)
+        // A stringified array no longer reaches here: array params are schema-
+        // typed and the transport rejects a non-array before dispatch. Anything
+        // that isn't a JSON array is a genuine error.
+        if (ValueField->Type != EJson::Array)
         {
-            SrcPtr = &ValueField->AsArray();
-        }
-        else if (ValueField->Type == EJson::String)
-        {
-            TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ValueField->AsString());
-            if (FJsonSerializer::Deserialize(Reader, ParsedArr))
-            {
-                SrcPtr = &ParsedArr;
-            }
-        }
-        if (!SrcPtr)
-        {
-            OutError = TEXT("Expected array (or a JSON string encoding an array) for array property");
+            OutError = TEXT("Expected a JSON array for array property");
             return false;
         }
-        const TArray<TSharedPtr<FJsonValue>>& Src = *SrcPtr;
+        const TArray<TSharedPtr<FJsonValue>>& Src = ValueField->AsArray();
         FScriptArrayHelper Helper(AP, AP->ContainerPtrToValuePtr<void>(TargetContainer));
         Helper.EmptyValues();
         Helper.Resize(Src.Num());
@@ -1203,27 +1179,21 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
         return true;
     }
 
-    // Maps: a JSON object { "<key>": <value>, ... } (or a JSON string encoding one).
-    // Keys come from the object's field names (always strings, converted to the key
-    // property's type); values go through this importer, so struct/object/instanced
-    // values work. Mirrors the map export in ExportPropertyToJsonValue.
+    // Maps: a JSON object { "<key>": <value>, ... }. Keys come from the object's
+    // field names (always strings, converted to the key property's type); values
+    // go through this importer, so struct/object/instanced values work. Mirrors
+    // the map export in ExportPropertyToJsonValue.
     if (FMapProperty* MP = CastField<FMapProperty>(Property))
     {
-        TSharedPtr<FJsonObject> MapObj;
-        if (ValueField->Type == EJson::Object)
+        // A map delivered as a stringified JSON object no longer reaches here:
+        // object-valued params are schema-typed and the transport rejects a
+        // stringified object before dispatch. Only a real JSON object is valid.
+        if (ValueField->Type != EJson::Object)
         {
-            MapObj = ValueField->AsObject();
-        }
-        else if (ValueField->Type == EJson::String)
-        {
-            TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ValueField->AsString());
-            FJsonSerializer::Deserialize(Reader, MapObj);
-        }
-        if (!MapObj.IsValid())
-        {
-            OutError = TEXT("Expected object (or a JSON string encoding an object) for map property");
+            OutError = TEXT("Expected a JSON object for map property");
             return false;
         }
+        const TSharedPtr<FJsonObject> MapObj = ValueField->AsObject();
         FScriptMapHelper Helper(MP, MP->ContainerPtrToValuePtr<void>(TargetContainer));
         Helper.EmptyValues();
         for (const auto& Pair : MapObj->Values)
@@ -1257,27 +1227,19 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
         return true;
     }
 
-    // Sets: a JSON array [ <elem>, ... ] (or a JSON string encoding one). Elements go
-    // through this importer. Mirrors the set export in ExportPropertyToJsonValue.
+    // Sets: a JSON array [ <elem>, ... ]. Elements go through this importer.
+    // Mirrors the set export in ExportPropertyToJsonValue.
     if (FSetProperty* SetP = CastField<FSetProperty>(Property))
     {
-        TArray<TSharedPtr<FJsonValue>> Elems;
-        bool bHaveElems = false;
-        if (ValueField->Type == EJson::Array)
+        // A set delivered as a stringified JSON array no longer reaches here:
+        // array-valued params are schema-typed and the transport rejects a
+        // non-array before dispatch. Only a real JSON array is valid.
+        if (ValueField->Type != EJson::Array)
         {
-            Elems = ValueField->AsArray();
-            bHaveElems = true;
-        }
-        else if (ValueField->Type == EJson::String)
-        {
-            TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ValueField->AsString());
-            bHaveElems = FJsonSerializer::Deserialize(Reader, Elems);
-        }
-        if (!bHaveElems)
-        {
-            OutError = TEXT("Expected array (or a JSON string encoding an array) for set property");
+            OutError = TEXT("Expected a JSON array for set property");
             return false;
         }
+        const TArray<TSharedPtr<FJsonValue>>& Elems = ValueField->AsArray();
         FScriptSetHelper Helper(SetP, SetP->ContainerPtrToValuePtr<void>(TargetContainer));
         Helper.EmptyElements();
         for (const TSharedPtr<FJsonValue>& Elem : Elems)

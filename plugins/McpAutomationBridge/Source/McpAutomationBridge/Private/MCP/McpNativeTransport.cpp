@@ -1365,6 +1365,49 @@ void FMcpNativeTransport::HandleToolsCall(
 						*Pair.Key, *Value, *Hint));
 				}
 			}
+
+			// Type check: a supplied argument's JSON type must match the type its
+			// (folded) schema advertises — the exact shape the client was handed,
+			// so a schema-compliant client can never trip this. It catches the
+			// failure the typed-params migration set out to kill: an object/array
+			// delivered as a stringified blob (or a scalar sent as the wrong
+			// primitive) would otherwise reach the handler, fail a typed getter,
+			// and silently default. Params with no declared "type" (none remain,
+			// but stay permissive) and JSON null (an omitted optional) don't
+			// constrain.
+			FString DeclaredType;
+			if ((*PropSchema)->TryGetStringField(TEXT("type"), DeclaredType) &&
+				Pair.Value.IsValid() &&
+				Pair.Value->Type != EJson::Null && Pair.Value->Type != EJson::None)
+			{
+				bool bTypeOk = true;
+				if (DeclaredType == TEXT("string"))       { bTypeOk = (Pair.Value->Type == EJson::String); }
+				else if (DeclaredType == TEXT("number") ||
+						 DeclaredType == TEXT("integer"))  { bTypeOk = (Pair.Value->Type == EJson::Number); }
+				else if (DeclaredType == TEXT("boolean")) { bTypeOk = (Pair.Value->Type == EJson::Boolean); }
+				else if (DeclaredType == TEXT("object"))  { bTypeOk = (Pair.Value->Type == EJson::Object); }
+				else if (DeclaredType == TEXT("array"))   { bTypeOk = (Pair.Value->Type == EJson::Array); }
+				// Any other declared type string carries no runtime constraint.
+
+				if (!bTypeOk)
+				{
+					auto JsonTypeName = [](EJson InType) -> const TCHAR*
+					{
+						switch (InType)
+						{
+						case EJson::String:  return TEXT("a string");
+						case EJson::Number:  return TEXT("a number");
+						case EJson::Boolean: return TEXT("a boolean");
+						case EJson::Object:  return TEXT("an object");
+						case EJson::Array:   return TEXT("an array");
+						default:             return TEXT("null");
+						}
+					};
+					Violations.Add(FString::Printf(
+						TEXT("argument '%s' must be of type '%s' but was sent as %s"),
+						*Pair.Key, *DeclaredType, JsonTypeName(Pair.Value->Type)));
+				}
+			}
 		}
 		return Violations;
 	};
