@@ -76,34 +76,34 @@ widget, not the Blueprint's own C++ parent. Had to ask Aaron to do the reparent 
 (Class Settings → Parent Class) — this is a real gap, not a naming/consolidation nit like the
 items above. Worth a `reparent_blueprint` (or similar) action if this recurs.
 
-### [x] 2026-07-07 — `create_node` duplicated nodes into EventGraph when targeting a BlueprintNativeEvent override's dedicated function graph (real bug, not noise)
-Dogfood find (`AStrikeActor::Configure` override on `BP_AoE`). Initially misdiagnosed as
-benign log noise (see history below) — it was NOT. After `add_function(override:true)`
-created the dedicated `Configure` function graph (a `K2Node_FunctionEntry`, correct — matches
-how BlueprintNativeEvent overrides get their own graph/tab), every subsequent
-`create_node(graphName:"Configure", ...)` call silently created a SECOND copy of each node
-inside `EventGraph` as a genuine `K2Node_Event` ("Event Configure") with its own independent
-`Get Sphere`/`Set Sphere Radius` chain — confirmed via `get_graph_details("EventGraph")`
-showing a fully-wired duplicate topology alongside the 17 pre-existing nodes. Two live
-implementations of the same override is what the Kismet compiler was correctly rejecting with
-`Graph named 'Configure' already exists ... Another one cannot be generated from Event
-Configure` — a REAL, user-visible `ERROR!` banner in the graph, not a transient log line.
-Confirmed live in-editor by the user (screenshot) after `compile` kept reporting
-`"compiled":true` despite the error text — the bridge's optimistic `compiled:true` alongside a
-real compile error is a second, smaller trust issue worth its own look. Fixed for this
-instance by deleting the 3 duplicate `EventGraph` nodes (`delete_node` × 3); compile then
-succeeded with zero errors. Root cause in `create_node` (or whatever resolves `graphName` for
-an override graph) not yet found/fixed — likely falls back to `EventGraph` in addition to (or
-instead of) the named override graph when resolving where to place a node for a
-`BlueprintNativeEvent`-derived graph name. Needs a repro + fix before the next override-graph
-authoring session; workaround until then: after `add_function(override:true)`, check
-`get_graph_details("EventGraph")` for stray duplicates before trusting `create_node` output on
-override graphs.
-Original (wrong) diagnosis, kept for context: "Looks like Kismet re-validating the override's
-dual function-graph/event identity on every touch and logging a benign duplicate-name notice,
-not a real failure. Same shape as the pre-existing `BP_MiliBot` Blackboard 'Accessed None'
-noise during PIE (tracked precedent, never fixed)." — that precedent is genuinely benign;
-this one was not.
+### [x] 2026-07-07 — NOT a bridge bug: `BlueprintNativeEvent` overrides have two competing implementation mechanisms in the editor, and a human + the bridge each used a different one
+Dogfood find (`AStrikeActor::Configure` override on `BP_AoE`) — corrected twice now; this is
+the real story. `Configure` is `UFUNCTION(BlueprintNativeEvent, Category="Strike")`. Unreal's
+Blueprint editor offers two distinct, both-legitimate ways to implement an override of a
+BlueprintNativeEvent: (1) **My Blueprint → Add Event → Override** — drops an inline
+`K2Node_Event` ("Event Configure", red diamond) directly into `EventGraph`, same as
+`BeginPlay`/`ActorBeginOverlap`; (2) **My Blueprint → Functions → Override dropdown** — what
+`manage_blueprint add_function(override:true)` uses — creates a *separate dedicated function
+graph* (its own tab) with a `K2Node_FunctionEntry` entry node (styled as a plain function, not
+a diamond). Aaron used mechanism (1) by hand in the editor while the bridge used mechanism (2)
+at roughly the same time, on the same `Configure` override — Unreal allows either but not
+both, and the Kismet compiler correctly rejected the collision with `Graph named 'Configure'
+already exists ... Another one cannot be generated from Event Configure`, a real user-visible
+`ERROR!` banner (confirmed live via screenshot), not a transient log line. `get_graph_details`
+on both graphs showed the two fully-wired, independent implementations side by side —
+conclusive. Fixed by deleting the 3 `EventGraph` copy nodes (`delete_node` × 3), keeping the
+bridge's dedicated function graph; compile then succeeded with zero errors, confirmed by the
+user in-editor. **No bridge code defect** — `create_node` was never writing to the wrong
+graph, it was two different actors implementing the same override through two different valid
+UI paths. Worth surfacing as a workflow gotcha for future co-editing sessions (human + bridge
+touching the same Blueprint concurrently): if a `BlueprintNativeEvent` override starts
+throwing this exact "Graph named 'X' already exists" error, check `EventGraph` for a stray
+inline `Event <name>` node before assuming the bridge broke something.
+Diagnostic history (both wrong, kept for the trail): first pass called this benign Kismet log
+noise akin to the pre-existing `BP_MiliBot` Blackboard "Accessed None" noise during PIE (that
+precedent is genuinely benign; this wasn't). Second pass blamed `create_node` for writing
+duplicate nodes into `EventGraph` — plausible from the data alone, but wrong: the duplicate
+was human-authored via Add Event, not bridge-authored via a graphName-resolution bug.
 
 ### [x] 2026-07-06 — dead-handler sweep: 31 removed (~4.6k lines); 1 was a false positive
 DONE. Removed 31 of the 32 (−4638 lines) — `HandleBlueprintProbeSubobjectHandle` was
