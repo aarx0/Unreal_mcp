@@ -169,11 +169,18 @@ action(s). Consequences:
    control_actor's remaining spots. Each = its own schema decl(s) + handler(s);
    convert per the same discriminated-union / typed-field pattern.
 2. **Category E** `metadata` across tools — keep as open key→string maps.
-3. **Phase B** — boundary type-check (`FJsonValue->Type` vs the derived
-   `EMcpParamKind` in the per-action check) + delete the string-reparse band-aid
-   (McpPropertyReflection.cpp:1125-1141) once no value param stringifies.
+3. **Phase B — DONE (`e3a043f2`).** Boundary type-check added to
+   `CollectSchemaViolations` (validates each supplied arg's `FJsonValue->Type`
+   against its FOLDED published `type`, the exact shape the client formatted
+   against — so a schema-compliant client can never false-reject; skips no-type
+   and JSON-null). String-reparse band-aids deleted from ALL container branches
+   of `ApplyJsonValueToProperty` — struct, array, map, set (the struct branch
+   keeps UE-syntax textual import for FKey/FGuid/`(X=,Y=,Z=)`). Design note:
+   validated against the folded schema (not the per-action derived kind) because
+   that's what the client was told; a static scan confirmed ZERO cross-action
+   top-level type collisions, so folded == per-action for every shared name.
 4. **Phase C** — generalize the strict field-by-field struct import to all structs
-   (not just instanced) so unknown nested fields fail loud.
+   (not just instanced) so unknown nested fields fail loud. ONLY remaining phase.
 
 ## Pending re-publish
 add_component's decl change is Live-Coding-patched but not yet re-published to the
