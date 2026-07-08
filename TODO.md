@@ -69,6 +69,28 @@ as they land.
 > Reuses the Phase 2 fragments; the gating unknown is whether the client honors top-level
 > `oneOf` — proposes a one-rebuild `control_editor` pilot to decide before any rollout.
 
+### [ ] 2026-07-07 — no `manage_blueprint` action to reparent an EXISTING Blueprint's parent class
+Dogfood find (lava-bomb `StrikeActor` work). `ensure_exists` takes `parentClass` but only
+applies it at *creation*; `reparent_scs_component`/`reparent_widget` reparent a component or
+widget, not the Blueprint's own C++ parent. Had to ask Aaron to do the reparent manually
+(Class Settings → Parent Class) — this is a real gap, not a naming/consolidation nit like the
+items above. Worth a `reparent_blueprint` (or similar) action if this recurs.
+
+### [ ] 2026-07-07 — false-positive `ENGINE_ERROR` noise on every edit to a BlueprintNativeEvent override graph
+Dogfood find (same session). Every `create_node`/`connect_pins`/`compile` call touching a
+freshly-`add_function(override:true)`-created override graph (e.g. `AStrikeActor::Configure`,
+a `BlueprintNativeEvent`) logs `[LogBlueprint] ... Graph named 'Configure' already exists in
+'BP_AoE'. Another one cannot be generated from Event Configure` and the handler surfaces it as
+`ENGINE_ERROR` / `"success": false` — even though `get_graph_details` afterward shows the edit
+landed correctly and the final `compile` call reported `"compiled":true,"saved":true` in the
+same payload as the "error". Looks like Kismet re-validating the override's dual
+function-graph/event identity on every touch and logging a benign duplicate-name notice, not a
+real failure. Same shape as the pre-existing `BP_MiliBot` Blackboard "Accessed None" noise
+during PIE (tracked precedent, never fixed) — signal-to-noise problem, not correctness. Worth
+suppressing this specific log pattern (or excluding "Graph named 'X' already exists ... Another
+one cannot be generated from Event X" from the ENGINE_ERROR promotion) if override-graph editing
+becomes common.
+
 ### [x] 2026-07-06 — dead-handler sweep: 31 removed (~4.6k lines); 1 was a false positive
 DONE. Removed 31 of the 32 (−4638 lines) — `HandleBlueprintProbeSubobjectHandle` was
 EXCLUDED: re-verification found it IS called (`BlueprintHandlers.cpp:4508`); the sweep's
