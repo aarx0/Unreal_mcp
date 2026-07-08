@@ -69,6 +69,24 @@ as they land.
 > Reuses the Phase 2 fragments; the gating unknown is whether the client honors top-level
 > `oneOf` — proposes a one-rebuild `control_editor` pilot to decide before any rollout.
 
+### [ ] 2026-07-07 — several actor-lookup actions miss live PIE-only actors (default to editor world)
+Dogfood find (chasing the `BP_AoE` radius bug live). Observed, not yet root-caused in bridge
+code — reporting what was directly seen: `inspect.find_by_class` for `BP_AoE_C`/`BP_Telegraph_C`
+returned 0 results immediately after a confirmed-successful `Lob` call, while `inspect.pie_report`
+taken at the same moment (same PIE world, `isPIE:true`) listed 13 live `BP_AoE_C_*` instances
+under `/Game/Maps/UEDPIE_0_L_CombatGym...`. Likewise `inspect.get_component_property` with a bare
+actor name (`"BP_AoE_C_355"`) returned `ACTOR_NOT_FOUND` for a PIE-only dynamically-spawned actor,
+but succeeded once given the FULL PIE-prefixed path as `actorName`
+(`/Game/Maps/UEDPIE_0_L_CombatGym.L_CombatGym:PersistentLevel.BP_AoE_C_355`). So: bare-name
+resolution on at least these two actions appears scoped to the editor world even while PIE is
+running; `pie_report` and a full PIE path both correctly reach the PIE world. `control_actor.
+call_actor_function` with a bare name DID appear to reach the live PIE dummy (new PIE actors kept
+appearing after each call) — inconsistent with the other two, worth confirming rather than
+assuming. Net effect: live PIE debugging via the bridge requires knowing to fall back to
+`pie_report` + full path lookups; bare-name actor tools silently look in the wrong world with no
+error hinting why. Needs a proper repro sweep across the actor-targeting actions (which resolve
+bare names against editor-world vs PIE-world vs "prefer PIE if active") before fixing.
+
 ### [ ] 2026-07-07 — no `manage_blueprint` action to reparent an EXISTING Blueprint's parent class
 Dogfood find (lava-bomb `StrikeActor` work). `ensure_exists` takes `parentClass` but only
 applies it at *creation*; `reparent_scs_component`/`reparent_widget` reparent a component or
