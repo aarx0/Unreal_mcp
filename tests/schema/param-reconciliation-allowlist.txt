@@ -17,6 +17,17 @@ output
 outputB
 outputG
 outputR
+# generate_lods reductionSettings sub-fields: read via the reductionSettings
+# object (AssetWorkflowHandlers.cpp ~4134 iterates its Values), not as top-level
+# params, so the by-name read check can't see them.
+baseLODModel
+hardAngleThreshold
+maxDeviation
+percentTriangles
+percentVertices
+pixelError
+recalculateNormals
+weldingThreshold
 
 # -- read from the request payload, not declared in any tool schema --
 args
@@ -30,5 +41,10 @@ payloadBase64
 player_index
 subAction
 subsystem
+# central discriminated-union field: ReadDiscriminatedValue probes every union
+# field (incl. vector4Value) to detect which one is set; no action's schema
+# advertises FVector4 setting yet, so it reads but isn't declared. Declare it in
+# the general-setter fragments if FVector4 props ever need to be settable.
+vector4Value
 widget_path
 z_order
