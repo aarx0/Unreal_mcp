@@ -1953,10 +1953,10 @@ hundreds of sites, a different risk class than dead-code deletion. Do deliberate
 - [x] **`remove_function` false success — HIGH.** ✅ FIXED + VERIFIED 2026-06-19: now `RemoveGraph` → `McpSafeCompileBlueprint` → save (BlueprintHandlers.cpp ~L3700); live test: add `TestFunc` → `remove_function` (`removed:true,saved:true`) → `list_functions` confirms it's actually gone. Original bug: `remove_function SetPercent` returned `removed:true,success:true`
   but left the function (with its broken node) in place; only a later `get_graph_details`/compile revealed it.
   False success left a compile-broken asset. Workaround: `delete_node` the offending node(s), then `compile`.
-- [ ] **`add_event` override path keyed on `eventType`, not `eventName`.** To implement a parent
-  BlueprintImplementableEvent override, pass `eventType:"<EventName>"` (walks ParentClass→FindFunctionByName).
-  Passing `eventName` leaves `eventType` empty → defaults "custom" → creates a GUID-named blank custom event
-  (silent wrong result). Accept `eventName` as an alias on the override path, or document.
+- [x] **`add_event` override path keyed on `eventType`, not `eventName`** — ✅ ALREADY FIXED (verified
+  2026-07-08, stale entry): BlueprintHandlers.cpp:3176-3186 accepts `eventName` as the override-path alias
+  when `eventType`/`customEventName` are empty, with a guard so an explicit `customEventName` still routes to
+  the custom path. The unoverridable-name case fails fast (EVENT_NOT_FOUND), so no garbage event is created.
 - [x] **✅ DONE 2026-06-20: declared the widget-authoring navigation params in the `manage_blueprint` schema**
   (`McpTool_ManageBlueprint.cpp`): `widgetPath`/`widgetName`/`slotName`/`parentSlot`/`widgetClass`. Handlers
   already read them from the payload; this makes them discoverable/passable through a schema-validating client
