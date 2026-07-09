@@ -114,6 +114,13 @@
           "description": "add_montage_slot/add_blend_sample/add_aim_offset_sample: animation sequence asset path.",
           "type": "string"
         },
+        "arrayValue": {
+          "description": "Set an array node property.",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
         "artifacts": {
           "items": {
             "type": "string"
@@ -228,6 +235,10 @@
           },
           "type": "array"
         },
+        "boolValue": {
+          "description": "Set a bool node property.",
+          "type": "boolean"
+        },
         "cacheName": {
           "description": "add_cached_pose: cached-pose node name.",
           "type": "string"
@@ -261,6 +272,24 @@
         "collisionEnabled": {
           "description": "configure_physics_body: enable query+physics collision (default true).",
           "type": "boolean"
+        },
+        "colorValue": {
+          "description": "Set an FLinearColor/FColor node property (r,g,b,a).",
+          "properties": {
+            "a": {
+              "type": "number"
+            },
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "compileReferencers": {
           "description": "rebuild_blend_space: recompile AnimBlueprints referencing this blend space (default true).",
@@ -314,6 +343,10 @@
         "engine": {
           "description": "configure_vehicle: engine settings (maxRPM, maxTorque, gears).",
           "type": "object"
+        },
+        "floatValue": {
+          "description": "Set a float/double node property.",
+          "type": "number"
         },
         "forceRootLock": {
           "description": "set_root_motion_settings: force root lock even when not additive (default false).",
@@ -372,6 +405,10 @@
         },
         "interpolationType": {
           "type": "string"
+        },
+        "intValue": {
+          "description": "Set an integer node property.",
+          "type": "number"
         },
         "length": {
           "description": "Length in seconds (create_animation_sequence, set_sequence_length, create_montage).",
@@ -629,9 +666,6 @@
           },
           "type": "object"
         },
-        "sampleValue": {
-          "description": "add_blend_sample: sample coordinate — a number for 1D blend spaces or {x, y} for 2D."
-        },
         "save": {
           "description": "Persist the created/modified asset to disk (default true; most authoring actions).",
           "type": "boolean"
@@ -727,6 +761,14 @@
           },
           "type": "array"
         },
+        "stringValue": {
+          "description": "Set a string / name / text / enum / object-path node property.",
+          "type": "string"
+        },
+        "structValue": {
+          "description": "Set a struct / instanced subobject node property.",
+          "type": "object"
+        },
         "suffix": {
           "description": "setup_retargeting: filename suffix for duplicated assets (default '_Retargeted').",
           "type": "string"
@@ -805,8 +847,32 @@
           "description": "configure_constraint_limits: twist angle when 'limits' is omitted.",
           "type": "number"
         },
-        "value": {
-          "description": "Generic value (any type)."
+        "vector2Value": {
+          "description": "add_blend_sample: 2D blend space sample coordinate (x, y).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "vectorValue": {
+          "description": "Set an FVector node property (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "vehicleName": {
           "description": "Legacy alias of actorName for configure_vehicle.",
@@ -971,7 +1037,9 @@
           "description": "create_spline_mesh_component: Blueprint asset path.",
           "type": "string"
         },
-        "bounds": {},
+        "bounds": {
+          "type": "object"
+        },
         "brushFalloff": {
           "description": "sculpt: brush falloff (alias: falloff).",
           "type": "number"
@@ -1286,7 +1354,8 @@
           "type": "object"
         },
         "properties": {
-          "description": "create_light: light component overrides (intensity, color, castShadows, useAsAtmosphereSunLight, attenuationRadius, innerConeAngle, outerConeAngle, sourceWidth, sourceHeight)."
+          "description": "create_light: light component overrides (intensity, color, castShadows, useAsAtmosphereSunLight, attenuationRadius, innerConeAngle, outerConeAngle, sourceWidth, sourceHeight).",
+          "type": "object"
         },
         "quadsPerComponent": {
           "description": "create_landscape: quads per component (alias: quadsPerSection/sectionSize).",
@@ -1325,7 +1394,8 @@
           "type": "boolean"
         },
         "reductionSettings": {
-          "description": "generate_lods: per-LOD FMeshReductionSettings overrides (percentTriangles, percentVertices, maxDeviation, pixelError, weldingThreshold, hardAngleThreshold, baseLODModel, recalculateNormals)."
+          "description": "generate_lods: per-LOD FMeshReductionSettings overrides (percentTriangles, percentVertices, maxDeviation, pixelError, weldingThreshold, hardAngleThreshold, baseLODModel, recalculateNormals).",
+          "type": "object"
         },
         "region": {
           "description": "modify_heightmap/paint_landscape: sub-region to affect (minX, minY, maxX, maxY); defaults to top-level minX/minY/maxX/maxY.",
@@ -1580,6 +1650,10 @@
           "description": "Blueprint asset path.",
           "type": "string"
         },
+        "boolValue": {
+          "description": "Set a bool variable.",
+          "type": "boolean"
+        },
         "childActor": {
           "description": "Name of the child actor (for attach/detach operations).",
           "type": "string"
@@ -1619,6 +1693,10 @@
           "description": "Optional actor label/name filter for list.",
           "type": "string"
         },
+        "floatValue": {
+          "description": "Set a float/double variable.",
+          "type": "number"
+        },
         "force": {
           "description": "3D vector.",
           "properties": {
@@ -1637,6 +1715,10 @@
         "functionName": {
           "description": "Name of the function.",
           "type": "string"
+        },
+        "intValue": {
+          "description": "Set an integer variable.",
+          "type": "number"
         },
         "limit": {
           "description": "Maximum number of actors to return.",
@@ -1662,7 +1744,7 @@
           "type": "string"
         },
         "meshPath": {
-          "description": "Mesh asset path.",
+          "description": "Mesh asset path (StaticMeshComponent convenience).",
           "type": "string"
         },
         "name": {
@@ -1696,7 +1778,6 @@
           "description": "Name of the parent actor (for attach operations).",
           "type": "string"
         },
-        "properties": {},
         "propertyName": {
           "description": "Name of the property.",
           "type": "string"
@@ -1738,14 +1819,33 @@
         "snapshotName": {
           "type": "string"
         },
+        "stringValue": {
+          "description": "Set a string / name / text / enum variable.",
+          "type": "string"
+        },
         "tag": {
           "description": "Name of the tag.",
           "type": "string"
         },
-        "value": {
-          "description": "Generic value (any type)."
+        "variableName": {
+          "description": "Name of the variable / actor property to set.",
+          "type": "string"
         },
-        "variables": {},
+        "vectorValue": {
+          "description": "Set an FVector variable (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
         "visible": {
           "description": "Whether the item/actor is visible.",
           "type": "boolean"
@@ -1762,191 +1862,582 @@
     "category": "core",
     "description": "Start/stop PIE, control viewport camera, run console commands, take screenshots, simulate input.",
     "inputSchema": {
-      "properties": {
-        "action": {
-          "description": "Editor action. screenshot captures the active viewport synchronously; the PNG is written to the returned absolute 'path' before the call returns, so it can be read back immediately to evaluate the result.",
-          "enum": [
-            "play",
-            "stop",
-            "pause",
-            "resume",
-            "eject",
-            "possess",
-            "set_game_speed",
-            "set_fixed_delta_time",
-            "set_camera",
-            "set_camera_fov",
-            "set_view_mode",
-            "screenshot",
-            "step_frame",
-            "start_recording",
-            "stop_recording",
-            "create_bookmark",
-            "jump_to_bookmark",
-            "set_preferences",
-            "set_viewport_realtime",
-            "open_asset",
-            "close_asset",
-            "simulate_input",
-            "simulate_nav",
-            "open_level",
-            "focus_actor",
-            "show_stats",
-            "hide_stats",
-            "set_editor_mode",
-            "set_immersive_mode",
-            "set_game_view",
-            "undo",
-            "redo",
-            "save_all"
-          ],
-          "type": "string"
-        },
-        "actorName": {
-          "description": "Name of the actor.",
-          "type": "string"
-        },
-        "assetPath": {
-          "description": "Asset path (e.g., /Game/Path/Asset).",
-          "type": "string"
-        },
-        "button": {
-          "description": "Mouse button for simulate_input.",
-          "type": "string"
-        },
-        "category": {
-          "type": "string"
-        },
-        "deltaTime": {
-          "type": "number"
-        },
-        "device": {
-          "description": "simulate_nav input device: 'gamepad' (default, sends DPad/face-button keys) or 'keyboard' (arrows/Enter/Esc/Tab).",
-          "type": "string"
-        },
-        "direction": {
-          "description": "simulate_nav direction: Up/Down/Left/Right/Accept/Back/Next/Previous (PIE-only; faithfully routes a nav key through CommonUI, then returns the post-nav focus snapshot).",
-          "type": "string"
-        },
-        "enabled": {
-          "description": "Whether the item/feature is enabled.",
-          "type": "boolean"
-        },
-        "filename": {
-          "description": "screenshot: output PNG name (saved under Saved/Screenshots; defaults to a timestamp).",
-          "type": "string"
-        },
-        "fov": {
-          "type": "number"
-        },
-        "id": {
-          "description": "Bookmark identifier/index.",
-          "type": "integer"
-        },
-        "index": {
-          "description": "Bookmark slot index (create_bookmark / jump_to_bookmark).",
-          "type": "number"
-        },
-        "inputAction": {
-          "type": "string"
-        },
-        "inputType": {
-          "description": "Alias for type used by simulate_input.",
-          "type": "string"
-        },
-        "key": {
-          "type": "string"
-        },
-        "levelPath": {
-          "description": "Level asset path.",
-          "type": "string"
-        },
-        "location": {
-          "description": "3D location (x, y, z).",
+      "oneOf": [
+        {
           "properties": {
+            "action": {
+              "const": "play",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "stop",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "pause",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "resume",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "eject",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "possess",
+              "type": "string"
+            },
+            "actorName": {
+              "description": "Name of the actor.",
+              "type": "string"
+            },
+            "objectPath": {
+              "description": "possess: object path of the pawn/actor to possess (alternative to actorName).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "step_frame",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "set_game_speed",
+              "type": "string"
+            },
+            "speed": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "set_fixed_delta_time",
+              "type": "string"
+            },
+            "deltaTime": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "set_camera",
+              "type": "string"
+            },
+            "location": {
+              "description": "3D location (x, y, z).",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "z": {
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            },
+            "rotation": {
+              "description": "3D rotation (pitch, yaw, roll).",
+              "properties": {
+                "pitch": {
+                  "type": "number"
+                },
+                "roll": {
+                  "type": "number"
+                },
+                "yaw": {
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "set_camera_fov",
+              "type": "string"
+            },
+            "fov": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "set_view_mode",
+              "type": "string"
+            },
+            "viewMode": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "set_viewport_realtime",
+              "type": "string"
+            },
+            "realtime": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "set_game_view",
+              "type": "string"
+            },
+            "enabled": {
+              "description": "Whether the item/feature is enabled.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "set_immersive_mode",
+              "type": "string"
+            },
+            "enabled": {
+              "description": "Whether the item/feature is enabled.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "show_stats",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "hide_stats",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "focus_actor",
+              "type": "string"
+            },
+            "actorName": {
+              "description": "Name of the actor.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "actorName"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "screenshot",
+              "type": "string"
+            },
+            "filename": {
+              "description": "screenshot: output PNG name (saved under Saved/Screenshots; defaults to a timestamp).",
+              "type": "string"
+            },
+            "maxWidth": {
+              "description": "screenshot: downscale the capture to at most this width in px (0/omit = native viewport size).",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "open_asset",
+              "type": "string"
+            },
+            "assetPath": {
+              "description": "Asset path (e.g., /Game/Path/Asset).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "assetPath"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "close_asset",
+              "type": "string"
+            },
+            "assetPath": {
+              "description": "Asset path (e.g., /Game/Path/Asset).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "assetPath"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "open_level",
+              "type": "string"
+            },
+            "assetPath": {
+              "description": "Asset path (e.g., /Game/Path/Asset).",
+              "type": "string"
+            },
+            "levelPath": {
+              "description": "Level asset path.",
+              "type": "string"
+            },
+            "path": {
+              "description": "Path to a directory.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "set_editor_mode",
+              "type": "string"
+            },
+            "mode": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "set_preferences",
+              "type": "string"
+            },
+            "category": {
+              "type": "string"
+            },
+            "preferences": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "create_bookmark",
+              "type": "string"
+            },
+            "id": {
+              "description": "Bookmark identifier/index.",
+              "type": "integer"
+            },
+            "index": {
+              "description": "Bookmark slot index (create_bookmark / jump_to_bookmark).",
+              "type": "number"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "jump_to_bookmark",
+              "type": "string"
+            },
+            "id": {
+              "description": "Bookmark identifier/index.",
+              "type": "integer"
+            },
+            "index": {
+              "description": "Bookmark slot index (create_bookmark / jump_to_bookmark).",
+              "type": "number"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "start_recording",
+              "type": "string"
+            },
+            "filename": {
+              "description": "screenshot: output PNG name (saved under Saved/Screenshots; defaults to a timestamp).",
+              "type": "string"
+            },
+            "name": {
+              "description": "Name identifier.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "stop_recording",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "simulate_input",
+              "type": "string"
+            },
+            "button": {
+              "description": "Mouse button for simulate_input.",
+              "type": "string"
+            },
+            "inputAction": {
+              "type": "string"
+            },
+            "inputType": {
+              "description": "Alias for type used by simulate_input.",
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "route": {
+              "description": "simulate_input analog: 'pie' (default — straight to the PIE player controller, focus-immune) or 'slate' (through FSlateApplication + input preprocessors, exercising the CommonUI layer).",
+              "type": "string"
+            },
+            "type": {
+              "description": "Input event type for simulate_input: key_down, key_up, mouse_click, mouse_move, analog. analog injects a 1D axis value (key=Gamepad_LeftY/Gamepad_RightX/MouseX/... + value); the value persists in PlayerInput until the next sample, so hold = inject once, release = inject 0.",
+              "type": "string"
+            },
+            "value": {
+              "description": "simulate_input analog: axis value (typically -1..1; mouse axes take pixel-ish deltas).",
+              "type": "number"
+            },
             "x": {
+              "description": "Mouse X coordinate for simulate_input.",
               "type": "number"
             },
             "y": {
-              "type": "number"
-            },
-            "z": {
+              "description": "Mouse Y coordinate for simulate_input.",
               "type": "number"
             }
           },
+          "required": [
+            "action"
+          ],
           "type": "object"
         },
-        "maxWidth": {
-          "description": "screenshot: downscale the capture to at most this width in px (0/omit = native viewport size).",
-          "type": "integer"
-        },
-        "mode": {
-          "type": "string"
-        },
-        "name": {
-          "description": "Name identifier.",
-          "type": "string"
-        },
-        "objectPath": {
-          "description": "possess: object path of the pawn/actor to possess (alternative to actorName).",
-          "type": "string"
-        },
-        "path": {
-          "description": "Path to a directory.",
-          "type": "string"
-        },
-        "preferences": {},
-        "realtime": {
-          "type": "boolean"
-        },
-        "rotation": {
-          "description": "3D rotation (pitch, yaw, roll).",
+        {
           "properties": {
-            "pitch": {
-              "type": "number"
+            "action": {
+              "const": "simulate_nav",
+              "type": "string"
             },
-            "roll": {
-              "type": "number"
+            "device": {
+              "description": "simulate_nav input device: 'gamepad' (default, sends DPad/face-button keys) or 'keyboard' (arrows/Enter/Esc/Tab).",
+              "type": "string"
             },
-            "yaw": {
-              "type": "number"
+            "direction": {
+              "description": "simulate_nav direction: Up/Down/Left/Right/Accept/Back/Next/Previous (PIE-only; faithfully routes a nav key through CommonUI, then returns the post-nav focus snapshot).",
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "stabilizeFocus": {
+              "description": "simulate_nav: default true — before the nav, focus the PIE game viewport if focus isn't already inside it, so the faithful drive routes through CommonUI deterministically (never steals focus from an already-focused in-game widget). Set false to drive from whatever currently has focus.",
+              "type": "boolean"
             }
           },
+          "required": [
+            "action"
+          ],
           "type": "object"
         },
-        "route": {
-          "description": "simulate_input analog: 'pie' (default — straight to the PIE player controller, focus-immune) or 'slate' (through FSlateApplication + input preprocessors, exercising the CommonUI layer).",
-          "type": "string"
+        {
+          "properties": {
+            "action": {
+              "const": "undo",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
         },
-        "speed": {
-          "type": "number"
+        {
+          "properties": {
+            "action": {
+              "const": "redo",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
         },
-        "stabilizeFocus": {
-          "description": "simulate_nav: default true — before the nav, focus the PIE game viewport if focus isn't already inside it, so the faithful drive routes through CommonUI deterministically (never steals focus from an already-focused in-game widget). Set false to drive from whatever currently has focus.",
-          "type": "boolean"
-        },
-        "type": {
-          "description": "Input event type for simulate_input: key_down, key_up, mouse_click, mouse_move, analog. analog injects a 1D axis value (key=Gamepad_LeftY/Gamepad_RightX/MouseX/... + value); the value persists in PlayerInput until the next sample, so hold = inject once, release = inject 0.",
-          "type": "string"
-        },
-        "value": {
-          "description": "simulate_input analog: axis value (typically -1..1; mouse axes take pixel-ish deltas).",
-          "type": "number"
-        },
-        "viewMode": {
-          "type": "string"
-        },
-        "x": {
-          "description": "Mouse X coordinate for simulate_input.",
-          "type": "number"
-        },
-        "y": {
-          "description": "Mouse Y coordinate for simulate_input.",
-          "type": "number"
+        {
+          "properties": {
+            "action": {
+              "const": "save_all",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
         }
-      },
-      "required": [
-        "action"
       ],
       "type": "object"
     },
@@ -2012,6 +2503,13 @@
           },
           "type": "array"
         },
+        "arrayValue": {
+          "description": "Set an array property (items are structs/instanced objects).",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
         "assetName": {
           "description": "diff_asset: object name inside the package (default = newFilePath filename stem).",
           "type": "string"
@@ -2020,12 +2518,34 @@
           "description": "Blueprint asset path.",
           "type": "string"
         },
+        "boolValue": {
+          "description": "Set a bool property.",
+          "type": "boolean"
+        },
         "className": {
           "type": "string"
         },
         "classPath": {
           "description": "Asset path (e.g., /Game/Path/Asset).",
           "type": "string"
+        },
+        "colorValue": {
+          "description": "Set an FLinearColor/FColor property (r,g,b,a, 0..1).",
+          "properties": {
+            "a": {
+              "type": "number"
+            },
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "componentName": {
           "description": "Name of the component.",
@@ -2048,6 +2568,10 @@
         "filter": {
           "type": "string"
         },
+        "floatValue": {
+          "description": "Set a float/double property.",
+          "type": "number"
+        },
         "includeCdo": {
           "description": "find_objects: include class default objects (default false).",
           "type": "boolean"
@@ -2055,6 +2579,10 @@
         "includeDefaults": {
           "description": "diff_asset: also diff CDO default properties (default true).",
           "type": "boolean"
+        },
+        "intValue": {
+          "description": "Set an integer property.",
+          "type": "number"
         },
         "limit": {
           "description": "find_objects: max objects returned (default 50, cap 200).",
@@ -2085,7 +2613,8 @@
           "type": "string"
         },
         "properties": {
-          "description": "set_component_property: map of component property name to value (alternative to a single propertyName/value pair)."
+          "description": "set_component_property: map of component property name to value (alternative to a single propertyName/value pair).",
+          "type": "object"
         },
         "propertyName": {
           "description": "Name of the property.",
@@ -2107,12 +2636,32 @@
         "snapshotName": {
           "type": "string"
         },
+        "stringValue": {
+          "description": "Set a string / name / text / enum / object-reference-by-path property.",
+          "type": "string"
+        },
+        "structValue": {
+          "description": "Set a struct / instanced subobject ({\"__class\",...}) / map property.",
+          "type": "object"
+        },
         "tag": {
           "description": "Name of the tag.",
           "type": "string"
         },
-        "value": {
-          "description": "Generic value (any type)."
+        "vectorValue": {
+          "description": "Set an FVector property (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         }
       },
       "required": [
@@ -2713,7 +3262,8 @@
           "type": "number"
         },
         "properties": {
-          "description": "Properties to set on a graph node."
+          "description": "Properties to set on a graph node.",
+          "type": "object"
         },
         "queryPath": {
           "description": "Path to EQS query asset.",
@@ -2853,6 +3403,10 @@
           "description": "State Tree state type.",
           "type": "string"
         },
+        "stringValue": {
+          "description": "Blackboard value, parsed per key type (bool true/false, int, float, vector \"X= Y= Z=\", name).",
+          "type": "string"
+        },
         "subnodeType": {
           "description": "Behavior Tree graph subnode type.",
           "type": "string"
@@ -2951,9 +3505,6 @@
         "triggerType": {
           "description": "State Tree transition trigger type.",
           "type": "string"
-        },
-        "value": {
-          "description": "Generic value (any type)."
         },
         "x": {
           "description": "Graph node X coordinate.",
@@ -3129,6 +3680,13 @@
           "description": "create_gradient_texture: Linear gradient direction in degrees (default 0).",
           "type": "number"
         },
+        "arrayValue": {
+          "description": "Set an array property (items are structs/instanced objects).",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
         "assetPath": {
           "description": "Asset path (e.g., /Game/Path/Asset).",
           "type": "string"
@@ -3170,6 +3728,10 @@
           "description": "channel_pack: source texture for the output blue channel.",
           "type": "string"
         },
+        "boolValue": {
+          "description": "Static switch value (on/off).",
+          "type": "boolean"
+        },
         "brickRatio": {
           "description": "create_pattern_texture: Brick length-to-height ratio (default 2).",
           "type": "number"
@@ -3203,6 +3765,24 @@
           "description": "add_custom_expression/update_custom_expression: HLSL source code body.",
           "type": "string"
         },
+        "colorValue": {
+          "description": "RGBA color, each channel 0..1.",
+          "properties": {
+            "a": {
+              "type": "number"
+            },
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
         "compressionSettings": {
           "description": "set_compression_settings: TC_Default|TC_Normalmap|TC_Masks|TC_Grayscale|TC_Displacementmap|TC_VectorDisplacementmap|TC_HDR|TC_EditorIcon|TC_Alpha|TC_DistanceFieldFont|TC_HDR_Compressed|TC_BC7.",
           "type": "string"
@@ -3229,9 +3809,6 @@
         "dataTablePath": {
           "description": "DataTable row CRUD: alias for assetPath (the DataTable).",
           "type": "string"
-        },
-        "defaultValue": {
-          "description": "Generic value (any type)."
         },
         "depth": {
           "description": "list: recursion depth filter relative to the queried path. get_node_connections: BFS hop limit (default 1; -1 unlimited).",
@@ -3265,7 +3842,22 @@
           "type": "boolean"
         },
         "endColor": {
-          "description": "create_gradient_texture: {r,g,b,a} end color (default white)."
+          "description": "create_gradient_texture: end color, channels 0..1 (default white).",
+          "properties": {
+            "a": {
+              "type": "number"
+            },
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "endNodeId": {
           "description": "get_node_chain: node ID (or \"Main\") to trace the signal path to.",
@@ -3297,6 +3889,10 @@
         "flipY": {
           "description": "create_normal_from_height: flip the green channel (DirectX vs OpenGL normal convention).",
           "type": "boolean"
+        },
+        "floatValue": {
+          "description": "set_node_value: scalar value for a Constant / named-float property / arithmetic ConstA.",
+          "type": "number"
         },
         "folderPath": {
           "description": "Path to a directory.",
@@ -3396,6 +3992,10 @@
           "description": "add_function_input/add_function_output: Float1|Float2|Float3|Float4|Texture2D|TextureCube|Bool|MaterialAttributes.",
           "type": "string"
         },
+        "intValue": {
+          "description": "Set an integer property.",
+          "type": "number"
+        },
         "invertAlpha": {
           "description": "invert: also invert the alpha channel (default false).",
           "type": "boolean"
@@ -3442,7 +4042,19 @@
           "type": "number"
         },
         "luminanceFactors": {
-          "description": "add_desaturation: optional {r,g,b} luminance weights (default 0.3/0.59/0.11)."
+          "description": "add_desaturation: optional luminance weights, channels 0..1 (default 0.3/0.59/0.11).",
+          "properties": {
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "materialDomain": {
           "description": "create_material/set_material_domain: Surface|DeferredDecal|LightFunction|Volume|PostProcess|UI.",
@@ -3463,7 +4075,9 @@
           "description": "Mesh asset path.",
           "type": "string"
         },
-        "metadata": {},
+        "metadata": {
+          "type": "object"
+        },
         "name": {
           "description": "Name identifier.",
           "type": "string"
@@ -3584,7 +4198,16 @@
           "type": "array"
         },
         "pagination": {
-          "description": "list: pagination window {offset, limit}."
+          "description": "list: pagination window.",
+          "properties": {
+            "limit": {
+              "type": "integer"
+            },
+            "offset": {
+              "type": "integer"
+            }
+          },
+          "type": "object"
         },
         "parameterName": {
           "description": "Name of the parameter.",
@@ -3635,10 +4258,25 @@
           "type": "boolean"
         },
         "primaryColor": {
-          "description": "create_pattern_texture: {r,g,b,a} foreground color (default white)."
+          "description": "create_pattern_texture: foreground color, channels 0..1 (default white).",
+          "properties": {
+            "a": {
+              "type": "number"
+            },
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "propertyName": {
-          "description": "set_asset_property: name of the reflected UPROPERTY to write.",
+          "description": "set_asset_property: reflected UPROPERTY name or dotted/indexed path (e.g. Mappings[0].Triggers[0]).",
           "type": "string"
         },
         "r": {
@@ -3668,7 +4306,34 @@
           "type": "string"
         },
         "reductionSettings": {
-          "description": "generate_lods: FMeshReductionSettings overrides applied to every generated LOD — percentTriangles/percentVertices (0-1, replace the progressive 50%/25%/... defaults), maxDeviation, pixelError, weldingThreshold, hardAngleThreshold, baseLODModel, recalculateNormals."
+          "description": "generate_lods: FMeshReductionSettings overrides for every generated LOD (percentTriangles/percentVertices 0-1 replace the progressive defaults).",
+          "properties": {
+            "baseLODModel": {
+              "type": "integer"
+            },
+            "hardAngleThreshold": {
+              "type": "number"
+            },
+            "maxDeviation": {
+              "type": "number"
+            },
+            "percentTriangles": {
+              "type": "number"
+            },
+            "percentVertices": {
+              "type": "number"
+            },
+            "pixelError": {
+              "type": "number"
+            },
+            "recalculateNormals": {
+              "type": "boolean"
+            },
+            "weldingThreshold": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "renderTargetPath": {
           "description": "create_render_target: full asset path (alternative to name+path).",
@@ -3682,7 +4347,8 @@
           "type": "string"
         },
         "rowData": {
-          "description": "DataTable add/edit row: JSON object of row-struct fields (partial edit merges)."
+          "description": "DataTable add/edit row: JSON object of row-struct fields (partial edit merges).",
+          "type": "object"
         },
         "rowName": {
           "description": "DataTable row CRUD: the row's key (FName).",
@@ -3732,7 +4398,22 @@
           "type": "string"
         },
         "secondaryColor": {
-          "description": "create_pattern_texture: {r,g,b,a} background color (default black)."
+          "description": "create_pattern_texture: background color, channels 0..1 (default black).",
+          "properties": {
+            "a": {
+              "type": "number"
+            },
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "seed": {
           "description": "create_noise_texture: noise seed (default 0).",
@@ -3766,7 +4447,22 @@
           "type": "string"
         },
         "startColor": {
-          "description": "create_gradient_texture: {r,g,b,a} start color (default black)."
+          "description": "create_gradient_texture: start color, channels 0..1 (default black).",
+          "properties": {
+            "a": {
+              "type": "number"
+            },
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "startNodeId": {
           "description": "get_node_chain: node ID to trace the signal path from.",
@@ -3775,6 +4471,14 @@
         "strength": {
           "description": "create_normal_from_height: normal map intensity (default 1).",
           "type": "number"
+        },
+        "stringValue": {
+          "description": "type=texture: default texture asset path.",
+          "type": "string"
+        },
+        "structValue": {
+          "description": "Set a struct / instanced subobject ({\"__class\",...}) / map property.",
+          "type": "object"
         },
         "suffix": {
           "type": "string"
@@ -3830,6 +4534,7 @@
           "type": "boolean"
         },
         "type": {
+          "description": "scalar | vector | texture | staticswitch.",
           "type": "string"
         },
         "upstream": {
@@ -3844,8 +4549,20 @@
           "description": "create_ao_from_mesh: source UV channel index (default 0).",
           "type": "number"
         },
-        "value": {
-          "description": "Generic value (any type)."
+        "vectorValue": {
+          "description": "Set an FVector property (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "virtualTextureStreaming": {
           "description": "configure_virtual_texture: enable VT streaming (default false).",
@@ -4300,7 +5017,9 @@
           "description": "create_dialogue_voice: Singular|Plural.",
           "type": "string"
         },
-        "properties": {},
+        "properties": {
+          "type": "object"
+        },
         "replace": {
           "description": "set_dialogue_context: replace an existing mapping for the same speaker.",
           "type": "boolean"
@@ -4695,6 +5414,13 @@
           "description": "Widget animation name (create_widget_animation default NewAnimation; add_animation_track/get_animation_info/delete_animation/etc.).",
           "type": "string"
         },
+        "arrayValue": {
+          "description": "Set an array style property.",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
         "assetPath": {
           "description": "Blueprint asset path for graph actions (create_node/connect_pins/etc.); alias of blueprintPath.",
           "type": "string"
@@ -4725,6 +5451,10 @@
         "blueprintType": {
           "description": "Path or name of the parent class.",
           "type": "string"
+        },
+        "boolValue": {
+          "description": "Set a bool style property.",
+          "type": "boolean"
         },
         "bottom": {
           "description": "set_margin: bottom margin.",
@@ -4768,6 +5498,24 @@
         },
         "colorAndOpacity": {
           "description": "Widget tint color, 0-1 components (add_text_block, add_image, add_button).",
+          "properties": {
+            "a": {
+              "type": "number"
+            },
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "colorValue": {
+          "description": "Set an FLinearColor/FColor style property (r,g,b,a).",
           "properties": {
             "a": {
               "type": "number"
@@ -4840,9 +5588,6 @@
           "description": "set_common_button_input_action: DataTable asset path (CommonInputActionDataBase row struct).",
           "type": "string"
         },
-        "defaultValue": {
-          "description": "Generic value (any type)."
-        },
         "delegateName": {
           "description": "Multicast delegate name (bind_on_clicked/bind_on_hovered default OnClicked/OnHovered; bind_on_value_changed default OnValueChanged; bind_event_to_delegate).",
           "type": "string"
@@ -4886,6 +5631,10 @@
         },
         "fillWeight": {
           "description": "set_size: fill weight when fill is true.",
+          "type": "number"
+        },
+        "floatValue": {
+          "description": "add_animation_keyframe: keyframe value.",
           "type": "number"
         },
         "folder": {
@@ -4936,6 +5685,10 @@
           "description": "add_text_input: placeholder hint text.",
           "type": "string"
         },
+        "iconSize": {
+          "description": "Icon size in pixels (add_crosshair/add_minimap).",
+          "type": "number"
+        },
         "includePinLinks": {
           "description": "get_graph_details: include per-node pins with defaults and \"<nodeGuid>:<pinName>\" link refs (always on inside get_transition_rule_graph's ruleGraph).",
           "type": "boolean"
@@ -4960,6 +5713,10 @@
             "type": "object"
           },
           "type": "array"
+        },
+        "intValue": {
+          "description": "Set an integer style property.",
+          "type": "number"
         },
         "isChecked": {
           "description": "add_check_box: initial checked state.",
@@ -5056,7 +5813,9 @@
           "description": "show_widget: notification text when widgetId is \"notification\".",
           "type": "string"
         },
-        "metadata": {},
+        "metadata": {
+          "type": "object"
+        },
         "minDesiredHeight": {
           "description": "add_size_box: minimum desired height.",
           "type": "number"
@@ -5260,7 +6019,9 @@
           "description": "set_anchor: named anchor preset (TopLeft, TopCenter, TopRight, CenterLeft, Center, CenterRight, BottomLeft, BottomCenter, BottomRight, StretchHorizontal, StretchVertical, StretchAll).",
           "type": "string"
         },
-        "properties": {},
+        "properties": {
+          "type": "object"
+        },
         "property": {
           "description": "set_widget_binding: property name to bind (NOT_IMPLEMENTED — validated only).",
           "type": "string"
@@ -5268,9 +6029,6 @@
         "property_name": {
           "description": "snake_case alias of propertyName.",
           "type": "string"
-        },
-        "property_value": {
-          "description": "snake_case alias of value (any type)."
         },
         "propertyName": {
           "description": "Name of the property.",
@@ -5381,7 +6139,16 @@
           "type": "object"
         },
         "size": {
-          "description": "Either a number (add_crosshair/add_minimap/add_ammo_counter: icon size) or an {x,y} object (set_size: canvas slot pixel size)."
+          "description": "set_size: canvas slot pixel size as an {x,y} object.",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "sizeX": {
           "description": "add_spacer/add_widget_component: width in pixels.",
@@ -5452,6 +6219,14 @@
         "stringTableId": {
           "description": "bind_localized_text: string table asset path.",
           "type": "string"
+        },
+        "stringValue": {
+          "description": "Set a string / enum / brush-path style property.",
+          "type": "string"
+        },
+        "structValue": {
+          "description": "Set a struct style property (e.g. a Slate brush/margin).",
+          "type": "object"
         },
         "style": {
           "description": "set_style: legacy value alias for propertyName=\"Style\" when propertyName is omitted.",
@@ -5544,9 +6319,6 @@
           "description": "add_scale_box: scale used when stretch is UserSpecified.",
           "type": "number"
         },
-        "value": {
-          "description": "Generic value (any type)."
-        },
         "variableName": {
           "description": "Name of the variable.",
           "type": "string"
@@ -5554,6 +6326,21 @@
         "variableType": {
           "description": "Variable type (e.g., Boolean, Float, Integer, Vector, String, Object)",
           "type": "string"
+        },
+        "vectorValue": {
+          "description": "Set an FVector style property (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "visibility": {
           "description": "set_visibility: Visible, Hidden, Collapsed, HitTestInvisible, or SelfHitTestInvisible.",
@@ -6184,6 +6971,10 @@
           "description": "particle/spawn_niagara: destroy the spawned actor once its effect finishes.",
           "type": "boolean"
         },
+        "boolValue": {
+          "description": "Value for a Bool Niagara parameter.",
+          "type": "boolean"
+        },
         "boxSize": {
           "description": "particle: box shape dimensions [x, y, z].",
           "items": {
@@ -6211,6 +7002,24 @@
         },
         "colorMode": {
           "type": "string"
+        },
+        "colorValue": {
+          "description": "Value when parameterType=Color (r, g, b, a, 0..1).",
+          "properties": {
+            "a": {
+              "type": "number"
+            },
+            "b": {
+              "type": "number"
+            },
+            "g": {
+              "type": "number"
+            },
+            "r": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "deltaTime": {
           "description": "Simulation delta time.",
@@ -6256,7 +7065,8 @@
           "type": "string"
         },
         "emitterProperties": {
-          "description": "Emitter properties to update."
+          "description": "Emitter properties to update.",
+          "type": "object"
         },
         "endLocation": {
           "description": "debug_shape/particle: end point for line/cylinder/arrow shapes (x, y, z).",
@@ -6296,6 +7106,10 @@
         },
         "fixedBoundsEnabled": {
           "type": "boolean"
+        },
+        "floatValue": {
+          "description": "Value for a Float/Int Niagara parameter.",
+          "type": "number"
         },
         "forceStrength": {
           "type": "number"
@@ -6392,9 +7206,6 @@
         },
         "parameterType": {
           "type": "string"
-        },
-        "parameterValue": {
-          "description": "Generic parameter value (any type)."
         },
         "path": {
           "description": "Directory path for asset creation.",
@@ -6526,8 +7337,20 @@
         "uniformSize": {
           "type": "number"
         },
-        "value": {
-          "description": "Generic value (any type)."
+        "vectorValue": {
+          "description": "Value for a Vector Niagara parameter (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "velocity": {
           "description": "3D velocity vector (x, y, z).",
@@ -8200,7 +9023,8 @@
           "type": "string"
         },
         "properties": {
-          "description": "Properties to apply to an item data asset (create_item_data_asset, set_item_properties). Keys matching native properties are written via reflection; other string/number/bool values are stored in the asset's string property bag (reported as storedInPropertyBag)."
+          "description": "Properties to apply to an item data asset (create_item_data_asset, set_item_properties). Keys matching native properties are written via reflection; other string/number/bool values are stored in the asset's string property bag (reported as storedInPropertyBag).",
+          "type": "object"
         },
         "quantity": {
           "description": "Ingredient quantity.",
@@ -8336,7 +9160,8 @@
           "type": "string"
         },
         "metadata": {
-          "description": "Metadata key/value object."
+          "description": "Metadata key/value object.",
+          "type": "object"
         },
         "newName": {
           "description": "New asset name for rename operations.",
@@ -8783,7 +9608,8 @@
           "type": "string"
         },
         "postProcessSettings": {
-          "description": "create_post_process_volume: post-process override key/values (bloomEnabled, exposureBias, vignetteIntensity, saturation, contrast, gamma)."
+          "description": "create_post_process_volume: post-process override key/values (bloomEnabled, exposureBias, vignetteIntensity, saturation, contrast, gamma).",
+          "type": "object"
         },
         "priority": {
           "description": "configure_grid_size: grid priority. Also create_physics_volume/set_volume_properties (physics volume priority) and create_post_process_volume/add_post_process_volume (blend priority).",
@@ -9454,6 +10280,10 @@
         "endFrame": {
           "type": "number"
         },
+        "floatValue": {
+          "description": "Keyframe value for a float property track.",
+          "type": "number"
+        },
         "frame": {
           "type": "number"
         },
@@ -9506,13 +10336,16 @@
         "startFrame": {
           "type": "number"
         },
+        "structValue": {
+          "description": "Keyframe value for a transform track: {location:{x,y,z}, rotation:{roll,pitch,yaw}, scale:{x,y,z}}.",
+          "type": "object"
+        },
         "trackName": {
           "type": "string"
         },
         "trackType": {
           "type": "string"
-        },
-        "value": {}
+        }
       },
       "required": [
         "action"
