@@ -50,7 +50,11 @@ Plan: [`consolidation-plan-2026-07-06.md`](consolidation-plan-2026-07-06.md).
   not → revert control_editor to the flat fold (one facade method) and do the enum-description fallback.
 
 ## 🔵 Smaller / older
-- **manage_blueprint `create_blueprint` ignores `path`** — sprays to /Game root (TODO 2026-07-03).
+- ~~**manage_blueprint `create` ignores `path`** — sprayed to /Game root~~ ✅ FIXED 2026-07-08 (`638a67a7`):
+  resolve path→savePath→folder→/Game + declared path/folder on the `create` fragment. **Lead:** the same
+  gap likely affects the OTHER create_* actions — their schemas advertise `path`/`folder` with a
+  "falls back to savePath, then folder" description, but no handler reads `folder` at all and the
+  widget/menu creators read only `savePath`. Worth a consistency sweep (a shared ResolveCreateFolder helper).
 - **animation_physics `setup_ragdoll`/`activate_ragdoll`** — full impls exist unwired; wire or retire.
 - **`execute_python` IMC/BP-default authoring traps** — documented gotchas (TODO).
 - **Clone sync** — `c:/GitHub/Unreal_mcp` behind the fork (reset declined once).
