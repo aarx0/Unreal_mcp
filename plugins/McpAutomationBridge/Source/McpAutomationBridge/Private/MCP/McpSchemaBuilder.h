@@ -52,9 +52,6 @@ public:
 	FMcpSchemaBuilder& ArrayOfObjects(const FString& Name, const FString& Description,
 		TFunction<void(FMcpSchemaBuilder&)> ItemBuilder = nullptr);
 
-	/** Freeform object property (type: "object", no properties constraint). */
-	FMcpSchemaBuilder& FreeformObject(const FString& Name, const FString& Description);
-
 	/** Declare required property names. Can be called multiple times. */
 	FMcpSchemaBuilder& Required(const TArray<FString>& Names);
 

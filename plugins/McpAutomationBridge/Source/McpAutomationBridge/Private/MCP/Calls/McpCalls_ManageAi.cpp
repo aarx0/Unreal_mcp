@@ -52,10 +52,6 @@ namespace McpCalls::ManageAi
 //     but absent from the old facade entirely.
 //   • create_nav_link_proxy/create_smart_link keep location/startPoint/endPoint
 //     required (the body rejects when any is missing).
-// value + properties author FreeformObject (no "type"): the handlers parse them
-// defensively, so the derived decl is Any (accepts any JSON type) — set_blackboard_value
-// reads value as a string, configure_bt_node/set_node_properties read properties as
-// an object, but neither should reject the other JSON shapes at the transport gate.
 // configure_state_tree_task shares the 'taskType' param name with add_task_node;
 // both author the add_task_node StringEnum verbatim so the folded facade keeps one
 // consistent taskType entry (the State-Tree task string is not enum-constrained at
