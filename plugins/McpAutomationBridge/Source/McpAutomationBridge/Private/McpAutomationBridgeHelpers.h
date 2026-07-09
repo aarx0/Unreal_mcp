@@ -8,7 +8,6 @@
 #include "Dom/JsonObject.h"
 #include "HAL/PlatformTime.h"
 #include "HAL/PlatformFileManager.h"
-#include "JsonObjectConverter.h"
 #include "Misc/FileHelper.h"
 #include "Misc/OutputDevice.h"
 #include "Misc/Paths.h"
@@ -1121,11 +1120,7 @@ struct FMcpOutputCapture : public FOutputDevice {
   }
 };
 
-// ExportPropertyToJsonValue is defined once, in McpPropertyReflection (declared in
-// McpPropertyReflection.h, included above) — the single reflection serializer with
-// full type coverage. This header's former twin was a strict subset that already
-// delegated container inners into it; this using-declaration keeps the existing
-// unqualified 2-arg call sites resolving to it (Depth defaults).
+// Route unqualified call sites to the single reflection serializer in McpPropertyReflection.
 using McpPropertyReflection::ExportPropertyToJsonValue;
 
 #if WITH_EDITOR
@@ -1236,14 +1231,7 @@ static inline void ScanPathSynchronous(const FString &InPath,
 }
 #endif
 
-// ApplyJsonValueToProperty is defined once, in McpPropertyReflection (declared in
-// McpPropertyReflection.h, included above). That single importer does field-by-
-// field struct import (fails loud on an unknown field instead of silently dropping
-// it) and handles enums, maps, sets and instanced subobjects under a depth guard.
-// This using-declaration keeps the existing unqualified 4-arg call sites resolving
-// to it (Depth and OwnerForInstancing default); it replaces a weaker in-header twin
-// that routed struct objects through JsonObjectToUStruct and silently dropped
-// unknown fields.
+// Route unqualified call sites to the single reflection importer in McpPropertyReflection.
 using McpPropertyReflection::ApplyJsonValueToProperty;
 
 /**

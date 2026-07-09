@@ -1317,9 +1317,6 @@ private:
   HandleWorldPartitionAction(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
-  bool HandleListBlueprints(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
   // manage_geometry is classed — see MCP/Calls/McpCalls_ManageGeometry.cpp.
   // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
   // can delegate, until the module split de-members the implementations off

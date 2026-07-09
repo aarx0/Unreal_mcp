@@ -6,13 +6,8 @@
 
 #include "McpPropertyReflection.h"
 #include "McpVersionCompatibility.h"
-#include "JsonObjectConverter.h"
 #include "Runtime/Launch/Resources/Version.h"
 #include "UObject/TextProperty.h"
-
-#if WITH_EDITOR
-#include "Editor.h"
-#endif
 
 // =============================================================================
 // JSON Value Export Implementation
@@ -402,10 +397,6 @@ TSharedPtr<FJsonObject> ExportPropertiesToJson(UObject* Object, const TArray<FNa
     return Result;
 }
 
-// Additional implementations would follow for ApplyJsonValueToProperty, etc.
-// The full implementation is in the previous code block - truncated for brevity
-// but the key functions are implemented above.
-
 int32 ApplyJsonValuesToObject(UObject* Object, const TMap<FName, TSharedPtr<FJsonValue>>& JsonValues, TMap<FName, FString>* OutErrors)
 {
     if (!Object)
@@ -663,13 +654,8 @@ static FProperty* FindStructChildProperty(const UScriptStruct* Struct, const FSt
     return nullptr;
 }
 
-// Full ApplyJsonValueToProperty implementation - this is a critical function
-// The implementation continues with all the type handling from McpAutomationBridgeHelpers.h
-
 bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const TSharedPtr<FJsonValue>& ValueField, FString& OutError, int32 Depth, UObject* OwnerForInstancing)
 {
-    // Standalone property importer used by reflection callers during the helper refactor.
-
     OutError.Empty();
     if (!TargetContainer || !Property || !ValueField.IsValid())
     {

@@ -222,13 +222,6 @@ static bool AddBlueprintVariableCombat(UBlueprint* Blueprint, const FName& VarNa
 }
 
 // Helper to create pin types
-static FEdGraphPinType MakeIntPinType()
-{
-    FEdGraphPinType PinType;
-    PinType.PinCategory = UEdGraphSchema_K2::PC_Int;
-    return PinType;
-}
-
 static FEdGraphPinType MakeFloatPinType()
 {
     FEdGraphPinType PinType;
@@ -255,14 +248,6 @@ static FEdGraphPinType MakeNamePinType()
 {
     FEdGraphPinType PinType;
     PinType.PinCategory = UEdGraphSchema_K2::PC_Name;
-    return PinType;
-}
-
-static FEdGraphPinType MakeObjectPinType(UClass* ObjectClass)
-{
-    FEdGraphPinType PinType;
-    PinType.PinCategory = UEdGraphSchema_K2::PC_Object;
-    PinType.PinSubCategoryObject = ObjectClass;
     return PinType;
 }
 

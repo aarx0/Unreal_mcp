@@ -64,6 +64,7 @@
 
 // JSON & Serialization
 #include "Dom/JsonObject.h"
+#include "JsonObjectConverter.h"
 
 // Asset Registry
 #include "AssetRegistry/AssetRegistryModule.h"

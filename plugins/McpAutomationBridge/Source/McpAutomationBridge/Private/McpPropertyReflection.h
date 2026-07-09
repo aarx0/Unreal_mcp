@@ -447,8 +447,7 @@ namespace McpPropertyReflection
      * Deep-export an Instanced subobject (CPF_InstancedReference — e.g. an input
      * trigger/modifier, a montage AnimNotify) as a nested JSON object carrying its
      * concrete class under "__class" plus its own properties. Used by the export path
-     * for instanced object values, and shared with the helpers twin so a direct
-     * top-level instanced property reads back its config rather than a bare path.
+     * for instanced object values.
      * @param Subobject The instanced subobject instance
      * @param Depth     Current recursion depth (bounded by the shared cap)
      */

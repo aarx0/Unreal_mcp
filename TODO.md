@@ -32,6 +32,26 @@ as they land.
 > `ApplyJsonValuesToObject`/`ReadDiscriminatedValue`/`PropertyMatchesValueKind` live only
 > in McpPropertyReflection; the split-brain reflection hazard is fully closed.
 
+> **[x] Obviated-code cleanup wave — DONE 2026-07-09.** Ripped ~1,435 lines of confirmed-dead code
+> prior "done" passes left behind. Handlers/files: the 3 husk shells from the 2026-07-06 dead-handler
+> sweep (`NiagaraHandlers`/`SequencerHandlers`/`MaterialGraphHandlers.cpp` — that sweep removed the
+> handler bodies but left the emptied include-only files); the whole dead `BlueprintHandlers_List.cpp`
+> (`HandleListBlueprints`, zero callers) + its header decl; the 4 SCS branches in `HandleSCSAction`
+> shadowed by the Core `FSCSHandlers` delegations that `return true` first (set_scs_property /
+> set_scs_transform / reparent_scs_component / remove_scs_component); the duplicate `set_default`
+> handler (the live one earlier in `HandleBlueprintAction` wins); the orphaned spline
+> `HandleConfigureMeshSpacing`/`Randomization`; AssetWorkflow's `GetHostExpressions`/`FindExpressionInHost`;
+> Combat's unused `MakeObjectPinType` + `MakeIntPinType`. Hygiene: dropped 2 dead cpp-local includes
+> (`JsonObjectConverter.h`, `Editor.h` in McpPropertyReflection.cpp) + trimmed 5 stale/provenance
+> comments. Each boundary re-verified (shadowing predecessor returns true / grep zero callers) before
+> cutting. Build clean editor-closed; boot routing-validation + schema-snapshot + param-reconciliation +
+> decl-lint all green.
+> **Shared-header include trap (lesson):** `JsonObjectConverter.h` was NOT dead in `helpers.h` — it was
+> transitively feeding `AssetWorkflow`/`WidgetAuthoring` (which use `FJsonObjectConverter` with no direct
+> include). First build caught it. Fixed IWYU-correctly: kept it out of the module-wide header, added it
+> to the 2 real users. A shared-header include counts as "dead" only if a FULL build agrees — a
+> header-local grep can't see transitive consumers.
+
 > **Fixture tip (2026-06-04):** a created Blueprint's variables are fully reachable by
 > `get`/`set_asset_property` via the **CDO path** `<bp-path>.Default__<Class>_C`. Create a
 > BP, `add_variable` the type you need (incl. `Set<>`/`Array<>`/`Map<>`), read/write it on
