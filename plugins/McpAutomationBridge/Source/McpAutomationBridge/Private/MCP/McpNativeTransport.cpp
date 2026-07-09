@@ -1276,11 +1276,48 @@ void FMcpNativeTransport::HandleToolsCall(
 		{
 			return Violations;
 		}
+		// Per-action `oneOf` (Phase 3): validate against the branch whose `action`
+		// const matches this request, so the required/enum/type checks below apply to
+		// exactly the called action's params. Flat-fold tools use the schema directly.
+		TSharedPtr<FJsonObject> Effective = Schema;
+		const TArray<TSharedPtr<FJsonValue>>* OneOf = nullptr;
+		if (Schema->TryGetArrayField(TEXT("oneOf"), OneOf) && OneOf)
+		{
+			FString ActionVal;
+			InArguments->TryGetStringField(TEXT("action"), ActionVal);
+			TSharedPtr<FJsonObject> Matched;
+			for (const TSharedPtr<FJsonValue>& BranchVal : *OneOf)
+			{
+				const TSharedPtr<FJsonObject> Branch = BranchVal->AsObject();
+				if (!Branch.IsValid())
+				{
+					continue;
+				}
+				const TSharedPtr<FJsonObject>* BranchProps = nullptr;
+				const TSharedPtr<FJsonObject>* BranchAction = nullptr;
+				FString BranchConst;
+				if (Branch->TryGetObjectField(TEXT("properties"), BranchProps) &&
+					(*BranchProps)->TryGetObjectField(TEXT("action"), BranchAction) &&
+					(*BranchAction)->TryGetStringField(TEXT("const"), BranchConst) &&
+					BranchConst == ActionVal)
+				{
+					Matched = Branch;
+					break;
+				}
+			}
+			// No matching branch => unknown/absent action; leave it to the action
+			// router (FindDecl -> UNKNOWN_ACTION handling). Nothing to validate here.
+			if (!Matched.IsValid())
+			{
+				return Violations;
+			}
+			Effective = Matched;
+		}
 		const TSharedPtr<FJsonObject>* Props = nullptr;
-		Schema->TryGetObjectField(TEXT("properties"), Props);
+		Effective->TryGetObjectField(TEXT("properties"), Props);
 
 		const TArray<TSharedPtr<FJsonValue>>* Required = nullptr;
-		if (Schema->TryGetArrayField(TEXT("required"), Required))
+		if (Effective->TryGetArrayField(TEXT("required"), Required))
 		{
 			for (const TSharedPtr<FJsonValue>& R : *Required)
 			{

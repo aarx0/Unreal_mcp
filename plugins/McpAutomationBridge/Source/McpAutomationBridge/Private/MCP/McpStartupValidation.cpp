@@ -22,6 +22,31 @@ TArray<FString> ExtractSchemaActionEnum(const FMcpToolDefinition* Tool)
 	{
 		return Out;
 	}
+	// Per-action `oneOf` shape (Phase 3): the advertised actions are the `action`
+	// const of each branch, not a single flat `properties.action.enum`.
+	const TArray<TSharedPtr<FJsonValue>>* OneOf = nullptr;
+	if (Schema->TryGetArrayField(TEXT("oneOf"), OneOf) && OneOf)
+	{
+		for (const TSharedPtr<FJsonValue>& BranchVal : *OneOf)
+		{
+			const TSharedPtr<FJsonObject> Branch = BranchVal->AsObject();
+			if (!Branch.IsValid())
+			{
+				continue;
+			}
+			const TSharedPtr<FJsonObject>* BranchProps = nullptr;
+			const TSharedPtr<FJsonObject>* BranchActionProp = nullptr;
+			FString ConstValue;
+			if (Branch->TryGetObjectField(TEXT("properties"), BranchProps) &&
+				(*BranchProps)->TryGetObjectField(Tool->GetActionFieldName(), BranchActionProp) &&
+				(*BranchActionProp)->TryGetStringField(TEXT("const"), ConstValue))
+			{
+				Out.Add(ConstValue);
+			}
+		}
+		return Out;
+	}
+
 	const TSharedPtr<FJsonObject>* Props = nullptr;
 	if (!Schema->TryGetObjectField(TEXT("properties"), Props))
 	{

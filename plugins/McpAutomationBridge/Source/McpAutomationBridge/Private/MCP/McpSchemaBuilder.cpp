@@ -46,6 +46,15 @@ FMcpSchemaBuilder& FMcpSchemaBuilder::StringEnum(const FString& Name,
 	return *this;
 }
 
+FMcpSchemaBuilder& FMcpSchemaBuilder::StringConst(const FString& Name, const FString& ConstValue)
+{
+	auto Prop = MakeShared<FJsonObject>();
+	Prop->SetStringField(TEXT("type"), TEXT("string"));
+	Prop->SetStringField(TEXT("const"), ConstValue);
+	AddProperty(Name, Prop);
+	return *this;
+}
+
 FMcpSchemaBuilder& FMcpSchemaBuilder::Number(const FString& Name, const FString& Description)
 {
 	auto Prop = MakeShared<FJsonObject>();

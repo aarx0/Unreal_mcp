@@ -514,6 +514,12 @@ void UMcpAutomationBridgeSubsystem::Initialize(
              TEXT("Registered %d action declarations"),
              FMcpCallRegistry::Get().NumDecls());
 
+      // Validate action routing AFTER the calls above register: a tool's per-action
+      // oneOf schema (Phase 3) derives its branches from the call registry, so the
+      // published schema is only complete once registration has run. (InitializeHandlers
+      // above, which builds the legacy handler map, runs before this on purpose.)
+      McpStartupValidation::ValidateActionRouting();
+
       NativeTransport = MakeShared<FMcpNativeTransport>(this);
       if (!NativeTransport->Start(Settings->NativeMCPPort, PluginDir,
                                   Settings->NativeMCPInstructions,
@@ -1119,8 +1125,6 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   // FMcpCall instances via the registry, not this map.
 
 #undef MCP_REGISTER_HANDLER
-
-  McpStartupValidation::ValidateActionRouting();
 }
 
 // Drain and process any automation requests that were enqueued while the

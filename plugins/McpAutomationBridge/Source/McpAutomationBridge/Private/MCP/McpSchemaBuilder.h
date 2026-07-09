@@ -31,6 +31,10 @@ public:
 	FMcpSchemaBuilder& StringEnum(const FString& Name, const TArray<FString>& Values,
 		const FString& Description);
 
+	/** String property fixed to a single constant value (JSON Schema `const`).
+	 *  The discriminator in per-action oneOf branches (Phase 3 per-action schemas). */
+	FMcpSchemaBuilder& StringConst(const FString& Name, const FString& ConstValue);
+
 	/** Number property. */
 	FMcpSchemaBuilder& Number(const FString& Name, const FString& Description = FString());
 
