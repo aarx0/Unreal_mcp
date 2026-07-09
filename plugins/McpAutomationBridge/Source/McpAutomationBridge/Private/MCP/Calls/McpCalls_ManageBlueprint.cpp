@@ -50,7 +50,9 @@ namespace McpCalls::ManageBlueprint
 static void S_Create(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Destination folder (alias of savePath; falls back to savePath, then folder, then /Game)."))
 	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("folder"), TEXT("Destination folder fallback after path/savePath."))
 	 .String(TEXT("parentClass"), TEXT("Path or name of the parent class."))
 	 .String(TEXT("blueprintType"), TEXT("Path or name of the parent class."))
 	 .Object(TEXT("properties"), TEXT(""))

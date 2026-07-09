@@ -474,8 +474,15 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
     return true;
   }
 
+  // Destination folder precedence: path -> savePath -> folder -> /Game (the
+  // convention the create_* schemas document). Previously only savePath was read,
+  // so a caller passing `path` (the alias the schema advertises) landed at /Game.
   FString SavePath;
-  LocalPayload->TryGetStringField(TEXT("savePath"), SavePath);
+  LocalPayload->TryGetStringField(TEXT("path"), SavePath);
+  if (SavePath.TrimStartAndEnd().IsEmpty())
+    LocalPayload->TryGetStringField(TEXT("savePath"), SavePath);
+  if (SavePath.TrimStartAndEnd().IsEmpty())
+    LocalPayload->TryGetStringField(TEXT("folder"), SavePath);
   if (SavePath.TrimStartAndEnd().IsEmpty())
     SavePath = TEXT("/Game");
   
