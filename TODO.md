@@ -8,6 +8,20 @@ as they land.
 > Origin: surfaced during the 2026-06 audio/options-menu work (verifying the asset
 > read/write actions on `manage_asset`).
 
+> **[ ] Unify `ExportPropertyToJsonValue` twin (found 2026-07-08).** Read-direction
+> sibling of the `ApplyJsonValueToProperty` de-dup already shipped (`cf4d90ef`): there
+> is still a `static inline` twin of `ExportPropertyToJsonValue` in
+> `McpAutomationBridgeHelpers.h` (~L1145–1435) alongside the canonical
+> `McpPropertyReflection::ExportPropertyToJsonValue`. ~6 handlers call it via the
+> UNqualified name (BlueprintHandlers 2755/2960, EnvironmentHandlers 280,
+> PropertyHandlers 487/684, SCSHandlers 1310) → they read back property values through
+> the twin, which can drift from the canonical serializer (the twin already recurses
+> into the qualified one for container inners — a half-migrated hybrid). Same fix as the
+> Apply de-dup: delete the twin, add `using McpPropertyReflection::ExportPropertyToJsonValue;`
+> in helpers.h, verify readback JSON shape is unchanged for those handlers. Not a
+> typed-params-migration correctness issue (migration only touched the write path), just
+> the same split-brain hazard.
+
 > **Fixture tip (2026-06-04):** a created Blueprint's variables are fully reachable by
 > `get`/`set_asset_property` via the **CDO path** `<bp-path>.Default__<Class>_C`. Create a
 > BP, `add_variable` the type you need (incl. `Set<>`/`Array<>`/`Map<>`), read/write it on
