@@ -38,8 +38,16 @@ Plan: [`consolidation-plan-2026-07-06.md`](consolidation-plan-2026-07-06.md).
 
 ## 🟡 Naming / Phase 3
 - **Confusing-names pass** — `class` vs `className` split + siblings (taste renames).
-- **Phase 3 per-action schemas (`oneOf`)** — [`phase3-per-action-schema-design-2026-07-06.md`](phase3-per-action-schema-design-2026-07-06.md);
-  `control_editor` pilot needs a fresh harness session to see if the client honors top-level oneOf.
+- **Phase 3 per-action schemas (`oneOf`)** — [`phase3-per-action-schema-design-2026-07-06.md`](phase3-per-action-schema-design-2026-07-06.md).
+  **Pilot SHIPPED 2026-07-08 (`1d0700c2`):** `control_editor` publishes 33 per-action oneOf branches;
+  server side fully verified (per-action params + required advertised, branch-resolved type-check,
+  clean boot after fixing a validation-before-registration ordering bug the oneOf exposed). **STILL
+  BLOCKED on the headline question — does the client honor a top-level oneOf?** Needs a FRESH harness
+  session (the MCP client caches the tool schema at connect and won't re-fetch mid-session). Next
+  session: open a new Claude Code session, inspect `control_editor`'s advertised schema (oneOf vs
+  flattened), and see if the model calls per-action params without a foreign-param reject vs a
+  flat-fold tool. If honored → roll out to the other 21 (mechanical: same BuildInputSchema loop). If
+  not → revert control_editor to the flat fold (one facade method) and do the enum-description fallback.
 
 ## 🔵 Smaller / older
 - **manage_blueprint `create_blueprint` ignores `path`** — sprays to /Game root (TODO 2026-07-03).

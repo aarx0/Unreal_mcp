@@ -1,7 +1,14 @@
 # Phase 3 design — per-action schemas (`oneOf` discriminated union)
 
-Status: **design proposal, Aaron-gated.** No code written. Prepared as no-editor prep so the
-build/rebuild work can be decided and executed in one sitting.
+Status: **PILOT SHIPPED 2026-07-08 (`1d0700c2`).** control_editor converted to per-action oneOf
+(33 branches). Infra built: `FMcpSchemaBuilder::StringConst`; oneOf-aware `CollectSchemaViolations`
++ `ExtractSchemaActionEnum`; and a fix for a validation-before-registration ordering bug the pilot
+exposed (`ValidateActionRouting` now runs after the calls register). Server side fully verified
+(direct HTTP): per-action params + required advertised, branch-resolved type-check, boot clean.
+**REMAINING — the risk in §"Risks 1": does the client honor top-level oneOf?** Not answerable in
+the authoring session (the MCP client caches the tool schema at connect, so it kept serving the flat
+schema after the mid-session rebuild). Verify in a FRESH harness session, then roll out to 21 (if
+honored) or revert control_editor + do the enum-description fallback (if not).
 
 ## The problem Phase 3 solves
 
