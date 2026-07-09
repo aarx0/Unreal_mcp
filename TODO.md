@@ -8,19 +8,16 @@ as they land.
 > Origin: surfaced during the 2026-06 audio/options-menu work (verifying the asset
 > read/write actions on `manage_asset`).
 
-> **[ ] Unify `ExportPropertyToJsonValue` twin (found 2026-07-08).** Read-direction
-> sibling of the `ApplyJsonValueToProperty` de-dup already shipped (`cf4d90ef`): there
-> is still a `static inline` twin of `ExportPropertyToJsonValue` in
-> `McpAutomationBridgeHelpers.h` (~L1145–1435) alongside the canonical
-> `McpPropertyReflection::ExportPropertyToJsonValue`. ~6 handlers call it via the
-> UNqualified name (BlueprintHandlers 2755/2960, EnvironmentHandlers 280,
-> PropertyHandlers 487/684, SCSHandlers 1310) → they read back property values through
-> the twin, which can drift from the canonical serializer (the twin already recurses
-> into the qualified one for container inners — a half-migrated hybrid). Same fix as the
-> Apply de-dup: delete the twin, add `using McpPropertyReflection::ExportPropertyToJsonValue;`
-> in helpers.h, verify readback JSON shape is unchanged for those handlers. Not a
-> typed-params-migration correctness issue (migration only touched the write path), just
-> the same split-brain hazard.
+> **[x] Unify `ExportPropertyToJsonValue` twin — DONE 2026-07-08 (`ae5e1739`).** Deleted
+> the `static inline` twin in `McpAutomationBridgeHelpers.h` and routed the ~6 unqualified
+> callers to `McpPropertyReflection::ExportPropertyToJsonValue` via a using-decl (2-arg
+> calls bind through defaulted Depth). Verified byte-identical readbacks (nested struct
+> incl. enum/name/null-ref/nested-vectors/array-of-structs, vectors, enum, nested path)
+> before/after via get_property A/B — invisible to clients. This was the read-direction
+> sibling of the `ApplyJsonValueToProperty` de-dup (`cf4d90ef`). **Swept for more: no
+> other reflection twins exist** — `ExportStructToJson`/`ExportInstancedObjectToJson`/
+> `ApplyJsonValuesToObject`/`ReadDiscriminatedValue`/`PropertyMatchesValueKind` live only
+> in McpPropertyReflection; the split-brain reflection hazard is fully closed.
 
 > **Fixture tip (2026-06-04):** a created Blueprint's variables are fully reachable by
 > `get`/`set_asset_property` via the **CDO path** `<bp-path>.Default__<Class>_C`. Create a
