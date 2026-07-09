@@ -8,6 +8,19 @@ as they land.
 > Origin: surfaced during the 2026-06 audio/options-menu work (verifying the asset
 > read/write actions on `manage_asset`).
 
+> **[ ] Dogfood finds 2026-07-08 (inspect read actions, direct-HTTP):**
+> - **`inspect get_editor_settings` fake-success stub** — returns `{success:true, message:"Editor
+>   settings retrieved"}` with NO data (EnvironmentHandlers.cpp:1590; the non-editor build is an
+>   honest `MCP_INSPECT_HANDLER_STUB` returning false). A silent lie. Recommend: fail loud
+>   (NOT_IMPLEMENTED, matching the non-editor path) OR implement real editor prefs; don't fake success.
+> - **`inspect list_objects` takes no params** — rejects `className`/`limit` ("takes no params besides
+>   'action'"). So it can't filter or bound its output. Either it's unbounded (dump-everything) or
+>   underpowered; give it `className`/`pathContains`/`limit` like `find_objects`, or document why not.
+> - **`inspect find_by_class` rejects `limit`** (reads only className/classPath) while `find_objects`
+>   accepts `limit`. Minor inconsistency — add `limit` to find_by_class for parity, or note the split.
+> (Other read actions verified working: get_world_settings, get_viewport_info, get_scene_stats,
+> get_selected_actors, get_memory_stats, get_performance_stats.)
+
 > **[x] Unify `ExportPropertyToJsonValue` twin — DONE 2026-07-08 (`ae5e1739`).** Deleted
 > the `static inline` twin in `McpAutomationBridgeHelpers.h` and routed the ~6 unqualified
 > callers to `McpPropertyReflection::ExportPropertyToJsonValue` via a using-decl (2-arg
