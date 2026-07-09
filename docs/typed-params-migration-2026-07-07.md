@@ -179,8 +179,24 @@ action(s). Consequences:
    validated against the folded schema (not the per-action derived kind) because
    that's what the client was told; a static scan confirmed ZERO cross-action
    top-level type collisions, so folded == per-action for every shared name.
-4. **Phase C** — generalize the strict field-by-field struct import to all structs
-   (not just instanced) so unknown nested fields fail loud. ONLY remaining phase.
+4. **Phase C — DONE (`cf4d90ef`).** Field-by-field struct import now runs for ALL
+   structs (not just instanced): every JSON key must resolve to a real field at
+   every depth, so a typo'd/stale nested field errors ("Struct 'X' has no field
+   'Y'") instead of being silently dropped by JsonObjectToUStruct; JSON null =
+   omitted (skipped). **Key finding while verifying:** there were TWO parallel
+   `ApplyJsonValueToProperty` importers — the capable `McpPropertyReflection` one
+   (all the migration's edits) and a weaker `static inline` twin in
+   McpAutomationBridgeHelpers.h that most handlers (set_property, control_actor,
+   inventory, SCS, blueprint defaults, animation) reached via the UNqualified
+   name and that silent-dropped unknown struct fields. The twin is deleted and
+   every unqualified caller routed to the capable importer via a using-decl (4-arg
+   calls bind through defaulted Depth/OwnerForInstancing) — a strict upgrade that
+   also retroactively completed Phase B's band-aid removal everywhere. Verified
+   live: set_property fails loud on unknown fields top-level AND nested, valid
+   fields still apply, Phase B suite still green.
+
+**Migration COMPLETE.** Phases A–D all done (D was already a no-op via McpDeriveDecl);
+Categories A–E all folded into Phase A. No further phases.
 
 ## Pending re-publish
 add_component's decl change is Live-Coding-patched but not yet re-published to the
