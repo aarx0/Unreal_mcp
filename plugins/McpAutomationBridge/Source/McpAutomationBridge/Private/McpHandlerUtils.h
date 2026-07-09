@@ -307,6 +307,52 @@ namespace McpHandlerUtils
      * Determines actor vs asset automatically.
      */
     MCPAUTOMATIONBRIDGE_API void AddVerification(TSharedPtr<FJsonObject>& Result, UObject* Object);
+
+    // =========================================================================
+    // Fail-in-place write report (silent-success convention)
+    // =========================================================================
+    // Collects the per-field outcome of a multi-field "bag" setter. Every
+    // requested field must be routed through MarkApplied or MarkFailed; a
+    // requested field left unrecorded is the silent-success bug this prevents.
+    // Success holds iff AnyApplied() && !AnyFailed() — every requested field
+    // applied. SendWriteReportResponse (McpResponseHelpers.h) turns a report
+    // into the NO_CHANGES_REQUESTED / PROPERTY_WRITE_FAILED / success response.
+    struct FMcpWriteReport
+    {
+        TArray<FString> Applied;
+        TArray<TPair<FString, FString>> Failed; // (field, reason)
+
+        void MarkApplied(const FString& Field) { Applied.Add(Field); }
+        void MarkFailed(const FString& Field, const FString& Reason) { Failed.Emplace(Field, Reason); }
+        bool AnyApplied() const { return Applied.Num() > 0; }
+        bool AnyFailed() const { return Failed.Num() > 0; }
+
+        // Writes appliedProperties (string[]) and, when non-empty, failed
+        // ([{property, reason}]) into Data. Must run before the response send
+        // (the Result is handed off and serialized on a worker thread).
+        void WriteInto(const TSharedPtr<FJsonObject>& Data) const
+        {
+            TArray<TSharedPtr<FJsonValue>> AppliedArr;
+            for (const FString& F : Applied)
+            {
+                AppliedArr.Add(MakeShared<FJsonValueString>(F));
+            }
+            Data->SetArrayField(TEXT("appliedProperties"), AppliedArr);
+
+            if (Failed.Num() > 0)
+            {
+                TArray<TSharedPtr<FJsonValue>> FailedArr;
+                for (const TPair<FString, FString>& Entry : Failed)
+                {
+                    TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+                    Obj->SetStringField(TEXT("property"), Entry.Key);
+                    Obj->SetStringField(TEXT("reason"), Entry.Value);
+                    FailedArr.Add(MakeShared<FJsonValueObject>(Obj));
+                }
+                Data->SetArrayField(TEXT("failed"), FailedArr);
+            }
+        }
+    };
 }
 
 // =============================================================================

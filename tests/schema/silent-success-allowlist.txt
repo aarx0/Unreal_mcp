@@ -1,0 +1,12 @@
+# Justified NON-conversions for tests/schema/silent-success-lint.ps1 (one Handle-name per line; # comments).
+#
+# An entry means: this handler has >=2 Payload->HasField guards (so the lint flags it as a
+# bag-setter) but it should NOT get the fail-in-place applied/failed treatment, because it is
+# actually one of:
+#   - a read-op that merely branches on optional filters (no writes to report), or
+#   - a genuinely atomic setter whose missing required value already fails loud, or
+#   - a no-op scaffold tracked separately (see fork TODO.md:256-283).
+# This is NOT a place to defer real conversion work — pinning an unconverted real bag-setter
+# defeats the forcing function. Every entry needs the one-line reason after the '#'.
+#
+# (populated as the lint surfaces heuristic false positives during the rollout)

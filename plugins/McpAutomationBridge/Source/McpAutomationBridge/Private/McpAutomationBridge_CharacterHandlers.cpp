@@ -208,6 +208,7 @@
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
+#include "McpResponseHelpers.h"
 
 // =============================================================================
 // Editor-Only Includes
@@ -1012,6 +1013,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMovementSpeeds(
         return true;
     }
 
+    McpHandlerUtils::FMcpWriteReport Report;
     const bool bHasWalkSpeed = Payload->HasField(TEXT("walkSpeed"));
     const bool bHasRunSpeed = Payload->HasField(TEXT("runSpeed"));
     const bool bHasSprintSpeed = Payload->HasField(TEXT("sprintSpeed"));
@@ -1022,6 +1024,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMovementSpeeds(
     if (bHasWalkSpeed)
     {
         Movement->MaxWalkSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("walkSpeed"), 600.0));
+        Report.MarkApplied(TEXT("walkSpeed"));
     }
 
     FString RunSpeedTarget;
@@ -1032,17 +1035,35 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMovementSpeeds(
     }
 
     if (Payload->HasField(TEXT("crouchSpeed")))
+    {
         Movement->MaxWalkSpeedCrouched = static_cast<float>(GetJsonNumberField(Payload, TEXT("crouchSpeed"), 300.0));
+        Report.MarkApplied(TEXT("crouchSpeed"));
+    }
     if (Payload->HasField(TEXT("swimSpeed")))
+    {
         Movement->MaxSwimSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("swimSpeed"), 300.0));
+        Report.MarkApplied(TEXT("swimSpeed"));
+    }
     if (Payload->HasField(TEXT("flySpeed")))
+    {
         Movement->MaxFlySpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("flySpeed"), 600.0));
+        Report.MarkApplied(TEXT("flySpeed"));
+    }
     if (Payload->HasField(TEXT("acceleration")))
+    {
         Movement->MaxAcceleration = static_cast<float>(GetJsonNumberField(Payload, TEXT("acceleration"), 2048.0));
+        Report.MarkApplied(TEXT("acceleration"));
+    }
     if (Payload->HasField(TEXT("deceleration")))
+    {
         Movement->BrakingDecelerationWalking = static_cast<float>(GetJsonNumberField(Payload, TEXT("deceleration"), 2048.0));
+        Report.MarkApplied(TEXT("deceleration"));
+    }
     if (Payload->HasField(TEXT("groundFriction")))
+    {
         Movement->GroundFriction = static_cast<float>(GetJsonNumberField(Payload, TEXT("groundFriction"), 8.0));
+        Report.MarkApplied(TEXT("groundFriction"));
+    }
 
     const float AppliedMaxWalkSpeed = Movement->MaxWalkSpeed;
 
@@ -1059,6 +1080,10 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMovementSpeeds(
         SetBPVarDefaultValue(Blueprint, FName(TEXT("RunSpeed")), FString::SanitizeFloat(GetJsonNumberField(Payload, TEXT("runSpeed"), 600.0)));
         RunSpeedTarget = TEXT("RunSpeed");
     }
+    if (bHasRunSpeed)
+    {
+        Report.MarkApplied(TEXT("runSpeed"));
+    }
 
     if (bHasSprintSpeed)
     {
@@ -1067,9 +1092,15 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMovementSpeeds(
             VarsAdded.Add(MakeShared<FJsonValueString>(TEXT("SprintSpeed")));
         }
         SetBPVarDefaultValue(Blueprint, FName(TEXT("SprintSpeed")), FString::SanitizeFloat(GetJsonNumberField(Payload, TEXT("sprintSpeed"), 900.0)));
+        Report.MarkApplied(TEXT("sprintSpeed"));
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    // No requested field -> the response helper emits NO_CHANGES_REQUESTED; skip
+    // dirtying the Blueprint for a no-op.
+    if (Report.AnyApplied())
+    {
+        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1089,9 +1120,8 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMovementSpeeds(
     {
         Result->SetArrayField(TEXT("variablesAdded"), VarsAdded);
     }
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Movement speeds configured"), Result);
-    return true;
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Movement speeds configured"), Blueprint);
 #endif // WITH_EDITOR
 }
 
