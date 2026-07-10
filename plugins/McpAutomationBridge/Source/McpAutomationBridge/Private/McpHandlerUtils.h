@@ -221,14 +221,27 @@ namespace McpHandlerUtils
     // Actor/Component Utilities
     // =========================================================================
 
+    // Actor name-match strictness for FindActorByName.
+    //   Exact  — case-insensitive equality on the actor's name, label, or full path.
+    //   Prefix — Exact, plus a case-insensitive StartsWith on the name or label.
+    //   Fuzzy  — Exact, plus a case-insensitive Contains on the name or label that
+    //            resolves only when exactly one actor matches (an ambiguous set is
+    //            rejected so destructive ops never target the wrong actor), plus a
+    //            "/"-rooted asset-path load fallback.
+    enum class EMcpActorNameMatch : uint8 { Exact, Prefix, Fuzzy };
+
 #if WITH_EDITOR
     /**
-     * Find an actor by name in the current world.
-     * @param ActorName Actor name to search for
-     * @param bExactMatch If true, requires exact name match; otherwise partial match
+     * Find an actor by name in the given world.
+     * @param World The world to search; nullptr yields nullptr
+     * @param Name Actor object name, editor label, or full path to match
+     * @param Match Match strictness (see EMcpActorNameMatch)
      * @return Found actor or nullptr
      */
-    MCPAUTOMATIONBRIDGE_API class AActor* FindActorByName(const FString& ActorName, bool bExactMatch = true);
+    MCPAUTOMATIONBRIDGE_API class AActor* FindActorByName(
+        class UWorld* World,
+        const FString& Name,
+        EMcpActorNameMatch Match = EMcpActorNameMatch::Exact);
 
     /**
      * Find a component by name on an actor.

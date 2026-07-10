@@ -262,33 +262,6 @@ namespace NetworkingHelpers
         return nullptr;
     }
 
-    // ---- Actor Utilities ----
-
-    /**
-     * Find actor by name in the given world.
-     * Checks both GetActorLabel() (user-visible name) and GetName() (internal name).
-     * @param World The world to search in
-     * @param ActorName Actor label or internal name to match
-     * @return Found AActor or nullptr
-     */
-    AActor* FindActorByName(UWorld* World, const FString& ActorName)
-    {
-        if (!World) return nullptr;
-        
-        for (TActorIterator<AActor> It(World); It; ++It)
-        {
-            AActor* Actor = *It;
-            // Check both GetActorLabel() (user-visible name) and GetName() (internal name)
-            // This matches the behavior of UMcpAutomationBridgeSubsystem::FindActorByName
-            if (Actor && (Actor->GetActorLabel().Equals(ActorName, ESearchCase::IgnoreCase) ||
-                          Actor->GetName().Equals(ActorName, ESearchCase::IgnoreCase)))
-            {
-                return Actor;
-            }
-        }
-        return nullptr;
-    }
-
     // ---- Enum Conversion Utilities ----
 
     /**
@@ -1060,7 +1033,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetOwner(
         return true;
     }
 
-    AActor* Actor = NetworkingHelpers::FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         SendAutomationError(Socket, RequestId, TEXT("Actor not found"), TEXT("NOT_FOUND"));
@@ -1070,7 +1043,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetOwner(
     AActor* Owner = nullptr;
     if (!OwnerActorName.IsEmpty())
     {
-        Owner = NetworkingHelpers::FindActorByName(World, OwnerActorName);
+        Owner = McpHandlerUtils::FindActorByName(World, OwnerActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
         if (!Owner)
         {
             SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Owner actor '%s' not found"), *OwnerActorName), TEXT("OWNER_NOT_FOUND"));
@@ -1182,7 +1155,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingCheckHasAuthority(
         return true;
     }
 
-    AActor* Actor = NetworkingHelpers::FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         SendAutomationError(Socket, RequestId, TEXT("Actor not found"), TEXT("NOT_FOUND"));
@@ -1229,7 +1202,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingCheckIsLocallyControlled(
         return true;
     }
 
-    AActor* Actor = NetworkingHelpers::FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         SendAutomationError(Socket, RequestId, TEXT("Actor not found"), TEXT("NOT_FOUND"));
@@ -2195,7 +2168,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingGetInfo(
             return true;
         }
 
-        AActor* Actor = NetworkingHelpers::FindActorByName(World, ActorName);
+        AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
         if (!Actor)
         {
             SendAutomationError(Socket, RequestId, TEXT("Actor not found"), TEXT("NOT_FOUND"));

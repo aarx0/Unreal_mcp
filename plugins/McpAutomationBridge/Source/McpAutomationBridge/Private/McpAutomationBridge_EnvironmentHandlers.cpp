@@ -38,8 +38,8 @@
 // ------------------
 // - Extracted utility functions should use McpHandlerUtils namespace
 // - File path validation uses SanitizeProjectFilePath()
-// - Actor operations use FindActorByName() helper
-// - Component lookups use FindComponentByName() helper
+// - Actor operations use McpHandlerUtils::FindActorByName()
+// - Component lookups use McpHandlerUtils::FindActorComponentByName()
 //
 // Copyright (c) 2024 MCP Automation Bridge Contributors
 // =============================================================================

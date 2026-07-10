@@ -168,21 +168,6 @@ static FRotator GetJsonRotatorFieldSpline(const TSharedPtr<FJsonObject>& Payload
     return Default;
 }
 
-// Helper to find actor by name
-static AActor* FindActorByName(UWorld* World, const FString& ActorName)
-{
-    if (!World || ActorName.IsEmpty()) return nullptr;
-    
-    for (TActorIterator<AActor> It(World); It; ++It)
-    {
-        if (It->GetActorLabel() == ActorName || It->GetName() == ActorName)
-        {
-            return *It;
-        }
-    }
-    return nullptr;
-}
-
 // Helper to find spline component on actor
 static USplineComponent* FindSplineComponent(AActor* Actor, const FString& ComponentName = TEXT(""))
 {
@@ -412,7 +397,7 @@ static bool HandleAddSplinePoint(
         return true;
     }
 
-    AActor* Actor = FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -480,7 +465,7 @@ static bool HandleRemoveSplinePoint(
         return true;
     }
 
-    AActor* Actor = FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -545,7 +530,7 @@ static bool HandleSetSplinePointPosition(
         return true;
     }
 
-    AActor* Actor = FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -610,7 +595,7 @@ static bool HandleSetSplinePointTangents(
         return true;
     }
 
-    AActor* Actor = FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -683,7 +668,7 @@ static bool HandleSetSplinePointRotation(
         return true;
     }
 
-    AActor* Actor = FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -747,7 +732,7 @@ static bool HandleSetSplinePointScale(
         return true;
     }
 
-    AActor* Actor = FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -811,7 +796,7 @@ static bool HandleSetSplineType(
         return true;
     }
 
-    AActor* Actor = FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -1040,7 +1025,7 @@ static bool HandleSetSplineMeshAsset(
         return true;
     }
 
-    AActor* Actor = FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -1124,7 +1109,7 @@ static bool HandleConfigureSplineMeshAxis(
         return true;
     }
 
-    AActor* Actor = FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -1213,7 +1198,7 @@ static bool HandleSetSplineMeshMaterial(
         return true;
     }
 
-    AActor* Actor = FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -1304,7 +1289,7 @@ static bool HandleScatterMeshesAlongSpline(
         return true;
     }
 
-    AActor* Actor = FindActorByName(World, ActorName);
+    AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -1599,7 +1584,7 @@ static bool HandleGetSplinesInfo(
     if (!ActorName.IsEmpty())
     {
         // Get info for specific actor
-        AActor* Actor = FindActorByName(World, ActorName);
+        AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
         if (!Actor)
         {
             Self->SendAutomationResponse(Socket, RequestId, false,

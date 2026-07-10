@@ -94,49 +94,83 @@ FString JsonValueToString(const TSharedPtr<FJsonValue>& Value)
 // =============================================================================
 
 #if WITH_EDITOR
-AActor* FindActorByName(const FString& ActorName, bool bExactMatch)
+AActor* FindActorByName(UWorld* World, const FString& Name, EMcpActorNameMatch Match)
 {
-    UWorld* World = nullptr;
-    if (GEditor)
-    {
-        World = GEditor->PlayWorld ? GEditor->PlayWorld.Get() : GEditor->GetEditorWorldContext().World();
-    }
-    if (!World)
+    if (!World || Name.IsEmpty())
     {
         return nullptr;
     }
 
-    FString SearchName = ActorName;
-    if (bExactMatch)
+    // GetActorLabel(), the Contains tier, and the asset-path fallback are
+    // editor-only; this module builds only for the editor. TActorIterator over
+    // the world resolves the same actor set as UEditorActorSubsystem::
+    // GetAllLevelActors() for name lookup, so the former member call sites are
+    // unaffected.
+    TArray<AActor*> FuzzyMatches;
+    AActor* PrefixMatch = nullptr;
+
+    for (TActorIterator<AActor> It(World); It; ++It)
     {
-        for (TActorIterator<AActor> It(World); It; ++It)
+        AActor* Actor = *It;
+        if (!Actor)
         {
-            AActor* Actor = *It;
-            // Match either the object name (e.g. BP_Telegraph_C_0) or the editor
-            // label (e.g. BP_Telegraph0); callers use both interchangeably.
-            if (Actor && (Actor->GetName().Equals(SearchName, ESearchCase::IgnoreCase)
-#if WITH_EDITOR
-                          || Actor->GetActorLabel().Equals(SearchName, ESearchCase::IgnoreCase)
-#endif
-                              ))
-            {
-                return Actor;
-            }
+            continue;
+        }
+
+        const FString ActorName = Actor->GetName();
+        const FString ActorLabel = Actor->GetActorLabel();
+
+        if (ActorName.Equals(Name, ESearchCase::IgnoreCase) ||
+            ActorLabel.Equals(Name, ESearchCase::IgnoreCase) ||
+            Actor->GetPathName().Equals(Name, ESearchCase::IgnoreCase))
+        {
+            return Actor;
+        }
+
+        if (Match == EMcpActorNameMatch::Prefix && !PrefixMatch &&
+            (ActorName.StartsWith(Name, ESearchCase::IgnoreCase) ||
+             ActorLabel.StartsWith(Name, ESearchCase::IgnoreCase)))
+        {
+            PrefixMatch = Actor;
+        }
+
+        if (Match == EMcpActorNameMatch::Fuzzy &&
+            (ActorName.Contains(Name, ESearchCase::IgnoreCase) ||
+             ActorLabel.Contains(Name, ESearchCase::IgnoreCase)))
+        {
+            FuzzyMatches.Add(Actor);
         }
     }
-    else
+
+    if (Match == EMcpActorNameMatch::Prefix)
     {
-        // Partial match - actors starting with the name
-        for (TActorIterator<AActor> It(World); It; ++It)
+        return PrefixMatch;
+    }
+
+    if (Match == EMcpActorNameMatch::Fuzzy)
+    {
+        // Exactly one partial match is unambiguous; more than one must not be
+        // guessed at (a query "Cube" must never resolve to "Cube_Copy").
+        if (FuzzyMatches.Num() == 1)
         {
-            AActor* Actor = *It;
-            if (Actor && (Actor->GetName().StartsWith(SearchName, ESearchCase::IgnoreCase)
-#if WITH_EDITOR
-                          || Actor->GetActorLabel().StartsWith(SearchName, ESearchCase::IgnoreCase)
-#endif
-                              ))
+            return FuzzyMatches[0];
+        }
+        if (FuzzyMatches.Num() > 1)
+        {
+            UE_LOG(LogMcpSafeOperations, Warning,
+                   TEXT("FindActorByName: ambiguous match for '%s' (%d candidates)"),
+                   *Name, FuzzyMatches.Num());
+        }
+
+        if (Name.StartsWith(TEXT("/")))
+        {
+            const FString SafePath = SanitizeProjectRelativePath(Name);
+            if (!SafePath.IsEmpty())
             {
-                return Actor;
+                if (UObject* Obj = McpLoadAssetPieSafe(SafePath))
+                {
+                    return Cast<AActor>(Obj);
+                }
             }
         }
     }
@@ -228,16 +262,20 @@ UObject* ResolveObjectFromPath(const FString& ObjectPath, FString* OutResolvedPa
     }
     
     FString Path = ObjectPath;
-    
+
+    UWorld* SearchWorld = GEditor
+        ? (GEditor->PlayWorld ? GEditor->PlayWorld.Get() : GEditor->GetEditorWorldContext().World())
+        : nullptr;
+
     // Handle component paths in "ActorName.ComponentName" format
     if (Path.Contains(TEXT(".")) && !Path.StartsWith(TEXT("/")))
     {
         FString ActorName = Path.Left(Path.Find(TEXT(".")));
         FString ComponentName = Path.Right(Path.Len() - ActorName.Len() - 1);
-        
+
         if (!ActorName.IsEmpty() && !ComponentName.IsEmpty())
         {
-            if (AActor* Actor = FindActorByName(ActorName))
+            if (AActor* Actor = FindActorByName(SearchWorld, ActorName))
             {
                 if (UActorComponent* Comp = FindActorComponentByName(Actor, ComponentName))
                 {
@@ -252,7 +290,7 @@ UObject* ResolveObjectFromPath(const FString& ObjectPath, FString* OutResolvedPa
     }
     
     // Try to find as actor by name
-    if (AActor* FoundActor = FindActorByName(Path))
+    if (AActor* FoundActor = FindActorByName(SearchWorld, Path))
     {
         if (OutResolvedPath)
         {

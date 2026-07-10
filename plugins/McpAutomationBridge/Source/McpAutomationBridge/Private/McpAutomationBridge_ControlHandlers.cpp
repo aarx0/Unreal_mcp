@@ -188,79 +188,18 @@ FEditorViewportClient* GetActiveEditorViewportClientForMcp() {
 
 AActor *UMcpAutomationBridgeSubsystem::FindActorByName(const FString &Target, bool bExactMatchOnly) {
 #if WITH_EDITOR
-  if (Target.IsEmpty() || !GEditor)
+  if (!GEditor)
     return nullptr;
-
-  // Priority: PIE World if active
-  if (GEditor->PlayWorld) {
-    for (TActorIterator<AActor> It(GEditor->PlayWorld); It; ++It) {
-      AActor *A = *It;
-      if (!A)
-        continue;
-      if (A->GetActorLabel().Equals(Target, ESearchCase::IgnoreCase) ||
-          A->GetName().Equals(Target, ESearchCase::IgnoreCase) ||
-          A->GetPathName().Equals(Target, ESearchCase::IgnoreCase)) {
-        return A;
-      }
-    }
-    // If not found in PIE, do we fall back to Editor World?
-    // Probably not, because interacting with Editor world during PIE is
-    // confusing. But for "Editor subsystems" usage, we usually want Editor
-    // world. Let's fallback if not found, just in case.
-  }
-
-  UEditorActorSubsystem *ActorSS =
-      GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
-  if (!ActorSS)
-    return nullptr;
-
-  TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
-  AActor *ExactMatch = nullptr;
-  TArray<AActor *> FuzzyMatches;
-
-  for (AActor *A : AllActors) {
-    if (!A)
-      continue;
-    if (A->GetActorLabel().Equals(Target, ESearchCase::IgnoreCase) ||
-        A->GetName().Equals(Target, ESearchCase::IgnoreCase) ||
-        A->GetPathName().Equals(Target, ESearchCase::IgnoreCase)) {
-      ExactMatch = A;
-      break;
-    }
-    // Collect fuzzy matches ONLY if exact matching is not required
-    // CRITICAL FIX: Fuzzy matching can cause delete operations to delete wrong actors
-    // (e.g., "TestActor_Copy" matches when searching for "TestActor")
-    if (!bExactMatchOnly && A->GetActorLabel().Contains(Target, ESearchCase::IgnoreCase)) {
-      FuzzyMatches.Add(A);
-    }
-  }
-
-  if (ExactMatch) {
-    return ExactMatch;
-  }
-
-  // If no exact match, check fuzzy matches ONLY if exact matching is not required
-  if (!bExactMatchOnly) {
-    if (FuzzyMatches.Num() == 1) {
-      return FuzzyMatches[0];
-    } else if (FuzzyMatches.Num() > 1) {
-      UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
-             TEXT("FindActorByName: Ambiguous match for '%s'. Found %d matches."),
-             *Target, FuzzyMatches.Num());
-    }
-  }
-
-  // Fallback: try to load as asset if it looks like a path
-  if (Target.StartsWith(TEXT("/"))) {
-    const FString SafeTargetPath = SanitizeProjectRelativePath(Target);
-    if (!SafeTargetPath.IsEmpty()) {
-      if (UObject *Obj = McpLoadAssetPieSafe(SafeTargetPath)) {
-        return Cast<AActor>(Obj);
-      }
-    }
-  }
-#endif
+  UWorld *World = GEditor->PlayWorld
+                      ? GEditor->PlayWorld.Get()
+                      : GEditor->GetEditorWorldContext().World();
+  return McpHandlerUtils::FindActorByName(
+      World, Target,
+      bExactMatchOnly ? McpHandlerUtils::EMcpActorNameMatch::Exact
+                      : McpHandlerUtils::EMcpActorNameMatch::Fuzzy);
+#else
   return nullptr;
+#endif
 }
 
 /**
@@ -1274,7 +1213,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorSetComponentProperties(
     return true;
   }
 
-  UActorComponent *TargetComponent = FindComponentByName(Found, ComponentName);
+  UActorComponent *TargetComponent = McpHandlerUtils::FindActorComponentByName(Found, ComponentName);
   if (!TargetComponent) {
     SendStandardErrorResponse(this, Socket, RequestId, TEXT("COMPONENT_NOT_FOUND"),
                               TEXT("Component not found"), nullptr);
@@ -2489,8 +2428,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorRemoveComponent(
     return true;
   }
   
-  // CRITICAL FIX: Use FindComponentByName helper which supports fuzzy matching
-  UActorComponent* Component = FindComponentByName(Actor, ComponentName);
+  UActorComponent* Component = McpHandlerUtils::FindActorComponentByName(Actor, ComponentName);
   if (Component) {
     Component->DestroyComponent();
     TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
@@ -2537,9 +2475,8 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorGetComponentProperty(
     return true;
   }
   
-  // CRITICAL FIX: Use FindComponentByName helper which supports fuzzy matching
-  // This handles cases where component names have numeric suffixes (e.g., "StaticMeshComponent0")
-  UActorComponent* Component = FindComponentByName(Actor, ComponentName);
+  // Fuzzy match resolves component names with numeric suffixes (e.g. "StaticMeshComponent0").
+  UActorComponent* Component = McpHandlerUtils::FindActorComponentByName(Actor, ComponentName);
   if (!Component) {
     SendAutomationError(Socket, RequestId, 
         FString::Printf(TEXT("Component not found: %s on actor: %s"), *ComponentName, *ActorName), 
@@ -2674,7 +2611,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlActorCallFunction(
   // is unreachable through the actor.
   UObject* Target = Actor;
   if (!ComponentName.IsEmpty()) {
-    UActorComponent* Component = FindComponentByName(Actor, ComponentName);
+    UActorComponent* Component = McpHandlerUtils::FindActorComponentByName(Actor, ComponentName);
     if (!Component) {
       SendAutomationError(Socket, RequestId,
           FString::Printf(TEXT("Component not found: %s on actor: %s"), *ComponentName, *ActorName),
