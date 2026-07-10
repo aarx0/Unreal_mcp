@@ -45,6 +45,7 @@
 #include "Modules/ModuleManager.h"  // Required for FModuleManager::IsModuleLoaded() runtime checks
 
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_NiagaraAuthoringHandlers.h"
 #include "Dom/JsonObject.h"
 #include "EdGraph/EdGraphNodeUtils.h"
 #include "McpAutomationBridgeHelpers.h"
@@ -521,7 +522,7 @@ static bool AddDataInterfaceUserParameter(UNiagaraSystem* System, const FString&
         if (!FModuleManager::Get().ModuleExists(TEXT("NiagaraEditor")) || \
             !FModuleManager::Get().LoadModule(TEXT("NiagaraEditor"))) \
         { \
-            SendAutomationError(RequestingSocket, RequestId, \
+            S.SendAutomationError(RequestingSocket, RequestId, \
                 TEXT("NiagaraEditor plugin is not enabled in this project. Enable the Niagara plugin to use Niagara VFX features."), \
                 TEXT("NIAGARAEDITOR_PLUGIN_NOT_ENABLED")); \
             return true; \
@@ -529,7 +530,7 @@ static bool AddDataInterfaceUserParameter(UNiagaraSystem* System, const FString&
     } \
     if (!Payload.IsValid()) \
     { \
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing payload."), TEXT("INVALID_PAYLOAD")); \
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing payload."), TEXT("INVALID_PAYLOAD")); \
         return true; \
     } \
     FString Name = GetJsonStringField(Payload, TEXT("name")); \
@@ -549,14 +550,14 @@ static bool AddDataInterfaceUserParameter(UNiagaraSystem* System, const FString&
             return true; \
         } \
         if (PathToCheck.Len() > 512) { \
-            SendAutomationError(RequestingSocket, RequestId,  \
+            S.SendAutomationError(RequestingSocket, RequestId,  \
                 FString::Printf(TEXT("'%s' is too long (%d chars). Maximum allowed is 512 characters."), *ParamName, PathToCheck.Len()),  \
                 TEXT("INVALID_ARGUMENT")); \
             return false; \
         } \
         FString SanitizedPath = SanitizeProjectRelativePath(PathToCheck); \
         if (SanitizedPath.IsEmpty()) { \
-            SendAutomationError(RequestingSocket, RequestId,  \
+            S.SendAutomationError(RequestingSocket, RequestId,  \
                 FString::Printf(TEXT("'%s' has invalid format. Path must be a valid Unreal asset path without traversal or invalid roots."), *ParamName), \
                 TEXT("INVALID_ARGUMENT")); \
             return false; \
@@ -571,7 +572,7 @@ static bool AddDataInterfaceUserParameter(UNiagaraSystem* System, const FString&
         } \
         if (Value.Len() > 128) \
         { \
-            SendAutomationError(RequestingSocket, RequestId, \
+            S.SendAutomationError(RequestingSocket, RequestId, \
                 FString::Printf(TEXT("'%s' is too long (%d chars). Maximum allowed is 128 characters."), *ParamName, Value.Len()), \
                 TEXT("INVALID_ARGUMENT")); \
             return false; \
@@ -582,7 +583,7 @@ static bool AddDataInterfaceUserParameter(UNiagaraSystem* System, const FString&
             const bool bAllowed = FChar::IsAlnum(Char) || Char == TEXT('_') || (bAllowDot && Char == TEXT('.')); \
             if (!bAllowed) \
             { \
-                SendAutomationError(RequestingSocket, RequestId, \
+                S.SendAutomationError(RequestingSocket, RequestId, \
                     FString::Printf(TEXT("'%s' contains invalid character '%c'. Use letters, numbers, underscores%s."), *ParamName, Char, bAllowDot ? TEXT(", or dots") : TEXT("")), \
                     TEXT("INVALID_ARGUMENT")); \
                 return false; \
@@ -601,7 +602,7 @@ static bool AddDataInterfaceUserParameter(UNiagaraSystem* System, const FString&
 
 // Systems & emitters
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraCreateNiagaraSystem(
+bool McpHandlers::Effect::HandleNiagaraCreateNiagaraSystem(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -610,7 +611,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraCreateNiagaraSystem(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'name' parameter."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'name' parameter."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -622,7 +623,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraCreateNiagaraSystem(
     UPackage* Package = CreatePackage(*PackagePath);
     if (!Package)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package."), TEXT("PACKAGE_ERROR"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package."), TEXT("PACKAGE_ERROR"));
         return true;
     }
 
@@ -663,7 +664,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraCreateNiagaraSystem(
             FVersionedNiagaraEmitterData* EmitterData = NewEmitter->GetEmitterData(EmitterVersion);
             if (!EmitterData || !EmitterData->GraphSource)
             {
-                SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to initialize default Niagara emitter graph source."), TEXT("NIAGARA_EMITTER_INIT_FAILED"));
+                S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to initialize default Niagara emitter graph source."), TEXT("NIAGARA_EMITTER_INIT_FAILED"));
                 return true;
             }
             FNiagaraEmitterHandle NewHandle(*NewEmitter, EmitterVersion);
@@ -673,7 +674,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraCreateNiagaraSystem(
     }
     if (!NewSystem)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create Niagara System."), TEXT("CREATE_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create Niagara System."), TEXT("CREATE_FAILED"));
         return true;
     }
 
@@ -697,15 +698,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraCreateNiagaraSystem(
     Result->SetStringField(TEXT("message"), CreatedEmitterNames.Num() > 0
         ? FString::Printf(TEXT("Created Niagara System: %s (with enabled default emitter: %s)"), *Name, *FString::Join(CreatedEmitterNames, TEXT(", ")))
         : FString::Printf(TEXT("Created Niagara System: %s"), *Name));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("System created."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("System created."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraCreateNiagaraEmitter(
+bool McpHandlers::Effect::HandleNiagaraCreateNiagaraEmitter(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -714,7 +715,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraCreateNiagaraEmitter(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'name' parameter."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'name' parameter."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -725,7 +726,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraCreateNiagaraEmitter(
     UPackage* Package = CreatePackage(*PackagePath);
     if (!Package)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package."), TEXT("PACKAGE_ERROR"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package."), TEXT("PACKAGE_ERROR"));
         return true;
     }
 
@@ -734,7 +735,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraCreateNiagaraEmitter(
     UNiagaraEmitter* NewEmitter = NewObject<UNiagaraEmitter>(Package, FName(*Name), RF_Public | RF_Standalone);
     if (!NewEmitter)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create Niagara Emitter."), TEXT("CREATE_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create Niagara Emitter."), TEXT("CREATE_FAILED"));
         return true;
     }
 
@@ -756,15 +757,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraCreateNiagaraEmitter(
 
     McpHandlerUtils::AddVerification(Result, NewEmitter);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Created Niagara Emitter: %s"), *Name));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Emitter created."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Emitter created."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEmitterToSystem(
+bool McpHandlers::Effect::HandleNiagaraAddEmitterToSystem(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -782,7 +783,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEmitterToSystem(
         {
             MissingParams.Add(TEXT("emitterPath"));
         }
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Missing '%s'."), *FString::Join(MissingParams, TEXT("' and '"))),
             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -791,14 +792,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEmitterToSystem(
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     UNiagaraEmitter* Emitter = LoadObject<UNiagaraEmitter>(nullptr, *EmitterPath);
     if (!Emitter)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara Emitter."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara Emitter."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -818,7 +819,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEmitterToSystem(
     FVersionedNiagaraEmitterData* EmitterData = Emitter->GetEmitterData(EmitterVersion);
     if (!EmitterData || !EmitterData->GraphSource)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Emitter graph source is not initialized."), TEXT("NIAGARA_EMITTER_INIT_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Emitter graph source is not initialized."), TEXT("NIAGARA_EMITTER_INIT_FAILED"));
         return true;
     }
 
@@ -834,7 +835,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEmitterToSystem(
     }
     if (!AddedHandle)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add emitter to Niagara system."), TEXT("CREATE_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add emitter to Niagara system."), TEXT("CREATE_FAILED"));
         return true;
     }
     if (!EmitterName.IsEmpty())
@@ -859,15 +860,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEmitterToSystem(
     McpHandlerUtils::AddVerification(Result, System);
     Result->SetStringField(TEXT("emitterName"), AddedEmitterName);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added emitter '%s' to system."), *AddedEmitterName));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Emitter added to system."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Emitter added to system."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraSetEmitterProperties(
+bool McpHandlers::Effect::HandleNiagaraSetEmitterProperties(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -876,14 +877,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraSetEmitterProperties(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -899,7 +900,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraSetEmitterProperties(
     
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found in system."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found in system."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
     
@@ -920,17 +921,17 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraSetEmitterProperties(
 
     McpHandlerUtils::AddVerification(Result, System);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Updated properties for emitter '%s'."), *EmitterName));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Emitter properties updated."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Emitter properties updated."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // Module library
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpawnRateModule(
+bool McpHandlers::Effect::HandleNiagaraAddSpawnRateModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -939,21 +940,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpawnRateModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -971,7 +972,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpawnRateModule(
     const bool bModuleAdded = (NewModule != nullptr);
     if (!bModuleAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add SpawnRate module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add SpawnRate module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
         return true;
     }
 
@@ -993,15 +994,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpawnRateModule(
     Result->SetBoolField(TEXT("moduleAdded"), bModuleAdded);
     Result->SetNumberField(TEXT("spawnRate"), SpawnRate);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added spawn rate module: %.1f particles/sec"), SpawnRate));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Spawn rate module added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Spawn rate module added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpawnBurstModule(
+bool McpHandlers::Effect::HandleNiagaraAddSpawnBurstModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1010,21 +1011,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpawnBurstModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -1043,7 +1044,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpawnBurstModule(
     const bool bModuleAdded = (NewModule != nullptr);
     if (!bModuleAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add SpawnBurst module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add SpawnBurst module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
         return true;
     }
 
@@ -1058,15 +1059,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpawnBurstModule(
     Result->SetNumberField(TEXT("burstCount"), BurstCount);
     Result->SetNumberField(TEXT("burstTime"), BurstTime);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added spawn burst module: %d particles at t=%.2f"), static_cast<int>(BurstCount), BurstTime));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Spawn burst module added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Spawn burst module added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpawnPerUnitModule(
+bool McpHandlers::Effect::HandleNiagaraAddSpawnPerUnitModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1075,21 +1076,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpawnPerUnitModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -1106,7 +1107,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpawnPerUnitModule(
     const bool bModuleAdded = (NewModule != nullptr);
     if (!bModuleAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add SpawnPerUnit module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add SpawnPerUnit module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
         return true;
     }
 
@@ -1120,15 +1121,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpawnPerUnitModule(
     Result->SetBoolField(TEXT("moduleAdded"), bModuleAdded);
     Result->SetNumberField(TEXT("spawnPerUnit"), SpawnPerUnit);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added spawn per unit module: %.1f particles/unit"), SpawnPerUnit));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Spawn per unit module added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Spawn per unit module added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddInitializeParticleModule(
+bool McpHandlers::Effect::HandleNiagaraAddInitializeParticleModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1137,21 +1138,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddInitializeParticleModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -1169,7 +1170,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddInitializeParticleModule(
     const bool bModuleAdded = (NewModule != nullptr);
     if (!bModuleAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add InitializeParticle module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add InitializeParticle module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
         return true;
     }
 
@@ -1184,15 +1185,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddInitializeParticleModule(
     Result->SetNumberField(TEXT("lifetime"), Lifetime);
     Result->SetNumberField(TEXT("mass"), Mass);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added initialize particle module: lifetime=%.2fs, mass=%.2f"), Lifetime, Mass));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Initialize particle module added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Initialize particle module added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddParticleStateModule(
+bool McpHandlers::Effect::HandleNiagaraAddParticleStateModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1201,21 +1202,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddParticleStateModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -1231,7 +1232,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddParticleStateModule(
     const bool bModuleAdded = (NewModule != nullptr);
     if (!bModuleAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add ParticleState module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add ParticleState module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
         return true;
     }
 
@@ -1244,15 +1245,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddParticleStateModule(
     Result->SetStringField(TEXT("moduleName"), TEXT("ParticleState"));
     Result->SetBoolField(TEXT("moduleAdded"), bModuleAdded);
     Result->SetStringField(TEXT("message"), TEXT("Added particle state module."));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Particle state module added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Particle state module added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddForceModule(
+bool McpHandlers::Effect::HandleNiagaraAddForceModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1261,7 +1262,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddForceModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -1270,14 +1271,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddForceModule(
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -1334,7 +1335,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddForceModule(
     const bool bModuleAdded = (NewModule != nullptr);
     if (!bModuleAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Failed to add %s force module to emitter stack."), *ForceType), TEXT("MODULE_ADD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Failed to add %s force module to emitter stack."), *ForceType), TEXT("MODULE_ADD_FAILED"));
         return true;
     }
 
@@ -1349,15 +1350,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddForceModule(
     Result->SetStringField(TEXT("forceType"), ForceType);
     Result->SetNumberField(TEXT("forceStrength"), ForceStrength);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added %s force module."), *ForceType));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Force module added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Force module added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddVelocityModule(
+bool McpHandlers::Effect::HandleNiagaraAddVelocityModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1366,21 +1367,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddVelocityModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -1421,7 +1422,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddVelocityModule(
     const bool bModuleAdded = (NewModule != nullptr);
     if (!bModuleAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add velocity module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add velocity module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
         return true;
     }
 
@@ -1435,15 +1436,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddVelocityModule(
     Result->SetBoolField(TEXT("moduleAdded"), bModuleAdded);
     Result->SetStringField(TEXT("velocityMode"), VelocityMode);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added velocity module: mode=%s"), *VelocityMode));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Velocity module added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Velocity module added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddAccelerationModule(
+bool McpHandlers::Effect::HandleNiagaraAddAccelerationModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1452,21 +1453,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddAccelerationModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -1489,7 +1490,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddAccelerationModule(
     const bool bModuleAdded = (NewModule != nullptr);
     if (!bModuleAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Acceleration module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Acceleration module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
         return true;
     }
 
@@ -1506,15 +1507,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddAccelerationModule(
     Result->SetBoolField(TEXT("parameterAdded"), bParameterAdded);
     Result->SetStringField(TEXT("parameterName"), TEXT("MCP_Acceleration"));
     Result->SetStringField(TEXT("message"), TEXT("Added acceleration module."));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Acceleration module added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Acceleration module added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSizeModule(
+bool McpHandlers::Effect::HandleNiagaraAddSizeModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1523,21 +1524,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSizeModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -1554,7 +1555,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSizeModule(
     const bool bModuleAdded = (NewModule != nullptr);
     if (!bModuleAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Size module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Size module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
         return true;
     }
 
@@ -1573,15 +1574,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSizeModule(
     Result->SetBoolField(TEXT("parameterAdded"), bParameterAdded);
     Result->SetStringField(TEXT("parameterName"), TEXT("MCP_UniformSize"));
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added size module: mode=%s, size=%.1f"), *SizeMode, UniformSize));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Size module added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Size module added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddColorModule(
+bool McpHandlers::Effect::HandleNiagaraAddColorModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1590,21 +1591,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddColorModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -1627,7 +1628,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddColorModule(
     const bool bModuleAdded = (NewModule != nullptr);
     if (!bModuleAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Color module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Color module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
         return true;
     }
 
@@ -1645,15 +1646,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddColorModule(
     Result->SetBoolField(TEXT("parameterAdded"), bParameterAdded);
     Result->SetStringField(TEXT("parameterName"), TEXT("MCP_Color"));
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added color module: mode=%s"), *ColorMode));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Color module added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Color module added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpriteRendererModule(
+bool McpHandlers::Effect::HandleNiagaraAddSpriteRendererModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1662,21 +1663,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpriteRendererModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -1712,7 +1713,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpriteRendererModule(
             SpriteRenderer = NewObject<UNiagaraSpriteRendererProperties>(Emitter);
             if (!SpriteRenderer)
             {
-                SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create sprite renderer"), TEXT("CREATION_FAILED"));
+                S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create sprite renderer"), TEXT("CREATION_FAILED"));
                 return true;
             }
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
@@ -1741,15 +1742,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSpriteRendererModule(
     McpHandlerUtils::AddVerification(Result, System);
     Result->SetStringField(TEXT("moduleName"), TEXT("SpriteRenderer"));
     Result->SetStringField(TEXT("message"), TEXT("Configured sprite renderer module."));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Sprite renderer configured."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Sprite renderer configured."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddMeshRendererModule(
+bool McpHandlers::Effect::HandleNiagaraAddMeshRendererModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1758,21 +1759,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddMeshRendererModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -1805,7 +1806,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddMeshRendererModule(
             MeshRenderer = NewObject<UNiagaraMeshRendererProperties>(Emitter);
             if (!MeshRenderer)
             {
-                SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create mesh renderer"), TEXT("CREATION_FAILED"));
+                S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create mesh renderer"), TEXT("CREATION_FAILED"));
                 return true;
             }
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
@@ -1837,15 +1838,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddMeshRendererModule(
     McpHandlerUtils::AddVerification(Result, System);
     Result->SetStringField(TEXT("moduleName"), TEXT("MeshRenderer"));
     Result->SetStringField(TEXT("message"), TEXT("Configured mesh renderer module."));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Mesh renderer configured."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Mesh renderer configured."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddRibbonRendererModule(
+bool McpHandlers::Effect::HandleNiagaraAddRibbonRendererModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1854,21 +1855,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddRibbonRendererModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -1899,7 +1900,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddRibbonRendererModule(
             RibbonRenderer = NewObject<UNiagaraRibbonRendererProperties>(Emitter);
             if (!RibbonRenderer)
             {
-                SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create ribbon renderer"), TEXT("CREATION_FAILED"));
+                S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create ribbon renderer"), TEXT("CREATION_FAILED"));
                 return true;
             }
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
@@ -1929,15 +1930,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddRibbonRendererModule(
     McpHandlerUtils::AddVerification(Result, System);
     Result->SetStringField(TEXT("moduleName"), TEXT("RibbonRenderer"));
     Result->SetStringField(TEXT("message"), TEXT("Configured ribbon renderer module."));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Ribbon renderer configured."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Ribbon renderer configured."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddLightRendererModule(
+bool McpHandlers::Effect::HandleNiagaraAddLightRendererModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1946,21 +1947,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddLightRendererModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -1991,7 +1992,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddLightRendererModule(
             LightRenderer = NewObject<UNiagaraLightRendererProperties>(Emitter);
             if (!LightRenderer)
             {
-                SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create light renderer"), TEXT("CREATION_FAILED"));
+                S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create light renderer"), TEXT("CREATION_FAILED"));
                 return true;
             }
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
@@ -2014,15 +2015,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddLightRendererModule(
     McpHandlerUtils::AddVerification(Result, System);
     Result->SetStringField(TEXT("moduleName"), TEXT("LightRenderer"));
     Result->SetStringField(TEXT("message"), TEXT("Configured light renderer module."));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Light renderer configured."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Light renderer configured."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddCollisionModule(
+bool McpHandlers::Effect::HandleNiagaraAddCollisionModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2031,21 +2032,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddCollisionModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -2064,7 +2065,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddCollisionModule(
     const bool bModuleAdded = (NewModule != nullptr);
     if (!bModuleAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Collision module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add Collision module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
         return true;
     }
     const bool bRestitutionAdded = AddOrSetFloatUserParameter(System, TEXT("MCP_CollisionRestitution"), static_cast<float>(Restitution));
@@ -2085,15 +2086,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddCollisionModule(
     Result->SetBoolField(TEXT("moduleAdded"), bModuleAdded);
     Result->SetBoolField(TEXT("parameterAdded"), bRestitutionAdded && bFrictionAdded && bDieOnCollisionAdded);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Configured collision module: mode=%s"), *CollisionMode));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Collision module configured."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Collision module configured."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddKillParticlesModule(
+bool McpHandlers::Effect::HandleNiagaraAddKillParticlesModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2102,21 +2103,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddKillParticlesModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -2132,7 +2133,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddKillParticlesModule(
     const bool bModuleAdded = (NewModule != nullptr);
     if (!bModuleAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add KillParticles module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add KillParticles module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
         return true;
     }
     const bool bParameterAdded = AddOrSetBoolUserParameter(System, TEXT("MCP_KillParticlesEnabled"), true);
@@ -2148,15 +2149,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddKillParticlesModule(
     Result->SetBoolField(TEXT("moduleAdded"), bModuleAdded);
     Result->SetBoolField(TEXT("parameterAdded"), bParameterAdded);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Configured kill particles module: condition=%s"), *KillCondition));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Kill particles module configured."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Kill particles module configured."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddCameraOffsetModule(
+bool McpHandlers::Effect::HandleNiagaraAddCameraOffsetModule(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2165,21 +2166,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddCameraOffsetModule(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -2195,7 +2196,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddCameraOffsetModule(
     const bool bModuleAdded = (NewModule != nullptr);
     if (!bModuleAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add CameraOffset module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to add CameraOffset module to emitter stack."), TEXT("MODULE_ADD_FAILED"));
         return true;
     }
     const bool bParameterAdded = AddOrSetFloatUserParameter(System, TEXT("MCP_CameraOffset"), static_cast<float>(CameraOffset));
@@ -2211,17 +2212,17 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddCameraOffsetModule(
     Result->SetBoolField(TEXT("moduleAdded"), bModuleAdded);
     Result->SetBoolField(TEXT("parameterAdded"), bParameterAdded);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Configured camera offset module: offset=%.1f"), CameraOffset));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Camera offset module configured."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Camera offset module configured."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // Parameters & data interfaces
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddUserParameter(
+bool McpHandlers::Effect::HandleNiagaraAddUserParameter(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2230,7 +2231,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddUserParameter(
 
     if (SystemPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -2239,14 +2240,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddUserParameter(
 
     if (ParamName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'parameterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'parameterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -2290,15 +2291,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddUserParameter(
     Result->SetStringField(TEXT("parameterName"), ParamName);
     Result->SetStringField(TEXT("parameterType"), ParamType);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added user parameter '%s' of type %s."), *ParamName, *ParamType));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("User parameter added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("User parameter added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraSetParameterValue(
+bool McpHandlers::Effect::HandleNiagaraSetParameterValue(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2307,21 +2308,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraSetParameterValue(
 
     if (SystemPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString ParamName = GetJsonStringField(Payload, TEXT("parameterName"));
     if (ParamName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'parameterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'parameterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -2361,7 +2362,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraSetParameterValue(
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Parameter '%s' not found."), *ParamName), TEXT("PARAM_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Parameter '%s' not found."), *ParamName), TEXT("PARAM_NOT_FOUND"));
         return true;
     }
 
@@ -2373,15 +2374,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraSetParameterValue(
     McpHandlerUtils::AddVerification(Result, System);
     Result->SetStringField(TEXT("parameterName"), ParamName);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Set parameter '%s' value."), *ParamName));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Parameter value set."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Parameter value set."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraBindParameterToSource(
+bool McpHandlers::Effect::HandleNiagaraBindParameterToSource(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2390,7 +2391,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraBindParameterToSource(
 
     if (SystemPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -2399,7 +2400,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraBindParameterToSource(
 
     if (ParamName.IsEmpty() || SourceBinding.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'parameterName' or 'sourceBinding'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'parameterName' or 'sourceBinding'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -2411,7 +2412,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraBindParameterToSource(
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -2419,14 +2420,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraBindParameterToSource(
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
     UNiagaraScriptSource* ScriptSource = GetEmitterScriptSource(Handle);
     if (!ScriptSource || !ScriptSource->NodeGraph)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Emitter has no Niagara graph source."), TEXT("NIAGARA_GRAPH_MISSING"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Emitter has no Niagara graph source."), TEXT("NIAGARA_GRAPH_MISSING"));
         return true;
     }
 
@@ -2446,7 +2447,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraBindParameterToSource(
 
     if (!TargetOutput)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Emitter has no particle update stack output for parameter binding."), TEXT("NIAGARA_STACK_MISSING"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Emitter has no particle update stack output for parameter binding."), TEXT("NIAGARA_STACK_MISSING"));
         return true;
     }
 
@@ -2499,7 +2500,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraBindParameterToSource(
 
     if (!AssignmentNode)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create Niagara assignment module for parameter binding."), TEXT("NIAGARA_BINDING_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create Niagara assignment module for parameter binding."), TEXT("NIAGARA_BINDING_FAILED"));
         return true;
     }
 
@@ -2522,18 +2523,18 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraBindParameterToSource(
     Result->SetStringField(TEXT("targetUsage"), TEXT("ParticleUpdateScript"));
     Result->SetNumberField(TEXT("assignmentTargetCount"), AssignmentNode->GetAssignmentTargets().Num());
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Bound Niagara parameter '%s' to source '%s' with a real assignment module."), *ParamName, *SourceBinding));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Niagara parameter binding applied."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Niagara parameter binding applied."), Result);
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Niagara stack graph utilities are unavailable in this engine version."), TEXT("NIAGARA_BINDING_UNSUPPORTED"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Niagara stack graph utilities are unavailable in this engine version."), TEXT("NIAGARA_BINDING_UNSUPPORTED"));
 #endif
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSkeletalMeshDataInterface(
+bool McpHandlers::Effect::HandleNiagaraAddSkeletalMeshDataInterface(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2542,14 +2543,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSkeletalMeshDataInterface(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -2560,7 +2561,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSkeletalMeshDataInterface(
 #if MCP_HAS_NIAGARA_SKELETAL_MESH_DI
     bDataInterfaceAdded = AddDataInterfaceUserParameter(System, ParamName, UNiagaraDataInterfaceSkeletalMesh::StaticClass());
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Skeletal mesh data interface is not available in this engine build."), TEXT("NIAGARA_DI_UNAVAILABLE"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Skeletal mesh data interface is not available in this engine build."), TEXT("NIAGARA_DI_UNAVAILABLE"));
     return true;
 #endif
 
@@ -2574,15 +2575,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSkeletalMeshDataInterface(
     Result->SetStringField(TEXT("parameterName"), ParamName);
     Result->SetBoolField(TEXT("dataInterfaceAdded"), bDataInterfaceAdded);
     Result->SetStringField(TEXT("message"), TEXT("Added Skeletal Mesh data interface."));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Skeletal Mesh DI added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Skeletal Mesh DI added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddStaticMeshDataInterface(
+bool McpHandlers::Effect::HandleNiagaraAddStaticMeshDataInterface(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2591,14 +2592,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddStaticMeshDataInterface(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -2619,7 +2620,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddStaticMeshDataInterface(
 
     if (!bDataInterfaceAdded)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create Static Mesh data interface parameter."), TEXT("NIAGARA_DI_CREATE_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create Static Mesh data interface parameter."), TEXT("NIAGARA_DI_CREATE_FAILED"));
         return true;
     }
 
@@ -2633,15 +2634,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddStaticMeshDataInterface(
     Result->SetStringField(TEXT("parameterName"), ParamName);
     Result->SetBoolField(TEXT("dataInterfaceAdded"), bDataInterfaceAdded);
     Result->SetStringField(TEXT("message"), TEXT("Added Static Mesh data interface."));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Static Mesh DI added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Static Mesh DI added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddDataInterface(
+bool McpHandlers::Effect::HandleNiagaraAddDataInterface(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const FString& SubAction,
     const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
 {
@@ -2650,14 +2651,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddDataInterface(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -2706,17 +2707,17 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddDataInterface(
     Result->SetStringField(TEXT("parameterName"), ParamName);
     Result->SetBoolField(TEXT("dataInterfaceAdded"), bDataInterfaceAdded);
     Result->SetStringField(TEXT("message"), DoneMessage);
-    SendAutomationResponse(RequestingSocket, RequestId, true, ResponseMessage, Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, ResponseMessage, Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // Events & GPU
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEventGenerator(
+bool McpHandlers::Effect::HandleNiagaraAddEventGenerator(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2725,14 +2726,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEventGenerator(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString EventName = GetJsonStringField(Payload, TEXT("eventName"));
     if (EventName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'eventName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'eventName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
     if (!ValidateNiagaraIdentifier(EventName, TEXT("eventName"), false))
@@ -2743,14 +2744,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEventGenerator(
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -2786,15 +2787,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEventGenerator(
     Result->SetBoolField(TEXT("eventGeneratorAdded"), bModuleAdded || bParameterAdded);
     Result->SetBoolField(TEXT("parameterAdded"), bParameterAdded);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added event generator '%s'."), *EventName));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Event generator added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Event generator added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEventReceiver(
+bool McpHandlers::Effect::HandleNiagaraAddEventReceiver(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2803,14 +2804,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEventReceiver(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString EventName = GetJsonStringField(Payload, TEXT("eventName"));
     if (EventName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'eventName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'eventName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
     if (!ValidateNiagaraIdentifier(EventName, TEXT("eventName"), false))
@@ -2821,14 +2822,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEventReceiver(
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -2849,7 +2850,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEventReceiver(
         UNiagaraScriptSource* ScriptSource = GetEmitterScriptSource(Handle);
         if (!ScriptSource || !ScriptSource->NodeGraph)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Emitter graph source is not initialized."), TEXT("NIAGARA_EMITTER_INIT_FAILED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Emitter graph source is not initialized."), TEXT("NIAGARA_EMITTER_INIT_FAILED"));
             return true;
         }
 
@@ -2867,7 +2868,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEventReceiver(
             bEventGraphCreated = EnsureScriptOutputGraph(ScriptSource, ENiagaraScriptUsage::ParticleEventScript, EventScriptProperties.Script->GetUsageId());
             if (!bEventGraphCreated)
             {
-                SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create Niagara event handler graph."), TEXT("NIAGARA_GRAPH_CREATE_FAILED"));
+                S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create Niagara event handler graph."), TEXT("NIAGARA_GRAPH_CREATE_FAILED"));
                 return true;
             }
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
@@ -2893,15 +2894,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddEventReceiver(
     Result->SetBoolField(TEXT("eventGraphCreated"), bEventGraphCreated);
     Result->SetBoolField(TEXT("parameterAdded"), bParameterAdded);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added event receiver '%s'."), *EventName));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Event receiver added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Event receiver added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraEnableGpuSimulation(
+bool McpHandlers::Effect::HandleNiagaraEnableGpuSimulation(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2910,21 +2911,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraEnableGpuSimulation(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -2962,15 +2963,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraEnableGpuSimulation(
     Result->SetBoolField(TEXT("fixedBoundsEnabled"), bFixedBounds);
     Result->SetBoolField(TEXT("deterministicEnabled"), bDeterministic);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Enabled GPU simulation for emitter '%s'."), *EmitterName));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("GPU simulation enabled."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("GPU simulation enabled."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSimulationStage(
+bool McpHandlers::Effect::HandleNiagaraAddSimulationStage(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2979,14 +2980,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSimulationStage(
 
     if (SystemPath.IsEmpty() || EmitterName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath' or 'emitterName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString StageName = GetJsonStringField(Payload, TEXT("stageName"));
     if (StageName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'stageName'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'stageName'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
     if (!ValidateNiagaraIdentifier(StageName, TEXT("stageName"), false))
@@ -2997,14 +2998,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSimulationStage(
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     FNiagaraEmitterHandle* Handle = FindEmitterHandle(System, EmitterName);
     if (!Handle)
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
     }
 
@@ -3025,7 +3026,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSimulationStage(
         UNiagaraScriptSource* ScriptSource = GetEmitterScriptSource(Handle);
         if (!ScriptSource || !ScriptSource->NodeGraph)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Emitter graph source is not initialized."), TEXT("NIAGARA_EMITTER_INIT_FAILED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Emitter graph source is not initialized."), TEXT("NIAGARA_EMITTER_INIT_FAILED"));
             return true;
         }
 
@@ -3046,7 +3047,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSimulationStage(
                 bSimulationStageGraphCreated = EnsureScriptOutputGraph(ScriptSource, ENiagaraScriptUsage::ParticleSimulationStageScript, NewStage->Script->GetUsageId());
                 if (!bSimulationStageGraphCreated)
                 {
-                    SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create Niagara simulation stage graph."), TEXT("NIAGARA_GRAPH_CREATE_FAILED"));
+                    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create Niagara simulation stage graph."), TEXT("NIAGARA_GRAPH_CREATE_FAILED"));
                     return true;
                 }
             }
@@ -3076,17 +3077,17 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraAddSimulationStage(
     Result->SetBoolField(TEXT("simulationStageGraphCreated"), bSimulationStageGraphCreated);
     Result->SetNumberField(TEXT("simulationStageCount"), SimulationStageCount);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added simulation stage '%s'."), *StageName));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Simulation stage added."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Simulation stage added."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // Utility
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraGetNiagaraInfo(
+bool McpHandlers::Effect::HandleNiagaraGetNiagaraInfo(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -3095,7 +3096,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraGetNiagaraInfo(
 
     if (AssetPath.IsEmpty() && SystemPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'assetPath' or 'systemPath'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'assetPath' or 'systemPath'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -3103,7 +3104,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraGetNiagaraInfo(
     FString TargetPath = AssetPath.IsEmpty() ? SystemPath : AssetPath;
     if (!UEditorAssetLibrary::DoesAssetExist(TargetPath))
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Niagara asset not found: %s"), *TargetPath), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Niagara asset not found: %s"), *TargetPath), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -3117,7 +3118,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraGetNiagaraInfo(
 
     if (!System && !Emitter)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara asset."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara asset."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -3203,15 +3204,15 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraGetNiagaraInfo(
 
     Result->SetObjectField(TEXT("niagaraInfo"), InfoObj);
     Result->SetStringField(TEXT("message"), TEXT("Retrieved Niagara asset information."));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Niagara info retrieved."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Niagara info retrieved."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNiagaraValidateNiagaraSystem(
+bool McpHandlers::Effect::HandleNiagaraValidateNiagaraSystem(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -3220,21 +3221,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraValidateNiagaraSystem(
 
     if (SystemPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'systemPath'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     // Guard against non-existent assets to prevent LoadObject hangs
     if (!UEditorAssetLibrary::DoesAssetExist(SystemPath))
     {
-        SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Niagara system asset not found: %s"), *SystemPath), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Niagara system asset not found: %s"), *SystemPath), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
     UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
     if (!System)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara System."), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -3280,10 +3281,10 @@ bool UMcpAutomationBridgeSubsystem::HandleNiagaraValidateNiagaraSystem(
 
     Result->SetObjectField(TEXT("validationResult"), ValidationResult);
     Result->SetStringField(TEXT("message"), bIsValid ? TEXT("System is valid.") : TEXT("System has validation errors."));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Validation complete."), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Validation complete."), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }

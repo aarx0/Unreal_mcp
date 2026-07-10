@@ -26,6 +26,7 @@
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_EffectHandlers.h"
 
 #if WITH_EDITOR
 #include "EditorAssetLibrary.h"
@@ -136,7 +137,7 @@ void McpRecordDebugShape(const FString &ShapeType, const FVector &Location,
 
 // Active drawn shapes; the catalog of drawable types rides along under
 // supportedShapes.
-bool UMcpAutomationBridgeSubsystem::HandleEffectListDebugShapes(
+bool McpHandlers::Effect::HandleEffectListDebugShapes(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   TArray<TSharedPtr<FJsonValue>> SupportedShapes;
@@ -171,12 +172,12 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectListDebugShapes(
   Resp->SetArrayField(TEXT("shapes"), ActiveShapes);
   Resp->SetNumberField(TEXT("count"), ActiveShapes.Num());
   Resp->SetArrayField(TEXT("supportedShapes"), SupportedShapes);
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Active debug shapes"), Resp);
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleEffectClearDebugShapes(
+bool McpHandlers::Effect::HandleEffectClearDebugShapes(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -185,24 +186,24 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectClearDebugShapes(
     GMcpActiveDebugShapes.Empty();
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Debug shapes cleared"), Resp);
     return true;
   } else {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor world not available"), nullptr,
                            TEXT("NO_WORLD"));
     return true;
   }
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("Debug shape clearing requires editor build"),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleEffectDebugShape(
+bool McpHandlers::Effect::HandleEffectDebugShape(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   // shapeType is required
@@ -218,7 +219,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectDebugShape(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), false);
     Resp->SetStringField(TEXT("error"), TEXT("location parameter is required for debug_shape"));
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Missing required parameter: location"), Resp,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -276,7 +277,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectDebugShape(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), false);
     Resp->SetStringField(TEXT("error"), TEXT("Editor not available for debug drawing"));
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), Resp,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -287,7 +288,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectDebugShape(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), false);
     Resp->SetStringField(TEXT("error"), TEXT("No world available for debug drawing"));
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("No world available"), Resp,
                            TEXT("NO_WORLD"));
     return true;
@@ -333,7 +334,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectDebugShape(
     Resp->SetBoolField(TEXT("success"), false);
     Resp->SetStringField(TEXT("error"), FString::Printf(TEXT("Unsupported shape type: %s"), *ShapeType));
     Resp->SetStringField(TEXT("supportedShapes"), TEXT("sphere, box, circle, line, point, arrow, capsule, cylinder, cone, coordinate, plane"));
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Unsupported shape type"), Resp,
                            TEXT("UNSUPPORTED_SHAPE"));
     return true;
@@ -346,20 +347,20 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectDebugShape(
   Resp->SetStringField(TEXT("shapeType"), ShapeType);
   Resp->SetStringField(TEXT("location"), FString::Printf(TEXT("%.2f,%.2f,%.2f"), Loc.X, Loc.Y, Loc.Z));
   Resp->SetNumberField(TEXT("duration"), Duration);
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Debug shape drawn"), Resp, FString());
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Debug shape drawn"), Resp, FString());
   return true;
 #else
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetBoolField(TEXT("success"), false);
   Resp->SetStringField(TEXT("error"), TEXT("Debug shape drawing requires editor build"));
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("Debug shape drawing not available in non-editor build"), Resp,
                          TEXT("NOT_AVAILABLE"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleEffectParticle(
+bool McpHandlers::Effect::HandleEffectParticle(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString Preset;
@@ -370,7 +371,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectParticle(
     Resp->SetStringField(
         TEXT("error"),
         TEXT("preset parameter required for particle spawning"));
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Preset path required"), Resp,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -468,7 +469,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectParticle(
     Resp->SetBoolField(TEXT("success"), false);
     Resp->SetStringField(TEXT("error"),
                          TEXT("Editor not available for debug drawing"));
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), Resp,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -481,7 +482,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectParticle(
     Resp->SetBoolField(TEXT("success"), false);
     Resp->SetStringField(TEXT("error"),
                          TEXT("No world available for debug drawing"));
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("No world available"), Resp,
                            TEXT("NO_WORLD"));
     return true;
@@ -705,7 +706,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectParticle(
         TEXT("supportedShapes"),
         TEXT("sphere, box, circle, line, point, coordinate, cylinder, "
              "cone, capsule, arrow, plane"));
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Unsupported shape type"), Resp,
                            TEXT("UNSUPPORTED_SHAPE"));
     return true;
@@ -720,7 +721,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectParticle(
       TEXT("location"),
       FString::Printf(TEXT("%.2f,%.2f,%.2f"), Loc.X, Loc.Y, Loc.Z));
   Resp->SetNumberField(TEXT("duration"), Duration);
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Debug shape drawn"), Resp, FString());
   return true;
 #else
@@ -729,7 +730,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectParticle(
   Resp->SetStringField(TEXT("error"),
                        TEXT("Debug shape drawing requires editor build"));
   Resp->SetStringField(TEXT("shapeType"), ShapeType);
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       Socket, RequestId, false,
       TEXT("Debug shape drawing not available in non-editor build"), Resp,
       TEXT("NOT_AVAILABLE"));
@@ -737,7 +738,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectParticle(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleEffectSetNiagaraParameter(
+bool McpHandlers::Effect::HandleEffectSetNiagaraParameter(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString SystemName;
@@ -747,7 +748,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSetNiagaraParameter(
   FString ParameterType;
   Payload->TryGetStringField(TEXT("parameterType"), ParameterType);
   if (ParameterName.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("parameterName required"), nullptr,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -762,7 +763,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSetNiagaraParameter(
 
 #if WITH_EDITOR
   if (!GEditor) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), nullptr,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -770,7 +771,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSetNiagaraParameter(
   UEditorActorSubsystem *ActorSS =
       GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
   if (!ActorSS) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("EditorActorSubsystem not available"),
                            nullptr, TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
     return true;
@@ -866,7 +867,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSetNiagaraParameter(
   Resp->SetStringField(TEXT("parameterType"), ParameterType);
 
   if (bApplied) {
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Niagara parameter set"), Resp, FString());
   } else {
     FString ErrMsg = TEXT("Niagara parameter not applied");
@@ -892,12 +893,12 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSetNiagaraParameter(
       }
     }
 
-    SendAutomationResponse(Socket, RequestId, false, ErrMsg, Resp,
+    S.SendAutomationResponse(Socket, RequestId, false, ErrMsg, Resp,
                            ErrCode);
   }
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       Socket, RequestId, false,
       TEXT("set_niagara_parameter requires editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -905,7 +906,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSetNiagaraParameter(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleEffectActivateNiagara(
+bool McpHandlers::Effect::HandleEffectActivateNiagara(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString SystemName;
@@ -948,22 +949,22 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectActivateNiagara(
         break;
       }
     }
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Niagara system activated."), Resp);
   } else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Niagara system not found."), nullptr,
                            TEXT("SYSTEM_NOT_FOUND"));
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("activate_niagara requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleEffectDeactivateNiagara(
+bool McpHandlers::Effect::HandleEffectDeactivateNiagara(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString SystemName;
@@ -998,22 +999,22 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectDeactivateNiagara(
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetStringField(TEXT("actorName"), SystemName);
     Resp->SetBoolField(TEXT("active"), false);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Niagara system deactivated."), Resp);
   } else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Niagara system not found."), nullptr,
                            TEXT("SYSTEM_NOT_FOUND"));
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("deactivate_niagara requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleEffectAdvanceSimulation(
+bool McpHandlers::Effect::HandleEffectAdvanceSimulation(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString SystemName;
@@ -1055,22 +1056,22 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectAdvanceSimulation(
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetStringField(TEXT("actorName"), SystemName);
     Resp->SetNumberField(TEXT("steps"), Steps);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Niagara simulation advanced."), Resp);
   } else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Niagara system not found."), nullptr,
                            TEXT("SYSTEM_NOT_FOUND"));
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("advance_simulation requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleEffectCreateDynamicLight(
+bool McpHandlers::Effect::HandleEffectCreateDynamicLight(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   // Validate required parameters - location is mandatory for meaningful light creation
@@ -1078,7 +1079,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateDynamicLight(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), false);
     Resp->SetStringField(TEXT("error"), TEXT("location parameter is required for create_dynamic_light"));
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Missing required parameter: location"), Resp,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -1163,7 +1164,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateDynamicLight(
 #if WITH_EDITOR
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   if (!GEditor) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), nullptr,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -1171,7 +1172,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateDynamicLight(
   UEditorActorSubsystem *ActorSS =
       GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
   if (!ActorSS) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("EditorActorSubsystem not available"),
                            nullptr, TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
     return true;
@@ -1194,7 +1195,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateDynamicLight(
   AActor *Spawned = SpawnActorInActiveWorld<AActor>(ChosenClass, Loc,
                                                     FRotator::ZeroRotator);
   if (!Spawned) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to spawn light actor"), nullptr,
                            TEXT("CREATE_DYNAMIC_LIGHT_FAILED"));
     return true;
@@ -1221,11 +1222,11 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateDynamicLight(
   }
 
   McpHandlerUtils::AddVerification(Resp, Spawned);
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Dynamic light created"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       Socket, RequestId, false,
       TEXT("create_dynamic_light requires editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -1234,7 +1235,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateDynamicLight(
 }
 
 // Removes actors whose label starts with the provided filter (editor-only).
-bool UMcpAutomationBridgeSubsystem::HandleEffectCleanup(
+bool McpHandlers::Effect::HandleEffectCleanup(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString Filter;
@@ -1242,14 +1243,14 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCleanup(
   if (Filter.IsEmpty()) {
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetNumberField(TEXT("removed"), 0);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Cleanup skipped (empty filter)"), Resp,
                            FString());
     return true;
   }
 #if WITH_EDITOR
   if (!GEditor) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), nullptr,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -1257,7 +1258,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCleanup(
   UEditorActorSubsystem *ActorSS =
       GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
   if (!ActorSS) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("EditorActorSubsystem not available"),
                            nullptr, TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
     return true;
@@ -1282,14 +1283,14 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCleanup(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetArrayField(TEXT("removedActors"), Arr);
   Resp->SetNumberField(TEXT("removed"), Removed.Num());
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       Socket, RequestId, true,
       FString::Printf(TEXT("Cleanup completed (removed=%d)"),
                       Removed.Num()),
       Resp, FString());
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("cleanup requires editor build."), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1297,13 +1298,13 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCleanup(
 }
 
 // Spawn Niagara system in-level as a NiagaraActor (editor-only)
-bool UMcpAutomationBridgeSubsystem::HandleEffectSpawnNiagara(
+bool McpHandlers::Effect::HandleEffectSpawnNiagara(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString SystemPath;
   Payload->TryGetStringField(TEXT("systemPath"), SystemPath);
   if (SystemPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("systemPath required"), nullptr,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -1311,7 +1312,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSpawnNiagara(
 
   // Guard against non-existent assets to prevent LoadPackage warnings
   if (!UEditorAssetLibrary::DoesAssetExist(SystemPath)) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Niagara system asset not found: %s"),
                         *SystemPath),
@@ -1375,7 +1376,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSpawnNiagara(
 
 #if WITH_EDITOR
   if (!GEditor) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), nullptr,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -1383,7 +1384,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSpawnNiagara(
   UEditorActorSubsystem *ActorSS =
       GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
   if (!ActorSS) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("EditorActorSubsystem not available"),
                            nullptr, TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
     return true;
@@ -1395,7 +1396,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSpawnNiagara(
     Resp->SetBoolField(TEXT("success"), false);
     Resp->SetStringField(TEXT("error"),
                          TEXT("Niagara system asset not found"));
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Niagara system not found"), Resp,
                            TEXT("SYSTEM_NOT_FOUND"));
     return true;
@@ -1407,7 +1408,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSpawnNiagara(
   AActor *Spawned = SpawnActorInActiveWorld<AActor>(
       ANiagaraActor::StaticClass(), Loc, SpawnRot);
   if (!Spawned) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to spawn NiagaraActor"), nullptr,
                            TEXT("SPAWN_FAILED"));
     return true;
@@ -1453,24 +1454,24 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectSpawnNiagara(
 
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   McpHandlerUtils::AddVerification(Resp, Spawned);
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Niagara spawned"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("spawn_niagara requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleEffectCreateVolumetricFog(
+bool McpHandlers::Effect::HandleEffectCreateVolumetricFog(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   // Create volumetric fog using AExponentialHeightFog
 #if WITH_EDITOR
   if (!GEditor) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), nullptr,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -1478,7 +1479,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateVolumetricFog(
   UEditorActorSubsystem *ActorSS =
       GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
   if (!ActorSS) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("EditorActorSubsystem not available"),
                            nullptr, TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
     return true;
@@ -1529,29 +1530,29 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateVolumetricFog(
     Resp->SetStringField(TEXT("actorName"), Spawned->GetActorLabel());
     Resp->SetStringField(TEXT("effectType"), TEXT("volumetric_fog"));
     McpHandlerUtils::AddVerification(Resp, Spawned);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Volumetric fog created"), Resp, FString());
     return true;
   }
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("Failed to spawn volumetric fog actor"), nullptr,
                          TEXT("SPAWN_FAILED"));
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("ExponentialHeightFog not available in this build"),
                          nullptr, TEXT("NOT_AVAILABLE"));
   return true;
 #endif
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("create_volumetric_fog requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleEffectCreateParticleTrail(
+bool McpHandlers::Effect::HandleEffectCreateParticleTrail(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   // Create a particle trail using Cascade particles or Niagara if available
@@ -1564,14 +1565,14 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateParticleTrail(
 
   if (!SystemPath.IsEmpty()) {
     // Use the provided system path
-    return CreateNiagaraEffect(RequestId, Payload, Socket,
+    return CreateNiagaraEffect(S, RequestId, Payload, Socket,
                                TEXT("create_particle_trail"), SystemPath);
   }
 
 #if WITH_EDITOR
   // Create a simple trail without an asset - spawn a NiagaraActor with default settings
   if (!GEditor) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), nullptr,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -1591,19 +1592,19 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateParticleTrail(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetBoolField(TEXT("success"), false);
   Resp->SetStringField(TEXT("error"), TEXT("systemPath or emitter parameter is required for particle trail creation. Please provide a valid Niagara system asset path."));
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("systemPath required for particle trail"), Resp,
                          TEXT("INVALID_ARGUMENT"));
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("create_particle_trail requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleEffectCreateEnvironmentEffect(
+bool McpHandlers::Effect::HandleEffectCreateEnvironmentEffect(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   // Create environment effect - requires a Niagara system asset
@@ -1611,7 +1612,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateEnvironmentEffect(
   Payload->TryGetStringField(TEXT("systemPath"), SystemPath);
 
   if (!SystemPath.IsEmpty()) {
-    return CreateNiagaraEffect(RequestId, Payload, Socket,
+    return CreateNiagaraEffect(S, RequestId, Payload, Socket,
                                TEXT("create_environment_effect"), SystemPath);
   }
 
@@ -1619,13 +1620,13 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateEnvironmentEffect(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetBoolField(TEXT("success"), false);
   Resp->SetStringField(TEXT("error"), TEXT("systemPath parameter is required for environment effect creation. Please provide a valid Niagara system asset path."));
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("systemPath required for environment effect"), Resp,
                          TEXT("INVALID_ARGUMENT"));
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleEffectCreateImpactEffect(
+bool McpHandlers::Effect::HandleEffectCreateImpactEffect(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   // Create impact effect - requires a Niagara system asset
@@ -1633,7 +1634,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateImpactEffect(
   Payload->TryGetStringField(TEXT("systemPath"), SystemPath);
 
   if (!SystemPath.IsEmpty()) {
-    return CreateNiagaraEffect(RequestId, Payload, Socket,
+    return CreateNiagaraEffect(S, RequestId, Payload, Socket,
                                TEXT("create_impact_effect"), SystemPath);
   }
 
@@ -1641,22 +1642,22 @@ bool UMcpAutomationBridgeSubsystem::HandleEffectCreateImpactEffect(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetBoolField(TEXT("success"), false);
   Resp->SetStringField(TEXT("error"), TEXT("systemPath parameter is required for impact effect creation. Please provide a valid Niagara system asset path."));
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("systemPath required for impact effect"), Resp,
                          TEXT("INVALID_ARGUMENT"));
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleEffectCreateNiagaraRibbon(
+bool McpHandlers::Effect::HandleEffectCreateNiagaraRibbon(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   // Require systemPath
-  return CreateNiagaraEffect(RequestId, Payload, Socket,
+  return CreateNiagaraEffect(S, RequestId, Payload, Socket,
                              TEXT("create_niagara_ribbon"), FString());
 }
 
 // Helper function to create Niagara effects with default systems
-bool UMcpAutomationBridgeSubsystem::CreateNiagaraEffect(
+bool McpHandlers::Effect::CreateNiagaraEffect(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket, const FString &EffectName,
     const FString &DefaultSystemPath) {
@@ -1665,7 +1666,7 @@ bool UMcpAutomationBridgeSubsystem::CreateNiagaraEffect(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), false);
     Resp->SetStringField(TEXT("error"), TEXT("Editor not available"));
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Editor not available"), Resp,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -1677,7 +1678,7 @@ bool UMcpAutomationBridgeSubsystem::CreateNiagaraEffect(
     Resp->SetBoolField(TEXT("success"), false);
     Resp->SetStringField(TEXT("error"),
                          TEXT("EditorActorSubsystem not available"));
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("EditorActorSubsystem not available"), Resp,
                            TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
     return true;
@@ -1695,7 +1696,7 @@ bool UMcpAutomationBridgeSubsystem::CreateNiagaraEffect(
         FString::Printf(TEXT("systemPath is required for %s. Please provide a "
                              "valid asset path (e.g. /Game/Effects/MySystem)"),
                         *EffectName));
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("systemPath required"), Resp,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -1728,7 +1729,7 @@ bool UMcpAutomationBridgeSubsystem::CreateNiagaraEffect(
 
   // Load the Niagara system
   if (!UEditorAssetLibrary::DoesAssetExist(SystemPath)) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         FString::Printf(TEXT("Niagara system asset not found: %s"),
                         *SystemPath),
@@ -1742,7 +1743,7 @@ bool UMcpAutomationBridgeSubsystem::CreateNiagaraEffect(
     Resp->SetBoolField(TEXT("success"), false);
     Resp->SetStringField(TEXT("error"), TEXT("Niagara system asset not found"));
     Resp->SetStringField(TEXT("systemPath"), SystemPath);
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Niagara system not found"), Resp,
                            TEXT("SYSTEM_NOT_FOUND"));
     return true;
@@ -1755,7 +1756,7 @@ bool UMcpAutomationBridgeSubsystem::CreateNiagaraEffect(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), false);
     Resp->SetStringField(TEXT("error"), TEXT("Failed to spawn Niagara actor"));
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Failed to spawn Niagara actor"), Resp,
                            TEXT("SPAWN_FAILED"));
     return true;
@@ -1793,7 +1794,7 @@ bool UMcpAutomationBridgeSubsystem::CreateNiagaraEffect(
   Resp->SetStringField(TEXT("systemPath"), SystemPath);
   Resp->SetStringField(TEXT("actorName"), Spawned->GetActorLabel());
   Resp->SetNumberField(TEXT("actorId"), Spawned->GetUniqueID());
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, true,
       FString::Printf(TEXT("%s created successfully"), *EffectName), Resp,
       FString());
@@ -1803,7 +1804,7 @@ bool UMcpAutomationBridgeSubsystem::CreateNiagaraEffect(
   Resp->SetBoolField(TEXT("success"), false);
   Resp->SetStringField(TEXT("error"),
                        TEXT("Effect creation requires editor build"));
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Effect creation not available in non-editor build"), Resp,
       TEXT("NOT_AVAILABLE"));
