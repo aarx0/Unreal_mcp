@@ -1529,14 +1529,12 @@ static inline FProperty *ResolveNestedPropertyPath(UObject *RootObject,
   return nullptr;
 }
 
-// Helper to find an SCS node by a (case-insensitive) name. Uses reflection
-// to iterate the internal AllNodes array so this implementation does not
 /**
  * Finds a Simple Construction Script node with the given name in the provided
  * USimpleConstructionScript.
  *
- * Matches case-insensitively first against a node's `VariableName` property
- * when present, and falls back to the node's object name.
+ * Matches case-insensitively first against the node's variable name, falling
+ * back to the node's object name.
  * @param SCS Pointer to the USimpleConstructionScript to search; may be
  * nullptr.
  * @param Name Name to match against nodes (case-insensitive).
@@ -1548,39 +1546,17 @@ static inline USCS_Node *FindScsNodeByName(USimpleConstructionScript *SCS,
   if (!SCS || Name.IsEmpty())
     return nullptr;
 
-  // Attempt to find an array property named "AllNodes" on the SCS
-  if (UClass *SCSClass = SCS->GetClass()) {
-    if (FArrayProperty *ArrayProp =
-            FindFProperty<FArrayProperty>(SCSClass, TEXT("AllNodes"))) {
-      // Helper to iterate elements
-      FScriptArrayHelper Helper(ArrayProp,
-                                ArrayProp->ContainerPtrToValuePtr<void>(SCS));
-      for (int32 Idx = 0; Idx < Helper.Num(); ++Idx) {
-        void *ElemPtr = Helper.GetRawPtr(Idx);
-        if (!ElemPtr)
-          continue;
-        if (FObjectProperty *ObjProp =
-                CastField<FObjectProperty>(ArrayProp->Inner)) {
-          UObject *ElemObj = ObjProp->GetObjectPropertyValue(ElemPtr);
-          if (!ElemObj)
-            continue;
-          // Match by explicit VariableName property when present
-          if (FProperty *VarProp = ElemObj->GetClass()->FindPropertyByName(
-                  TEXT("VariableName"))) {
-            if (FNameProperty *NP = CastField<FNameProperty>(VarProp)) {
-              const FName V = NP->GetPropertyValue_InContainer(ElemObj);
-              if (!V.IsNone() &&
-                  V.ToString().Equals(Name, ESearchCase::IgnoreCase)) {
-                return reinterpret_cast<USCS_Node *>(ElemObj);
-              }
-            }
-          }
-          // Fallback: match the object name
-          if (ElemObj->GetName().Equals(Name, ESearchCase::IgnoreCase)) {
-            return reinterpret_cast<USCS_Node *>(ElemObj);
-          }
-        }
-      }
+  for (USCS_Node *Node : SCS->GetAllNodes()) {
+    if (!Node)
+      continue;
+    const FName VariableName = Node->GetVariableName();
+    if (!VariableName.IsNone() &&
+        VariableName.ToString().Equals(Name, ESearchCase::IgnoreCase)) {
+      return Node;
+    }
+    // Fallback: match the node object's name
+    if (Node->GetName().Equals(Name, ESearchCase::IgnoreCase)) {
+      return Node;
     }
   }
   return nullptr;
