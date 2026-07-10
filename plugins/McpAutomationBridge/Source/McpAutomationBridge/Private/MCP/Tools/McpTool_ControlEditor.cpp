@@ -22,25 +22,20 @@ public:
 
 	TSharedPtr<FJsonObject> BuildInputSchema() const override
 	{
-		// Phase 3 pilot — per-action `oneOf` (vs the flat fold every other tool
-		// still uses). One branch per action, each advertising EXACTLY that action's
-		// params (from its AppendSchema fragment) plus its real required set, keyed
-		// on an `action` const discriminator. control_editor is fully classed, so
-		// CallsForTool covers every action. If the client honors a top-level oneOf,
-		// the other 21 tools convert the same way; if not, revert to the flat fold.
-		TArray<TSharedPtr<FJsonValue>> Branches;
+		// Flat fold, same as every other tool. A per-action `oneOf` was piloted
+		// here and REVERTED: the MCP client flattens a top-level oneOf by merging
+		// branch properties and keeping only the first branch's `action` const, so
+		// the model saw a schema whose only action was "play". Server-side branch
+		// validation support remains in McpNativeTransport (CollectSchemaViolations)
+		// should clients ever render oneOf faithfully.
+		FMcpSchemaBuilder B;
+		B.StringEnum(TEXT("action"), McpConsolidatedActions::ControlEditor(),
+			TEXT("Action"));
 		for (FMcpCall* Call : FMcpCallRegistry::Get().CallsForTool(TEXT("control_editor")))
 		{
-			FMcpSchemaBuilder Bi;
-			Bi.StringConst(TEXT("action"), Call->GetDecl().Action);
-			Bi.Required({TEXT("action")});
-			Call->AppendSchema(Bi);   // the action's own params + their Required()
-			Branches.Add(MakeShared<FJsonValueObject>(Bi.Build()));
+			Call->AppendSchema(B);
 		}
-		auto Schema = MakeShared<FJsonObject>();
-		Schema->SetStringField(TEXT("type"), TEXT("object"));
-		Schema->SetArrayField(TEXT("oneOf"), Branches);
-		return Schema;
+		return B.ClearRequired().Required({TEXT("action")}).Build();
 	}
 };
 

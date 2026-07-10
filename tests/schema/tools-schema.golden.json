@@ -1862,582 +1862,193 @@
     "category": "core",
     "description": "Start/stop PIE, control viewport camera, run console commands, take screenshots, simulate input.",
     "inputSchema": {
-      "oneOf": [
-        {
-          "properties": {
-            "action": {
-              "const": "play",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
+      "properties": {
+        "action": {
+          "description": "Action",
+          "enum": [
+            "play",
+            "stop",
+            "pause",
+            "resume",
+            "eject",
+            "possess",
+            "set_game_speed",
+            "set_fixed_delta_time",
+            "set_camera",
+            "set_camera_fov",
+            "set_view_mode",
+            "screenshot",
+            "step_frame",
+            "start_recording",
+            "stop_recording",
+            "create_bookmark",
+            "jump_to_bookmark",
+            "set_preferences",
+            "set_viewport_realtime",
+            "open_asset",
+            "close_asset",
+            "simulate_input",
+            "simulate_nav",
+            "open_level",
+            "focus_actor",
+            "show_stats",
+            "hide_stats",
+            "set_editor_mode",
+            "set_immersive_mode",
+            "set_game_view",
+            "undo",
+            "redo",
+            "save_all"
           ],
-          "type": "object"
+          "type": "string"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "stop",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "actorName": {
+          "description": "Name of the actor.",
+          "type": "string"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "pause",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "assetPath": {
+          "description": "Asset path (e.g., /Game/Path/Asset).",
+          "type": "string"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "resume",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "button": {
+          "description": "Mouse button for simulate_input.",
+          "type": "string"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "eject",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "category": {
+          "type": "string"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "possess",
-              "type": "string"
-            },
-            "actorName": {
-              "description": "Name of the actor.",
-              "type": "string"
-            },
-            "objectPath": {
-              "description": "possess: object path of the pawn/actor to possess (alternative to actorName).",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "deltaTime": {
+          "type": "number"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "step_frame",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "device": {
+          "description": "simulate_nav input device: 'gamepad' (default, sends DPad/face-button keys) or 'keyboard' (arrows/Enter/Esc/Tab).",
+          "type": "string"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "set_game_speed",
-              "type": "string"
-            },
-            "speed": {
-              "type": "number"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "direction": {
+          "description": "simulate_nav direction: Up/Down/Left/Right/Accept/Back/Next/Previous (PIE-only; faithfully routes a nav key through CommonUI, then returns the post-nav focus snapshot).",
+          "type": "string"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "set_fixed_delta_time",
-              "type": "string"
-            },
-            "deltaTime": {
-              "type": "number"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "enabled": {
+          "description": "Whether the item/feature is enabled.",
+          "type": "boolean"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "set_camera",
-              "type": "string"
-            },
-            "location": {
-              "description": "3D location (x, y, z).",
-              "properties": {
-                "x": {
-                  "type": "number"
-                },
-                "y": {
-                  "type": "number"
-                },
-                "z": {
-                  "type": "number"
-                }
-              },
-              "type": "object"
-            },
-            "rotation": {
-              "description": "3D rotation (pitch, yaw, roll).",
-              "properties": {
-                "pitch": {
-                  "type": "number"
-                },
-                "roll": {
-                  "type": "number"
-                },
-                "yaw": {
-                  "type": "number"
-                }
-              },
-              "type": "object"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "filename": {
+          "description": "screenshot: output PNG name (saved under Saved/Screenshots; defaults to a timestamp).",
+          "type": "string"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "set_camera_fov",
-              "type": "string"
-            },
-            "fov": {
-              "type": "number"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "fov": {
+          "type": "number"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "set_view_mode",
-              "type": "string"
-            },
-            "viewMode": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "id": {
+          "description": "Bookmark identifier/index.",
+          "type": "integer"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "set_viewport_realtime",
-              "type": "string"
-            },
-            "realtime": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "index": {
+          "description": "Bookmark slot index (create_bookmark / jump_to_bookmark).",
+          "type": "number"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "set_game_view",
-              "type": "string"
-            },
-            "enabled": {
-              "description": "Whether the item/feature is enabled.",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "inputAction": {
+          "type": "string"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "set_immersive_mode",
-              "type": "string"
-            },
-            "enabled": {
-              "description": "Whether the item/feature is enabled.",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "inputType": {
+          "description": "Alias for type used by simulate_input.",
+          "type": "string"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "show_stats",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "key": {
+          "type": "string"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "hide_stats",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "levelPath": {
+          "description": "Level asset path.",
+          "type": "string"
         },
-        {
+        "location": {
+          "description": "3D location (x, y, z).",
           "properties": {
-            "action": {
-              "const": "focus_actor",
-              "type": "string"
-            },
-            "actorName": {
-              "description": "Name of the actor.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action",
-            "actorName"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "action": {
-              "const": "screenshot",
-              "type": "string"
-            },
-            "filename": {
-              "description": "screenshot: output PNG name (saved under Saved/Screenshots; defaults to a timestamp).",
-              "type": "string"
-            },
-            "maxWidth": {
-              "description": "screenshot: downscale the capture to at most this width in px (0/omit = native viewport size).",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "action": {
-              "const": "open_asset",
-              "type": "string"
-            },
-            "assetPath": {
-              "description": "Asset path (e.g., /Game/Path/Asset).",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action",
-            "assetPath"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "action": {
-              "const": "close_asset",
-              "type": "string"
-            },
-            "assetPath": {
-              "description": "Asset path (e.g., /Game/Path/Asset).",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action",
-            "assetPath"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "action": {
-              "const": "open_level",
-              "type": "string"
-            },
-            "assetPath": {
-              "description": "Asset path (e.g., /Game/Path/Asset).",
-              "type": "string"
-            },
-            "levelPath": {
-              "description": "Level asset path.",
-              "type": "string"
-            },
-            "path": {
-              "description": "Path to a directory.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "action": {
-              "const": "set_editor_mode",
-              "type": "string"
-            },
-            "mode": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "action",
-            "mode"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "action": {
-              "const": "set_preferences",
-              "type": "string"
-            },
-            "category": {
-              "type": "string"
-            },
-            "preferences": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "action": {
-              "const": "create_bookmark",
-              "type": "string"
-            },
-            "id": {
-              "description": "Bookmark identifier/index.",
-              "type": "integer"
-            },
-            "index": {
-              "description": "Bookmark slot index (create_bookmark / jump_to_bookmark).",
-              "type": "number"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "action": {
-              "const": "jump_to_bookmark",
-              "type": "string"
-            },
-            "id": {
-              "description": "Bookmark identifier/index.",
-              "type": "integer"
-            },
-            "index": {
-              "description": "Bookmark slot index (create_bookmark / jump_to_bookmark).",
-              "type": "number"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "action": {
-              "const": "start_recording",
-              "type": "string"
-            },
-            "filename": {
-              "description": "screenshot: output PNG name (saved under Saved/Screenshots; defaults to a timestamp).",
-              "type": "string"
-            },
-            "name": {
-              "description": "Name identifier.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "action": {
-              "const": "stop_recording",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "action": {
-              "const": "simulate_input",
-              "type": "string"
-            },
-            "button": {
-              "description": "Mouse button for simulate_input.",
-              "type": "string"
-            },
-            "inputAction": {
-              "type": "string"
-            },
-            "inputType": {
-              "description": "Alias for type used by simulate_input.",
-              "type": "string"
-            },
-            "key": {
-              "type": "string"
-            },
-            "route": {
-              "description": "simulate_input analog: 'pie' (default — straight to the PIE player controller, focus-immune) or 'slate' (through FSlateApplication + input preprocessors, exercising the CommonUI layer).",
-              "type": "string"
-            },
-            "type": {
-              "description": "Input event type for simulate_input: key_down, key_up, mouse_click, mouse_move, analog. analog injects a 1D axis value (key=Gamepad_LeftY/Gamepad_RightX/MouseX/... + value); the value persists in PlayerInput until the next sample, so hold = inject once, release = inject 0.",
-              "type": "string"
-            },
-            "value": {
-              "description": "simulate_input analog: axis value (typically -1..1; mouse axes take pixel-ish deltas).",
-              "type": "number"
-            },
             "x": {
-              "description": "Mouse X coordinate for simulate_input.",
               "type": "number"
             },
             "y": {
-              "description": "Mouse Y coordinate for simulate_input.",
+              "type": "number"
+            },
+            "z": {
               "type": "number"
             }
           },
-          "required": [
-            "action"
-          ],
           "type": "object"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "simulate_nav",
-              "type": "string"
-            },
-            "device": {
-              "description": "simulate_nav input device: 'gamepad' (default, sends DPad/face-button keys) or 'keyboard' (arrows/Enter/Esc/Tab).",
-              "type": "string"
-            },
-            "direction": {
-              "description": "simulate_nav direction: Up/Down/Left/Right/Accept/Back/Next/Previous (PIE-only; faithfully routes a nav key through CommonUI, then returns the post-nav focus snapshot).",
-              "type": "string"
-            },
-            "key": {
-              "type": "string"
-            },
-            "stabilizeFocus": {
-              "description": "simulate_nav: default true — before the nav, focus the PIE game viewport if focus isn't already inside it, so the faithful drive routes through CommonUI deterministically (never steals focus from an already-focused in-game widget). Set false to drive from whatever currently has focus.",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "action"
-          ],
+        "maxWidth": {
+          "description": "screenshot: downscale the capture to at most this width in px (0/omit = native viewport size).",
+          "type": "integer"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "name": {
+          "description": "Name identifier.",
+          "type": "string"
+        },
+        "objectPath": {
+          "description": "possess: object path of the pawn/actor to possess (alternative to actorName).",
+          "type": "string"
+        },
+        "path": {
+          "description": "Path to a directory.",
+          "type": "string"
+        },
+        "preferences": {
           "type": "object"
         },
-        {
+        "realtime": {
+          "type": "boolean"
+        },
+        "rotation": {
+          "description": "3D rotation (pitch, yaw, roll).",
           "properties": {
-            "action": {
-              "const": "undo",
-              "type": "string"
+            "pitch": {
+              "type": "number"
+            },
+            "roll": {
+              "type": "number"
+            },
+            "yaw": {
+              "type": "number"
             }
           },
-          "required": [
-            "action"
-          ],
           "type": "object"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "redo",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "route": {
+          "description": "simulate_input analog: 'pie' (default — straight to the PIE player controller, focus-immune) or 'slate' (through FSlateApplication + input preprocessors, exercising the CommonUI layer).",
+          "type": "string"
         },
-        {
-          "properties": {
-            "action": {
-              "const": "save_all",
-              "type": "string"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "type": "object"
+        "speed": {
+          "type": "number"
+        },
+        "stabilizeFocus": {
+          "description": "simulate_nav: default true — before the nav, focus the PIE game viewport if focus isn't already inside it, so the faithful drive routes through CommonUI deterministically (never steals focus from an already-focused in-game widget). Set false to drive from whatever currently has focus.",
+          "type": "boolean"
+        },
+        "type": {
+          "description": "Input event type for simulate_input: key_down, key_up, mouse_click, mouse_move, analog. analog injects a 1D axis value (key=Gamepad_LeftY/Gamepad_RightX/MouseX/... + value); the value persists in PlayerInput until the next sample, so hold = inject once, release = inject 0.",
+          "type": "string"
+        },
+        "value": {
+          "description": "simulate_input analog: axis value (typically -1..1; mouse axes take pixel-ish deltas).",
+          "type": "number"
+        },
+        "viewMode": {
+          "type": "string"
+        },
+        "x": {
+          "description": "Mouse X coordinate for simulate_input.",
+          "type": "number"
+        },
+        "y": {
+          "description": "Mouse Y coordinate for simulate_input.",
+          "type": "number"
         }
+      },
+      "required": [
+        "action"
       ],
       "type": "object"
     },

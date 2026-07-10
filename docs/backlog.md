@@ -38,16 +38,17 @@ Plan: [`consolidation-plan-2026-07-06.md`](consolidation-plan-2026-07-06.md).
 
 ## 🟡 Naming / Phase 3
 - **Confusing-names pass** — `class` vs `className` split + siblings (taste renames).
-- **Phase 3 per-action schemas (`oneOf`)** — [`phase3-per-action-schema-design-2026-07-06.md`](phase3-per-action-schema-design-2026-07-06.md).
-  **Pilot SHIPPED 2026-07-08 (`1d0700c2`):** `control_editor` publishes 33 per-action oneOf branches;
-  server side fully verified (per-action params + required advertised, branch-resolved type-check,
-  clean boot after fixing a validation-before-registration ordering bug the oneOf exposed). **STILL
-  BLOCKED on the headline question — does the client honor a top-level oneOf?** Needs a FRESH harness
-  session (the MCP client caches the tool schema at connect and won't re-fetch mid-session). Next
-  session: open a new Claude Code session, inspect `control_editor`'s advertised schema (oneOf vs
-  flattened), and see if the model calls per-action params without a foreign-param reject vs a
-  flat-fold tool. If honored → roll out to the other 21 (mechanical: same BuildInputSchema loop). If
-  not → revert control_editor to the flat fold (one facade method) and do the enum-description fallback.
+- ~~**Phase 3 per-action schemas (`oneOf`)**~~ **ANSWERED 2026-07-09 — client does NOT honor top-level
+  oneOf; pilot REVERTED.** Fresh-session evidence: the Claude Code MCP client flattened `control_editor`'s
+  33 branches into a merged property bag with an auto-generated "exactly one of" description, an EMPTY
+  `required`, and — fatally — `action` reduced to the FIRST branch's `const: "play"`, hiding the other 32
+  actions from the model entirely. `control_editor` is back on the flat fold (enum + folded fragments,
+  same facade as every other tool). PAUSED, not deleted: the server-side branch-resolved validation in
+  `McpNativeTransport::CollectSchemaViolations` remains (it no-ops on flat schemas) so a future
+  faithful-rendering client only needs the one facade method restored — see
+  [`phase3-per-action-schema-design-2026-07-06.md`](phase3-per-action-schema-design-2026-07-06.md).
+  Discoverability of per-action params stays with the per-action decl rejection messages (they name the
+  accepted params on any miss).
 
 ## 🔵 Smaller / older
 - ~~**manage_blueprint `create` ignores `path`** — sprayed to /Game root~~ ✅ FIXED 2026-07-08 (`638a67a7`):
