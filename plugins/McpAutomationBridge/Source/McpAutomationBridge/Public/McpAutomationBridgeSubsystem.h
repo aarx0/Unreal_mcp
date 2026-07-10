@@ -735,13 +735,11 @@ private:
   // member handlers (HandleEffect*) live in the transitional public block
   // below.
   // manage_blueprint is classed — see MCP/Calls/McpCalls_ManageBlueprint.cpp.
-  // Its route dispatchers survive (HandleBlueprintAction is called externally by
-  // EditorFunctionHandlers.cpp); public so the classed Core actions delegate.
-public:
-  bool HandleBlueprintAction(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
-private:
+  // Core + Graph subActions are per-action members (below), called directly by
+  // their classed actions; Widget/CommonUi delegate to their surviving route
+  // dispatchers (HandleManageWidgetAuthoringAction / HandleCommonUiAction). The
+  // HandleBlueprintModifyScs member is also called externally by
+  // EditorFunctionHandlers.cpp (BLUEPRINT_ADD_COMPONENT).
   // manage_sequence is classed — see MCP/Calls/McpCalls_ManageSequence.cpp.
   bool CreateNiagaraEffect(const FString &RequestId,
                            const TSharedPtr<FJsonObject> &Payload,
@@ -1293,8 +1291,8 @@ public:
   // 1. Editor Authoring & Graph Editing
   // manage_blueprint is classed (MCP/Calls/McpCalls_ManageBlueprint.cpp); each
   // graph subAction is one member below, called directly by its classed action.
-  // HandleBlueprintGraphCreateNode is also reused by HandleBlueprintAction's
-  // add_node cast/getter/CallFunction fast-path (BlueprintHandlers.cpp).
+  // HandleBlueprintGraphCreateNode is also reused by HandleBlueprintAddNode's
+  // cast/getter/CallFunction fast-path (BlueprintHandlers.cpp).
   bool HandleBlueprintGraphCreateNode(const FString &RequestId,
       const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
   bool HandleBlueprintGraphConnectPins(const FString &RequestId,
@@ -1325,8 +1323,8 @@ public:
       const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 
   // manage_blueprint Core + SCS per-action members (BlueprintHandlers.cpp),
-  // called directly by their classed actions. Hoisted verbatim from
-  // HandleBlueprintAction's dispatcher and the retired HandleSCSAction.
+  // called directly by their classed actions. Hoisted verbatim from the retired
+  // HandleBlueprintAction dispatcher and the retired HandleSCSAction.
   bool HandleBlueprintAddScsComponent(const FString &RequestId,
       const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
   bool HandleBlueprintRemoveScsComponent(const FString &RequestId,
@@ -1350,6 +1348,36 @@ public:
   bool HandleBlueprintAddComponent(const FString &RequestId,
       const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
   bool HandleBlueprintGetScs(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGet(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintSetDefault(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGetDefault(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintListFunctions(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintModifyScs(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintAddVariable(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintRemoveVariable(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintRenameVariable(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintAddFunction(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintRemoveFunction(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintAddEvent(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintRemoveEvent(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintSetVariableMetadata(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintSetMetadata(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintAddNode(const FString &RequestId,
       const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 
   // Called directly by the classed manage_effect graph actions (MCP/Calls/);

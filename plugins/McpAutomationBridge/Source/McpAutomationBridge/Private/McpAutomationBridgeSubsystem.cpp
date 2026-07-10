@@ -1076,14 +1076,14 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
 
   // manage_blueprint is fully classed (MCP/Calls/McpCalls_ManageBlueprint.cpp),
   // the twenty-first and final classed family — dispatch reaches its FMcpCall
-  // instances via the registry, not this map. It is the one delegation-wired
-  // family: its four route dispatchers survive (HandleBlueprintAction recurses
-  // into HandleBlueprintGraphAction/HandleSCSAction and is called externally by
-  // EditorFunctionHandlers.cpp), so each class delegates to its route's
-  // dispatcher with the exact args this retired lambda passed — CommonUi to
-  // HandleCommonUiAction("manage_common_ui"), WidgetAuthoring to
-  // HandleManageWidgetAuthoringAction("manage_widget_authoring"), BlueprintGraph
-  // and Core to HandleBlueprintGraphAction/HandleBlueprintAction("manage_blueprint").
+  // instances via the registry, not this map. Core and BlueprintGraph actions call
+  // per-action HandleBlueprint*/HandleBlueprintGraph* members directly (the old
+  // string dispatchers HandleBlueprintAction/HandleBlueprintGraphAction/HandleSCSAction
+  // are hoisted and deleted; HandleBlueprintModifyScs is called externally by
+  // EditorFunctionHandlers.cpp). The Widget and CommonUi routes still delegate to
+  // their surviving dispatchers with the exact args the retired lambda passed —
+  // WidgetAuthoring to HandleManageWidgetAuthoringAction("manage_widget_authoring"),
+  // CommonUi to HandleCommonUiAction("manage_common_ui").
 
   // manage_geometry is fully classed (MCP/Calls/McpCalls_ManageGeometry.cpp)
   // — dispatch reaches its FMcpCall instances via the registry, not this map.

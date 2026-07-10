@@ -7,18 +7,18 @@
 // those fragments and GetDecl() derives the validation decl from the same fragment
 // via McpDeriveDecl(), so schema and decl are one source and cannot drift.
 //
-// Dispatch is mixed: extracted actions call a per-action HandleBlueprint*/
+// Dispatch is mixed: Core and Graph actions call a per-action HandleBlueprint*/
 // HandleBlueprintGraph* member directly (MCP_BP_CORE_CALL / MCP_BP_GRAPH_CALL);
-// the un-extracted Core actions plus the whole Widget/CommonUi routes still
-// delegate to a surviving 4-arg dispatcher (MCP_BP_ACTION_CALL), passing EXACTLY
-// the args the retired registration lambda passed (byte-behaviour-identical for
-// canonical inputs). HandleBlueprintAction survives (its remaining branches +
-// external EditorFunctionHandlers.cpp callers):
-//   Core (extracted) -> HandleBlueprint<Action> member (RequestId, Payload, ...)
-//   Core (remaining) -> HandleBlueprintAction(RequestId, "manage_blueprint", ...)
-//   Graph            -> HandleBlueprintGraph<Action> member (RequestId, Payload, ...)
-//   Widget           -> HandleManageWidgetAuthoringAction(RequestId, "manage_widget_authoring", ...)
-//   CommonUi         -> HandleCommonUiAction(RequestId, "manage_common_ui", ...)
+// the Widget/CommonUi routes still delegate to a surviving 4-arg dispatcher
+// (MCP_BP_ACTION_CALL), passing EXACTLY the args the retired registration lambda
+// passed (byte-behaviour-identical for canonical inputs). The old Core string
+// dispatcher HandleBlueprintAction is fully hoisted and deleted; the hoisted
+// HandleBlueprintModifyScs member is also called externally by
+// EditorFunctionHandlers.cpp:
+//   Core     -> HandleBlueprint<Action> member (RequestId, Payload, ...)
+//   Graph    -> HandleBlueprintGraph<Action> member (RequestId, Payload, ...)
+//   Widget   -> HandleManageWidgetAuthoringAction(RequestId, "manage_widget_authoring", ...)
+//   CommonUi -> HandleCommonUiAction(RequestId, "manage_common_ui", ...)
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
@@ -46,7 +46,7 @@ namespace McpCalls::ManageBlueprint
 // alias of blueprintCandidates) and the SCS snake_case aliases. The five
 // zero-param actions (bind_*/create_property_binding) author nothing.
 
-// Core (HandleBlueprintAction, Action arg "manage_blueprint")
+// Core (per-action HandleBlueprint* members, BlueprintHandlers.cpp)
 
 static void S_Create(FMcpSchemaBuilder& B)
 {
@@ -1604,9 +1604,9 @@ static void S_CreateCommonTextStyle(FMcpSchemaBuilder& B)
 }
 
 // --- Classes ----------------------------------------------------------------
-// Flags authored per action. RequiresEditor on Core + Graph: BlueprintHandlers.cpp
-// (HandleBlueprintAction, whole-body #if WITH_EDITOR) and BlueprintGraphHandlers.cpp
-// (HandleBlueprintGraphAction, whole-body #if WITH_EDITOR) are editor-gated. NOT on
+// Flags authored per action. RequiresEditor on Core + Graph: the per-action
+// HandleBlueprint* members (BlueprintHandlers.cpp) and HandleBlueprintGraph* members
+// (BlueprintGraphHandlers.cpp) are each #if WITH_EDITOR gated. NOT on
 // Widget (WidgetAuthoringHandlers.cpp carries no editor gate) or CommonUi
 // (CommonUIHandlers.cpp gates on MCP_HAS_COMMON_UI, not WITH_EDITOR) — flagging
 // either would newly reject the GEditor-less runs the shim served. Mutating on every
@@ -1676,15 +1676,15 @@ class FMcpCall_ManageBlueprint_##ClassSuffix final : public FMcpCall            
 	}                                                                                    \
 };
 
-// Core (HandleBlueprintAction, Action arg "manage_blueprint")
+// Core (per-action HandleBlueprint* members, BlueprintHandlers.cpp)
 MCP_BP_CORE_CALL(Create, "create", HandleBlueprintCreateAction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(Get, "get", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
+MCP_BP_CORE_CALL(Get, "get", HandleBlueprintGet, EMcpCallFlags::RequiresEditor)
 MCP_BP_CORE_CALL(Compile, "compile", HandleBlueprintCompile, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_CORE_CALL(AddComponent, "add_component", HandleBlueprintAddComponent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetDefault, "set_default", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(GetDefault, "get_default", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
-MCP_BP_ACTION_CALL(ListFunctions, "list_functions", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
-MCP_BP_ACTION_CALL(ModifyScs, "modify_scs", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_CORE_CALL(SetDefault, "set_default", HandleBlueprintSetDefault, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_CORE_CALL(GetDefault, "get_default", HandleBlueprintGetDefault, EMcpCallFlags::RequiresEditor)
+MCP_BP_CORE_CALL(ListFunctions, "list_functions", HandleBlueprintListFunctions, EMcpCallFlags::RequiresEditor)
+MCP_BP_CORE_CALL(ModifyScs, "modify_scs", HandleBlueprintModifyScs, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_CORE_CALL(GetScs, "get_scs", HandleBlueprintGetScs, EMcpCallFlags::RequiresEditor)
 MCP_BP_CORE_CALL(AddScsComponent, "add_scs_component", HandleBlueprintAddScsComponent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_CORE_CALL(RemoveScsComponent, "remove_scs_component", HandleBlueprintRemoveScsComponent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -1693,17 +1693,17 @@ MCP_BP_CORE_CALL(SetScsTransform, "set_scs_transform", HandleBlueprintSetScsTran
 MCP_BP_CORE_CALL(SetScsProperty, "set_scs_property", HandleBlueprintSetScsProperty, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_CORE_CALL(EnsureExists, "ensure_exists", HandleBlueprintEnsureExists, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_CORE_CALL(ProbeHandle, "probe_handle", HandleBlueprintProbeHandle, EMcpCallFlags::RequiresEditor)
-MCP_BP_ACTION_CALL(AddVariable, "add_variable", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(RemoveVariable, "remove_variable", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(RenameVariable, "rename_variable", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddFunction, "add_function", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(RemoveFunction, "remove_function", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddEvent, "add_event", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(RemoveEvent, "remove_event", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_CORE_CALL(AddVariable, "add_variable", HandleBlueprintAddVariable, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_CORE_CALL(RemoveVariable, "remove_variable", HandleBlueprintRemoveVariable, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_CORE_CALL(RenameVariable, "rename_variable", HandleBlueprintRenameVariable, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_CORE_CALL(AddFunction, "add_function", HandleBlueprintAddFunction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_CORE_CALL(RemoveFunction, "remove_function", HandleBlueprintRemoveFunction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_CORE_CALL(AddEvent, "add_event", HandleBlueprintAddEvent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_CORE_CALL(RemoveEvent, "remove_event", HandleBlueprintRemoveEvent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_CORE_CALL(AddConstructionScript, "add_construction_script", HandleBlueprintAddConstructionScript, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetVariableMetadata, "set_variable_metadata", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetMetadata, "set_blueprint_metadata", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddNode, "add_node", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_CORE_CALL(SetVariableMetadata, "set_variable_metadata", HandleBlueprintSetVariableMetadata, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_CORE_CALL(SetMetadata, "set_blueprint_metadata", HandleBlueprintSetMetadata, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_CORE_CALL(AddNode, "add_node", HandleBlueprintAddNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // BlueprintGraph (per-action HandleBlueprintGraph* members, BlueprintGraphHandlers.cpp)
 MCP_BP_GRAPH_CALL(CreateNode, "create_node", HandleBlueprintGraphCreateNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
