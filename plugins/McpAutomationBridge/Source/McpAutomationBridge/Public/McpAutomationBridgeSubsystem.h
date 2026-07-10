@@ -735,8 +735,7 @@ private:
   // member handlers (HandleEffect*) live in the transitional public block
   // below.
   // manage_blueprint is classed — see MCP/Calls/McpCalls_ManageBlueprint.cpp.
-  // Its four route dispatchers survive (HandleBlueprintAction recurses into
-  // HandleBlueprintGraphAction/HandleSCSAction and is called externally by
+  // Its route dispatchers survive (HandleBlueprintAction is called externally by
   // EditorFunctionHandlers.cpp); public so the classed Core actions delegate.
 public:
   bool HandleBlueprintAction(const FString &RequestId, const FString &Action,
@@ -1267,11 +1266,6 @@ private:
   HandleAddFoliageInstances(const FString &RequestId, const FString &Action,
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle RequestingSocket);
-  // SCS Blueprint authoring handler
-  bool HandleSCSAction(const FString &RequestId, const FString &Action,
-                       const TSharedPtr<FJsonObject> &Payload,
-                       FMcpResponseHandle RequestingSocket);
-
   // Additional consolidated tool handlers
   bool
   HandleConsoleCommandAction(const FString &RequestId, const FString &Action,
@@ -1328,6 +1322,34 @@ public:
   bool HandleBlueprintGraphListAnimbpGraphs(const FString &RequestId,
       const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
   bool HandleBlueprintGraphGetTransitionRuleGraph(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+
+  // manage_blueprint Core + SCS per-action members (BlueprintHandlers.cpp),
+  // called directly by their classed actions. Hoisted verbatim from
+  // HandleBlueprintAction's dispatcher and the retired HandleSCSAction.
+  bool HandleBlueprintAddScsComponent(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintRemoveScsComponent(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintReparentScsComponent(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintSetScsTransform(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintSetScsProperty(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintAddConstructionScript(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintCompile(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintCreateAction(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintEnsureExists(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintProbeHandle(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintAddComponent(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGetScs(const FString &RequestId,
       const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 
   // Called directly by the classed manage_effect graph actions (MCP/Calls/);

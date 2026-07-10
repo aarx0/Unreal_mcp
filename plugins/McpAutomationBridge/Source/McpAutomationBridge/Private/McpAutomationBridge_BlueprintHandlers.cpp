@@ -2006,164 +2006,6 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     return FString();
   };
 
-  // add_scs_component: add component to SCS
-  if (CleanAction.Equals(TEXT("add_scs_component"), ESearchCase::IgnoreCase)) {
-    FString BPPath;
-    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
-    if (BPPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
-    }
-    FString CompClass;
-    Payload->TryGetStringField(TEXT("component_class"), CompClass);
-    if (CompClass.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("componentClass"), CompClass);
-    }
-    FString CompName;
-    Payload->TryGetStringField(TEXT("component_name"), CompName);
-    if (CompName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("componentName"), CompName);
-    }
-    FString ParentName;
-    Payload->TryGetStringField(TEXT("parent_component"), ParentName);
-    if (ParentName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("parentComponent"), ParentName);
-    }
-    // Feature #1, #2: Extract mesh and material paths for assignment
-    FString MeshPath;
-    Payload->TryGetStringField(TEXT("mesh_path"), MeshPath);
-    if (MeshPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("meshPath"), MeshPath);
-    }
-    FString MaterialPath;
-    Payload->TryGetStringField(TEXT("material_path"), MaterialPath);
-    if (MaterialPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("materialPath"), MaterialPath);
-    }
-    TSharedPtr<FJsonObject> Result = FSCSHandlers::AddSCSComponent(
-        BPPath, CompClass, CompName, ParentName, MeshPath, MaterialPath);
-    SendAutomationResponse(RequestingSocket, RequestId,
-                           GetJsonBoolField(Result, TEXT("success")),
-                           SafeGetStr(Result, TEXT("message")), Result,
-                           SafeGetStr(Result, TEXT("error")));
-    return true;
-  }
-
-  // remove_scs_component: remove component from SCS
-  if (CleanAction.Equals(TEXT("remove_scs_component"), ESearchCase::IgnoreCase)) {
-    FString BPPath;
-    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
-    if (BPPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
-    }
-    FString CompName;
-    Payload->TryGetStringField(TEXT("component_name"), CompName);
-    if (CompName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("componentName"), CompName);
-    }
-    TSharedPtr<FJsonObject> Result =
-        FSCSHandlers::RemoveSCSComponent(BPPath, CompName);
-    SendAutomationResponse(RequestingSocket, RequestId,
-                           GetJsonBoolField(Result, TEXT("success")),
-                           SafeGetStr(Result, TEXT("message")), Result,
-                           SafeGetStr(Result, TEXT("error")));
-    return true;
-  }
-
-  // reparent_scs_component: reparent component in SCS
-  if (CleanAction.Equals(TEXT("reparent_scs_component"), ESearchCase::IgnoreCase)) {
-    FString BPPath;
-    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
-    if (BPPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
-    }
-    FString CompName;
-    Payload->TryGetStringField(TEXT("component_name"), CompName);
-    if (CompName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("componentName"), CompName);
-    }
-    FString NewParent;
-    Payload->TryGetStringField(TEXT("new_parent"), NewParent);
-    if (NewParent.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("newParent"), NewParent);
-    }
-    TSharedPtr<FJsonObject> Result =
-        FSCSHandlers::ReparentSCSComponent(BPPath, CompName, NewParent);
-    SendAutomationResponse(RequestingSocket, RequestId,
-                           GetJsonBoolField(Result, TEXT("success")),
-                           SafeGetStr(Result, TEXT("message")), Result,
-                           SafeGetStr(Result, TEXT("error")));
-    return true;
-  }
-
-  // set_scs_component_transform: set component transform in SCS
-  if (CleanAction.Equals(TEXT("set_scs_transform"), ESearchCase::IgnoreCase)) {
-    FString BPPath;
-    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
-    if (BPPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
-    }
-    FString CompName;
-    Payload->TryGetStringField(TEXT("component_name"), CompName);
-    if (CompName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("componentName"), CompName);
-    }
-    TSharedPtr<FJsonObject> Result =
-        FSCSHandlers::SetSCSComponentTransform(BPPath, CompName, Payload);
-    SendAutomationResponse(RequestingSocket, RequestId,
-                           GetJsonBoolField(Result, TEXT("success")),
-                           SafeGetStr(Result, TEXT("message")), Result,
-                           SafeGetStr(Result, TEXT("error")));
-    return true;
-  }
-
-  // set_scs_component_property: set component property in SCS
-  if (CleanAction.Equals(TEXT("set_scs_property"), ESearchCase::IgnoreCase)) {
-    FString BPPath;
-    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
-    if (BPPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
-    }
-    FString CompName;
-    Payload->TryGetStringField(TEXT("component_name"), CompName);
-    if (CompName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("componentName"), CompName);
-    }
-    FString PropName;
-    Payload->TryGetStringField(TEXT("property_name"), PropName);
-    if (PropName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("propertyName"), PropName);
-    }
-    McpPropertyReflection::FMcpTypedValue TypedValue;
-    FString ValueParseDetail;
-    switch (McpPropertyReflection::ReadDiscriminatedValue(Payload, TypedValue,
-                                                          ValueParseDetail)) {
-    case McpPropertyReflection::EMcpTypedValueParse::None:
-      SendAutomationResponse(
-          RequestingSocket, RequestId, false,
-          TEXT("set exactly one typed value field: boolValue, intValue, "
-               "floatValue, stringValue, colorValue, vectorValue, structValue, "
-               "or arrayValue"),
-          nullptr, TEXT("NO_CHANGES_REQUESTED"));
-      return true;
-    case McpPropertyReflection::EMcpTypedValueParse::Ambiguous:
-      SendAutomationResponse(
-          RequestingSocket, RequestId, false,
-          *FString::Printf(TEXT("set exactly one typed value field, got: %s"),
-                           *ValueParseDetail),
-          nullptr, TEXT("AMBIGUOUS_VALUE"));
-      return true;
-    case McpPropertyReflection::EMcpTypedValueParse::Ok:
-      break;
-    }
-    TSharedPtr<FJsonObject> Result = FSCSHandlers::SetSCSComponentProperty(
-        BPPath, CompName, PropName, TypedValue.Json);
-    SendAutomationResponse(RequestingSocket, RequestId,
-                           GetJsonBoolField(Result, TEXT("success")),
-                           SafeGetStr(Result, TEXT("message")), Result,
-                           SafeGetStr(Result, TEXT("error")));
-    return true;
-  }
-
   // blueprint_set_variable_metadata: apply metadata to the Blueprint variable
   // (editor-only when available)
   if (CleanAction.Equals(TEXT("set_variable_metadata"), ESearchCase::IgnoreCase)) {
@@ -2327,96 +2169,6 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
         RequestingSocket, RequestId, false,
         TEXT("blueprint_set_variable_metadata requires editor build"), nullptr,
         TEXT("NOT_AVAILABLE"));
-    return true;
-#endif
-  }
-
-  if (CleanAction.Equals(TEXT("add_construction_script"), ESearchCase::IgnoreCase)) {
-    FString Path = ResolveBlueprintRequestedPath();
-    if (Path.IsEmpty()) {
-      SendAutomationResponse(
-          RequestingSocket, RequestId, false,
-          TEXT("blueprint_add_construction_script requires a blueprint path."),
-          nullptr, TEXT("INVALID_BLUEPRINT_PATH"));
-      return true;
-    }
-
-#if WITH_EDITOR
-    UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
-           TEXT("HandleBlueprintAction: ensuring construction script graph for "
-                "'%s' (RequestId=%s)"),
-           *Path, *RequestId);
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    FString Normalized, LoadErr;
-    UBlueprint *BP = LoadBlueprintAsset(Path, Normalized, LoadErr);
-
-    if (!BP) {
-      Result->SetStringField(TEXT("error"), LoadErr);
-      UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
-             TEXT("HandleBlueprintAction: blueprint_add_construction_script "
-                  "failed to load '%s' (%s)"),
-             *Path, *LoadErr);
-      SendAutomationResponse(RequestingSocket, RequestId, false, LoadErr,
-                             Result, TEXT("BLUEPRINT_NOT_FOUND"));
-      return true;
-    }
-
-    UEdGraph *ConstructionGraph = nullptr;
-    for (UEdGraph *Graph : BP->FunctionGraphs) {
-      if (Graph &&
-          Graph->GetFName() == UEdGraphSchema_K2::FN_UserConstructionScript) {
-        ConstructionGraph = Graph;
-        break;
-      }
-    }
-
-    if (!ConstructionGraph) {
-      UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
-             TEXT("HandleBlueprintAction: creating new construction script "
-                  "graph for '%s'"),
-             *Path);
-      ConstructionGraph = FBlueprintEditorUtils::CreateNewGraph(
-          BP, UEdGraphSchema_K2::FN_UserConstructionScript,
-          UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
-      FBlueprintEditorUtils::AddFunctionGraph<UClass>(
-          BP, ConstructionGraph, /*bIsUserCreated=*/false, nullptr);
-    }
-
-    if (ConstructionGraph) {
-      FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
-      Result->SetBoolField(TEXT("success"), true);
-      Result->SetStringField(TEXT("blueprintPath"), Path);
-      Result->SetStringField(TEXT("graphName"), ConstructionGraph->GetName());
-      Result->SetStringField(
-          TEXT("note"),
-          TEXT("Construction script graph ensured. Use blueprint_add_node with "
-               "graphName='UserConstructionScript' to add nodes."));
-      UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
-             TEXT("HandleBlueprintAction: construction script graph ready '%s' "
-                  "graph='%s'"),
-             *Path, *ConstructionGraph->GetName());
-      SendAutomationResponse(RequestingSocket, RequestId, true,
-                             TEXT("Construction script graph ready."), Result,
-                             FString());
-    } else {
-      Result->SetBoolField(TEXT("success"), false);
-      Result->SetStringField(
-          TEXT("error"), TEXT("Failed to create construction script graph"));
-      UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
-             TEXT("HandleBlueprintAction: failed to create construction script "
-                  "graph for '%s'"),
-             *Path);
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("Construction script creation failed"),
-                             Result, TEXT("GRAPH_ERROR"));
-    }
-    return true;
-#else
-    SendAutomationResponse(
-        RequestingSocket, RequestId, false,
-        TEXT("blueprint_add_construction_script requires editor build"),
-        nullptr, TEXT("NOT_AVAILABLE"));
     return true;
 #endif
   }
@@ -4275,71 +4027,6 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  // Compile a Blueprint asset (editor builds only). Returns whether
-  // compilation (and optional save) succeeded.
-  if (CleanAction.Equals(TEXT("compile"), ESearchCase::IgnoreCase)) {
-    FString Path = ResolveBlueprintRequestedPath();
-    if (Path.IsEmpty()) {
-      SendAutomationResponse(
-          RequestingSocket, RequestId, false,
-          TEXT("blueprint_compile requires a blueprint path."), nullptr,
-          TEXT("INVALID_BLUEPRINT_PATH"));
-      return true;
-    }
-    // The schema's generic 'save' is an alias for 'saveAfterCompile'.
-    bool bSaveAfterCompile = false;
-    if (LocalPayload->HasField(TEXT("saveAfterCompile")))
-      LocalPayload->TryGetBoolField(TEXT("saveAfterCompile"),
-                                    bSaveAfterCompile);
-    else if (LocalPayload->HasField(TEXT("save")))
-      LocalPayload->TryGetBoolField(TEXT("save"), bSaveAfterCompile);
-    // Editor-only compile
-#if WITH_EDITOR
-    FString Normalized;
-    FString LoadErr;
-    UBlueprint *BP = LoadBlueprintAsset(Path, Normalized, LoadErr);
-    if (!BP) {
-      TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
-      Err->SetStringField(TEXT("error"), LoadErr);
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("Failed to load blueprint for compilation"),
-                             Err, TEXT("NOT_FOUND"));
-      return true;
-    }
-    McpSafeCompileBlueprint(BP);
-    bool bSaved = false;
-    if (bSaveAfterCompile) {
-      // saveAfterCompile is an explicit caller request, so bypass the time-based
-      // save throttle (bForce=true). Otherwise a recent save of the same asset
-      // would make this return saved:true WITHOUT writing -- leaving structural
-      // edits (e.g. a remove_widget) unpersisted on disk. McpSafeAssetSave forces
-      // the dirty flag itself, so the write always lands.
-      bSaved = SaveLoadedAssetThrottled(BP, /*ThrottleSecondsOverride=*/-1.0,
-                                        /*bForce=*/true);
-    }
-    TSharedPtr<FJsonObject> Out = McpHandlerUtils::CreateResultObject();
-    Out->SetBoolField(TEXT("compiled"), true);
-    Out->SetBoolField(TEXT("saved"), bSaved);
-    Out->SetStringField(TEXT("blueprintPath"), Path);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
-                           TEXT("Blueprint compiled"), Out, FString());
-    return true;
-#else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
-                           TEXT("blueprint_compile requires editor build"),
-                           nullptr, TEXT("NOT_AVAILABLE"));
-    return true;
-#endif
-  }
-
-  // blueprint_create handler: parse payload and prepare coalesced creation
-  // Support both explicit blueprint_create and the nested 'create' action from
-  // manage_blueprint
-  if (CleanAction.Equals(TEXT("create"), ESearchCase::IgnoreCase)) {
-    return FBlueprintCreationHandlers::HandleBlueprintCreate(
-        this, RequestId, LocalPayload, RequestingSocket);
-  }
-
   // Other blueprint_* actions (modify_scs, compile, add_variable, add_function,
   // etc.) For simplicity, unhandled blueprint actions return NOT_IMPLEMENTED so
   // the server may fall back to Python helpers if available.
@@ -4965,157 +4652,6 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  // blueprint_ensure_exists: Check if blueprint exists, create if not
-  if (CleanAction.Equals(TEXT("ensure_exists"), ESearchCase::IgnoreCase)) {
-    UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
-           TEXT("Entered blueprint_ensure_exists handler: RequestId=%s"),
-           *RequestId);
-    FString Path = ResolveBlueprintRequestedPath();
-    if (Path.IsEmpty()) {
-      SendAutomationResponse(
-          RequestingSocket, RequestId, false,
-          TEXT("blueprint_ensure_exists requires a blueprint path."), nullptr,
-          TEXT("INVALID_BLUEPRINT_PATH"));
-      return true;
-    }
-
-    FString ParentClass;
-    LocalPayload->TryGetStringField(TEXT("parentClass"), ParentClass);
-    bool bCreateIfMissing = true;
-    if (LocalPayload->HasField(TEXT("createIfMissing"))) {
-      LocalPayload->TryGetBoolField(TEXT("createIfMissing"), bCreateIfMissing);
-    }
-
-#if WITH_EDITOR
-    // Check if blueprint exists using lightweight check
-    FString CheckPath = Path;
-    if (!CheckPath.StartsWith(TEXT("/Game")) &&
-        !CheckPath.StartsWith(TEXT("/Engine")) &&
-        !CheckPath.StartsWith(TEXT("/Script"))) {
-      if (CheckPath.StartsWith(TEXT("/"))) {
-        CheckPath = TEXT("/Game") + CheckPath;
-      } else {
-        CheckPath = TEXT("/Game/") + CheckPath;
-      }
-    }
-    if (CheckPath.EndsWith(TEXT(".uasset"))) {
-      CheckPath = CheckPath.LeftChop(7);
-    }
-
-    bool bExists = UEditorAssetLibrary::DoesAssetExist(CheckPath);
-    bool bCreated = false;
-
-    if (!bExists && bCreateIfMissing) {
-      // Delegate to HandleBlueprintCreate for creation
-      TSharedPtr<FJsonObject> CreatePayload = McpHandlerUtils::CreateResultObject();
-      CreatePayload->SetStringField(TEXT("blueprintPath"), Path);
-      if (!ParentClass.IsEmpty()) {
-        CreatePayload->SetStringField(TEXT("parentClass"), ParentClass);
-      }
-      // Use FBlueprintCreationHandlers to create the blueprint
-      bool bCreateResult = FBlueprintCreationHandlers::HandleBlueprintCreate(
-          this, RequestId, CreatePayload, RequestingSocket);
-      // If creation handler returned true, it sent its own response
-      if (bCreateResult) {
-        return true;
-      }
-      // Check again after creation attempt
-      bExists = UEditorAssetLibrary::DoesAssetExist(CheckPath);
-      bCreated = bExists;
-    }
-
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetBoolField(TEXT("exists"), bExists);
-    Resp->SetBoolField(TEXT("created"), bCreated);
-    Resp->SetStringField(TEXT("blueprintPath"), bExists ? CheckPath : Path);
-    SendAutomationResponse(
-        RequestingSocket, RequestId, true,
-        bCreated ? TEXT("Blueprint created")
-                 : (bExists ? TEXT("Blueprint exists")
-                            : TEXT("Blueprint not found")),
-        Resp, FString());
-    return true;
-#else
-    SendAutomationResponse(
-        RequestingSocket, RequestId, false,
-        TEXT("blueprint_ensure_exists requires editor build"), nullptr,
-        TEXT("NOT_AVAILABLE"));
-    return true;
-#endif
-  }
-
-  // blueprint_probe_handle: Lightweight check for blueprint existence without loading
-  if (CleanAction.Equals(TEXT("probe_handle"), ESearchCase::IgnoreCase)) {
-    UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
-           TEXT("Entered blueprint_probe_handle handler: RequestId=%s"),
-           *RequestId);
-    FString Path = ResolveBlueprintRequestedPath();
-    if (Path.IsEmpty()) {
-      SendAutomationResponse(
-          RequestingSocket, RequestId, false,
-          TEXT("blueprint_probe_handle requires a blueprint path."), nullptr,
-          TEXT("INVALID_BLUEPRINT_PATH"));
-      return true;
-    }
-
-#if WITH_EDITOR
-    // Normalize path
-    FString CheckPath = Path;
-    if (!CheckPath.StartsWith(TEXT("/Game")) &&
-        !CheckPath.StartsWith(TEXT("/Engine")) &&
-        !CheckPath.StartsWith(TEXT("/Script"))) {
-      if (CheckPath.StartsWith(TEXT("/"))) {
-        CheckPath = TEXT("/Game") + CheckPath;
-      } else {
-        CheckPath = TEXT("/Game/") + CheckPath;
-      }
-    }
-    if (CheckPath.EndsWith(TEXT(".uasset"))) {
-      CheckPath = CheckPath.LeftChop(7);
-    }
-
-    bool bExists = UEditorAssetLibrary::DoesAssetExist(CheckPath);
-    FString AssetClass;
-
-    if (bExists) {
-      // Try to get asset class without fully loading - use FindAssetData
-      IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
-      FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(CheckPath));
-#else
-      // UE 5.0: GetAssetByObjectPath takes FName
-      FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FName(*CheckPath));
-#endif
-      if (AssetData.IsValid()) {
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
-        AssetClass = AssetData.AssetClassPath.GetAssetName().ToString();
-#else
-        // UE 5.0: AssetClass is FName
-        AssetClass = AssetData.AssetClass.ToString();
-#endif
-      }
-    }
-
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetBoolField(TEXT("exists"), bExists);
-    Resp->SetStringField(TEXT("path"), bExists ? CheckPath : Path);
-    if (!AssetClass.IsEmpty()) {
-      Resp->SetStringField(TEXT("assetClass"), AssetClass);
-    }
-    SendAutomationResponse(RequestingSocket, RequestId, true,
-                           bExists ? TEXT("Blueprint handle found")
-                                   : TEXT("Blueprint not found"),
-                           Resp, FString());
-    return true;
-#else
-    SendAutomationResponse(
-        RequestingSocket, RequestId, false,
-        TEXT("blueprint_probe_handle requires editor build"), nullptr,
-        TEXT("NOT_AVAILABLE"));
-    return true;
-#endif
-  }
-
   // set_blueprint_metadata: Set metadata on a blueprint asset
   if (CleanAction.Equals(TEXT("set_blueprint_metadata"), ESearchCase::IgnoreCase)) {
     UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
@@ -5206,18 +4742,6 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  // Handle SCS (Simple Construction Script) operations - must be called before
-  // the final fallback
-  UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
-         TEXT("HandleBlueprintAction: checking HandleSCSAction for action='%s' "
-              "(clean='%s')"),
-         *Action, *CleanAction);
-  if (HandleSCSAction(RequestId, CleanAction, Payload, RequestingSocket)) {
-    UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
-           TEXT("HandleSCSAction consumed request"));
-    return true;
-  }
-
   // If we reached here, it's not a blueprint action we recognize.
   // Return false so the dispatcher reports UNKNOWN_ACTION (there is no
   // secondary dispatch chain).
@@ -5238,54 +4762,676 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif // WITH_EDITOR
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSCSAction(
-    const FString &RequestId, const FString &Action,
-    const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
+#endif // WITH_EDITOR from line 11
+
+// =============================================================================
+// Per-action manage_blueprint Core + SCS members
+// =============================================================================
+// Hoisted verbatim out of HandleBlueprintAction's dispatcher (Core branches) and
+// the retired HandleSCSAction (add_component / get_scs). Each is dispatched
+// directly by its classed action (MCP/Calls/McpCalls_ManageBlueprint.cpp); the
+// dispatcher keeps its own copies of the shared locals for the branches that
+// remain, so these members replicate what they need via the preambles below.
 #if WITH_EDITOR
-  if (!Payload.IsValid()) {
-    SendAutomationResponse(RequestingSocket, RequestId, false,
-                           TEXT("SCS operations require valid payload"),
-                           nullptr, TEXT("INVALID_PAYLOAD"));
-    return true;
-  }
-
-  FString CleanAction = Action;
-  CleanAction.TrimStartAndEndInline();
-
-  // Helper to resolve blueprint
-  auto ResolveBlueprint = [&]() -> UBlueprint * {
-    FString BlueprintPath;
-    if (Payload->TryGetStringField(TEXT("name"), BlueprintPath) ||
-        Payload->TryGetStringField(TEXT("blueprintPath"), BlueprintPath)) {
-      if (!BlueprintPath.IsEmpty()) {
-        return LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-      }
-    }
-
-    // Try blueprint candidates array
-    const TArray<TSharedPtr<FJsonValue>> *Candidates = nullptr;
-    if (Payload->TryGetArrayField(TEXT("blueprintCandidates"), Candidates) &&
-        Candidates->Num() > 0) {
-      for (const TSharedPtr<FJsonValue> &Candidate : *Candidates) {
-        if (Candidate.IsValid() && Candidate->Type == EJson::String) {
-          FString CandidatePath = Candidate->AsString();
-          if (!CandidatePath.IsEmpty()) {
-            UBlueprint *BP = LoadObject<UBlueprint>(nullptr, *CandidatePath);
-            if (BP)
-              return BP;
-          }
-        }
-      }
-    }
-
-    return nullptr;
+// SafeGetStr: pulls an optional string field, "" when absent — the SCS-family
+// members report through it. A local lambda in the live dispatcher; a preamble
+// here keeps the members self-contained (no unity-fragile file static).
+#define MCP_BPSCS_SAFEGETSTR() \
+  auto SafeGetStr = [](const TSharedPtr<FJsonObject> &O, const FString &F) { \
+    FString V; \
+    if (O->TryGetStringField(F, V)) \
+      return V; \
+    return FString(); \
   };
 
-  // Add component to SCS. Note: add_scs_component is fully served by the Core
-  // HandleBlueprintAction branch (which returns before delegating here), so this
-  // branch serves add_component only.
-  if (CleanAction.Equals(TEXT("add_component"), ESearchCase::IgnoreCase)) {
+// Core preamble: LocalPayload + the requested-path resolver (honors
+// requestedPath / name / blueprintPath / blueprintCandidates / candidates),
+// replicated from HandleBlueprintAction's dispatcher top.
+#define MCP_BPCORE_PREAMBLE() \
+  TSharedPtr<FJsonObject> LocalPayload = \
+      Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject(); \
+  auto ResolveBlueprintRequestedPath = [&]() -> FString { \
+    FString Req; \
+    if (LocalPayload->TryGetStringField(TEXT("requestedPath"), Req) && \
+        !Req.TrimStartAndEnd().IsEmpty()) { \
+      FString Norm; \
+      if (FindBlueprintNormalizedPath(Req, Norm) && \
+          !Norm.TrimStartAndEnd().IsEmpty()) { return Norm; } \
+      return Req; \
+    } \
+    if (LocalPayload->TryGetStringField(TEXT("name"), Req) && \
+        !Req.TrimStartAndEnd().IsEmpty()) { \
+      FString Norm; \
+      if (FindBlueprintNormalizedPath(Req, Norm) && \
+          !Norm.TrimStartAndEnd().IsEmpty()) { return Norm; } \
+      return Req; \
+    } \
+    if (LocalPayload->TryGetStringField(TEXT("blueprintPath"), Req) && \
+        !Req.TrimStartAndEnd().IsEmpty()) { \
+      FString Norm; \
+      if (FindBlueprintNormalizedPath(Req, Norm) && \
+          !Norm.TrimStartAndEnd().IsEmpty()) { return Norm; } \
+      return Req; \
+    } \
+    const TArray<TSharedPtr<FJsonValue>> *CandidateArray = nullptr; \
+    if (LocalPayload->TryGetArrayField(TEXT("blueprintCandidates"), \
+                                       CandidateArray) && \
+        CandidateArray && CandidateArray->Num() > 0) { \
+      for (const TSharedPtr<FJsonValue> &V : *CandidateArray) { \
+        if (!V.IsValid() || V->Type != EJson::String) continue; \
+        FString Candidate = V->AsString(); \
+        if (Candidate.TrimStartAndEnd().IsEmpty()) continue; \
+        FString Norm; \
+        if (FindBlueprintNormalizedPath(Candidate, Norm)) \
+          return !Norm.TrimStartAndEnd().IsEmpty() ? Norm : Candidate; \
+      } \
+    } \
+    if (LocalPayload->TryGetArrayField(TEXT("candidates"), CandidateArray) && \
+        CandidateArray && CandidateArray->Num() > 0) { \
+      for (const TSharedPtr<FJsonValue> &V : *CandidateArray) { \
+        if (!V.IsValid() || V->Type != EJson::String) continue; \
+        FString Candidate = V->AsString(); \
+        if (Candidate.TrimStartAndEnd().IsEmpty()) continue; \
+        FString Norm; \
+        if (FindBlueprintNormalizedPath(Candidate, Norm)) \
+          return !Norm.TrimStartAndEnd().IsEmpty() ? Norm : Candidate; \
+      } \
+    } \
+    return FString(); \
+  };
+
+// SCS preamble: payload check + ResolveBlueprint (LoadObject by
+// name/blueprintPath/blueprintCandidates), from the retired HandleSCSAction.
+#define MCP_BPSCS_PREAMBLE() \
+  if (!Payload.IsValid()) { \
+    SendAutomationResponse(RequestingSocket, RequestId, false, \
+                           TEXT("SCS operations require valid payload"), \
+                           nullptr, TEXT("INVALID_PAYLOAD")); \
+    return true; \
+  } \
+  auto ResolveBlueprint = [&]() -> UBlueprint * { \
+    FString BlueprintPath; \
+    if (Payload->TryGetStringField(TEXT("name"), BlueprintPath) || \
+        Payload->TryGetStringField(TEXT("blueprintPath"), BlueprintPath)) { \
+      if (!BlueprintPath.IsEmpty()) { \
+        return LoadObject<UBlueprint>(nullptr, *BlueprintPath); \
+      } \
+    } \
+    const TArray<TSharedPtr<FJsonValue>> *Candidates = nullptr; \
+    if (Payload->TryGetArrayField(TEXT("blueprintCandidates"), Candidates) && \
+        Candidates->Num() > 0) { \
+      for (const TSharedPtr<FJsonValue> &Candidate : *Candidates) { \
+        if (Candidate.IsValid() && Candidate->Type == EJson::String) { \
+          FString CandidatePath = Candidate->AsString(); \
+          if (!CandidatePath.IsEmpty()) { \
+            UBlueprint *BP = LoadObject<UBlueprint>(nullptr, *CandidatePath); \
+            if (BP) return BP; \
+          } \
+        } \
+      } \
+    } \
+    return nullptr; \
+  };
+#endif // WITH_EDITOR (manage_blueprint Core/SCS member preambles)
+
+bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddScsComponent(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  MCP_BPSCS_SAFEGETSTR();
+    FString BPPath;
+    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
+    if (BPPath.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
+    }
+    FString CompClass;
+    Payload->TryGetStringField(TEXT("component_class"), CompClass);
+    if (CompClass.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("componentClass"), CompClass);
+    }
+    FString CompName;
+    Payload->TryGetStringField(TEXT("component_name"), CompName);
+    if (CompName.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("componentName"), CompName);
+    }
+    FString ParentName;
+    Payload->TryGetStringField(TEXT("parent_component"), ParentName);
+    if (ParentName.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("parentComponent"), ParentName);
+    }
+    // Feature #1, #2: Extract mesh and material paths for assignment
+    FString MeshPath;
+    Payload->TryGetStringField(TEXT("mesh_path"), MeshPath);
+    if (MeshPath.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("meshPath"), MeshPath);
+    }
+    FString MaterialPath;
+    Payload->TryGetStringField(TEXT("material_path"), MaterialPath);
+    if (MaterialPath.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("materialPath"), MaterialPath);
+    }
+    TSharedPtr<FJsonObject> Result = FSCSHandlers::AddSCSComponent(
+        BPPath, CompClass, CompName, ParentName, MeshPath, MaterialPath);
+    SendAutomationResponse(RequestingSocket, RequestId,
+                           GetJsonBoolField(Result, TEXT("success")),
+                           SafeGetStr(Result, TEXT("message")), Result,
+                           SafeGetStr(Result, TEXT("error")));
+    return true;
+#else
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("blueprint actions are editor-only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveScsComponent(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  MCP_BPSCS_SAFEGETSTR();
+    FString BPPath;
+    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
+    if (BPPath.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
+    }
+    FString CompName;
+    Payload->TryGetStringField(TEXT("component_name"), CompName);
+    if (CompName.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("componentName"), CompName);
+    }
+    TSharedPtr<FJsonObject> Result =
+        FSCSHandlers::RemoveSCSComponent(BPPath, CompName);
+    SendAutomationResponse(RequestingSocket, RequestId,
+                           GetJsonBoolField(Result, TEXT("success")),
+                           SafeGetStr(Result, TEXT("message")), Result,
+                           SafeGetStr(Result, TEXT("error")));
+    return true;
+#else
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("blueprint actions are editor-only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleBlueprintReparentScsComponent(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  MCP_BPSCS_SAFEGETSTR();
+    FString BPPath;
+    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
+    if (BPPath.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
+    }
+    FString CompName;
+    Payload->TryGetStringField(TEXT("component_name"), CompName);
+    if (CompName.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("componentName"), CompName);
+    }
+    FString NewParent;
+    Payload->TryGetStringField(TEXT("new_parent"), NewParent);
+    if (NewParent.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("newParent"), NewParent);
+    }
+    TSharedPtr<FJsonObject> Result =
+        FSCSHandlers::ReparentSCSComponent(BPPath, CompName, NewParent);
+    SendAutomationResponse(RequestingSocket, RequestId,
+                           GetJsonBoolField(Result, TEXT("success")),
+                           SafeGetStr(Result, TEXT("message")), Result,
+                           SafeGetStr(Result, TEXT("error")));
+    return true;
+#else
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("blueprint actions are editor-only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetScsTransform(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  MCP_BPSCS_SAFEGETSTR();
+    FString BPPath;
+    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
+    if (BPPath.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
+    }
+    FString CompName;
+    Payload->TryGetStringField(TEXT("component_name"), CompName);
+    if (CompName.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("componentName"), CompName);
+    }
+    TSharedPtr<FJsonObject> Result =
+        FSCSHandlers::SetSCSComponentTransform(BPPath, CompName, Payload);
+    SendAutomationResponse(RequestingSocket, RequestId,
+                           GetJsonBoolField(Result, TEXT("success")),
+                           SafeGetStr(Result, TEXT("message")), Result,
+                           SafeGetStr(Result, TEXT("error")));
+    return true;
+#else
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("blueprint actions are editor-only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetScsProperty(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  MCP_BPSCS_SAFEGETSTR();
+    FString BPPath;
+    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
+    if (BPPath.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
+    }
+    FString CompName;
+    Payload->TryGetStringField(TEXT("component_name"), CompName);
+    if (CompName.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("componentName"), CompName);
+    }
+    FString PropName;
+    Payload->TryGetStringField(TEXT("property_name"), PropName);
+    if (PropName.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("propertyName"), PropName);
+    }
+    McpPropertyReflection::FMcpTypedValue TypedValue;
+    FString ValueParseDetail;
+    switch (McpPropertyReflection::ReadDiscriminatedValue(Payload, TypedValue,
+                                                          ValueParseDetail)) {
+    case McpPropertyReflection::EMcpTypedValueParse::None:
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("set exactly one typed value field: boolValue, intValue, "
+               "floatValue, stringValue, colorValue, vectorValue, structValue, "
+               "or arrayValue"),
+          nullptr, TEXT("NO_CHANGES_REQUESTED"));
+      return true;
+    case McpPropertyReflection::EMcpTypedValueParse::Ambiguous:
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          *FString::Printf(TEXT("set exactly one typed value field, got: %s"),
+                           *ValueParseDetail),
+          nullptr, TEXT("AMBIGUOUS_VALUE"));
+      return true;
+    case McpPropertyReflection::EMcpTypedValueParse::Ok:
+      break;
+    }
+    TSharedPtr<FJsonObject> Result = FSCSHandlers::SetSCSComponentProperty(
+        BPPath, CompName, PropName, TypedValue.Json);
+    SendAutomationResponse(RequestingSocket, RequestId,
+                           GetJsonBoolField(Result, TEXT("success")),
+                           SafeGetStr(Result, TEXT("message")), Result,
+                           SafeGetStr(Result, TEXT("error")));
+    return true;
+#else
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("blueprint actions are editor-only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddConstructionScript(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  MCP_BPCORE_PREAMBLE();
+    FString Path = ResolveBlueprintRequestedPath();
+    if (Path.IsEmpty()) {
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("blueprint_add_construction_script requires a blueprint path."),
+          nullptr, TEXT("INVALID_BLUEPRINT_PATH"));
+      return true;
+    }
+
+#if WITH_EDITOR
+    UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
+           TEXT("HandleBlueprintAction: ensuring construction script graph for "
+                "'%s' (RequestId=%s)"),
+           *Path, *RequestId);
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    FString Normalized, LoadErr;
+    UBlueprint *BP = LoadBlueprintAsset(Path, Normalized, LoadErr);
+
+    if (!BP) {
+      Result->SetStringField(TEXT("error"), LoadErr);
+      UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
+             TEXT("HandleBlueprintAction: blueprint_add_construction_script "
+                  "failed to load '%s' (%s)"),
+             *Path, *LoadErr);
+      SendAutomationResponse(RequestingSocket, RequestId, false, LoadErr,
+                             Result, TEXT("BLUEPRINT_NOT_FOUND"));
+      return true;
+    }
+
+    UEdGraph *ConstructionGraph = nullptr;
+    for (UEdGraph *Graph : BP->FunctionGraphs) {
+      if (Graph &&
+          Graph->GetFName() == UEdGraphSchema_K2::FN_UserConstructionScript) {
+        ConstructionGraph = Graph;
+        break;
+      }
+    }
+
+    if (!ConstructionGraph) {
+      UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
+             TEXT("HandleBlueprintAction: creating new construction script "
+                  "graph for '%s'"),
+             *Path);
+      ConstructionGraph = FBlueprintEditorUtils::CreateNewGraph(
+          BP, UEdGraphSchema_K2::FN_UserConstructionScript,
+          UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
+      FBlueprintEditorUtils::AddFunctionGraph<UClass>(
+          BP, ConstructionGraph, /*bIsUserCreated=*/false, nullptr);
+    }
+
+    if (ConstructionGraph) {
+      FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
+      Result->SetBoolField(TEXT("success"), true);
+      Result->SetStringField(TEXT("blueprintPath"), Path);
+      Result->SetStringField(TEXT("graphName"), ConstructionGraph->GetName());
+      Result->SetStringField(
+          TEXT("note"),
+          TEXT("Construction script graph ensured. Use blueprint_add_node with "
+               "graphName='UserConstructionScript' to add nodes."));
+      UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
+             TEXT("HandleBlueprintAction: construction script graph ready '%s' "
+                  "graph='%s'"),
+             *Path, *ConstructionGraph->GetName());
+      SendAutomationResponse(RequestingSocket, RequestId, true,
+                             TEXT("Construction script graph ready."), Result,
+                             FString());
+    } else {
+      Result->SetBoolField(TEXT("success"), false);
+      Result->SetStringField(
+          TEXT("error"), TEXT("Failed to create construction script graph"));
+      UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
+             TEXT("HandleBlueprintAction: failed to create construction script "
+                  "graph for '%s'"),
+             *Path);
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Construction script creation failed"),
+                             Result, TEXT("GRAPH_ERROR"));
+    }
+    return true;
+#else
+    SendAutomationResponse(
+        RequestingSocket, RequestId, false,
+        TEXT("blueprint_add_construction_script requires editor build"),
+        nullptr, TEXT("NOT_AVAILABLE"));
+    return true;
+#endif
+#else
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("blueprint_add_construction_script requires editor build"),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleBlueprintCompile(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  MCP_BPCORE_PREAMBLE();
+    FString Path = ResolveBlueprintRequestedPath();
+    if (Path.IsEmpty()) {
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("blueprint_compile requires a blueprint path."), nullptr,
+          TEXT("INVALID_BLUEPRINT_PATH"));
+      return true;
+    }
+    // The schema's generic 'save' is an alias for 'saveAfterCompile'.
+    bool bSaveAfterCompile = false;
+    if (LocalPayload->HasField(TEXT("saveAfterCompile")))
+      LocalPayload->TryGetBoolField(TEXT("saveAfterCompile"),
+                                    bSaveAfterCompile);
+    else if (LocalPayload->HasField(TEXT("save")))
+      LocalPayload->TryGetBoolField(TEXT("save"), bSaveAfterCompile);
+    // Editor-only compile
+#if WITH_EDITOR
+    FString Normalized;
+    FString LoadErr;
+    UBlueprint *BP = LoadBlueprintAsset(Path, Normalized, LoadErr);
+    if (!BP) {
+      TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
+      Err->SetStringField(TEXT("error"), LoadErr);
+      SendAutomationResponse(RequestingSocket, RequestId, false,
+                             TEXT("Failed to load blueprint for compilation"),
+                             Err, TEXT("NOT_FOUND"));
+      return true;
+    }
+    McpSafeCompileBlueprint(BP);
+    bool bSaved = false;
+    if (bSaveAfterCompile) {
+      // saveAfterCompile is an explicit caller request, so bypass the time-based
+      // save throttle (bForce=true). Otherwise a recent save of the same asset
+      // would make this return saved:true WITHOUT writing -- leaving structural
+      // edits (e.g. a remove_widget) unpersisted on disk. McpSafeAssetSave forces
+      // the dirty flag itself, so the write always lands.
+      bSaved = SaveLoadedAssetThrottled(BP, /*ThrottleSecondsOverride=*/-1.0,
+                                        /*bForce=*/true);
+    }
+    TSharedPtr<FJsonObject> Out = McpHandlerUtils::CreateResultObject();
+    Out->SetBoolField(TEXT("compiled"), true);
+    Out->SetBoolField(TEXT("saved"), bSaved);
+    Out->SetStringField(TEXT("blueprintPath"), Path);
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           TEXT("Blueprint compiled"), Out, FString());
+    return true;
+#else
+    SendAutomationResponse(RequestingSocket, RequestId, false,
+                           TEXT("blueprint_compile requires editor build"),
+                           nullptr, TEXT("NOT_AVAILABLE"));
+    return true;
+#endif
+#else
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("blueprint_compile requires editor build"),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleBlueprintCreateAction(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  TSharedPtr<FJsonObject> LocalPayload =
+      Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
+    return FBlueprintCreationHandlers::HandleBlueprintCreate(
+        this, RequestId, LocalPayload, RequestingSocket);
+#else
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("blueprint actions are editor-only."),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleBlueprintEnsureExists(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  MCP_BPCORE_PREAMBLE();
+    UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
+           TEXT("Entered blueprint_ensure_exists handler: RequestId=%s"),
+           *RequestId);
+    FString Path = ResolveBlueprintRequestedPath();
+    if (Path.IsEmpty()) {
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("blueprint_ensure_exists requires a blueprint path."), nullptr,
+          TEXT("INVALID_BLUEPRINT_PATH"));
+      return true;
+    }
+
+    FString ParentClass;
+    LocalPayload->TryGetStringField(TEXT("parentClass"), ParentClass);
+    bool bCreateIfMissing = true;
+    if (LocalPayload->HasField(TEXT("createIfMissing"))) {
+      LocalPayload->TryGetBoolField(TEXT("createIfMissing"), bCreateIfMissing);
+    }
+
+#if WITH_EDITOR
+    // Check if blueprint exists using lightweight check
+    FString CheckPath = Path;
+    if (!CheckPath.StartsWith(TEXT("/Game")) &&
+        !CheckPath.StartsWith(TEXT("/Engine")) &&
+        !CheckPath.StartsWith(TEXT("/Script"))) {
+      if (CheckPath.StartsWith(TEXT("/"))) {
+        CheckPath = TEXT("/Game") + CheckPath;
+      } else {
+        CheckPath = TEXT("/Game/") + CheckPath;
+      }
+    }
+    if (CheckPath.EndsWith(TEXT(".uasset"))) {
+      CheckPath = CheckPath.LeftChop(7);
+    }
+
+    bool bExists = UEditorAssetLibrary::DoesAssetExist(CheckPath);
+    bool bCreated = false;
+
+    if (!bExists && bCreateIfMissing) {
+      // Delegate to HandleBlueprintCreate for creation
+      TSharedPtr<FJsonObject> CreatePayload = McpHandlerUtils::CreateResultObject();
+      CreatePayload->SetStringField(TEXT("blueprintPath"), Path);
+      if (!ParentClass.IsEmpty()) {
+        CreatePayload->SetStringField(TEXT("parentClass"), ParentClass);
+      }
+      // Use FBlueprintCreationHandlers to create the blueprint
+      bool bCreateResult = FBlueprintCreationHandlers::HandleBlueprintCreate(
+          this, RequestId, CreatePayload, RequestingSocket);
+      // If creation handler returned true, it sent its own response
+      if (bCreateResult) {
+        return true;
+      }
+      // Check again after creation attempt
+      bExists = UEditorAssetLibrary::DoesAssetExist(CheckPath);
+      bCreated = bExists;
+    }
+
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetBoolField(TEXT("exists"), bExists);
+    Resp->SetBoolField(TEXT("created"), bCreated);
+    Resp->SetStringField(TEXT("blueprintPath"), bExists ? CheckPath : Path);
+    SendAutomationResponse(
+        RequestingSocket, RequestId, true,
+        bCreated ? TEXT("Blueprint created")
+                 : (bExists ? TEXT("Blueprint exists")
+                            : TEXT("Blueprint not found")),
+        Resp, FString());
+    return true;
+#else
+    SendAutomationResponse(
+        RequestingSocket, RequestId, false,
+        TEXT("blueprint_ensure_exists requires editor build"), nullptr,
+        TEXT("NOT_AVAILABLE"));
+    return true;
+#endif
+#else
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("blueprint_ensure_exists requires editor build"),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleBlueprintProbeHandle(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  MCP_BPCORE_PREAMBLE();
+    UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
+           TEXT("Entered blueprint_probe_handle handler: RequestId=%s"),
+           *RequestId);
+    FString Path = ResolveBlueprintRequestedPath();
+    if (Path.IsEmpty()) {
+      SendAutomationResponse(
+          RequestingSocket, RequestId, false,
+          TEXT("blueprint_probe_handle requires a blueprint path."), nullptr,
+          TEXT("INVALID_BLUEPRINT_PATH"));
+      return true;
+    }
+
+#if WITH_EDITOR
+    // Normalize path
+    FString CheckPath = Path;
+    if (!CheckPath.StartsWith(TEXT("/Game")) &&
+        !CheckPath.StartsWith(TEXT("/Engine")) &&
+        !CheckPath.StartsWith(TEXT("/Script"))) {
+      if (CheckPath.StartsWith(TEXT("/"))) {
+        CheckPath = TEXT("/Game") + CheckPath;
+      } else {
+        CheckPath = TEXT("/Game/") + CheckPath;
+      }
+    }
+    if (CheckPath.EndsWith(TEXT(".uasset"))) {
+      CheckPath = CheckPath.LeftChop(7);
+    }
+
+    bool bExists = UEditorAssetLibrary::DoesAssetExist(CheckPath);
+    FString AssetClass;
+
+    if (bExists) {
+      // Try to get asset class without fully loading - use FindAssetData
+      IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+      FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(CheckPath));
+#else
+      // UE 5.0: GetAssetByObjectPath takes FName
+      FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FName(*CheckPath));
+#endif
+      if (AssetData.IsValid()) {
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+        AssetClass = AssetData.AssetClassPath.GetAssetName().ToString();
+#else
+        // UE 5.0: AssetClass is FName
+        AssetClass = AssetData.AssetClass.ToString();
+#endif
+      }
+    }
+
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetBoolField(TEXT("exists"), bExists);
+    Resp->SetStringField(TEXT("path"), bExists ? CheckPath : Path);
+    if (!AssetClass.IsEmpty()) {
+      Resp->SetStringField(TEXT("assetClass"), AssetClass);
+    }
+    SendAutomationResponse(RequestingSocket, RequestId, true,
+                           bExists ? TEXT("Blueprint handle found")
+                                   : TEXT("Blueprint not found"),
+                           Resp, FString());
+    return true;
+#else
+    SendAutomationResponse(
+        RequestingSocket, RequestId, false,
+        TEXT("blueprint_probe_handle requires editor build"), nullptr,
+        TEXT("NOT_AVAILABLE"));
+    return true;
+#endif
+#else
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("blueprint_probe_handle requires editor build"),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddComponent(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  MCP_BPSCS_PREAMBLE();
     UBlueprint *Blueprint = ResolveBlueprint();
     if (!Blueprint) {
       SendAutomationResponse(RequestingSocket, RequestId, false,
@@ -5370,10 +5516,19 @@ bool UMcpAutomationBridgeSubsystem::HandleSCSAction(
                            TEXT("Failed to add component to SCS"), nullptr,
                            TEXT("OPERATION_FAILED"));
     return true;
-  }
+#else
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("SCS operations require editor build"),
+                      TEXT("EDITOR_ONLY"));
+  return true;
+#endif
+}
 
-  // Get SCS hierarchy
-  if (CleanAction.Equals(TEXT("get_scs"), ESearchCase::IgnoreCase)) {
+bool UMcpAutomationBridgeSubsystem::HandleBlueprintGetScs(
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
+    FMcpResponseHandle RequestingSocket) {
+#if WITH_EDITOR
+  MCP_BPSCS_PREAMBLE();
     UBlueprint *Blueprint = ResolveBlueprint();
     if (!Blueprint) {
       SendAutomationResponse(RequestingSocket, RequestId, false,
@@ -5455,21 +5610,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSCSAction(
                                            ComponentsArray.Num()),
                            Result, FString());
     return true;
-  }
-
-  // Unknown blueprint action - send explicit error instead of returning false
-  // to prevent client timeouts waiting for a response
-  SendAutomationError(
-      RequestingSocket, RequestId,
-      FString::Printf(TEXT("Unknown blueprint action: %s"), *CleanAction),
-      TEXT("UNKNOWN_ACTION"));
-  return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
-                           TEXT("SCS operations require editor build"), nullptr,
-                           TEXT("NOT_IMPLEMENTED"));
-    return true;
+  SendAutomationError(RequestingSocket, RequestId,
+                      TEXT("SCS operations require editor build"),
+                      TEXT("EDITOR_ONLY"));
+  return true;
 #endif
 }
 
-#endif // WITH_EDITOR from line 11
