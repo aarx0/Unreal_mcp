@@ -2757,27 +2757,27 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAlignment(
             return true;
         }
 
-        // Accept alignment:{x,y} OR top-level scalars alignmentX/alignmentY.
-        // Strict MCP clients strip object-valued params, so the scalar form is the
-        // reliable path; fail loudly if neither is present instead of silently no-op.
-        FVector2D Alignment(0, 0);
+        // Accept alignment:{x,y} OR top-level scalars alignmentX/alignmentY. Seed
+        // from the slot's current alignment so a partial request keeps the unspecified
+        // axis; an empty request is NO_CHANGES_REQUESTED, not a silent no-op.
+        FVector2D Alignment = CanvasSlot->GetAlignment();
         bool bHaveAlignment = false;
         TSharedPtr<FJsonObject> AlignmentObj = GetObjectField(Payload, TEXT("alignment"));
         if (AlignmentObj.IsValid())
         {
-            Alignment.X = GetJsonNumberField(AlignmentObj, TEXT("x"), 0.0);
-            Alignment.Y = GetJsonNumberField(AlignmentObj, TEXT("y"), 0.0);
+            Alignment.X = GetJsonNumberField(AlignmentObj, TEXT("x"), Alignment.X);
+            Alignment.Y = GetJsonNumberField(AlignmentObj, TEXT("y"), Alignment.Y);
             bHaveAlignment = true;
         }
         else if (Payload->HasField(TEXT("alignmentX")) || Payload->HasField(TEXT("alignmentY")))
         {
-            Alignment.X = GetJsonNumberField(Payload, TEXT("alignmentX"), 0.0);
-            Alignment.Y = GetJsonNumberField(Payload, TEXT("alignmentY"), 0.0);
+            Alignment.X = GetJsonNumberField(Payload, TEXT("alignmentX"), Alignment.X);
+            Alignment.Y = GetJsonNumberField(Payload, TEXT("alignmentY"), Alignment.Y);
             bHaveAlignment = true;
         }
         if (!bHaveAlignment)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing alignment: provide alignment:{x,y} or alignmentX/alignmentY"), TEXT("MISSING_PARAMETER"));
+            SendAutomationError(RequestingSocket, RequestId, TEXT("No alignment provided: supply alignment:{x,y} or alignmentX/alignmentY"), TEXT("NO_CHANGES_REQUESTED"));
             return true;
         }
 
@@ -2828,32 +2828,33 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPosition(
             return true;
         }
 
-        // Accept position:{x,y} OR top-level scalars posX/posY (objects get
-        // stripped by strict MCP clients; fail loudly rather than no-op).
-        FVector2D Position(0, 0);
+        // Accept position:{x,y} OR top-level scalars posX/posY OR x/y. Seed from the
+        // slot's current position so a partial request keeps the unspecified axis; an
+        // empty request is NO_CHANGES_REQUESTED, not a silent no-op.
+        FVector2D Position = CanvasSlot->GetPosition();
         bool bHavePosition = false;
         TSharedPtr<FJsonObject> PositionObj = GetObjectField(Payload, TEXT("position"));
         if (PositionObj.IsValid())
         {
-            Position.X = GetJsonNumberField(PositionObj, TEXT("x"), 0.0);
-            Position.Y = GetJsonNumberField(PositionObj, TEXT("y"), 0.0);
+            Position.X = GetJsonNumberField(PositionObj, TEXT("x"), Position.X);
+            Position.Y = GetJsonNumberField(PositionObj, TEXT("y"), Position.Y);
             bHavePosition = true;
         }
         else if (Payload->HasField(TEXT("posX")) || Payload->HasField(TEXT("posY")))
         {
-            Position.X = GetJsonNumberField(Payload, TEXT("posX"), 0.0);
-            Position.Y = GetJsonNumberField(Payload, TEXT("posY"), 0.0);
+            Position.X = GetJsonNumberField(Payload, TEXT("posX"), Position.X);
+            Position.Y = GetJsonNumberField(Payload, TEXT("posY"), Position.Y);
             bHavePosition = true;
         }
         else if (Payload->HasField(TEXT("x")) || Payload->HasField(TEXT("y")))
         {
-            Position.X = GetJsonNumberField(Payload, TEXT("x"), 0.0);
-            Position.Y = GetJsonNumberField(Payload, TEXT("y"), 0.0);
+            Position.X = GetJsonNumberField(Payload, TEXT("x"), Position.X);
+            Position.Y = GetJsonNumberField(Payload, TEXT("y"), Position.Y);
             bHavePosition = true;
         }
         if (!bHavePosition)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing position: provide position:{x,y}, posX/posY, or x/y"), TEXT("MISSING_PARAMETER"));
+            SendAutomationError(RequestingSocket, RequestId, TEXT("No position provided: supply position:{x,y}, posX/posY, or x/y"), TEXT("NO_CHANGES_REQUESTED"));
             return true;
         }
 
@@ -2899,46 +2900,72 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetSize(
 
         FString SizedAs = TEXT("none");
         UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot);
+        UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(Widget->Slot);
+        UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(Widget->Slot);
         if (CanvasSlot)
         {
-            // Canvas slots take an explicit pixel size. Accept either a "size":{x,y}
-            // object or top-level x/y for convenience.
+            // Canvas slots take an explicit pixel size. Accept a "size":{x,y} object or
+            // top-level x/y; seed from the slot's current size so a partial request keeps
+            // the unspecified axis, and fail NO_CHANGES_REQUESTED on empty.
             TSharedPtr<FJsonObject> SizeObj = GetObjectField(Payload, TEXT("size"));
-            FVector2D Size;
+            const bool bHaveSize = SizeObj.IsValid() || Payload->HasField(TEXT("x")) || Payload->HasField(TEXT("y"));
+            if (!bHaveSize)
+            {
+                SendAutomationError(RequestingSocket, RequestId, TEXT("No size provided: supply size:{x,y} or x/y"), TEXT("NO_CHANGES_REQUESTED"));
+                return true;
+            }
+            FVector2D Size = CanvasSlot->GetSize();
             if (SizeObj.IsValid())
             {
-                Size.X = GetJsonNumberField(SizeObj, TEXT("x"), 100.0);
-                Size.Y = GetJsonNumberField(SizeObj, TEXT("y"), 100.0);
+                Size.X = GetJsonNumberField(SizeObj, TEXT("x"), Size.X);
+                Size.Y = GetJsonNumberField(SizeObj, TEXT("y"), Size.Y);
             }
             else
             {
-                Size.X = GetJsonNumberField(Payload, TEXT("x"), 100.0);
-                Size.Y = GetJsonNumberField(Payload, TEXT("y"), 100.0);
+                Size.X = GetJsonNumberField(Payload, TEXT("x"), Size.X);
+                Size.Y = GetJsonNumberField(Payload, TEXT("y"), Size.Y);
             }
             CanvasSlot->SetSize(Size);
             SizedAs = TEXT("canvas");
         }
-        else if (Widget->Slot)
+        else if (HSlot || VSlot)
         {
             // Box slots (HorizontalBox / VerticalBox) have no pixel size — a child is
             // either Automatic (hug content) or Fill (stretch, weighted). Pass
             // "fill": true (optional "fillWeight") to stretch a child across its
             // row/column — e.g. a slider that would otherwise collapse to ~0 width.
-            bool bFill = false;
-            Payload->TryGetBoolField(TEXT("fill"), bFill);
-            FSlateChildSize NewSize;
-            NewSize.SizeRule = bFill ? ESlateSizeRule::Fill : ESlateSizeRule::Automatic;
-            NewSize.Value = (float)GetJsonNumberField(Payload, TEXT("fillWeight"), 1.0);
-            if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(Widget->Slot))
+            // Seed from the slot's current size so an unspecified rule/weight is kept.
+            if (!Payload->HasField(TEXT("fill")) && !Payload->HasField(TEXT("fillWeight")))
+            {
+                SendAutomationError(RequestingSocket, RequestId, TEXT("No size provided: supply fill:<bool> and/or fillWeight:<number>"), TEXT("NO_CHANGES_REQUESTED"));
+                return true;
+            }
+            FSlateChildSize NewSize = HSlot ? HSlot->GetSize() : VSlot->GetSize();
+            bool bFill = (NewSize.SizeRule == ESlateSizeRule::Fill);
+            if (Payload->HasField(TEXT("fill")))
+            {
+                Payload->TryGetBoolField(TEXT("fill"), bFill);
+                NewSize.SizeRule = bFill ? ESlateSizeRule::Fill : ESlateSizeRule::Automatic;
+            }
+            if (Payload->HasField(TEXT("fillWeight")))
+            {
+                NewSize.Value = (float)GetJsonNumberField(Payload, TEXT("fillWeight"), NewSize.Value);
+            }
+            if (HSlot)
             {
                 HSlot->SetSize(NewSize);
                 SizedAs = bFill ? TEXT("hbox-fill") : TEXT("hbox-auto");
             }
-            else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(Widget->Slot))
+            else
             {
                 VSlot->SetSize(NewSize);
                 SizedAs = bFill ? TEXT("vbox-fill") : TEXT("vbox-auto");
             }
+        }
+        else
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("set_size requires a Canvas Panel, Horizontal Box, or Vertical Box slot"), TEXT("INVALID_SLOT"));
+            return true;
         }
 
         const bool bSizeSaved = McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
@@ -2980,18 +3007,31 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPadding(
         }
 
         // Accept padding:{left,top,right,bottom} OR top-level scalars
-        // padLeft/padTop/padRight/padBottom OR a single "pad" for all sides.
-        // Strict MCP clients strip object-valued params, so the scalar forms are
-        // the reliable path; fail loudly if nothing usable was supplied.
-        FMargin Padding(0);
+        // padLeft/padTop/padRight/padBottom OR a single "pad" for all sides. Seed from
+        // the slot's current padding so a partial request keeps the unspecified sides;
+        // an empty request is NO_CHANGES_REQUESTED, not a silent no-op.
+        UHorizontalBoxSlot* HBoxSlot = Cast<UHorizontalBoxSlot>(Widget->Slot);
+        UVerticalBoxSlot* VBoxSlot = Cast<UVerticalBoxSlot>(Widget->Slot);
+        UOverlaySlot* OverlaySlotWidget = Cast<UOverlaySlot>(Widget->Slot);
+        FString PaddedSlot;
+        FMargin Padding;
+        if (HBoxSlot) { Padding = HBoxSlot->GetPadding(); PaddedSlot = TEXT("hbox"); }
+        else if (VBoxSlot) { Padding = VBoxSlot->GetPadding(); PaddedSlot = TEXT("vbox"); }
+        else if (OverlaySlotWidget) { Padding = OverlaySlotWidget->GetPadding(); PaddedSlot = TEXT("overlay"); }
+        else
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Slot type does not support padding (need HBox/VBox/Overlay child)"), TEXT("INVALID_SLOT"));
+            return true;
+        }
+
         bool bHavePadding = false;
         TSharedPtr<FJsonObject> PaddingObj = GetObjectField(Payload, TEXT("padding"));
         if (PaddingObj.IsValid())
         {
-            Padding.Left = GetJsonNumberField(PaddingObj, TEXT("left"), 0.0);
-            Padding.Top = GetJsonNumberField(PaddingObj, TEXT("top"), 0.0);
-            Padding.Right = GetJsonNumberField(PaddingObj, TEXT("right"), 0.0);
-            Padding.Bottom = GetJsonNumberField(PaddingObj, TEXT("bottom"), 0.0);
+            Padding.Left = GetJsonNumberField(PaddingObj, TEXT("left"), Padding.Left);
+            Padding.Top = GetJsonNumberField(PaddingObj, TEXT("top"), Padding.Top);
+            Padding.Right = GetJsonNumberField(PaddingObj, TEXT("right"), Padding.Right);
+            Padding.Bottom = GetJsonNumberField(PaddingObj, TEXT("bottom"), Padding.Bottom);
             bHavePadding = true;
         }
         else if (Payload->HasField(TEXT("pad")))
@@ -3002,27 +3042,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPadding(
         else if (Payload->HasField(TEXT("padLeft")) || Payload->HasField(TEXT("padTop"))
               || Payload->HasField(TEXT("padRight")) || Payload->HasField(TEXT("padBottom")))
         {
-            Padding.Left = GetJsonNumberField(Payload, TEXT("padLeft"), 0.0);
-            Padding.Top = GetJsonNumberField(Payload, TEXT("padTop"), 0.0);
-            Padding.Right = GetJsonNumberField(Payload, TEXT("padRight"), 0.0);
-            Padding.Bottom = GetJsonNumberField(Payload, TEXT("padBottom"), 0.0);
+            Padding.Left = GetJsonNumberField(Payload, TEXT("padLeft"), Padding.Left);
+            Padding.Top = GetJsonNumberField(Payload, TEXT("padTop"), Padding.Top);
+            Padding.Right = GetJsonNumberField(Payload, TEXT("padRight"), Padding.Right);
+            Padding.Bottom = GetJsonNumberField(Payload, TEXT("padBottom"), Padding.Bottom);
             bHavePadding = true;
         }
         if (!bHavePadding)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing padding: provide padding:{left,top,right,bottom}, pad:<all>, or padLeft/padTop/padRight/padBottom"), TEXT("MISSING_PARAMETER"));
+            SendAutomationError(RequestingSocket, RequestId, TEXT("No padding provided: supply padding:{left,top,right,bottom}, pad:<all>, or padLeft/padTop/padRight/padBottom"), TEXT("NO_CHANGES_REQUESTED"));
             return true;
         }
 
-        FString PaddedSlot = TEXT("none");
-        if (UHorizontalBoxSlot* HBoxSlot = Cast<UHorizontalBoxSlot>(Widget->Slot)) { HBoxSlot->SetPadding(Padding); PaddedSlot = TEXT("hbox"); }
-        else if (UVerticalBoxSlot* VBoxSlot = Cast<UVerticalBoxSlot>(Widget->Slot)) { VBoxSlot->SetPadding(Padding); PaddedSlot = TEXT("vbox"); }
-        else if (UOverlaySlot* OverlaySlotWidget = Cast<UOverlaySlot>(Widget->Slot)) { OverlaySlotWidget->SetPadding(Padding); PaddedSlot = TEXT("overlay"); }
-        else
-        {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Slot type does not support padding (need HBox/VBox/Overlay child)"), TEXT("INVALID_SLOT"));
-            return true;
-        }
+        if (HBoxSlot) { HBoxSlot->SetPadding(Padding); }
+        else if (VBoxSlot) { VBoxSlot->SetPadding(Padding); }
+        else { OverlaySlotWidget->SetPadding(Padding); }
 
         const bool bPadSaved = McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
 
@@ -3107,32 +3141,45 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetRenderTransform(
             return true;
         }
 
-        FWidgetTransform RenderTransform;
+        // Seed from the widget's current transform so a partial request (e.g. only
+        // "angle") keeps translation/scale/shear; an empty request is NO_CHANGES_REQUESTED.
+        FWidgetTransform RenderTransform = Widget->GetRenderTransform();
+        bool bHaveTransform = false;
 
         TSharedPtr<FJsonObject> TranslationObj = GetObjectField(Payload, TEXT("translation"));
         if (TranslationObj.IsValid())
         {
-            RenderTransform.Translation.X = GetJsonNumberField(TranslationObj, TEXT("x"), 0.0);
-            RenderTransform.Translation.Y = GetJsonNumberField(TranslationObj, TEXT("y"), 0.0);
+            RenderTransform.Translation.X = GetJsonNumberField(TranslationObj, TEXT("x"), RenderTransform.Translation.X);
+            RenderTransform.Translation.Y = GetJsonNumberField(TranslationObj, TEXT("y"), RenderTransform.Translation.Y);
+            bHaveTransform = true;
         }
 
         TSharedPtr<FJsonObject> ScaleObj = GetObjectField(Payload, TEXT("scale"));
         if (ScaleObj.IsValid())
         {
-            RenderTransform.Scale.X = GetJsonNumberField(ScaleObj, TEXT("x"), 1.0);
-            RenderTransform.Scale.Y = GetJsonNumberField(ScaleObj, TEXT("y"), 1.0);
+            RenderTransform.Scale.X = GetJsonNumberField(ScaleObj, TEXT("x"), RenderTransform.Scale.X);
+            RenderTransform.Scale.Y = GetJsonNumberField(ScaleObj, TEXT("y"), RenderTransform.Scale.Y);
+            bHaveTransform = true;
         }
 
         TSharedPtr<FJsonObject> ShearObj = GetObjectField(Payload, TEXT("shear"));
         if (ShearObj.IsValid())
         {
-            RenderTransform.Shear.X = GetJsonNumberField(ShearObj, TEXT("x"), 0.0);
-            RenderTransform.Shear.Y = GetJsonNumberField(ShearObj, TEXT("y"), 0.0);
+            RenderTransform.Shear.X = GetJsonNumberField(ShearObj, TEXT("x"), RenderTransform.Shear.X);
+            RenderTransform.Shear.Y = GetJsonNumberField(ShearObj, TEXT("y"), RenderTransform.Shear.Y);
+            bHaveTransform = true;
         }
 
         if (Payload->HasField(TEXT("angle")))
         {
-            RenderTransform.Angle = static_cast<float>(GetJsonNumberField(Payload, TEXT("angle"), 0.0));
+            RenderTransform.Angle = static_cast<float>(GetJsonNumberField(Payload, TEXT("angle"), RenderTransform.Angle));
+            bHaveTransform = true;
+        }
+
+        if (!bHaveTransform)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("No render transform provided: supply translation, scale, shear, or angle"), TEXT("NO_CHANGES_REQUESTED"));
+            return true;
         }
 
         Widget->SetRenderTransform(RenderTransform);
@@ -3731,10 +3778,6 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetMargin(
     MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"));
-        float Left = GetJsonNumberField(Payload, TEXT("left"), 0.0f);
-        float Top = GetJsonNumberField(Payload, TEXT("top"), 0.0f);
-        float Right = GetJsonNumberField(Payload, TEXT("right"), 0.0f);
-        float Bottom = GetJsonNumberField(Payload, TEXT("bottom"), 0.0f);
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
@@ -3756,45 +3799,50 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetMargin(
             return true;
         }
 
-        FMargin Margin(Left, Top, Right, Bottom);
-        bool bMarginApplied = false;
+        // Margin applies to the child's slot (HBox/VBox/Overlay) and/or a Border widget.
+        // Seed from the target's current padding so a partial request keeps the
+        // unspecified sides; an empty request is NO_CHANGES_REQUESTED, no target is INVALID_SLOT.
+        UHorizontalBoxSlot* HBoxSlot = Cast<UHorizontalBoxSlot>(TargetWidget->Slot);
+        UVerticalBoxSlot* VBoxSlot = Cast<UVerticalBoxSlot>(TargetWidget->Slot);
+        UOverlaySlot* OvSlot = Cast<UOverlaySlot>(TargetWidget->Slot);
+        UBorder* BorderWidget = Cast<UBorder>(TargetWidget);
 
-        // Apply margin based on slot type
-        if (UPanelSlot* Slot = TargetWidget->Slot)
+        FMargin Margin;
+        if (HBoxSlot) { Margin = HBoxSlot->GetPadding(); }
+        else if (VBoxSlot) { Margin = VBoxSlot->GetPadding(); }
+        else if (OvSlot) { Margin = OvSlot->GetPadding(); }
+        else if (BorderWidget) { Margin = BorderWidget->GetPadding(); }
+        else
         {
-            if (UHorizontalBoxSlot* HBoxSlot = Cast<UHorizontalBoxSlot>(Slot))
-            {
-                HBoxSlot->SetPadding(Margin);
-                bMarginApplied = true;
-            }
-            else if (UVerticalBoxSlot* VBoxSlot = Cast<UVerticalBoxSlot>(Slot))
-            {
-                VBoxSlot->SetPadding(Margin);
-                bMarginApplied = true;
-            }
-            else if (UOverlaySlot* OvSlot = Cast<UOverlaySlot>(Slot))
-            {
-                OvSlot->SetPadding(Margin);
-                bMarginApplied = true;
-            }
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget has no margin target (need HBox/VBox/Overlay child or a Border widget)"), TEXT("INVALID_SLOT"));
+            return true;
         }
 
-        // Also try to set on border widgets
-        if (UBorder* BorderWidget = Cast<UBorder>(TargetWidget))
+        bool bHaveMargin = false;
+        if (Payload->HasField(TEXT("left"))) { Margin.Left = GetJsonNumberField(Payload, TEXT("left"), Margin.Left); bHaveMargin = true; }
+        if (Payload->HasField(TEXT("top"))) { Margin.Top = GetJsonNumberField(Payload, TEXT("top"), Margin.Top); bHaveMargin = true; }
+        if (Payload->HasField(TEXT("right"))) { Margin.Right = GetJsonNumberField(Payload, TEXT("right"), Margin.Right); bHaveMargin = true; }
+        if (Payload->HasField(TEXT("bottom"))) { Margin.Bottom = GetJsonNumberField(Payload, TEXT("bottom"), Margin.Bottom); bHaveMargin = true; }
+        if (!bHaveMargin)
         {
-            BorderWidget->SetPadding(Margin);
-            bMarginApplied = true;
+            SendAutomationError(RequestingSocket, RequestId, TEXT("No margin provided: supply left/top/right/bottom"), TEXT("NO_CHANGES_REQUESTED"));
+            return true;
         }
+
+        if (HBoxSlot) { HBoxSlot->SetPadding(Margin); }
+        else if (VBoxSlot) { VBoxSlot->SetPadding(Margin); }
+        else if (OvSlot) { OvSlot->SetPadding(Margin); }
+        if (BorderWidget) { BorderWidget->SetPadding(Margin); }
 
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
 
-        ResultJson->SetBoolField(TEXT("success"), bMarginApplied);
+        ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
         ResultJson->SetStringField(TEXT("slotName"), SlotName);
-        ResultJson->SetNumberField(TEXT("left"), Left);
-        ResultJson->SetNumberField(TEXT("top"), Top);
-        ResultJson->SetNumberField(TEXT("right"), Right);
-        ResultJson->SetNumberField(TEXT("bottom"), Bottom);
+        ResultJson->SetNumberField(TEXT("left"), Margin.Left);
+        ResultJson->SetNumberField(TEXT("top"), Margin.Top);
+        ResultJson->SetNumberField(TEXT("right"), Margin.Right);
+        ResultJson->SetNumberField(TEXT("bottom"), Margin.Bottom);
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set margin"), ResultJson);
         return true;
