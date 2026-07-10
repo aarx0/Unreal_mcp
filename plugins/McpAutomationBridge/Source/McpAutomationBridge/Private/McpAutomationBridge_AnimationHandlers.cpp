@@ -1537,7 +1537,8 @@ bool McpHandlers::AnimationPhysics::HandleAnimPhysSetupIk(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysConfigureVehicle(
+bool McpHandlers::AnimationPhysics::HandleAnimPhysConfigureVehicle(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1560,7 +1561,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysConfigureVehicle(
     Resp->SetStringField(TEXT("error"), Message);
   } else {
 #if MCP_HAS_WHEELED_VEHICLE_4W
-    AActor *TargetActor = FindActorByName(ActorName);
+    AActor *TargetActor = S.FindActorByName(ActorName);
     if (!TargetActor) {
       Message = FString::Printf(TEXT("Actor not found: %s"), *ActorName);
       ErrorCode = TEXT("ACTOR_NOT_FOUND");
@@ -1980,7 +1981,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysConfigureVehicle(
 #endif
 
         return SendWriteReportResponse(
-            this, RequestingSocket, RequestId, Report, Resp,
+            &S, RequestingSocket, RequestId, Report, Resp,
             FString::Printf(TEXT("Vehicle physics configured for actor '%s'"),
                             *ActorName),
             nullptr);
@@ -1998,11 +1999,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysConfigureVehicle(
     Message = bSuccess ? TEXT("Animation/Physics action completed")
                        : TEXT("Animation/Physics action failed");
   }
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
                          ErrorCode);
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Animation/Physics actions require editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -2010,7 +2011,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysConfigureVehicle(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysSetupPhysicsSimulation(
+bool McpHandlers::AnimationPhysics::HandleAnimPhysSetupPhysicsSimulation(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2046,14 +2048,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysSetupPhysicsSimulation(
     Message = TEXT("setup_physics_simulation requires skeletonPath, skeletalMeshPath, or actorName");
     ErrorCode = TEXT("INVALID_ARGUMENT");
     Resp->SetStringField(TEXT("error"), Message);
-    SendAutomationResponse(RequestingSocket, RequestId, false, Message, Resp,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false, Message, Resp,
                            ErrorCode);
     return true;
   }
 
   // If actorName provided, try to find the actor and get its skeletal mesh
   if (!bSkeletonProvided && !bSkeletalMeshProvided && bActorProvided) {
-		AActor *FoundActor = FindActorByName(ActorName);
+		AActor *FoundActor = S.FindActorByName(ActorName);
 	if (FoundActor) {
 			// Try to get skeletal mesh component
       if (USkeletalMeshComponent *SkelComp =
@@ -2088,7 +2090,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysSetupPhysicsSimulation(
     if (!TargetMesh) {
       Resp->SetStringField(TEXT("actorName"), ActorName);
       bSuccess = false;
-      SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message,
+      S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message,
                              Resp, ErrorCode);
       return true;
     }
@@ -2294,11 +2296,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysSetupPhysicsSimulation(
     Message = bSuccess ? TEXT("Animation/Physics action completed")
                        : TEXT("Animation/Physics action failed");
   }
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
                          ErrorCode);
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Animation/Physics actions require editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));

@@ -988,25 +988,6 @@ class FMcpCall_AnimationPhysics_##ClassSuffix final : public FMcpCall           
 	}                                                                                    \
 };
 
-// configure_vehicle/setup_physics_simulation still touch the subsystem's private
-// FindActorByName, so their handlers stay members (F1 rule 4): dispatch via S.
-#define MCP_AP_MEMBER_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                  \
-class FMcpCall_AnimationPhysics_##ClassSuffix final : public FMcpCall                     \
-{                                                                                        \
-	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }       \
-	const FMcpCallDecl& GetDecl() const override                                         \
-	{                                                                                    \
-		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("animation_physics"),          \
-			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                             \
-		return D;                                                                        \
-	}                                                                                    \
-	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
-	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
-	{                                                                                    \
-		return S.HandlerFn(RequestId, Payload, Socket);                                  \
-	}                                                                                    \
-};
-
 // Core (AnimationHandlers.cpp)
 MCP_AP_CALL(Cleanup, "cleanup", McpHandlers::AnimationPhysics::HandleAnimPhysCleanup, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreateBlendSpace, "create_blend_space", McpHandlers::AnimationPhysics::HandleAnimPhysCreateBlendSpace, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -1014,8 +995,8 @@ MCP_AP_CALL(CreateBlendTree, "create_blend_tree", McpHandlers::AnimationPhysics:
 MCP_AP_CALL(CreateProceduralAnim, "create_procedural_animation", McpHandlers::AnimationPhysics::HandleAnimPhysCreateProceduralAnim, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreateStateMachine, "create_state_machine", McpHandlers::AnimationPhysics::HandleAnimPhysCreateStateMachine, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(SetupIk, "setup_ik", McpHandlers::AnimationPhysics::HandleAnimPhysSetupIk, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_MEMBER_CALL(ConfigureVehicle, "configure_vehicle", HandleAnimPhysConfigureVehicle, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_MEMBER_CALL(SetupPhysicsSimulation, "setup_physics_simulation", HandleAnimPhysSetupPhysicsSimulation, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(ConfigureVehicle, "configure_vehicle", McpHandlers::AnimationPhysics::HandleAnimPhysConfigureVehicle, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(SetupPhysicsSimulation, "setup_physics_simulation", McpHandlers::AnimationPhysics::HandleAnimPhysSetupPhysicsSimulation, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreateAnimationAsset, "create_animation_asset", McpHandlers::AnimationPhysics::HandleAnimPhysCreateAnimationAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(SetupRetargeting, "setup_retargeting", McpHandlers::AnimationPhysics::HandleAnimPhysSetupRetargeting, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(PlayMontage, "play_montage", McpHandlers::AnimationPhysics::HandleAnimPhysPlayMontage, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -1098,7 +1079,6 @@ MCP_AP_CALL(CopyWeights, "copy_weights", McpHandlers::AnimationPhysics::HandleSk
 MCP_AP_CALL(MirrorWeights, "mirror_weights", McpHandlers::AnimationPhysics::HandleSkeletonMirrorWeights, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 #undef MCP_AP_CALL
-#undef MCP_AP_MEMBER_CALL
 
 } // namespace McpCalls::AnimationPhysics
 

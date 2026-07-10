@@ -21,6 +21,8 @@ bool HandleAnimPhysCreateBlendTree(UMcpAutomationBridgeSubsystem& S, const FStri
 bool HandleAnimPhysCreateProceduralAnim(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 bool HandleAnimPhysCreateStateMachine(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 bool HandleAnimPhysSetupIk(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+bool HandleAnimPhysConfigureVehicle(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+bool HandleAnimPhysSetupPhysicsSimulation(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 bool HandleAnimPhysCreateAnimationAsset(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 bool HandleAnimPhysSetupRetargeting(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 bool HandleAnimPhysPlayMontage(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);

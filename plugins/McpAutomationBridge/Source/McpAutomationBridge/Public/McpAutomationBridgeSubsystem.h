@@ -418,20 +418,7 @@ private:
   // its member handlers (HandlePerf*/HandleSys*/HandleUi*/HandleLog*/
   // HandleDebugSpawnCategory/HandleRenderLumenUpdateScene) live in the
   // transitional public block below.
-  // animation_physics is classed — see
-  // MCP/Calls/McpCalls_AnimationPhysics.cpp. Its per-action members are
-  // public so the FMcpCall classes (Private/MCP/Calls/) can delegate, until
-  // the module split de-members the implementations off the subsystem:
-  // HandleAnimPhys* (AnimationHandlers.cpp), HandleAnimAuthoring*
-  // (AnimationAuthoringHandlers.cpp), HandleSkeleton* (SkeletonHandlers.cpp).
 public:
-  bool HandleAnimPhysConfigureVehicle(const FString &RequestId,
-                                      const TSharedPtr<FJsonObject> &Payload,
-                                      FMcpResponseHandle RequestingSocket);
-  bool HandleAnimPhysSetupPhysicsSimulation(const FString &RequestId,
-                                            const TSharedPtr<FJsonObject> &Payload,
-                                            FMcpResponseHandle RequestingSocket);
-
   // build_environment is classed — see
   // MCP/Calls/McpCalls_BuildEnvironment.cpp.
   // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
