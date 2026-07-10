@@ -345,7 +345,7 @@ static void S_AddSpawnBurstModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .Number(TEXT("burstCount"), TEXT(""))
+	 .Integer(TEXT("burstCount"), TEXT(""))
 	 .Number(TEXT("burstTime"), TEXT(""))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
@@ -728,7 +728,7 @@ static void S_AddEventReceiver(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
 	 .String(TEXT("eventName"), TEXT("Name of the event."))
 	 .Bool(TEXT("spawnOnEvent"), TEXT(""))
-	 .Number(TEXT("eventSpawnCount"), TEXT(""))
+	 .Integer(TEXT("eventSpawnCount"), TEXT(""))
 	 .Required({TEXT("systemPath"), TEXT("emitterName"), TEXT("eventName")});
 }
 

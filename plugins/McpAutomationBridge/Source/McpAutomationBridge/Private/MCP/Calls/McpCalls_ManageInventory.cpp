@@ -71,7 +71,7 @@ static void S_CreateComponent(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
-	 .Number(TEXT("slotCount"), TEXT(""))
+	 .Integer(TEXT("slotCount"), TEXT(""))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("blueprintPath")});
 }
@@ -79,7 +79,7 @@ static void S_CreateComponent(FMcpSchemaBuilder& B)
 static void S_ConfigureSlots(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("slotCount"), TEXT(""))
+	 .Integer(TEXT("slotCount"), TEXT(""))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("blueprintPath")});
 }
@@ -197,8 +197,8 @@ static void S_AddLootEntry(FMcpSchemaBuilder& B)
 	B.String(TEXT("lootTablePath"), TEXT("Path to loot table asset."))
 	 .String(TEXT("itemPath"), TEXT("Path to item data asset."))
 	 .Number(TEXT("lootWeight"), TEXT("Weight for drop chance calculation."))
-	 .Number(TEXT("minQuantity"), TEXT("Minimum drop quantity."))
-	 .Number(TEXT("maxQuantity"), TEXT("Maximum drop quantity."))
+	 .Integer(TEXT("minQuantity"), TEXT("Minimum drop quantity."))
+	 .Integer(TEXT("maxQuantity"), TEXT("Maximum drop quantity."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("lootTablePath"), TEXT("itemPath")});
 }
@@ -207,7 +207,7 @@ static void S_ConfigureLootDrop(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorPath"), TEXT("Path to actor Blueprint for loot drop."))
 	 .String(TEXT("lootTablePath"), TEXT("Path to loot table asset."))
-	 .Number(TEXT("dropCount"), TEXT("Number of drops to roll."))
+	 .Integer(TEXT("dropCount"), TEXT("Number of drops to roll."))
 	 .Number(TEXT("dropRadius"), TEXT("Radius for scattered drops."))
 	 .Bool(TEXT("dropOnDeath"), TEXT("Drop loot when the actor dies."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
@@ -227,7 +227,7 @@ static void S_CreateCraftingRecipe(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name of the asset to create."))
 	 .String(TEXT("outputItemPath"), TEXT("Path to item produced by recipe."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .Number(TEXT("outputQuantity"), TEXT("Quantity produced."))
+	 .Integer(TEXT("outputQuantity"), TEXT("Quantity produced."))
 	 .Number(TEXT("craftTime"), TEXT("Time in seconds to craft."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("name"), TEXT("outputItemPath")});
@@ -236,7 +236,7 @@ static void S_CreateCraftingRecipe(FMcpSchemaBuilder& B)
 static void S_ConfigureRecipeRequirements(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("recipePath"), TEXT("Path to crafting recipe asset."))
-	 .Number(TEXT("requiredLevel"), TEXT("Required player level."))
+	 .Integer(TEXT("requiredLevel"), TEXT("Required player level."))
 	 .String(TEXT("requiredStation"), TEXT("Required crafting station type."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("recipePath")});
@@ -263,7 +263,7 @@ static void S_ConfigureItemStacking(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("itemPath"), TEXT("Path to item data asset."))
 	 .Bool(TEXT("stackable"), TEXT("Whether the item can stack."))
-	 .Number(TEXT("maxStackSize"), TEXT("Maximum stack size."))
+	 .Integer(TEXT("maxStackSize"), TEXT("Maximum stack size."))
 	 .Bool(TEXT("uniqueItems"), TEXT("Whether each stack entry is unique."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("itemPath")});
@@ -281,7 +281,7 @@ static void S_AddRecipeIngredient(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("recipePath"), TEXT("Path to crafting recipe asset."))
 	 .String(TEXT("ingredientItemPath"), TEXT("Item path to add as a recipe ingredient."))
-	 .Number(TEXT("quantity"), TEXT("Ingredient quantity."))
+	 .Integer(TEXT("quantity"), TEXT("Ingredient quantity."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("recipePath"), TEXT("ingredientItemPath")});
 }
@@ -289,7 +289,7 @@ static void S_AddRecipeIngredient(FMcpSchemaBuilder& B)
 static void S_RemoveLootEntry(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("lootTablePath"), TEXT("Path to loot table asset."))
-	 .Number(TEXT("entryIndex"), TEXT("Loot entry index."))
+	 .Integer(TEXT("entryIndex"), TEXT("Loot entry index."))
 	 .String(TEXT("itemPath"), TEXT("Path to item data asset."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("lootTablePath")});

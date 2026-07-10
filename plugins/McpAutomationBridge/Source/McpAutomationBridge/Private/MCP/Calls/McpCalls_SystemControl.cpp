@@ -85,7 +85,7 @@ static void S_RunTests(FMcpSchemaBuilder& B)
 	 .String(TEXT("spec"), TEXT("run_tests suite:\"ui-nav\": single spec to run, by name or filename (e.g. \"pause_menu\"); omit to run every spec in tests/ui-nav."))
 	 .String(TEXT("filter"), TEXT("Substring filter over automation test display name / full path / test name (run_tests, list_tests)."))
 	 .String(TEXT("test"), TEXT("Exact/partial test name to run (run_tests; alias for filter)."))
-	 .Number(TEXT("maxTests"), TEXT("Max tests to queue for run_tests (1-500, default 50)."));
+	 .Integer(TEXT("maxTests"), TEXT("Max tests to queue for run_tests (1-500, default 50)."));
 }
 
 static void S_GetTestResults(FMcpSchemaBuilder& B)
@@ -134,8 +134,8 @@ static void S_SetProjectSetting(FMcpSchemaBuilder& B)
 
 static void S_GetLog(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("count"), TEXT("get_log/tail_log: max lines to return (default 100, max 2000)."))
-	 .Number(TEXT("sinceSeq"), TEXT("get_log/tail_log: return only lines with seq > this (incremental polling; response carries nextSeq + dropped)."))
+	B.Integer(TEXT("count"), TEXT("get_log/tail_log: max lines to return (default 100, max 2000)."))
+	 .Integer(TEXT("sinceSeq"), TEXT("get_log/tail_log: return only lines with seq > this (incremental polling; response carries nextSeq + dropped)."))
 	 .String(TEXT("verbosity"), TEXT("get_log/tail_log: minimum severity to include — Fatal|Error|Warning|Display|Log|Verbose|VeryVerbose (default Verbose = all)."))
 	 .String(TEXT("category"), TEXT(""))
 	 .String(TEXT("contains"), TEXT("get_log/tail_log: case-insensitive substring the message must contain."));
@@ -143,8 +143,8 @@ static void S_GetLog(FMcpSchemaBuilder& B)
 
 static void S_TailLog(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("count"), TEXT("get_log/tail_log: max lines to return (default 100, max 2000)."))
-	 .Number(TEXT("sinceSeq"), TEXT("get_log/tail_log: return only lines with seq > this (incremental polling; response carries nextSeq + dropped)."))
+	B.Integer(TEXT("count"), TEXT("get_log/tail_log: max lines to return (default 100, max 2000)."))
+	 .Integer(TEXT("sinceSeq"), TEXT("get_log/tail_log: return only lines with seq > this (incremental polling; response carries nextSeq + dropped)."))
 	 .String(TEXT("verbosity"), TEXT("get_log/tail_log: minimum severity to include — Fatal|Error|Warning|Display|Log|Verbose|VeryVerbose (default Verbose = all)."))
 	 .String(TEXT("category"), TEXT(""))
 	 .String(TEXT("contains"), TEXT("get_log/tail_log: case-insensitive substring the message must contain."));
@@ -170,7 +170,7 @@ static void S_ShowFps(FMcpSchemaBuilder& B)
 
 static void S_SetScalability(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("level"), TEXT(""));
+	B.Integer(TEXT("level"), TEXT(""));
 }
 
 static void S_SetResolutionScale(FMcpSchemaBuilder& B)
@@ -203,7 +203,7 @@ static void S_ConfigureNanite(FMcpSchemaBuilder& B)
 static void S_ConfigureLod(FMcpSchemaBuilder& B)
 {
 	B.Number(TEXT("lodBias"), TEXT("configure_lod: r.MipMapLODBias."))
-	 .Number(TEXT("forceLOD"), TEXT("configure_lod: r.ForceLOD index (-1 = auto)."));
+	 .Integer(TEXT("forceLOD"), TEXT("configure_lod: r.ForceLOD index (-1 = auto)."));
 }
 
 static void S_ConfigureTextureStreaming(FMcpSchemaBuilder& B)

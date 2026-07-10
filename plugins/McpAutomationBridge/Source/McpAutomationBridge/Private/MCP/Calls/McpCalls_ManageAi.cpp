@@ -290,7 +290,7 @@ static void S_AddEqsTest(FMcpSchemaBuilder& B)
 static void S_ConfigureTestScoring(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("queryPath"), TEXT("Path to EQS query asset."))
-	 .Number(TEXT("testIndex"), TEXT("Index of test to configure."))
+	 .Integer(TEXT("testIndex"), TEXT("Index of test to configure."))
 	 .Object(TEXT("testSettings"), TEXT("Test scoring and filter settings."),
 		[](FMcpSchemaBuilder& S) {
 		S.StringEnum(TEXT("scoringEquation"), {
@@ -397,7 +397,7 @@ static void S_ConfigureDamageSenseConfig(FMcpSchemaBuilder& B)
 static void S_SetPerceptionTeam(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("teamId"), TEXT("Team ID for perception affiliation (0=Neutral, 1=Player, 2=Enemy, etc.)."))
+	 .Integer(TEXT("teamId"), TEXT("Team ID for perception affiliation (0=Neutral, 1=Player, 2=Enemy, etc.)."))
 	 .Required({TEXT("blueprintPath")});
 }
 
@@ -476,7 +476,7 @@ static void S_AddSmartObjectSlot(FMcpSchemaBuilder& B)
 static void S_ConfigureSlotBehavior(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("definitionPath"), TEXT("Path to definition asset."))
-	 .Number(TEXT("slotIndex"), TEXT("Index of slot to configure."))
+	 .Integer(TEXT("slotIndex"), TEXT("Index of slot to configure."))
 	 .String(TEXT("behaviorType"), TEXT("configure_slot_behavior: behavior definition type for the slot."))
 	 .Array(TEXT("activityTags"), TEXT("configure_slot_behavior: gameplay tags describing slot activity."))
 	 .Bool(TEXT("enabled"), TEXT("Generic enabled flag."))
@@ -510,7 +510,7 @@ static void S_AddMassSpawner(FMcpSchemaBuilder& B)
 	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("configPath"), TEXT("Path to config asset."))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
-	 .Number(TEXT("spawnCount"), TEXT("Mass spawner entity count."))
+	 .Integer(TEXT("spawnCount"), TEXT("Mass spawner entity count."))
 	 .Required({TEXT("blueprintPath")});
 }
 

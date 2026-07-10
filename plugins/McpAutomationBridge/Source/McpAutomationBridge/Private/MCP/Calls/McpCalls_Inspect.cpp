@@ -203,7 +203,7 @@ static void S_SetComponentProperty(FMcpSchemaBuilder& B)
 	 .String(TEXT("propertyPath"), TEXT(""))
 	 // Discriminated value (single propertyName/value form): populate exactly ONE.
 	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
-	 .Number(TEXT("intValue"), TEXT("Set an integer property."))
+	 .Integer(TEXT("intValue"), TEXT("Set an integer property."))
 	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
 	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum / object-path property."))
 	 .Object(TEXT("vectorValue"), TEXT("Set an FVector property (x, y, z)."),
@@ -250,7 +250,7 @@ static void S_SetProperty(FMcpSchemaBuilder& B)
 	 .String(TEXT("propertyPath"), TEXT(""))
 	 // Discriminated value: populate exactly ONE typed field matching the target property.
 	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
-	 .Number(TEXT("intValue"), TEXT("Set an integer property."))
+	 .Integer(TEXT("intValue"), TEXT("Set an integer property."))
 	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
 	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum / object-reference-by-path property."))
 	 .Object(TEXT("colorValue"), TEXT("Set an FLinearColor/FColor property (r,g,b,a, 0..1)."),

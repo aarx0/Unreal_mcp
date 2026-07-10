@@ -139,7 +139,7 @@ static void S_SetComponentProperty(FMcpSchemaBuilder& B)
 	 // arrives as a real object, never a stringified blob. The server cross-checks
 	 // the populated field against the property's reflected type.
 	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
-	 .Number(TEXT("intValue"), TEXT("Set an integer property."))
+	 .Integer(TEXT("intValue"), TEXT("Set an integer property."))
 	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
 	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum property."))
 	 .Object(TEXT("vectorValue"), TEXT("Set an FVector property (x, y, z)."),
@@ -215,7 +215,7 @@ static void S_SetBlueprintVariables(FMcpSchemaBuilder& B)
 	 // Discriminated value: populate exactly ONE typed field (same shape as
 	 // set_component_property). Sets one variable per call, atomically.
 	 .Bool(TEXT("boolValue"), TEXT("Set a bool variable."))
-	 .Number(TEXT("intValue"), TEXT("Set an integer variable."))
+	 .Integer(TEXT("intValue"), TEXT("Set an integer variable."))
 	 .Number(TEXT("floatValue"), TEXT("Set a float/double variable."))
 	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum variable."))
 	 .Object(TEXT("vectorValue"), TEXT("Set an FVector variable (x, y, z)."),

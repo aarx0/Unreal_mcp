@@ -67,9 +67,9 @@ static void S_CreateBox(FMcpSchemaBuilder& B)
 		[](FMcpSchemaBuilder& S) {
 			S.Number(TEXT("width")).Number(TEXT("height")).Number(TEXT("depth"));
 		})
-	 .Number(TEXT("widthSegments"), TEXT("Segments along width."))
-	 .Number(TEXT("heightSegments"), TEXT("Segments along height."))
-	 .Number(TEXT("depthSegments"), TEXT("Segments along depth."));
+	 .Integer(TEXT("widthSegments"), TEXT("Segments along width."))
+	 .Integer(TEXT("heightSegments"), TEXT("Segments along height."))
+	 .Integer(TEXT("depthSegments"), TEXT("Segments along depth."));
 }
 
 static void S_CreateSphere(FMcpSchemaBuilder& B)
@@ -79,8 +79,8 @@ static void S_CreateSphere(FMcpSchemaBuilder& B)
 	S_Transform(B);
 	B.Number(TEXT("radius"), TEXT("Radius value."))
 	 .Integer(TEXT("subdivisions"), TEXT("create_sphere: icosphere subdivision count (default topology; alternative to numRings/radialSegments)."))
-	 .Number(TEXT("numRings"), TEXT("Ring count: sphere latitude rings (switches to lat-long topology) or torus major segments."))
-	 .Number(TEXT("radialSegments"), TEXT("Radial segments: sphere longitude steps (switches to lat-long topology) or torus minor segments."));
+	 .Integer(TEXT("numRings"), TEXT("Ring count: sphere latitude rings (switches to lat-long topology) or torus major segments."))
+	 .Integer(TEXT("radialSegments"), TEXT("Radial segments: sphere longitude steps (switches to lat-long topology) or torus minor segments."));
 }
 
 static void S_CreateCylinder(FMcpSchemaBuilder& B)
@@ -90,8 +90,8 @@ static void S_CreateCylinder(FMcpSchemaBuilder& B)
 	S_Transform(B);
 	B.Number(TEXT("radius"), TEXT("Radius value."))
 	 .Number(TEXT("height"), TEXT("Height value."))
-	 .Number(TEXT("segments"), TEXT("Number of segments for bevel, subdivide."))
-	 .Number(TEXT("numSides"), TEXT("Radial side count for cylinder and cone (alias of segments)."));
+	 .Integer(TEXT("segments"), TEXT("Number of segments for bevel, subdivide."))
+	 .Integer(TEXT("numSides"), TEXT("Radial side count for cylinder and cone (alias of segments)."));
 }
 
 static void S_CreateCone(FMcpSchemaBuilder& B)
@@ -102,8 +102,8 @@ static void S_CreateCone(FMcpSchemaBuilder& B)
 	B.Number(TEXT("baseRadius"), TEXT("create_cone: radius at the base."))
 	 .Number(TEXT("topRadius"), TEXT("create_cone: radius at the top (0 for a point)."))
 	 .Number(TEXT("height"), TEXT("Height value."))
-	 .Number(TEXT("segments"), TEXT("Number of segments for bevel, subdivide."))
-	 .Number(TEXT("numSides"), TEXT("Radial side count for cylinder and cone (alias of segments)."));
+	 .Integer(TEXT("segments"), TEXT("Number of segments for bevel, subdivide."))
+	 .Integer(TEXT("numSides"), TEXT("Radial side count for cylinder and cone (alias of segments)."));
 }
 
 static void S_CreateCapsule(FMcpSchemaBuilder& B)
@@ -114,7 +114,7 @@ static void S_CreateCapsule(FMcpSchemaBuilder& B)
 	B.Number(TEXT("radius"), TEXT("Radius value."))
 	 .Number(TEXT("length"), TEXT("create_capsule/create_ramp: cylinder/ramp length."))
 	 .Integer(TEXT("hemisphereSteps"), TEXT("create_capsule: hemisphere cap subdivision count."))
-	 .Number(TEXT("segments"), TEXT("Number of segments for bevel, subdivide."));
+	 .Integer(TEXT("segments"), TEXT("Number of segments for bevel, subdivide."));
 }
 
 static void S_CreateTorus(FMcpSchemaBuilder& B)
@@ -126,8 +126,8 @@ static void S_CreateTorus(FMcpSchemaBuilder& B)
 	 .Number(TEXT("minorRadius"), TEXT("create_torus/create_arch: minor (tube) radius."))
 	 .Integer(TEXT("majorSegments"), TEXT("create_torus: major ring segment count (alias of numRings)."))
 	 .Integer(TEXT("minorSegments"), TEXT("create_torus: minor tube segment count (alias of radialSegments)."))
-	 .Number(TEXT("numRings"), TEXT("Ring count: sphere latitude rings (switches to lat-long topology) or torus major segments."))
-	 .Number(TEXT("radialSegments"), TEXT("Radial segments: sphere longitude steps (switches to lat-long topology) or torus minor segments."));
+	 .Integer(TEXT("numRings"), TEXT("Ring count: sphere latitude rings (switches to lat-long topology) or torus major segments."))
+	 .Integer(TEXT("radialSegments"), TEXT("Radial segments: sphere longitude steps (switches to lat-long topology) or torus minor segments."));
 }
 
 static void S_CreatePlane(FMcpSchemaBuilder& B)
@@ -138,9 +138,9 @@ static void S_CreatePlane(FMcpSchemaBuilder& B)
 	B.Number(TEXT("width"), TEXT("Width value."))
 	 .Number(TEXT("height"), TEXT("Height value."))
 	 .Number(TEXT("depth"), TEXT("Depth value."))
-	 .Number(TEXT("widthSegments"), TEXT("Segments along width."))
+	 .Integer(TEXT("widthSegments"), TEXT("Segments along width."))
 	 .Integer(TEXT("widthSubdivisions"), TEXT("create_plane: subdivision count along width."))
-	 .Number(TEXT("heightSegments"), TEXT("Segments along height."))
+	 .Integer(TEXT("heightSegments"), TEXT("Segments along height."))
 	 .Integer(TEXT("depthSubdivisions"), TEXT("create_plane: subdivision count along depth."));
 }
 
@@ -150,7 +150,7 @@ static void S_CreateDisc(FMcpSchemaBuilder& B)
 	 .String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."));
 	S_Transform(B);
 	B.Number(TEXT("radius"), TEXT("Radius value."))
-	 .Number(TEXT("segments"), TEXT("Number of segments for bevel, subdivide."));
+	 .Integer(TEXT("segments"), TEXT("Number of segments for bevel, subdivide."));
 }
 
 static void S_CreateStairs(FMcpSchemaBuilder& B)
@@ -161,7 +161,7 @@ static void S_CreateStairs(FMcpSchemaBuilder& B)
 	B.Number(TEXT("stepWidth"), TEXT("Width of each stair step."))
 	 .Number(TEXT("stepHeight"), TEXT("Height of each stair step."))
 	 .Number(TEXT("stepDepth"), TEXT("Depth of each stair step."))
-	 .Number(TEXT("numSteps"), TEXT("Number of steps for stairs."))
+	 .Integer(TEXT("numSteps"), TEXT("Number of steps for stairs."))
 	 .Bool(TEXT("floating"), TEXT("create_stairs/create_spiral_stairs: omit the support structure beneath the steps."));
 }
 
@@ -175,7 +175,7 @@ static void S_CreateSpiralStairs(FMcpSchemaBuilder& B)
 	 .Number(TEXT("innerRadius"), TEXT("Inner radius for torus."))
 	 .Number(TEXT("curveAngle"), TEXT("Total sweep angle in degrees for create_spiral_stairs (mutually exclusive with numTurns; default 90)."))
 	 .Number(TEXT("numTurns"), TEXT("Number of full revolutions for create_spiral_stairs (mutually exclusive with curveAngle)."))
-	 .Number(TEXT("numSteps"), TEXT("Number of steps for stairs."))
+	 .Integer(TEXT("numSteps"), TEXT("Number of steps for stairs."))
 	 .Bool(TEXT("floating"), TEXT("create_stairs/create_spiral_stairs: omit the support structure beneath the steps."));
 }
 
@@ -186,7 +186,7 @@ static void S_CreateRing(FMcpSchemaBuilder& B)
 	S_Transform(B);
 	B.Number(TEXT("outerRadius"), TEXT("create_ring/create_pipe: outer radius."))
 	 .Number(TEXT("innerRadius"), TEXT("Inner radius for torus."))
-	 .Number(TEXT("segments"), TEXT("Number of segments for bevel, subdivide."));
+	 .Integer(TEXT("segments"), TEXT("Number of segments for bevel, subdivide."));
 }
 
 static void S_CreateArch(FMcpSchemaBuilder& B)
@@ -302,7 +302,7 @@ static void S_FlipNormals(FMcpSchemaBuilder& B)
 static void S_SimplifyMesh(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
-	 .Number(TEXT("targetTriangleCount"), TEXT("Target triangle count for simplify_mesh and remesh_uniform."))
+	 .Integer(TEXT("targetTriangleCount"), TEXT("Target triangle count for simplify_mesh and remesh_uniform."))
 	 .Number(TEXT("targetPercentage"), TEXT("Percent of triangles to keep for simplify_mesh when targetTriangleCount is absent (default 50)."))
 	 .Number(TEXT("reductionPercent"), TEXT("Percent of triangles to remove for simplify_mesh (mutually exclusive with targetTriangleCount/targetPercentage)."))
 	 .Required({TEXT("actorName")});
@@ -311,7 +311,7 @@ static void S_SimplifyMesh(FMcpSchemaBuilder& B)
 static void S_Subdivide(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
-	 .Number(TEXT("iterations"), TEXT("Number of iterations for smooth, remesh."))
+	 .Integer(TEXT("iterations"), TEXT("Number of iterations for smooth, remesh."))
 	 .Required({TEXT("actorName")});
 }
 
@@ -423,7 +423,7 @@ static void S_NoiseDeform(FMcpSchemaBuilder& B)
 static void S_Smooth(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
-	 .Number(TEXT("iterations"), TEXT("Number of iterations for smooth, remesh."))
+	 .Integer(TEXT("iterations"), TEXT("Number of iterations for smooth, remesh."))
 	 .Number(TEXT("alpha"), TEXT("smooth: per-iteration smoothing factor."))
 	 .Required({TEXT("actorName")});
 }
@@ -431,7 +431,7 @@ static void S_Smooth(FMcpSchemaBuilder& B)
 static void S_Relax(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
-	 .Number(TEXT("iterations"), TEXT("Number of iterations for smooth, remesh."))
+	 .Integer(TEXT("iterations"), TEXT("Number of iterations for smooth, remesh."))
 	 .Number(TEXT("strength"), TEXT("Strength or weight."))
 	 .Required({TEXT("actorName")});
 }
@@ -470,7 +470,7 @@ static void S_Cylindrify(FMcpSchemaBuilder& B)
 static void S_LatticeDeform(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
-	 .Number(TEXT("latticeResolution"), TEXT("Control lattice resolution for lattice deformation."))
+	 .Integer(TEXT("latticeResolution"), TEXT("Control lattice resolution for lattice deformation."))
 	 .Number(TEXT("weight"), TEXT("Weight for lattice deformation."))
 	 .Number(TEXT("strength"), TEXT("Strength or weight."))
 	 .Object(TEXT("position"), TEXT("lattice_deform: deformation center (x, y, z)."),
@@ -525,7 +525,7 @@ static void S_RemoveDegenerates(FMcpSchemaBuilder& B)
 static void S_RemeshUniform(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
-	 .Number(TEXT("targetTriangleCount"), TEXT("Target triangle count for simplify_mesh and remesh_uniform."))
+	 .Integer(TEXT("targetTriangleCount"), TEXT("Target triangle count for simplify_mesh and remesh_uniform."))
 	 .Number(TEXT("targetEdgeLength"), TEXT("Target edge length for remesh_uniform (mutually exclusive with targetTriangleCount)."))
 	 .Required({TEXT("actorName")});
 }
@@ -549,7 +549,7 @@ static void S_GenerateCollision(FMcpSchemaBuilder& B)
 		TEXT("convex"),
 		TEXT("convex_decomposition")
 	}, TEXT("generate_collision: shape/method to generate."))
-	 .Number(TEXT("hullCount"), TEXT("Max convex hulls for generate_collision (convex/convex_decomposition only)."))
+	 .Integer(TEXT("hullCount"), TEXT("Max convex hulls for generate_collision (convex/convex_decomposition only)."))
 	 .Required({TEXT("actorName")});
 }
 
@@ -614,7 +614,7 @@ static void S_ProjectUV(FMcpSchemaBuilder& B)
 		[](FMcpSchemaBuilder& S) {
 			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
 		})
-	 .Number(TEXT("uvChannel"), TEXT("UV channel index (0-7)."))
+	 .Integer(TEXT("uvChannel"), TEXT("UV channel index (0-7)."))
 	 .Object(TEXT("uvScale"), TEXT("UV scale."),
 		[](FMcpSchemaBuilder& S) {
 			S.Number(TEXT("u")).Number(TEXT("v"));
@@ -629,7 +629,7 @@ static void S_ProjectUV(FMcpSchemaBuilder& B)
 static void S_TransformUVs(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
-	 .Number(TEXT("uvChannel"), TEXT("UV channel index (0-7)."))
+	 .Integer(TEXT("uvChannel"), TEXT("UV channel index (0-7)."))
 	 .Number(TEXT("translateU"), TEXT("transform_uvs: U-axis translation."))
 	 .Number(TEXT("translateV"), TEXT("transform_uvs: V-axis translation."))
 	 .Number(TEXT("scaleU"), TEXT("transform_uvs: U-axis scale."))
@@ -707,14 +707,14 @@ static void S_DuplicateAlongSpline(FMcpSchemaBuilder& B)
 static void S_UnwrapUV(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
-	 .Number(TEXT("uvChannel"), TEXT("UV channel index (0-7)."))
+	 .Integer(TEXT("uvChannel"), TEXT("UV channel index (0-7)."))
 	 .Required({TEXT("actorName")});
 }
 
 static void S_PackUVIslands(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
-	 .Number(TEXT("uvChannel"), TEXT("UV channel index (0-7)."))
+	 .Integer(TEXT("uvChannel"), TEXT("UV channel index (0-7)."))
 	 .Integer(TEXT("textureResolution"), TEXT("pack_uv_islands: target texture resolution."))
 	 .Required({TEXT("actorName")});
 }
@@ -734,7 +734,7 @@ static void S_ExtrudeAlongSpline(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
 	 .String(TEXT("splineActorName"), TEXT("sweep/duplicate_along_spline/extrude_along_spline: spline actor to follow."))
-	 .Number(TEXT("segments"), TEXT("Number of segments for bevel, subdivide."))
+	 .Integer(TEXT("segments"), TEXT("Number of segments for bevel, subdivide."))
 	 .Bool(TEXT("cap"), TEXT("loft/sweep/extrude_along_spline: cap the open ends."))
 	 .Number(TEXT("scaleStart"), TEXT("sweep/extrude_along_spline: cross-section scale at the path start."))
 	 .Number(TEXT("scaleEnd"), TEXT("sweep/extrude_along_spline: cross-section scale at the path end."))
@@ -796,14 +796,14 @@ static void S_SimplifyCollision(FMcpSchemaBuilder& B)
 static void S_GenerateLODs(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
-	 .Number(TEXT("lodCount"), TEXT("Number of LOD levels to generate."))
+	 .Integer(TEXT("lodCount"), TEXT("Number of LOD levels to generate."))
 	 .String(TEXT("assetPath"), TEXT("Destination asset path for convert_to_static_mesh/convert_to_nanite (e.g. /Game/Meshes/SM_Rock)."));
 }
 
 static void S_SetLODSettings(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Destination asset path for convert_to_static_mesh/convert_to_nanite (e.g. /Game/Meshes/SM_Rock)."))
-	 .Number(TEXT("lodIndex"), TEXT("Specific LOD index to configure."))
+	 .Integer(TEXT("lodIndex"), TEXT("Specific LOD index to configure."))
 	 .Number(TEXT("trianglePercent"), TEXT("set_lod_settings: percent of triangles to keep at this LOD."))
 	 .Bool(TEXT("recomputeNormals"), TEXT("set_lod_settings: recompute normals for this LOD."))
 	 .Bool(TEXT("recomputeTangents"), TEXT("set_lod_settings: recompute tangents for this LOD."))

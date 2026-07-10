@@ -141,13 +141,13 @@ static void S_SetPreferences(FMcpSchemaBuilder& B)
 
 static void S_CreateBookmark(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("index"), TEXT("Bookmark slot index (create_bookmark / jump_to_bookmark)."))
+	B.Integer(TEXT("index"), TEXT("Bookmark slot index (create_bookmark / jump_to_bookmark)."))
 	 .Integer(TEXT("id"), TEXT("Bookmark identifier/index."));
 }
 
 static void S_JumpToBookmark(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("index"), TEXT("Bookmark slot index (create_bookmark / jump_to_bookmark)."))
+	B.Integer(TEXT("index"), TEXT("Bookmark slot index (create_bookmark / jump_to_bookmark)."))
 	 .Integer(TEXT("id"), TEXT("Bookmark identifier/index."));
 }
 

@@ -250,9 +250,9 @@ static void S_ConfigureMovementPrediction(FMcpSchemaBuilder& B)
 // Connection & net driver
 static void S_ConfigureNetDriver(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("maxClientRate"), TEXT("Max client rate."))
-	 .Number(TEXT("maxInternetClientRate"), TEXT("Max internet client rate."))
-	 .Number(TEXT("netServerMaxTickRate"), TEXT("Server max tick rate."));
+	B.Integer(TEXT("maxClientRate"), TEXT("Max client rate."))
+	 .Integer(TEXT("maxInternetClientRate"), TEXT("Max internet client rate."))
+	 .Integer(TEXT("netServerMaxTickRate"), TEXT("Server max tick rate."));
 }
 
 static void S_SetNetRole(FMcpSchemaBuilder& B)
@@ -422,7 +422,7 @@ static void S_ConfigurePlayerStart(FMcpSchemaBuilder& B)
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .Object(TEXT("location"), TEXT("configure_player_start: PlayerStart world location (x, y, z)."))
 	 .Object(TEXT("rotation"), TEXT("configure_player_start: PlayerStart world rotation (pitch, yaw, roll)."))
-	 .Number(TEXT("teamIndex"), TEXT("configure_player_start: team index used to build the default PlayerStartTag."))
+	 .Integer(TEXT("teamIndex"), TEXT("configure_player_start: team index used to build the default PlayerStartTag."))
 	 .Bool(TEXT("bPlayerOnly"), TEXT("configure_player_start: restrict the PlayerStart to player pawns only."))
 	 .String(TEXT("playerStartName"), TEXT("configure_player_start: specific PlayerStart actor to configure (falls back to actorName)."))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
@@ -439,7 +439,7 @@ static void S_SetRespawnRules(FMcpSchemaBuilder& B)
 	 .Number(TEXT("respawnDelay"), TEXT("configure_spawn_system / set_respawn_rules: seconds before a player respawns (default 5)."))
 	 .String(TEXT("respawnLocation"), TEXT("set_respawn_rules: named respawn location strategy (default PlayerStart)."))
 	 .Bool(TEXT("forceRespawn"), TEXT("set_respawn_rules: whether respawn is forced rather than optional."))
-	 .Number(TEXT("respawnLives"), TEXT("set_respawn_rules: lives per player (-1 = unlimited)."));
+	 .Integer(TEXT("respawnLives"), TEXT("set_respawn_rules: lives per player (-1 = unlimited)."));
 }
 
 static void S_ConfigureSpectating(FMcpSchemaBuilder& B)
@@ -484,7 +484,7 @@ static void S_AddLocalPlayer(FMcpSchemaBuilder& B)
 
 static void S_RemoveLocalPlayer(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("playerIndex"), TEXT("remove_local_player: local player index to remove (cannot be 0)."))
+	B.Integer(TEXT("playerIndex"), TEXT("remove_local_player: local player index to remove (cannot be 0)."))
 	 .Required({TEXT("playerIndex")});
 }
 
@@ -493,7 +493,7 @@ static void S_HostLanServer(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("serverName"), TEXT("host_lan_server: display name for the hosted server."))
 	 .String(TEXT("mapName"), TEXT("host_lan_server: map to travel to when hosting."))
-	 .Number(TEXT("maxPlayers"), TEXT("configure_local_session_settings / host_lan_server: max player count (default 4)."))
+	 .Integer(TEXT("maxPlayers"), TEXT("configure_local_session_settings / host_lan_server: max player count (default 4)."))
 	 .String(TEXT("travelOptions"), TEXT("host_lan_server / join_lan_server: extra URL options appended to the travel string."))
 	 .Bool(TEXT("executeTravel"), TEXT("host_lan_server: actually perform ServerTravel instead of just building the URL (default false)."))
 	 .Required({TEXT("mapName")});
@@ -502,7 +502,7 @@ static void S_HostLanServer(FMcpSchemaBuilder& B)
 static void S_JoinLanServer(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("serverAddress"), TEXT("join_lan_server: address of the LAN server to connect to."))
-	 .Number(TEXT("serverPort"), TEXT("configure_lan_play / join_lan_server: port number (default 7777)."))
+	 .Integer(TEXT("serverPort"), TEXT("configure_lan_play / join_lan_server: port number (default 7777)."))
 	 .String(TEXT("serverPassword"), TEXT("configure_lan_play / join_lan_server: LAN server password."))
 	 .String(TEXT("travelOptions"), TEXT("host_lan_server / join_lan_server: extra URL options appended to the travel string."))
 	 .Required({TEXT("serverAddress")});
@@ -529,7 +529,7 @@ static void S_MutePlayer(FMcpSchemaBuilder& B)
 	B.String(TEXT("playerName"), TEXT("mute_player: player name to mute/unmute (or use targetPlayerId)."))
 	 .String(TEXT("targetPlayerId"), TEXT("mute_player: player id to mute/unmute (or use playerName)."))
 	 .Bool(TEXT("muted"), TEXT("mute_player: mute (true) or unmute (false), default true."))
-	 .Number(TEXT("localPlayerNum"), TEXT("mute_player: local player index applying the mute."))
+	 .Integer(TEXT("localPlayerNum"), TEXT("mute_player: local player index applying the mute."))
 	 .Bool(TEXT("systemWide"), TEXT("mute_player: apply the mute system-wide rather than just locally."));
 }
 

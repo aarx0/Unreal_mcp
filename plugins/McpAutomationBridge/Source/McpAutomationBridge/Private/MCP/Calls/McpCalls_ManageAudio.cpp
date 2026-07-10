@@ -287,7 +287,7 @@ static void S_AddCueNode(FMcpSchemaBuilder& B)
 	 .Number(TEXT("volume"), TEXT(""))
 	 .Number(TEXT("pitch"), TEXT(""))
 	 .Bool(TEXT("indefinite"), TEXT("add_cue_node (looping node): loop indefinitely."))
-	 .Number(TEXT("loopCount"), TEXT("add_cue_node (looping node): fixed loop count when not indefinite."))
+	 .Integer(TEXT("loopCount"), TEXT("add_cue_node (looping node): fixed loop count when not indefinite."))
 	 .String(TEXT("attenuationPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .Number(TEXT("delay"), TEXT("add_cue_node (delay node): delay in seconds."))
 	 .Required({TEXT("assetPath")});
@@ -298,7 +298,7 @@ static void S_ConnectCueNodes(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("sourceNodeId"), TEXT("ID of the consuming (parent) node; pass 'Root' in connect_cue_nodes to wire the cue output."))
 	 .String(TEXT("targetNodeId"), TEXT("ID of the target (feeding child) node."))
-	 .Number(TEXT("childIndex"), TEXT("Input pin index on the source node for connect_cue_nodes."))
+	 .Integer(TEXT("childIndex"), TEXT("Input pin index on the source node for connect_cue_nodes."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation. Default true."))
 	 .Required({TEXT("assetPath"), TEXT("sourceNodeId"), TEXT("targetNodeId")});
 }

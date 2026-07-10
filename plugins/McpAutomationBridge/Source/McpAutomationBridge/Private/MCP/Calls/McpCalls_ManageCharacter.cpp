@@ -103,7 +103,7 @@ static void S_ConfigureJump(FMcpSchemaBuilder& B)
 	 .Number(TEXT("jumpHeight"), TEXT("Desired jump apex height in cm; converted to JumpZVelocity via sqrt(2*g*h) using effective gravity."))
 	 .Number(TEXT("airControl"), TEXT(""))
 	 .Number(TEXT("fallingLateralFriction"), TEXT("Air friction."))
-	 .Number(TEXT("maxJumpCount"), TEXT(""))
+	 .Integer(TEXT("maxJumpCount"), TEXT(""))
 	 .Number(TEXT("jumpHoldTime"), TEXT("Max hold time for variable jump."))
 	 .Required({TEXT("blueprintPath")});
 }
@@ -127,7 +127,7 @@ static void S_AddCustomMovementMode(FMcpSchemaBuilder& B)
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("modeName"), TEXT("Name for custom movement mode."))
-	 .Number(TEXT("modeId"), TEXT("Custom movement mode ID."))
+	 .Integer(TEXT("modeId"), TEXT("Custom movement mode ID."))
 	 .Number(TEXT("customSpeed"), TEXT("add_custom_movement_mode: speed stored as the {modeName}Speed variable default and MaxCustomMovementSpeed."))
 	 .Required({TEXT("blueprintPath")});
 }

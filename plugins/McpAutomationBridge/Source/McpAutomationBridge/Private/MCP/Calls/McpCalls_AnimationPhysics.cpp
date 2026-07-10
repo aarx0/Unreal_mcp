@@ -48,13 +48,13 @@ static void S_CreateBlendSpace(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
 	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("dimensions"), TEXT("create_blend_space: 1 or 2 (default 1)."))
+	 .Integer(TEXT("dimensions"), TEXT("create_blend_space: 1 or 2 (default 1)."))
 	 .Number(TEXT("minX"), TEXT("create_blend_space: axis-0 minimum (default 0)."))
 	 .Number(TEXT("maxX"), TEXT("create_blend_space: axis-0 maximum (default 1)."))
-	 .Number(TEXT("gridX"), TEXT("create_blend_space: axis-0 grid divisions (default 3)."))
+	 .Integer(TEXT("gridX"), TEXT("create_blend_space: axis-0 grid divisions (default 3)."))
 	 .Number(TEXT("minY"), TEXT("create_blend_space: axis-1 minimum when dimensions=2 (default 0)."))
 	 .Number(TEXT("maxY"), TEXT("create_blend_space: axis-1 maximum when dimensions=2 (default 1)."))
-	 .Number(TEXT("gridY"), TEXT("create_blend_space: axis-1 grid divisions when dimensions=2 (default 3)."))
+	 .Integer(TEXT("gridY"), TEXT("create_blend_space: axis-1 grid divisions when dimensions=2 (default 3)."))
 	 .Required({TEXT("name"), TEXT("skeletonPath")});
 }
 
@@ -75,8 +75,8 @@ static void S_CreateProceduralAnim(FMcpSchemaBuilder& B)
 	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
 	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .ArrayOfObjects(TEXT("boneTracks"), TEXT("create_procedural_animation: per-bone keyframe tracks ({boneName, frames:[{frame, location, rotation}]})."))
-	 .Number(TEXT("numFrames"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: explicit frame count (overrides length*frameRate)."))
-	 .Number(TEXT("frameRate"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: sample rate in fps (default 30)."))
+	 .Integer(TEXT("numFrames"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: explicit frame count (overrides length*frameRate)."))
+	 .Integer(TEXT("frameRate"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: sample rate in fps (default 30)."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Required({TEXT("name"), TEXT("skeletonPath"), TEXT("boneTracks")});
 }
@@ -176,8 +176,8 @@ static void S_CreateAnimationSequence(FMcpSchemaBuilder& B)
 	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
 	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
-	 .Number(TEXT("frameRate"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: sample rate in fps (default 30)."))
-	 .Number(TEXT("numFrames"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: explicit frame count (overrides length*frameRate)."))
+	 .Integer(TEXT("frameRate"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: sample rate in fps (default 30)."))
+	 .Integer(TEXT("numFrames"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: explicit frame count (overrides length*frameRate)."))
 	 .Number(TEXT("length"), TEXT("Length in seconds (create_animation_sequence, set_sequence_length, create_montage)."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Required({TEXT("name"), TEXT("skeletonPath")});
@@ -187,8 +187,8 @@ static void S_SetSequenceLength(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
 	 .Number(TEXT("length"), TEXT("Length in seconds (create_animation_sequence, set_sequence_length, create_montage)."))
-	 .Number(TEXT("frameRate"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: sample rate in fps (default 30)."))
-	 .Number(TEXT("numFrames"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: explicit frame count (overrides length*frameRate)."))
+	 .Integer(TEXT("frameRate"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: sample rate in fps (default 30)."))
+	 .Integer(TEXT("numFrames"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: explicit frame count (overrides length*frameRate)."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Required({TEXT("assetPath"), TEXT("length")});
 }
@@ -213,7 +213,7 @@ static void S_SetBoneKey(FMcpSchemaBuilder& B)
 		[](FMcpSchemaBuilder& S) {
 		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
 	})
-	 .Number(TEXT("frame"), TEXT(""))
+	 .Integer(TEXT("frame"), TEXT(""))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
@@ -227,7 +227,7 @@ static void S_SetCurveKey(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
 	 .String(TEXT("curveName"), TEXT(""))
 	 .Number(TEXT("floatValue"), TEXT("Curve key value."))
-	 .Number(TEXT("frame"), TEXT(""))
+	 .Integer(TEXT("frame"), TEXT(""))
 	 .Bool(TEXT("createIfMissing"), TEXT("set_curve_key: create the curve if it doesn't exist yet (default true)."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Required({TEXT("assetPath"), TEXT("curveName")});
@@ -238,8 +238,8 @@ static void S_AddNotify(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
 	 .String(TEXT("notifyName"), TEXT(""))
 	 .String(TEXT("notifyClass"), TEXT("add_notify/add_notify_state/add_montage_notify: AnimNotify(State) class name (e.g. PlaySound; 'AnimNotify_' prefix optional)."))
-	 .Number(TEXT("frame"), TEXT(""))
-	 .Number(TEXT("trackIndex"), TEXT("add_notify/add_notify_state/add_montage_notify: notify track index (default 0)."))
+	 .Integer(TEXT("frame"), TEXT(""))
+	 .Integer(TEXT("trackIndex"), TEXT("add_notify/add_notify_state/add_montage_notify: notify track index (default 0)."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Required({TEXT("assetPath")});
 }
@@ -248,9 +248,9 @@ static void S_AddNotifyState(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
 	 .String(TEXT("notifyClass"), TEXT("add_notify/add_notify_state/add_montage_notify: AnimNotify(State) class name (e.g. PlaySound; 'AnimNotify_' prefix optional)."))
-	 .Number(TEXT("startFrame"), TEXT("add_notify_state: start frame."))
-	 .Number(TEXT("endFrame"), TEXT("add_notify_state: end frame."))
-	 .Number(TEXT("trackIndex"), TEXT("add_notify/add_notify_state/add_montage_notify: notify track index (default 0)."))
+	 .Integer(TEXT("startFrame"), TEXT("add_notify_state: start frame."))
+	 .Integer(TEXT("endFrame"), TEXT("add_notify_state: end frame."))
+	 .Integer(TEXT("trackIndex"), TEXT("add_notify/add_notify_state/add_montage_notify: notify track index (default 0)."))
 	 .String(TEXT("notifyName"), TEXT(""))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Required({TEXT("assetPath")});
@@ -260,7 +260,7 @@ static void S_AddSyncMarker(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
 	 .String(TEXT("markerName"), TEXT("add_sync_marker: marker name."))
-	 .Number(TEXT("frame"), TEXT(""))
+	 .Integer(TEXT("frame"), TEXT(""))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Required({TEXT("assetPath"), TEXT("markerName")});
 }
@@ -281,7 +281,7 @@ static void S_SetAdditiveSettings(FMcpSchemaBuilder& B)
 	 .String(TEXT("additiveAnimType"), TEXT("set_additive_settings: additive type (default NoAdditive)."))
 	 .String(TEXT("basePoseType"), TEXT("set_additive_settings: base pose type (default RefPose)."))
 	 .String(TEXT("basePoseAnimation"), TEXT("set_additive_settings: base pose animation asset path."))
-	 .Number(TEXT("basePoseFrame"), TEXT("set_additive_settings: base pose frame index."))
+	 .Integer(TEXT("basePoseFrame"), TEXT("set_additive_settings: base pose frame index."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Required({TEXT("assetPath")});
 }
@@ -335,7 +335,7 @@ static void S_AddMontageNotify(FMcpSchemaBuilder& B)
 	 .String(TEXT("notifyName"), TEXT(""))
 	 .Number(TEXT("time"), TEXT(""))
 	 .String(TEXT("notifyClass"), TEXT("add_notify/add_notify_state/add_montage_notify: AnimNotify(State) class name (e.g. PlaySound; 'AnimNotify_' prefix optional)."))
-	 .Number(TEXT("trackIndex"), TEXT("add_notify/add_notify_state/add_montage_notify: notify track index (default 0)."))
+	 .Integer(TEXT("trackIndex"), TEXT("add_notify/add_notify_state/add_montage_notify: notify track index (default 0)."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Required({TEXT("assetPath")});
 }
@@ -426,7 +426,7 @@ static void S_SetAxisSettings(FMcpSchemaBuilder& B)
 	 .String(TEXT("axisName"), TEXT(""))
 	 .String(TEXT("axis"), TEXT("mirror_weights: mirror axis X/Y/Z (default X); set_axis_settings: Horizontal/Vertical (default Horizontal)."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
-	 .Number(TEXT("gridDivisions"), TEXT("set_axis_settings: axis grid divisions."))
+	 .Integer(TEXT("gridDivisions"), TEXT("set_axis_settings: axis grid divisions."))
 	 .Required({TEXT("assetPath")});
 }
 
@@ -516,7 +516,7 @@ static void S_SetTransitionRules(FMcpSchemaBuilder& B)
 	 .String(TEXT("fromState"), TEXT("add_transition/set_transition_rules: source state name."))
 	 .String(TEXT("toState"), TEXT("add_transition/set_transition_rules: target state name."))
 	 .Number(TEXT("crossfadeDuration"), TEXT("add_transition/set_transition_rules: crossfade time in seconds."))
-	 .Number(TEXT("priorityOrder"), TEXT("set_transition_rules: transition priority order."))
+	 .Integer(TEXT("priorityOrder"), TEXT("set_transition_rules: transition priority order."))
 	 .Bool(TEXT("automaticRule"), TEXT("set_transition_rules: auto-trigger when the source sequence player finishes (default false)."))
 	 .Bool(TEXT("bidirectional"), TEXT("set_transition_rules: also allow the reverse transition (default false)."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."));
@@ -572,7 +572,7 @@ static void S_SetAnimGraphNodeValue(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 // Discriminated value: populate exactly ONE typed field matching the node property.
 	 .Bool(TEXT("boolValue"), TEXT("Set a bool node property."))
-	 .Number(TEXT("intValue"), TEXT("Set an integer node property."))
+	 .Integer(TEXT("intValue"), TEXT("Set an integer node property."))
 	 .Number(TEXT("floatValue"), TEXT("Set a float/double node property."))
 	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum / object-path node property."))
 	 .Object(TEXT("colorValue"), TEXT("Set an FLinearColor/FColor node property (r,g,b,a)."),
@@ -825,7 +825,7 @@ static void S_CreateMorphTarget(FMcpSchemaBuilder& B)
 	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
 	 .String(TEXT("morphTargetName"), TEXT("create_morph_target/set_morph_target_deltas: morph target name."))
 	 .ArrayOfObjects(TEXT("deltas"), TEXT("create_morph_target/set_morph_target_deltas: vertex deltas ({vertexIndex, positionDelta, tangentDelta})."))
-	 .Number(TEXT("lodIndex"), TEXT("set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0)."))
+	 .Integer(TEXT("lodIndex"), TEXT("set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0)."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Required({TEXT("skeletalMeshPath"), TEXT("morphTargetName"), TEXT("deltas")});
 }
@@ -864,9 +864,9 @@ static void S_BindClothToSkeletalMesh(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
 	 .String(TEXT("clothAssetName"), TEXT("bind_cloth_to_skeletal_mesh: cloth asset to bind (omit to list available cloth assets)."))
-	 .Number(TEXT("meshLodIndex"), TEXT("bind_cloth_to_skeletal_mesh: skeletal mesh LOD index."))
-	 .Number(TEXT("sectionIndex"), TEXT("bind_cloth_to_skeletal_mesh: mesh section index to bind."))
-	 .Number(TEXT("assetLodIndex"), TEXT("bind_cloth_to_skeletal_mesh: cloth asset LOD index."))
+	 .Integer(TEXT("meshLodIndex"), TEXT("bind_cloth_to_skeletal_mesh: skeletal mesh LOD index."))
+	 .Integer(TEXT("sectionIndex"), TEXT("bind_cloth_to_skeletal_mesh: mesh section index to bind."))
+	 .Integer(TEXT("assetLodIndex"), TEXT("bind_cloth_to_skeletal_mesh: cloth asset LOD index."))
 	 .Required({TEXT("skeletalMeshPath")});
 }
 
@@ -926,7 +926,7 @@ static void S_SetVertexWeights(FMcpSchemaBuilder& B)
 	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
 	 .String(TEXT("profileName"), TEXT("set_vertex_weights/copy_weights/mirror_weights: skin weight profile name."))
 	 .ArrayOfObjects(TEXT("weights"), TEXT("set_vertex_weights: per-vertex influences ({vertexIndex, influences:[{boneIndex, weight}]})."))
-	 .Number(TEXT("lodIndex"), TEXT("set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0)."))
+	 .Integer(TEXT("lodIndex"), TEXT("set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0)."))
 	 .Required({TEXT("skeletalMeshPath"), TEXT("weights")});
 }
 
@@ -941,7 +941,7 @@ static void S_CopyWeights(FMcpSchemaBuilder& B)
 	B.String(TEXT("sourceMeshPath"), TEXT("copy_weights: source skeletal mesh path."))
 	 .String(TEXT("targetMeshPath"), TEXT("copy_weights: target skeletal mesh path."))
 	 .String(TEXT("profileName"), TEXT("set_vertex_weights/copy_weights/mirror_weights: skin weight profile name."))
-	 .Number(TEXT("lodIndex"), TEXT("set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0)."))
+	 .Integer(TEXT("lodIndex"), TEXT("set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0)."))
 	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
 	 .Required({TEXT("sourceMeshPath"), TEXT("targetMeshPath")});
 }
@@ -951,7 +951,7 @@ static void S_MirrorWeights(FMcpSchemaBuilder& B)
 	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
 	 .String(TEXT("axis"), TEXT("mirror_weights: mirror axis X/Y/Z (default X); set_axis_settings: Horizontal/Vertical (default Horizontal)."))
 	 .String(TEXT("profileName"), TEXT("set_vertex_weights/copy_weights/mirror_weights: skin weight profile name."))
-	 .Number(TEXT("lodIndex"), TEXT("set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0)."))
+	 .Integer(TEXT("lodIndex"), TEXT("set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0)."))
 	 .Required({TEXT("skeletalMeshPath")});
 }
 

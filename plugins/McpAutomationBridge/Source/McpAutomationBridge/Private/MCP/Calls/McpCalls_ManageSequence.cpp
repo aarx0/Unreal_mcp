@@ -94,10 +94,10 @@ static void S_SetProperties(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .String(TEXT("frameRate"), TEXT(""))
-	 .Number(TEXT("lengthInFrames"), TEXT(""))
-	 .Number(TEXT("playbackStart"), TEXT(""))
-	 .Number(TEXT("playbackEnd"), TEXT(""))
+	 .String(TEXT("frameRate"), TEXT("Frame/display rate in fps: an integer string (e.g. \"30\"), an exact NTSC rational \"numerator/denominator\" (e.g. \"24000/1001\"), or a plain JSON number (rounded to a whole-number rate)."))
+	 .Integer(TEXT("lengthInFrames"), TEXT(""))
+	 .Integer(TEXT("playbackStart"), TEXT(""))
+	 .Integer(TEXT("playbackEnd"), TEXT(""))
 	 .Required({TEXT("path")});
 }
 
@@ -147,7 +147,7 @@ static void S_AddKeyframe(FMcpSchemaBuilder& B)
 	 .String(TEXT("bindingId"), TEXT("add_keyframe: sequence binding GUID (alternative to actorName)."))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("property"), TEXT("Name of the property."))
-	 .Number(TEXT("frame"), TEXT(""))
+	 .Integer(TEXT("frame"), TEXT(""))
 	 // Transform tracks: structValue {location,rotation,scale}. Float property tracks: floatValue.
 	 .Number(TEXT("floatValue"), TEXT("Keyframe value for a float property track."))
 	 .Object(TEXT("structValue"), TEXT("Keyframe value for a transform track: {location:{x,y,z}, rotation:{roll,pitch,yaw}, scale:{x,y,z}}."))
@@ -160,8 +160,8 @@ static void S_AddSection(FMcpSchemaBuilder& B)
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
 	 .String(TEXT("trackName"), TEXT(""))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .Number(TEXT("startFrame"), TEXT(""))
-	 .Number(TEXT("endFrame"), TEXT(""))
+	 .Integer(TEXT("startFrame"), TEXT(""))
+	 .Integer(TEXT("endFrame"), TEXT(""))
 	 .Required({TEXT("path")});
 }
 
@@ -223,7 +223,7 @@ static void S_SetDisplayRate(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .String(TEXT("frameRate"), TEXT(""))
+	 .String(TEXT("frameRate"), TEXT("Frame/display rate in fps: an integer string (e.g. \"30\"), an exact NTSC rational \"numerator/denominator\" (e.g. \"24000/1001\"), or a plain JSON number (rounded to a whole-number rate)."))
 	 .Required({TEXT("path"), TEXT("frameRate")});
 }
 

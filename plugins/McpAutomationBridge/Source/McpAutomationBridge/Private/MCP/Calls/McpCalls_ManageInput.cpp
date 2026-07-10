@@ -83,7 +83,7 @@ static void S_SetInputModifier(FMcpSchemaBuilder& B)
 static void S_EnableInputMapping(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("contextPath"), TEXT("InputMappingContext asset path (add_mapping / remove_mapping)."))
-	 .Number(TEXT("priority"), TEXT("enable_input_mapping: mapping context priority (default 0)."))
+	 .Integer(TEXT("priority"), TEXT("enable_input_mapping: mapping context priority (default 0)."))
 	 .Required({TEXT("contextPath")});
 }
 

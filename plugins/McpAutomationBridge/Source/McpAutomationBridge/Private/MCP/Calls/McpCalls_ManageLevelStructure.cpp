@@ -97,7 +97,7 @@ static void S_ConfigureGridSize(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("gridName"), TEXT("configure_grid_size: name of the World Partition runtime grid "
 		"(default grid if omitted)."))
-	 .Number(TEXT("gridCellSize"), TEXT("World Partition grid cell size."))
+	 .Integer(TEXT("gridCellSize"), TEXT("World Partition grid cell size."))
 	 .Number(TEXT("loadingRange"), TEXT("Loading range for grid cells."))
 	 .Bool(TEXT("bBlockOnSlowStreaming"), TEXT("configure_grid_size: block on slow streaming for this grid."))
 	 .Number(TEXT("priority"), TEXT("configure_grid_size: grid priority. Also create_physics_volume/"

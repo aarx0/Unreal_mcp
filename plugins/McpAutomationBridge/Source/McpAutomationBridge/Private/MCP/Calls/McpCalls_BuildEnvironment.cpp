@@ -83,7 +83,7 @@ static void S_CreateProceduralFoliage(FMcpSchemaBuilder& B)
 	 .ArrayOfObjects(TEXT("foliageTypes"), TEXT(""))
 	 .ArrayOfObjects(TEXT("types"),
 		TEXT("create_procedural_foliage: alias of 'foliageTypes'."))
-	 .Number(TEXT("seed"), TEXT(""))
+	 .Integer(TEXT("seed"), TEXT(""))
 	 .Number(TEXT("tileSize"), TEXT(""));
 }
 
@@ -93,7 +93,7 @@ static void S_CreateProceduralTerrain(FMcpSchemaBuilder& B)
 	 .Number(TEXT("sizeY"), TEXT(""))
 	 .Number(TEXT("spacing"), TEXT(""))
 	 .Number(TEXT("heightScale"), TEXT(""))
-	 .Number(TEXT("subdivisions"), TEXT(""))
+	 .Integer(TEXT("subdivisions"), TEXT(""))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
@@ -149,9 +149,9 @@ static void S_CreateLandscape(FMcpSchemaBuilder& B)
 	 .Integer(TEXT("quadsPerComponent"),
 		TEXT("create_landscape: quads per component (alias: "
 			"quadsPerSection/sectionSize)."))
-	 .Number(TEXT("quadsPerSection"), TEXT(""))
-	 .Number(TEXT("sectionSize"), TEXT(""))
-	 .Number(TEXT("sectionsPerComponent"), TEXT(""))
+	 .Integer(TEXT("quadsPerSection"), TEXT(""))
+	 .Integer(TEXT("sectionSize"), TEXT(""))
+	 .Integer(TEXT("sectionsPerComponent"), TEXT(""))
 	 .String(TEXT("materialPath"), TEXT("Material asset path."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("landscapeName"), TEXT(""));
@@ -170,13 +170,13 @@ static void S_PaintLandscape(FMcpSchemaBuilder& B)
 			"(minX, minY, maxX, maxY); defaults to top-level minX/minY/"
 			"maxX/maxY."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("minX")).Number(TEXT("minY"))
-				.Number(TEXT("maxX")).Number(TEXT("maxY"));
+			S.Integer(TEXT("minX")).Integer(TEXT("minY"))
+				.Integer(TEXT("maxX")).Integer(TEXT("maxY"));
 		})
-	 .Number(TEXT("minX"), TEXT(""))
-	 .Number(TEXT("minY"), TEXT(""))
-	 .Number(TEXT("maxX"), TEXT(""))
-	 .Number(TEXT("maxY"), TEXT(""))
+	 .Integer(TEXT("minX"), TEXT(""))
+	 .Integer(TEXT("minY"), TEXT(""))
+	 .Integer(TEXT("maxX"), TEXT(""))
+	 .Integer(TEXT("maxY"), TEXT(""))
 	 .Number(TEXT("strength"), TEXT(""))
 	 .Bool(TEXT("skipFlush"),
 		TEXT("modify_heightmap/sculpt/paint_landscape: "
@@ -237,13 +237,13 @@ static void S_ModifyHeightmap(FMcpSchemaBuilder& B)
 			"(minX, minY, maxX, maxY); defaults to top-level minX/minY/"
 			"maxX/maxY."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("minX")).Number(TEXT("minY"))
-				.Number(TEXT("maxX")).Number(TEXT("maxY"));
+			S.Integer(TEXT("minX")).Integer(TEXT("minY"))
+				.Integer(TEXT("maxX")).Integer(TEXT("maxY"));
 		})
-	 .Number(TEXT("minX"), TEXT(""))
-	 .Number(TEXT("minY"), TEXT(""))
-	 .Number(TEXT("maxX"), TEXT(""))
-	 .Number(TEXT("maxY"), TEXT(""))
+	 .Integer(TEXT("minX"), TEXT(""))
+	 .Integer(TEXT("minY"), TEXT(""))
+	 .Integer(TEXT("maxX"), TEXT(""))
+	 .Integer(TEXT("maxY"), TEXT(""))
 	 .Array(TEXT("heightData"), TEXT(""), TEXT("number"))
 	 .Bool(TEXT("skipFlush"),
 		TEXT("modify_heightmap/sculpt/paint_landscape: "
@@ -284,9 +284,9 @@ static void S_GenerateLods(FMcpSchemaBuilder& B)
 			"assetPaths/assets)."))
 	 .Array(TEXT("assetPaths"), TEXT(""))
 	 .Array(TEXT("assets"), TEXT(""))
-	 .Number(TEXT("lodCount"),
+	 .Integer(TEXT("lodCount"),
 		TEXT("generate_lods: number of LODs to generate (alias: numLODs)."))
-	 .Number(TEXT("numLODs"), TEXT(""))
+	 .Integer(TEXT("numLODs"), TEXT(""))
 	 .Object(TEXT("reductionSettings"),
 		TEXT("generate_lods: per-LOD FMeshReductionSettings overrides "
 			"(percentTriangles, percentVertices, maxDeviation, pixelError, "

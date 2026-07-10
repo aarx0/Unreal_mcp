@@ -104,7 +104,7 @@ static void S_SetDefault(FMcpSchemaBuilder& B)
 	 // instanced subobjects ({"__class",...}) and arrays; ApplyJsonValueToProperty
 	 // is the gate for whether the value fits the resolved property.
 	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
-	 .Number(TEXT("intValue"), TEXT("Set an integer property."))
+	 .Integer(TEXT("intValue"), TEXT("Set an integer property."))
 	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
 	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum / object-reference-by-path property."))
 	 .Object(TEXT("colorValue"), TEXT("Set an FLinearColor/FColor property (r,g,b,a, 0..1)."),
@@ -230,7 +230,7 @@ static void S_SetScsProperty(FMcpSchemaBuilder& B)
 	 // instanced subobjects ({"__class",...}) and arrays; ApplyJsonValueToProperty
 	 // is the gate for whether the value fits the resolved property.
 	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
-	 .Number(TEXT("intValue"), TEXT("Set an integer property."))
+	 .Integer(TEXT("intValue"), TEXT("Set an integer property."))
 	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
 	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum / object-reference-by-path property."))
 	 .Object(TEXT("colorValue"), TEXT("Set an FLinearColor/FColor property (r,g,b,a, 0..1)."),
@@ -273,7 +273,7 @@ static void S_AddVariable(FMcpSchemaBuilder& B)
 		TEXT("Variable type (e.g., Boolean, Float, Integer, Vector, String, Object)"))
 	 // Discriminated default value: populate exactly ONE typed field matching variableType.
 	 .Bool(TEXT("boolValue"), TEXT("Default for a Boolean variable."))
-	 .Number(TEXT("intValue"), TEXT("Default for an Integer variable."))
+	 .Integer(TEXT("intValue"), TEXT("Default for an Integer variable."))
 	 .Number(TEXT("floatValue"), TEXT("Default for a Float variable."))
 	 .String(TEXT("stringValue"), TEXT("Default for a String / Name / enum / object-path variable."))
 	 .Object(TEXT("colorValue"), TEXT("Default for an FLinearColor/FColor variable (r,g,b,a)."),
@@ -577,7 +577,7 @@ static void S_GetTransitionRuleGraph(FMcpSchemaBuilder& B)
 	 .String(TEXT("toState"), TEXT("get_transition_rule_graph: target state name (paired with fromState)."))
 	 .String(TEXT("transitionName"), TEXT("get_transition_rule_graph: transition node title or rule-graph name, as an alternative to fromState/toState."))
 	 .String(TEXT("stateMachine"), TEXT("get_transition_rule_graph: state machine graph name to search; all state machines searched when omitted."))
-	 .Number(TEXT("transitionIndex"), TEXT("get_transition_rule_graph: 0-based pick when parallel transitions between the same states match (see matchCount in the response)."))
+	 .Integer(TEXT("transitionIndex"), TEXT("get_transition_rule_graph: 0-based pick when parallel transitions between the same states match (see matchCount in the response)."))
 	 .Required({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
@@ -762,7 +762,7 @@ static void S_AddTextBlock(FMcpSchemaBuilder& B)
 	 .String(TEXT("parentSlot"), TEXT("Name of the parent panel widget to add the new widget under."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .String(TEXT("text"), TEXT("Initial text (add_common_text, add_text_block, add_rich_text_block, add_interaction_prompt, add_widget_component)."))
-	 .Number(TEXT("fontSize"), TEXT("Font size (add_text_block, set_font)."))
+	 .Integer(TEXT("fontSize"), TEXT("Font size (add_text_block, set_font)."))
 	 .Object(TEXT("colorAndOpacity"), TEXT("Widget tint color, 0-1 components (add_text_block, add_image, add_button)."),
 			[](FMcpSchemaBuilder& S) {
 			S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a"));
@@ -1015,7 +1015,7 @@ static void S_SetZOrder(FMcpSchemaBuilder& B)
 	 .String(TEXT("slotName"), TEXT("Name for the widget being added / the slot to target."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("widgetName"), TEXT("Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget; get_widget_info: return this widget's property values + objectPath)."))
-	 .Number(TEXT("zOrder"), TEXT("set_z_order: Canvas slot Z-order."))
+	 .Integer(TEXT("zOrder"), TEXT("set_z_order: Canvas slot Z-order."))
 	 .Required({TEXT("widgetPath"), TEXT("slotName")});
 }
 
@@ -1063,7 +1063,7 @@ static void S_SetStyle(FMcpSchemaBuilder& B)
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
 	 // Discriminated value (set_style): populate exactly ONE typed field.
 	 .Bool(TEXT("boolValue"), TEXT("Set a bool style property."))
-	 .Number(TEXT("intValue"), TEXT("Set an integer style property."))
+	 .Integer(TEXT("intValue"), TEXT("Set an integer style property."))
 	 .Number(TEXT("floatValue"), TEXT("Set a float style property."))
 	 .String(TEXT("stringValue"), TEXT("Set a string / enum / brush-path style property."))
 	 .Object(TEXT("colorValue"), TEXT("Set an FLinearColor/FColor style property (r,g,b,a)."),
@@ -1176,7 +1176,7 @@ static void S_SetAnimationLoop(FMcpSchemaBuilder& B)
 	B.String(TEXT("widgetPath"), TEXT("Widget Blueprint asset path (widget-authoring actions)."))
 	 .String(TEXT("animationName"), TEXT("Widget animation name (create_widget_animation default NewAnimation; add_animation_track/get_animation_info/delete_animation/etc.)."))
 	 .Bool(TEXT("loop"), TEXT("set_animation_loop: whether the animation loops."))
-	 .Number(TEXT("loopCount"), TEXT("set_animation_loop: loop count (0 = infinite)."))
+	 .Integer(TEXT("loopCount"), TEXT("set_animation_loop: loop count (0 = infinite)."))
 	 .Required({TEXT("widgetPath"), TEXT("animationName")});
 }
 
@@ -1281,8 +1281,8 @@ static void S_CreateInventoryUi(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("path"), TEXT("Destination folder for a created asset (create_widget_blueprint, create_common_button_style/create_common_text_style, create_*_menu, etc.); falls back to savePath, then folder."))
 	 .String(TEXT("folder"), TEXT("Destination folder fallback after path/savePath."))
-	 .Number(TEXT("columns"), TEXT("create_inventory_ui/create_shop_ui: grid column count."))
-	 .Number(TEXT("rows"), TEXT("create_inventory_ui: grid row count."));
+	 .Integer(TEXT("columns"), TEXT("create_inventory_ui/create_shop_ui: grid column count."))
+	 .Integer(TEXT("rows"), TEXT("create_inventory_ui: grid row count."));
 }
 
 static void S_CreateDialogWidget(FMcpSchemaBuilder& B)
@@ -1297,7 +1297,7 @@ static void S_CreateRadialMenu(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("path"), TEXT("Destination folder for a created asset (create_widget_blueprint, create_common_button_style/create_common_text_style, create_*_menu, etc.); falls back to savePath, then folder."))
 	 .String(TEXT("folder"), TEXT("Destination folder fallback after path/savePath."))
-	 .Number(TEXT("segments"), TEXT("create_radial_menu: number of radial segments."));
+	 .Integer(TEXT("segments"), TEXT("create_radial_menu: number of radial segments."));
 }
 
 static void S_GetWidgetInfo(FMcpSchemaBuilder& B)
@@ -1418,7 +1418,7 @@ static void S_AddWidgetSwitcher(FMcpSchemaBuilder& B)
 	B.String(TEXT("widgetPath"), TEXT("Widget Blueprint asset path (widget-authoring actions)."))
 	 .String(TEXT("slotName"), TEXT("Name for the widget being added / the slot to target."))
 	 .String(TEXT("parentSlot"), TEXT("Name of the parent panel widget to add the new widget under."))
-	 .Number(TEXT("activeIndex"), TEXT("add_widget_switcher: initially active child index."))
+	 .Integer(TEXT("activeIndex"), TEXT("add_widget_switcher: initially active child index."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("widgetPath")});
 }
@@ -1428,7 +1428,7 @@ static void S_SetFont(FMcpSchemaBuilder& B)
 	B.String(TEXT("widgetPath"), TEXT("Widget Blueprint asset path (widget-authoring actions)."))
 	 .String(TEXT("slotName"), TEXT("Name for the widget being added / the slot to target."))
 	 .String(TEXT("font"), TEXT("set_font: font asset path."))
-	 .Number(TEXT("fontSize"), TEXT("Font size (add_text_block, set_font)."))
+	 .Integer(TEXT("fontSize"), TEXT("Font size (add_text_block, set_font)."))
 	 .Required({TEXT("widgetPath"), TEXT("slotName")});
 }
 
@@ -1520,7 +1520,7 @@ static void S_CreateShopUi(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("path"), TEXT("Destination folder for a created asset (create_widget_blueprint, create_common_button_style/create_common_text_style, create_*_menu, etc.); falls back to savePath, then folder."))
 	 .String(TEXT("folder"), TEXT("Destination folder fallback after path/savePath."))
-	 .Number(TEXT("columns"), TEXT("create_inventory_ui/create_shop_ui: grid column count."));
+	 .Integer(TEXT("columns"), TEXT("create_inventory_ui/create_shop_ui: grid column count."));
 }
 
 static void S_AddQuestTracker(FMcpSchemaBuilder& B)
