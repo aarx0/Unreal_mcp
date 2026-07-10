@@ -711,6 +711,8 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCapsuleComponent(
     UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
+    const bool bHasRadius = Payload->HasField(TEXT("capsuleRadius"));
+    const bool bHasHalfHeight = Payload->HasField(TEXT("capsuleHalfHeight"));
     float CapsuleRadius = static_cast<float>(GetJsonNumberField(Payload, TEXT("capsuleRadius"), 42.0));
     float CapsuleHalfHeight = static_cast<float>(GetJsonNumberField(Payload, TEXT("capsuleHalfHeight"), 96.0));
 
@@ -734,27 +736,45 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCapsuleComponent(
         return true;
     }
 
-    Capsule->SetCapsuleRadius(CapsuleRadius);
-    Capsule->SetCapsuleHalfHeight(CapsuleHalfHeight);
+    McpHandlerUtils::FMcpWriteReport Report;
 
-    if (Capsule->GetUnscaledCapsuleRadius() != CapsuleRadius ||
-        Capsule->GetUnscaledCapsuleHalfHeight() != CapsuleHalfHeight)
+    if (bHasRadius)
     {
-        SendAutomationError(Socket, RequestId,
-            FString::Printf(TEXT("Capsule on '%s' did not retain the requested dimensions."), *BlueprintPath),
-            TEXT("VERIFY_FAILED"));
-        return true;
+        Capsule->SetCapsuleRadius(CapsuleRadius);
+    }
+    if (bHasHalfHeight)
+    {
+        Capsule->SetCapsuleHalfHeight(CapsuleHalfHeight);
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    // SetCapsule* clamps radius and half-height against each other, so a requested
+    // value the capsule did not retain (e.g. radius > half-height) is a real failure.
+    if (bHasRadius)
+    {
+        if (Capsule->GetUnscaledCapsuleRadius() == CapsuleRadius)
+            Report.MarkApplied(TEXT("capsuleRadius"));
+        else
+            Report.MarkFailed(TEXT("capsuleRadius"), TEXT("capsule did not retain the requested radius (clamped against half-height)"));
+    }
+    if (bHasHalfHeight)
+    {
+        if (Capsule->GetUnscaledCapsuleHalfHeight() == CapsuleHalfHeight)
+            Report.MarkApplied(TEXT("capsuleHalfHeight"));
+        else
+            Report.MarkFailed(TEXT("capsuleHalfHeight"), TEXT("capsule did not retain the requested half-height"));
+    }
+
+    if (Report.AnyApplied())
+    {
+        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetNumberField(TEXT("capsuleRadius"), CapsuleRadius);
-    Result->SetNumberField(TEXT("capsuleHalfHeight"), CapsuleHalfHeight);
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Capsule configured"), Result);
-    return true;
+    Result->SetNumberField(TEXT("capsuleRadius"), Capsule->GetUnscaledCapsuleRadius());
+    Result->SetNumberField(TEXT("capsuleHalfHeight"), Capsule->GetUnscaledCapsuleHalfHeight());
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Capsule configured"), Blueprint);
 #endif // WITH_EDITOR
 }
 
@@ -813,42 +833,66 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMeshComponent(
     bool bSkeletalMeshAssigned = false;
     bool bAnimBlueprintAssigned = false;
 
-    ACharacter* CharCDO = Blueprint->GeneratedClass 
+    ACharacter* CharCDO = Blueprint->GeneratedClass
         ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
         : nullptr;
-    
-    if (CharCDO && CharCDO->GetMesh())
+    USkeletalMeshComponent* Mesh = CharCDO ? CharCDO->GetMesh() : nullptr;
+    if (!Mesh)
     {
-        if (RequestedMesh)
-        {
-            CharCDO->GetMesh()->SetSkeletalMesh(RequestedMesh);
-            bSkeletalMeshAssigned = true;
-        }
+        SendAutomationError(Socket, RequestId,
+            FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no mesh component to configure."), *BlueprintPath),
+            TEXT("NOT_A_CHARACTER"));
+        return true;
+    }
 
-        if (RequestedAnimBP)
-        {
-            CharCDO->GetMesh()->SetAnimInstanceClass(RequestedAnimBP->GeneratedClass);
-            bAnimBlueprintAssigned = true;
-        }
+    McpHandlerUtils::FMcpWriteReport Report;
 
-        // Handle offset
+    if (RequestedMesh)
+    {
+        Mesh->SetSkeletalMesh(RequestedMesh);
+        bSkeletalMeshAssigned = true;
+        Report.MarkApplied(TEXT("skeletalMeshPath"));
+    }
+
+    if (RequestedAnimBP)
+    {
+        Mesh->SetAnimInstanceClass(RequestedAnimBP->GeneratedClass);
+        bAnimBlueprintAssigned = true;
+        Report.MarkApplied(TEXT("animBlueprintPath"));
+    }
+
+    if (Payload->HasField(TEXT("meshOffset")))
+    {
         const TSharedPtr<FJsonObject>* OffsetObj;
         if (Payload->TryGetObjectField(TEXT("meshOffset"), OffsetObj))
         {
-            FVector Offset = GetVectorFromJsonChar(*OffsetObj);
-            CharCDO->GetMesh()->SetRelativeLocation(Offset);
+            Mesh->SetRelativeLocation(GetVectorFromJsonChar(*OffsetObj));
+            Report.MarkApplied(TEXT("meshOffset"));
         }
-
-        // Handle rotation
-        const TSharedPtr<FJsonObject>* RotObj;
-        if (Payload->TryGetObjectField(TEXT("meshRotation"), RotObj))
+        else
         {
-            FRotator Rotation = GetRotatorFromJsonChar(*RotObj);
-            CharCDO->GetMesh()->SetRelativeRotation(Rotation);
+            Report.MarkFailed(TEXT("meshOffset"), TEXT("must be an object with x/y/z"));
         }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    if (Payload->HasField(TEXT("meshRotation")))
+    {
+        const TSharedPtr<FJsonObject>* RotObj;
+        if (Payload->TryGetObjectField(TEXT("meshRotation"), RotObj))
+        {
+            Mesh->SetRelativeRotation(GetRotatorFromJsonChar(*RotObj));
+            Report.MarkApplied(TEXT("meshRotation"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("meshRotation"), TEXT("must be an object with pitch/yaw/roll"));
+        }
+    }
+
+    if (Report.AnyApplied())
+    {
+        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -862,9 +906,8 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMeshComponent(
         Result->SetStringField(TEXT("animBlueprint"), AnimBPPath);
         Result->SetBoolField(TEXT("animBlueprintAssigned"), bAnimBlueprintAssigned);
     }
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Mesh configured"), Result);
-    return true;
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Mesh configured"), Blueprint);
 #endif // WITH_EDITOR
 }
 
@@ -895,50 +938,37 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCameraComponent(
     UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
+    const bool bHasLength = Payload->HasField(TEXT("springArmLength"));
+    const bool bHasUsePawn = Payload->HasField(TEXT("cameraUsePawnControlRotation"));
+    const bool bHasLag = Payload->HasField(TEXT("springArmLagEnabled"));
+    const bool bHasLagSpeed = Payload->HasField(TEXT("springArmLagSpeed"));
+
     float SpringArmLength = static_cast<float>(GetJsonNumberField(Payload, TEXT("springArmLength"), 300.0));
     bool UsePawnControlRotation = GetJsonBoolField(Payload, TEXT("cameraUsePawnControlRotation"), true);
     bool LagEnabled = GetJsonBoolField(Payload, TEXT("springArmLagEnabled"), false);
     float LagSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("springArmLagSpeed"), 10.0));
 
-    // Add spring arm + camera to SCS if not present
-    bool bHasSpringArm = false;
-    bool bHasCamera = false;
-
+    USpringArmComponent* SpringArm = nullptr;
     for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
     {
-        if (Node && Node->ComponentTemplate)
+        if (Node && Node->ComponentTemplate && Node->ComponentTemplate->IsA<USpringArmComponent>())
         {
-            if (Node->ComponentTemplate->IsA<USpringArmComponent>())
-            {
-                bHasSpringArm = true;
-                USpringArmComponent* SpringArm = Cast<USpringArmComponent>(Node->ComponentTemplate);
-                SpringArm->TargetArmLength = SpringArmLength;
-                SpringArm->bUsePawnControlRotation = UsePawnControlRotation;
-                SpringArm->bEnableCameraLag = LagEnabled;
-                SpringArm->CameraLagSpeed = LagSpeed;
-            }
-            if (Node->ComponentTemplate->IsA<UCameraComponent>())
-            {
-                bHasCamera = true;
-            }
+            SpringArm = Cast<USpringArmComponent>(Node->ComponentTemplate);
+            break;
         }
     }
 
-    // Add spring arm if not present
-    if (!bHasSpringArm)
+    McpHandlerUtils::FMcpWriteReport Report;
+
+    // Ensure a spring arm (+ child camera) exists to receive the requested fields;
+    // create it only when there is config to apply, so an empty request stays a no-op.
+    if (SpringArm == nullptr && (bHasLength || bHasUsePawn || bHasLag || bHasLagSpeed))
     {
         USCS_Node* SpringArmNode = Blueprint->SimpleConstructionScript->CreateNode(
             USpringArmComponent::StaticClass(), FName(TEXT("CameraBoom")));
         if (SpringArmNode)
         {
-            USpringArmComponent* SpringArm = Cast<USpringArmComponent>(SpringArmNode->ComponentTemplate);
-            if (SpringArm)
-            {
-                SpringArm->TargetArmLength = SpringArmLength;
-                SpringArm->bUsePawnControlRotation = UsePawnControlRotation;
-                SpringArm->bEnableCameraLag = LagEnabled;
-                SpringArm->CameraLagSpeed = LagSpeed;
-            }
+            SpringArm = Cast<USpringArmComponent>(SpringArmNode->ComponentTemplate);
             Blueprint->SimpleConstructionScript->AddNode(SpringArmNode);
 
             // Add camera as child of spring arm - UE 5.7 fix: use SetParent(USCS_Node*)
@@ -952,16 +982,42 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCameraComponent(
         }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+    if (bHasLength)
+    {
+        if (SpringArm) { SpringArm->TargetArmLength = SpringArmLength; Report.MarkApplied(TEXT("springArmLength")); }
+        else Report.MarkFailed(TEXT("springArmLength"), TEXT("no spring arm component and one could not be created"));
+    }
+    if (bHasUsePawn)
+    {
+        if (SpringArm) { SpringArm->bUsePawnControlRotation = UsePawnControlRotation; Report.MarkApplied(TEXT("cameraUsePawnControlRotation")); }
+        else Report.MarkFailed(TEXT("cameraUsePawnControlRotation"), TEXT("no spring arm component and one could not be created"));
+    }
+    if (bHasLag)
+    {
+        if (SpringArm) { SpringArm->bEnableCameraLag = LagEnabled; Report.MarkApplied(TEXT("springArmLagEnabled")); }
+        else Report.MarkFailed(TEXT("springArmLagEnabled"), TEXT("no spring arm component and one could not be created"));
+    }
+    if (bHasLagSpeed)
+    {
+        if (SpringArm) { SpringArm->CameraLagSpeed = LagSpeed; Report.MarkApplied(TEXT("springArmLagSpeed")); }
+        else Report.MarkFailed(TEXT("springArmLagSpeed"), TEXT("no spring arm component and one could not be created"));
+    }
+
+    if (Report.AnyApplied())
+    {
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetNumberField(TEXT("springArmLength"), SpringArmLength);
-    Result->SetBoolField(TEXT("usePawnControlRotation"), UsePawnControlRotation);
-    Result->SetBoolField(TEXT("lagEnabled"), LagEnabled);
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Camera configured"), Result);
-    return true;
+    if (SpringArm)
+    {
+        Result->SetNumberField(TEXT("springArmLength"), SpringArm->TargetArmLength);
+        Result->SetBoolField(TEXT("usePawnControlRotation"), SpringArm->bUsePawnControlRotation);
+        Result->SetBoolField(TEXT("lagEnabled"), SpringArm->bEnableCameraLag);
+    }
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Camera configured"), Blueprint);
 #endif // WITH_EDITOR
 }
 
@@ -1166,52 +1222,74 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureJump(
         return true;
     }
 
+    McpHandlerUtils::FMcpWriteReport Report;
+
+    // gravityScale is applied first so a same-call jumpHeight conversion sees it.
     if (Payload->HasField(TEXT("gravityScale")))
+    {
         Movement->GravityScale = static_cast<float>(GetJsonNumberField(Payload, TEXT("gravityScale"), 1.0));
+        Report.MarkApplied(TEXT("gravityScale"));
+    }
 
     const bool bHasJumpHeight = Payload->HasField(TEXT("jumpHeight"));
     double RequestedJumpHeight = 0.0;
+    bool bJumpHeightApplied = false;
     if (bHasJumpHeight)
     {
         RequestedJumpHeight = GetJsonNumberField(Payload, TEXT("jumpHeight"), 600.0);
+        const double GravityMagnitude = FMath::Abs(static_cast<double>(UPhysicsSettings::Get()->DefaultGravityZ) * Movement->GravityScale);
         if (RequestedJumpHeight < 0.0)
         {
-            SendAutomationError(Socket, RequestId,
-                TEXT("jumpHeight must be >= 0 (apex height in cm; converted to JumpZVelocity)."),
-                TEXT("INVALID_ARGUMENT"));
-            return true;
+            Report.MarkFailed(TEXT("jumpHeight"),
+                TEXT("jumpHeight must be >= 0 (apex height in cm; converted to JumpZVelocity)."));
         }
-        const double GravityMagnitude = FMath::Abs(static_cast<double>(UPhysicsSettings::Get()->DefaultGravityZ) * Movement->GravityScale);
-        if (GravityMagnitude <= KINDA_SMALL_NUMBER)
+        else if (GravityMagnitude <= KINDA_SMALL_NUMBER)
         {
-            SendAutomationError(Socket, RequestId,
-                FString::Printf(TEXT("Cannot convert jumpHeight to JumpZVelocity: effective gravity is zero (gravityScale=%g). Pass a non-zero gravityScale."), Movement->GravityScale),
-                TEXT("INVALID_ARGUMENT"));
-            return true;
+            Report.MarkFailed(TEXT("jumpHeight"),
+                FString::Printf(TEXT("cannot convert to JumpZVelocity: effective gravity is zero (gravityScale=%g); pass a non-zero gravityScale"), Movement->GravityScale));
         }
-        Movement->JumpZVelocity = static_cast<float>(FMath::Sqrt(2.0 * GravityMagnitude * RequestedJumpHeight));
+        else
+        {
+            Movement->JumpZVelocity = static_cast<float>(FMath::Sqrt(2.0 * GravityMagnitude * RequestedJumpHeight));
+            bJumpHeightApplied = true;
+            Report.MarkApplied(TEXT("jumpHeight"));
+        }
     }
     if (Payload->HasField(TEXT("airControl")))
+    {
         Movement->AirControl = static_cast<float>(GetJsonNumberField(Payload, TEXT("airControl"), 0.35));
+        Report.MarkApplied(TEXT("airControl"));
+    }
     if (Payload->HasField(TEXT("fallingLateralFriction")))
+    {
         Movement->FallingLateralFriction = static_cast<float>(GetJsonNumberField(Payload, TEXT("fallingLateralFriction"), 0.0));
+        Report.MarkApplied(TEXT("fallingLateralFriction"));
+    }
     if (Payload->HasField(TEXT("maxJumpCount")))
+    {
         CharCDO->JumpMaxCount = static_cast<int32>(GetJsonNumberField(Payload, TEXT("maxJumpCount"), 1));
+        Report.MarkApplied(TEXT("maxJumpCount"));
+    }
     if (Payload->HasField(TEXT("jumpHoldTime")))
+    {
         CharCDO->JumpMaxHoldTime = static_cast<float>(GetJsonNumberField(Payload, TEXT("jumpHoldTime"), 0.0));
+        Report.MarkApplied(TEXT("jumpHoldTime"));
+    }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    if (Report.AnyApplied())
+    {
+        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    if (bHasJumpHeight)
+    if (bJumpHeightApplied)
     {
         Result->SetNumberField(TEXT("requestedJumpHeight"), RequestedJumpHeight);
         Result->SetNumberField(TEXT("appliedJumpZVelocity"), Movement->JumpZVelocity);
     }
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Jump configured"), Result);
-    return true;
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Jump configured"), Blueprint);
 #endif // WITH_EDITOR
 }
 
@@ -1240,33 +1318,55 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureRotation(
     UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
-    ACharacter* CharCDO = Blueprint->GeneratedClass 
+    ACharacter* CharCDO = Blueprint->GeneratedClass
         ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
         : nullptr;
-    
-    if (CharCDO && CharCDO->GetCharacterMovement())
+    UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
+    if (!Movement)
     {
-        UCharacterMovementComponent* Movement = CharCDO->GetCharacterMovement();
-
-        if (Payload->HasField(TEXT("orientToMovement")))
-            Movement->bOrientRotationToMovement = GetJsonBoolField(Payload, TEXT("orientToMovement"), true);
-        if (Payload->HasField(TEXT("useControllerRotationYaw")))
-            CharCDO->bUseControllerRotationYaw = GetJsonBoolField(Payload, TEXT("useControllerRotationYaw"), false);
-        if (Payload->HasField(TEXT("useControllerRotationPitch")))
-            CharCDO->bUseControllerRotationPitch = GetJsonBoolField(Payload, TEXT("useControllerRotationPitch"), false);
-        if (Payload->HasField(TEXT("useControllerRotationRoll")))
-            CharCDO->bUseControllerRotationRoll = GetJsonBoolField(Payload, TEXT("useControllerRotationRoll"), false);
-        if (Payload->HasField(TEXT("rotationRate")))
-            Movement->RotationRate = FRotator(0.0, GetJsonNumberField(Payload, TEXT("rotationRate"), 540.0), 0.0);
+        SendAutomationError(Socket, RequestId,
+            FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
+            TEXT("NOT_A_CHARACTER"));
+        return true;
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    McpHandlerUtils::FMcpWriteReport Report;
+
+    if (Payload->HasField(TEXT("orientToMovement")))
+    {
+        Movement->bOrientRotationToMovement = GetJsonBoolField(Payload, TEXT("orientToMovement"), true);
+        Report.MarkApplied(TEXT("orientToMovement"));
+    }
+    if (Payload->HasField(TEXT("useControllerRotationYaw")))
+    {
+        CharCDO->bUseControllerRotationYaw = GetJsonBoolField(Payload, TEXT("useControllerRotationYaw"), false);
+        Report.MarkApplied(TEXT("useControllerRotationYaw"));
+    }
+    if (Payload->HasField(TEXT("useControllerRotationPitch")))
+    {
+        CharCDO->bUseControllerRotationPitch = GetJsonBoolField(Payload, TEXT("useControllerRotationPitch"), false);
+        Report.MarkApplied(TEXT("useControllerRotationPitch"));
+    }
+    if (Payload->HasField(TEXT("useControllerRotationRoll")))
+    {
+        CharCDO->bUseControllerRotationRoll = GetJsonBoolField(Payload, TEXT("useControllerRotationRoll"), false);
+        Report.MarkApplied(TEXT("useControllerRotationRoll"));
+    }
+    if (Payload->HasField(TEXT("rotationRate")))
+    {
+        Movement->RotationRate = FRotator(0.0, GetJsonNumberField(Payload, TEXT("rotationRate"), 540.0), 0.0);
+        Report.MarkApplied(TEXT("rotationRate"));
+    }
+
+    if (Report.AnyApplied())
+    {
+        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Rotation configured"), Result);
-    return true;
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Rotation configured"), Blueprint);
 #endif // WITH_EDITOR
 }
 
@@ -1373,29 +1473,45 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureNavMovement(
     UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
-    ACharacter* CharCDO = Blueprint->GeneratedClass 
+    ACharacter* CharCDO = Blueprint->GeneratedClass
         ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
         : nullptr;
-    
-    if (CharCDO && CharCDO->GetCharacterMovement())
+    UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
+    if (!Movement)
     {
-        UCharacterMovementComponent* Movement = CharCDO->GetCharacterMovement();
-
-        if (Payload->HasField(TEXT("navAgentRadius")))
-            Movement->NavAgentProps.AgentRadius = static_cast<float>(GetJsonNumberField(Payload, TEXT("navAgentRadius"), 42.0));
-        if (Payload->HasField(TEXT("navAgentHeight")))
-            Movement->NavAgentProps.AgentHeight = static_cast<float>(GetJsonNumberField(Payload, TEXT("navAgentHeight"), 192.0));
-        if (Payload->HasField(TEXT("avoidanceEnabled")))
-            Movement->bUseRVOAvoidance = GetJsonBoolField(Payload, TEXT("avoidanceEnabled"), false);
+        SendAutomationError(Socket, RequestId,
+            FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
+            TEXT("NOT_A_CHARACTER"));
+        return true;
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    McpHandlerUtils::FMcpWriteReport Report;
+
+    if (Payload->HasField(TEXT("navAgentRadius")))
+    {
+        Movement->NavAgentProps.AgentRadius = static_cast<float>(GetJsonNumberField(Payload, TEXT("navAgentRadius"), 42.0));
+        Report.MarkApplied(TEXT("navAgentRadius"));
+    }
+    if (Payload->HasField(TEXT("navAgentHeight")))
+    {
+        Movement->NavAgentProps.AgentHeight = static_cast<float>(GetJsonNumberField(Payload, TEXT("navAgentHeight"), 192.0));
+        Report.MarkApplied(TEXT("navAgentHeight"));
+    }
+    if (Payload->HasField(TEXT("avoidanceEnabled")))
+    {
+        Movement->bUseRVOAvoidance = GetJsonBoolField(Payload, TEXT("avoidanceEnabled"), false);
+        Report.MarkApplied(TEXT("avoidanceEnabled"));
+    }
+
+    if (Report.AnyApplied())
+    {
+        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Nav movement configured"), Result);
-    return true;
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Nav movement configured"), Blueprint);
 #endif // WITH_EDITOR
 }
 
@@ -1893,25 +2009,52 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupMovement(
     ACharacter* CharCDO = Blueprint->GeneratedClass
         ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
         : nullptr;
-
-    if (CharCDO && CharCDO->GetCharacterMovement())
+    UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
+    if (!Movement)
     {
-        UCharacterMovementComponent* Movement = CharCDO->GetCharacterMovement();
-        // walkSpeed takes priority over runSpeed since both set MaxWalkSpeed in UE.
-        if (Payload->HasField(TEXT("walkSpeed")))
-            Movement->MaxWalkSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("walkSpeed"), 600.0));
-        else if (Payload->HasField(TEXT("runSpeed")))
-            Movement->MaxWalkSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("runSpeed"), 600.0));
-        if (Payload->HasField(TEXT("acceleration")))
-            Movement->MaxAcceleration = static_cast<float>(GetJsonNumberField(Payload, TEXT("acceleration"), 2048.0));
+        SendAutomationError(Socket, RequestId,
+            FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
+            TEXT("NOT_A_CHARACTER"));
+        return true;
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    McpHandlerUtils::FMcpWriteReport Report;
+    const bool bHasWalk = Payload->HasField(TEXT("walkSpeed"));
+    const bool bHasRun = Payload->HasField(TEXT("runSpeed"));
+
+    // walkSpeed takes priority over runSpeed since both set MaxWalkSpeed in UE.
+    if (bHasWalk)
+    {
+        Movement->MaxWalkSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("walkSpeed"), 600.0));
+        Report.MarkApplied(TEXT("walkSpeed"));
+    }
+    if (bHasRun)
+    {
+        if (bHasWalk)
+        {
+            Report.MarkFailed(TEXT("runSpeed"), TEXT("walkSpeed also provided and takes precedence for MaxWalkSpeed"));
+        }
+        else
+        {
+            Movement->MaxWalkSpeed = static_cast<float>(GetJsonNumberField(Payload, TEXT("runSpeed"), 600.0));
+            Report.MarkApplied(TEXT("runSpeed"));
+        }
+    }
+    if (Payload->HasField(TEXT("acceleration")))
+    {
+        Movement->MaxAcceleration = static_cast<float>(GetJsonNumberField(Payload, TEXT("acceleration"), 2048.0));
+        Report.MarkApplied(TEXT("acceleration"));
+    }
+
+    if (Report.AnyApplied())
+    {
+        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Movement configured"), Result);
-    return true;
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Movement configured"), nullptr);
 #endif // WITH_EDITOR
 }
 
@@ -2177,6 +2320,9 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCrouch(
     UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
+    const bool bHasCrouchSpeed = Payload->HasField(TEXT("crouchSpeed"));
+    const bool bHasCrouchedHalfHeight = Payload->HasField(TEXT("crouchedHalfHeight"));
+    const bool bHasCanCrouch = Payload->HasField(TEXT("canCrouch"));
     double CrouchSpeed = GetJsonNumberField(Payload, TEXT("crouchSpeed"), 300.0);
     double CrouchedHalfHeight = GetJsonNumberField(Payload, TEXT("crouchedHalfHeight"), 44.0);
     bool CanCrouch = GetJsonBoolField(Payload, TEXT("canCrouch"), true);
@@ -2184,24 +2330,45 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCrouch(
     ACharacter* CharCDO = Blueprint->GeneratedClass
         ? Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject())
         : nullptr;
-
-    if (CharCDO && CharCDO->GetCharacterMovement())
+    UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
+    if (!Movement)
     {
-        UCharacterMovementComponent* Movement = CharCDO->GetCharacterMovement();
-        Movement->MaxWalkSpeedCrouched = static_cast<float>(CrouchSpeed);
-        Movement->SetCrouchedHalfHeight(static_cast<float>(CrouchedHalfHeight));
-        Movement->NavAgentProps.bCanCrouch = CanCrouch;
+        SendAutomationError(Socket, RequestId,
+            FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
+            TEXT("NOT_A_CHARACTER"));
+        return true;
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    McpHandlerUtils::FMcpWriteReport Report;
+
+    if (bHasCrouchSpeed)
+    {
+        Movement->MaxWalkSpeedCrouched = static_cast<float>(CrouchSpeed);
+        Report.MarkApplied(TEXT("crouchSpeed"));
+    }
+    if (bHasCrouchedHalfHeight)
+    {
+        Movement->SetCrouchedHalfHeight(static_cast<float>(CrouchedHalfHeight));
+        Report.MarkApplied(TEXT("crouchedHalfHeight"));
+    }
+    if (bHasCanCrouch)
+    {
+        Movement->NavAgentProps.bCanCrouch = CanCrouch;
+        Report.MarkApplied(TEXT("canCrouch"));
+    }
+
+    if (Report.AnyApplied())
+    {
+        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetNumberField(TEXT("crouchSpeed"), CrouchSpeed);
-    Result->SetNumberField(TEXT("crouchedHalfHeight"), CrouchedHalfHeight);
-    Result->SetBoolField(TEXT("canCrouch"), CanCrouch);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Crouch configured"), Result);
-    return true;
+    Result->SetNumberField(TEXT("crouchSpeed"), Movement->MaxWalkSpeedCrouched);
+    Result->SetNumberField(TEXT("crouchedHalfHeight"), Movement->GetCrouchedHalfHeight());
+    Result->SetBoolField(TEXT("canCrouch"), Movement->NavAgentProps.bCanCrouch);
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Crouch configured"), nullptr);
 #endif // WITH_EDITOR
 }
 
