@@ -1,6 +1,7 @@
 // McpStartupValidation.cpp — boot-time drift checks for the tool/action vocabulary
 
 #include "MCP/McpStartupValidation.h"
+#include "MCP/McpCallRegistry.h"
 #include "MCP/McpConsolidatedActionRouting.h"
 #include "MCP/McpToolRegistry.h"
 #include "MCP/McpToolDefinition.h"
@@ -191,11 +192,41 @@ int32 McpStartupValidation::ValidateActionRouting()
 		}
 	}
 
+	// One-way certification: every published action must resolve to a registered
+	// FMcpCall class (RegisterCall already ensures against duplicates at boot, so
+	// a hit here means exactly one typed path). A miss means the schema advertises
+	// an action no class dispatches — a missing registration or a stale enum entry.
+	int32 ActionsCertified = 0;
+	for (const FString& Name : FMcpToolRegistry::GetCanonicalToolNames())
+	{
+		const FMcpToolDefinition* Tool = Registry.FindTool(Name);
+		if (!Tool)
+		{
+			continue; // missing definition already reported above
+		}
+		for (const FString& Action : ExtractSchemaActionEnum(Tool))
+		{
+			if (FMcpCallRegistry::Get().FindCall(Name, Action))
+			{
+				++ActionsCertified;
+			}
+			else
+			{
+				UE_LOG(LogMcpStartupValidation, Error,
+					TEXT("%s: published action '%s' has no registered FMcpCall class; "
+						"no typed dispatch path exists for it."),
+					*Name, *Action);
+				++Violations;
+			}
+		}
+	}
+
 	if (Violations == 0)
 	{
 		UE_LOG(LogMcpStartupValidation, Log,
-			TEXT("Action routing validation passed (%d canonical tools, %d routing entries)."),
-			FMcpToolRegistry::GetCanonicalToolNames().Num(), ToolsChecked);
+			TEXT("Action routing validation passed (%d canonical tools, %d routing entries, "
+				"%d published actions each backed by exactly one FMcpCall class)."),
+			FMcpToolRegistry::GetCanonicalToolNames().Num(), ToolsChecked, ActionsCertified);
 	}
 	else
 	{
