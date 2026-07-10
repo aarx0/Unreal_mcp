@@ -7,9 +7,8 @@
 // fragment via McpDeriveDecl(), so schema and decl are one source and cannot
 // drift. Run() delegates to the subsystem member handlers until the module
 // split de-members those bodies: the effect actions live in EffectHandlers.cpp
-// (HandleEffect*), the Niagara authoring actions delegate to
-// HandleManageNiagaraAuthoringAction (NiagaraAuthoringHandlers.cpp) under its
-// manage_niagara_authoring gate literal, and the three graph actions delegate
+// (HandleEffect*), the Niagara authoring actions call per-action HandleNiagara*
+// members (NiagaraAuthoringHandlers.cpp), and the three graph actions delegate
 // to HandleNiagaraGraphAction (NiagaraGraphHandlers.cpp) after rewriting
 // subAction to that handler's internal add_module/connect_pins/remove_node
 // spellings.
@@ -811,10 +810,11 @@ class FMcpCall_ManageEffect_##ClassSuffix final : public FMcpCall               
 	}                                                                                     \
 };
 
-// Niagara authoring delegates: the monolith gates on the
-// manage_niagara_authoring literal and dispatches on the payload's subAction,
-// which the transport mirrors from action (McpNativeTransport.cpp).
-#define MCP_ME_NA_CALL(ClassSuffix, ActionLiteral, ExtraFlags)                             \
+// Niagara authoring: one classed action per subsystem member
+// (NiagaraAuthoringHandlers.cpp). Run() calls the member directly; the
+// *_ACTION_ variant also passes the action literal so one member can serve a
+// small family (the add_*_data_interface adders share HandleNiagaraAddDataInterface).
+#define MCP_ME_NA_CALL(ClassSuffix, ActionLiteral, HandlerFn, ExtraFlags)                  \
 class FMcpCall_ManageEffect_##ClassSuffix final : public FMcpCall                          \
 {                                                                                         \
 	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }         \
@@ -828,8 +828,25 @@ class FMcpCall_ManageEffect_##ClassSuffix final : public FMcpCall               
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
 	{                                                                                     \
-		return S.HandleManageNiagaraAuthoringAction(                                      \
-			RequestId, TEXT("manage_niagara_authoring"), Payload, Socket);                \
+		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+	}                                                                                     \
+};
+
+#define MCP_ME_NA_ACTION_CALL(ClassSuffix, ActionLiteral, HandlerFn, ExtraFlags)           \
+class FMcpCall_ManageEffect_##ClassSuffix final : public FMcpCall                          \
+{                                                                                         \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }         \
+	const FMcpCallDecl& GetDecl() const override                                          \
+	{                                                                                     \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_effect"),               \
+			TEXT(ActionLiteral), EMcpCallFlags::RequiresEditor | (ExtraFlags),            \
+			&S_##ClassSuffix);                                                            \
+		return D;                                                                         \
+	}                                                                                     \
+	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
+	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
+	{                                                                                     \
+		return S.HandlerFn(RequestId, TEXT(ActionLiteral), Payload, Socket);              \
 	}                                                                                     \
 };
 
@@ -881,44 +898,45 @@ MCP_ME_GRAPH_CALL(ConnectNiagaraPins, "connect_niagara_pins", "connect_pins", EM
 MCP_ME_GRAPH_CALL(RemoveNiagaraNode, "remove_niagara_node", "remove_node", EMcpCallFlags::Mutating)
 
 // Niagara authoring actions (NiagaraAuthoringHandlers.cpp)
-MCP_ME_NA_CALL(CreateNiagaraSystem, "create_niagara_system", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(CreateNiagaraEmitter, "create_niagara_emitter", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddEmitterToSystem, "add_emitter_to_system", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(SetEmitterProperties, "set_emitter_properties", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddSpawnRateModule, "add_spawn_rate_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddSpawnBurstModule, "add_spawn_burst_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddSpawnPerUnitModule, "add_spawn_per_unit_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddInitializeParticleModule, "add_initialize_particle_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddParticleStateModule, "add_particle_state_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddForceModule, "add_force_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddVelocityModule, "add_velocity_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddAccelerationModule, "add_acceleration_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddSizeModule, "add_size_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddColorModule, "add_color_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddSpriteRendererModule, "add_sprite_renderer_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddMeshRendererModule, "add_mesh_renderer_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddRibbonRendererModule, "add_ribbon_renderer_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddLightRendererModule, "add_light_renderer_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddCollisionModule, "add_collision_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddKillParticlesModule, "add_kill_particles_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddCameraOffsetModule, "add_camera_offset_module", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddUserParameter, "add_user_parameter", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(SetParameterValue, "set_parameter_value", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(BindParameterToSource, "bind_parameter_to_source", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddSkeletalMeshDataInterface, "add_skeletal_mesh_data_interface", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddStaticMeshDataInterface, "add_static_mesh_data_interface", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddSplineDataInterface, "add_spline_data_interface", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddAudioSpectrumDataInterface, "add_audio_spectrum_data_interface", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddCollisionQueryDataInterface, "add_collision_query_data_interface", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddEventGenerator, "add_event_generator", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddEventReceiver, "add_event_receiver", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(EnableGpuSimulation, "enable_gpu_simulation", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(AddSimulationStage, "add_simulation_stage", EMcpCallFlags::Mutating)
-MCP_ME_NA_CALL(GetNiagaraInfo, "get_niagara_info", EMcpCallFlags::None)
-MCP_ME_NA_CALL(ValidateNiagaraSystem, "validate_niagara_system", EMcpCallFlags::None)
+MCP_ME_NA_CALL(CreateNiagaraSystem, "create_niagara_system", HandleNiagaraCreateNiagaraSystem, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(CreateNiagaraEmitter, "create_niagara_emitter", HandleNiagaraCreateNiagaraEmitter, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddEmitterToSystem, "add_emitter_to_system", HandleNiagaraAddEmitterToSystem, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(SetEmitterProperties, "set_emitter_properties", HandleNiagaraSetEmitterProperties, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddSpawnRateModule, "add_spawn_rate_module", HandleNiagaraAddSpawnRateModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddSpawnBurstModule, "add_spawn_burst_module", HandleNiagaraAddSpawnBurstModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddSpawnPerUnitModule, "add_spawn_per_unit_module", HandleNiagaraAddSpawnPerUnitModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddInitializeParticleModule, "add_initialize_particle_module", HandleNiagaraAddInitializeParticleModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddParticleStateModule, "add_particle_state_module", HandleNiagaraAddParticleStateModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddForceModule, "add_force_module", HandleNiagaraAddForceModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddVelocityModule, "add_velocity_module", HandleNiagaraAddVelocityModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddAccelerationModule, "add_acceleration_module", HandleNiagaraAddAccelerationModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddSizeModule, "add_size_module", HandleNiagaraAddSizeModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddColorModule, "add_color_module", HandleNiagaraAddColorModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddSpriteRendererModule, "add_sprite_renderer_module", HandleNiagaraAddSpriteRendererModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddMeshRendererModule, "add_mesh_renderer_module", HandleNiagaraAddMeshRendererModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddRibbonRendererModule, "add_ribbon_renderer_module", HandleNiagaraAddRibbonRendererModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddLightRendererModule, "add_light_renderer_module", HandleNiagaraAddLightRendererModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddCollisionModule, "add_collision_module", HandleNiagaraAddCollisionModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddKillParticlesModule, "add_kill_particles_module", HandleNiagaraAddKillParticlesModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddCameraOffsetModule, "add_camera_offset_module", HandleNiagaraAddCameraOffsetModule, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddUserParameter, "add_user_parameter", HandleNiagaraAddUserParameter, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(SetParameterValue, "set_parameter_value", HandleNiagaraSetParameterValue, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(BindParameterToSource, "bind_parameter_to_source", HandleNiagaraBindParameterToSource, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddSkeletalMeshDataInterface, "add_skeletal_mesh_data_interface", HandleNiagaraAddSkeletalMeshDataInterface, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddStaticMeshDataInterface, "add_static_mesh_data_interface", HandleNiagaraAddStaticMeshDataInterface, EMcpCallFlags::Mutating)
+MCP_ME_NA_ACTION_CALL(AddSplineDataInterface, "add_spline_data_interface", HandleNiagaraAddDataInterface, EMcpCallFlags::Mutating)
+MCP_ME_NA_ACTION_CALL(AddAudioSpectrumDataInterface, "add_audio_spectrum_data_interface", HandleNiagaraAddDataInterface, EMcpCallFlags::Mutating)
+MCP_ME_NA_ACTION_CALL(AddCollisionQueryDataInterface, "add_collision_query_data_interface", HandleNiagaraAddDataInterface, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddEventGenerator, "add_event_generator", HandleNiagaraAddEventGenerator, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddEventReceiver, "add_event_receiver", HandleNiagaraAddEventReceiver, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(EnableGpuSimulation, "enable_gpu_simulation", HandleNiagaraEnableGpuSimulation, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(AddSimulationStage, "add_simulation_stage", HandleNiagaraAddSimulationStage, EMcpCallFlags::Mutating)
+MCP_ME_NA_CALL(GetNiagaraInfo, "get_niagara_info", HandleNiagaraGetNiagaraInfo, EMcpCallFlags::None)
+MCP_ME_NA_CALL(ValidateNiagaraSystem, "validate_niagara_system", HandleNiagaraValidateNiagaraSystem, EMcpCallFlags::None)
 
 #undef MCP_ME_CALL
 #undef MCP_ME_NA_CALL
+#undef MCP_ME_NA_ACTION_CALL
 #undef MCP_ME_GRAPH_CALL
 
 } // namespace McpCalls::ManageEffect

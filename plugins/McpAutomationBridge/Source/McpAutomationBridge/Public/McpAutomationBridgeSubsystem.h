@@ -1765,13 +1765,76 @@ private:
   // HandleAudioAuthoring* members live in the transitional public block
   // above (AudioAuthoringHandlers.cpp).
 public:
-  // Phase 12: Niagara Authoring handlers — called directly by the classed
-  // manage_effect Niagara-authoring actions (MCP/Calls/); Action carries its
-  // manage_niagara_authoring gate literal.
-  bool HandleManageNiagaraAuthoringAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
+  // Phase 12: Niagara Authoring handlers — one member per classed manage_effect
+  // Niagara-authoring action (MCP/Calls/McpCalls_ManageEffect.cpp), implemented
+  // in NiagaraAuthoringHandlers.cpp. HandleNiagaraAddDataInterface serves the
+  // three spline/audio-spectrum/collision-query adders via its SubAction arg.
+  bool HandleNiagaraCreateNiagaraSystem(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraCreateNiagaraEmitter(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddEmitterToSystem(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraSetEmitterProperties(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddSpawnRateModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddSpawnBurstModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddSpawnPerUnitModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddInitializeParticleModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddParticleStateModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddForceModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddVelocityModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddAccelerationModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddSizeModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddColorModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddSpriteRendererModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddMeshRendererModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddRibbonRendererModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddLightRendererModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddCollisionModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddKillParticlesModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddCameraOffsetModule(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddUserParameter(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraSetParameterValue(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraBindParameterToSource(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddSkeletalMeshDataInterface(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddStaticMeshDataInterface(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddDataInterface(const FString &RequestId, const FString &SubAction,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddEventGenerator(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddEventReceiver(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraEnableGpuSimulation(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraAddSimulationStage(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraGetNiagaraInfo(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleNiagaraValidateNiagaraSystem(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 
 private:
   // manage_gas is classed — see MCP/Calls/McpCalls_ManageGas.cpp.

@@ -5,9 +5,9 @@
 // (Private/MCP/Calls/McpCalls_ManageEffect.cpp); each HandleEffect* member
 // here implements one advertised action. create_particle_trail/
 // create_environment_effect/create_impact_effect/create_niagara_ribbon share
-// CreateNiagaraEffect. The 36 Niagara authoring actions are implemented by
-// HandleManageNiagaraAuthoringAction (NiagaraAuthoringHandlers.cpp) and the
-// three graph actions by HandleNiagaraGraphAction (NiagaraGraphHandlers.cpp).
+// CreateNiagaraEffect. The Niagara authoring actions are per-action
+// HandleNiagara* members (NiagaraAuthoringHandlers.cpp) and the three graph
+// actions go through HandleNiagaraGraphAction (NiagaraGraphHandlers.cpp).
 //
 // VERSION COMPATIBILITY:
 // ----------------------
