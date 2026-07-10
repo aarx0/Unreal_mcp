@@ -38,10 +38,6 @@ enum class EMcpCallFlags : uint8
 	None = 0,
 	// Mutates editor/asset state (feeds the apply-receipt work).
 	Mutating = 1 << 0,
-	// Declaration could not be verified against a reachable handler branch
-	// (dead action, unreachable dispatch). Validation SKIPS these — loudly,
-	// via the lint — instead of rejecting on made-up truth.
-	UnverifiedDecl = 1 << 1,
 	// Needs a live GEditor; Execute() rejects (EDITOR_NOT_AVAILABLE /
 	// NOT_IMPLEMENTED outside editor builds) before Run() sees the call.
 	RequiresEditor = 1 << 2,

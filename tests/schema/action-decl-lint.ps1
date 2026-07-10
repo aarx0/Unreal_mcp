@@ -31,7 +31,6 @@ $allowFile  = Join-Path $PSScriptRoot 'action-decl-lint-allowlist.txt'
 
 # --- declarations: "tool.action" -> param set ---
 $declParams = @{}
-$unverified = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 foreach ($f in Get-ChildItem $declsDir -Filter 'McpDecl_*.h') {
   $text = Get-Content $f.FullName -Raw
   $arrays = @{}
@@ -42,7 +41,6 @@ foreach ($f in Get-ChildItem $declsDir -Filter 'McpDecl_*.h') {
     $key = "$($m.Groups[1].Value).$($m.Groups[2].Value)"
     $arrRef = $m.Groups[3].Value
     $declParams[$key] = if ($arrays.ContainsKey($arrRef)) { $arrays[$arrRef] } else { @() }
-    if ($m.Groups[4].Value -eq 'EMcpCallFlags::UnverifiedDecl') { [void]$unverified.Add($key) }
   }
 }
 # Classed families: decls live with their FMcpCall classes (MCP/Calls/). Each
@@ -141,7 +139,6 @@ foreach ($f in $handlerFiles) {
       foreach ($tool in $chargedTools) {
         if ($schemaDerivedTools.Contains($tool)) { continue }
         $key = "$tool.$($range.Action)"
-        if ($unverified.Contains($key)) { continue }
         if (-not $declParams.ContainsKey($key)) { continue }
         if ($param -notin $declParams[$key]) {
           $line = 1 + ([regex]::Matches($text.Substring(0, $m.Index), "`n")).Count
@@ -176,7 +173,7 @@ if (Test-Path $allowFile) {
 $violations = @($findings | Where-Object { -not $allow.Contains(($_ -split '  ')[0]) })
 
 if ($violations.Count -eq 0) {
-  Write-Host "PASS  handler reads match action declarations ($($declParams.Count) decls, $($unverified.Count) unverified-skipped; allowlist $($allow.Count))"
+  Write-Host "PASS  handler reads match action declarations ($($declParams.Count) decls; allowlist $($allow.Count))"
   exit 0
 }
 Write-Host "FAIL  handler reads missing from declarations: $($violations.Count)" -ForegroundColor Red

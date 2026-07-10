@@ -1261,8 +1261,11 @@ void FMcpNativeTransport::HandleToolsCall(
 	// Shipped warn-first 2026-07-02; promoted to INVALID_PARAMS rejection
 	// 2026-07-03 after the warnings proved quiet (11 editor sessions, hundreds
 	// of calls, 5 warnings — every one a genuinely wrong call). Required-arg
-	// and enum violations reject; unknown top-level keys stay log-only
-	// forever: handlers legitimately read params the schema doesn't declare.
+	// and enum violations reject; unknown top-level keys stay log-only HERE
+	// because the per-action decl check below owns unknown-key rejection and
+	// is strictly stronger (this tool-level union would accept a param that
+	// belongs to a different action), and envelope keys (bypassParamCheck)
+	// are legitimately absent from the schema.
 	auto CollectSchemaViolations = [](const FString& InToolName, const TSharedPtr<FJsonObject>& InArguments) -> TArray<FString>
 	{
 		TArray<FString> Violations;
@@ -1481,8 +1484,7 @@ void FMcpNativeTransport::HandleToolsCall(
 	// a silent ignore never surfaces. Because a wrong declaration can only be
 	// corrected with an edit + rebuild, the error names the escape hatch
 	// (bypassParamCheck:true → proceed, findings ride the response as
-	// paramWarnings) and routes the fix back to the repo. UnverifiedDecl
-	// entries are skipped — validation never runs on unattributed truth.
+	// paramWarnings) and routes the fix back to the repo.
 	TArray<FString> BypassedParamWarnings;
 	if (Arguments.IsValid())
 	{
@@ -1490,7 +1492,7 @@ void FMcpNativeTransport::HandleToolsCall(
 		if (Arguments->TryGetStringField(TEXT("action"), ActionValue))
 		{
 			const FMcpCallDecl* Decl = FMcpCallRegistry::Get().FindDecl(ToolName, ActionValue);
-			if (Decl && !EnumHasAnyFlags(Decl->Flags, EMcpCallFlags::UnverifiedDecl))
+			if (Decl)
 			{
 				TArray<FString> ForeignParams;
 				for (const auto& Pair : Arguments->Values)
