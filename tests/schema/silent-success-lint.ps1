@@ -32,7 +32,10 @@ $allowFile = Join-Path $PSScriptRoot 'silent-success-allowlist.txt'
 $convMarkers = @('FMcpWriteReport', 'SendWriteReportResponse', 'NO_CHANGES_REQUESTED',
                  'PROPERTY_WRITE_FAILED', 'appliedProperties')
 
-$funcRegex = [regex]'bool\s+UMcpAutomationBridgeSubsystem::(Handle\w+)\s*\('
+# Matches both subsystem-member defs and the de-membered namespaced free
+# functions (McpHandlers::<Family>::Handle*) so a converted family's setters
+# stay in scope.
+$funcRegex = [regex]'bool\s+(?:UMcpAutomationBridgeSubsystem|McpHandlers::\w+)::(Handle\w+)\s*\('
 # A "bag setter" is an EDIT handler that writes an existing object's optional
 # fields — identified by the setter verb in its NAME (Configure/Setup/Set<X>/
 # Modify/Update/Adjust). Name-based, not read-based: the handlers use several

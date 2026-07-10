@@ -5,13 +5,13 @@
 // its schema fragment in a S_<Suffix>() function; the published facade schema
 // folds those fragments and GetDecl() derives the validation decl from the same
 // fragment via McpDeriveDecl(), so schema and decl are one source and cannot
-// drift. Run() delegates to the subsystem member handlers (HandleGas*,
-// McpAutomationBridge_GASHandlers.cpp) until the module split de-members those
-// bodies.
+// drift. Run() delegates to the namespaced free handlers (McpHandlers::Gas::HandleGas*,
+// McpAutomationBridge_GASHandlers.cpp).
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_GASHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -577,53 +577,53 @@ class FMcpCall_ManageGas_##ClassSuffix final : public FMcpCall                  
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                   \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override   \
 	{                                                                                      \
-		return S.HandlerFn(RequestId, Payload, Socket);                                    \
+		return HandlerFn(S, RequestId, Payload, Socket);                                    \
 	}                                                                                      \
 };
 
 // Components & attributes (13.1)
-MCP_GA_CALL(AddAbilitySystemComponent, "add_ability_system_component", HandleGasAddAbilitySystemComponent, EMcpCallFlags::Mutating)
-MCP_GA_CALL(ConfigureAsc, "configure_asc", HandleGasConfigureAsc, EMcpCallFlags::Mutating)
-MCP_GA_CALL(CreateAttributeSet, "create_attribute_set", HandleGasCreateAttributeSet, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddAttribute, "add_attribute", HandleGasAddAttribute, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetAttributeBaseValue, "set_attribute_base_value", HandleGasSetAttributeBaseValue, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetAttributeClamping, "set_attribute_clamping", HandleGasSetAttributeClamping, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddAbilitySystemComponent, "add_ability_system_component", McpHandlers::Gas::HandleGasAddAbilitySystemComponent, EMcpCallFlags::Mutating)
+MCP_GA_CALL(ConfigureAsc, "configure_asc", McpHandlers::Gas::HandleGasConfigureAsc, EMcpCallFlags::Mutating)
+MCP_GA_CALL(CreateAttributeSet, "create_attribute_set", McpHandlers::Gas::HandleGasCreateAttributeSet, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddAttribute, "add_attribute", McpHandlers::Gas::HandleGasAddAttribute, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetAttributeBaseValue, "set_attribute_base_value", McpHandlers::Gas::HandleGasSetAttributeBaseValue, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetAttributeClamping, "set_attribute_clamping", McpHandlers::Gas::HandleGasSetAttributeClamping, EMcpCallFlags::Mutating)
 
 // Gameplay abilities (13.2)
-MCP_GA_CALL(CreateGameplayAbility, "create_gameplay_ability", HandleGasCreateGameplayAbility, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetAbilityTags, "set_ability_tags", HandleGasSetAbilityTags, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetAbilityCosts, "set_ability_costs", HandleGasSetAbilityCosts, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetAbilityCooldown, "set_ability_cooldown", HandleGasSetAbilityCooldown, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetAbilityTargeting, "set_ability_targeting", HandleGasSetAbilityTargeting, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddAbilityTask, "add_ability_task", HandleGasAddAbilityTask, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetActivationPolicy, "set_activation_policy", HandleGasSetActivationPolicy, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetInstancingPolicy, "set_instancing_policy", HandleGasSetInstancingPolicy, EMcpCallFlags::Mutating)
+MCP_GA_CALL(CreateGameplayAbility, "create_gameplay_ability", McpHandlers::Gas::HandleGasCreateGameplayAbility, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetAbilityTags, "set_ability_tags", McpHandlers::Gas::HandleGasSetAbilityTags, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetAbilityCosts, "set_ability_costs", McpHandlers::Gas::HandleGasSetAbilityCosts, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetAbilityCooldown, "set_ability_cooldown", McpHandlers::Gas::HandleGasSetAbilityCooldown, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetAbilityTargeting, "set_ability_targeting", McpHandlers::Gas::HandleGasSetAbilityTargeting, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddAbilityTask, "add_ability_task", McpHandlers::Gas::HandleGasAddAbilityTask, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetActivationPolicy, "set_activation_policy", McpHandlers::Gas::HandleGasSetActivationPolicy, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetInstancingPolicy, "set_instancing_policy", McpHandlers::Gas::HandleGasSetInstancingPolicy, EMcpCallFlags::Mutating)
 
 // Gameplay effects (13.3)
-MCP_GA_CALL(CreateGameplayEffect, "create_gameplay_effect", HandleGasCreateGameplayEffect, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetEffectDuration, "set_effect_duration", HandleGasSetEffectDuration, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddEffectModifier, "add_effect_modifier", HandleGasAddEffectModifier, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetModifierMagnitude, "set_modifier_magnitude", HandleGasSetModifierMagnitude, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddEffectExecutionCalculation, "add_effect_execution_calculation", HandleGasAddEffectExecutionCalculation, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddEffectCue, "add_effect_cue", HandleGasAddEffectCue, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetEffectStacking, "set_effect_stacking", HandleGasSetEffectStacking, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetEffectTags, "set_effect_tags", HandleGasSetEffectTags, EMcpCallFlags::Mutating)
+MCP_GA_CALL(CreateGameplayEffect, "create_gameplay_effect", McpHandlers::Gas::HandleGasCreateGameplayEffect, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetEffectDuration, "set_effect_duration", McpHandlers::Gas::HandleGasSetEffectDuration, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddEffectModifier, "add_effect_modifier", McpHandlers::Gas::HandleGasAddEffectModifier, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetModifierMagnitude, "set_modifier_magnitude", McpHandlers::Gas::HandleGasSetModifierMagnitude, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddEffectExecutionCalculation, "add_effect_execution_calculation", McpHandlers::Gas::HandleGasAddEffectExecutionCalculation, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddEffectCue, "add_effect_cue", McpHandlers::Gas::HandleGasAddEffectCue, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetEffectStacking, "set_effect_stacking", McpHandlers::Gas::HandleGasSetEffectStacking, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetEffectTags, "set_effect_tags", McpHandlers::Gas::HandleGasSetEffectTags, EMcpCallFlags::Mutating)
 
 // Gameplay cues + tags (13.4)
-MCP_GA_CALL(CreateGameplayCueNotify, "create_gameplay_cue_notify", HandleGasCreateGameplayCueNotify, EMcpCallFlags::Mutating)
-MCP_GA_CALL(SetCueEffects, "set_cue_effects", HandleGasSetCueEffects, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddTagToAsset, "add_tag_to_asset", HandleGasAddTagToAsset, EMcpCallFlags::Mutating)
+MCP_GA_CALL(CreateGameplayCueNotify, "create_gameplay_cue_notify", McpHandlers::Gas::HandleGasCreateGameplayCueNotify, EMcpCallFlags::Mutating)
+MCP_GA_CALL(SetCueEffects, "set_cue_effects", McpHandlers::Gas::HandleGasSetCueEffects, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddTagToAsset, "add_tag_to_asset", McpHandlers::Gas::HandleGasAddTagToAsset, EMcpCallFlags::Mutating)
 
 // Utility (13.5)
-MCP_GA_CALL(GetAttribute, "get_attribute", HandleGasGetAttribute, EMcpCallFlags::None)
-MCP_GA_CALL(GetInfo, "get_info", HandleGasGetInfo, EMcpCallFlags::None)
+MCP_GA_CALL(GetAttribute, "get_attribute", McpHandlers::Gas::HandleGasGetAttribute, EMcpCallFlags::None)
+MCP_GA_CALL(GetInfo, "get_info", McpHandlers::Gas::HandleGasGetInfo, EMcpCallFlags::None)
 
 // Ability sets (13.6)
-MCP_GA_CALL(CreateAbilitySet, "create_ability_set", HandleGasCreateAbilitySet, EMcpCallFlags::Mutating)
-MCP_GA_CALL(AddAbility, "add_ability", HandleGasAddAbility, EMcpCallFlags::Mutating)
+MCP_GA_CALL(CreateAbilitySet, "create_ability_set", McpHandlers::Gas::HandleGasCreateAbilitySet, EMcpCallFlags::Mutating)
+MCP_GA_CALL(AddAbility, "add_ability", McpHandlers::Gas::HandleGasAddAbility, EMcpCallFlags::Mutating)
 
 // Execution calculations (13.7)
-MCP_GA_CALL(CreateExecutionCalculation, "create_execution_calculation", HandleGasCreateExecutionCalculation, EMcpCallFlags::Mutating)
+MCP_GA_CALL(CreateExecutionCalculation, "create_execution_calculation", McpHandlers::Gas::HandleGasCreateExecutionCalculation, EMcpCallFlags::Mutating)
 
 #undef MCP_GA_CALL
 

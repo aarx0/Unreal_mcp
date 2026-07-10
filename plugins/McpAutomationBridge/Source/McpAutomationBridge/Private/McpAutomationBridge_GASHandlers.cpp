@@ -71,6 +71,7 @@
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
+#include "McpAutomationBridge_GASHandlers.h"
 #include "McpResponseHelpers.h"
 #include "Misc/EngineVersionComparison.h"
 #include "Modules/ModuleManager.h"  // Required for FModuleManager::IsModuleLoaded() runtime checks
@@ -494,16 +495,17 @@ static UBlueprint* CreateGASBlueprint(const FString& Path, const FString& Name, 
 // ============================================================
 
 // add_ability_system_component
-bool UMcpAutomationBridgeSubsystem::HandleGasAddAbilitySystemComponent(
+bool McpHandlers::Gas::HandleGasAddAbilitySystemComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -515,7 +517,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbilitySystemComponent(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -537,7 +539,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbilitySystemComponent(
         }
     }
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     FString ComponentName = GetJsonStringField(Payload, TEXT("componentName"), TEXT("AbilitySystemComponent"));
@@ -547,7 +549,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbilitySystemComponent(
     
     if (!NewNode)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             TEXT("Failed to create ASC node"), TEXT("CREATION_FAILED"));
         return true;
     }
@@ -559,22 +561,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbilitySystemComponent(
     Result->SetStringField(TEXT("componentName"), ComponentName);
     Result->SetStringField(TEXT("componentClass"), TEXT("AbilitySystemComponent"));
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("ASC added"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("ASC added"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // configure_asc
-bool UMcpAutomationBridgeSubsystem::HandleGasConfigureAsc(
+bool McpHandlers::Gas::HandleGasConfigureAsc(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -586,7 +589,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasConfigureAsc(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -608,7 +611,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasConfigureAsc(
         }
     }
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     FString ComponentName = GetJsonStringField(Payload, TEXT("componentName"), TEXT("AbilitySystemComponent"));
@@ -630,7 +633,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasConfigureAsc(
 
     if (!ASCTemplate)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("ASC not found: %s"), *ComponentName), TEXT("NOT_FOUND"));
         return true;
     }
@@ -675,22 +678,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasConfigureAsc(
     {
         Result->SetStringField(TEXT("replicationMode"), ReplicationMode);
     }
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("ASC configured"), Blueprint);
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // create_attribute_set
-bool UMcpAutomationBridgeSubsystem::HandleGasCreateAttributeSet(
+bool McpHandlers::Gas::HandleGasCreateAttributeSet(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -702,7 +706,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateAttributeSet(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -714,7 +718,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateAttributeSet(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -723,7 +727,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateAttributeSet(
     UBlueprint* Blueprint = CreateGASBlueprint(Path, Name, UAttributeSet::StaticClass(), Error, bReusedExisting);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -741,23 +745,24 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateAttributeSet(
     Result->SetStringField(TEXT("parentClass"), TEXT("AttributeSet"));
     Result->SetBoolField(TEXT("reusedExisting"), bReusedExisting);
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
         bReusedExisting ? TEXT("Attribute set already exists") : TEXT("Attribute set created"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // add_attribute
-bool UMcpAutomationBridgeSubsystem::HandleGasAddAttribute(
+bool McpHandlers::Gas::HandleGasAddAttribute(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -769,7 +774,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAttribute(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -793,18 +798,18 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAttribute(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString AttributeName = GetJsonStringField(Payload, TEXT("attributeName"));
     if (AttributeName.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing attributeName."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing attributeName."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     double BaseValue = 0.0;
@@ -822,7 +827,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAttribute(
     bool bSuccess = FBlueprintEditorUtils::AddMemberVariable(Blueprint, FName(*AttributeName), PinType);
     if (!bSuccess)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Failed to add attribute"), TEXT("ADD_FAILED"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Failed to add attribute"), TEXT("ADD_FAILED"));
         return true;
     }
 
@@ -850,22 +855,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAttribute(
     Result->SetNumberField(TEXT("defaultValue"), BaseValue);
     Result->SetBoolField(TEXT("baseValueApplied"), bHasBaseValue);
     Result->SetBoolField(TEXT("saved"), bSaved);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Attribute added"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Attribute added"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // set_attribute_base_value - REAL IMPLEMENTATION using reflection
-bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeBaseValue(
+bool McpHandlers::Gas::HandleGasSetAttributeBaseValue(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -877,7 +883,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeBaseValue(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -901,14 +907,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeBaseValue(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString AttributeName = GetJsonStringField(Payload, TEXT("attributeName"));
     if (AttributeName.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing attributeName."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing attributeName."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -917,7 +923,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeBaseValue(
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -925,7 +931,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeBaseValue(
     UAttributeSet* AttrSetCDO = Cast<UAttributeSet>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!AttrSetCDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Not an AttributeSet blueprint"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Not an AttributeSet blueprint"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -950,7 +956,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeBaseValue(
 
         if (!bUpdatedBlueprintVariable)
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Attribute not found: %s"), *AttributeName), TEXT("ATTRIBUTE_NOT_FOUND"));
             return true;
         }
@@ -987,22 +993,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeBaseValue(
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetStringField(TEXT("attributeName"), AttributeName);
     Result->SetNumberField(TEXT("baseValue"), BaseValue);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Attribute base value set via reflection"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Attribute base value set via reflection"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // set_attribute_clamping - REAL IMPLEMENTATION with PreAttributeChange clamping logic
-bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeClamping(
+bool McpHandlers::Gas::HandleGasSetAttributeClamping(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -1014,7 +1021,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeClamping(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -1038,24 +1045,24 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeClamping(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString AttributeName = GetJsonStringField(Payload, TEXT("attributeName"));
     if (AttributeName.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing attributeName."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing attributeName."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     // Verify this is an AttributeSet blueprint
     if (!Blueprint->GeneratedClass || !Blueprint->GeneratedClass->IsChildOf(UAttributeSet::StaticClass()))
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint is not an AttributeSet"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint is not an AttributeSet"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -1147,7 +1154,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeClamping(
         Result->SetStringField(TEXT("enableClampVariable"), EnableClampVarName);
         Result->SetStringField(TEXT("message"), TEXT("Clamping variables added. Override PreAttributeChange in Blueprint and use these variables to clamp the attribute value."));
     }
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Attribute clamping configured"), Blueprint);
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
@@ -1157,16 +1164,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeClamping(
 // ============================================================
 
 // create_gameplay_ability
-bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayAbility(
+bool McpHandlers::Gas::HandleGasCreateGameplayAbility(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -1178,7 +1186,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayAbility(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -1190,7 +1198,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayAbility(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -1199,7 +1207,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayAbility(
     UBlueprint* Blueprint = CreateGASBlueprint(Path, Name, UGameplayAbility::StaticClass(), Error, bReusedExisting);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -1217,23 +1225,24 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayAbility(
     Result->SetStringField(TEXT("name"), ActualName);
     Result->SetStringField(TEXT("parentClass"), TEXT("GameplayAbility"));
     Result->SetBoolField(TEXT("reusedExisting"), bReusedExisting);
-    SendAutomationResponse(Socket, RequestId, true, 
+    S.SendAutomationResponse(Socket, RequestId, true, 
         bReusedExisting ? TEXT("Ability already exists") : TEXT("Ability created"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // set_ability_tags
-bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTags(
+bool McpHandlers::Gas::HandleGasSetAbilityTags(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -1245,7 +1254,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTags(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -1269,14 +1278,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTags(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -1284,7 +1293,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTags(
     UGameplayAbility* AbilityCDO = Cast<UGameplayAbility>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!AbilityCDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Not a GameplayAbility blueprint"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Not a GameplayAbility blueprint"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -1433,7 +1442,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTags(
 
     if (TagsRequested == 0)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("No tags provided. Pass abilityTags, cancelAbilitiesWithTag, blockAbilitiesWithTag, activationRequiredTags, or activationBlockedTags."),
             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -1453,7 +1462,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTags(
             Detail += FString::Printf(TEXT(" Tag container write failed for: %s."),
                 *FString::Join(TagsFailedToApply, TEXT(", ")));
         }
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("None of the %d requested tags were applied.%s"), TagsRequested, *Detail),
             TEXT("TAGS_NOT_APPLIED"));
         return true;
@@ -1479,22 +1488,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTags(
         }
         Result->SetArrayField(TEXT("tagsNotRegistered"), NotRegisteredJson);
     }
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Ability tags set"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Ability tags set"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // set_ability_costs
-bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCosts(
+bool McpHandlers::Gas::HandleGasSetAbilityCosts(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -1506,7 +1516,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCosts(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -1530,7 +1540,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCosts(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -1539,7 +1549,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCosts(
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -1547,7 +1557,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCosts(
     UGameplayAbility* AbilityCDO = Cast<UGameplayAbility>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!AbilityCDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Not a GameplayAbility blueprint"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Not a GameplayAbility blueprint"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -1557,7 +1567,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCosts(
         UClass* CostClass = ResolveGameplayEffectClassFromPath(CostEffectPath);
         if (!CostClass)
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Cost GameplayEffect not found or invalid: %s"), *CostEffectPath), TEXT("ASSET_NOT_FOUND"));
             return true;
         }
@@ -1574,22 +1584,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCosts(
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetStringField(TEXT("costEffectPath"), CostEffectPath);
     Result->SetBoolField(TEXT("costEffectAssigned"), bCostEffectAssigned);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Ability cost set"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Ability cost set"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // set_ability_cooldown
-bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCooldown(
+bool McpHandlers::Gas::HandleGasSetAbilityCooldown(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -1601,7 +1612,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCooldown(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -1625,7 +1636,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCooldown(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -1634,7 +1645,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCooldown(
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -1642,7 +1653,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCooldown(
     UGameplayAbility* AbilityCDO = Cast<UGameplayAbility>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!AbilityCDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Not a GameplayAbility blueprint"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Not a GameplayAbility blueprint"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -1652,7 +1663,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCooldown(
         UClass* CooldownClass = ResolveGameplayEffectClassFromPath(CooldownEffectPath);
         if (!CooldownClass)
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Cooldown GameplayEffect not found or invalid: %s"), *CooldownEffectPath), TEXT("ASSET_NOT_FOUND"));
             return true;
         }
@@ -1669,22 +1680,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityCooldown(
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetStringField(TEXT("cooldownEffectPath"), CooldownEffectPath);
     Result->SetBoolField(TEXT("cooldownEffectAssigned"), bCooldownEffectAssigned);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Ability cooldown set"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Ability cooldown set"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // set_ability_targeting - REAL IMPLEMENTATION with actual targeting configuration
-bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTargeting(
+bool McpHandlers::Gas::HandleGasSetAbilityTargeting(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -1696,7 +1708,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTargeting(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -1720,14 +1732,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTargeting(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -1735,7 +1747,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTargeting(
     // Verify this is a GameplayAbility blueprint
     if (!Blueprint->GeneratedClass->IsChildOf(UGameplayAbility::StaticClass()))
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint is not a GameplayAbility"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint is not a GameplayAbility"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -1898,22 +1910,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTargeting(
     {
         Result->SetArrayField(TEXT("variablesAdded"), VariablesArray);
     }
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Targeting configuration complete"), Blueprint);
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // add_ability_task - REAL IMPLEMENTATION with AbilityTask class reference and configuration
-bool UMcpAutomationBridgeSubsystem::HandleGasAddAbilityTask(
+bool McpHandlers::Gas::HandleGasAddAbilityTask(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -1925,7 +1938,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbilityTask(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -1949,14 +1962,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbilityTask(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString TaskType = GetJsonStringField(Payload, TEXT("taskType"));
     if (TaskType.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing taskType."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing taskType."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
     
@@ -1965,7 +1978,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbilityTask(
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -1973,7 +1986,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbilityTask(
     // Verify this is a GameplayAbility blueprint
     if (!Blueprint->GeneratedClass->IsChildOf(UGameplayAbility::StaticClass()))
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint is not a GameplayAbility"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint is not a GameplayAbility"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -2110,22 +2123,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbilityTask(
     Result->SetArrayField(TEXT("variablesAdded"), VarsArray);
     Result->SetNumberField(TEXT("variableCount"), VariablesAdded.Num());
     
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Ability task configuration added"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Ability task configuration added"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // set_activation_policy
-bool UMcpAutomationBridgeSubsystem::HandleGasSetActivationPolicy(
+bool McpHandlers::Gas::HandleGasSetActivationPolicy(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -2137,7 +2151,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetActivationPolicy(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -2161,7 +2175,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetActivationPolicy(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -2173,7 +2187,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetActivationPolicy(
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -2181,7 +2195,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetActivationPolicy(
     UGameplayAbility* AbilityCDO = Cast<UGameplayAbility>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!AbilityCDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Not a GameplayAbility blueprint"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Not a GameplayAbility blueprint"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -2236,22 +2250,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetActivationPolicy(
     {
         Result->SetStringField(TEXT("activationPolicy"), ActivationPolicy);
     }
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Activation policy set"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Activation policy set"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // set_instancing_policy
-bool UMcpAutomationBridgeSubsystem::HandleGasSetInstancingPolicy(
+bool McpHandlers::Gas::HandleGasSetInstancingPolicy(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -2263,7 +2278,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetInstancingPolicy(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -2287,7 +2302,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetInstancingPolicy(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -2297,7 +2312,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetInstancingPolicy(
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -2305,7 +2320,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetInstancingPolicy(
     UGameplayAbility* AbilityCDO = Cast<UGameplayAbility>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!AbilityCDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Not a GameplayAbility blueprint"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Not a GameplayAbility blueprint"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -2338,7 +2353,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetInstancingPolicy(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetStringField(TEXT("policy"), Policy);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Instancing policy set"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Instancing policy set"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
@@ -2348,16 +2363,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetInstancingPolicy(
 // ============================================================
 
 // create_gameplay_effect
-bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayEffect(
+bool McpHandlers::Gas::HandleGasCreateGameplayEffect(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -2369,7 +2385,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayEffect(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -2381,7 +2397,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayEffect(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -2390,7 +2406,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayEffect(
     UBlueprint* Blueprint = CreateGASBlueprint(Path, Name, UGameplayEffect::StaticClass(), Error, bReusedExisting);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -2433,23 +2449,24 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayEffect(
     Result->SetStringField(TEXT("parentClass"), TEXT("GameplayEffect"));
     Result->SetStringField(TEXT("durationType"), DurationType);
     Result->SetBoolField(TEXT("reusedExisting"), bReusedExisting);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
         bReusedExisting ? TEXT("Effect already exists") : TEXT("Effect created"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // set_effect_duration
-bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectDuration(
+bool McpHandlers::Gas::HandleGasSetEffectDuration(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -2461,7 +2478,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectDuration(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -2485,14 +2502,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectDuration(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -2500,7 +2517,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectDuration(
     UGameplayEffect* EffectCDO = Cast<UGameplayEffect>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!EffectCDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -2602,22 +2619,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectDuration(
     {
         Result->SetNumberField(TEXT("period"), PeriodValue);
     }
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Duration set"), Blueprint);
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // add_effect_modifier
-bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectModifier(
+bool McpHandlers::Gas::HandleGasAddEffectModifier(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -2629,7 +2647,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectModifier(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -2653,14 +2671,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectModifier(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -2668,7 +2686,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectModifier(
     UGameplayEffect* EffectCDO = Cast<UGameplayEffect>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!EffectCDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -2679,7 +2697,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectModifier(
     const FString AttributeSpec = GetJsonStringField(Payload, TEXT("attribute"));
     if (AttributeSpec.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("Missing 'attribute' - a modifier must target a gameplay attribute (pass 'AttributeName' or 'SetClassName.AttributeName')."),
             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -2688,7 +2706,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectModifier(
     const FGameplayAttribute ResolvedAttribute = McpResolveGameplayAttribute(AttributeSpec, AttrResolveError);
     if (!ResolvedAttribute.IsValid())
     {
-        SendAutomationError(Socket, RequestId, AttrResolveError, TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, AttrResolveError, TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -2717,14 +2735,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectModifier(
     {
         if (Payload->HasField(TEXT("magnitude")) || Payload->HasField(TEXT("modifierMagnitude")))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("'setByCallerTag' and a numeric magnitude are mutually exclusive."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
         const FGameplayTag DataTag = GetOrRequestTag(SetByCallerTagString);
         if (!DataTag.IsValid())
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("setByCallerTag not registered: %s"), *SetByCallerTagString),
                 TEXT("INVALID_ARGUMENT"));
             return true;
@@ -2756,22 +2774,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectModifier(
         Result->SetNumberField(TEXT("magnitude"), Magnitude);
     }
     Result->SetNumberField(TEXT("modifierCount"), EffectCDO->Modifiers.Num());
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Modifier added"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Modifier added"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // set_modifier_magnitude
-bool UMcpAutomationBridgeSubsystem::HandleGasSetModifierMagnitude(
+bool McpHandlers::Gas::HandleGasSetModifierMagnitude(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -2783,7 +2802,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetModifierMagnitude(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -2807,14 +2826,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetModifierMagnitude(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -2822,7 +2841,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetModifierMagnitude(
     UGameplayEffect* EffectCDO = Cast<UGameplayEffect>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!EffectCDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -2832,7 +2851,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetModifierMagnitude(
 
     if (ModifierIndex >= EffectCDO->Modifiers.Num())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Modifier index out of range"), TEXT("INVALID_INDEX"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Modifier index out of range"), TEXT("INVALID_INDEX"));
         return true;
     }
 
@@ -2842,26 +2861,26 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetModifierMagnitude(
     {
         if (MagnitudeTypeToken != TEXT("setbycaller"))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("'setByCallerTag' requires magnitudeType 'SetByCaller'."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
         if (SetByCallerTagString.IsEmpty())
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("magnitudeType 'SetByCaller' requires 'setByCallerTag'."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
         if (Payload->HasField(TEXT("value")) || Payload->HasField(TEXT("modifierMagnitude")))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("'setByCallerTag' and a numeric magnitude are mutually exclusive."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
         const FGameplayTag DataTag = GetOrRequestTag(SetByCallerTagString);
         if (!DataTag.IsValid())
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("setByCallerTag not registered: %s"), *SetByCallerTagString),
                 TEXT("INVALID_ARGUMENT"));
             return true;
@@ -2891,22 +2910,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetModifierMagnitude(
     {
         Result->SetNumberField(TEXT("value"), Value);
     }
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Magnitude set"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Magnitude set"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // add_effect_execution_calculation - REAL IMPLEMENTATION
-bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectExecutionCalculation(
+bool McpHandlers::Gas::HandleGasAddEffectExecutionCalculation(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -2918,7 +2938,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectExecutionCalculation(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -2942,21 +2962,21 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectExecutionCalculation(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString CalculationClassPath = GetJsonStringField(Payload, TEXT("calculationClass"));
     if (CalculationClassPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing calculationClass."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing calculationClass."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -2964,7 +2984,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectExecutionCalculation(
     UGameplayEffect* EffectCDO = Cast<UGameplayEffect>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!EffectCDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -2972,7 +2992,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectExecutionCalculation(
     UClass* CalcClass = LoadClass<UGameplayEffectExecutionCalculation>(nullptr, *CalculationClassPath);
     if (!CalcClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Calculation class not found: %s"), *CalculationClassPath), TEXT("CLASS_NOT_FOUND"));
         return true;
     }
@@ -2989,22 +3009,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectExecutionCalculation(
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetStringField(TEXT("calculationClass"), CalculationClassPath);
     Result->SetNumberField(TEXT("executionCount"), EffectCDO->Executions.Num());
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Execution calculation added to GameplayEffect"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Execution calculation added to GameplayEffect"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // add_effect_cue
-bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectCue(
+bool McpHandlers::Gas::HandleGasAddEffectCue(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -3016,7 +3037,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectCue(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -3040,21 +3061,21 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectCue(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString CueTag = GetJsonStringField(Payload, TEXT("cueTag"));
     if (CueTag.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing cueTag."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing cueTag."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -3062,7 +3083,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectCue(
     UGameplayEffect* EffectCDO = Cast<UGameplayEffect>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!EffectCDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -3081,22 +3102,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddEffectCue(
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetStringField(TEXT("cueTag"), CueTag);
     Result->SetNumberField(TEXT("cueCount"), EffectCDO->GameplayCues.Num());
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Cue added"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Cue added"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // set_effect_stacking
-bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectStacking(
+bool McpHandlers::Gas::HandleGasSetEffectStacking(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -3108,7 +3130,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectStacking(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -3132,14 +3154,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectStacking(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -3147,7 +3169,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectStacking(
     UGameplayEffect* EffectCDO = Cast<UGameplayEffect>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!EffectCDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -3245,22 +3267,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectStacking(
     if (!StackDurationRefreshPolicy.IsEmpty()) Result->SetStringField(TEXT("stackDurationRefreshPolicy"), StackDurationRefreshPolicy);
     if (!StackPeriodResetPolicy.IsEmpty()) Result->SetStringField(TEXT("stackPeriodResetPolicy"), StackPeriodResetPolicy);
     if (!StackExpirationPolicy.IsEmpty()) Result->SetStringField(TEXT("stackExpirationPolicy"), StackExpirationPolicy);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Stacking set"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Stacking set"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // set_effect_tags
-bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectTags(
+bool McpHandlers::Gas::HandleGasSetEffectTags(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -3272,7 +3295,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectTags(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -3296,14 +3319,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectTags(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -3311,7 +3334,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectTags(
     UGameplayEffect* EffectCDO = Cast<UGameplayEffect>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!EffectCDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Not a GameplayEffect blueprint"), TEXT("INVALID_TYPE"));
         return true;
     }
 
@@ -3429,7 +3452,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectTags(
 
     if (TagsRequested == 0)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("No tags provided. Pass grantedTags, applicationRequiredTags, removalTags, or immunityTags."),
             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -3437,7 +3460,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectTags(
 
     if (TagsAdded.Num() == 0)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(
                 TEXT("None of the %d requested tags were applied. Unregistered gameplay tags: %s. Register them in Project Settings > Project > Gameplay Tags (DefaultGameplayTags.ini) and retry."),
                 TagsRequested, *FString::Join(TagsNotRegistered, TEXT(", "))),
@@ -3465,7 +3488,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectTags(
         }
         Result->SetArrayField(TEXT("tagsNotRegistered"), NotRegisteredJson);
     }
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Effect tags set"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Effect tags set"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
@@ -3475,16 +3498,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectTags(
 // ============================================================
 
 // create_gameplay_cue_notify
-bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayCueNotify(
+bool McpHandlers::Gas::HandleGasCreateGameplayCueNotify(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -3496,7 +3520,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayCueNotify(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -3508,7 +3532,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayCueNotify(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -3525,7 +3549,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayCueNotify(
     UBlueprint* Blueprint = CreateGASBlueprint(Path, Name, ParentClass, Error, bReusedExisting);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -3568,7 +3592,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayCueNotify(
     Result->SetStringField(TEXT("cueType"), CueType);
     Result->SetStringField(TEXT("cueTag"), CueTag);
     Result->SetBoolField(TEXT("reusedExisting"), bReusedExisting);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
         bReusedExisting ? TEXT("Cue notify already exists") : TEXT("Cue notify created"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
@@ -3577,16 +3601,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateGameplayCueNotify(
 // configure_cue_trigger - REAL IMPLEMENTATION adding trigger configuration
 
 // set_cue_effects - REAL IMPLEMENTATION adding effect reference variables
-bool UMcpAutomationBridgeSubsystem::HandleGasSetCueEffects(
+bool McpHandlers::Gas::HandleGasSetCueEffects(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -3598,7 +3623,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetCueEffects(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -3622,7 +3647,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetCueEffects(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -3634,7 +3659,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetCueEffects(
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -3766,22 +3791,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetCueEffects(
     Result->SetArrayField(TEXT("variablesAdded"), VarsArray);
     Result->SetNumberField(TEXT("variableCount"), VariablesAdded.Num());
     
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Cue effect variables added to blueprint"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Cue effect variables added to blueprint"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // add_tag_to_asset - REAL IMPLEMENTATION: Load asset and add tag to appropriate container
-bool UMcpAutomationBridgeSubsystem::HandleGasAddTagToAsset(
+bool McpHandlers::Gas::HandleGasAddTagToAsset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -3793,7 +3819,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddTagToAsset(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -3804,14 +3830,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddTagToAsset(
 
     if (AssetPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing assetPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing assetPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString TagString = GetGASStringFieldWithFallback(Payload, TEXT("tag"), TEXT("tagName"));
     if (TagString.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing tag (alias: tagName)."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing tag (alias: tagName)."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -3864,7 +3890,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddTagToAsset(
     UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
     if (!Asset)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Asset not found: %s"), *AssetPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -3988,7 +4014,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddTagToAsset(
 
     if (!bTagAdded)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             TEXT("Asset is not a supported GAS type (GameplayAbility, GameplayEffect, GameplayCue, or Actor with ASC)"), 
             TEXT("UNSUPPORTED_TYPE"));
         return true;
@@ -4000,7 +4026,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddTagToAsset(
     Result->SetStringField(TEXT("assetType"), AssetType);
     Result->SetBoolField(TEXT("tagValid"), bTagIsRegistered);
     Result->SetBoolField(TEXT("tagAdded"), bTagAdded);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Tag added to asset"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Tag added to asset"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
@@ -4012,16 +4038,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddTagToAsset(
 // get_attribute - read a LIVE actor's GAS attribute value during PIE. This is the
 // verify-loop keystone for combat: enter PIE, act, then assert (e.g. Health dropped).
 // Reads the runtime ASC, NOT an asset CDO (that's get_info).
-bool UMcpAutomationBridgeSubsystem::HandleGasGetAttribute(
+bool McpHandlers::Gas::HandleGasGetAttribute(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -4033,7 +4060,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasGetAttribute(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -4043,7 +4070,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasGetAttribute(
     UWorld* PieWorld = (GEditor && GEditor->PlayWorld) ? GEditor->PlayWorld.Get() : nullptr;
     if (!PieWorld)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("get_attribute reads a live actor; start PIE first (control_editor play)."),
             TEXT("NOT_IN_PIE"));
         return true;
@@ -4053,7 +4080,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasGetAttribute(
     const FString AttributeName = GetJsonStringField(Payload, TEXT("attribute"));
     if (AttributeName.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("get_attribute requires 'attribute' (e.g. 'Health'). Optional 'actorName' (defaults to the player pawn)."),
             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -4074,7 +4101,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasGetAttribute(
         }
         if (!TargetActor)
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Actor '%s' not found in the PIE world."), *ActorName),
                 TEXT("ACTOR_NOT_FOUND"));
             return true;
@@ -4086,7 +4113,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasGetAttribute(
         TargetActor = PC ? PC->GetPawn() : nullptr;
         if (!TargetActor)
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("No 'actorName' given and no player pawn found in PIE."),
                 TEXT("ACTOR_NOT_FOUND"));
             return true;
@@ -4122,7 +4149,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasGetAttribute(
     }
     if (!ASC)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Actor '%s' (and its pawn/controller/playerstate) has no AbilitySystemComponent."), *TargetActor->GetName()),
             TEXT("NO_ASC"));
         return true;
@@ -4147,7 +4174,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasGetAttribute(
         TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
         Err->SetStringField(TEXT("actor"), TargetActor->GetName());
         Err->SetArrayField(TEXT("availableAttributes"), AvailableJson);
-        SendAutomationResponse(Socket, RequestId, false,
+        S.SendAutomationResponse(Socket, RequestId, false,
             FString::Printf(TEXT("Attribute '%s' not found on '%s'."), *AttributeName, *TargetActor->GetName()),
             Err, TEXT("ATTRIBUTE_NOT_FOUND"));
         return true;
@@ -4164,22 +4191,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasGetAttribute(
     Result->SetStringField(TEXT("attribute"), Matched.GetName());
     Result->SetNumberField(TEXT("value"), CurrentValue);
     Result->SetNumberField(TEXT("baseValue"), BaseValue);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Attribute value"), Result, FString());
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Attribute value"), Result, FString());
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // get_info
-bool UMcpAutomationBridgeSubsystem::HandleGasGetInfo(
+bool McpHandlers::Gas::HandleGasGetInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -4191,7 +4219,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasGetInfo(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -4202,14 +4230,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGasGetInfo(
 
     if (AssetPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing assetPath."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing assetPath."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
     if (!Asset)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Asset not found: %s"), *AssetPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -4421,7 +4449,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasGetInfo(
         }
     }
 
-    SendAutomationResponse(Socket, RequestId, true, TEXT("GAS info retrieved"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("GAS info retrieved"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
@@ -4431,16 +4459,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGasGetInfo(
 // ============================================================
 
 // create_ability_set - Create UGameplayAbilitySet (data asset with granted abilities)
-bool UMcpAutomationBridgeSubsystem::HandleGasCreateAbilitySet(
+bool McpHandlers::Gas::HandleGasCreateAbilitySet(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -4452,7 +4481,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateAbilitySet(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -4466,7 +4495,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateAbilitySet(
     }
     if (SetPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing setPath or assetPath"), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing setPath or assetPath"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -4496,7 +4525,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateAbilitySet(
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("setPath"), SetPath);
         Result->SetStringField(TEXT("status"), TEXT("already_exists"));
-        SendAutomationResponse(Socket, RequestId, true, TEXT("Ability set already exists"), Result);
+        S.SendAutomationResponse(Socket, RequestId, true, TEXT("Ability set already exists"), Result);
         return true;
     }
 
@@ -4505,7 +4534,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateAbilitySet(
     UPackage* Package = CreatePackage(*PackageName);
     if (!Package)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_FAILED"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_FAILED"));
         return true;
     }
 
@@ -4528,7 +4557,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateAbilitySet(
 
     if (!SetBlueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Failed to create ability set blueprint"), TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Failed to create ability set blueprint"), TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -4590,22 +4619,23 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateAbilitySet(
     VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("SetDisplayName")));
     Result->SetArrayField(TEXT("variables"), VariablesArray);
 
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Ability set created"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Ability set created"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
 // add_ability - Add ability class reference to ability set
-bool UMcpAutomationBridgeSubsystem::HandleGasAddAbility(
+bool McpHandlers::Gas::HandleGasAddAbility(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -4617,7 +4647,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbility(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -4627,7 +4657,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbility(
     FString SetPath = GetJsonStringField(Payload, TEXT("setPath"));
     if (SetPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing setPath"), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing setPath"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -4638,14 +4668,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbility(
     }
     if (AbilityPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing abilityPath or abilityClass"), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing abilityPath or abilityClass"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* SetBlueprint = LoadObject<UBlueprint>(nullptr, *SetPath);
     if (!SetBlueprint)
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Ability set not found: %s"), *SetPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -4666,7 +4696,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbility(
 
     if (!AbilityClass || !AbilityClass->IsChildOf(UGameplayAbility::StaticClass()))
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             FString::Printf(TEXT("Invalid ability class: %s"), *AbilityPath), TEXT("INVALID_CLASS"));
         return true;
     }
@@ -4686,7 +4716,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbility(
     FArrayProperty* GrantedArrayProp = CastField<FArrayProperty>(GrantedProp);
     if (!GrantedArrayProp)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("'%s' has no GrantedAbilities array property. Create the set via create_ability_set."), *SetPath),
             TEXT("PROPERTY_NOT_FOUND"));
         return true;
@@ -4696,7 +4726,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbility(
     FClassProperty* ClassInner = CastField<FClassProperty>(GrantedArrayProp->Inner);
     if (!SoftClassInner && !ClassInner)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("GrantedAbilities on '%s' is not a class or soft-class array."), *SetPath),
             TEXT("INVALID_TYPE"));
         return true;
@@ -4747,7 +4777,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbility(
     Result->SetBoolField(TEXT("alreadyPresent"), bAlreadyPresent);
     Result->SetNumberField(TEXT("grantedAbilityCount"), GrantedCount);
     Result->SetBoolField(TEXT("saved"), bSaved);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
         bAlreadyPresent ? TEXT("Ability already in set") : TEXT("Ability added to set"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS
@@ -4758,16 +4788,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGasAddAbility(
 // ============================================================
 
 // create_execution_calculation - Create UGameplayEffectExecutionCalculation blueprint
-bool UMcpAutomationBridgeSubsystem::HandleGasCreateExecutionCalculation(
+bool McpHandlers::Gas::HandleGasCreateExecutionCalculation(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GAS handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #elif !MCP_HAS_GAS
-    SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("GameplayAbilities plugin not enabled."), TEXT("GAS_NOT_AVAILABLE"));
     return true;
 #else
     // Runtime check: Verify GameplayAbilities module is actually loaded
@@ -4779,7 +4810,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateExecutionCalculation(
         if (!FModuleManager::Get().ModuleExists(TEXT("GameplayAbilities")) || 
             !FModuleManager::Get().LoadModule(TEXT("GameplayAbilities")))
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("GameplayAbilities plugin is not enabled in this project. Enable the GameplayAbilities plugin to use GAS features."), 
                 TEXT("GAS_PLUGIN_NOT_ENABLED"));
             return true;
@@ -4791,7 +4822,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateExecutionCalculation(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -4800,7 +4831,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateExecutionCalculation(
     UBlueprint* Blueprint = CreateGASBlueprint(Path, Name, UGameplayEffectExecutionCalculation::StaticClass(), Error, bReusedExisting);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -4864,7 +4895,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGasCreateExecutionCalculation(
     
     Result->SetStringField(TEXT("note"), TEXT("Override Execute_Implementation in Blueprint to implement custom calculation logic. Use CapturedSourceAttributes and CapturedTargetAttributes to define which attributes to capture."));
     
-    SendAutomationResponse(Socket, RequestId, true, 
+    S.SendAutomationResponse(Socket, RequestId, true, 
         bReusedExisting ? TEXT("Execution calculation already exists") : TEXT("Execution calculation created"), Result);
     return true;
 #endif // WITH_EDITOR && MCP_HAS_GAS

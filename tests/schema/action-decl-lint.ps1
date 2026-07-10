@@ -65,8 +65,11 @@ if (Test-Path $callsDir) {
     foreach ($m in [regex]::Matches($text, 'inline const FMcpParamDecl (\w+)\[\] = \{(.*?)\};')) {
       $arrays[$m.Groups[1].Value] = @([regex]::Matches($m.Groups[2].Value, '\{ TEXT\("([^"]+)"\)') | ForEach-Object { $_.Groups[1].Value })
     }
-    # Params arg is an array name, or literal {} for zero-param actions.
-    foreach ($m in [regex]::Matches($text, 'MCP_\w+_CALL\(\s*\w+\s*,\s*"([^"]+)"\s*,\s*(\w+|\{\})\s*,')) {
+    # Params arg is an array name, or literal {} for zero-param actions. Schema-
+    # derived families instead pass a handler name here, now possibly namespace-
+    # qualified (McpHandlers::Gas::Handle*) — [\w:]+ keeps those rows parsed so
+    # the action still registers a (fragment-authored, empty here) param set.
+    foreach ($m in [regex]::Matches($text, 'MCP_\w+_CALL\(\s*\w+\s*,\s*"([^"]+)"\s*,\s*([\w:]+|\{\})\s*,')) {
       $key = "$tool.$($m.Groups[1].Value)"
       $arrRef = $m.Groups[2].Value
       $declParams[$key] = if ($arrays.ContainsKey($arrRef)) { $arrays[$arrRef] } else { @() }
