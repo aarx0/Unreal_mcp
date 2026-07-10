@@ -736,9 +736,7 @@ private:
   // below.
   // manage_blueprint is classed — see MCP/Calls/McpCalls_ManageBlueprint.cpp.
   // Core + Graph subActions are per-action members (below), called directly by
-  // their classed actions, as are the CommonUi actions and the widget Lifecycle/
-  // Containers/Leaves/Slot/Binding/Animation actions; the remaining widget families
-  // (Style/Tree/Recipes/Misc) still delegate to HandleManageWidgetAuthoringAction.
+  // their classed actions, as are the CommonUi actions and every widget action.
   // The HandleBlueprintModifyScs member is also called externally by
   // EditorFunctionHandlers.cpp (BLUEPRINT_ADD_COMPONENT).
   // manage_sequence is classed — see MCP/Calls/McpCalls_ManageSequence.cpp.
@@ -2473,13 +2471,10 @@ public:
                                 FMcpResponseHandle Socket);
 
   // Phase 19: Widget Authoring System handlers
-  // manage_blueprint is classed (MCP/Calls/McpCalls_ManageBlueprint.cpp) — this
-  // route dispatcher is public so the classed WidgetAuthoring actions delegate.
+  // manage_blueprint is classed (MCP/Calls/McpCalls_ManageBlueprint.cpp) — the
+  // per-action WidgetAuthoring members below are public so the classed actions
+  // call them directly.
 public:
-  bool HandleManageWidgetAuthoringAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
   // Per-action manage_widget_authoring members (Lifecycle / Containers / Leaves),
   // hoisted from the family scanners; called directly by their classed actions.
   bool HandleWidgetAuthoringCreateWidgetBlueprint(const FString &RequestId,
@@ -2610,27 +2605,64 @@ public:
       const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
   bool HandleWidgetAuthoringDeleteAnimation(const FString &RequestId,
       const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
-private:
-  // Phase 19 family sub-handlers — each owns one cluster of subactions and
-  // returns false if SubAction isn't one of its own (so the dispatcher falls
-  // through to the next family). Split out of the former monolithic dispatcher
-  // purely for navigability; branch bodies are unchanged.
-  bool HandleWidgetAuthoring_Style(
-      const FString &SubAction, const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool HandleWidgetAuthoring_Tree(
-      const FString &SubAction, const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool HandleWidgetAuthoring_Recipes(
-      const FString &SubAction, const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool HandleWidgetAuthoring_Misc(
-      const FString &SubAction, const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
+  // Per-action manage_widget_authoring members (Style / Tree / Recipes / Misc),
+  // hoisted from the family scanners; called directly by their classed actions.
+  bool HandleWidgetAuthoringCreateWidgetStyle(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringApplyStyleToWidget(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddWidgetComponent(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringReparentWidget(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringWrapRoot(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddWidget(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringGetWidgetSlotInfo(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringCreateMainMenu(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringCreatePauseMenu(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringCreateHudWidget(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddHealthBar(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddCrosshair(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddAmmoCounter(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringCreateSettingsMenu(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringCreateLoadingScreen(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddMinimap(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddCompass(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddInteractionPrompt(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddObjectiveTracker(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddDamageIndicator(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringCreateInventoryUi(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringCreateDialogWidget(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringCreateRadialMenu(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringCreateCreditsScreen(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringCreateShopUi(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddQuestTracker(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringGetWidgetInfo(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetLocalizationKey(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
   // Common UI (CommonUI plugin) authoring handlers — per-action members
   // (CommonUIHandlers.cpp) called directly by their classed manage_blueprint
   // actions (MCP/Calls/McpCalls_ManageBlueprint.cpp).

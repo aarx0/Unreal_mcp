@@ -2563,8 +2563,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddTreeView(
 // several sub-actions (set_style/set_clipping; bind_text/bind_visibility/
 // bind_color/bind_enabled; bind_on_clicked/bind_on_hovered) become one member per
 // sub-action, each holding the whole branch body and re-deriving the payload
-// sub-action via MCP_WIDGETAUTH_SUBACTION so it still steers the body. The Style /
-// Tree / Recipes / Misc families still route through HandleManageWidgetAuthoringAction.
+// sub-action via MCP_WIDGETAUTH_SUBACTION so it still steers the body.
 // -----------------------------------------------------------------------------
 
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnchor(
@@ -5476,13 +5475,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringDeleteAnimation(
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Deleted animation"), ResultJson);
         return true;
 }
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Style(
-    const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
+
+// -----------------------------------------------------------------------------
+// Per-action manage_widget_authoring members: Style, Tree, Recipes, Misc. Hoisted
+// verbatim from the retired HandleWidgetAuthoring_Style / _Tree / _Recipes / _Misc
+// family scanners; each is called directly by its classed action
+// (MCP/Calls/McpCalls_ManageBlueprint.cpp).
+// -----------------------------------------------------------------------------
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetStyle(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
 {
-    TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
-    if (SubAction.Equals(TEXT("create_widget_style"), ESearchCase::IgnoreCase))
-    {
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         if (WidgetPath.IsEmpty())
         {
@@ -5647,10 +5652,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Style(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget style variables created"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("apply_style_to_widget"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringApplyStyleToWidget(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"));
         FString StyleName = GetJsonStringField(Payload, TEXT("styleName"));
@@ -5685,17 +5692,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Style(
                  "style/brush property directly via set_property on the widget's slot object."),
             TEXT("NOT_IMPLEMENTED"));
         return true;
-    }
-
-    return false;
 }
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Tree(
-    const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidgetComponent(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
 {
-    TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
-    if (SubAction.Equals(TEXT("add_widget_component"), ESearchCase::IgnoreCase))
-    {
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         if (WidgetPath.IsEmpty())
         {
@@ -5921,10 +5924,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Tree(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget component added"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("reparent_widget"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringReparentWidget(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"));
         FString NewParent = GetJsonStringField(Payload, TEXT("newParent"));
@@ -5972,10 +5978,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Tree(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Reparented widget"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("wrap_root"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringWrapRoot(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         // Wrap the current root widget in a new panel: the panel becomes the root and
         // the old root its first child (Fill/Fill so it keeps occupying the full rect).
         // Unblocks adding overlay chrome (action bars, HUD layers) to a widget BP whose
@@ -6059,10 +6068,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Tree(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Wrapped root widget"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_widget"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidget(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         // Generic widget add for classes without a dedicated add_* action: resolves any
         // UWidget subclass (loaded short name, /Script/Module.Class, or /Game/....Name_C)
         // and places it via the same SafeAddWidgetToTree path as the typed adds.
@@ -6158,10 +6170,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Tree(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added widget"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("get_widget_slot_info"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetWidgetSlotInfo(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"));
 
@@ -6283,17 +6298,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Tree(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Retrieved widget slot info"), ResultJson);
         return true;
-    }
-
-    return false;
 }
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
-    const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateMainMenu(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
 {
-    TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
-    if (SubAction.Equals(TEXT("create_main_menu"), ESearchCase::IgnoreCase))
-    {
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString Title = GetJsonStringField(Payload, TEXT("title"), TEXT("Main Menu"));
         
@@ -6372,10 +6383,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Main menu created"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("create_pause_menu"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreatePauseMenu(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         
         if (WidgetPath.IsEmpty())
@@ -6448,10 +6462,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Pause menu created"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("create_hud_widget"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateHudWidget(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         
         if (WidgetPath.IsEmpty())
@@ -6490,10 +6507,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("HUD widget created"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_health_bar"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddHealthBar(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString ParentName = GetJsonStringField(Payload, TEXT("parentName"));
         double X = GetJsonNumberField(Payload, TEXT("x"), 20.0);
@@ -6568,10 +6588,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Health bar added"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_crosshair"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCrosshair(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString ParentName = GetJsonStringField(Payload, TEXT("parentName"));
         double Size = GetJsonNumberField(Payload, TEXT("iconSize"), 32.0);
@@ -6642,10 +6665,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Crosshair added"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_ammo_counter"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAmmoCounter(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString ParentName = GetJsonStringField(Payload, TEXT("parentName"));
         
@@ -6714,10 +6740,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
         
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Ammo counter added"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("create_settings_menu"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateSettingsMenu(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString Name = GetJsonStringField(Payload, TEXT("name"), TEXT("WBP_SettingsMenu"));
         FString Folder = GetJsonStringField(Payload, TEXT("path"));
         if (Folder.IsEmpty()) { Folder = GetJsonStringField(Payload, TEXT("folder"), TEXT("/Game/UI/Menus")); }
@@ -6820,10 +6849,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created settings menu template"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("create_loading_screen"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateLoadingScreen(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString Name = GetJsonStringField(Payload, TEXT("name"), TEXT("WBP_LoadingScreen"));
         FString Folder = GetJsonStringField(Payload, TEXT("path"));
         if (Folder.IsEmpty()) { Folder = GetJsonStringField(Payload, TEXT("folder"), TEXT("/Game/UI")); }
@@ -6916,10 +6948,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created loading screen template"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_minimap"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddMinimap(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("Minimap"));
         float Size = GetJsonNumberField(Payload, TEXT("iconSize"), 200.0f);
@@ -6988,10 +7023,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added minimap widget"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_compass"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCompass(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("Compass"));
 
@@ -7053,10 +7091,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added compass widget"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_interaction_prompt"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddInteractionPrompt(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("InteractionPrompt"));
         FString DefaultText = GetJsonStringField(Payload, TEXT("text"), TEXT("Press E to Interact"));
@@ -7119,10 +7160,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added interaction prompt"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_objective_tracker"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddObjectiveTracker(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("ObjectiveTracker"));
 
@@ -7197,10 +7241,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added objective tracker"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_damage_indicator"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddDamageIndicator(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("DamageIndicator"));
 
@@ -7275,10 +7322,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added damage indicator"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("create_inventory_ui"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateInventoryUi(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString Name = GetJsonStringField(Payload, TEXT("name"), TEXT("WBP_Inventory"));
         FString Folder = GetJsonStringField(Payload, TEXT("path"));
         if (Folder.IsEmpty()) { Folder = GetJsonStringField(Payload, TEXT("folder"), TEXT("/Game/UI")); }
@@ -7378,10 +7428,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created inventory UI"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("create_dialog_widget"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateDialogWidget(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString Name = GetJsonStringField(Payload, TEXT("name"), TEXT("WBP_DialogBox"));
         FString Folder = GetJsonStringField(Payload, TEXT("path"));
         if (Folder.IsEmpty()) { Folder = GetJsonStringField(Payload, TEXT("folder"), TEXT("/Game/UI")); }
@@ -7485,10 +7538,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created dialog widget"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("create_radial_menu"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateRadialMenu(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString Name = GetJsonStringField(Payload, TEXT("name"), TEXT("WBP_RadialMenu"));
         FString Folder = GetJsonStringField(Payload, TEXT("path"));
         if (Folder.IsEmpty()) { Folder = GetJsonStringField(Payload, TEXT("folder"), TEXT("/Game/UI")); }
@@ -7602,10 +7658,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created radial menu"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("create_credits_screen"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateCreditsScreen(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString Name = GetJsonStringField(Payload, TEXT("name"), TEXT("WBP_Credits"));
         FString Folder = GetJsonStringField(Payload, TEXT("path"));
         if (Folder.IsEmpty()) { Folder = GetJsonStringField(Payload, TEXT("folder"), TEXT("/Game/UI")); }
@@ -7694,10 +7753,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created credits screen"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("create_shop_ui"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateShopUi(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString Name = GetJsonStringField(Payload, TEXT("name"), TEXT("WBP_Shop"));
         FString Folder = GetJsonStringField(Payload, TEXT("path"));
         if (Folder.IsEmpty()) { Folder = GetJsonStringField(Payload, TEXT("folder"), TEXT("/Game/UI")); }
@@ -7826,10 +7888,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created shop UI"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_quest_tracker"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddQuestTracker(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("QuestTracker"));
 
@@ -7914,17 +7979,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Recipes(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added quest tracker"), ResultJson);
         return true;
-    }
-
-    return false;
 }
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Misc(
-    const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetWidgetInfo(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
 {
-    TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
-    if (SubAction.Equals(TEXT("get_widget_info"), ESearchCase::IgnoreCase))
-    {
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         if (WidgetPath.IsEmpty())
         {
@@ -8082,10 +8143,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Misc(
         McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Retrieved widget info"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_localization_key"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetLocalizationKey(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"));
         FString Namespace = GetJsonStringField(Payload, TEXT("namespace"), TEXT("Game"));
@@ -8130,42 +8194,5 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Misc(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set localization key"), ResultJson);
         return true;
-    }
-
-    return false;
-}
-
-bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
-    const FString& RequestId,
-    const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle RequestingSocket)
-{
-    // Only handle manage_widget_authoring action
-    if (Action != TEXT("manage_widget_authoring"))
-    {
-        return false;
-    }
-
-    // Get subAction from payload
-    FString SubAction = GetJsonStringField(Payload, TEXT("subAction"));
-    if (SubAction.IsEmpty())
-    {
-        SubAction = GetJsonStringField(Payload, TEXT("action"));
-    }
-
-    // Family sub-handlers. Each returns true once it has handled (and responded
-    // to) SubAction, false if SubAction isn't one of its own, so the next family
-    // is tried. The Lifecycle / Containers / Leaves and Slot / Binding / Animation
-    // families were hoisted to per-action members dispatched directly by their
-    // classed actions (MCP/Calls/McpCalls_ManageBlueprint.cpp) and no longer route
-    // through here.
-    if (HandleWidgetAuthoring_Style(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
-    if (HandleWidgetAuthoring_Tree(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
-    if (HandleWidgetAuthoring_Recipes(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
-    if (HandleWidgetAuthoring_Misc(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
-
-    // Action not recognized
-    return false;
 }
 #pragma warning(pop)

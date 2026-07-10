@@ -7,19 +7,14 @@
 // those fragments and GetDecl() derives the validation decl from the same fragment
 // via McpDeriveDecl(), so schema and decl are one source and cannot drift.
 //
-// Dispatch is mixed: Core, Graph, CommonUi, and the widget Lifecycle/Containers/
-// Leaves/Slot/Binding/Animation actions call a per-action member directly
-// (MCP_BP_CORE_CALL / MCP_BP_GRAPH_CALL / MCP_BP_CUI_CALL / MCP_BP_WIDGET_CALL);
-// the remaining widget families (Style/Tree/Recipes/Misc) still delegate to the
-// surviving 4-arg HandleManageWidgetAuthoringAction dispatcher (MCP_BP_ACTION_CALL),
-// passing EXACTLY the args the retired registration lambda passed
-// (byte-behaviour-identical for canonical inputs). The hoisted HandleBlueprintModifyScs
+// Dispatch is direct: Core, Graph, CommonUi, and every widget action call a
+// per-action member directly (MCP_BP_CORE_CALL / MCP_BP_GRAPH_CALL /
+// MCP_BP_CUI_CALL / MCP_BP_WIDGET_CALL). The hoisted HandleBlueprintModifyScs
 // member is also called externally by EditorFunctionHandlers.cpp:
 //   Core       -> HandleBlueprint<Action> member (RequestId, Payload, ...)
 //   Graph      -> HandleBlueprintGraph<Action> member (RequestId, Payload, ...)
 //   CommonUi   -> HandleCommonUi<Action> member (RequestId, Payload, ...)
-//   Widget     -> HandleWidgetAuthoring<Action> member (Lifecycle/Containers/Leaves/
-//                 Slot/Binding/Animation), else HandleManageWidgetAuthoringAction(RequestId, "manage_widget_authoring", ...)
+//   Widget     -> HandleWidgetAuthoring<Action> member (RequestId, Payload, ...)
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
@@ -582,7 +577,7 @@ static void S_GetTransitionRuleGraph(FMcpSchemaBuilder& B)
 	 .Required({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
-// WidgetAuthoring (HandleManageWidgetAuthoringAction, Action arg "manage_widget_authoring")
+// WidgetAuthoring (per-action HandleWidgetAuthoring* members)
 
 static void S_CreateWidgetBlueprint(FMcpSchemaBuilder& B)
 {
@@ -1612,29 +1607,6 @@ static void S_CreateCommonTextStyle(FMcpSchemaBuilder& B)
 // (CommonUIHandlers.cpp gates on MCP_HAS_COMMON_UI, not WITH_EDITOR) — flagging
 // either would newly reject the GEditor-less runs those handlers accept. Mutating on
 // every action except the pure get_*/list_*/preview_*/probe_* reads.
-//
-// MCP_BP_ACTION_CALL delegates to the surviving 4-arg HandleManageWidgetAuthoringAction
-// dispatcher, passing the "manage_widget_authoring" tool-name literal (the dispatcher
-// gates on it and reads the real sub-action from the payload); it now serves only the
-// un-hoisted Widget families. AppendSchema forwards to the action's S_<Suffix>()
-// fragment; GetDecl derives from the same.
-
-#define MCP_BP_ACTION_CALL(ClassSuffix, ActionLiteral, HandlerFn, ActionArg, Flags) \
-class FMcpCall_ManageBlueprint_##ClassSuffix final : public FMcpCall                     \
-{                                                                                        \
-	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
-	const FMcpCallDecl& GetDecl() const override                                          \
-	{                                                                                    \
-		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_blueprint"),              \
-			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                                 \
-		return D;                                                                          \
-	}                                                                                    \
-	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
-	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
-	{                                                                                    \
-		return S.HandlerFn(RequestId, TEXT(ActionArg), Payload, Socket);                   \
-	}                                                                                    \
-};
 
 // BlueprintGraph: one classed action per HandleBlueprintGraph* member
 // (BlueprintGraphHandlers.cpp). Run() calls the member directly — no surviving
@@ -1658,8 +1630,7 @@ class FMcpCall_ManageBlueprint_##ClassSuffix final : public FMcpCall            
 
 // Core direct-call: one classed action per hoisted HandleBlueprint* member
 // (BlueprintHandlers.cpp). Run() calls the member directly — no surviving 4-arg
-// dispatcher, no action-string re-parse. Structurally identical to
-// MCP_BP_GRAPH_CALL; the un-hoisted Core rows still delegate via MCP_BP_ACTION_CALL.
+// dispatcher, no action-string re-parse. Structurally identical to MCP_BP_GRAPH_CALL.
 #define MCP_BP_CORE_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags) \
 class FMcpCall_ManageBlueprint_##ClassSuffix final : public FMcpCall                     \
 {                                                                                        \
@@ -1678,9 +1649,8 @@ class FMcpCall_ManageBlueprint_##ClassSuffix final : public FMcpCall            
 };
 
 // Widget direct-call: one classed action per hoisted HandleWidgetAuthoring* member
-// (WidgetAuthoringHandlers.cpp, Lifecycle/Containers/Leaves/Slot/Binding/Animation
-// families). Run() calls the member directly. Structurally identical to
-// MCP_BP_CORE_CALL; the un-hoisted Widget families still delegate via MCP_BP_ACTION_CALL.
+// (WidgetAuthoringHandlers.cpp; all widget families). Run() calls the member
+// directly. Structurally identical to MCP_BP_CORE_CALL.
 #define MCP_BP_WIDGET_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags) \
 class FMcpCall_ManageBlueprint_##ClassSuffix final : public FMcpCall                     \
 {                                                                                        \
@@ -1763,10 +1733,8 @@ MCP_BP_GRAPH_CALL(ArrangeGraph, "arrange_graph", HandleBlueprintGraphArrangeGrap
 MCP_BP_GRAPH_CALL(ListAnimbpGraphs, "list_animbp_graphs", HandleBlueprintGraphListAnimbpGraphs, EMcpCallFlags::RequiresEditor)
 MCP_BP_GRAPH_CALL(GetTransitionRuleGraph, "get_transition_rule_graph", HandleBlueprintGraphGetTransitionRuleGraph, EMcpCallFlags::RequiresEditor)
 
-// WidgetAuthoring. Lifecycle/Containers/Leaves/Slot/Binding/Animation actions call
-// a per-action HandleWidgetAuthoring* member directly (MCP_BP_WIDGET_CALL); the
-// remaining families (Style/Tree/Recipes/Misc) still delegate to
-// HandleManageWidgetAuthoringAction (MCP_BP_ACTION_CALL, Action arg "manage_widget_authoring").
+// WidgetAuthoring: every action calls a per-action HandleWidgetAuthoring* member
+// directly (MCP_BP_WIDGET_CALL, WidgetAuthoringHandlers.cpp).
 MCP_BP_WIDGET_CALL(CreateWidgetBlueprint, "create_widget_blueprint", HandleWidgetAuthoringCreateWidgetBlueprint, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(SetWidgetParentClass, "set_widget_parent_class", HandleWidgetAuthoringSetWidgetParentClass, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(AddCanvasPanel, "add_canvas_panel", HandleWidgetAuthoringAddCanvasPanel, EMcpCallFlags::Mutating)
@@ -1815,49 +1783,49 @@ MCP_BP_WIDGET_CALL(CreateWidgetAnimation, "create_widget_animation", HandleWidge
 MCP_BP_WIDGET_CALL(AddAnimationTrack, "add_animation_track", HandleWidgetAuthoringAddAnimationTrack, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(AddAnimationKeyframe, "add_animation_keyframe", HandleWidgetAuthoringAddAnimationKeyframe, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(SetAnimationLoop, "set_animation_loop", HandleWidgetAuthoringSetAnimationLoop, EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateMainMenu, "create_main_menu", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreatePauseMenu, "create_pause_menu", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateSettingsMenu, "create_settings_menu", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateLoadingScreen, "create_loading_screen", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateHudWidget, "create_hud_widget", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddHealthBar, "add_health_bar", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddAmmoCounter, "add_ammo_counter", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddMinimap, "add_minimap", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddCrosshair, "add_crosshair", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddCompass, "add_compass", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddInteractionPrompt, "add_interaction_prompt", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddObjectiveTracker, "add_objective_tracker", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddDamageIndicator, "add_damage_indicator", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateInventoryUi, "create_inventory_ui", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateDialogWidget, "create_dialog_widget", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateRadialMenu, "create_radial_menu", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(GetWidgetInfo, "get_widget_info", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::None)
+MCP_BP_WIDGET_CALL(CreateMainMenu, "create_main_menu", HandleWidgetAuthoringCreateMainMenu, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(CreatePauseMenu, "create_pause_menu", HandleWidgetAuthoringCreatePauseMenu, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(CreateSettingsMenu, "create_settings_menu", HandleWidgetAuthoringCreateSettingsMenu, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(CreateLoadingScreen, "create_loading_screen", HandleWidgetAuthoringCreateLoadingScreen, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(CreateHudWidget, "create_hud_widget", HandleWidgetAuthoringCreateHudWidget, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(AddHealthBar, "add_health_bar", HandleWidgetAuthoringAddHealthBar, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(AddAmmoCounter, "add_ammo_counter", HandleWidgetAuthoringAddAmmoCounter, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(AddMinimap, "add_minimap", HandleWidgetAuthoringAddMinimap, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(AddCrosshair, "add_crosshair", HandleWidgetAuthoringAddCrosshair, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(AddCompass, "add_compass", HandleWidgetAuthoringAddCompass, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(AddInteractionPrompt, "add_interaction_prompt", HandleWidgetAuthoringAddInteractionPrompt, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(AddObjectiveTracker, "add_objective_tracker", HandleWidgetAuthoringAddObjectiveTracker, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(AddDamageIndicator, "add_damage_indicator", HandleWidgetAuthoringAddDamageIndicator, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(CreateInventoryUi, "create_inventory_ui", HandleWidgetAuthoringCreateInventoryUi, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(CreateDialogWidget, "create_dialog_widget", HandleWidgetAuthoringCreateDialogWidget, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(CreateRadialMenu, "create_radial_menu", HandleWidgetAuthoringCreateRadialMenu, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(GetWidgetInfo, "get_widget_info", HandleWidgetAuthoringGetWidgetInfo, EMcpCallFlags::None)
 MCP_BP_WIDGET_CALL(PreviewWidget, "preview_widget", HandleWidgetAuthoringPreviewWidget, EMcpCallFlags::None)
 MCP_BP_WIDGET_CALL(RemoveWidget, "remove_widget", HandleWidgetAuthoringRemoveWidget, EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(ReparentWidget, "reparent_widget", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(ReparentWidget, "reparent_widget", HandleWidgetAuthoringReparentWidget, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(RenameWidget, "rename_widget", HandleWidgetAuthoringRenameWidget, EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(GetWidgetSlotInfo, "get_widget_slot_info", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::None)
+MCP_BP_WIDGET_CALL(GetWidgetSlotInfo, "get_widget_slot_info", HandleWidgetAuthoringGetWidgetSlotInfo, EMcpCallFlags::None)
 MCP_BP_WIDGET_CALL(ReplaceWidgetClass, "replace_widget_class", HandleWidgetAuthoringReplaceWidgetClass, EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddWidget, "add_widget", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(WrapRoot, "wrap_root", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(AddWidget, "add_widget", HandleWidgetAuthoringAddWidget, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(WrapRoot, "wrap_root", HandleWidgetAuthoringWrapRoot, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(ShowWidget, "show_widget", HandleWidgetAuthoringShowWidget, EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddWidgetComponent, "add_widget_component", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(AddWidgetComponent, "add_widget_component", HandleWidgetAuthoringAddWidgetComponent, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(AddSafeZone, "add_safe_zone", HandleWidgetAuthoringAddSafeZone, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(AddSpacer, "add_spacer", HandleWidgetAuthoringAddSpacer, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(AddWidgetSwitcher, "add_widget_switcher", HandleWidgetAuthoringAddWidgetSwitcher, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(SetFont, "set_font", HandleWidgetAuthoringSetFont, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(SetMargin, "set_margin", HandleWidgetAuthoringSetMargin, EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateWidgetStyle, "create_widget_style", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(ApplyStyleToWidget, "apply_style_to_widget", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(CreateWidgetStyle, "create_widget_style", HandleWidgetAuthoringCreateWidgetStyle, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(ApplyStyleToWidget, "apply_style_to_widget", HandleWidgetAuthoringApplyStyleToWidget, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(SetWidgetBinding, "set_widget_binding", HandleWidgetAuthoringSetWidgetBinding, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(BindLocalizedText, "bind_localized_text", HandleWidgetAuthoringBindLocalizedText, EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetLocalizationKey, "set_localization_key", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetLocalizationKey, "set_localization_key", HandleWidgetAuthoringSetLocalizationKey, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(GetAnimationInfo, "get_animation_info", HandleWidgetAuthoringGetAnimationInfo, EMcpCallFlags::None)
 MCP_BP_WIDGET_CALL(SetAnimationSpeed, "set_animation_speed", HandleWidgetAuthoringSetAnimationSpeed, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(DeleteAnimation, "delete_animation", HandleWidgetAuthoringDeleteAnimation, EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateCreditsScreen, "create_credits_screen", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateShopUi, "create_shop_ui", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddQuestTracker, "add_quest_tracker", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(CreateCreditsScreen, "create_credits_screen", HandleWidgetAuthoringCreateCreditsScreen, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(CreateShopUi, "create_shop_ui", HandleWidgetAuthoringCreateShopUi, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(AddQuestTracker, "add_quest_tracker", HandleWidgetAuthoringAddQuestTracker, EMcpCallFlags::Mutating)
 
 // CommonUi (per-action HandleCommonUi* members, CommonUIHandlers.cpp)
 MCP_BP_CUI_CALL(AddCommonButton, "add_common_button", HandleCommonUiAddCommonButton, EMcpCallFlags::Mutating)
@@ -1869,7 +1837,6 @@ MCP_BP_CUI_CALL(SetCommonButtonInputAction, "set_common_button_input_action", Ha
 MCP_BP_CUI_CALL(CreateCommonButtonStyle, "create_common_button_style", HandleCommonUiCreateCommonButtonStyle, EMcpCallFlags::Mutating)
 MCP_BP_CUI_CALL(CreateCommonTextStyle, "create_common_text_style", HandleCommonUiCreateCommonTextStyle, EMcpCallFlags::Mutating)
 
-#undef MCP_BP_ACTION_CALL
 #undef MCP_BP_GRAPH_CALL
 #undef MCP_BP_CORE_CALL
 #undef MCP_BP_WIDGET_CALL
