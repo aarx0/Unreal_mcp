@@ -2030,14 +2030,10 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
     }
 
     if (OperationsArray->Num() == 0) {
-      TSharedPtr<FJsonObject> ResultPayload = McpHandlerUtils::CreateResultObject();
-      ResultPayload->SetStringField(TEXT("blueprintPath"),
-                                    NormalizedBlueprintPath);
-      ResultPayload->SetArrayField(TEXT("operations"),
-                                   TArray<TSharedPtr<FJsonValue>>());
-      SendAutomationResponse(RequestingSocket, RequestId, true,
-                             TEXT("No SCS operations supplied."), ResultPayload,
-                             FString());
+      SendAutomationError(
+          RequestingSocket, RequestId,
+          TEXT("blueprint_modify_scs operations array is empty."),
+          TEXT("NO_CHANGES_REQUESTED"));
       return true;
     }
 
@@ -2540,7 +2536,18 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
       FinalSummaries.Add(MakeShared<FJsonValueObject>(OpSummary));
     }
 
-    bOk = FinalSummaries.Num() > 0;
+    // Partial application is failure: success requires every operation applied.
+    int32 FailedOps = 0;
+    for (const TSharedPtr<FJsonValue> &Summary : FinalSummaries) {
+      const TSharedPtr<FJsonObject> *SummaryObj = nullptr;
+      bool bOpSuccess = false;
+      if (!Summary->TryGetObject(SummaryObj) ||
+          !(*SummaryObj)->TryGetBoolField(TEXT("success"), bOpSuccess) ||
+          !bOpSuccess) {
+        ++FailedOps;
+      }
+    }
+    bOk = FinalSummaries.Num() > 0 && FailedOps == 0;
     CompletionResult->SetArrayField(TEXT("operations"), FinalSummaries);
 
     // Compile/save as requested
@@ -2583,6 +2590,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
     ResultPayload->SetStringField(TEXT("blueprintPath"),
                                   NormalizedBlueprintPath);
     ResultPayload->SetArrayField(TEXT("operations"), FinalSummaries);
+    ResultPayload->SetNumberField(TEXT("failedOperations"), FailedOps);
     ResultPayload->SetBoolField(TEXT("compiled"), bCompile);
     ResultPayload->SetBoolField(TEXT("saved"), bSave && bSaveResult);
     if (LocalWarnings.Num() > 0) {
@@ -2593,8 +2601,11 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
       ResultPayload->SetArrayField(TEXT("warnings"), WVals2);
     }
 
-    const FString Message = FString::Printf(
-        TEXT("Processed %d SCS operation(s)."), FinalSummaries.Num());
+    const FString Message =
+        bOk ? FString::Printf(TEXT("Processed %d SCS operation(s)."),
+                              FinalSummaries.Num())
+            : FString::Printf(TEXT("%d of %d SCS operation(s) failed."),
+                              FailedOps, FinalSummaries.Num());
     SendAutomationResponse(
         RequestingSocket, RequestId, bOk, Message, ResultPayload,
         bOk ? FString()
