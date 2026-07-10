@@ -5,13 +5,15 @@
 // fragment in an S_<Suffix>() function; the published facade schema folds those
 // fragments and GetDecl() derives the validation decl from the same fragment via
 // McpDeriveDecl(), so schema and decl are one source and cannot drift. Run()
-// delegates to the subsystem member handlers — HandleAudio* (AudioHandlers.cpp)
-// for the 23 core actions, HandleAudioAuthoring* (AudioAuthoringHandlers.cpp) for
-// the 27 authoring actions — until the module split de-members those bodies.
+// delegates to the namespaced free handlers: McpHandlers::Audio::HandleAudio*
+// (AudioHandlers.cpp) for the 23 core actions and HandleAudioAuthoring*
+// (AudioAuthoringHandlers.cpp) for the 27 authoring actions.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_AudioHandlers.h"
+#include "McpAutomationBridge_AudioAuthoringHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -587,63 +589,63 @@ class FMcpCall_ManageAudio_##ClassSuffix final : public FMcpCall                
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
 	{                                                                                     \
-		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+		return HandlerFn(S, RequestId, Payload, Socket);                                  \
 	}                                                                                     \
 };
 
 // Core (AudioHandlers.cpp)
-MCP_AU_CALL(CreateSoundCue, "create_sound_cue", HandleAudioCreateSoundCue, EMcpCallFlags::Mutating)
-MCP_AU_CALL(CreateSoundClass, "create_sound_class", HandleAudioCreateSoundClass, EMcpCallFlags::Mutating)
-MCP_AU_CALL(CreateSoundMix, "create_sound_mix", HandleAudioCreateSoundMix, EMcpCallFlags::Mutating)
-MCP_AU_CALL(PlaySoundAtLocation, "play_sound_at_location", HandleAudioPlaySoundAtLocation, EMcpCallFlags::Mutating)
-MCP_AU_CALL(PlaySound2D, "play_sound_2d", HandleAudioPlaySound2D, EMcpCallFlags::Mutating)
-MCP_AU_CALL(PlaySoundAttached, "play_sound_attached", HandleAudioPlaySoundAttached, EMcpCallFlags::Mutating)
-MCP_AU_CALL(CreateAmbientSound, "create_ambient_sound", HandleAudioCreateAmbientSound, EMcpCallFlags::Mutating)
-MCP_AU_CALL(SpawnSoundAtLocation, "spawn_sound_at_location", HandleAudioSpawnSoundAtLocation, EMcpCallFlags::Mutating)
-MCP_AU_CALL(PushSoundMix, "push_sound_mix", HandleAudioPushSoundMix, EMcpCallFlags::Mutating)
-MCP_AU_CALL(PopSoundMix, "pop_sound_mix", HandleAudioPopSoundMix, EMcpCallFlags::Mutating)
-MCP_AU_CALL(SetSoundMixClassOverride, "set_sound_mix_class_override", HandleAudioSetSoundMixClassOverride, EMcpCallFlags::Mutating)
-MCP_AU_CALL(ClearSoundMixClassOverride, "clear_sound_mix_class_override", HandleAudioClearSoundMixClassOverride, EMcpCallFlags::Mutating)
-MCP_AU_CALL(SetBaseSoundMix, "set_base_sound_mix", HandleAudioSetBaseSoundMix, EMcpCallFlags::Mutating)
-MCP_AU_CALL(FadeSoundOut, "fade_sound_out", HandleAudioFadeSoundOut, EMcpCallFlags::Mutating)
-MCP_AU_CALL(FadeSoundIn, "fade_sound_in", HandleAudioFadeSoundIn, EMcpCallFlags::Mutating)
-MCP_AU_CALL(PrimeSound, "prime_sound", HandleAudioPrimeSound, EMcpCallFlags::Mutating)
-MCP_AU_CALL(CreateAudioComponent, "create_audio_component", HandleAudioCreateAudioComponent, EMcpCallFlags::Mutating)
-MCP_AU_CALL(EnableAudioAnalysis, "enable_audio_analysis", HandleAudioEnableAudioAnalysis, EMcpCallFlags::Mutating)
-MCP_AU_CALL(SetDopplerEffect, "set_doppler_effect", HandleAudioSetDopplerEffect, EMcpCallFlags::Mutating)
-MCP_AU_CALL(SetAudioOcclusion, "set_audio_occlusion", HandleAudioSetAudioOcclusion, EMcpCallFlags::Mutating)
-MCP_AU_CALL(SetSoundAttenuation, "set_sound_attenuation", HandleAudioSetSoundAttenuation, EMcpCallFlags::Mutating)
-MCP_AU_CALL(FadeSound, "fade_sound", HandleAudioFadeSound, EMcpCallFlags::Mutating)
-MCP_AU_CALL(CreateReverbZone, "create_reverb_zone", HandleAudioCreateReverbZone, EMcpCallFlags::Mutating)
+MCP_AU_CALL(CreateSoundCue, "create_sound_cue", McpHandlers::Audio::HandleAudioCreateSoundCue, EMcpCallFlags::Mutating)
+MCP_AU_CALL(CreateSoundClass, "create_sound_class", McpHandlers::Audio::HandleAudioCreateSoundClass, EMcpCallFlags::Mutating)
+MCP_AU_CALL(CreateSoundMix, "create_sound_mix", McpHandlers::Audio::HandleAudioCreateSoundMix, EMcpCallFlags::Mutating)
+MCP_AU_CALL(PlaySoundAtLocation, "play_sound_at_location", McpHandlers::Audio::HandleAudioPlaySoundAtLocation, EMcpCallFlags::Mutating)
+MCP_AU_CALL(PlaySound2D, "play_sound_2d", McpHandlers::Audio::HandleAudioPlaySound2D, EMcpCallFlags::Mutating)
+MCP_AU_CALL(PlaySoundAttached, "play_sound_attached", McpHandlers::Audio::HandleAudioPlaySoundAttached, EMcpCallFlags::Mutating)
+MCP_AU_CALL(CreateAmbientSound, "create_ambient_sound", McpHandlers::Audio::HandleAudioCreateAmbientSound, EMcpCallFlags::Mutating)
+MCP_AU_CALL(SpawnSoundAtLocation, "spawn_sound_at_location", McpHandlers::Audio::HandleAudioSpawnSoundAtLocation, EMcpCallFlags::Mutating)
+MCP_AU_CALL(PushSoundMix, "push_sound_mix", McpHandlers::Audio::HandleAudioPushSoundMix, EMcpCallFlags::Mutating)
+MCP_AU_CALL(PopSoundMix, "pop_sound_mix", McpHandlers::Audio::HandleAudioPopSoundMix, EMcpCallFlags::Mutating)
+MCP_AU_CALL(SetSoundMixClassOverride, "set_sound_mix_class_override", McpHandlers::Audio::HandleAudioSetSoundMixClassOverride, EMcpCallFlags::Mutating)
+MCP_AU_CALL(ClearSoundMixClassOverride, "clear_sound_mix_class_override", McpHandlers::Audio::HandleAudioClearSoundMixClassOverride, EMcpCallFlags::Mutating)
+MCP_AU_CALL(SetBaseSoundMix, "set_base_sound_mix", McpHandlers::Audio::HandleAudioSetBaseSoundMix, EMcpCallFlags::Mutating)
+MCP_AU_CALL(FadeSoundOut, "fade_sound_out", McpHandlers::Audio::HandleAudioFadeSoundOut, EMcpCallFlags::Mutating)
+MCP_AU_CALL(FadeSoundIn, "fade_sound_in", McpHandlers::Audio::HandleAudioFadeSoundIn, EMcpCallFlags::Mutating)
+MCP_AU_CALL(PrimeSound, "prime_sound", McpHandlers::Audio::HandleAudioPrimeSound, EMcpCallFlags::Mutating)
+MCP_AU_CALL(CreateAudioComponent, "create_audio_component", McpHandlers::Audio::HandleAudioCreateAudioComponent, EMcpCallFlags::Mutating)
+MCP_AU_CALL(EnableAudioAnalysis, "enable_audio_analysis", McpHandlers::Audio::HandleAudioEnableAudioAnalysis, EMcpCallFlags::Mutating)
+MCP_AU_CALL(SetDopplerEffect, "set_doppler_effect", McpHandlers::Audio::HandleAudioSetDopplerEffect, EMcpCallFlags::Mutating)
+MCP_AU_CALL(SetAudioOcclusion, "set_audio_occlusion", McpHandlers::Audio::HandleAudioSetAudioOcclusion, EMcpCallFlags::Mutating)
+MCP_AU_CALL(SetSoundAttenuation, "set_sound_attenuation", McpHandlers::Audio::HandleAudioSetSoundAttenuation, EMcpCallFlags::Mutating)
+MCP_AU_CALL(FadeSound, "fade_sound", McpHandlers::Audio::HandleAudioFadeSound, EMcpCallFlags::Mutating)
+MCP_AU_CALL(CreateReverbZone, "create_reverb_zone", McpHandlers::Audio::HandleAudioCreateReverbZone, EMcpCallFlags::Mutating)
 
 // Audio authoring (AudioAuthoringHandlers.cpp)
-MCP_AU_CALL(AddCueNode, "add_cue_node", HandleAudioAuthoringAddCueNode, EMcpCallFlags::Mutating)
-MCP_AU_CALL(ConnectCueNodes, "connect_cue_nodes", HandleAudioAuthoringConnectCueNodes, EMcpCallFlags::Mutating)
-MCP_AU_CALL(SetCueAttenuation, "set_cue_attenuation", HandleAudioAuthoringSetCueAttenuation, EMcpCallFlags::Mutating)
-MCP_AU_CALL(SetCueConcurrency, "set_cue_concurrency", HandleAudioAuthoringSetCueConcurrency, EMcpCallFlags::Mutating)
-MCP_AU_CALL(CreateMetasound, "create_metasound", HandleAudioAuthoringCreateMetasound, EMcpCallFlags::Mutating)
-MCP_AU_CALL(AddMetasoundNode, "add_metasound_node", HandleAudioAuthoringAddMetasoundNode, EMcpCallFlags::Mutating)
-MCP_AU_CALL(ConnectMetasoundNodes, "connect_metasound_nodes", HandleAudioAuthoringConnectMetasoundNodes, EMcpCallFlags::Mutating)
-MCP_AU_CALL(AddMetasoundInput, "add_metasound_input", HandleAudioAuthoringAddMetasoundInput, EMcpCallFlags::Mutating)
-MCP_AU_CALL(AddMetasoundOutput, "add_metasound_output", HandleAudioAuthoringAddMetasoundOutput, EMcpCallFlags::Mutating)
-MCP_AU_CALL(SetMetasoundDefault, "set_metasound_default", HandleAudioAuthoringSetMetasoundDefault, EMcpCallFlags::Mutating)
-MCP_AU_CALL(SetClassProperties, "set_class_properties", HandleAudioAuthoringSetClassProperties, EMcpCallFlags::Mutating)
-MCP_AU_CALL(SetClassParent, "set_class_parent", HandleAudioAuthoringSetClassParent, EMcpCallFlags::Mutating)
-MCP_AU_CALL(AddMixModifier, "add_mix_modifier", HandleAudioAuthoringAddMixModifier, EMcpCallFlags::Mutating)
-MCP_AU_CALL(ConfigureMixEq, "configure_mix_eq", HandleAudioAuthoringConfigureMixEq, EMcpCallFlags::Mutating)
-MCP_AU_CALL(CreateAttenuationSettings, "create_attenuation_settings", HandleAudioAuthoringCreateAttenuationSettings, EMcpCallFlags::Mutating)
-MCP_AU_CALL(ConfigureDistanceAttenuation, "configure_distance_attenuation", HandleAudioAuthoringConfigureDistanceAttenuation, EMcpCallFlags::Mutating)
-MCP_AU_CALL(ConfigureSpatialization, "configure_spatialization", HandleAudioAuthoringConfigureSpatialization, EMcpCallFlags::Mutating)
-MCP_AU_CALL(ConfigureOcclusion, "configure_occlusion", HandleAudioAuthoringConfigureOcclusion, EMcpCallFlags::Mutating)
-MCP_AU_CALL(ConfigureReverbSend, "configure_reverb_send", HandleAudioAuthoringConfigureReverbSend, EMcpCallFlags::Mutating)
-MCP_AU_CALL(CreateDialogueVoice, "create_dialogue_voice", HandleAudioAuthoringCreateDialogueVoice, EMcpCallFlags::Mutating)
-MCP_AU_CALL(CreateDialogueWave, "create_dialogue_wave", HandleAudioAuthoringCreateDialogueWave, EMcpCallFlags::Mutating)
-MCP_AU_CALL(SetDialogueContext, "set_dialogue_context", HandleAudioAuthoringSetDialogueContext, EMcpCallFlags::Mutating)
-MCP_AU_CALL(CreateReverbEffect, "create_reverb_effect", HandleAudioAuthoringCreateReverbEffect, EMcpCallFlags::Mutating)
-MCP_AU_CALL(CreateSourceEffectChain, "create_source_effect_chain", HandleAudioAuthoringCreateSourceEffectChain, EMcpCallFlags::Mutating)
-MCP_AU_CALL(AddSourceEffect, "add_source_effect", HandleAudioAuthoringAddSourceEffect, EMcpCallFlags::Mutating)
-MCP_AU_CALL(CreateSubmixEffect, "create_submix_effect", HandleAudioAuthoringCreateSubmixEffect, EMcpCallFlags::Mutating)
-MCP_AU_CALL(GetAudioInfo, "get_info", HandleAudioAuthoringGetAudioInfo, EMcpCallFlags::None)
+MCP_AU_CALL(AddCueNode, "add_cue_node", McpHandlers::Audio::HandleAudioAuthoringAddCueNode, EMcpCallFlags::Mutating)
+MCP_AU_CALL(ConnectCueNodes, "connect_cue_nodes", McpHandlers::Audio::HandleAudioAuthoringConnectCueNodes, EMcpCallFlags::Mutating)
+MCP_AU_CALL(SetCueAttenuation, "set_cue_attenuation", McpHandlers::Audio::HandleAudioAuthoringSetCueAttenuation, EMcpCallFlags::Mutating)
+MCP_AU_CALL(SetCueConcurrency, "set_cue_concurrency", McpHandlers::Audio::HandleAudioAuthoringSetCueConcurrency, EMcpCallFlags::Mutating)
+MCP_AU_CALL(CreateMetasound, "create_metasound", McpHandlers::Audio::HandleAudioAuthoringCreateMetasound, EMcpCallFlags::Mutating)
+MCP_AU_CALL(AddMetasoundNode, "add_metasound_node", McpHandlers::Audio::HandleAudioAuthoringAddMetasoundNode, EMcpCallFlags::Mutating)
+MCP_AU_CALL(ConnectMetasoundNodes, "connect_metasound_nodes", McpHandlers::Audio::HandleAudioAuthoringConnectMetasoundNodes, EMcpCallFlags::Mutating)
+MCP_AU_CALL(AddMetasoundInput, "add_metasound_input", McpHandlers::Audio::HandleAudioAuthoringAddMetasoundInput, EMcpCallFlags::Mutating)
+MCP_AU_CALL(AddMetasoundOutput, "add_metasound_output", McpHandlers::Audio::HandleAudioAuthoringAddMetasoundOutput, EMcpCallFlags::Mutating)
+MCP_AU_CALL(SetMetasoundDefault, "set_metasound_default", McpHandlers::Audio::HandleAudioAuthoringSetMetasoundDefault, EMcpCallFlags::Mutating)
+MCP_AU_CALL(SetClassProperties, "set_class_properties", McpHandlers::Audio::HandleAudioAuthoringSetClassProperties, EMcpCallFlags::Mutating)
+MCP_AU_CALL(SetClassParent, "set_class_parent", McpHandlers::Audio::HandleAudioAuthoringSetClassParent, EMcpCallFlags::Mutating)
+MCP_AU_CALL(AddMixModifier, "add_mix_modifier", McpHandlers::Audio::HandleAudioAuthoringAddMixModifier, EMcpCallFlags::Mutating)
+MCP_AU_CALL(ConfigureMixEq, "configure_mix_eq", McpHandlers::Audio::HandleAudioAuthoringConfigureMixEq, EMcpCallFlags::Mutating)
+MCP_AU_CALL(CreateAttenuationSettings, "create_attenuation_settings", McpHandlers::Audio::HandleAudioAuthoringCreateAttenuationSettings, EMcpCallFlags::Mutating)
+MCP_AU_CALL(ConfigureDistanceAttenuation, "configure_distance_attenuation", McpHandlers::Audio::HandleAudioAuthoringConfigureDistanceAttenuation, EMcpCallFlags::Mutating)
+MCP_AU_CALL(ConfigureSpatialization, "configure_spatialization", McpHandlers::Audio::HandleAudioAuthoringConfigureSpatialization, EMcpCallFlags::Mutating)
+MCP_AU_CALL(ConfigureOcclusion, "configure_occlusion", McpHandlers::Audio::HandleAudioAuthoringConfigureOcclusion, EMcpCallFlags::Mutating)
+MCP_AU_CALL(ConfigureReverbSend, "configure_reverb_send", McpHandlers::Audio::HandleAudioAuthoringConfigureReverbSend, EMcpCallFlags::Mutating)
+MCP_AU_CALL(CreateDialogueVoice, "create_dialogue_voice", McpHandlers::Audio::HandleAudioAuthoringCreateDialogueVoice, EMcpCallFlags::Mutating)
+MCP_AU_CALL(CreateDialogueWave, "create_dialogue_wave", McpHandlers::Audio::HandleAudioAuthoringCreateDialogueWave, EMcpCallFlags::Mutating)
+MCP_AU_CALL(SetDialogueContext, "set_dialogue_context", McpHandlers::Audio::HandleAudioAuthoringSetDialogueContext, EMcpCallFlags::Mutating)
+MCP_AU_CALL(CreateReverbEffect, "create_reverb_effect", McpHandlers::Audio::HandleAudioAuthoringCreateReverbEffect, EMcpCallFlags::Mutating)
+MCP_AU_CALL(CreateSourceEffectChain, "create_source_effect_chain", McpHandlers::Audio::HandleAudioAuthoringCreateSourceEffectChain, EMcpCallFlags::Mutating)
+MCP_AU_CALL(AddSourceEffect, "add_source_effect", McpHandlers::Audio::HandleAudioAuthoringAddSourceEffect, EMcpCallFlags::Mutating)
+MCP_AU_CALL(CreateSubmixEffect, "create_submix_effect", McpHandlers::Audio::HandleAudioAuthoringCreateSubmixEffect, EMcpCallFlags::Mutating)
+MCP_AU_CALL(GetAudioInfo, "get_info", McpHandlers::Audio::HandleAudioAuthoringGetAudioInfo, EMcpCallFlags::None)
 
 #undef MCP_AU_CALL
 

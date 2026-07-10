@@ -41,6 +41,7 @@
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
+#include "McpAutomationBridge_AudioAuthoringHandlers.h"
 
 #if WITH_EDITOR
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -2489,352 +2490,352 @@ static bool SendAudioAuthoringResult(UMcpAutomationBridgeSubsystem* Self,
 
 #endif // WITH_EDITOR
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringAddCueNode(
+bool McpHandlers::Audio::HandleAudioAuthoringAddCueNode(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringAddCueNode(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringAddCueNode(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConnectCueNodes(
+bool McpHandlers::Audio::HandleAudioAuthoringConnectCueNodes(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConnectCueNodes(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringConnectCueNodes(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringSetCueAttenuation(
+bool McpHandlers::Audio::HandleAudioAuthoringSetCueAttenuation(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringSetCueAttenuation(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringSetCueAttenuation(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringSetCueConcurrency(
+bool McpHandlers::Audio::HandleAudioAuthoringSetCueConcurrency(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringSetCueConcurrency(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringSetCueConcurrency(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateMetasound(
+bool McpHandlers::Audio::HandleAudioAuthoringCreateMetasound(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateMetasound(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringCreateMetasound(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringAddMetasoundNode(
+bool McpHandlers::Audio::HandleAudioAuthoringAddMetasoundNode(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringAddMetasoundNode(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringAddMetasoundNode(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConnectMetasoundNodes(
+bool McpHandlers::Audio::HandleAudioAuthoringConnectMetasoundNodes(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConnectMetasoundNodes(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringConnectMetasoundNodes(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringAddMetasoundInput(
+bool McpHandlers::Audio::HandleAudioAuthoringAddMetasoundInput(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringAddMetasoundInput(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringAddMetasoundInput(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringAddMetasoundOutput(
+bool McpHandlers::Audio::HandleAudioAuthoringAddMetasoundOutput(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringAddMetasoundOutput(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringAddMetasoundOutput(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringSetMetasoundDefault(
+bool McpHandlers::Audio::HandleAudioAuthoringSetMetasoundDefault(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringSetMetasoundDefault(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringSetMetasoundDefault(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringSetClassProperties(
+bool McpHandlers::Audio::HandleAudioAuthoringSetClassProperties(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringSetClassProperties(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringSetClassProperties(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringSetClassParent(
+bool McpHandlers::Audio::HandleAudioAuthoringSetClassParent(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringSetClassParent(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringSetClassParent(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringAddMixModifier(
+bool McpHandlers::Audio::HandleAudioAuthoringAddMixModifier(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringAddMixModifier(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringAddMixModifier(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConfigureMixEq(
+bool McpHandlers::Audio::HandleAudioAuthoringConfigureMixEq(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConfigureMixEq(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringConfigureMixEq(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateAttenuationSettings(
+bool McpHandlers::Audio::HandleAudioAuthoringCreateAttenuationSettings(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateAttenuationSettings(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringCreateAttenuationSettings(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConfigureDistanceAttenuation(
+bool McpHandlers::Audio::HandleAudioAuthoringConfigureDistanceAttenuation(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConfigureDistanceAttenuation(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringConfigureDistanceAttenuation(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConfigureSpatialization(
+bool McpHandlers::Audio::HandleAudioAuthoringConfigureSpatialization(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConfigureSpatialization(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringConfigureSpatialization(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConfigureOcclusion(
+bool McpHandlers::Audio::HandleAudioAuthoringConfigureOcclusion(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConfigureOcclusion(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringConfigureOcclusion(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringConfigureReverbSend(
+bool McpHandlers::Audio::HandleAudioAuthoringConfigureReverbSend(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringConfigureReverbSend(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringConfigureReverbSend(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateDialogueVoice(
+bool McpHandlers::Audio::HandleAudioAuthoringCreateDialogueVoice(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateDialogueVoice(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringCreateDialogueVoice(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateDialogueWave(
+bool McpHandlers::Audio::HandleAudioAuthoringCreateDialogueWave(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateDialogueWave(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringCreateDialogueWave(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringSetDialogueContext(
+bool McpHandlers::Audio::HandleAudioAuthoringSetDialogueContext(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringSetDialogueContext(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringSetDialogueContext(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateReverbEffect(
+bool McpHandlers::Audio::HandleAudioAuthoringCreateReverbEffect(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateReverbEffect(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringCreateReverbEffect(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateSourceEffectChain(
+bool McpHandlers::Audio::HandleAudioAuthoringCreateSourceEffectChain(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateSourceEffectChain(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringCreateSourceEffectChain(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringAddSourceEffect(
+bool McpHandlers::Audio::HandleAudioAuthoringAddSourceEffect(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringAddSourceEffect(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringAddSourceEffect(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringCreateSubmixEffect(
+bool McpHandlers::Audio::HandleAudioAuthoringCreateSubmixEffect(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringCreateSubmixEffect(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringCreateSubmixEffect(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioAuthoringGetAudioInfo(
+bool McpHandlers::Audio::HandleAudioAuthoringGetAudioInfo(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
-    return SendAudioAuthoringResult(this, RequestId, AudioAuthoringGetAudioInfo(Payload), RequestingSocket);
+    return SendAudioAuthoringResult(&S, RequestId, AudioAuthoringGetAudioInfo(Payload), RequestingSocket);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                        TEXT("Audio authoring requires editor build"), TEXT("EDITOR_REQUIRED"));
     return true;
 #endif

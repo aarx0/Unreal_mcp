@@ -130,6 +130,7 @@
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_AudioHandlers.h"
 
 // =============================================================================
 // Editor-Only Includes
@@ -516,13 +517,13 @@ static USoundClass *ResolveSoundClass(const FString &ClassPath) {
 //             "save"?: bool (default true) }
 // Response: { "success": bool, "path": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundCue(
+bool McpHandlers::Audio::HandleAudioCreateSoundCue(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString Name;
   if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("name required"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("name required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -538,7 +539,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundCue(
 
   FString FullPath;
   if (!BuildSanitizedAssetPath(PackagePath, Name, PackagePath, FullPath)) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid path"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid path"),
                         TEXT("INVALID_PATH"));
     return true;
   }
@@ -561,7 +562,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundCue(
     Resp->SetStringField(TEXT("assetPath"), FullPath);
     Resp->SetStringField(TEXT("assetName"), Name);
     McpHandlerUtils::AddVerification(Resp, ExistingSoundCue);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("SoundCue already exists"), Resp);
     return true;
   }
@@ -594,7 +595,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundCue(
   }
 
   if (!SoundCue) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to create SoundCue"),
                         TEXT("ASSET_CREATION_FAILED"));
     return true;
@@ -653,7 +654,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundCue(
   bool bSave = true;
   Payload->TryGetBoolField(TEXT("save"), bSave);
   if (bSave && !McpSafeAssetSave(SoundCue)) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to save sound cue"),
                         TEXT("SAVE_FAILED"));
     return true;
@@ -663,11 +664,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundCue(
   Resp->SetBoolField(TEXT("success"), true);
   Resp->SetStringField(TEXT("path"), SoundCue->GetPathName());
   McpHandlerUtils::AddVerification(Resp, SoundCue);
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("SoundCue created"), Resp);
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -685,13 +686,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundCue(
 //             "parentClass"?: string, "save"?: bool (default true) }
 // Response: { "success": bool, "path": string, "name": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundClass(
+bool McpHandlers::Audio::HandleAudioCreateSoundClass(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString Name;
   if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("name required"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("name required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -746,7 +747,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundClass(
     bool bSave = true;
     Payload->TryGetBoolField(TEXT("save"), bSave);
     if (bSave && !McpSafeAssetSave(SoundClass)) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Failed to save sound class"),
                           TEXT("SAVE_FAILED"));
       return true;
@@ -758,16 +759,16 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundClass(
     Resp->SetStringField(TEXT("name"), SoundClass->GetName());
 
     McpHandlerUtils::AddVerification(Resp, SoundClass);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("SoundClass created"), Resp);
   } else {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to create SoundClass"),
                         TEXT("ASSET_CREATION_FAILED"));
   }
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -786,13 +787,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundClass(
 //             "save"?: bool (default true) }
 // Response: { "success": bool, "path": string, "name": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundMix(
+bool McpHandlers::Audio::HandleAudioCreateSoundMix(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString Name;
   if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("name required"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("name required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -845,7 +846,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundMix(
     bool bSave = true;
     Payload->TryGetBoolField(TEXT("save"), bSave);
     if (bSave && !McpSafeAssetSave(SoundMix)) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Failed to save sound mix"),
                           TEXT("SAVE_FAILED"));
       return true;
@@ -857,16 +858,16 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundMix(
     Resp->SetStringField(TEXT("name"), SoundMix->GetName());
 
     McpHandlerUtils::AddVerification(Resp, SoundMix);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("SoundMix created"), Resp);
   } else {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to create SoundMix"),
                         TEXT("ASSET_CREATION_FAILED"));
   }
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -889,21 +890,21 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateSoundMix(
 //             "attenuationPath"?: string, "concurrencyPath"?: string }
 // Response: { "success": bool, "soundPath": string, "location": {x,y,z} }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioPlaySoundAtLocation(
+bool McpHandlers::Audio::HandleAudioPlaySoundAtLocation(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString SoundPath;
   if (!Payload->TryGetStringField(TEXT("soundPath"), SoundPath) ||
       SoundPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("soundPath required"), TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   USoundBase *Sound = ResolveSoundAsset(SoundPath);
   if (!Sound) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Sound asset not found"),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -947,13 +948,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPlaySoundAtLocation(
 
   if (!GEditor)
   {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor not available"), TEXT("NO_EDITOR"));
     return true;
   }
   UWorld *World = GEditor->GetEditorWorldContext().World();
   if (!World) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("No world context available"), TEXT("NO_WORLD"));
     return true;
   }
@@ -971,11 +972,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPlaySoundAtLocation(
   LocObj->SetNumberField(TEXT("z"), Location.Z);
   Resp->SetObjectField(TEXT("location"), LocObj);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Sound played at location"), Resp);
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -993,21 +994,21 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPlaySoundAtLocation(
 // Response: { "success": bool, "soundPath": string, "volume": number,
 //             "pitch": number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioPlaySound2D(
+bool McpHandlers::Audio::HandleAudioPlaySound2D(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString SoundPath;
   if (!Payload->TryGetStringField(TEXT("soundPath"), SoundPath) ||
       SoundPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("soundPath required"), TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   USoundBase *Sound = ResolveSoundAsset(SoundPath);
   if (!Sound) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Sound asset not found"),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -1024,7 +1025,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPlaySound2D(
     return true;
   UWorld *World = GEditor->GetEditorWorldContext().World();
   if (!World) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
                         TEXT("NO_WORLD"));
     return true;
   }
@@ -1040,11 +1041,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPlaySound2D(
 
   // Sound played - add sound asset verification
   McpHandlerUtils::AddVerification(Resp, Sound);
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Sound played 2D"), Resp);
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1061,7 +1062,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPlaySound2D(
 //             "attachPointName"?: string }
 // Response: { "componentName": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioPlaySoundAttached(
+bool McpHandlers::Audio::HandleAudioPlaySoundAttached(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1072,27 +1073,27 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPlaySoundAttached(
 
   USoundBase *Sound = ResolveSoundAsset(SoundPath);
   if (!Sound) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Sound not found"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Sound not found"),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
   }
 
   if (!GEditor)
   {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor not available"), TEXT("NO_EDITOR"));
     return true;
   }
   UWorld *World = GEditor->GetEditorWorldContext().World();
   if (!World) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
                         TEXT("NO_WORLD"));
     return true;
   }
 
   AActor *TargetActor = FindAudioActorByName(ActorName, World);
   if (!TargetActor) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Actor not found"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Actor not found"),
                         TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
@@ -1125,16 +1126,16 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPlaySoundAttached(
     Resp->SetStringField(TEXT("componentName"), AudioComp->GetName());
     McpHandlerUtils::AddVerification(Resp, Sound);
     AddComponentVerification(Resp, AudioComp);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Sound attached"), Resp);
   } else {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to attach sound"),
                         TEXT("ATTACH_FAILED"));
   }
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1152,21 +1153,21 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPlaySoundAttached(
 //             "attenuationPath"?: string, "concurrencyPath"?: string }
 // Response: { "componentName": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioCreateAmbientSound(
+bool McpHandlers::Audio::HandleAudioCreateAmbientSound(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString SoundPath;
   if (!Payload->TryGetStringField(TEXT("soundPath"), SoundPath) ||
       SoundPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("soundPath required"), TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   USoundBase *Sound = ResolveSoundAsset(SoundPath);
   if (!Sound) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Sound asset not found"),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -1203,13 +1204,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateAmbientSound(
 
   if (!GEditor)
   {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor not available"), TEXT("NO_EDITOR"));
     return true;
   }
   UWorld *World = GEditor->GetEditorWorldContext().World();
   if (!World) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
                         TEXT("NO_WORLD"));
     return true;
   }
@@ -1241,16 +1242,16 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateAmbientSound(
     Resp->SetStringField(TEXT("componentName"), AudioComp->GetName());
     McpHandlerUtils::AddVerification(Resp, Sound);
     AddComponentVerification(Resp, AudioComp);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Ambient sound created"), Resp);
   } else {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to create ambient sound"),
                         TEXT("SPAWN_FAILED"));
   }
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1268,7 +1269,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateAmbientSound(
 //             "volume"?: number, "pitch"?: number, "startTime"?: number }
 // Response: { "componentName": string, "componentPath": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioSpawnSoundAtLocation(
+bool McpHandlers::Audio::HandleAudioSpawnSoundAtLocation(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1276,14 +1277,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSpawnSoundAtLocation(
   FString SoundPath;
   if (!Payload->TryGetStringField(TEXT("soundPath"), SoundPath) ||
       SoundPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("soundPath required"), TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   USoundBase *Sound = ResolveSoundAsset(SoundPath);
   if (!Sound) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Sound asset not found"),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -1314,13 +1315,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSpawnSoundAtLocation(
 
   if (!GEditor)
   {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor not available"), TEXT("NO_EDITOR"));
     return true;
   }
   UWorld *World = GEditor->GetEditorWorldContext().World();
   if (!World) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
                         TEXT("NO_WORLD"));
     return true;
   }
@@ -1336,15 +1337,15 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSpawnSoundAtLocation(
     Resp->SetStringField(TEXT("componentPath"), AudioComp->GetPathName());
     McpHandlerUtils::AddVerification(Resp, Sound);
     AddComponentVerification(Resp, AudioComp);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Sound spawned"), Resp);
   } else {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to spawn sound"), TEXT("SPAWN_FAILED"));
   }
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1364,14 +1365,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSpawnSoundAtLocation(
 // Payload:  { "mixName": string }
 // Response: { "success": bool, "mixName": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioPushSoundMix(
+bool McpHandlers::Audio::HandleAudioPushSoundMix(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString MixName;
   if (!Payload->TryGetStringField(TEXT("mixName"), MixName) ||
       MixName.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("mixName required"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("mixName required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -1385,19 +1386,19 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPushSoundMix(
       Resp->SetBoolField(TEXT("success"), true);
       Resp->SetStringField(TEXT("mixName"), MixName);
       McpHandlerUtils::AddVerification(Resp, Mix);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("SoundMix pushed"), Resp);
     } else {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("No World Context"), TEXT("NO_WORLD"));
     }
   } else {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("SoundMix not found"), TEXT("ASSET_NOT_FOUND"));
   }
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1413,14 +1414,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPushSoundMix(
 // Payload:  { "mixName": string }
 // Response: { "success": bool, "mixName": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioPopSoundMix(
+bool McpHandlers::Audio::HandleAudioPopSoundMix(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString MixName;
   if (!Payload->TryGetStringField(TEXT("mixName"), MixName) ||
       MixName.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("mixName required"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("mixName required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -1434,19 +1435,19 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPopSoundMix(
       Resp->SetBoolField(TEXT("success"), true);
       Resp->SetStringField(TEXT("mixName"), MixName);
       McpHandlerUtils::AddVerification(Resp, Mix);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("SoundMix popped"), Resp);
     } else {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("No World Context"), TEXT("NO_WORLD"));
     }
   } else {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("SoundMix not found"), TEXT("ASSET_NOT_FOUND"));
   }
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1464,7 +1465,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPopSoundMix(
 //             "applyToChildren"?: bool }
 // Response: { "success": bool, "mixName": string, "className": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioSetSoundMixClassOverride(
+bool McpHandlers::Audio::HandleAudioSetSoundMixClassOverride(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1482,7 +1483,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetSoundMixClassOverride(
   USoundClass *Class = ResolveSoundClass(ClassName);
 
   if (!Mix || !Class) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Mix or Class not found"),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -1505,15 +1506,15 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetSoundMixClassOverride(
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetStringField(TEXT("mixName"), MixName);
     Resp->SetStringField(TEXT("className"), ClassName);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Sound mix override set"), Resp);
   } else {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
                         TEXT("NO_WORLD"));
   }
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1530,7 +1531,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetSoundMixClassOverride(
 //             "fadeOutTime"?: number }
 // Response: { "success": bool, "message": "Sound mix override cleared" }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioClearSoundMixClassOverride(
+bool McpHandlers::Audio::HandleAudioClearSoundMixClassOverride(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1548,7 +1549,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioClearSoundMixClassOverride(
   USoundClass *Class = ResolveSoundClass(ClassName);
 
   if (!Mix || !Class) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Mix or Class not found"),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -1561,15 +1562,15 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioClearSoundMixClassOverride(
     UGameplayStatics::ClearSoundMixClassOverride(
         GEditor->GetEditorWorldContext().World(), Mix, Class,
         (float)FadeTime);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Sound mix override cleared"), nullptr);
   } else {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
                         TEXT("NO_WORLD"));
   }
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1585,7 +1586,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioClearSoundMixClassOverride(
 // Payload:  { "mixName": string }
 // Response: { "success": bool, "message": "Base sound mix set" }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioSetBaseSoundMix(
+bool McpHandlers::Audio::HandleAudioSetBaseSoundMix(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1597,22 +1598,22 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetBaseSoundMix(
   }
   USoundMix *Mix = ResolveSoundMix(MixName);
   if (!Mix) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Mix not found"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Mix not found"),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
   }
   if (GEditor && GEditor->GetEditorWorldContext().World()) {
     UGameplayStatics::SetBaseSoundMix(
         GEditor->GetEditorWorldContext().World(), Mix);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Base sound mix set"), nullptr);
   } else {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
                         TEXT("NO_WORLD"));
   }
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1634,7 +1635,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetBaseSoundMix(
 // Response: { "success": bool, "actorName": string, "action": string }
 // -------------------------------------------------------------------------
 // fade_sound_out/fade_sound_in shared implementation.
-bool UMcpAutomationBridgeSubsystem::HandleAudioFadeSoundInternal(
+bool McpHandlers::Audio::HandleAudioFadeSoundInternal(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket, bool bFadeIn) {
 #if WITH_EDITOR
@@ -1653,13 +1654,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioFadeSoundInternal(
 
 	if (!GEditor)
 	{
-		SendAutomationError(RequestingSocket, RequestId,
+		S.SendAutomationError(RequestingSocket, RequestId,
 			TEXT("Editor not available"), TEXT("NO_EDITOR"));
 		return true;
 	}
 	UWorld *World = GEditor->GetEditorWorldContext().World();
 	if (!World) {
-		SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
+		S.SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
 			TEXT("NO_WORLD"));
 		return true;
 	}
@@ -1733,33 +1734,33 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioFadeSoundInternal(
 			Resp->SetStringField(TEXT("actorName"), ActorName);
 			Resp->SetStringField(TEXT("action"), bFadeIn ? TEXT("fade_sound_in") : TEXT("fade_sound_out"));
 			McpHandlerUtils::AddVerification(Resp, TargetActor);
-			SendAutomationResponse(RequestingSocket, RequestId, true,
+			S.SendAutomationResponse(RequestingSocket, RequestId, true,
 				TEXT("Sound fading"), Resp);
 			return true;
 		}
 	}
-	SendAutomationError(RequestingSocket, RequestId,
+	S.SendAutomationError(RequestingSocket, RequestId,
 		TEXT("Audio component not found on actor"),
 		TEXT("COMPONENT_NOT_FOUND"));
 	return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioFadeSoundOut(
+bool McpHandlers::Audio::HandleAudioFadeSoundOut(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
-  return HandleAudioFadeSoundInternal(RequestId, Payload, RequestingSocket, false);
+  return McpHandlers::Audio::HandleAudioFadeSoundInternal(S, RequestId, Payload, RequestingSocket, false);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAudioFadeSoundIn(
+bool McpHandlers::Audio::HandleAudioFadeSoundIn(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
-  return HandleAudioFadeSoundInternal(RequestId, Payload, RequestingSocket, true);
+  return McpHandlers::Audio::HandleAudioFadeSoundInternal(S, RequestId, Payload, RequestingSocket, true);
 }
 
 
@@ -1771,7 +1772,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioFadeSoundIn(
 // Payload:  { "soundPath": string }
 // Response: { "success": bool, "message": "Sound primed" }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioPrimeSound(
+bool McpHandlers::Audio::HandleAudioPrimeSound(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1779,16 +1780,16 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPrimeSound(
   Payload->TryGetStringField(TEXT("soundPath"), SoundPath);
   USoundBase *Sound = ResolveSoundAsset(SoundPath);
   if (!Sound) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Sound not found"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Sound not found"),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
   }
   UGameplayStatics::PrimeSound(Sound);
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Sound primed"), nullptr);
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1807,7 +1808,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioPrimeSound(
 // Response: { "success": bool, "componentPath": string,
 //             "componentName": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioCreateAudioComponent(
+bool McpHandlers::Audio::HandleAudioCreateAudioComponent(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1815,14 +1816,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateAudioComponent(
   if (!Payload->TryGetStringField(TEXT("soundPath"), SoundPath))
     Payload->TryGetStringField(TEXT("path"), SoundPath);
   if (SoundPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("soundPath required"), TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   USoundBase *Sound = ResolveSoundAsset(SoundPath);
   if (!Sound) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(TEXT("Sound asset not found: %s"), *SoundPath),
         TEXT("ASSET_NOT_FOUND"));
@@ -1843,7 +1844,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateAudioComponent(
       GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 
   if (!World) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("No editor world"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("No editor world"),
                         TEXT("NO_WORLD"));
     return true;
   }
@@ -1877,16 +1878,16 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateAudioComponent(
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetStringField(TEXT("componentPath"), AudioComp->GetPathName());
     Resp->SetStringField(TEXT("componentName"), AudioComp->GetName());
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Audio component created"), Resp, FString());
     return true;
   }
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Failed to create audio component"),
                       TEXT("CREATE_FAILED"));
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1908,7 +1909,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateAudioComponent(
 //             "windowSize"?: number }
 // Response: { "success": bool, "enabled": bool, "analysisType": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioEnableAudioAnalysis(
+bool McpHandlers::Audio::HandleAudioEnableAudioAnalysis(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1942,7 +1943,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioEnableAudioAnalysis(
       Resp->SetBoolField(TEXT("enabled"), bEnable);
       Resp->SetStringField(TEXT("analysisType"), AnalysisType);
       Resp->SetNumberField(TEXT("windowSize"), WindowSize);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Audio analysis configured"), Resp);
     } else {
       TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
@@ -1952,16 +1953,16 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioEnableAudioAnalysis(
       Resp->SetBoolField(TEXT("analysisDeferred"), true);
       Resp->SetStringField(TEXT("analysisType"), AnalysisType);
       Resp->SetNumberField(TEXT("windowSize"), WindowSize);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Audio analysis configuration deferred until an audio device is available"), Resp);
     }
   } else {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("No world context"), TEXT("NO_WORLD"));
   }
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1980,7 +1981,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioEnableAudioAnalysis(
 //             "velocityScale"?: number (default 1.0), "save"?: bool (default true) }
 // Response: { "success": bool, "dopplerIntensity": number, "velocityScale": number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioSetDopplerEffect(
+bool McpHandlers::Audio::HandleAudioSetDopplerEffect(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2002,7 +2003,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetDopplerEffect(
     // Validate path for security
     FString ValidatedPath = SanitizeProjectRelativePath(SoundPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Invalid sound path"), TEXT("INVALID_PATH"));
       return true;
     }
@@ -2019,7 +2020,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetDopplerEffect(
 
 	if (bSave) {
 		if (!McpSafeAssetSave(SoundCue)) {
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to save sound cue"), TEXT("SAVE_FAILED"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to save sound cue"), TEXT("SAVE_FAILED"));
 			return true;
 		}
 	}
@@ -2030,7 +2031,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetDopplerEffect(
       Resp->SetNumberField(TEXT("velocityScale"), VelocityScale);
       Resp->SetStringField(TEXT("soundPath"), SoundPath);
       McpHandlerUtils::AddVerification(Resp, SoundCue);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Doppler effect configured"), Resp);
     } else {
       // Not a SoundCue - doppler is a SoundCue feature
@@ -2044,7 +2045,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetDopplerEffect(
       Resp->SetNumberField(TEXT("velocityScale"), VelocityScale);
       Resp->SetStringField(TEXT("soundPath"), SoundPath);
       Resp->SetStringField(TEXT("note"), TEXT("Doppler is a SoundCue feature. For full doppler support, use SoundCues with SoundNodeDoppler."));
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Doppler settings applied"), Resp);
     }
   } else {
@@ -2057,12 +2058,12 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetDopplerEffect(
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetNumberField(TEXT("dopplerIntensity"), DopplerIntensity);
     Resp->SetNumberField(TEXT("velocityScale"), VelocityScale);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Doppler configuration set"), Resp);
   }
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -2083,7 +2084,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetDopplerEffect(
 //             "save"?: bool (default true) }
 // Response: { "success": bool, "enabled": bool, "occlusionVolumeScale": number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioSetAudioOcclusion(
+bool McpHandlers::Audio::HandleAudioSetAudioOcclusion(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2111,14 +2112,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetAudioOcclusion(
     // Validate path for security
     FString ValidatedPath = SanitizeProjectRelativePath(SoundPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Invalid sound path"), TEXT("INVALID_PATH"));
       return true;
     }
 
     AttenuationSettings = LoadObject<USoundAttenuation>(nullptr, *ValidatedPath);
     if (!AttenuationSettings) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("Sound attenuation not found: %s"), *SoundPath),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -2143,7 +2144,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetAudioOcclusion(
 
 	if (bSave && !SoundPath.IsEmpty()) {
 		if (!McpSafeAssetSave(AttenuationSettings)) {
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to save attenuation settings"), TEXT("SAVE_FAILED"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to save attenuation settings"), TEXT("SAVE_FAILED"));
 			return true;
 		}
 	}
@@ -2158,15 +2159,15 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetAudioOcclusion(
       Resp->SetStringField(TEXT("soundPath"), SoundPath);
       McpHandlerUtils::AddVerification(Resp, AttenuationSettings);
     }
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Audio occlusion configured"), Resp);
   } else {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                          TEXT("Failed to configure audio occlusion"), TEXT("CONFIGURATION_FAILED"));
    }
    return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -2184,13 +2185,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetAudioOcclusion(
  //             "falloffMode"?: string, "path"?: string, "save"?: bool }
  // Response: { "success": bool, "path": string, "name": string }
  // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioSetSoundAttenuation(
+bool McpHandlers::Audio::HandleAudioSetSoundAttenuation(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
    FString Name;
    if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
-     SendAutomationError(RequestingSocket, RequestId,
+     S.SendAutomationError(RequestingSocket, RequestId,
                          TEXT("name required"), TEXT("INVALID_ARGUMENT"));
      return true;
    }
@@ -2211,14 +2212,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetSoundAttenuation(
 
    FString FullPath;
    if (!BuildSanitizedAssetPath(PackagePath, Name, PackagePath, FullPath)) {
-     SendAutomationError(RequestingSocket, RequestId,
+     S.SendAutomationError(RequestingSocket, RequestId,
                          TEXT("Invalid path"), TEXT("INVALID_PATH"));
      return true;
    }
 
    UPackage *Package = CreatePackage(*FullPath);
    if (!Package) {
-     SendAutomationError(RequestingSocket, RequestId,
+     S.SendAutomationError(RequestingSocket, RequestId,
                          TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
      return true;
    }
@@ -2229,7 +2230,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetSoundAttenuation(
                                  FName(*Name), RF_Public | RF_Standalone,
                                  nullptr, GWarn)) : nullptr;
    if (!Atten) {
-     SendAutomationError(RequestingSocket, RequestId,
+     S.SendAutomationError(RequestingSocket, RequestId,
                          TEXT("Failed to create SoundAttenuation"), TEXT("CREATE_FAILED"));
      return true;
    }
@@ -2271,7 +2272,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetSoundAttenuation(
 
     if (bSave) {
       if (!McpSafeAssetSave(Atten)) {
-       SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to save sound attenuation asset"), TEXT("SAVE_FAILED"));
+       S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to save sound attenuation asset"), TEXT("SAVE_FAILED"));
        return true;
      }
    }
@@ -2285,11 +2286,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetSoundAttenuation(
     Resp->SetStringField(TEXT("attenuationShape"), AppliedShape);
     Resp->SetStringField(TEXT("falloffMode"), AppliedFalloffMode);
     McpHandlerUtils::AddVerification(Resp, Atten);
-   SendAutomationResponse(RequestingSocket, RequestId, true,
+   S.SendAutomationResponse(RequestingSocket, RequestId, true,
                           TEXT("Sound attenuation configured"), Resp);
    return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -2307,7 +2308,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioSetSoundAttenuation(
  //             "fadeTime"?: number, "fadeType"?: "FadeIn"|"FadeOut"|"FadeTo" }
  // Response: { "success": bool, "actorName": string, "action": string }
  // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioFadeSound(
+bool McpHandlers::Audio::HandleAudioFadeSound(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2324,20 +2325,20 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioFadeSound(
     Payload->TryGetStringField(TEXT("fadeType"), FadeType);
 
    if (!GEditor) {
-     SendAutomationError(RequestingSocket, RequestId,
+     S.SendAutomationError(RequestingSocket, RequestId,
                          TEXT("Editor not available"), TEXT("NO_EDITOR"));
      return true;
    }
    UWorld *World = GEditor->GetEditorWorldContext().World();
    if (!World) {
-     SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
+     S.SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
                          TEXT("NO_WORLD"));
      return true;
    }
 
 	AActor *TargetActor = FindAudioActorByName(ActorName, World);
 	if (!TargetActor) {
-		SendAutomationError(RequestingSocket, RequestId,
+		S.SendAutomationError(RequestingSocket, RequestId,
 			TEXT("Actor not found"), TEXT("ACTOR_NOT_FOUND"));
 		return true;
 	}
@@ -2395,7 +2396,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioFadeSound(
 	}
 
 	if (!AudioComp) {
-		SendAutomationError(RequestingSocket, RequestId,
+		S.SendAutomationError(RequestingSocket, RequestId,
 			TEXT("Audio component not found on actor"),
 			TEXT("COMPONENT_NOT_FOUND"));
 		return true;
@@ -2416,11 +2417,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioFadeSound(
    Resp->SetStringField(TEXT("actorName"), ActorName);
 	Resp->SetStringField(TEXT("action"), TEXT("fade_sound"));
    McpHandlerUtils::AddVerification(Resp, TargetActor);
-   SendAutomationResponse(RequestingSocket, RequestId, true,
+   S.SendAutomationResponse(RequestingSocket, RequestId, true,
                           TEXT("Sound fading"), Resp);
    return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -2438,13 +2439,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioFadeSound(
  //             "volume"?: number, "fadeTime"?: number }
  // Response: { "success": bool, "actorName": string, "location": {x,y,z} }
  // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAudioCreateReverbZone(
+bool McpHandlers::Audio::HandleAudioCreateReverbZone(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
    FString ZoneName;
    if (!Payload->TryGetStringField(TEXT("name"), ZoneName) || ZoneName.IsEmpty()) {
-     SendAutomationError(RequestingSocket, RequestId,
+     S.SendAutomationError(RequestingSocket, RequestId,
                          TEXT("name required"), TEXT("INVALID_ARGUMENT"));
      return true;
    }
@@ -2471,13 +2472,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateReverbZone(
    Payload->TryGetNumberField(TEXT("fadeTime"), FadeTime);
 
    if (!GEditor) {
-     SendAutomationError(RequestingSocket, RequestId,
+     S.SendAutomationError(RequestingSocket, RequestId,
                          TEXT("Editor not available"), TEXT("NO_EDITOR"));
      return true;
    }
    UWorld *World = GEditor->GetEditorWorldContext().World();
     if (!World) {
-      SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
+      S.SendAutomationError(RequestingSocket, RequestId, TEXT("No World Context"),
                           TEXT("NO_WORLD"));
       return true;
     }
@@ -2485,7 +2486,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateReverbZone(
     // Check for existing actor with same name (name collision detection)
     AActor* ExistingActor = FindAudioActorByName(ZoneName, World);
     if (ExistingActor) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("Actor '%s' already exists in level"), *ZoneName),
                           TEXT("DUPLICATE_NAME"));
       return true;
@@ -2496,7 +2497,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateReverbZone(
     SpawnParams.Name = FName(*ZoneName);
     AAudioVolume *AudioVolume = World->SpawnActor<AAudioVolume>(Location, FRotator::ZeroRotator, SpawnParams);
    if (!AudioVolume) {
-     SendAutomationError(RequestingSocket, RequestId,
+     S.SendAutomationError(RequestingSocket, RequestId,
                          TEXT("Failed to spawn AudioVolume"), TEXT("SPAWN_FAILED"));
      return true;
    }
@@ -2538,11 +2539,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAudioCreateReverbZone(
    LocObj->SetNumberField(TEXT("z"), Location.Z);
    Resp->SetObjectField(TEXT("location"), LocObj);
    McpHandlerUtils::AddVerification(Resp, AudioVolume);
-   SendAutomationResponse(RequestingSocket, RequestId, true,
+   S.SendAutomationResponse(RequestingSocket, RequestId, true,
                           TEXT("Reverb zone created"), Resp);
    return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Audio actions require editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
