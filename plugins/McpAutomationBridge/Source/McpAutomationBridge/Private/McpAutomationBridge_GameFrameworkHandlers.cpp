@@ -49,6 +49,7 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
+#include "McpAutomationBridge_GameFrameworkHandlers.h"
 #include "McpResponseHelpers.h"
 #include "Misc/EngineVersionComparison.h"
 
@@ -444,13 +445,14 @@ namespace GameFrameworkHelpers
 // 21.1 CORE CLASSES (6 actions)
 // ========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameMode(
+bool McpHandlers::Networking::HandleGameFrameworkCreateGameMode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -463,7 +465,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameMode(
     FString SanitizedPath = SanitizeProjectRelativePath(Path);
     if (SanitizedPath.IsEmpty() && !Path.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             TEXT("Invalid path: path traversal or invalid characters detected. Path must start with /Game/, /Engine/, or /Script/"), 
             TEXT("SECURITY_VIOLATION"));
         return true;
@@ -475,7 +477,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameMode(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'name' for create_game_mode."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'name' for create_game_mode."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -492,7 +494,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameMode(
     
     if (!BP)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -557,18 +559,19 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameMode(
     Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Created GameMode blueprint: %s"), *Name));
     Response->SetStringField(TEXT("blueprintPath"), BP->GetPathName());
     McpHandlerUtils::AddVerification(Response, BP);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameState(
+bool McpHandlers::Networking::HandleGameFrameworkCreateGameState(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -581,7 +584,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameState(
     FString SanitizedPath = SanitizeProjectRelativePath(Path);
     if (SanitizedPath.IsEmpty() && !Path.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             TEXT("Invalid path: path traversal or invalid characters detected. Path must start with /Game/, /Engine/, or /Script/"), 
             TEXT("SECURITY_VIOLATION"));
         return true;
@@ -593,7 +596,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameState(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'name' for create_game_state."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'name' for create_game_state."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -610,7 +613,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameState(
     
     if (!BP)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -624,18 +627,19 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameState(
     Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Created GameState blueprint: %s"), *Name));
     Response->SetStringField(TEXT("blueprintPath"), BP->GetPathName());
     McpHandlerUtils::AddVerification(Response, BP);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreatePlayerController(
+bool McpHandlers::Networking::HandleGameFrameworkCreatePlayerController(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -648,7 +652,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreatePlayerController(
     FString SanitizedPath = SanitizeProjectRelativePath(Path);
     if (SanitizedPath.IsEmpty() && !Path.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             TEXT("Invalid path: path traversal or invalid characters detected. Path must start with /Game/, /Engine/, or /Script/"), 
             TEXT("SECURITY_VIOLATION"));
         return true;
@@ -660,7 +664,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreatePlayerController(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'name' for create_player_controller."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'name' for create_player_controller."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -677,7 +681,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreatePlayerController(
     
     if (!BP)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -691,18 +695,19 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreatePlayerController(
     Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Created PlayerController blueprint: %s"), *Name));
     Response->SetStringField(TEXT("blueprintPath"), BP->GetPathName());
     McpHandlerUtils::AddVerification(Response, BP);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreatePlayerState(
+bool McpHandlers::Networking::HandleGameFrameworkCreatePlayerState(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -715,7 +720,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreatePlayerState(
     FString SanitizedPath = SanitizeProjectRelativePath(Path);
     if (SanitizedPath.IsEmpty() && !Path.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             TEXT("Invalid path: path traversal or invalid characters detected. Path must start with /Game/, /Engine/, or /Script/"), 
             TEXT("SECURITY_VIOLATION"));
         return true;
@@ -727,7 +732,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreatePlayerState(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'name' for create_player_state."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'name' for create_player_state."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -744,7 +749,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreatePlayerState(
     
     if (!BP)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -758,18 +763,19 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreatePlayerState(
     Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Created PlayerState blueprint: %s"), *Name));
     Response->SetStringField(TEXT("blueprintPath"), BP->GetPathName());
     McpHandlerUtils::AddVerification(Response, BP);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameInstance(
+bool McpHandlers::Networking::HandleGameFrameworkCreateGameInstance(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -782,7 +788,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameInstance(
     FString SanitizedPath = SanitizeProjectRelativePath(Path);
     if (SanitizedPath.IsEmpty() && !Path.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             TEXT("Invalid path: path traversal or invalid characters detected. Path must start with /Game/, /Engine/, or /Script/"), 
             TEXT("SECURITY_VIOLATION"));
         return true;
@@ -794,7 +800,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameInstance(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'name' for create_game_instance."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'name' for create_game_instance."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -811,7 +817,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameInstance(
     
     if (!BP)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -825,18 +831,19 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateGameInstance(
     Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Created GameInstance blueprint: %s"), *Name));
     Response->SetStringField(TEXT("blueprintPath"), BP->GetPathName());
     McpHandlerUtils::AddVerification(Response, BP);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateHudClass(
+bool McpHandlers::Networking::HandleGameFrameworkCreateHudClass(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -849,7 +856,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateHudClass(
     FString SanitizedPath = SanitizeProjectRelativePath(Path);
     if (SanitizedPath.IsEmpty() && !Path.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, 
+        S.SendAutomationError(Socket, RequestId, 
             TEXT("Invalid path: path traversal or invalid characters detected. Path must start with /Game/, /Engine/, or /Script/"), 
             TEXT("SECURITY_VIOLATION"));
         return true;
@@ -861,7 +868,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateHudClass(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'name' for create_hud_class."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'name' for create_hud_class."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -878,7 +885,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateHudClass(
     
     if (!BP)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -892,7 +899,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateHudClass(
     Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Created HUD blueprint: %s"), *Name));
     Response->SetStringField(TEXT("blueprintPath"), BP->GetPathName());
     McpHandlerUtils::AddVerification(Response, BP);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }
@@ -901,13 +908,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkCreateHudClass(
 // 21.2 GAME MODE CONFIGURATION (5 actions)
 // ========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetDefaultPawnClass(
+bool McpHandlers::Networking::HandleGameFrameworkSetDefaultPawnClass(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -927,7 +935,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetDefaultPawnClass(
         FString SanitizedBPPath = SanitizeProjectRelativePath(GameModeBlueprint);
         if (SanitizedBPPath.IsEmpty())
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("Invalid gameModeBlueprint path: path traversal or invalid characters detected"), 
                 TEXT("SECURITY_VIOLATION"));
             return true;
@@ -937,7 +945,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetDefaultPawnClass(
 
     if (GameModeBlueprint.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -949,28 +957,28 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetDefaultPawnClass(
     }
     if (PawnClassPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'pawnClass' or 'defaultPawnClass'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'pawnClass' or 'defaultPawnClass'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* BP = LoadBlueprintFromPath(GameModeBlueprint);
     if (!BP)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
         return true;
     }
 
     UClass* PawnClass = LoadClassFromPath(PawnClassPath);
     if (!PawnClass)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load pawn class: %s"), *PawnClassPath), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load pawn class: %s"), *PawnClassPath), TEXT("NOT_FOUND"));
         return true;
     }
 
     FString Error;
     if (!SetClassProperty(BP, TEXT("DefaultPawnClass"), PawnClass, Error))
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("SET_PROPERTY_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("SET_PROPERTY_FAILED"));
         return true;
     }
 
@@ -985,18 +993,19 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetDefaultPawnClass(
     Response->SetBoolField(TEXT("success"), true);
     Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Set DefaultPawnClass to %s"), *PawnClassPath));
     Response->SetStringField(TEXT("blueprintPath"), BP->GetPathName());
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetPlayerControllerClass(
+bool McpHandlers::Networking::HandleGameFrameworkSetPlayerControllerClass(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -1016,7 +1025,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetPlayerControllerClass(
         FString SanitizedBPPath = SanitizeProjectRelativePath(GameModeBlueprint);
         if (SanitizedBPPath.IsEmpty())
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("Invalid gameModeBlueprint path: path traversal or invalid characters detected"), 
                 TEXT("SECURITY_VIOLATION"));
             return true;
@@ -1026,35 +1035,35 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetPlayerControllerClass(
 
     if (GameModeBlueprint.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString PCClassPath = GetStringField(Payload, TEXT("playerControllerClass"));
     if (PCClassPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'playerControllerClass'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'playerControllerClass'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* BP = LoadBlueprintFromPath(GameModeBlueprint);
     if (!BP)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
         return true;
     }
 
     UClass* PCClass = LoadClassFromPath(PCClassPath);
     if (!PCClass)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load PlayerController class: %s"), *PCClassPath), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load PlayerController class: %s"), *PCClassPath), TEXT("NOT_FOUND"));
         return true;
     }
 
     FString Error;
     if (!SetClassProperty(BP, TEXT("PlayerControllerClass"), PCClass, Error))
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("SET_PROPERTY_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("SET_PROPERTY_FAILED"));
         return true;
     }
 
@@ -1069,18 +1078,19 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetPlayerControllerClass(
     Response->SetBoolField(TEXT("success"), true);
     Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Set PlayerControllerClass to %s"), *PCClassPath));
     Response->SetStringField(TEXT("blueprintPath"), BP->GetPathName());
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetGameStateClass(
+bool McpHandlers::Networking::HandleGameFrameworkSetGameStateClass(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -1100,7 +1110,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetGameStateClass(
         FString SanitizedBPPath = SanitizeProjectRelativePath(GameModeBlueprint);
         if (SanitizedBPPath.IsEmpty())
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("Invalid gameModeBlueprint path: path traversal or invalid characters detected"), 
                 TEXT("SECURITY_VIOLATION"));
             return true;
@@ -1110,35 +1120,35 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetGameStateClass(
 
     if (GameModeBlueprint.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString GSClassPath = GetStringField(Payload, TEXT("gameStateClass"));
     if (GSClassPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'gameStateClass'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'gameStateClass'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* BP = LoadBlueprintFromPath(GameModeBlueprint);
     if (!BP)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
         return true;
     }
 
     UClass* GSClass = LoadClassFromPath(GSClassPath);
     if (!GSClass)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameState class: %s"), *GSClassPath), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameState class: %s"), *GSClassPath), TEXT("NOT_FOUND"));
         return true;
     }
 
     FString Error;
     if (!SetClassProperty(BP, TEXT("GameStateClass"), GSClass, Error))
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("SET_PROPERTY_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("SET_PROPERTY_FAILED"));
         return true;
     }
 
@@ -1153,18 +1163,19 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetGameStateClass(
     Response->SetBoolField(TEXT("success"), true);
     Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Set GameStateClass to %s"), *GSClassPath));
     Response->SetStringField(TEXT("blueprintPath"), BP->GetPathName());
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetPlayerStateClass(
+bool McpHandlers::Networking::HandleGameFrameworkSetPlayerStateClass(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -1184,7 +1195,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetPlayerStateClass(
         FString SanitizedBPPath = SanitizeProjectRelativePath(GameModeBlueprint);
         if (SanitizedBPPath.IsEmpty())
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("Invalid gameModeBlueprint path: path traversal or invalid characters detected"), 
                 TEXT("SECURITY_VIOLATION"));
             return true;
@@ -1194,35 +1205,35 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetPlayerStateClass(
 
     if (GameModeBlueprint.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString PSClassPath = GetStringField(Payload, TEXT("playerStateClass"));
     if (PSClassPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'playerStateClass'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'playerStateClass'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* BP = LoadBlueprintFromPath(GameModeBlueprint);
     if (!BP)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
         return true;
     }
 
     UClass* PSClass = LoadClassFromPath(PSClassPath);
     if (!PSClass)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load PlayerState class: %s"), *PSClassPath), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load PlayerState class: %s"), *PSClassPath), TEXT("NOT_FOUND"));
         return true;
     }
 
     FString Error;
     if (!SetClassProperty(BP, TEXT("PlayerStateClass"), PSClass, Error))
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("SET_PROPERTY_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("SET_PROPERTY_FAILED"));
         return true;
     }
 
@@ -1237,18 +1248,19 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetPlayerStateClass(
     Response->SetBoolField(TEXT("success"), true);
     Response->SetStringField(TEXT("message"), FString::Printf(TEXT("Set PlayerStateClass to %s"), *PSClassPath));
     Response->SetStringField(TEXT("blueprintPath"), BP->GetPathName());
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigureGameRules(
+bool McpHandlers::Networking::HandleGameFrameworkConfigureGameRules(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -1268,7 +1280,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigureGameRules(
         FString SanitizedBPPath = SanitizeProjectRelativePath(GameModeBlueprint);
         if (SanitizedBPPath.IsEmpty())
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("Invalid gameModeBlueprint path: path traversal or invalid characters detected"), 
                 TEXT("SECURITY_VIOLATION"));
             return true;
@@ -1278,21 +1290,21 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigureGameRules(
 
     if (GameModeBlueprint.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* BP = LoadBlueprintFromPath(GameModeBlueprint);
     if (!BP || !BP->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
         return true;
     }
 
     UObject* CDO = BP->GeneratedClass->GetDefaultObject();
     if (!CDO)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Failed to get CDO."), TEXT("INTERNAL_ERROR"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Failed to get CDO."), TEXT("INTERNAL_ERROR"));
         return true;
     }
 
@@ -1329,7 +1341,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigureGameRules(
 
     TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
     Response->SetStringField(TEXT("blueprintPath"), BP->GetPathName());
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Response,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Response,
         TEXT("Configured game rules"), nullptr);
 #endif // WITH_EDITOR
 }
@@ -1347,13 +1359,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigureGameRules(
 // 21.4 PLAYER MANAGEMENT (3 actions)
 // ========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigurePlayerStart(
+bool McpHandlers::Networking::HandleGameFrameworkConfigurePlayerStart(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -1373,7 +1386,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigurePlayerStart(
         FString SanitizedBPPath = SanitizeProjectRelativePath(GameModeBlueprint);
         if (SanitizedBPPath.IsEmpty())
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("Invalid gameModeBlueprint path: path traversal or invalid characters detected"), 
                 TEXT("SECURITY_VIOLATION"));
             return true;
@@ -1384,7 +1397,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigurePlayerStart(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'blueprintPath'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'blueprintPath'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -1417,7 +1430,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigurePlayerStart(
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World)
     {
-        SendAutomationError(Socket, RequestId, TEXT("No world available."), TEXT("NO_WORLD"));
+        S.SendAutomationError(Socket, RequestId, TEXT("No world available."), TEXT("NO_WORLD"));
         return true;
     }
 
@@ -1464,7 +1477,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigurePlayerStart(
         const FString Reason = PlayerStartName.IsEmpty()
             ? TEXT("No PlayerStart actors found in the current level.")
             : FString::Printf(TEXT("PlayerStart '%s' not found in level."), *PlayerStartName);
-        SendAutomationError(Socket, RequestId, Reason, TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, Reason, TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1482,7 +1495,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigurePlayerStart(
             }
             else
             {
-                SendAutomationError(Socket, RequestId,
+                S.SendAutomationError(Socket, RequestId,
                     FString::Printf(TEXT("Configured %d PlayerStart actor(s) but failed to save level: %s"),
                         ConfiguredCount, *LevelPackagePath),
                     TEXT("SAVE_FAILED"));
@@ -1502,18 +1515,19 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigurePlayerStart(
     Response->SetNumberField(TEXT("teamIndex"), TeamIndex);
     Response->SetBoolField(TEXT("saved"), bSave && SavedLevelCount > 0);
     Response->SetNumberField(TEXT("savedLevelCount"), SavedLevelCount);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetRespawnRules(
+bool McpHandlers::Networking::HandleGameFrameworkSetRespawnRules(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -1533,7 +1547,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetRespawnRules(
         FString SanitizedBPPath = SanitizeProjectRelativePath(GameModeBlueprint);
         if (SanitizedBPPath.IsEmpty())
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("Invalid gameModeBlueprint path: path traversal or invalid characters detected"), 
                 TEXT("SECURITY_VIOLATION"));
             return true;
@@ -1543,14 +1557,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetRespawnRules(
 
     if (GameModeBlueprint.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* BP = LoadBlueprintFromPath(GameModeBlueprint);
     if (!BP)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1630,18 +1644,19 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkSetRespawnRules(
     ConfigObj->SetNumberField(TEXT("respawnLives"), RespawnLives);
     Response->SetObjectField(TEXT("configuration"), ConfigObj);
     
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigureSpectating(
+bool McpHandlers::Networking::HandleGameFrameworkConfigureSpectating(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -1661,7 +1676,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigureSpectating(
         FString SanitizedBPPath = SanitizeProjectRelativePath(GameModeBlueprint);
         if (SanitizedBPPath.IsEmpty())
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("Invalid gameModeBlueprint path: path traversal or invalid characters detected"), 
                 TEXT("SECURITY_VIOLATION"));
             return true;
@@ -1671,14 +1686,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigureSpectating(
 
     if (GameModeBlueprint.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing 'gameModeBlueprint'."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlueprint* BP = LoadBlueprintFromPath(GameModeBlueprint);
     if (!BP)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to load GameMode: %s"), *GameModeBlueprint), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1709,7 +1724,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigureSpectating(
     Response->SetBoolField(TEXT("success"), true);
     Response->SetStringField(TEXT("message"), TEXT("Spectating configured."));
     Response->SetStringField(TEXT("blueprintPath"), BP->GetPathName());
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }
@@ -1718,13 +1733,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigureSpectating(
 // UTILITY (1 action)
 // ========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkGetGameFrameworkInfo(
+bool McpHandlers::Networking::HandleGameFrameworkGetGameFrameworkInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Game framework handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     using namespace GameFrameworkHelpers;
@@ -1742,7 +1758,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkGetGameFrameworkInfo(
         FString SanitizedBPPath = SanitizeProjectRelativePath(GameModeBlueprint);
         if (SanitizedBPPath.IsEmpty())
         {
-            SendAutomationError(Socket, RequestId, 
+            S.SendAutomationError(Socket, RequestId, 
                 TEXT("Invalid gameModeBlueprint path: path traversal or invalid characters detected"), 
                 TEXT("SECURITY_VIOLATION"));
             return true;
@@ -1856,7 +1872,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkGetGameFrameworkInfo(
 
     Response->SetObjectField(TEXT("gameFrameworkInfo"), InfoObj);
     Response->SetStringField(TEXT("message"), TEXT("Game framework info retrieved."));
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
     return true;
 #endif // WITH_EDITOR
 }

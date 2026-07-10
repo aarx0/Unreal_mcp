@@ -140,6 +140,7 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
+#include "McpAutomationBridge_NetworkingHandlers.h"
 #include "Misc/EngineVersionComparison.h"
 
 // ---- Editor Includes ----
@@ -372,7 +373,8 @@ namespace NetworkingHelpers
 //
 // Payload:  { blueprintPath: string, propertyName: string, replicated?: bool }
 // Response: { success: bool, message: string, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetPropertyReplicated(
+bool McpHandlers::Networking::HandleNetworkingSetPropertyReplicated(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -387,14 +389,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetPropertyReplicated(
 
     if (BlueprintPath.IsEmpty() || PropertyName.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath or propertyName"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath or propertyName"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -411,7 +413,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetPropertyReplicated(
 
     if (!Property)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Property not found in blueprint"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Property not found in blueprint"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -432,7 +434,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetPropertyReplicated(
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Property %s replication set to %s"), *PropertyName, bReplicated ? TEXT("true") : TEXT("false")));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Property replication configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Property replication configured"), ResultJson);
     return true;
 }
 
@@ -442,7 +444,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetPropertyReplicated(
 //
 // Payload:  { blueprintPath: string, propertyName: string, condition: string }
 // Response: { success: bool, message: string, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetReplicationCondition(
+bool McpHandlers::Networking::HandleNetworkingSetReplicationCondition(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -457,14 +460,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetReplicationCondition(
 
     if (BlueprintPath.IsEmpty() || PropertyName.IsEmpty() || Condition.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -486,7 +489,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetReplicationCondition(
 
     if (!bFound)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Property '%s' not found"), *PropertyName), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Property '%s' not found"), *PropertyName), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -496,7 +499,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetReplicationCondition(
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Replication condition set to %s"), *Condition));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Replication condition configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Replication condition configured"), ResultJson);
     return true;
 }
 
@@ -511,7 +514,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetReplicationCondition(
 //
 // Payload:  { blueprintPath: string, netUpdateFrequency?: number, minNetUpdateFrequency?: number }
 // Response: { success: bool, message: string, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetUpdateFrequency(
+bool McpHandlers::Networking::HandleNetworkingConfigureNetUpdateFrequency(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -526,14 +530,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetUpdateFrequency(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -554,7 +558,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetUpdateFrequency(
     }
 #else
     // UE 5.0 fallback - these APIs not available
-    SendAutomationError(Socket, RequestId, TEXT("Net update frequency APIs not available in UE 5.0"), TEXT("NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Net update frequency APIs not available in UE 5.0"), TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 
@@ -564,7 +568,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetUpdateFrequency(
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Net update frequency set to %.1f (min: %.1f)"), NetUpdateFrequency, MinNetUpdateFrequency));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Net update frequency configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Net update frequency configured"), ResultJson);
     return true;
 }
 
@@ -574,7 +578,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetUpdateFrequency(
 //
 // Payload:  { blueprintPath: string, netPriority?: number }
 // Response: { success: bool, message: string, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetPriority(
+bool McpHandlers::Networking::HandleNetworkingConfigureNetPriority(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -588,14 +593,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetPriority(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -611,7 +616,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetPriority(
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Net priority set to %.2f"), NetPriority));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Net priority configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Net priority configured"), ResultJson);
     return true;
 }
 
@@ -621,7 +626,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetPriority(
 //
 // Payload:  { blueprintPath: string, dormancy: string }
 // Response: { success: bool, message: string, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetNetDormancy(
+bool McpHandlers::Networking::HandleNetworkingSetNetDormancy(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -635,14 +641,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetNetDormancy(
 
     if (BlueprintPath.IsEmpty() || Dormancy.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath or dormancy"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath or dormancy"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -659,7 +665,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetNetDormancy(
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Net dormancy set to %s"), *Dormancy));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Net dormancy configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Net dormancy configured"), ResultJson);
     return true;
 }
 
@@ -672,7 +678,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetNetDormancy(
 //
 // Payload:  { blueprintPath: string, spatiallyLoaded?: bool, netLoadOnClient?: bool, replicationPolicy?: string }
 // Response: { success: bool, spatiallyLoaded, netLoadOnClient, replicationPolicy, message, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureReplicationGraph(
+bool McpHandlers::Networking::HandleNetworkingConfigureReplicationGraph(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -688,14 +695,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureReplicationGraph(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -725,7 +732,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureReplicationGraph(
         bNetLoadOnClient ? TEXT("true") : TEXT("false"),
         bSpatiallyLoaded ? TEXT("true") : TEXT("false")));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Replication graph configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Replication graph configured"), ResultJson);
     return true;
 }
 
@@ -739,7 +746,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureReplicationGraph(
 //
 // Payload:  { blueprintPath: string, functionName: string, rpcType: string, reliable?: bool }
 // Response: { success: bool, functionName, rpcType, reliable, message, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingCreateRpcFunction(
+bool McpHandlers::Networking::HandleNetworkingCreateRpcFunction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -755,14 +763,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingCreateRpcFunction(
 
     if (BlueprintPath.IsEmpty() || FunctionName.IsEmpty() || RpcType.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -820,11 +828,11 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingCreateRpcFunction(
         ResultJson->SetBoolField(TEXT("reliable"), bReliable);
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Created %s RPC function: %s"), *RpcType, *FunctionName));
         McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-        SendAutomationResponse(Socket, RequestId, true, TEXT("RPC function created"), ResultJson);
+        S.SendAutomationResponse(Socket, RequestId, true, TEXT("RPC function created"), ResultJson);
     }
     else
     {
-        SendAutomationError(Socket, RequestId, TEXT("Failed to create function graph"), TEXT("CREATE_FAILED"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Failed to create function graph"), TEXT("CREATE_FAILED"));
     }
     return true;
 }
@@ -835,7 +843,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingCreateRpcFunction(
 //
 // Payload:  { blueprintPath: string, functionName: string, withValidation?: bool }
 // Response: { success: bool, withValidation, message, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureRpcValidation(
+bool McpHandlers::Networking::HandleNetworkingConfigureRpcValidation(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -850,14 +859,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureRpcValidation(
 
     if (BlueprintPath.IsEmpty() || FunctionName.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -874,7 +883,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureRpcValidation(
 
     if (!FuncGraph)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Function '%s' not found"), *FunctionName), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Function '%s' not found"), *FunctionName), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -899,7 +908,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureRpcValidation(
 
     if (!bFlagSet)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Function entry node not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Function entry node not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -910,7 +919,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureRpcValidation(
     ResultJson->SetBoolField(TEXT("withValidation"), bWithValidation);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("RPC validation %s for function %s"), bWithValidation ? TEXT("enabled") : TEXT("disabled"), *FunctionName));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("RPC validation configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("RPC validation configured"), ResultJson);
     return true;
 }
 
@@ -920,7 +929,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureRpcValidation(
 //
 // Payload:  { blueprintPath: string, functionName: string, reliable?: bool }
 // Response: { success: bool, reliable, message, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetRpcReliability(
+bool McpHandlers::Networking::HandleNetworkingSetRpcReliability(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -935,14 +945,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetRpcReliability(
 
     if (BlueprintPath.IsEmpty() || FunctionName.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -959,7 +969,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetRpcReliability(
 
     if (!FuncGraph)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Function '%s' not found"), *FunctionName), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Function '%s' not found"), *FunctionName), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -984,7 +994,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetRpcReliability(
 
     if (!bFlagSet)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Function entry node not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Function entry node not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -995,7 +1005,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetRpcReliability(
     ResultJson->SetBoolField(TEXT("reliable"), bReliable);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("RPC %s reliability set to %s"), *FunctionName, bReliable ? TEXT("reliable") : TEXT("unreliable")));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("RPC reliability configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("RPC reliability configured"), ResultJson);
     return true;
 }
 
@@ -1008,7 +1018,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetRpcReliability(
 //
 // Payload:  { actorName: string, ownerActorName?: string }
 // Response: { success: bool, message: string, actorVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetOwner(
+bool McpHandlers::Networking::HandleNetworkingSetOwner(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1022,21 +1033,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetOwner(
 
     if (ActorName.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing actorName"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing actorName"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World)
     {
-        SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
+        S.SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
         return true;
     }
 
     AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Actor not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1046,7 +1057,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetOwner(
         Owner = McpHandlerUtils::FindActorByName(World, OwnerActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
         if (!Owner)
         {
-            SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Owner actor '%s' not found"), *OwnerActorName), TEXT("OWNER_NOT_FOUND"));
+            S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Owner actor '%s' not found"), *OwnerActorName), TEXT("OWNER_NOT_FOUND"));
             return true;
         }
     }
@@ -1056,7 +1067,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetOwner(
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetStringField(TEXT("message"), Owner ? FString::Printf(TEXT("Set owner of %s to %s"), *ActorName, *OwnerActorName) : FString::Printf(TEXT("Cleared owner of %s"), *ActorName));
     McpHandlerUtils::AddVerification(ResultJson, Actor);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Owner set"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Owner set"), ResultJson);
     return true;
 }
 
@@ -1066,7 +1077,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetOwner(
 //
 // Payload:  { blueprintPath: string, isAutonomousProxy?: bool }
 // Response: { success: bool, isAutonomousProxy, message, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetAutonomousProxy(
+bool McpHandlers::Networking::HandleNetworkingSetAutonomousProxy(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1080,14 +1092,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetAutonomousProxy(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1121,7 +1133,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetAutonomousProxy(
     ResultJson->SetBoolField(TEXT("isAutonomousProxy"), bIsAutonomousProxy);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Autonomous proxy configuration %s for replicated properties"), bIsAutonomousProxy ? TEXT("enabled") : TEXT("disabled")));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Autonomous proxy configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Autonomous proxy configured"), ResultJson);
     return true;
 }
 
@@ -1131,7 +1143,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetAutonomousProxy(
 //
 // Payload:  { actorName: string }
 // Response: { success: bool, hasAuthority: bool, role: string }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingCheckHasAuthority(
+bool McpHandlers::Networking::HandleNetworkingCheckHasAuthority(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1144,21 +1157,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingCheckHasAuthority(
 
     if (ActorName.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing actorName"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing actorName"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World)
     {
-        SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
+        S.SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
         return true;
     }
 
     AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Actor not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1168,7 +1181,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingCheckHasAuthority(
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetBoolField(TEXT("hasAuthority"), bHasAuthority);
     ResultJson->SetStringField(TEXT("role"), NetRoleToString(Role));
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Authority checked"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Authority checked"), ResultJson);
     return true;
 }
 
@@ -1178,7 +1191,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingCheckHasAuthority(
 //
 // Payload:  { actorName: string }
 // Response: { success: bool, isLocallyControlled: bool, isLocalController: bool }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingCheckIsLocallyControlled(
+bool McpHandlers::Networking::HandleNetworkingCheckIsLocallyControlled(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1191,21 +1205,21 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingCheckIsLocallyControlled(
 
     if (ActorName.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing actorName"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing actorName"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World)
     {
-        SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
+        S.SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
         return true;
     }
 
     AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
     if (!Actor)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Actor not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1223,7 +1237,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingCheckIsLocallyControlled(
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetBoolField(TEXT("isLocallyControlled"), bIsLocallyControlled);
     ResultJson->SetBoolField(TEXT("isLocalController"), bIsLocalController);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Local control checked"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Local control checked"), ResultJson);
     return true;
 }
 
@@ -1242,7 +1256,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingCheckIsLocallyControlled(
 //
 // Payload:  { blueprintPath: string, netCullDistanceSquared?: number, useOwnerNetRelevancy?: bool }
 // Response: { success: bool, message: string, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetCullDistance(
+bool McpHandlers::Networking::HandleNetworkingConfigureNetCullDistance(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1257,14 +1272,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetCullDistance(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1283,7 +1298,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetCullDistance(
     }
 #else
     // UE 5.0 fallback - SetNetCullDistanceSquared not available
-    SendAutomationError(Socket, RequestId, TEXT("Net cull distance API not available in UE 5.0"), TEXT("NOT_AVAILABLE"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Net cull distance API not available in UE 5.0"), TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 
@@ -1293,7 +1308,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetCullDistance(
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Net cull distance squared set to %.0f"), NetCullDistanceSquared));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Net cull distance configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Net cull distance configured"), ResultJson);
     return true;
 }
 
@@ -1303,7 +1318,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetCullDistance(
 //
 // Payload:  { blueprintPath: string, alwaysRelevant?: bool }
 // Response: { success: bool, message: string, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetAlwaysRelevant(
+bool McpHandlers::Networking::HandleNetworkingSetAlwaysRelevant(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1317,14 +1333,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetAlwaysRelevant(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1340,7 +1356,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetAlwaysRelevant(
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Always relevant set to %s"), bAlwaysRelevant ? TEXT("true") : TEXT("false")));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Always relevant configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Always relevant configured"), ResultJson);
     return true;
 }
 
@@ -1350,7 +1366,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetAlwaysRelevant(
 //
 // Payload:  { blueprintPath: string, onlyRelevantToOwner?: bool }
 // Response: { success: bool, message: string, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetOnlyRelevantToOwner(
+bool McpHandlers::Networking::HandleNetworkingSetOnlyRelevantToOwner(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1364,14 +1381,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetOnlyRelevantToOwner(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1387,7 +1404,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetOnlyRelevantToOwner(
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Only relevant to owner set to %s"), bOnlyRelevantToOwner ? TEXT("true") : TEXT("false")));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Only relevant to owner configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Only relevant to owner configured"), ResultJson);
     return true;
 }
 
@@ -1412,7 +1429,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetOnlyRelevantToOwner(
 //
 // Payload:  { blueprintPath: string, propertyName: string, repNotifyFunc: string }
 // Response: { success: bool, repNotifyFunctionCreated: bool, message: string, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetReplicatedUsing(
+bool McpHandlers::Networking::HandleNetworkingSetReplicatedUsing(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1427,14 +1445,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetReplicatedUsing(
 
     if (BlueprintPath.IsEmpty() || PropertyName.IsEmpty() || RepNotifyFunc.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1451,7 +1469,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetReplicatedUsing(
 
     if (!bFound)
     {
-        SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Property '%s' not found"), *PropertyName), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Property '%s' not found"), *PropertyName), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1481,7 +1499,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetReplicatedUsing(
         );
         if (!NewGraph)
         {
-            SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to create RepNotify function graph '%s'"), *RepNotifyFunc), TEXT("CREATE_FAILED"));
+            S.SendAutomationError(Socket, RequestId, FString::Printf(TEXT("Failed to create RepNotify function graph '%s'"), *RepNotifyFunc), TEXT("CREATE_FAILED"));
             return true;
         }
         FBlueprintEditorUtils::AddFunctionGraph<UFunction>(Blueprint, NewGraph, false, static_cast<UFunction*>(nullptr));
@@ -1506,7 +1524,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetReplicatedUsing(
     ResultJson->SetBoolField(TEXT("repNotifyFunctionCreated"), bCreatedStub);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("ReplicatedUsing set to %s for property %s (%s)"), *RepNotifyFunc, *PropertyName, bCreatedStub ? TEXT("function stub created") : TEXT("function already existed")));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("ReplicatedUsing configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("ReplicatedUsing configured"), ResultJson);
     return true;
 }
 
@@ -1517,7 +1535,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetReplicatedUsing(
 //
 // Payload:  { blueprintPath: string, usePushModel?: bool }
 // Response: { success: bool, usePushModel, message, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigurePushModel(
+bool McpHandlers::Networking::HandleNetworkingConfigurePushModel(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1531,14 +1550,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigurePushModel(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1573,7 +1592,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigurePushModel(
     ResultJson->SetBoolField(TEXT("usePushModel"), bUsePushModel);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Push model replication %s for all replicated properties"), bUsePushModel ? TEXT("enabled") : TEXT("disabled")));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Push model configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Push model configured"), ResultJson);
     return true;
 }
 
@@ -1588,7 +1607,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigurePushModel(
 //
 // Payload:  { blueprintPath: string, enablePrediction?: bool, predictionThreshold?: number }
 // Response: { success: bool, enablePrediction, predictionThreshold, message, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureClientPrediction(
+bool McpHandlers::Networking::HandleNetworkingConfigureClientPrediction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1603,14 +1623,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureClientPrediction(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1640,7 +1660,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureClientPrediction(
     ResultJson->SetNumberField(TEXT("predictionThreshold"), PredictionThreshold);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Client prediction %s"), bEnablePrediction ? TEXT("enabled") : TEXT("disabled")));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Client prediction configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Client prediction configured"), ResultJson);
     return true;
 }
 
@@ -1650,7 +1670,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureClientPrediction(
 //
 // Payload:  { blueprintPath: string, correctionThreshold?: number, smoothingRate?: number }
 // Response: { success: bool, correctionThreshold, smoothingRate, message, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureServerCorrection(
+bool McpHandlers::Networking::HandleNetworkingConfigureServerCorrection(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1665,14 +1686,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureServerCorrection(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1697,7 +1718,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureServerCorrection(
     ResultJson->SetNumberField(TEXT("smoothingRate"), SmoothingRate);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Server correction configured (threshold=%.2f, smoothing=%.2f)"), CorrectionThreshold, SmoothingRate));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Server correction configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Server correction configured"), ResultJson);
     return true;
 }
 
@@ -1710,7 +1731,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureServerCorrection(
 //
 // Payload:  { blueprintPath: string, dataType: string, variableName?: string }
 // Response: { success: bool, variableName, dataType, message, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingAddNetworkPredictionData(
+bool McpHandlers::Networking::HandleNetworkingAddNetworkPredictionData(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1725,14 +1747,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingAddNetworkPredictionData(
 
     if (BlueprintPath.IsEmpty() || DataType.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1788,7 +1810,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingAddNetworkPredictionData(
     ResultJson->SetStringField(TEXT("dataType"), DataType);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Network prediction data variable '%s' of type '%s' %s"), *VarName, *DataType, bSuccess ? TEXT("added") : TEXT("could not be added (may already exist)")));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, bSuccess, TEXT("Network prediction data added"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, bSuccess, TEXT("Network prediction data added"), ResultJson);
     return true;
 }
 
@@ -1798,7 +1820,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingAddNetworkPredictionData(
 //
 // Payload:  { blueprintPath: string, networkSmoothingMode?: string, networkMaxSmoothUpdateDistance?: number, networkNoSmoothUpdateDistance?: number }
 // Response: { success: bool, message: string, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureMovementPrediction(
+bool McpHandlers::Networking::HandleNetworkingConfigureMovementPrediction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1814,14 +1837,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureMovementPrediction(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1840,7 +1863,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureMovementPrediction(
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetStringField(TEXT("message"), TEXT("Movement prediction configured"));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Movement prediction configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Movement prediction configured"), ResultJson);
     return true;
 }
 
@@ -1858,7 +1881,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureMovementPrediction(
 //
 // Payload:  { maxClientRate?: number, maxInternetClientRate?: number, netServerMaxTickRate?: number }
 // Response: { success: bool, appliedToActiveDriver, maxClientRate, maxInternetClientRate, netServerMaxTickRate, message }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetDriver(
+bool McpHandlers::Networking::HandleNetworkingConfigureNetDriver(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1900,7 +1924,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetDriver(
     ResultJson->SetNumberField(TEXT("netServerMaxTickRate"), NetServerMaxTickRate);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Net driver configured (maxClientRate=%.0f, maxInternetClientRate=%.0f, tickRate=%.0f)"), 
         MaxClientRate, MaxInternetClientRate, NetServerMaxTickRate));
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Net driver configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Net driver configured"), ResultJson);
     return true;
 }
 
@@ -1910,7 +1934,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureNetDriver(
 //
 // Payload:  { blueprintPath: string, role: string }
 // Response: { success: bool, role, replicates, message, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetNetRole(
+bool McpHandlers::Networking::HandleNetworkingSetNetRole(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1924,14 +1949,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetNetRole(
 
     if (BlueprintPath.IsEmpty() || Role.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameters"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -1964,7 +1989,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetNetRole(
     ResultJson->SetBoolField(TEXT("replicates"), CDO ? CDO->GetIsReplicated() : false);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Net role configured to %s (replicates=%s)"), *Role, CDO && CDO->GetIsReplicated() ? TEXT("true") : TEXT("false")));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Net role configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Net role configured"), ResultJson);
     return true;
 }
 
@@ -1974,7 +1999,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingSetNetRole(
 //
 // Payload:  { blueprintPath: string, replicateMovement?: bool }
 // Response: { success: bool, message: string, assetVerification }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureReplicatedMovement(
+bool McpHandlers::Networking::HandleNetworkingConfigureReplicatedMovement(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1988,14 +2014,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureReplicatedMovement(
 
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing blueprintPath"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
         return true;
     }
 
@@ -2011,7 +2037,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureReplicatedMovement(
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Replicate movement set to %s"), bReplicateMovement ? TEXT("true") : TEXT("false")));
     McpHandlerUtils::AddVerification(ResultJson, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Replicated movement configured"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Replicated movement configured"), ResultJson);
     return true;
 }
 
@@ -2035,7 +2061,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingConfigureReplicatedMovement(
 //
 // Payload:  { blueprintPath?: string, actorName?: string }  (one required)
 // Response: { success: bool, networkingInfo: object }
-bool UMcpAutomationBridgeSubsystem::HandleNetworkingGetInfo(
+bool McpHandlers::Networking::HandleNetworkingGetInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -2054,7 +2081,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingGetInfo(
         UBlueprint* Blueprint = LoadBlueprintFromPath(BlueprintPath);
         if (!Blueprint)
         {
-            SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(Socket, RequestId, TEXT("Blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -2164,14 +2191,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingGetInfo(
         UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
         if (!World)
         {
-            SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
+            S.SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
             return true;
         }
 
         AActor* Actor = McpHandlerUtils::FindActorByName(World, ActorName, McpHandlerUtils::EMcpActorNameMatch::Exact);
         if (!Actor)
         {
-            SendAutomationError(Socket, RequestId, TEXT("Actor not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -2201,12 +2228,12 @@ bool UMcpAutomationBridgeSubsystem::HandleNetworkingGetInfo(
     }
     else
     {
-        SendAutomationError(Socket, RequestId, TEXT("Must provide either blueprintPath or actorName"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Must provide either blueprintPath or actorName"), TEXT("INVALID_PARAMS"));
         return true;
     }
 
     ResultJson->SetBoolField(TEXT("success"), true);
     ResultJson->SetObjectField(TEXT("networkingInfo"), NetworkingInfo);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Networking info retrieved"), ResultJson);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Networking info retrieved"), ResultJson);
     return true;
 }

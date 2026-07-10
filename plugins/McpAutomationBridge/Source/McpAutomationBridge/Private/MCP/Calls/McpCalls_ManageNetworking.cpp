@@ -15,6 +15,9 @@
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_NetworkingHandlers.h"
+#include "McpAutomationBridge_GameFrameworkHandlers.h"
+#include "McpAutomationBridge_SessionsHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -571,80 +574,80 @@ class FMcpCall_ManageNetworking_##ClassSuffix final : public FMcpCall           
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
 	{                                                                                    \
-		return S.HandlerFn(RequestId, Payload, Socket);                                  \
+		return HandlerFn(S, RequestId, Payload, Socket);                                  \
 	}                                                                                    \
 };
 
 // Replication (NetworkingHandlers.cpp)
-MCP_NW_CALL(SetPropertyReplicated, "set_property_replicated", HandleNetworkingSetPropertyReplicated, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetReplicationCondition, "set_replication_condition", HandleNetworkingSetReplicationCondition, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureNetUpdateFrequency, "configure_net_update_frequency", HandleNetworkingConfigureNetUpdateFrequency, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureNetPriority, "configure_net_priority", HandleNetworkingConfigureNetPriority, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetNetDormancy, "set_net_dormancy", HandleNetworkingSetNetDormancy, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureReplicationGraph, "configure_replication_graph", HandleNetworkingConfigureReplicationGraph, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetPropertyReplicated, "set_property_replicated", McpHandlers::Networking::HandleNetworkingSetPropertyReplicated, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetReplicationCondition, "set_replication_condition", McpHandlers::Networking::HandleNetworkingSetReplicationCondition, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureNetUpdateFrequency, "configure_net_update_frequency", McpHandlers::Networking::HandleNetworkingConfigureNetUpdateFrequency, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureNetPriority, "configure_net_priority", McpHandlers::Networking::HandleNetworkingConfigureNetPriority, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetNetDormancy, "set_net_dormancy", McpHandlers::Networking::HandleNetworkingSetNetDormancy, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureReplicationGraph, "configure_replication_graph", McpHandlers::Networking::HandleNetworkingConfigureReplicationGraph, EMcpCallFlags::Mutating)
 
 // RPCs
-MCP_NW_CALL(CreateRpcFunction, "create_rpc_function", HandleNetworkingCreateRpcFunction, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureRpcValidation, "configure_rpc_validation", HandleNetworkingConfigureRpcValidation, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetRpcReliability, "set_rpc_reliability", HandleNetworkingSetRpcReliability, EMcpCallFlags::Mutating)
+MCP_NW_CALL(CreateRpcFunction, "create_rpc_function", McpHandlers::Networking::HandleNetworkingCreateRpcFunction, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureRpcValidation, "configure_rpc_validation", McpHandlers::Networking::HandleNetworkingConfigureRpcValidation, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetRpcReliability, "set_rpc_reliability", McpHandlers::Networking::HandleNetworkingSetRpcReliability, EMcpCallFlags::Mutating)
 
 // Authority & ownership
-MCP_NW_CALL(SetOwner, "set_owner", HandleNetworkingSetOwner, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetAutonomousProxy, "set_autonomous_proxy", HandleNetworkingSetAutonomousProxy, EMcpCallFlags::Mutating)
-MCP_NW_CALL(CheckHasAuthority, "check_has_authority", HandleNetworkingCheckHasAuthority, EMcpCallFlags::None)
-MCP_NW_CALL(CheckIsLocallyControlled, "check_is_locally_controlled", HandleNetworkingCheckIsLocallyControlled, EMcpCallFlags::None)
+MCP_NW_CALL(SetOwner, "set_owner", McpHandlers::Networking::HandleNetworkingSetOwner, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetAutonomousProxy, "set_autonomous_proxy", McpHandlers::Networking::HandleNetworkingSetAutonomousProxy, EMcpCallFlags::Mutating)
+MCP_NW_CALL(CheckHasAuthority, "check_has_authority", McpHandlers::Networking::HandleNetworkingCheckHasAuthority, EMcpCallFlags::None)
+MCP_NW_CALL(CheckIsLocallyControlled, "check_is_locally_controlled", McpHandlers::Networking::HandleNetworkingCheckIsLocallyControlled, EMcpCallFlags::None)
 
 // Network relevancy
-MCP_NW_CALL(ConfigureNetCullDistance, "configure_net_cull_distance", HandleNetworkingConfigureNetCullDistance, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetAlwaysRelevant, "set_always_relevant", HandleNetworkingSetAlwaysRelevant, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetOnlyRelevantToOwner, "set_only_relevant_to_owner", HandleNetworkingSetOnlyRelevantToOwner, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureNetCullDistance, "configure_net_cull_distance", McpHandlers::Networking::HandleNetworkingConfigureNetCullDistance, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetAlwaysRelevant, "set_always_relevant", McpHandlers::Networking::HandleNetworkingSetAlwaysRelevant, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetOnlyRelevantToOwner, "set_only_relevant_to_owner", McpHandlers::Networking::HandleNetworkingSetOnlyRelevantToOwner, EMcpCallFlags::Mutating)
 
 // Net serialization
-MCP_NW_CALL(SetReplicatedUsing, "set_replicated_using", HandleNetworkingSetReplicatedUsing, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigurePushModel, "configure_push_model", HandleNetworkingConfigurePushModel, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetReplicatedUsing, "set_replicated_using", McpHandlers::Networking::HandleNetworkingSetReplicatedUsing, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigurePushModel, "configure_push_model", McpHandlers::Networking::HandleNetworkingConfigurePushModel, EMcpCallFlags::Mutating)
 
 // Network prediction
-MCP_NW_CALL(ConfigureClientPrediction, "configure_client_prediction", HandleNetworkingConfigureClientPrediction, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureServerCorrection, "configure_server_correction", HandleNetworkingConfigureServerCorrection, EMcpCallFlags::Mutating)
-MCP_NW_CALL(AddNetworkPredictionData, "add_network_prediction_data", HandleNetworkingAddNetworkPredictionData, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureMovementPrediction, "configure_movement_prediction", HandleNetworkingConfigureMovementPrediction, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureClientPrediction, "configure_client_prediction", McpHandlers::Networking::HandleNetworkingConfigureClientPrediction, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureServerCorrection, "configure_server_correction", McpHandlers::Networking::HandleNetworkingConfigureServerCorrection, EMcpCallFlags::Mutating)
+MCP_NW_CALL(AddNetworkPredictionData, "add_network_prediction_data", McpHandlers::Networking::HandleNetworkingAddNetworkPredictionData, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureMovementPrediction, "configure_movement_prediction", McpHandlers::Networking::HandleNetworkingConfigureMovementPrediction, EMcpCallFlags::Mutating)
 
 // Connection & net driver
-MCP_NW_CALL(ConfigureNetDriver, "configure_net_driver", HandleNetworkingConfigureNetDriver, EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetNetRole, "set_net_role", HandleNetworkingSetNetRole, EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureReplicatedMovement, "configure_replicated_movement", HandleNetworkingConfigureReplicatedMovement, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureNetDriver, "configure_net_driver", McpHandlers::Networking::HandleNetworkingConfigureNetDriver, EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetNetRole, "set_net_role", McpHandlers::Networking::HandleNetworkingSetNetRole, EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureReplicatedMovement, "configure_replicated_movement", McpHandlers::Networking::HandleNetworkingConfigureReplicatedMovement, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_NW_CALL(GetInfo, "get_info", HandleNetworkingGetInfo, EMcpCallFlags::None)
+MCP_NW_CALL(GetInfo, "get_info", McpHandlers::Networking::HandleNetworkingGetInfo, EMcpCallFlags::None)
 
 // Game framework (GameFrameworkHandlers.cpp)
-MCP_NW_CALL(CreateGameMode, "create_game_mode", HandleGameFrameworkCreateGameMode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(CreateGameState, "create_game_state", HandleGameFrameworkCreateGameState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(CreatePlayerController, "create_player_controller", HandleGameFrameworkCreatePlayerController, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(CreatePlayerState, "create_player_state", HandleGameFrameworkCreatePlayerState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(CreateGameInstance, "create_game_instance", HandleGameFrameworkCreateGameInstance, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(CreateHudClass, "create_hud_class", HandleGameFrameworkCreateHudClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetDefaultPawnClass, "set_default_pawn_class", HandleGameFrameworkSetDefaultPawnClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetPlayerControllerClass, "set_player_controller_class", HandleGameFrameworkSetPlayerControllerClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetGameStateClass, "set_game_state_class", HandleGameFrameworkSetGameStateClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetPlayerStateClass, "set_player_state_class", HandleGameFrameworkSetPlayerStateClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureGameRules, "configure_game_rules", HandleGameFrameworkConfigureGameRules, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigurePlayerStart, "configure_player_start", HandleGameFrameworkConfigurePlayerStart, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetRespawnRules, "set_respawn_rules", HandleGameFrameworkSetRespawnRules, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(ConfigureSpectating, "configure_spectating", HandleGameFrameworkConfigureSpectating, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(GetGameFrameworkInfo, "get_game_framework_info", HandleGameFrameworkGetGameFrameworkInfo, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(CreateGameMode, "create_game_mode", McpHandlers::Networking::HandleGameFrameworkCreateGameMode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(CreateGameState, "create_game_state", McpHandlers::Networking::HandleGameFrameworkCreateGameState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(CreatePlayerController, "create_player_controller", McpHandlers::Networking::HandleGameFrameworkCreatePlayerController, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(CreatePlayerState, "create_player_state", McpHandlers::Networking::HandleGameFrameworkCreatePlayerState, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(CreateGameInstance, "create_game_instance", McpHandlers::Networking::HandleGameFrameworkCreateGameInstance, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(CreateHudClass, "create_hud_class", McpHandlers::Networking::HandleGameFrameworkCreateHudClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetDefaultPawnClass, "set_default_pawn_class", McpHandlers::Networking::HandleGameFrameworkSetDefaultPawnClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetPlayerControllerClass, "set_player_controller_class", McpHandlers::Networking::HandleGameFrameworkSetPlayerControllerClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetGameStateClass, "set_game_state_class", McpHandlers::Networking::HandleGameFrameworkSetGameStateClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetPlayerStateClass, "set_player_state_class", McpHandlers::Networking::HandleGameFrameworkSetPlayerStateClass, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureGameRules, "configure_game_rules", McpHandlers::Networking::HandleGameFrameworkConfigureGameRules, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigurePlayerStart, "configure_player_start", McpHandlers::Networking::HandleGameFrameworkConfigurePlayerStart, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetRespawnRules, "set_respawn_rules", McpHandlers::Networking::HandleGameFrameworkSetRespawnRules, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(ConfigureSpectating, "configure_spectating", McpHandlers::Networking::HandleGameFrameworkConfigureSpectating, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(GetGameFrameworkInfo, "get_game_framework_info", McpHandlers::Networking::HandleGameFrameworkGetGameFrameworkInfo, EMcpCallFlags::RequiresEditor)
 
 // Sessions (SessionsHandlers.cpp)
-MCP_NW_CALL(SetSplitScreenType, "set_split_screen_type", HandleSessionsSetSplitScreenType, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(AddLocalPlayer, "add_local_player", HandleSessionsAddLocalPlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(RemoveLocalPlayer, "remove_local_player", HandleSessionsRemoveLocalPlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(HostLanServer, "host_lan_server", HandleSessionsHostLanServer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(JoinLanServer, "join_lan_server", HandleSessionsJoinLanServer, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(EnableVoiceChat, "enable_voice_chat", HandleSessionsEnableVoiceChat, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetVoiceChannel, "set_voice_channel", HandleSessionsSetVoiceChannel, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(MutePlayer, "mute_player", HandleSessionsMutePlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetVoiceAttenuation, "set_voice_attenuation", HandleSessionsSetVoiceAttenuation, EMcpCallFlags::RequiresEditor)
-MCP_NW_CALL(GetSessionsInfo, "get_sessions_info", HandleSessionsGetSessionsInfo, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(SetSplitScreenType, "set_split_screen_type", McpHandlers::Networking::HandleSessionsSetSplitScreenType, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(AddLocalPlayer, "add_local_player", McpHandlers::Networking::HandleSessionsAddLocalPlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(RemoveLocalPlayer, "remove_local_player", McpHandlers::Networking::HandleSessionsRemoveLocalPlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(HostLanServer, "host_lan_server", McpHandlers::Networking::HandleSessionsHostLanServer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(JoinLanServer, "join_lan_server", McpHandlers::Networking::HandleSessionsJoinLanServer, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(EnableVoiceChat, "enable_voice_chat", McpHandlers::Networking::HandleSessionsEnableVoiceChat, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetVoiceChannel, "set_voice_channel", McpHandlers::Networking::HandleSessionsSetVoiceChannel, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(MutePlayer, "mute_player", McpHandlers::Networking::HandleSessionsMutePlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_NW_CALL(SetVoiceAttenuation, "set_voice_attenuation", McpHandlers::Networking::HandleSessionsSetVoiceAttenuation, EMcpCallFlags::RequiresEditor)
+MCP_NW_CALL(GetSessionsInfo, "get_sessions_info", McpHandlers::Networking::HandleSessionsGetSessionsInfo, EMcpCallFlags::RequiresEditor)
 
 #undef MCP_NW_CALL
 

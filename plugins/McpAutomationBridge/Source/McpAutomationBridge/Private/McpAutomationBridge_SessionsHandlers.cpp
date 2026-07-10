@@ -47,6 +47,7 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
+#include "McpAutomationBridge_SessionsHandlers.h"
 
 // =============================================================================
 // Helper Macros
@@ -878,43 +879,46 @@ static bool HandleGetSessionsInfo(
 // configure_split_screen
 
 // set_split_screen_type
-bool UMcpAutomationBridgeSubsystem::HandleSessionsSetSplitScreenType(
+bool McpHandlers::Networking::HandleSessionsSetSplitScreenType(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleSetSplitScreenType(this, RequestId, Payload, Socket);
+    return HandleSetSplitScreenType(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // add_local_player
-bool UMcpAutomationBridgeSubsystem::HandleSessionsAddLocalPlayer(
+bool McpHandlers::Networking::HandleSessionsAddLocalPlayer(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleAddLocalPlayer(this, RequestId, Payload, Socket);
+    return HandleAddLocalPlayer(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // remove_local_player
-bool UMcpAutomationBridgeSubsystem::HandleSessionsRemoveLocalPlayer(
+bool McpHandlers::Networking::HandleSessionsRemoveLocalPlayer(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleRemoveLocalPlayer(this, RequestId, Payload, Socket);
+    return HandleRemoveLocalPlayer(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
@@ -922,43 +926,46 @@ bool UMcpAutomationBridgeSubsystem::HandleSessionsRemoveLocalPlayer(
 // configure_lan_play
 
 // host_lan_server
-bool UMcpAutomationBridgeSubsystem::HandleSessionsHostLanServer(
+bool McpHandlers::Networking::HandleSessionsHostLanServer(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleHostLanServer(this, RequestId, Payload, Socket);
+    return HandleHostLanServer(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // join_lan_server
-bool UMcpAutomationBridgeSubsystem::HandleSessionsJoinLanServer(
+bool McpHandlers::Networking::HandleSessionsJoinLanServer(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleJoinLanServer(this, RequestId, Payload, Socket);
+    return HandleJoinLanServer(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // enable_voice_chat
-bool UMcpAutomationBridgeSubsystem::HandleSessionsEnableVoiceChat(
+bool McpHandlers::Networking::HandleSessionsEnableVoiceChat(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleEnableVoiceChat(this, RequestId, Payload, Socket);
+    return HandleEnableVoiceChat(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
@@ -966,43 +973,46 @@ bool UMcpAutomationBridgeSubsystem::HandleSessionsEnableVoiceChat(
 // configure_voice_settings
 
 // set_voice_channel
-bool UMcpAutomationBridgeSubsystem::HandleSessionsSetVoiceChannel(
+bool McpHandlers::Networking::HandleSessionsSetVoiceChannel(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleSetVoiceChannel(this, RequestId, Payload, Socket);
+    return HandleSetVoiceChannel(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // mute_player
-bool UMcpAutomationBridgeSubsystem::HandleSessionsMutePlayer(
+bool McpHandlers::Networking::HandleSessionsMutePlayer(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleMutePlayer(this, RequestId, Payload, Socket);
+    return HandleMutePlayer(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // set_voice_attenuation
-bool UMcpAutomationBridgeSubsystem::HandleSessionsSetVoiceAttenuation(
+bool McpHandlers::Networking::HandleSessionsSetVoiceAttenuation(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleSetVoiceAttenuation(this, RequestId, Payload, Socket);
+    return HandleSetVoiceAttenuation(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
@@ -1010,15 +1020,16 @@ bool UMcpAutomationBridgeSubsystem::HandleSessionsSetVoiceAttenuation(
 // configure_push_to_talk
 
 // get_sessions_info
-bool UMcpAutomationBridgeSubsystem::HandleSessionsGetSessionsInfo(
+bool McpHandlers::Networking::HandleSessionsGetSessionsInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleGetSessionsInfo(this, RequestId, Payload, Socket);
+    return HandleGetSessionsInfo(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
