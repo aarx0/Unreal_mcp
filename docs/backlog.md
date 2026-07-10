@@ -62,6 +62,8 @@ Plan: [`consolidation-plan-2026-07-06.md`](consolidation-plan-2026-07-06.md).
   gap likely affects the OTHER create_* actions — their schemas advertise `path`/`folder` with a
   "falls back to savePath, then folder" description, but no handler reads `folder` at all and the
   widget/menu creators read only `savePath`. Worth a consistency sweep (a shared ResolveCreateFolder helper).
-- **animation_physics `setup_ragdoll`/`activate_ragdoll`** — full impls exist unwired; wire or retire.
+- ~~**animation_physics `setup_ragdoll`/`activate_ragdoll`** — full impls exist unwired; wire or retire~~ ✅ WIRED:
+  both actions now run the full implementations (`RequiresEditor | Mutating`); setup_ragdoll published with
+  its own fragment (it previously had no class at all — only activate_ragdoll had a NOT_IMPLEMENTED stub).
 - **`execute_python` IMC/BP-default authoring traps** — documented gotchas (TODO).
 - **Clone sync** — `c:/GitHub/Unreal_mcp` behind the fork (reset declined once).

@@ -1570,6 +1570,18 @@ bool McpHandlers::AnimationPhysics::HandleAnimPhysConfigureVehicle(
       FString VehicleType = TEXT("WheeledVehicle4W");
       Payload->TryGetStringField(TEXT("vehicleType"), VehicleType);
 
+      // An empty request must not create the movement component below.
+      const bool bAnyFieldRequested = Payload->HasField(TEXT("wheels")) ||
+                                      Payload->HasField(TEXT("engine")) ||
+                                      Payload->HasField(TEXT("transmission")) ||
+                                      Payload->HasField(TEXT("mass")) ||
+                                      Payload->HasField(TEXT("dragCoefficient"));
+      if (!bAnyFieldRequested) {
+        McpHandlerUtils::FMcpWriteReport EmptyReport;
+        return SendWriteReportResponse(&S, RequestingSocket, RequestId,
+                                       EmptyReport, Resp, FString(), nullptr);
+      }
+
       UWheeledVehicleMovementComponent4W *VehicleMC =
           TargetActor->FindComponentByClass<UWheeledVehicleMovementComponent4W>();
       bool bCreatedComponent = false;
@@ -2817,40 +2829,6 @@ bool McpHandlers::AnimationPhysics::HandleAnimPhysCreatePoseLibrary(
 #endif
 }
 
-// setup_ragdoll is advertised but the retired dispatcher had no branch for it, so
-// it always fell through to the terminal NOT_IMPLEMENTED else. This stub
-// preserves that response exactly. The orphaned HandleSetupRagdoll implementation
-// below has no call site and is the wire-up candidate — wiring it up vs
-// retiring the schema row is an open product decision (TODO.md).
-
-// activate_ragdoll is advertised but the retired dispatcher had no branch for it, so
-// it always fell through to the terminal NOT_IMPLEMENTED else. This stub
-// preserves that response exactly. The orphaned HandleActivateRagdoll implementation
-// below has no call site and is the wire-up candidate — wiring it up vs
-// retiring the schema row is an open product decision (TODO.md).
-bool McpHandlers::AnimationPhysics::HandleAnimPhysActivateRagdoll(
-    UMcpAutomationBridgeSubsystem& S,
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
-#if WITH_EDITOR
-  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-  Resp->SetStringField(TEXT("action"), TEXT("activate_ragdoll"));
-  const FString Message =
-      TEXT("Animation/Physics action 'activate_ragdoll' not implemented");
-  Resp->SetStringField(TEXT("error"), Message);
-  Resp->SetBoolField(TEXT("success"), false);
-  S.SendAutomationResponse(RequestingSocket, RequestId, false, Message, Resp,
-                         TEXT("NOT_IMPLEMENTED"));
-  return true;
-#else
-  S.SendAutomationResponse(
-      RequestingSocket, RequestId, false,
-      TEXT("Animation/Physics actions require editor build."), nullptr,
-      TEXT("NOT_IMPLEMENTED"));
-  return true;
-#endif
-}
-
 // NOTE: ExecuteEditorCommands and CreateControlRigBlueprint are defined in
 // McpAutomationBridgeSubsystem.cpp - do not duplicate definitions here.
 // The functions are declared in the subsystem header and implemented once
@@ -3061,7 +3039,6 @@ bool McpHandlers::AnimationPhysics::HandlePlayAnimMontage(
  * verifies an optional skeleton asset.
  *
  * @param RequestId The automation request identifier returned to the caller.
- * @param Action The original action string (expected "setup_ragdoll").
  * @param Payload JSON payload; must contain "actorName" and may include:
  *                - "blendWeight" (number): blend factor for animation/physics
  * update.
@@ -3069,19 +3046,12 @@ bool McpHandlers::AnimationPhysics::HandlePlayAnimMontage(
  * to validate.
  * @param RequestingSocket The websocket that initiated the request (may be
  * null).
- * @return true if this handler processed the action (either completed or sent
- * an error response); false if the action did not match "setup_ragdoll".
+ * @return true after sending a response (success or error).
  */
 bool McpHandlers::AnimationPhysics::HandleSetupRagdoll(
     UMcpAutomationBridgeSubsystem& S,
-    const FString &RequestId, const FString &Action,
-    const TSharedPtr<FJsonObject> &Payload,
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
-  const FString Lower = Action.ToLower();
-  if (!Lower.Equals(TEXT("setup_ragdoll"), ESearchCase::IgnoreCase)) {
-    return false;
-  }
-
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
     S.SendAutomationError(RequestingSocket, RequestId,
@@ -3221,22 +3191,15 @@ bool McpHandlers::AnimationPhysics::HandleSetupRagdoll(
  * over physics simulation state.
  *
  * @param RequestId The automation request identifier returned to the caller.
- * @param Action The original action string (expected "activate_ragdoll").
  * @param Payload JSON payload; must contain "actorName" and may include:
  *                - "activate" (bool): true to activate, false to deactivate (default: true)
  * @param RequestingSocket The websocket that initiated the request (may be null).
- * @return true if this handler processed the action.
+ * @return true after sending a response (success or error).
  */
 bool McpHandlers::AnimationPhysics::HandleActivateRagdoll(
     UMcpAutomationBridgeSubsystem& S,
-    const FString &RequestId, const FString &Action,
-    const TSharedPtr<FJsonObject> &Payload,
+    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
-  const FString Lower = Action.ToLower();
-  if (!Lower.Equals(TEXT("activate_ragdoll"), ESearchCase::IgnoreCase)) {
-    return false;
-  }
-
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
     S.SendAutomationError(RequestingSocket, RequestId,

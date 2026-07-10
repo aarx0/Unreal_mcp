@@ -527,14 +527,16 @@ parser survives only as a lint.
     became `HandleSkeleton*` members — 21 thin wrappers over the dedicated
     members the retired `HandleManageSkeleton` chain delegated to, 8
     verbatim extractions of its inline branches. **setup_ragdoll and
-    activate_ragdoll are advertised-but-unwired** (Aaron's dogfood find):
-    the retired dispatcher had no branch for either name, so both always
-    answered its terminal NOT_IMPLEMENTED else — their classes are explicit
-    stubs preserving that response byte-for-byte (flags `None`, so the
-    members answer the chain's own compile-time stub in non-editor builds
-    too), the orphaned `HandleSetupRagdoll`/`HandleActivateRagdoll`
-    implementations stay in place as wire-up candidates, and
-    wire-the-orphans vs retire-the-rows is logged for Aaron (TODO.md).
+    activate_ragdoll are wired to real implementations**
+    (`HandleSetupRagdoll`/`HandleActivateRagdoll`,
+    `RequiresEditor | Mutating`): both were initially
+    advertised-but-unwired (Aaron's dogfood find — the retired dispatcher
+    had no branch for either name, so both always answered its terminal
+    NOT_IMPLEMENTED else while the full implementations sat orphaned);
+    the wire-up re-pointed activate_ragdoll's stub class at the real body
+    and published setup_ragdoll (which until then had no class or
+    fragment at all) with its own fragment (actorName required;
+    blendWeight, skeletonPath optional).
     Decl burn-down — 27 of 85 rows fixed, in three classes: (1) spellings
     only the deleted shadowed copies read were dropped (`sequenceName`,
     `montageName`, add_notify's `animationPath`/`time`, set_bone_key's

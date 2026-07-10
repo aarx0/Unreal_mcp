@@ -5,10 +5,9 @@
 // fragment in a S_<Suffix>() function; the published facade schema folds those
 // fragments and GetDecl() derives the validation decl from the same fragment via
 // McpDeriveDecl(), so schema and decl are one source and cannot drift. Run()
-// delegates to the subsystem member handlers — HandleAnimPhys* (AnimationHandlers.cpp)
-// for the 14 core actions, HandleAnimAuthoring* (AnimationAuthoringHandlers.cpp)
-// for the 42 authoring actions, HandleSkeleton* (SkeletonHandlers.cpp) for the 29
-// skeleton actions — until the module split de-members those bodies.
+// delegates to the McpHandlers::AnimationPhysics free functions
+// (AnimationHandlers.cpp for the 14 core actions, AnimationAuthoringHandlers.cpp
+// for the 42 authoring actions, SkeletonHandlers.cpp for the 29 skeleton actions).
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
@@ -31,9 +30,7 @@ namespace McpCalls::AnimationPhysics
 // assetPath, add_montage_section's assetPath/montagePath/name, the notifyClass/
 // notifyName one-ofs, create_socket's attachBoneName/boneName, ...) author each
 // optional: the requirement is "at least one", which the decl vocabulary cannot
-// express and each handler enforces itself. setup_ragdoll/activate_ragdoll are
-// advertised-but-unwired stubs (see the class comment below) — their fragments
-// are authored from their contract like any other action.
+// express and each handler enforces itself.
 
 // Core (AnimationHandlers.cpp)
 
@@ -160,6 +157,14 @@ static void S_CreatePoseLibrary(FMcpSchemaBuilder& B)
 	 .Required({TEXT("name"), TEXT("skeletonPath")});
 }
 
+
+static void S_SetupRagdoll(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .Number(TEXT("blendWeight"), TEXT("setup_ragdoll: animation/physics blend weight (default 1; values below 1 keep animation updating in editor)."))
+	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Required({TEXT("actorName")});
+}
 
 static void S_ActivateRagdoll(FMcpSchemaBuilder& B)
 {
@@ -956,20 +961,13 @@ static void S_MirrorWeights(FMcpSchemaBuilder& B)
 }
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
-// RequiresEditor on 83 of 85: all three retired chains were whole-editor-gated
-// (the primary dispatcher answered a NOT_IMPLEMENTED stub in non-editor
-// builds; the authoring and skeleton TUs are compiled only WITH_EDITOR).
-// setup_ragdoll/activate_ragdoll carry EMcpCallFlags::None so their members
-// preserve the retired chain's exact behavior in every build flavor: the two
-// names are advertised but the dispatcher had no branch for them — they always
-// answered the terminal NOT_IMPLEMENTED else, and the orphaned
-// HandleSetupRagdoll/HandleActivateRagdoll implementations have no call site
-// (wire-up vs retire is Aaron's call — TODO.md). Mutating on the writers; the
-// readers are get_animation_info, get_skeleton_info, list_bones, list_sockets,
-// and list_physics_bodies, and seven more actions write nothing:
-// import_morph_targets (info/redirect only), normalize_weights, prune_weights,
-// auto_skin_weights, copy_weights, assign_cloth_asset_to_mesh (honest
-// MANUAL_INTERVENTION_REQUIRED errors), and the two ragdoll stubs.
+// RequiresEditor on all 85: the handlers use editor-only APIs (the handler TUs
+// gate on WITH_EDITOR and answer NOT_IMPLEMENTED in non-editor builds).
+// Mutating on the writers; the readers are get_animation_info,
+// get_skeleton_info, list_bones, list_sockets, and list_physics_bodies, and six
+// more actions write nothing: import_morph_targets (info/redirect only),
+// normalize_weights, prune_weights, auto_skin_weights, copy_weights, and
+// assign_cloth_asset_to_mesh (honest MANUAL_INTERVENTION_REQUIRED errors).
 
 #define MCP_AP_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                         \
 class FMcpCall_AnimationPhysics_##ClassSuffix final : public FMcpCall                     \
@@ -1001,7 +999,8 @@ MCP_AP_CALL(CreateAnimationAsset, "create_animation_asset", McpHandlers::Animati
 MCP_AP_CALL(SetupRetargeting, "setup_retargeting", McpHandlers::AnimationPhysics::HandleAnimPhysSetupRetargeting, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(PlayMontage, "play_montage", McpHandlers::AnimationPhysics::HandleAnimPhysPlayMontage, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_AP_CALL(CreatePoseLibrary, "create_pose_library", McpHandlers::AnimationPhysics::HandleAnimPhysCreatePoseLibrary, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_AP_CALL(ActivateRagdoll, "activate_ragdoll", McpHandlers::AnimationPhysics::HandleAnimPhysActivateRagdoll, EMcpCallFlags::None)
+MCP_AP_CALL(SetupRagdoll, "setup_ragdoll", McpHandlers::AnimationPhysics::HandleSetupRagdoll, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_AP_CALL(ActivateRagdoll, "activate_ragdoll", McpHandlers::AnimationPhysics::HandleActivateRagdoll, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Animation authoring (AnimationAuthoringHandlers.cpp)
 MCP_AP_CALL(CreateAnimationSequence, "create_animation_sequence", McpHandlers::AnimationPhysics::HandleAnimAuthoringCreateAnimationSequence, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -1098,6 +1097,7 @@ void McpRegisterAnimationPhysicsCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_SetupRetargeting>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_PlayMontage>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_CreatePoseLibrary>());
+	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_SetupRagdoll>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_ActivateRagdoll>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_CreateAnimationSequence>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_AnimationPhysics_SetSequenceLength>());

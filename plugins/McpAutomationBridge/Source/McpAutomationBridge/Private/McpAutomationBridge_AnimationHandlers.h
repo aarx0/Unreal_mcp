@@ -27,8 +27,7 @@ bool HandleAnimPhysCreateAnimationAsset(UMcpAutomationBridgeSubsystem& S, const 
 bool HandleAnimPhysSetupRetargeting(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 bool HandleAnimPhysPlayMontage(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 bool HandleAnimPhysCreatePoseLibrary(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
-bool HandleAnimPhysActivateRagdoll(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 bool HandlePlayAnimMontage(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const FString &Action, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
-bool HandleSetupRagdoll(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const FString &Action, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
-bool HandleActivateRagdoll(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const FString &Action, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+bool HandleSetupRagdoll(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+bool HandleActivateRagdoll(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 } // namespace McpHandlers::AnimationPhysics
