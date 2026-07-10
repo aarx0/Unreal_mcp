@@ -208,6 +208,7 @@
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
+#include "McpAutomationBridge_CharacterHandlers.h"
 #include "McpResponseHelpers.h"
 
 // =============================================================================
@@ -588,13 +589,14 @@ static bool AddBlueprintVariableChar(UBlueprint* Blueprint, const FString& VarNa
 // Payload:  { "name": string, "path"?: "/Game", "skeletalMeshPath"?: string }
 // Response: { "blueprintPath": string, "name": string, "parentClass": "Character" }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterCreateBlueprint(
+bool McpHandlers::Character::HandleCharacterCreateBlueprint(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString Name = GetJsonStringField(Payload, TEXT("name"));
@@ -602,7 +604,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterCreateBlueprint(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -613,7 +615,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterCreateBlueprint(
         RequestedMesh = LoadObject<USkeletalMesh>(nullptr, *SkeletalMeshPath);
         if (!RequestedMesh)
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Skeletal mesh not found: %s"), *SkeletalMeshPath), TEXT("ASSET_NOT_FOUND"));
             return true;
         }
@@ -623,7 +625,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterCreateBlueprint(
     UBlueprint* Blueprint = CreateCharacterBlueprint(Path, Name, Error);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -664,7 +666,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterCreateBlueprint(
 
         if (!bSkeletalMeshAssigned)
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("No skeletal mesh component found to assign '%s' on blueprint '%s'."),
                     *SkeletalMeshPath, *(Path / Name)),
                 TEXT("NO_MESH_COMPONENT"));
@@ -684,7 +686,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterCreateBlueprint(
         Result->SetBoolField(TEXT("skeletalMeshAssigned"), bSkeletalMeshAssigned);
     }
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Character blueprint created"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Character blueprint created"), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -697,18 +699,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterCreateBlueprint(
 // Payload:  { "blueprintPath": string, "capsuleRadius"?: 42, "capsuleHalfHeight"?: 96 }
 // Response: { "blueprintPath": string, "capsuleRadius": number, "capsuleHalfHeight": number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCapsuleComponent(
+bool McpHandlers::Character::HandleCharacterConfigureCapsuleComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     const bool bHasRadius = Payload->HasField(TEXT("capsuleRadius"));
@@ -721,7 +724,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCapsuleComponent(
         : nullptr;
     if (!CharCDO)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no capsule to configure."), *BlueprintPath),
             TEXT("NOT_A_CHARACTER"));
         return true;
@@ -730,7 +733,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCapsuleComponent(
     UCapsuleComponent* Capsule = CharCDO->GetCapsuleComponent();
     if (!Capsule)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Character blueprint '%s' has no capsule component."), *BlueprintPath),
             TEXT("NO_CAPSULE"));
         return true;
@@ -773,7 +776,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCapsuleComponent(
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetNumberField(TEXT("capsuleRadius"), Capsule->GetUnscaledCapsuleRadius());
     Result->SetNumberField(TEXT("capsuleHalfHeight"), Capsule->GetUnscaledCapsuleHalfHeight());
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Capsule configured"), Blueprint);
 #endif // WITH_EDITOR
 }
@@ -789,18 +792,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCapsuleComponent(
 //             "meshRotation"?: {pitch,yaw,roll} }
 // Response: { "blueprintPath": string, "skeletalMesh"?: string, "animBlueprint"?: string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMeshComponent(
+bool McpHandlers::Character::HandleCharacterConfigureMeshComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     FString SkeletalMeshPath = GetJsonStringField(Payload, TEXT("skeletalMeshPath"));
@@ -813,7 +817,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMeshComponent(
         RequestedMesh = LoadObject<USkeletalMesh>(nullptr, *SkeletalMeshPath);
         if (!RequestedMesh)
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Skeletal mesh not found: %s"), *SkeletalMeshPath), TEXT("ASSET_NOT_FOUND"));
             return true;
         }
@@ -824,7 +828,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMeshComponent(
         RequestedAnimBP = LoadObject<UAnimBlueprint>(nullptr, *AnimBPPath);
         if (!RequestedAnimBP || !RequestedAnimBP->GeneratedClass)
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Animation Blueprint not found: %s"), *AnimBPPath), TEXT("ASSET_NOT_FOUND"));
             return true;
         }
@@ -839,7 +843,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMeshComponent(
     USkeletalMeshComponent* Mesh = CharCDO ? CharCDO->GetMesh() : nullptr;
     if (!Mesh)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no mesh component to configure."), *BlueprintPath),
             TEXT("NOT_A_CHARACTER"));
         return true;
@@ -906,7 +910,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMeshComponent(
         Result->SetStringField(TEXT("animBlueprint"), AnimBPPath);
         Result->SetBoolField(TEXT("animBlueprintAssigned"), bAnimBlueprintAssigned);
     }
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Mesh configured"), Blueprint);
 #endif // WITH_EDITOR
 }
@@ -924,18 +928,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMeshComponent(
 // Response: { "blueprintPath": string, "springArmLength": number,
 //             "usePawnControlRotation": bool, "lagEnabled": bool }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCameraComponent(
+bool McpHandlers::Character::HandleCharacterConfigureCameraComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     const bool bHasLength = Payload->HasField(TEXT("springArmLength"));
@@ -1016,7 +1021,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCameraComponent(
         Result->SetBoolField(TEXT("usePawnControlRotation"), SpringArm->bUsePawnControlRotation);
         Result->SetBoolField(TEXT("lagEnabled"), SpringArm->bEnableCameraLag);
     }
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Camera configured"), Blueprint);
 #endif // WITH_EDITOR
 }
@@ -1043,18 +1048,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCameraComponent(
 //             "sprintSpeed"?: number, "sprintSpeedTarget"?: string,
 //             "variablesAdded"?: string[] }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMovementSpeeds(
+bool McpHandlers::Character::HandleCharacterConfigureMovementSpeeds(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     ACharacter* CharCDO = Blueprint->GeneratedClass
@@ -1063,7 +1069,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMovementSpeeds(
     UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
     if (!Movement)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
             TEXT("NOT_A_CHARACTER"));
         return true;
@@ -1176,7 +1182,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMovementSpeeds(
     {
         Result->SetArrayField(TEXT("variablesAdded"), VarsAdded);
     }
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Movement speeds configured"), Blueprint);
 #endif // WITH_EDITOR
 }
@@ -1196,18 +1202,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureMovementSpeeds(
 // Response: { "blueprintPath": string, "requestedJumpHeight"?: number,
 //             "appliedJumpZVelocity"?: number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureJump(
+bool McpHandlers::Character::HandleCharacterConfigureJump(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     ACharacter* CharCDO = Blueprint->GeneratedClass
@@ -1216,7 +1223,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureJump(
     UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
     if (!Movement)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
             TEXT("NOT_A_CHARACTER"));
         return true;
@@ -1288,7 +1295,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureJump(
         Result->SetNumberField(TEXT("requestedJumpHeight"), RequestedJumpHeight);
         Result->SetNumberField(TEXT("appliedJumpZVelocity"), Movement->JumpZVelocity);
     }
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Jump configured"), Blueprint);
 #endif // WITH_EDITOR
 }
@@ -1304,18 +1311,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureJump(
 //             "useControllerRotationRoll"?: false, "rotationRate"?: 540 }
 // Response: { "blueprintPath": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureRotation(
+bool McpHandlers::Character::HandleCharacterConfigureRotation(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     ACharacter* CharCDO = Blueprint->GeneratedClass
@@ -1324,7 +1332,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureRotation(
     UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
     if (!Movement)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
             TEXT("NOT_A_CHARACTER"));
         return true;
@@ -1365,7 +1373,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureRotation(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Rotation configured"), Blueprint);
 #endif // WITH_EDITOR
 }
@@ -1382,18 +1390,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureRotation(
 // Response: { "blueprintPath": string, "modeName": string, "modeId": number,
 //             "stateVariable": string, "speedVariable": string, "customSpeed": number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterAddCustomMovementMode(
+bool McpHandlers::Character::HandleCharacterAddCustomMovementMode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     FString ModeName = GetJsonStringField(Payload, TEXT("modeName"), TEXT("Custom"));
@@ -1445,7 +1454,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterAddCustomMovementMode(
     Result->SetNumberField(TEXT("customSpeed"), CustomSpeed);
     Result->SetStringField(TEXT("cmcProperty"), TEXT("MaxCustomMovementSpeed"));
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Custom movement mode added with state tracking variables"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Custom movement mode added with state tracking variables"), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -1459,18 +1468,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterAddCustomMovementMode(
 //             "navAgentHeight"?: 192, "avoidanceEnabled"?: false }
 // Response: { "blueprintPath": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureNavMovement(
+bool McpHandlers::Character::HandleCharacterConfigureNavMovement(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     ACharacter* CharCDO = Blueprint->GeneratedClass
@@ -1479,7 +1489,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureNavMovement(
     UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
     if (!Movement)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
             TEXT("NOT_A_CHARACTER"));
         return true;
@@ -1510,7 +1520,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureNavMovement(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Nav movement configured"), Blueprint);
 #endif // WITH_EDITOR
 }
@@ -1634,32 +1644,33 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureNavMovement(
 // Response: { "blueprintPath": string, "surfaceType": string, "soundPath": string,
 //             "mapVariable": string, "mapSize": number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterMapSurfaceToSound(
+bool McpHandlers::Character::HandleCharacterMapSurfaceToSound(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     FString SurfaceType = GetJsonStringField(Payload, TEXT("surfaceType"));
     FString SoundPath = GetJsonStringField(Payload, TEXT("soundPath"));
     if (SurfaceType.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("Missing 'surfaceType'. Provide the surface name to map (e.g. 'Grass')."),
             TEXT("INVALID_ARGUMENT"));
         return true;
     }
     if (SoundPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("Missing 'soundPath'. Provide the sound asset (SoundBase) to map to this surface."),
             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -1668,7 +1679,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterMapSurfaceToSound(
     USoundBase* Sound = LoadObject<USoundBase>(nullptr, *SoundPath);
     if (!Sound)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Sound asset not found: %s"), *SoundPath), TEXT("ASSET_NOT_FOUND"));
         return true;
     }
@@ -1689,7 +1700,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterMapSurfaceToSound(
     FSoftObjectProperty* SoundValueProperty = MapProperty ? CastField<FSoftObjectProperty>(MapProperty->ValueProp) : nullptr;
     if (!CDO || !MapProperty || !CastField<FNameProperty>(MapProperty->KeyProp) || !SoundValueProperty)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("FootstepSoundMap on '%s' is not a TMap<Name, SoftObject> variable; retype or remove the existing variable and retry."), *BlueprintPath),
             TEXT("VARIABLE_TYPE_MISMATCH"));
         return true;
@@ -1728,7 +1739,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterMapSurfaceToSound(
     Result->SetStringField(TEXT("mapVariable"), TEXT("FootstepSoundMap"));
     Result->SetNumberField(TEXT("mapSize"), MapHelper.Num());
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Surface mapped to footstep sound"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Surface mapped to footstep sound"), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -1779,18 +1790,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterMapSurfaceToSound(
 //             "bFindCameraComponentWhenViewTarget"?: bool, "playerViewState": object,
 //             "movementVariables"?: string[], "movementVariablesTruncated"?: bool }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterGetInfo(
+bool McpHandlers::Character::HandleCharacterGetInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
@@ -1974,7 +1986,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterGetInfo(
         Result->SetBoolField(TEXT("movementVariablesTruncated"), bMovementVarsTruncated);
     }
 
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Character info retrieved"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Character info retrieved"), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -1992,18 +2004,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterGetInfo(
 //             "acceleration"?: 2048 }
 // Response: { "blueprintPath": string }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupMovement(
+bool McpHandlers::Character::HandleCharacterSetupMovement(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     ACharacter* CharCDO = Blueprint->GeneratedClass
@@ -2012,7 +2025,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupMovement(
     UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
     if (!Movement)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
             TEXT("NOT_A_CHARACTER"));
         return true;
@@ -2053,7 +2066,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupMovement(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Movement configured"), nullptr);
 #endif // WITH_EDITOR
 }
@@ -2066,18 +2079,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetupMovement(
 // Payload:  { "blueprintPath": string, "walkSpeed"?: 600 }
 // Response: { "blueprintPath": string, "walkSpeed": number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterSetWalkSpeed(
+bool McpHandlers::Character::HandleCharacterSetWalkSpeed(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     double WalkSpeed = GetJsonNumberField(Payload, TEXT("walkSpeed"), 600.0);
@@ -2096,7 +2110,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetWalkSpeed(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetNumberField(TEXT("walkSpeed"), WalkSpeed);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Walk speed set"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Walk speed set"), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -2111,24 +2125,25 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetWalkSpeed(
 // Response: { "blueprintPath": string, "jumpHeight": number,
 //             "appliedJumpZVelocity": number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterSetJumpHeight(
+bool McpHandlers::Character::HandleCharacterSetJumpHeight(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     double JumpHeight = GetJsonNumberField(Payload, TEXT("jumpHeight"), 600.0);
     if (JumpHeight < 0.0)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("jumpHeight must be >= 0 (apex height in cm; converted to JumpZVelocity)."),
             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -2140,7 +2155,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetJumpHeight(
     UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
     if (!Movement)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
             TEXT("NOT_A_CHARACTER"));
         return true;
@@ -2149,7 +2164,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetJumpHeight(
     const double GravityMagnitude = FMath::Abs(static_cast<double>(UPhysicsSettings::Get()->DefaultGravityZ) * Movement->GravityScale);
     if (GravityMagnitude <= KINDA_SMALL_NUMBER)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Cannot convert jumpHeight to JumpZVelocity: effective gravity is zero (gravityScale=%g). Set a non-zero gravityScale first."), Movement->GravityScale),
             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -2162,7 +2177,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetJumpHeight(
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetNumberField(TEXT("jumpHeight"), JumpHeight);
     Result->SetNumberField(TEXT("appliedJumpZVelocity"), Movement->JumpZVelocity);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Jump height set"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Jump height set"), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -2175,18 +2190,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetJumpHeight(
 // Payload:  { "blueprintPath": string, "gravityScale"?: 1.0 }
 // Response: { "blueprintPath": string, "gravityScale": number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterSetGravityScale(
+bool McpHandlers::Character::HandleCharacterSetGravityScale(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     double GravityScale = GetJsonNumberField(Payload, TEXT("gravityScale"), 1.0);
@@ -2205,7 +2221,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetGravityScale(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetNumberField(TEXT("gravityScale"), GravityScale);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Gravity scale set"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Gravity scale set"), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -2218,18 +2234,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetGravityScale(
 // Payload:  { "blueprintPath": string, "groundFriction"?: 8.0 }
 // Response: { "blueprintPath": string, "groundFriction": number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterSetGroundFriction(
+bool McpHandlers::Character::HandleCharacterSetGroundFriction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     double GroundFriction = GetJsonNumberField(Payload, TEXT("groundFriction"), 8.0);
@@ -2248,7 +2265,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetGroundFriction(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetNumberField(TEXT("groundFriction"), GroundFriction);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Ground friction set"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Ground friction set"), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -2261,18 +2278,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetGroundFriction(
 // Payload:  { "blueprintPath": string, "brakingDeceleration"?: 2048 }
 // Response: { "blueprintPath": string, "brakingDeceleration": number }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterSetBrakingDeceleration(
+bool McpHandlers::Character::HandleCharacterSetBrakingDeceleration(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     double Deceleration = GetJsonNumberField(Payload, TEXT("brakingDeceleration"), 2048.0);
@@ -2291,7 +2309,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetBrakingDeceleration(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetNumberField(TEXT("brakingDeceleration"), Deceleration);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Braking deceleration set"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Braking deceleration set"), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -2306,18 +2324,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterSetBrakingDeceleration(
 // Response: { "blueprintPath": string, "crouchSpeed": number,
 //             "crouchedHalfHeight": number, "canCrouch": bool }
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCrouch(
+bool McpHandlers::Character::HandleCharacterConfigureCrouch(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Character handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     const bool bHasCrouchSpeed = Payload->HasField(TEXT("crouchSpeed"));
@@ -2333,7 +2352,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCrouch(
     UCharacterMovementComponent* Movement = CharCDO ? CharCDO->GetCharacterMovement() : nullptr;
     if (!Movement)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Blueprint '%s' is not an ACharacter; no CharacterMovementComponent to configure."), *BlueprintPath),
             TEXT("NOT_A_CHARACTER"));
         return true;
@@ -2367,7 +2386,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCharacterConfigureCrouch(
     Result->SetNumberField(TEXT("crouchSpeed"), Movement->MaxWalkSpeedCrouched);
     Result->SetNumberField(TEXT("crouchedHalfHeight"), Movement->GetCrouchedHalfHeight());
     Result->SetBoolField(TEXT("canCrouch"), Movement->NavAgentProps.bCanCrouch);
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Crouch configured"), nullptr);
 #endif // WITH_EDITOR
 }

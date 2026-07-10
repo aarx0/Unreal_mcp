@@ -150,6 +150,7 @@
 #include "McpAutomationBridgeHelpers.h"
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_InteractionHandlers.h"
 
 // =============================================================================
 // Editor-Only Includes
@@ -306,14 +307,15 @@ static void McpInteractionAddComponentReadback(const TSharedPtr<FJsonObject>& Re
  * Payload: { "blueprintPath": string, "componentName"?: string, "traceDistance"?: number }
  * Response: { "componentAdded": bool, "componentName": string, assetVerification... }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateComponent(
+bool McpHandlers::Interaction::HandleInteractionCreateComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
   FString ComponentName = GetJsonStringField(Payload, TEXT("componentName"), TEXT("InteractionComponent"));
 
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: blueprintPath"), TEXT("MISSING_PARAMETER"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: blueprintPath"), TEXT("MISSING_PARAMETER"));
     return true;
   }
 
@@ -321,12 +323,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateComponent(
   FString ResolvedPath, LoadError;
   UBlueprint* Blueprint = LoadBlueprintAsset(BlueprintPath, ResolvedPath, LoadError);
   if (!Blueprint) {
-    SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
+    S.SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
     return true;
   }
 
   if (!Blueprint->SimpleConstructionScript) {
-    SendAutomationError(Socket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("INVALID_BP"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("INVALID_BP"));
     return true;
   }
 
@@ -346,12 +348,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateComponent(
     Result->SetBoolField(TEXT("componentAdded"), true);
     Result->SetStringField(TEXT("componentName"), ComponentName);
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Interaction component added"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Interaction component added"), Result);
   } else {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create interaction component"), TEXT("COMPONENT_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create interaction component"), TEXT("COMPONENT_CREATE_FAILED"));
   }
 #else
-  SendAutomationError(Socket, RequestId, TEXT("create_interaction_component is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("create_interaction_component is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -369,7 +371,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateComponent(
  *            "componentsUpdated": number, "variablesAdded": string[],
  *            "appliedProperties": string[], "configured": bool, assetVerification... }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureTrace(
+bool McpHandlers::Interaction::HandleInteractionConfigureTrace(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
@@ -381,7 +384,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureTrace(
   const bool bHasTraceRadius = Payload->TryGetNumberField(TEXT("traceRadius"), TraceRadius);
 
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: blueprintPath"), TEXT("MISSING_PARAMETER"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: blueprintPath"), TEXT("MISSING_PARAMETER"));
     return true;
   }
 
@@ -389,7 +392,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureTrace(
   FString ResolvedPath, LoadError;
   UBlueprint* Blueprint = LoadBlueprintAsset(BlueprintPath, ResolvedPath, LoadError);
   if (!Blueprint) {
-    SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
+    S.SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
     return true;
   }
 
@@ -441,7 +444,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureTrace(
   }
 
   if (!McpSafeCompileBlueprint(Blueprint)) {
-    SendAutomationError(Socket, RequestId, TEXT("Blueprint failed to compile; trace values were not written"), TEXT("COMPILE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Blueprint failed to compile; trace values were not written"), TEXT("COMPILE_FAILED"));
     return true;
   }
 
@@ -449,7 +452,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureTrace(
   auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
     FString ApplyError;
     if (!McpInteractionApplyVarDefault(Blueprint, VarName, Value, ApplyError)) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
                           TEXT("PROPERTY_WRITE_FAILED"));
       return false;
@@ -483,9 +486,9 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureTrace(
   Result->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
   Result->SetBoolField(TEXT("configured"), true);
   McpHandlerUtils::AddVerification(Result, Blueprint);
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Interaction trace configured"), Result);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Interaction trace configured"), Result);
 #else
-  SendAutomationError(Socket, RequestId, TEXT("configure_interaction_trace is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("configure_interaction_trace is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -503,7 +506,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureTrace(
  *            "promptTextFormat"?: string, "variablesAdded": string[],
  *            "appliedProperties": string[], "configured": bool, "blueprintPath": string }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureWidget(
+bool McpHandlers::Interaction::HandleInteractionConfigureWidget(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
@@ -517,7 +521,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureWidget(
   const bool bHasPromptTextFormat = Payload->TryGetStringField(TEXT("promptTextFormat"), PromptTextFormat);
 
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: blueprintPath"), TEXT("MISSING_PARAMETER"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: blueprintPath"), TEXT("MISSING_PARAMETER"));
     return true;
   }
 
@@ -525,7 +529,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureWidget(
   FString ResolvedPath, LoadError;
   UBlueprint* Blueprint = LoadBlueprintAsset(BlueprintPath, ResolvedPath, LoadError);
   if (!Blueprint) {
-    SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
+    S.SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
     return true;
   }
 
@@ -536,7 +540,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureWidget(
       WidgetClassPath += TEXT(".") + FPaths::GetBaseFilename(WidgetClassPath) + TEXT("_C");
     }
     if (!FPackageName::DoesPackageExist(FPackageName::ObjectPathToPackageName(WidgetClassPath))) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("widgetClass '%s' does not exist"), *WidgetClass),
                           TEXT("WIDGET_CLASS_NOT_FOUND"));
       return true;
@@ -567,7 +571,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureWidget(
   }
 
   if (!McpSafeCompileBlueprint(Blueprint)) {
-    SendAutomationError(Socket, RequestId, TEXT("Blueprint failed to compile; widget values were not written"), TEXT("COMPILE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Blueprint failed to compile; widget values were not written"), TEXT("COMPILE_FAILED"));
     return true;
   }
 
@@ -575,7 +579,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureWidget(
   auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
     FString ApplyError;
     if (!McpInteractionApplyVarDefault(Blueprint, VarName, Value, ApplyError)) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
                           TEXT("PROPERTY_WRITE_FAILED"));
       return false;
@@ -618,9 +622,9 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureWidget(
   Result->SetBoolField(TEXT("configured"), true);
   Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
   McpHandlerUtils::AddVerification(Result, Blueprint);
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Interaction widget configured"), Result);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Interaction widget configured"), Result);
 #else
-  SendAutomationError(Socket, RequestId, TEXT("configure_interaction_widget is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("configure_interaction_widget is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -634,7 +638,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureWidget(
  * Payload: { "blueprintPath": string }
  * Response: { "eventsAdded": string[], "blueprintPath": string, "eventCount": number }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionAddEvents(
+bool McpHandlers::Interaction::HandleInteractionAddEvents(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
@@ -643,7 +648,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionAddEvents(
   FString ResolvedPath, LoadError;
   UBlueprint* Blueprint = LoadBlueprintAsset(BlueprintPath, ResolvedPath, LoadError);
   if (!Blueprint) {
-    SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
+    S.SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
     return true;
   }
 
@@ -685,9 +690,9 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionAddEvents(
   Result->SetNumberField(TEXT("eventCount"), EventNames.Num());
 
   McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Interaction events added"), Result);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Interaction events added"), Result);
 #else
-  SendAutomationError(Socket, RequestId, TEXT("add_interaction_events is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("add_interaction_events is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -709,14 +714,15 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionAddEvents(
  * Response: { "interfacePath": string, "interfaceName": string, "created": bool,
  *            "recommendedFunctions": string[], "note": string }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateInteractableInterface(
+bool McpHandlers::Interaction::HandleInteractionCreateInteractableInterface(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString Name = GetJsonStringField(Payload, TEXT("name"));
   FString Folder = GetJsonStringField(Payload, TEXT("folder"), TEXT("/Game/Interfaces"));
 
   if (Name.IsEmpty()) {
-    SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
     return true;
   }
 
@@ -731,7 +737,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateInteractableInterface
   // Create the package
   UPackage* Package = CreatePackage(*PackageName);
   if (!Package) {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_CREATE_FAILED"));
     return true;
   }
 
@@ -780,12 +786,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateInteractableInterface
 
     Result->SetArrayField(TEXT("functionsAdded"), FunctionsAdded);
 
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Interactable interface created"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Interactable interface created"), Result);
   } else {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create interface blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create interface blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
   }
 #else
-  SendAutomationError(Socket, RequestId, TEXT("create_interactable_interface is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("create_interactable_interface is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -810,7 +816,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateInteractableInterface
  *            "autoCloseDelay": number, "requiresKey": bool,
  *            "appliedProperties": string[], assetVerification... }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateDoorActor(
+bool McpHandlers::Interaction::HandleInteractionCreateDoorActor(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString Name = GetJsonStringField(Payload, TEXT("name"));
@@ -824,7 +831,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateDoorActor(
   bool RequiresKey = GetJsonBoolField(Payload, TEXT("requiresKey"), false);
 
   if (Name.IsEmpty()) {
-    SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
     return true;
   }
 
@@ -833,7 +840,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateDoorActor(
   FString PackageName;
   FString PathError;
   if (!ValidateAssetCreationPath(Folder, Name, PackageName, PathError)) {
-    SendAutomationError(Socket, RequestId, PathError, TEXT("INVALID_PATH"));
+    S.SendAutomationError(Socket, RequestId, PathError, TEXT("INVALID_PATH"));
     return true;
   }
 
@@ -852,18 +859,18 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateDoorActor(
       Result->SetObjectField(TEXT("ignoredParams"), IgnoredParams);
     }
     McpHandlerUtils::AddVerification(Result, ExistingDoorBP);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Door actor already exists"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Door actor already exists"), Result);
     return true;
   }
 
   UPackage* Package = CreatePackage(*PackageName);
   if (!Package) {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_CREATE_FAILED"));
     return true;
   }
 
   if (FindObject<UBlueprint>(Package, *SanitizedName)) {
-    SendAutomationError(Socket, RequestId, TEXT("Door blueprint already exists in package but could not be loaded"), TEXT("ASSET_ALREADY_EXISTS"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Door blueprint already exists in package but could not be loaded"), TEXT("ASSET_ALREADY_EXISTS"));
     return true;
   }
 
@@ -916,7 +923,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateDoorActor(
     McpInteractionEnsureVar(DoorBP, TEXT("bRequiresKey"), BoolType);
 
     if (!McpSafeCompileBlueprint(DoorBP)) {
-      SendAutomationError(Socket, RequestId, TEXT("Door blueprint was created but failed to compile; door properties were not written"), TEXT("COMPILE_FAILED"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Door blueprint was created but failed to compile; door properties were not written"), TEXT("COMPILE_FAILED"));
       return true;
     }
 
@@ -924,7 +931,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateDoorActor(
     auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
       FString ApplyError;
       if (!McpInteractionApplyVarDefault(DoorBP, VarName, Value, ApplyError)) {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
                             TEXT("PROPERTY_WRITE_FAILED"));
         return false;
@@ -960,12 +967,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateDoorActor(
     Result->SetBoolField(TEXT("requiresKey"), RequiresKey);
     Result->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
     McpHandlerUtils::AddVerification(Result, DoorBP);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Door actor created"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Door actor created"), Result);
   } else {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create door blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create door blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
   }
 #else
-  SendAutomationError(Socket, RequestId, TEXT("create_door_actor is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("create_door_actor is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -984,7 +991,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateDoorActor(
  *            "variablesAdded": string[], "appliedProperties": string[],
  *            "configured": bool, "doorPath": string, assetVerification... }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureDoorProperties(
+bool McpHandlers::Interaction::HandleInteractionConfigureDoorProperties(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString DoorPath = GetJsonStringField(Payload, TEXT("doorPath"));
@@ -1005,7 +1013,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureDoorProperties(
   const bool bHasRequiresKey = Payload->TryGetBoolField(TEXT("requiresKey"), RequiresKey);
 
   if (DoorPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: doorPath"), TEXT("MISSING_PARAMETER"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: doorPath"), TEXT("MISSING_PARAMETER"));
     return true;
   }
 
@@ -1013,7 +1021,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureDoorProperties(
   FString ResolvedPath, LoadError;
   UBlueprint* Blueprint = LoadBlueprintAsset(DoorPath, ResolvedPath, LoadError);
   if (!Blueprint) {
-    SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
+    S.SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
     return true;
   }
 
@@ -1048,7 +1056,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureDoorProperties(
   }
 
   if (!McpSafeCompileBlueprint(Blueprint)) {
-    SendAutomationError(Socket, RequestId, TEXT("Blueprint failed to compile; door properties were not written"), TEXT("COMPILE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Blueprint failed to compile; door properties were not written"), TEXT("COMPILE_FAILED"));
     return true;
   }
 
@@ -1056,7 +1064,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureDoorProperties(
   auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
     FString ApplyError;
     if (!McpInteractionApplyVarDefault(Blueprint, VarName, Value, ApplyError)) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
                           TEXT("PROPERTY_WRITE_FAILED"));
       return false;
@@ -1111,9 +1119,9 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureDoorProperties(
   Result->SetBoolField(TEXT("configured"), true);
   Result->SetStringField(TEXT("doorPath"), DoorPath);
   McpHandlerUtils::AddVerification(Result, Blueprint);
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Door properties configured"), Result);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Door properties configured"), Result);
 #else
-  SendAutomationError(Socket, RequestId, TEXT("configure_door_properties is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("configure_door_properties is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -1134,7 +1142,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureDoorProperties(
  * Response: { "switchPath": string, "blueprintPath": string, "switchType": string,
  *            "appliedProperties": string[], assetVerification... }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateSwitchActor(
+bool McpHandlers::Interaction::HandleInteractionCreateSwitchActor(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString Name = GetJsonStringField(Payload, TEXT("name"));
@@ -1144,7 +1153,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateSwitchActor(
   FString SwitchType = GetJsonStringField(Payload, TEXT("switchType"), TEXT("button"));
 
   if (Name.IsEmpty()) {
-    SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
     return true;
   }
 
@@ -1153,13 +1162,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateSwitchActor(
   FString PackageName;
   FString PathError;
   if (!ValidateAssetCreationPath(Folder, Name, PackageName, PathError)) {
-    SendAutomationError(Socket, RequestId, PathError, TEXT("INVALID_PATH"));
+    S.SendAutomationError(Socket, RequestId, PathError, TEXT("INVALID_PATH"));
     return true;
   }
 
   UPackage* Package = CreatePackage(*PackageName);
   if (!Package) {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_CREATE_FAILED"));
     return true;
   }
 
@@ -1209,7 +1218,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateSwitchActor(
     McpInteractionEnsureVar(SwitchBP, TEXT("ResetTime"), FloatType);
 
     if (!McpSafeCompileBlueprint(SwitchBP)) {
-      SendAutomationError(Socket, RequestId, TEXT("Switch blueprint was created but failed to compile; switch properties were not written"), TEXT("COMPILE_FAILED"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Switch blueprint was created but failed to compile; switch properties were not written"), TEXT("COMPILE_FAILED"));
       return true;
     }
 
@@ -1217,7 +1226,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateSwitchActor(
     auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
       FString ApplyError;
       if (!McpInteractionApplyVarDefault(SwitchBP, VarName, Value, ApplyError)) {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
                             TEXT("PROPERTY_WRITE_FAILED"));
         return false;
@@ -1242,12 +1251,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateSwitchActor(
     Result->SetStringField(TEXT("switchType"), SwitchType);
     Result->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
     McpHandlerUtils::AddVerification(Result, SwitchBP);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Switch actor created"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Switch actor created"), Result);
   } else {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create switch blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create switch blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
   }
 #else
-  SendAutomationError(Socket, RequestId, TEXT("create_switch_actor is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("create_switch_actor is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -1265,7 +1274,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateSwitchActor(
  *            "variablesAdded": string[], "appliedProperties": string[],
  *            "configured": bool, "switchPath": string, assetVerification... }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureSwitchProperties(
+bool McpHandlers::Interaction::HandleInteractionConfigureSwitchProperties(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString SwitchPath = GetJsonStringField(Payload, TEXT("switchPath"));
@@ -1280,7 +1290,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureSwitchProperties(
   const bool bHasResetTime = Payload->TryGetNumberField(TEXT("resetTime"), ResetTime);
 
   if (SwitchPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: switchPath"), TEXT("MISSING_PARAMETER"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: switchPath"), TEXT("MISSING_PARAMETER"));
     return true;
   }
 
@@ -1288,7 +1298,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureSwitchProperties(
   FString ResolvedPath, LoadError;
   UBlueprint* Blueprint = LoadBlueprintAsset(SwitchPath, ResolvedPath, LoadError);
   if (!Blueprint) {
-    SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
+    S.SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
     return true;
   }
 
@@ -1317,7 +1327,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureSwitchProperties(
   }
 
   if (!McpSafeCompileBlueprint(Blueprint)) {
-    SendAutomationError(Socket, RequestId, TEXT("Blueprint failed to compile; switch properties were not written"), TEXT("COMPILE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Blueprint failed to compile; switch properties were not written"), TEXT("COMPILE_FAILED"));
     return true;
   }
 
@@ -1325,7 +1335,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureSwitchProperties(
   auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
     FString ApplyError;
     if (!McpInteractionApplyVarDefault(Blueprint, VarName, Value, ApplyError)) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
                           TEXT("PROPERTY_WRITE_FAILED"));
       return false;
@@ -1362,9 +1372,9 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureSwitchProperties(
   Result->SetBoolField(TEXT("configured"), true);
   Result->SetStringField(TEXT("switchPath"), SwitchPath);
   McpHandlerUtils::AddVerification(Result, Blueprint);
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Switch properties configured"), Result);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Switch properties configured"), Result);
 #else
-  SendAutomationError(Socket, RequestId, TEXT("configure_switch_properties is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("configure_switch_properties is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -1386,7 +1396,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureSwitchProperties(
  * Response: { "chestPath": string, "blueprintPath": string, "locked": bool,
  *            "appliedProperties": string[], assetVerification... }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateChestActor(
+bool McpHandlers::Interaction::HandleInteractionCreateChestActor(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString Name = GetJsonStringField(Payload, TEXT("name"));
@@ -1396,7 +1407,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateChestActor(
   bool Locked = GetJsonBoolField(Payload, TEXT("locked"), false);
 
   if (Name.IsEmpty()) {
-    SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
     return true;
   }
 
@@ -1406,7 +1417,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateChestActor(
   FString PackageName = PackagePath / Name;
   UPackage* Package = CreatePackage(*PackageName);
   if (!Package) {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_CREATE_FAILED"));
     return true;
   }
 
@@ -1464,7 +1475,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateChestActor(
     McpInteractionEnsureVar(ChestBP, TEXT("LootTable"), SoftObjectType);
 
     if (!McpSafeCompileBlueprint(ChestBP)) {
-      SendAutomationError(Socket, RequestId, TEXT("Chest blueprint was created but failed to compile; chest properties were not written"), TEXT("COMPILE_FAILED"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Chest blueprint was created but failed to compile; chest properties were not written"), TEXT("COMPILE_FAILED"));
       return true;
     }
 
@@ -1472,7 +1483,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateChestActor(
     auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
       FString ApplyError;
       if (!McpInteractionApplyVarDefault(ChestBP, VarName, Value, ApplyError)) {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
                             TEXT("PROPERTY_WRITE_FAILED"));
         return false;
@@ -1500,12 +1511,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateChestActor(
     Result->SetBoolField(TEXT("locked"), Locked);
     Result->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
     McpHandlerUtils::AddVerification(Result, ChestBP);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Chest actor created"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Chest actor created"), Result);
   } else {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create chest blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create chest blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
   }
 #else
-  SendAutomationError(Socket, RequestId, TEXT("create_chest_actor is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("create_chest_actor is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -1524,7 +1535,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateChestActor(
  *            "appliedProperties": string[], "configured": bool,
  *            "chestPath": string, assetVerification... }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureChestProperties(
+bool McpHandlers::Interaction::HandleInteractionConfigureChestProperties(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString ChestPath = GetJsonStringField(Payload, TEXT("chestPath"));
@@ -1540,7 +1552,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureChestProperties(
   FString LootTablePath = GetJsonStringField(Payload, TEXT("lootTablePath"));
 
   if (ChestPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: chestPath"), TEXT("MISSING_PARAMETER"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: chestPath"), TEXT("MISSING_PARAMETER"));
     return true;
   }
 
@@ -1548,7 +1560,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureChestProperties(
   FString ResolvedPath, LoadError;
   UBlueprint* Blueprint = LoadBlueprintAsset(ChestPath, ResolvedPath, LoadError);
   if (!Blueprint) {
-    SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
+    S.SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
     return true;
   }
 
@@ -1559,7 +1571,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureChestProperties(
       LootTableObjectPath += TEXT(".") + FPaths::GetBaseFilename(LootTableObjectPath);
     }
     if (!FPackageName::DoesPackageExist(FPackageName::ObjectPathToPackageName(LootTableObjectPath))) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("lootTablePath '%s' does not exist"), *LootTablePath),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -1594,7 +1606,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureChestProperties(
   }
 
   if (!McpSafeCompileBlueprint(Blueprint)) {
-    SendAutomationError(Socket, RequestId, TEXT("Blueprint failed to compile; chest properties were not written"), TEXT("COMPILE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Blueprint failed to compile; chest properties were not written"), TEXT("COMPILE_FAILED"));
     return true;
   }
 
@@ -1602,7 +1614,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureChestProperties(
   auto ApplyVar = [&](const TCHAR* ParamName, const FName VarName, const FString& Value) -> bool {
     FString ApplyError;
     if (!McpInteractionApplyVarDefault(Blueprint, VarName, Value, ApplyError)) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Failed to apply '%s': %s"), ParamName, *ApplyError),
                           TEXT("PROPERTY_WRITE_FAILED"));
       return false;
@@ -1645,9 +1657,9 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureChestProperties(
   Result->SetBoolField(TEXT("configured"), true);
   Result->SetStringField(TEXT("chestPath"), ChestPath);
   McpHandlerUtils::AddVerification(Result, Blueprint);
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Chest properties configured"), Result);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Chest properties configured"), Result);
 #else
-  SendAutomationError(Socket, RequestId, TEXT("configure_chest_properties is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("configure_chest_properties is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -1665,7 +1677,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionConfigureChestProperties(
  * Payload: { "name": string, "folder"?: string }
  * Response: { "leverPath": string, "blueprintPath": string }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateLeverActor(
+bool McpHandlers::Interaction::HandleInteractionCreateLeverActor(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString Name = GetJsonStringField(Payload, TEXT("name"));
@@ -1674,7 +1687,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateLeverActor(
           GetJsonStringField(Payload, TEXT("savePath"), TEXT("/Game/Interactables"))));
 
   if (Name.IsEmpty()) {
-    SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
     return true;
   }
 
@@ -1684,7 +1697,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateLeverActor(
   FString PackageName = PackagePath / Name;
   UPackage* Package = CreatePackage(*PackageName);
   if (!Package) {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_CREATE_FAILED"));
     return true;
   }
 
@@ -1728,12 +1741,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateLeverActor(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("leverPath"), LeverBP->GetPathName());
     Result->SetStringField(TEXT("blueprintPath"), LeverBP->GetPathName());
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Lever actor created"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Lever actor created"), Result);
   } else {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create lever blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create lever blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
   }
 #else
-  SendAutomationError(Socket, RequestId, TEXT("create_lever_actor is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("create_lever_actor is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -1762,7 +1775,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateLeverActor(
  * Response: { "componentAdded": bool, "componentName": string,
  *            "blueprintPath": string, "variablesAdded": string[] }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionAddDestructionComponent(
+bool McpHandlers::Interaction::HandleInteractionAddDestructionComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
@@ -1772,13 +1786,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionAddDestructionComponent(
   FString ResolvedPath, LoadError;
   UBlueprint* Blueprint = LoadBlueprintAsset(BlueprintPath, ResolvedPath, LoadError);
   if (!Blueprint) {
-    SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
+    S.SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
     return true;
   }
 
   USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
   if (!SCS) {
-    SendAutomationError(Socket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("NO_SCS"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("NO_SCS"));
     return true;
   }
 
@@ -1860,12 +1874,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionAddDestructionComponent(
     AddedVars.Add(MakeShared<FJsonValueString>(TEXT("DestructionStage")));
     Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
 
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Destruction component added"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Destruction component added"), Result);
   } else {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create destruction component"), TEXT("COMPONENT_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create destruction component"), TEXT("COMPONENT_CREATE_FAILED"));
   }
 #else
-  SendAutomationError(Socket, RequestId, TEXT("add_destruction_component is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("add_destruction_component is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -1888,7 +1902,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionAddDestructionComponent(
  * Payload: { "name": string, "folder"?: string, "triggerShape"?: string }
  * Response: { "triggerPath": string, "blueprintPath": string, "triggerShape": string }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateTriggerActor(
+bool McpHandlers::Interaction::HandleInteractionCreateTriggerActor(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString Name = GetJsonStringField(Payload, TEXT("name"));
@@ -1896,7 +1911,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateTriggerActor(
   FString TriggerShape = GetJsonStringField(Payload, TEXT("triggerShape"), TEXT("box"));
 
   if (Name.IsEmpty()) {
-    SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
     return true;
   }
 
@@ -1906,7 +1921,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateTriggerActor(
   FString PackageName = PackagePath / Name;
   UPackage* Package = CreatePackage(*PackageName);
   if (!Package) {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_CREATE_FAILED"));
     return true;
   }
 
@@ -1956,12 +1971,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateTriggerActor(
     Result->SetStringField(TEXT("triggerPath"), TriggerBP->GetPathName());
     Result->SetStringField(TEXT("blueprintPath"), TriggerBP->GetPathName());
     Result->SetStringField(TEXT("triggerShape"), TriggerShape);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Trigger actor created"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Trigger actor created"), Result);
   } else {
-    SendAutomationError(Socket, RequestId, TEXT("Failed to create trigger blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create trigger blueprint"), TEXT("BLUEPRINT_CREATE_FAILED"));
   }
 #else
-  SendAutomationError(Socket, RequestId, TEXT("create_trigger_actor is editor-only"), TEXT("EDITOR_ONLY"));
+  S.SendAutomationError(Socket, RequestId, TEXT("create_trigger_actor is editor-only"), TEXT("EDITOR_ONLY"));
 #endif
   return true;
 }
@@ -2025,7 +2040,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionCreateTriggerActor(
  *            "variableCount"?: number, "components"?: object[],
  *            "actorName"?: string, "actorClass"?: string, ... }
  */
-bool UMcpAutomationBridgeSubsystem::HandleInteractionGetInfo(
+bool McpHandlers::Interaction::HandleInteractionGetInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
@@ -2038,7 +2054,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionGetInfo(
   // Validate that at least one path is provided
   if (BlueprintPath.IsEmpty() && ActorName.IsEmpty() && DoorPath.IsEmpty() &&
       SwitchPath.IsEmpty() && ChestPath.IsEmpty() && TriggerPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("At least one path parameter is required (blueprintPath, actorName, doorPath, switchPath, chestPath, or triggerPath)"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -2050,7 +2066,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionGetInfo(
   if (BlueprintPath.IsEmpty() && !ActorName.IsEmpty()) {
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World) {
-      SendAutomationError(Socket, RequestId, TEXT("No editor world available"), TEXT("NO_WORLD"));
+      S.SendAutomationError(Socket, RequestId, TEXT("No editor world available"), TEXT("NO_WORLD"));
       return true;
     }
     AActor* FoundActor = nullptr;
@@ -2058,7 +2074,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionGetInfo(
       if (It->GetActorLabel() == ActorName || It->GetName() == ActorName) { FoundActor = *It; break; }
     }
     if (!FoundActor) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Actor not found: %s"), *ActorName),
                           TEXT("ACTOR_NOT_FOUND"));
       return true;
@@ -2098,7 +2114,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionGetInfo(
     FString ResolvedPath, LoadError;
     UBlueprint* Blueprint = LoadBlueprintAsset(Path, ResolvedPath, LoadError);
     if (!Blueprint) {
-      SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
+      S.SendAutomationError(Socket, RequestId, LoadError, TEXT("BLUEPRINT_NOT_FOUND"));
       return true;
     }
     Result->SetStringField(TEXT("assetType"), AssetType);
@@ -2110,6 +2126,6 @@ bool UMcpAutomationBridgeSubsystem::HandleInteractionGetInfo(
   }
 #endif
 
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Interaction info retrieved"), Result);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Interaction info retrieved"), Result);
   return true;
 }

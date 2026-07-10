@@ -53,6 +53,7 @@ class UBoxComponent;
 
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
+#include "McpAutomationBridge_CombatHandlers.h"
 
 #if WITH_EDITOR
 #include "Engine/Blueprint.h"
@@ -343,13 +344,14 @@ static void AddVariableValueReadbackCombat(const TSharedPtr<FJsonObject>& Info, 
 // ============================================================
 
 // create_weapon_blueprint
-bool UMcpAutomationBridgeSubsystem::HandleCombatCreateWeaponBlueprint(
+bool McpHandlers::Combat::HandleCombatCreateWeaponBlueprint(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString Name = GetJsonStringField(Payload, TEXT("name"));
@@ -357,7 +359,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateWeaponBlueprint(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -365,7 +367,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateWeaponBlueprint(
     UBlueprint* Blueprint = CreateActorBlueprint(AActor::StaticClass(), Path, Name, Error);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -435,24 +437,25 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateWeaponBlueprint(
     Result->SetNumberField(TEXT("spread"), Spread);
     SetVariablesAdded(Result, {TEXT("BaseDamage"), TEXT("FireRate"), TEXT("Range"), TEXT("Spread")});
 
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Weapon blueprint created successfully."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Weapon blueprint created successfully."), Result);
     return true;
 #endif // WITH_EDITOR
 }
 
 // configure_weapon_mesh
-bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureWeaponMesh(
+bool McpHandlers::Combat::HandleCombatConfigureWeaponMesh(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     FString MeshPath = GetJsonStringField(Payload, TEXT("weaponMeshPath"));
@@ -477,7 +480,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureWeaponMesh(
     Result->SetStringField(TEXT("meshPath"), MeshPath);
     
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Weapon mesh configured."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Weapon mesh configured."), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -485,18 +488,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureWeaponMesh(
 // configure_weapon_sockets
 
 // set_weapon_stats
-bool UMcpAutomationBridgeSubsystem::HandleCombatSetWeaponStats(
+bool McpHandlers::Combat::HandleCombatSetWeaponStats(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     McpHandlerUtils::FMcpWriteReport Report;
@@ -581,7 +585,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatSetWeaponStats(
         Result->SetObjectField(TEXT("ignoredParams"), IgnoredParams);
     }
 
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Weapon stats configured."), Blueprint);
 #endif // WITH_EDITOR
 }
@@ -605,13 +609,14 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatSetWeaponStats(
 // ============================================================
 
 // create_projectile_blueprint
-bool UMcpAutomationBridgeSubsystem::HandleCombatCreateProjectileBlueprint(
+bool McpHandlers::Combat::HandleCombatCreateProjectileBlueprint(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString Name = GetJsonStringField(Payload, TEXT("name"));
@@ -619,7 +624,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateProjectileBlueprint(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -627,7 +632,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateProjectileBlueprint(
     UBlueprint* Blueprint = CreateActorBlueprint(AActor::StaticClass(), Path, Name, Error);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -679,24 +684,25 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateProjectileBlueprint(
     Result->SetBoolField(TEXT("projectileMeshLoaded"), bProjectileMeshLoaded);
     
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Projectile blueprint created successfully."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Projectile blueprint created successfully."), Result);
     return true;
 #endif // WITH_EDITOR
 }
 
 // configure_projectile_movement
-bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureProjectileMovement(
+bool McpHandlers::Combat::HandleCombatConfigureProjectileMovement(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     McpHandlerUtils::FMcpWriteReport Report;
@@ -761,24 +767,25 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureProjectileMovement(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
 
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Projectile movement configured."), Blueprint);
 #endif // WITH_EDITOR
 }
 
 // configure_projectile_collision
-bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureProjectileCollision(
+bool McpHandlers::Combat::HandleCombatConfigureProjectileCollision(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     McpHandlerUtils::FMcpWriteReport Report;
@@ -833,24 +840,25 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureProjectileCollision(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
 
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Projectile collision configured."), nullptr);
 #endif // WITH_EDITOR
 }
 
 // configure_projectile_homing
-bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureProjectileHoming(
+bool McpHandlers::Combat::HandleCombatConfigureProjectileHoming(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     McpHandlerUtils::FMcpWriteReport Report;
@@ -890,7 +898,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureProjectileHoming(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
 
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Projectile homing configured."), nullptr);
 #endif // WITH_EDITOR
 }
@@ -900,13 +908,14 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureProjectileHoming(
 // ============================================================
 
 // create_damage_type
-bool UMcpAutomationBridgeSubsystem::HandleCombatCreateDamageType(
+bool McpHandlers::Combat::HandleCombatCreateDamageType(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString Name = GetJsonStringField(Payload, TEXT("name"));
@@ -914,7 +923,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateDamageType(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -928,7 +937,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateDamageType(
         // Validate path before fallback CreatePackage
         if (!IsValidAssetPath(FullPath))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Invalid asset path: '%s'. Path must start with '/', cannot contain '..' or '//'."), *FullPath),
                 TEXT("INVALID_PATH"));
             return true;
@@ -937,7 +946,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateDamageType(
         // Check if asset already exists
         if (UEditorAssetLibrary::DoesAssetExist(FullPath))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Asset already exists at path: %s"), *FullPath),
                 TEXT("ASSET_EXISTS"));
             return true;
@@ -946,7 +955,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateDamageType(
         UPackage* Package = CreatePackage(*FullPath);
         if (!Package)
         {
-            SendAutomationError(Socket, RequestId, TEXT("Failed to create damage type package."), TEXT("CREATION_FAILED"));
+            S.SendAutomationError(Socket, RequestId, TEXT("Failed to create damage type package."), TEXT("CREATION_FAILED"));
             return true;
         }
 
@@ -959,7 +968,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateDamageType(
         
         if (!Blueprint)
         {
-            SendAutomationError(Socket, RequestId, TEXT("Failed to create damage type blueprint."), TEXT("CREATION_FAILED"));
+            S.SendAutomationError(Socket, RequestId, TEXT("Failed to create damage type blueprint."), TEXT("CREATION_FAILED"));
             return true;
         }
 
@@ -974,7 +983,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateDamageType(
     Result->SetStringField(TEXT("damageTypePath"), Blueprint->GetPathName());
     
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Damage type created successfully."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Damage type created successfully."), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -982,19 +991,20 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateDamageType(
 // configure_damage_execution
 
 // setup_hitbox_component
-bool UMcpAutomationBridgeSubsystem::HandleCombatSetupHitboxComponent(
+bool McpHandlers::Combat::HandleCombatSetupHitboxComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString Name = GetJsonStringField(Payload, TEXT("name"));
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     McpHandlerUtils::FMcpWriteReport Report;
@@ -1173,7 +1183,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatSetupHitboxComponent(
         SetVariablesAdded(Result, VarsAdded);
     }
 
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Hitbox component configured."), Blueprint);
 #endif // WITH_EDITOR
 }
@@ -1187,18 +1197,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatSetupHitboxComponent(
 // setup_ammo_system
 
 // setup_attachment_system
-bool UMcpAutomationBridgeSubsystem::HandleCombatSetupAttachmentSystem(
+bool McpHandlers::Combat::HandleCombatSetupAttachmentSystem(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     // Parse attachment slots and create actual SceneComponent attach points
@@ -1271,7 +1282,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatSetupAttachmentSystem(
     }
     Result->SetArrayField(TEXT("componentsCreated"), ComponentsJsonArray);
     
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Attachment system configured with SceneComponent attach points."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Attachment system configured with SceneComponent attach points."), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -1295,18 +1306,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatSetupAttachmentSystem(
 // ============================================================
 
 // create_melee_trace
-bool UMcpAutomationBridgeSubsystem::HandleCombatCreateMeleeTrace(
+bool McpHandlers::Combat::HandleCombatCreateMeleeTrace(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     FString TraceStartSocket = GetJsonStringField(Payload, TEXT("meleeTraceStartSocket"), TEXT("WeaponBase"));
@@ -1356,7 +1368,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateMeleeTrace(
     SetVariablesAdded(Result, {TEXT("MeleeTraceStartSocket"), TEXT("MeleeTraceEndSocket"), TEXT("MeleeTraceRadius"), TEXT("bIsTracing")});
     Result->SetBoolField(TEXT("scaffoldOnly"), true);
 
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Melee trace variables scaffolded; game code must perform the trace."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Melee trace variables scaffolded; game code must perform the trace."), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -1364,18 +1376,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateMeleeTrace(
 // configure_combo_system
 
 // create_hit_pause (hitstop)
-bool UMcpAutomationBridgeSubsystem::HandleCombatCreateHitPause(
+bool McpHandlers::Combat::HandleCombatCreateHitPause(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     double HitPauseDuration = GetJsonNumberField(Payload, TEXT("hitPauseDuration"), 0.05);
@@ -1418,7 +1431,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateHitPause(
     SetVariablesAdded(Result, {TEXT("HitPauseDuration"), TEXT("HitPauseTimeDilation"), TEXT("bEnableHitPause")});
     Result->SetBoolField(TEXT("scaffoldOnly"), true);
 
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Hit pause variables scaffolded; game code must apply the time dilation."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Hit pause variables scaffolded; game code must apply the time dilation."), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -1434,18 +1447,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateHitPause(
 // ============================================================
 
 // get_info
-bool UMcpAutomationBridgeSubsystem::HandleCombatGetInfo(
+bool McpHandlers::Combat::HandleCombatGetInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     TSharedPtr<FJsonObject> Info = McpHandlerUtils::CreateResultObject();
@@ -1501,7 +1515,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatGetInfo(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetObjectField(TEXT("combatInfo"), Info);
     
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Combat info retrieved."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Combat info retrieved."), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -1511,18 +1525,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatGetInfo(
 // ============================================================
 
 // configure_hit_detection -> alias for setup_hitbox_component
-bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureHitDetection(
+bool McpHandlers::Combat::HandleCombatConfigureHitDetection(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     McpHandlerUtils::FMcpWriteReport Report;
@@ -1593,24 +1608,25 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureHitDetection(
     {
         SetVariablesAdded(Result, VarsAdded);
     }
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Hit detection configured."), nullptr);
 #endif // WITH_EDITOR
 }
 
 // get_stats -> alias for get_info
-bool UMcpAutomationBridgeSubsystem::HandleCombatGetStats(
+bool McpHandlers::Combat::HandleCombatGetStats(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     TSharedPtr<FJsonObject> Info = McpHandlerUtils::CreateResultObject();
@@ -1627,7 +1643,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatGetStats(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetObjectField(TEXT("combatInfo"), Info);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Combat stats retrieved."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Combat stats retrieved."), Result);
     return true;
 #endif // WITH_EDITOR
 }
@@ -1637,13 +1653,14 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatGetStats(
 // ============================================================
 
 // create_damage_effect - creates a blueprint with damage effect variables
-bool UMcpAutomationBridgeSubsystem::HandleCombatCreateDamageEffect(
+bool McpHandlers::Combat::HandleCombatCreateDamageEffect(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString Name = GetJsonStringField(Payload, TEXT("name"));
@@ -1651,7 +1668,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateDamageEffect(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Missing name."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -1659,7 +1676,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateDamageEffect(
     UBlueprint* Blueprint = CreateActorBlueprint(AActor::StaticClass(), Path, Name, Error);
     if (!Blueprint)
     {
-        SendAutomationError(Socket, RequestId, Error.IsEmpty() ? TEXT("Failed to create damage effect.") : Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, Error.IsEmpty() ? TEXT("Failed to create damage effect.") : Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
@@ -1697,24 +1714,25 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateDamageEffect(
     Result->SetStringField(TEXT("effectType"), EffectType);
     SetVariablesAdded(Result, {TEXT("EffectDuration"), TEXT("DamagePerSecond"), TEXT("EffectType"), TEXT("bIsActive")});
     Result->SetBoolField(TEXT("scaffoldOnly"), true);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Damage effect blueprint created with scaffold variables; game code must implement the damage-over-time logic."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Damage effect blueprint created with scaffold variables; game code must implement the damage-over-time logic."), Result);
     return true;
 #endif // WITH_EDITOR
 }
 
 // apply_damage - adds damage application variables to a blueprint
-bool UMcpAutomationBridgeSubsystem::HandleCombatApplyDamage(
+bool McpHandlers::Combat::HandleCombatApplyDamage(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     double DamageAmount = GetJsonNumberField(Payload, TEXT("damageAmount"), 25.0);
@@ -1745,24 +1763,25 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatApplyDamage(
     Result->SetStringField(TEXT("damageType"), DamageTypeName);
     SetVariablesAdded(Result, {TEXT("AppliedDamageAmount"), TEXT("AppliedDamageType")});
     Result->SetBoolField(TEXT("scaffoldOnly"), true);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Damage variables scaffolded; no damage was applied at runtime."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Damage variables scaffolded; no damage was applied at runtime."), Result);
     return true;
 #endif // WITH_EDITOR
 }
 
 // heal - adds healing variables to a blueprint
-bool UMcpAutomationBridgeSubsystem::HandleCombatHeal(
+bool McpHandlers::Combat::HandleCombatHeal(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     double HealAmount = GetJsonNumberField(Payload, TEXT("healAmount"), 25.0);
@@ -1796,24 +1815,25 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatHeal(
     Result->SetNumberField(TEXT("maxHealth"), MaxHealth);
     SetVariablesAdded(Result, {TEXT("CurrentHealth"), TEXT("MaxHealth"), TEXT("HealAmount")});
     Result->SetBoolField(TEXT("scaffoldOnly"), true);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Healing variables scaffolded; no healing was applied at runtime."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Healing variables scaffolded; no healing was applied at runtime."), Result);
     return true;
 #endif // WITH_EDITOR
 }
 
 // create_shield - adds shield/barrier variables to a blueprint
-bool UMcpAutomationBridgeSubsystem::HandleCombatCreateShield(
+bool McpHandlers::Combat::HandleCombatCreateShield(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     double ShieldAmount = GetJsonNumberField(Payload, TEXT("shieldAmount"), 50.0);
@@ -1866,24 +1886,25 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatCreateShield(
     Result->SetObjectField(TEXT("appliedDefaults"), AppliedDefaults);
 
     Result->SetBoolField(TEXT("scaffoldOnly"), true);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Shield variables scaffolded (shieldAmount stored as CurrentShield); game code must implement absorption and regen."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Shield variables scaffolded (shieldAmount stored as CurrentShield); game code must implement absorption and regen."), Result);
     return true;
 #endif // WITH_EDITOR
 }
 
 // modify_armor - adds armor/damage reduction variables to a blueprint
-bool UMcpAutomationBridgeSubsystem::HandleCombatModifyArmor(
+bool McpHandlers::Combat::HandleCombatModifyArmor(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Combat handlers require editor build."), TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
 
-    UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
+    UBlueprint* Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
     McpHandlerUtils::FMcpWriteReport Report;
@@ -1934,7 +1955,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatModifyArmor(
         SetVariablesAdded(Result, VarsAdded);
     }
     Result->SetBoolField(TEXT("scaffoldOnly"), true);
-    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                    TEXT("Armor variables scaffolded; game code must apply the damage reduction."), nullptr);
 #endif // WITH_EDITOR
 }

@@ -5,15 +5,16 @@
 // its schema fragment in a S_<Suffix>() function; the published facade schema
 // folds those fragments and GetDecl() derives the validation decl from the same
 // fragment via McpDeriveDecl(), so schema and decl are one source and cannot
-// drift. Run() delegates to the subsystem member handlers (HandleInteraction*,
-// InteractionHandlers.cpp) until the module split de-members those bodies. Five
-// of the 22 are shallow scaffolds preserved as-is — the configure_destruction_*
-// marker-tag writers and the configure_trigger_filter/response variable
-// scaffolds; deepening or retiring them is a logged product decision (TODO.md).
+// drift. Run() delegates to the namespaced free handlers (McpHandlers::Interaction::HandleInteraction*,
+// McpAutomationBridge_InteractionHandlers.cpp). Five of the 22 are shallow
+// scaffolds preserved as-is — the configure_destruction_* marker-tag writers
+// and the configure_trigger_filter/response variable scaffolds; deepening or
+// retiring them is a logged product decision (TODO.md).
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_InteractionHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -199,34 +200,34 @@ class FMcpCall_ManageInteraction_##ClassSuffix final : public FMcpCall          
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                    \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override    \
 	{                                                                                      \
-		return S.HandlerFn(RequestId, Payload, Socket);                                     \
+		return HandlerFn(S, RequestId, Payload, Socket);                                     \
 	}                                                                                      \
 };
 
 // Interaction component (18.1)
-MCP_MI_CALL(CreateComponent, "create_interaction_component", HandleInteractionCreateComponent, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureTrace, "configure_interaction_trace", HandleInteractionConfigureTrace, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureWidget, "configure_interaction_widget", HandleInteractionConfigureWidget, EMcpCallFlags::Mutating)
-MCP_MI_CALL(AddEvents, "add_interaction_events", HandleInteractionAddEvents, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateComponent, "create_interaction_component", McpHandlers::Interaction::HandleInteractionCreateComponent, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureTrace, "configure_interaction_trace", McpHandlers::Interaction::HandleInteractionConfigureTrace, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureWidget, "configure_interaction_widget", McpHandlers::Interaction::HandleInteractionConfigureWidget, EMcpCallFlags::Mutating)
+MCP_MI_CALL(AddEvents, "add_interaction_events", McpHandlers::Interaction::HandleInteractionAddEvents, EMcpCallFlags::Mutating)
 
 // Interactables (18.2)
-MCP_MI_CALL(CreateInteractableInterface, "create_interactable_interface", HandleInteractionCreateInteractableInterface, EMcpCallFlags::Mutating)
-MCP_MI_CALL(CreateDoorActor, "create_door_actor", HandleInteractionCreateDoorActor, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureDoorProperties, "configure_door_properties", HandleInteractionConfigureDoorProperties, EMcpCallFlags::Mutating)
-MCP_MI_CALL(CreateSwitchActor, "create_switch_actor", HandleInteractionCreateSwitchActor, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureSwitchProperties, "configure_switch_properties", HandleInteractionConfigureSwitchProperties, EMcpCallFlags::Mutating)
-MCP_MI_CALL(CreateChestActor, "create_chest_actor", HandleInteractionCreateChestActor, EMcpCallFlags::Mutating)
-MCP_MI_CALL(ConfigureChestProperties, "configure_chest_properties", HandleInteractionConfigureChestProperties, EMcpCallFlags::Mutating)
-MCP_MI_CALL(CreateLeverActor, "create_lever_actor", HandleInteractionCreateLeverActor, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateInteractableInterface, "create_interactable_interface", McpHandlers::Interaction::HandleInteractionCreateInteractableInterface, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateDoorActor, "create_door_actor", McpHandlers::Interaction::HandleInteractionCreateDoorActor, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureDoorProperties, "configure_door_properties", McpHandlers::Interaction::HandleInteractionConfigureDoorProperties, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateSwitchActor, "create_switch_actor", McpHandlers::Interaction::HandleInteractionCreateSwitchActor, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureSwitchProperties, "configure_switch_properties", McpHandlers::Interaction::HandleInteractionConfigureSwitchProperties, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateChestActor, "create_chest_actor", McpHandlers::Interaction::HandleInteractionCreateChestActor, EMcpCallFlags::Mutating)
+MCP_MI_CALL(ConfigureChestProperties, "configure_chest_properties", McpHandlers::Interaction::HandleInteractionConfigureChestProperties, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateLeverActor, "create_lever_actor", McpHandlers::Interaction::HandleInteractionCreateLeverActor, EMcpCallFlags::Mutating)
 
 // Destructibles (18.3; the configure_destruction_* trio are marker-tag scaffolds)
-MCP_MI_CALL(AddDestructionComponent, "add_destruction_component", HandleInteractionAddDestructionComponent, EMcpCallFlags::Mutating)
+MCP_MI_CALL(AddDestructionComponent, "add_destruction_component", McpHandlers::Interaction::HandleInteractionAddDestructionComponent, EMcpCallFlags::Mutating)
 
 // Trigger system (18.4; filter/response are variable scaffolds)
-MCP_MI_CALL(CreateTriggerActor, "create_trigger_actor", HandleInteractionCreateTriggerActor, EMcpCallFlags::Mutating)
+MCP_MI_CALL(CreateTriggerActor, "create_trigger_actor", McpHandlers::Interaction::HandleInteractionCreateTriggerActor, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_MI_CALL(GetInfo, "get_info", HandleInteractionGetInfo, EMcpCallFlags::None)
+MCP_MI_CALL(GetInfo, "get_info", McpHandlers::Interaction::HandleInteractionGetInfo, EMcpCallFlags::None)
 
 #undef MCP_MI_CALL
 

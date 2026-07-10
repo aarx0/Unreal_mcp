@@ -5,12 +5,13 @@
 // its schema fragment in a S_<Suffix>() function; the published facade schema
 // folds those fragments and GetDecl() derives the validation decl from the same
 // fragment via McpDeriveDecl(), so schema and decl are one source and cannot
-// drift. Run() delegates to the subsystem member handlers (HandleCharacter*,
-// CharacterHandlers.cpp) until the module split de-members those bodies.
+// drift. Run() delegates to the namespaced free handlers (McpHandlers::Character::HandleCharacter*,
+// McpAutomationBridge_CharacterHandlers.cpp).
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_CharacterHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -267,39 +268,39 @@ class FMcpCall_ManageCharacter_##ClassSuffix final : public FMcpCall            
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                    \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override    \
 	{                                                                                       \
-		return S.HandlerFn(RequestId, Payload, Socket);                                     \
+		return HandlerFn(S, RequestId, Payload, Socket);                                     \
 	}                                                                                       \
 };
 
 // Character creation (14.1)
-MCP_MC_CALL(CreateBlueprint, "create_character_blueprint", HandleCharacterCreateBlueprint, EMcpCallFlags::Mutating)
-MCP_MC_CALL(ConfigureCapsuleComponent, "configure_capsule_component", HandleCharacterConfigureCapsuleComponent, EMcpCallFlags::Mutating)
-MCP_MC_CALL(ConfigureMeshComponent, "configure_mesh_component", HandleCharacterConfigureMeshComponent, EMcpCallFlags::Mutating)
-MCP_MC_CALL(ConfigureCameraComponent, "configure_camera_component", HandleCharacterConfigureCameraComponent, EMcpCallFlags::Mutating)
+MCP_MC_CALL(CreateBlueprint, "create_character_blueprint", McpHandlers::Character::HandleCharacterCreateBlueprint, EMcpCallFlags::Mutating)
+MCP_MC_CALL(ConfigureCapsuleComponent, "configure_capsule_component", McpHandlers::Character::HandleCharacterConfigureCapsuleComponent, EMcpCallFlags::Mutating)
+MCP_MC_CALL(ConfigureMeshComponent, "configure_mesh_component", McpHandlers::Character::HandleCharacterConfigureMeshComponent, EMcpCallFlags::Mutating)
+MCP_MC_CALL(ConfigureCameraComponent, "configure_camera_component", McpHandlers::Character::HandleCharacterConfigureCameraComponent, EMcpCallFlags::Mutating)
 
 // Movement component (14.2)
-MCP_MC_CALL(ConfigureMovementSpeeds, "configure_movement_speeds", HandleCharacterConfigureMovementSpeeds, EMcpCallFlags::Mutating)
-MCP_MC_CALL(ConfigureJump, "configure_jump", HandleCharacterConfigureJump, EMcpCallFlags::Mutating)
-MCP_MC_CALL(ConfigureRotation, "configure_rotation", HandleCharacterConfigureRotation, EMcpCallFlags::Mutating)
-MCP_MC_CALL(AddCustomMovementMode, "add_custom_movement_mode", HandleCharacterAddCustomMovementMode, EMcpCallFlags::Mutating)
-MCP_MC_CALL(ConfigureNavMovement, "configure_nav_movement", HandleCharacterConfigureNavMovement, EMcpCallFlags::Mutating)
+MCP_MC_CALL(ConfigureMovementSpeeds, "configure_movement_speeds", McpHandlers::Character::HandleCharacterConfigureMovementSpeeds, EMcpCallFlags::Mutating)
+MCP_MC_CALL(ConfigureJump, "configure_jump", McpHandlers::Character::HandleCharacterConfigureJump, EMcpCallFlags::Mutating)
+MCP_MC_CALL(ConfigureRotation, "configure_rotation", McpHandlers::Character::HandleCharacterConfigureRotation, EMcpCallFlags::Mutating)
+MCP_MC_CALL(AddCustomMovementMode, "add_custom_movement_mode", McpHandlers::Character::HandleCharacterAddCustomMovementMode, EMcpCallFlags::Mutating)
+MCP_MC_CALL(ConfigureNavMovement, "configure_nav_movement", McpHandlers::Character::HandleCharacterConfigureNavMovement, EMcpCallFlags::Mutating)
 
 // Advanced movement (14.3)
 
 // Footstep system (14.4)
-MCP_MC_CALL(MapSurfaceToSound, "map_surface_to_sound", HandleCharacterMapSurfaceToSound, EMcpCallFlags::Mutating)
+MCP_MC_CALL(MapSurfaceToSound, "map_surface_to_sound", McpHandlers::Character::HandleCharacterMapSurfaceToSound, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_MC_CALL(GetInfo, "get_info", HandleCharacterGetInfo, EMcpCallFlags::None)
+MCP_MC_CALL(GetInfo, "get_info", McpHandlers::Character::HandleCharacterGetInfo, EMcpCallFlags::None)
 
 // Aliases & convenience setters
-MCP_MC_CALL(SetupMovement, "setup_movement", HandleCharacterSetupMovement, EMcpCallFlags::Mutating)
-MCP_MC_CALL(SetWalkSpeed, "set_walk_speed", HandleCharacterSetWalkSpeed, EMcpCallFlags::Mutating)
-MCP_MC_CALL(SetJumpHeight, "set_jump_height", HandleCharacterSetJumpHeight, EMcpCallFlags::Mutating)
-MCP_MC_CALL(SetGravityScale, "set_gravity_scale", HandleCharacterSetGravityScale, EMcpCallFlags::Mutating)
-MCP_MC_CALL(SetGroundFriction, "set_ground_friction", HandleCharacterSetGroundFriction, EMcpCallFlags::Mutating)
-MCP_MC_CALL(SetBrakingDeceleration, "set_braking_deceleration", HandleCharacterSetBrakingDeceleration, EMcpCallFlags::Mutating)
-MCP_MC_CALL(ConfigureCrouch, "configure_crouch", HandleCharacterConfigureCrouch, EMcpCallFlags::Mutating)
+MCP_MC_CALL(SetupMovement, "setup_movement", McpHandlers::Character::HandleCharacterSetupMovement, EMcpCallFlags::Mutating)
+MCP_MC_CALL(SetWalkSpeed, "set_walk_speed", McpHandlers::Character::HandleCharacterSetWalkSpeed, EMcpCallFlags::Mutating)
+MCP_MC_CALL(SetJumpHeight, "set_jump_height", McpHandlers::Character::HandleCharacterSetJumpHeight, EMcpCallFlags::Mutating)
+MCP_MC_CALL(SetGravityScale, "set_gravity_scale", McpHandlers::Character::HandleCharacterSetGravityScale, EMcpCallFlags::Mutating)
+MCP_MC_CALL(SetGroundFriction, "set_ground_friction", McpHandlers::Character::HandleCharacterSetGroundFriction, EMcpCallFlags::Mutating)
+MCP_MC_CALL(SetBrakingDeceleration, "set_braking_deceleration", McpHandlers::Character::HandleCharacterSetBrakingDeceleration, EMcpCallFlags::Mutating)
+MCP_MC_CALL(ConfigureCrouch, "configure_crouch", McpHandlers::Character::HandleCharacterConfigureCrouch, EMcpCallFlags::Mutating)
 
 #undef MCP_MC_CALL
 

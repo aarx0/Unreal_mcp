@@ -5,12 +5,13 @@
 // its schema fragment in a S_<Suffix>() function; the published facade schema
 // folds those fragments and GetDecl() derives the validation decl from the same
 // fragment via McpDeriveDecl(), so schema and decl are one source and cannot
-// drift. Run() delegates to the subsystem member handlers (HandleCombat*,
-// CombatHandlers.cpp) until the module split de-members those bodies.
+// drift. Run() delegates to the namespaced free handlers (McpHandlers::Combat::HandleCombat*,
+// McpAutomationBridge_CombatHandlers.cpp).
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_CombatHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -253,49 +254,49 @@ class FMcpCall_ManageCombat_##ClassSuffix final : public FMcpCall               
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                   \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override   \
 	{                                                                                       \
-		return S.HandlerFn(RequestId, Payload, Socket);                                    \
+		return HandlerFn(S, RequestId, Payload, Socket);                                    \
 	}                                                                                       \
 };
 
 // Weapon base (15.1)
-MCP_CB_CALL(CreateWeaponBlueprint, "create_weapon_blueprint", HandleCombatCreateWeaponBlueprint, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureWeaponMesh, "configure_weapon_mesh", HandleCombatConfigureWeaponMesh, EMcpCallFlags::Mutating)
-MCP_CB_CALL(SetWeaponStats, "set_weapon_stats", HandleCombatSetWeaponStats, EMcpCallFlags::Mutating)
+MCP_CB_CALL(CreateWeaponBlueprint, "create_weapon_blueprint", McpHandlers::Combat::HandleCombatCreateWeaponBlueprint, EMcpCallFlags::Mutating)
+MCP_CB_CALL(ConfigureWeaponMesh, "configure_weapon_mesh", McpHandlers::Combat::HandleCombatConfigureWeaponMesh, EMcpCallFlags::Mutating)
+MCP_CB_CALL(SetWeaponStats, "set_weapon_stats", McpHandlers::Combat::HandleCombatSetWeaponStats, EMcpCallFlags::Mutating)
 
 // Firing modes (15.2)
 
 // Projectiles (15.3)
-MCP_CB_CALL(CreateProjectileBlueprint, "create_projectile_blueprint", HandleCombatCreateProjectileBlueprint, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureProjectileMovement, "configure_projectile_movement", HandleCombatConfigureProjectileMovement, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureProjectileCollision, "configure_projectile_collision", HandleCombatConfigureProjectileCollision, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ConfigureProjectileHoming, "configure_projectile_homing", HandleCombatConfigureProjectileHoming, EMcpCallFlags::Mutating)
+MCP_CB_CALL(CreateProjectileBlueprint, "create_projectile_blueprint", McpHandlers::Combat::HandleCombatCreateProjectileBlueprint, EMcpCallFlags::Mutating)
+MCP_CB_CALL(ConfigureProjectileMovement, "configure_projectile_movement", McpHandlers::Combat::HandleCombatConfigureProjectileMovement, EMcpCallFlags::Mutating)
+MCP_CB_CALL(ConfigureProjectileCollision, "configure_projectile_collision", McpHandlers::Combat::HandleCombatConfigureProjectileCollision, EMcpCallFlags::Mutating)
+MCP_CB_CALL(ConfigureProjectileHoming, "configure_projectile_homing", McpHandlers::Combat::HandleCombatConfigureProjectileHoming, EMcpCallFlags::Mutating)
 
 // Damage system (15.4)
-MCP_CB_CALL(CreateDamageType, "create_damage_type", HandleCombatCreateDamageType, EMcpCallFlags::Mutating)
-MCP_CB_CALL(SetupHitboxComponent, "setup_hitbox_component", HandleCombatSetupHitboxComponent, EMcpCallFlags::Mutating)
+MCP_CB_CALL(CreateDamageType, "create_damage_type", McpHandlers::Combat::HandleCombatCreateDamageType, EMcpCallFlags::Mutating)
+MCP_CB_CALL(SetupHitboxComponent, "setup_hitbox_component", McpHandlers::Combat::HandleCombatSetupHitboxComponent, EMcpCallFlags::Mutating)
 
 // Weapon features (15.5)
-MCP_CB_CALL(SetupAttachmentSystem, "setup_attachment_system", HandleCombatSetupAttachmentSystem, EMcpCallFlags::Mutating)
+MCP_CB_CALL(SetupAttachmentSystem, "setup_attachment_system", McpHandlers::Combat::HandleCombatSetupAttachmentSystem, EMcpCallFlags::Mutating)
 
 // Effects (15.6)
 
 // Melee combat (15.7)
-MCP_CB_CALL(CreateMeleeTrace, "create_melee_trace", HandleCombatCreateMeleeTrace, EMcpCallFlags::Mutating)
-MCP_CB_CALL(CreateHitPause, "create_hit_pause", HandleCombatCreateHitPause, EMcpCallFlags::Mutating)
+MCP_CB_CALL(CreateMeleeTrace, "create_melee_trace", McpHandlers::Combat::HandleCombatCreateMeleeTrace, EMcpCallFlags::Mutating)
+MCP_CB_CALL(CreateHitPause, "create_hit_pause", McpHandlers::Combat::HandleCombatCreateHitPause, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_CB_CALL(GetInfo, "get_info", HandleCombatGetInfo, EMcpCallFlags::None)
+MCP_CB_CALL(GetInfo, "get_info", McpHandlers::Combat::HandleCombatGetInfo, EMcpCallFlags::None)
 
 // Aliases
-MCP_CB_CALL(ConfigureHitDetection, "configure_hit_detection", HandleCombatConfigureHitDetection, EMcpCallFlags::Mutating)
-MCP_CB_CALL(GetStats, "get_stats", HandleCombatGetStats, EMcpCallFlags::None)
+MCP_CB_CALL(ConfigureHitDetection, "configure_hit_detection", McpHandlers::Combat::HandleCombatConfigureHitDetection, EMcpCallFlags::Mutating)
+MCP_CB_CALL(GetStats, "get_stats", McpHandlers::Combat::HandleCombatGetStats, EMcpCallFlags::None)
 
 // New sub-actions
-MCP_CB_CALL(CreateDamageEffect, "create_damage_effect", HandleCombatCreateDamageEffect, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ApplyDamage, "apply_damage", HandleCombatApplyDamage, EMcpCallFlags::Mutating)
-MCP_CB_CALL(Heal, "heal", HandleCombatHeal, EMcpCallFlags::Mutating)
-MCP_CB_CALL(CreateShield, "create_shield", HandleCombatCreateShield, EMcpCallFlags::Mutating)
-MCP_CB_CALL(ModifyArmor, "modify_armor", HandleCombatModifyArmor, EMcpCallFlags::Mutating)
+MCP_CB_CALL(CreateDamageEffect, "create_damage_effect", McpHandlers::Combat::HandleCombatCreateDamageEffect, EMcpCallFlags::Mutating)
+MCP_CB_CALL(ApplyDamage, "apply_damage", McpHandlers::Combat::HandleCombatApplyDamage, EMcpCallFlags::Mutating)
+MCP_CB_CALL(Heal, "heal", McpHandlers::Combat::HandleCombatHeal, EMcpCallFlags::Mutating)
+MCP_CB_CALL(CreateShield, "create_shield", McpHandlers::Combat::HandleCombatCreateShield, EMcpCallFlags::Mutating)
+MCP_CB_CALL(ModifyArmor, "modify_armor", McpHandlers::Combat::HandleCombatModifyArmor, EMcpCallFlags::Mutating)
 
 #undef MCP_CB_CALL
 
