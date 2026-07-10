@@ -2857,6 +2857,24 @@ bool McpHandlers::Gas::HandleGasSetModifierMagnitude(
 
     const FString MagnitudeTypeToken = NormalizeGASToken(MagnitudeType);
     const FString SetByCallerTagString = GetJsonStringField(Payload, TEXT("setByCallerTag"));
+
+    const bool bHasNumericMagnitude = Payload->HasField(TEXT("value")) || Payload->HasField(TEXT("modifierMagnitude"));
+    const bool bHasSetByCallerTag = !SetByCallerTagString.IsEmpty();
+    if (!bHasNumericMagnitude && !bHasSetByCallerTag)
+    {
+        S.SendAutomationError(Socket, RequestId,
+            TEXT("set_modifier_magnitude requires exactly one of 'value' or 'setByCallerTag'; neither was provided."),
+            TEXT("INVALID_ARGUMENT"));
+        return true;
+    }
+    if (bHasNumericMagnitude && bHasSetByCallerTag)
+    {
+        S.SendAutomationError(Socket, RequestId,
+            TEXT("'value' and 'setByCallerTag' are mutually exclusive; provide exactly one."),
+            TEXT("INVALID_ARGUMENT"));
+        return true;
+    }
+
     if (MagnitudeTypeToken == TEXT("setbycaller") || !SetByCallerTagString.IsEmpty())
     {
         if (MagnitudeTypeToken != TEXT("setbycaller"))
@@ -2869,12 +2887,6 @@ bool McpHandlers::Gas::HandleGasSetModifierMagnitude(
         {
             S.SendAutomationError(Socket, RequestId,
                 TEXT("magnitudeType 'SetByCaller' requires 'setByCallerTag'."), TEXT("INVALID_ARGUMENT"));
-            return true;
-        }
-        if (Payload->HasField(TEXT("value")) || Payload->HasField(TEXT("modifierMagnitude")))
-        {
-            S.SendAutomationError(Socket, RequestId,
-                TEXT("'setByCallerTag' and a numeric magnitude are mutually exclusive."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
         const FGameplayTag DataTag = GetOrRequestTag(SetByCallerTagString);
