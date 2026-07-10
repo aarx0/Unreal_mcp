@@ -15,6 +15,7 @@
             "create_pose_library",
             "create_animation_asset",
             "play_montage",
+            "setup_ragdoll",
             "activate_ragdoll",
             "configure_vehicle",
             "setup_physics_simulation",
@@ -207,6 +208,10 @@
         "blendType": {
           "description": "add_blend_node: node type, e.g. TwoWayBlend (default).",
           "type": "string"
+        },
+        "blendWeight": {
+          "description": "setup_ragdoll: animation/physics blend weight (default 1; values below 1 keep animation updating in editor).",
+          "type": "number"
         },
         "blueprintPath": {
           "description": "Anim Blueprint asset path (bind_animation_notify, add_state_machine, add_state, add_transition, set_transition_rules; 'assetPath' accepted for the state-machine actions).",
@@ -2200,7 +2205,7 @@
           "type": "integer"
         },
         "limit": {
-          "description": "find_objects: max objects returned (default 50, cap 200).",
+          "description": "find_by_class: max actors returned (default 50, cap 200).",
           "type": "integer"
         },
         "markDirty": {
@@ -2224,7 +2229,7 @@
           "type": "string"
         },
         "pathContains": {
-          "description": "find_objects: case-insensitive substring filter on the object's full path.",
+          "description": "list_objects: case-insensitive substring filter on the actor's full path.",
           "type": "string"
         },
         "properties": {
@@ -8187,8 +8192,6 @@
             "remove_mapping",
             "set_input_trigger",
             "set_input_modifier",
-            "enable_input_mapping",
-            "disable_input_action",
             "get_info"
           ],
           "type": "string"
@@ -8224,10 +8227,6 @@
         "path": {
           "description": "Destination folder for a created input asset.",
           "type": "string"
-        },
-        "priority": {
-          "description": "enable_input_mapping: mapping context priority (default 0).",
-          "type": "integer"
         },
         "replace": {
           "description": "set_input_trigger: clear existing triggers before adding (default false = idempotent dedupe).",
@@ -9388,15 +9387,11 @@
             "set_respawn_rules",
             "configure_spectating",
             "get_game_framework_info",
-            "set_split_screen_type",
             "add_local_player",
             "remove_local_player",
             "host_lan_server",
-            "join_lan_server",
             "enable_voice_chat",
-            "set_voice_channel",
             "mute_player",
-            "set_voice_attenuation",
             "get_sessions_info"
           ],
           "type": "string"
@@ -9413,14 +9408,6 @@
           "description": "Always relevant to all clients.",
           "type": "boolean"
         },
-        "attenuationFalloff": {
-          "description": "set_voice_attenuation: falloff curve exponent, 0.1-10.0 (default 1.0).",
-          "type": "number"
-        },
-        "attenuationRadius": {
-          "description": "set_voice_attenuation: distance at which voice starts attenuating (default 2000).",
-          "type": "number"
-        },
         "bDelayedStart": {
           "description": "configure_game_rules: sets AGameMode::bDelayedStart when the property exists on the class.",
           "type": "boolean"
@@ -9432,20 +9419,6 @@
         "bPlayerOnly": {
           "description": "configure_player_start: restrict the PlayerStart to player pawns only.",
           "type": "boolean"
-        },
-        "channelName": {
-          "description": "set_voice_channel: voice channel name.",
-          "type": "string"
-        },
-        "channelType": {
-          "description": "set_voice_channel: channel type (default Global).",
-          "enum": [
-            "Team",
-            "Global",
-            "Proximity",
-            "Party"
-          ],
-          "type": "string"
         },
         "condition": {
           "description": "Replication condition.",
@@ -9554,7 +9527,7 @@
           "type": "integer"
         },
         "maxPlayers": {
-          "description": "configure_local_session_settings / host_lan_server: max player count (default 4).",
+          "description": "host_lan_server: max player count (default 4).",
           "type": "integer"
         },
         "minNetUpdateFrequency": {
@@ -9717,21 +9690,9 @@
           "description": "Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false).",
           "type": "boolean"
         },
-        "serverAddress": {
-          "description": "join_lan_server: address of the LAN server to connect to.",
-          "type": "string"
-        },
         "serverName": {
           "description": "host_lan_server: display name for the hosted server.",
           "type": "string"
-        },
-        "serverPassword": {
-          "description": "configure_lan_play / join_lan_server: LAN server password.",
-          "type": "string"
-        },
-        "serverPort": {
-          "description": "configure_lan_play / join_lan_server: port number (default 7777).",
-          "type": "integer"
         },
         "smoothingRate": {
           "description": "Smoothing rate for corrections.",
@@ -9747,18 +9708,6 @@
         },
         "spectatorViewMode": {
           "description": "configure_spectating: spectator view mode (default FreeCam).",
-          "type": "string"
-        },
-        "splitScreenType": {
-          "description": "configure_split_screen / set_split_screen_type: split-screen layout.",
-          "enum": [
-            "None",
-            "TwoPlayer_Horizontal",
-            "TwoPlayer_Vertical",
-            "ThreePlayer_FavorTop",
-            "ThreePlayer_FavorBottom",
-            "FourPlayer_Grid"
-          ],
           "type": "string"
         },
         "startPlayersNeeded": {
@@ -9778,7 +9727,7 @@
           "type": "integer"
         },
         "travelOptions": {
-          "description": "host_lan_server / join_lan_server: extra URL options appended to the travel string.",
+          "description": "host_lan_server: extra URL options appended to the travel string.",
           "type": "string"
         },
         "useOwnerNetRelevancy": {

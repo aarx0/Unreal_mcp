@@ -21,8 +21,10 @@ as they land.
 > non-Boolean) with VALUE_TYPE_MISMATCH before applying, plus a PropertyMatchesValueKind cross-check on
 > the generic path.
 
-> **[ ] Found 2026-07-09 (silent-success sweep, code read), two pre-existing warts adjacent to the
-> conversion but out of its scope:**
+> **[x] Found 2026-07-09 (silent-success sweep, code read), two pre-existing warts adjacent to the
+> conversion but out of its scope — BOTH FIXED 2026-07-10** (`cc7f79fd`: set_modifier_magnitude
+> requires exactly one of value|setByCallerTag before any mutation; `a6575979`: configure_vehicle
+> only creates the movement component when a writable field was requested):
 > - **`set_modifier_magnitude` default-clobber** — absent `value`/`setByCallerTag` writes
 >   `ScalableFloat(0.0)` into `Modifiers[i].ModifierMagnitude` (GASHandlers.cpp, HandleGasSetModifierMagnitude).
 >   It's an atomic setter (allowlisted from the bag lint); the fix is a fail-loud guard requiring exactly
@@ -163,6 +165,33 @@ E2 sweep find. `HandleMoveAsset` (`AssetWorkflowHandlers.cpp:1825`) is one line:
 `{sourcePath, assetPath, destinationPath, newName}` while `S_Rename` requires nothing — identical
 behavior, two validation contracts. Consolidation-pass input (keep one action, or align decls).
 
+### [ ] 2026-07-10 — two orphaned handlers left standing by the build_environment de-member (delete candidates)
+Found during 5f5eb09f: `HandleWorldPartitionAction` (WorldPartitionHandlers.cpp — manage_world_partition
+has no Calls-file registration, no ProcessRequest reference tree-wide) and `HandleEditLandscape`
+(LandscapeHandlers.cpp — aggregate dispatcher, zero callers). Both were converted to free functions
+to finish the de-member but are dispatched nowhere. Delete both (WorldPartitionHandlers.cpp likely
+empties entirely) after a fresh zero-caller grep + full build; also `HandlePlayAnimMontage`
+(AnimationHandlers.cpp, see the ragdoll entry) belongs to the same wire-or-retire cleanup batch.
+
+### [ ] 2026-07-10 — remaining unbounded list-style actions (limit-parity follow-up)
+Found while adding className/pathContains/limit to inspect list_objects and limit to both
+find_by_class variants (default 50, clamp [1,200], matched+truncated response fields — mirrors
+find_objects). Same gap, not fixed: `inspect find_by_tag` (HandleInspectFindByTag),
+`control_actor find_by_tag` (HandleControlActorFindByTag), `control_actor find_by_name`
+(HandleControlActorFindByName) — all return every match with no limit. get_selected_actors is
+also unbounded but naturally bounded by the editor selection. NOTE the parity fix is itself a
+behavior change: previously-unbounded list_objects/find_by_class now default-cap at 50 (visible
+via truncated:true, matched=<pre-limit total>).
+
+### [ ] 2026-07-10 — set_modifier_magnitude advertises magnitudeType values it silently ignores
+Found during the exactly-one-of guard fix. The schema enum (McpCalls_ManageGas.cpp:346-351) advertises
+`AttributeBased` and `CustomCalculationClass`, but the handler's else branch
+(GASHandlers.cpp:~2904) treats every non-SetByCaller magnitudeType as ScalableFloat — a call with
+`magnitudeType:'AttributeBased'` + `value:5` succeeds but stores an FScalableFloat, misrepresenting
+the requested type. Repro: set_modifier_magnitude with blueprintPath + modifierIndex +
+magnitudeType:'AttributeBased' + value. Fix: implement the two types or retire them from the enum
+(reject unknown/unimplemented types loudly).
+
 ### [ ] 2026-07-10 — internal hand-built-payload delegations: wrapper→target decl drift risk (list)
 E2 sweep inventory, for the Execute-pipeline/apply-receipt evolution — NOT unvalidated wire input
 (each wrapper's own decl Gate-B-validates its params; injected fields are handler-authored
@@ -174,7 +203,31 @@ published action's member directly, so wrapper and target decls can drift: 5 AI 
 `EditorFunctionHandlers.cpp:883` → modify_scs, `AssetQueryHandlers.cpp:668` → HandleAssetQueryAction
 (internal dispatcher).
 
-### [ ] 2026-07-07 — several actor-lookup actions miss live PIE-only actors (default to editor world)
+### [x] 2026-07-07 — several actor-lookup actions miss live PIE-only actors (default to editor world)
+FIXED 2026-07-10 (`bba60ace`): shared McpHandlerUtils::GetActorLookupWorld (GetPIEWorldContext if
+active, else editor world — promoted from find_by_class's inline picker) now feeds inspect
+list_objects/find_by_class/find_by_tag, control_actor find_by_tag/find_by_name, play_montage
+(via the member resolver), 4 networking sites, 12 spline sites; retargeted enumerations expose
+isPieWorld/worldName/worldPackage/hasBegunPlay. Write-target change during PIE (documented, by
+design): set_owner + the 11 spline writes hit the PIE mirror actor, matching the member resolver.
+Deliberately left editor-world: spawn-into-level authoring, focus_actor, world-global reads.
+Follow-ups (not fixed): control_actor.delete_by_tag still enumerates editor-world
+(bulk-destructive PIE retarget is a semantics call — its single-actor sibling delete already
+prefers PIE); setup_ragdoll/activate_ragdoll keep the editor iterator (SetUpdateAnimationInEditor
+suggests editor-preview intent); manage_geometry DynamicMesh family (~50 editor-world seeds)
+left as authoring.
+SWEPT + ROOT-CAUSED same day (live PIE matrix, report in session scratchpad PIE_WORLD_SWEEP.md). Not a policy gap — a consistency defect: the prefer-PIE-if-active policy already
+lives in four shared helpers (member FindActorByName, ResolveObjectFromPath,
+McpGetRuntimeInspectionWorld, find_by_class's GetPIEWorldContext picker), but several actions
+hand-roll editor-world enumeration (GEditor->GetEditorWorldContext() / GetAllLevelActors) and never
+migrated. Confirmed-missing PIE: inspect.find_by_class / find_by_tag / list_objects,
+control_actor.find_by_tag, animation_physics.play_montage; by code inspection also
+manage_networking + manage_geometry/spline actor actions. The original get_component_property
+repro NO LONGER reproduces (healed by fe085d14 + inspect delegation). Twin split:
+control_actor.find_by_class prefers PIE, inspect.find_by_class was left editor-only. Fix design:
+promote the GetPIEWorldContext→EditorWorld picker into a shared McpHandlerUtils accessor, route
+all hand-rolled sites through it; optional explicit world param only as an additive escape hatch.
+Original find below.
 Dogfood find (chasing the `BP_AoE` radius bug live). Observed, not yet root-caused in bridge
 code — reporting what was directly seen: `inspect.find_by_class` for `BP_AoE_C`/`BP_Telegraph_C`
 returned 0 results immediately after a confirmed-successful `Lob` call, while `inspect.pie_report`
@@ -298,7 +351,17 @@ actually fits the name: execute_command/python, set_cvar, get/set_project_settin
 profiling. Same structural call as the manage_input enhanced-input split — Aaron's decision;
 flagged, not acted on.
 
-### [ ] 2026-07-05 — animation_physics setup_ragdoll/activate_ragdoll: wire the orphans or retire the rows (Aaron's call)
+### [x] 2026-07-05 — animation_physics setup_ragdoll/activate_ragdoll: wire the orphans or retire the rows (Aaron's call)
+RESOLVED 2026-07-10 (`a6575979`, option a per Aaron): both actions now route to the full
+implementations (classed 4-arg signatures, action-literal gates deleted, stub removed), flags
+RequiresEditor|Mutating. Premise correction found en route: setup_ragdoll was never actually
+published (no fragment/row/registration — docs claimed explicit stubs for BOTH; only
+activate_ragdoll had one); wiring it added S_SetupRagdoll (actorName required, blendWeight,
+skeletonPath) — golden re-pin rides the central pass. Related orphan found in passing:
+`HandlePlayAnimMontage` (AnimationHandlers.cpp) — 5-arg legacy gate on "play_anim_montage",
+no classed row (published action is play_montage → HandleAnimPhysPlayMontage); needs its own
+wire-or-retire decision.
+Original entry below.
 Dogfood find, preserved exactly at the family's classing (McpCalls_AnimationPhysics.cpp):
 both names are ADVERTISED (schema enum + decl rows) but the retired dispatcher had no
 branch for either, so every call answered its terminal else — "Animation/Physics action
@@ -314,7 +377,14 @@ change; or (b) retire the two rows — a schema change needing golden regen, aft
 the orphans delete as dead code. Advertised surface is Aaron's decision; do neither
 silently.
 
-### [ ] 2026-07-05 — manage_interaction's five scaffold actions: deepen or retire (Aaron's call)
+### [x] 2026-07-05 — manage_interaction's five scaffold actions: deepen or retire (Aaron's call)
+RESOLVED 2026-07-10 (`568a3ea9`, retire per Aaron) — with a premise correction: all five were
+ALREADY unpublished orphans by the time of the sweep (no class/row/enum entry; a prior cleanup got
+them); only dead doc-comments remained, now deleted. setup_destructible_mesh verdict: also already
+fully retired (comments only, no handler body); the one live destructibles action,
+add_destruction_component, is real (SCS component + 4 BP variables + save). configure_trigger_events
+and configure_split_screen are two more already-dead orphan names found adjacent.
+Original entry below.
 Preserved as-is at the family's classing (McpCalls_ManageInteraction.cpp — bodies moved
 verbatim, deliberately not deepened there): `configure_destruction_levels`/
 `configure_destruction_effects`/`configure_destruction_damage` accept only `actorName`,
@@ -327,7 +397,13 @@ configuration (the dogfood audit's silent-success class, tag-writer flavor). Opt
 deepen to real writes (destruction params, filter/response defaults + params to carry
 them), or retire the names from the schema. Schema surface is Aaron's decision.
 
-### [ ] 2026-07-05 — manage_networking's eleven no-op acknowledgment actions: deepen or retire (Aaron's call)
+### [x] 2026-07-05 — manage_networking's eleven no-op acknowledgment actions: deepen or retire (Aaron's call)
+RESOLVED 2026-07-10 (`568a3ea9`, retire per Aaron): the 6 still-live ones deleted end-to-end
+(sessions set_split_screen_type / join_lan_server / set_voice_channel / set_voice_attenuation +
+input enable_input_mapping / disable_input_action — routing enum, classes, fragments, handlers);
+the other 5 sessions configure_* echoes were already unpublished orphans, dead comments swept.
+Published actions 1042 → 1036 (setup_ragdoll's publication brings the post-wave total to 1037).
+Original entry below.
 Preserved as-is at the family's classing (McpCalls_ManageNetworking.cpp — bodies moved
 verbatim, deliberately not deepened there). Nine Sessions actions parse and echo their
 inputs without writing anything (SessionsHandlers.cpp free functions):
@@ -343,7 +419,11 @@ flags — RequiresEditor without Mutating — so the no-write behavior is at lea
 machine-visible now. Options: deepen to real writes, or retire the names from the
 schema. Schema surface is Aaron's decision.
 
-### [ ] 2026-07-03 — `manage_blueprint create_blueprint` ignores `path`, sprays to /Game root
+### [x] 2026-07-03 — `manage_blueprint create_blueprint` ignores `path`, sprays to /Game root
+FIXED in `638a67a7` (verified 2026-07-10): `HandleBlueprintCreate` reads path → savePath → folder
+(matching the widget-create precedent), `S_Create` declares all three, golden re-pinned in
+`feda1be4`; `ensure_exists` shares the handler so it inherits the fix. The action is canonical
+`create` now — `create_blueprint` in this entry was the historical name.
 Found during the sleep-triage benchmark: `create_blueprint {name:'BP_Bench', path:'/Game/ZZ_McpScratch'}`
 silently created `/Game/BP_Bench` — the schema documents `savePath` for this action and the handler
 never reads `path`, so the destination fell through to the /Game root (the audit's
