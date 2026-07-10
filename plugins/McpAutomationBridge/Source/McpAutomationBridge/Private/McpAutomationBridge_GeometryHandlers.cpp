@@ -45,6 +45,7 @@
 #include "McpAutomationBridgeHelpers.h"
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_GeometryHandlers.h"
 #include "Misc/EngineVersionComparison.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMcpGeometryHandlers, Log, All);
@@ -6931,16 +6932,17 @@ static bool HandleSetLODScreenSizes(UMcpAutomationBridgeSubsystem* Self, const F
 // exactly as they omitted the retired dispatcher.
 
 // create_box
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateBox(
+bool McpHandlers::Geometry::HandleGeometryCreateBox(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreateBox(this, RequestId, Payload, Socket);
+    return HandleCreateBox(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -6948,16 +6950,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateBox(
 }
 
 // create_sphere
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateSphere(
+bool McpHandlers::Geometry::HandleGeometryCreateSphere(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreateSphere(this, RequestId, Payload, Socket);
+    return HandleCreateSphere(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -6965,16 +6968,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateSphere(
 }
 
 // create_cylinder
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateCylinder(
+bool McpHandlers::Geometry::HandleGeometryCreateCylinder(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreateCylinder(this, RequestId, Payload, Socket);
+    return HandleCreateCylinder(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -6982,16 +6986,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateCylinder(
 }
 
 // create_cone
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateCone(
+bool McpHandlers::Geometry::HandleGeometryCreateCone(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreateCone(this, RequestId, Payload, Socket);
+    return HandleCreateCone(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -6999,16 +7004,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateCone(
 }
 
 // create_capsule
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateCapsule(
+bool McpHandlers::Geometry::HandleGeometryCreateCapsule(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreateCapsule(this, RequestId, Payload, Socket);
+    return HandleCreateCapsule(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7016,16 +7022,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateCapsule(
 }
 
 // create_torus
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateTorus(
+bool McpHandlers::Geometry::HandleGeometryCreateTorus(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreateTorus(this, RequestId, Payload, Socket);
+    return HandleCreateTorus(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7033,16 +7040,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateTorus(
 }
 
 // create_plane
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreatePlane(
+bool McpHandlers::Geometry::HandleGeometryCreatePlane(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreatePlane(this, RequestId, Payload, Socket);
+    return HandleCreatePlane(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7050,16 +7058,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreatePlane(
 }
 
 // create_disc
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateDisc(
+bool McpHandlers::Geometry::HandleGeometryCreateDisc(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreateDisc(this, RequestId, Payload, Socket);
+    return HandleCreateDisc(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7067,16 +7076,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateDisc(
 }
 
 // create_stairs
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateStairs(
+bool McpHandlers::Geometry::HandleGeometryCreateStairs(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreateStairs(this, RequestId, Payload, Socket);
+    return HandleCreateStairs(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7084,16 +7094,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateStairs(
 }
 
 // create_spiral_stairs
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateSpiralStairs(
+bool McpHandlers::Geometry::HandleGeometryCreateSpiralStairs(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreateSpiralStairs(this, RequestId, Payload, Socket);
+    return HandleCreateSpiralStairs(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7101,16 +7112,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateSpiralStairs(
 }
 
 // create_ring
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateRing(
+bool McpHandlers::Geometry::HandleGeometryCreateRing(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreateRing(this, RequestId, Payload, Socket);
+    return HandleCreateRing(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7118,16 +7130,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateRing(
 }
 
 // create_arch
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateArch(
+bool McpHandlers::Geometry::HandleGeometryCreateArch(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreateArch(this, RequestId, Payload, Socket);
+    return HandleCreateArch(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7135,16 +7148,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateArch(
 }
 
 // create_pipe
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreatePipe(
+bool McpHandlers::Geometry::HandleGeometryCreatePipe(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreatePipe(this, RequestId, Payload, Socket);
+    return HandleCreatePipe(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7152,16 +7166,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreatePipe(
 }
 
 // create_ramp
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateRamp(
+bool McpHandlers::Geometry::HandleGeometryCreateRamp(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCreateRamp(this, RequestId, Payload, Socket);
+    return HandleCreateRamp(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7169,16 +7184,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCreateRamp(
 }
 
 // revolve
-bool UMcpAutomationBridgeSubsystem::HandleGeometryRevolve(
+bool McpHandlers::Geometry::HandleGeometryRevolve(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleRevolve(this, RequestId, Payload, Socket);
+    return HandleRevolve(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7186,16 +7202,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryRevolve(
 }
 
 // boolean_union
-bool UMcpAutomationBridgeSubsystem::HandleGeometryBooleanUnion(
+bool McpHandlers::Geometry::HandleGeometryBooleanUnion(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleBooleanUnion(this, RequestId, Payload, Socket);
+    return HandleBooleanUnion(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7203,16 +7220,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryBooleanUnion(
 }
 
 // boolean_subtract
-bool UMcpAutomationBridgeSubsystem::HandleGeometryBooleanSubtract(
+bool McpHandlers::Geometry::HandleGeometryBooleanSubtract(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleBooleanSubtract(this, RequestId, Payload, Socket);
+    return HandleBooleanSubtract(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7220,16 +7238,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryBooleanSubtract(
 }
 
 // boolean_intersection
-bool UMcpAutomationBridgeSubsystem::HandleGeometryBooleanIntersection(
+bool McpHandlers::Geometry::HandleGeometryBooleanIntersection(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleBooleanIntersection(this, RequestId, Payload, Socket);
+    return HandleBooleanIntersection(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7237,16 +7256,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryBooleanIntersection(
 }
 
 // boolean_trim
-bool UMcpAutomationBridgeSubsystem::HandleGeometryBooleanTrim(
+bool McpHandlers::Geometry::HandleGeometryBooleanTrim(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleBooleanTrim(this, RequestId, Payload, Socket);
+    return HandleBooleanTrim(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7254,16 +7274,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryBooleanTrim(
 }
 
 // self_union
-bool UMcpAutomationBridgeSubsystem::HandleGeometrySelfUnion(
+bool McpHandlers::Geometry::HandleGeometrySelfUnion(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleSelfUnion(this, RequestId, Payload, Socket);
+    return HandleSelfUnion(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7271,16 +7292,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometrySelfUnion(
 }
 
 // get_mesh_info
-bool UMcpAutomationBridgeSubsystem::HandleGeometryGetMeshInfo(
+bool McpHandlers::Geometry::HandleGeometryGetMeshInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleGetMeshInfo(this, RequestId, Payload, Socket);
+    return HandleGetMeshInfo(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7288,16 +7310,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryGetMeshInfo(
 }
 
 // recalculate_normals
-bool UMcpAutomationBridgeSubsystem::HandleGeometryRecalculateNormals(
+bool McpHandlers::Geometry::HandleGeometryRecalculateNormals(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleRecalculateNormals(this, RequestId, Payload, Socket);
+    return HandleRecalculateNormals(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7305,16 +7328,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryRecalculateNormals(
 }
 
 // flip_normals
-bool UMcpAutomationBridgeSubsystem::HandleGeometryFlipNormals(
+bool McpHandlers::Geometry::HandleGeometryFlipNormals(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleFlipNormals(this, RequestId, Payload, Socket);
+    return HandleFlipNormals(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7322,16 +7346,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryFlipNormals(
 }
 
 // simplify_mesh
-bool UMcpAutomationBridgeSubsystem::HandleGeometrySimplifyMesh(
+bool McpHandlers::Geometry::HandleGeometrySimplifyMesh(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleSimplifyMesh(this, RequestId, Payload, Socket);
+    return HandleSimplifyMesh(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7339,16 +7364,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometrySimplifyMesh(
 }
 
 // subdivide
-bool UMcpAutomationBridgeSubsystem::HandleGeometrySubdivide(
+bool McpHandlers::Geometry::HandleGeometrySubdivide(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleSubdivide(this, RequestId, Payload, Socket);
+    return HandleSubdivide(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7356,16 +7382,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometrySubdivide(
 }
 
 // auto_uv
-bool UMcpAutomationBridgeSubsystem::HandleGeometryAutoUV(
+bool McpHandlers::Geometry::HandleGeometryAutoUV(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleAutoUV(this, RequestId, Payload, Socket);
+    return HandleAutoUV(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7373,16 +7400,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryAutoUV(
 }
 
 // convert_to_static_mesh
-bool UMcpAutomationBridgeSubsystem::HandleGeometryConvertToStaticMesh(
+bool McpHandlers::Geometry::HandleGeometryConvertToStaticMesh(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleConvertToStaticMesh(this, RequestId, Payload, Socket);
+    return HandleConvertToStaticMesh(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7390,16 +7418,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryConvertToStaticMesh(
 }
 
 // extrude
-bool UMcpAutomationBridgeSubsystem::HandleGeometryExtrude(
+bool McpHandlers::Geometry::HandleGeometryExtrude(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleExtrude(this, RequestId, Payload, Socket);
+    return HandleExtrude(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7407,16 +7436,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryExtrude(
 }
 
 // inset
-bool UMcpAutomationBridgeSubsystem::HandleGeometryInset(
+bool McpHandlers::Geometry::HandleGeometryInset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleInsetOutset(this, RequestId, Payload, Socket, true);
+    return HandleInsetOutset(&S, RequestId, Payload, Socket, true);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7424,16 +7454,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryInset(
 }
 
 // outset
-bool UMcpAutomationBridgeSubsystem::HandleGeometryOutset(
+bool McpHandlers::Geometry::HandleGeometryOutset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleInsetOutset(this, RequestId, Payload, Socket, false);
+    return HandleInsetOutset(&S, RequestId, Payload, Socket, false);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7441,16 +7472,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryOutset(
 }
 
 // bevel
-bool UMcpAutomationBridgeSubsystem::HandleGeometryBevel(
+bool McpHandlers::Geometry::HandleGeometryBevel(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleBevel(this, RequestId, Payload, Socket);
+    return HandleBevel(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7458,16 +7490,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryBevel(
 }
 
 // offset_faces
-bool UMcpAutomationBridgeSubsystem::HandleGeometryOffsetFaces(
+bool McpHandlers::Geometry::HandleGeometryOffsetFaces(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleOffsetFaces(this, RequestId, Payload, Socket);
+    return HandleOffsetFaces(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7475,16 +7508,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryOffsetFaces(
 }
 
 // shell
-bool UMcpAutomationBridgeSubsystem::HandleGeometryShell(
+bool McpHandlers::Geometry::HandleGeometryShell(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleShell(this, RequestId, Payload, Socket);
+    return HandleShell(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7492,16 +7526,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryShell(
 }
 
 // chamfer
-bool UMcpAutomationBridgeSubsystem::HandleGeometryChamfer(
+bool McpHandlers::Geometry::HandleGeometryChamfer(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleChamfer(this, RequestId, Payload, Socket);
+    return HandleChamfer(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7509,16 +7544,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryChamfer(
 }
 
 // bend
-bool UMcpAutomationBridgeSubsystem::HandleGeometryBend(
+bool McpHandlers::Geometry::HandleGeometryBend(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleBend(this, RequestId, Payload, Socket);
+    return HandleBend(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7526,16 +7562,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryBend(
 }
 
 // twist
-bool UMcpAutomationBridgeSubsystem::HandleGeometryTwist(
+bool McpHandlers::Geometry::HandleGeometryTwist(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleTwist(this, RequestId, Payload, Socket);
+    return HandleTwist(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7543,16 +7580,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryTwist(
 }
 
 // taper
-bool UMcpAutomationBridgeSubsystem::HandleGeometryTaper(
+bool McpHandlers::Geometry::HandleGeometryTaper(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleTaper(this, RequestId, Payload, Socket);
+    return HandleTaper(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7560,16 +7598,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryTaper(
 }
 
 // noise_deform
-bool UMcpAutomationBridgeSubsystem::HandleGeometryNoiseDeform(
+bool McpHandlers::Geometry::HandleGeometryNoiseDeform(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleNoiseDeform(this, RequestId, Payload, Socket);
+    return HandleNoiseDeform(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7577,16 +7616,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryNoiseDeform(
 }
 
 // smooth
-bool UMcpAutomationBridgeSubsystem::HandleGeometrySmooth(
+bool McpHandlers::Geometry::HandleGeometrySmooth(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleSmooth(this, RequestId, Payload, Socket);
+    return HandleSmooth(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7594,16 +7634,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometrySmooth(
 }
 
 // relax
-bool UMcpAutomationBridgeSubsystem::HandleGeometryRelax(
+bool McpHandlers::Geometry::HandleGeometryRelax(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleRelax(this, RequestId, Payload, Socket);
+    return HandleRelax(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7611,16 +7652,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryRelax(
 }
 
 // stretch
-bool UMcpAutomationBridgeSubsystem::HandleGeometryStretch(
+bool McpHandlers::Geometry::HandleGeometryStretch(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleStretch(this, RequestId, Payload, Socket);
+    return HandleStretch(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7628,16 +7670,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryStretch(
 }
 
 // spherify
-bool UMcpAutomationBridgeSubsystem::HandleGeometrySpherify(
+bool McpHandlers::Geometry::HandleGeometrySpherify(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleSpherify(this, RequestId, Payload, Socket);
+    return HandleSpherify(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7645,16 +7688,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometrySpherify(
 }
 
 // cylindrify
-bool UMcpAutomationBridgeSubsystem::HandleGeometryCylindrify(
+bool McpHandlers::Geometry::HandleGeometryCylindrify(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleCylindrify(this, RequestId, Payload, Socket);
+    return HandleCylindrify(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7662,16 +7706,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryCylindrify(
 }
 
 // lattice_deform
-bool UMcpAutomationBridgeSubsystem::HandleGeometryLatticeDeform(
+bool McpHandlers::Geometry::HandleGeometryLatticeDeform(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleLatticeDeform(this, RequestId, Payload, Socket);
+    return HandleLatticeDeform(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7679,16 +7724,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryLatticeDeform(
 }
 
 // displace_by_texture
-bool UMcpAutomationBridgeSubsystem::HandleGeometryDisplaceByTexture(
+bool McpHandlers::Geometry::HandleGeometryDisplaceByTexture(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleDisplaceByTexture(this, RequestId, Payload, Socket);
+    return HandleDisplaceByTexture(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7696,16 +7742,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryDisplaceByTexture(
 }
 
 // weld_vertices
-bool UMcpAutomationBridgeSubsystem::HandleGeometryWeldVertices(
+bool McpHandlers::Geometry::HandleGeometryWeldVertices(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleWeldVertices(this, RequestId, Payload, Socket);
+    return HandleWeldVertices(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7713,16 +7760,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryWeldVertices(
 }
 
 // fill_holes
-bool UMcpAutomationBridgeSubsystem::HandleGeometryFillHoles(
+bool McpHandlers::Geometry::HandleGeometryFillHoles(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleFillHoles(this, RequestId, Payload, Socket);
+    return HandleFillHoles(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7730,16 +7778,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryFillHoles(
 }
 
 // remove_degenerates
-bool UMcpAutomationBridgeSubsystem::HandleGeometryRemoveDegenerates(
+bool McpHandlers::Geometry::HandleGeometryRemoveDegenerates(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleRemoveDegenerates(this, RequestId, Payload, Socket);
+    return HandleRemoveDegenerates(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7747,16 +7796,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryRemoveDegenerates(
 }
 
 // remesh_uniform
-bool UMcpAutomationBridgeSubsystem::HandleGeometryRemeshUniform(
+bool McpHandlers::Geometry::HandleGeometryRemeshUniform(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleRemeshUniform(this, RequestId, Payload, Socket);
+    return HandleRemeshUniform(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7764,16 +7814,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryRemeshUniform(
 }
 
 // merge_vertices
-bool UMcpAutomationBridgeSubsystem::HandleGeometryMergeVertices(
+bool McpHandlers::Geometry::HandleGeometryMergeVertices(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleMergeVertices(this, RequestId, Payload, Socket);
+    return HandleMergeVertices(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7781,16 +7832,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryMergeVertices(
 }
 
 // generate_collision
-bool UMcpAutomationBridgeSubsystem::HandleGeometryGenerateCollision(
+bool McpHandlers::Geometry::HandleGeometryGenerateCollision(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleGenerateCollision(this, RequestId, Payload, Socket);
+    return HandleGenerateCollision(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7798,16 +7850,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryGenerateCollision(
 }
 
 // mirror
-bool UMcpAutomationBridgeSubsystem::HandleGeometryMirror(
+bool McpHandlers::Geometry::HandleGeometryMirror(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleMirror(this, RequestId, Payload, Socket);
+    return HandleMirror(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7815,16 +7868,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryMirror(
 }
 
 // array_linear
-bool UMcpAutomationBridgeSubsystem::HandleGeometryArrayLinear(
+bool McpHandlers::Geometry::HandleGeometryArrayLinear(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleArrayLinear(this, RequestId, Payload, Socket);
+    return HandleArrayLinear(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7832,16 +7886,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryArrayLinear(
 }
 
 // array_radial
-bool UMcpAutomationBridgeSubsystem::HandleGeometryArrayRadial(
+bool McpHandlers::Geometry::HandleGeometryArrayRadial(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleArrayRadial(this, RequestId, Payload, Socket);
+    return HandleArrayRadial(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7849,16 +7904,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryArrayRadial(
 }
 
 // triangulate
-bool UMcpAutomationBridgeSubsystem::HandleGeometryTriangulate(
+bool McpHandlers::Geometry::HandleGeometryTriangulate(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleTriangulate(this, RequestId, Payload, Socket);
+    return HandleTriangulate(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7866,16 +7922,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryTriangulate(
 }
 
 // poke
-bool UMcpAutomationBridgeSubsystem::HandleGeometryPoke(
+bool McpHandlers::Geometry::HandleGeometryPoke(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandlePoke(this, RequestId, Payload, Socket);
+    return HandlePoke(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7883,16 +7940,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryPoke(
 }
 
 // project_uv
-bool UMcpAutomationBridgeSubsystem::HandleGeometryProjectUV(
+bool McpHandlers::Geometry::HandleGeometryProjectUV(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleProjectUV(this, RequestId, Payload, Socket);
+    return HandleProjectUV(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7900,16 +7958,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryProjectUV(
 }
 
 // transform_uvs
-bool UMcpAutomationBridgeSubsystem::HandleGeometryTransformUVs(
+bool McpHandlers::Geometry::HandleGeometryTransformUVs(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleTransformUVs(this, RequestId, Payload, Socket);
+    return HandleTransformUVs(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7917,16 +7976,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryTransformUVs(
 }
 
 // recompute_tangents
-bool UMcpAutomationBridgeSubsystem::HandleGeometryRecomputeTangents(
+bool McpHandlers::Geometry::HandleGeometryRecomputeTangents(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleRecomputeTangents(this, RequestId, Payload, Socket);
+    return HandleRecomputeTangents(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7934,16 +7994,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryRecomputeTangents(
 }
 
 // bridge
-bool UMcpAutomationBridgeSubsystem::HandleGeometryBridge(
+bool McpHandlers::Geometry::HandleGeometryBridge(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleBridge(this, RequestId, Payload, Socket);
+    return HandleBridge(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7951,16 +8012,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryBridge(
 }
 
 // loft
-bool UMcpAutomationBridgeSubsystem::HandleGeometryLoft(
+bool McpHandlers::Geometry::HandleGeometryLoft(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleLoft(this, RequestId, Payload, Socket);
+    return HandleLoft(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7968,16 +8030,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryLoft(
 }
 
 // sweep
-bool UMcpAutomationBridgeSubsystem::HandleGeometrySweep(
+bool McpHandlers::Geometry::HandleGeometrySweep(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleSweep(this, RequestId, Payload, Socket);
+    return HandleSweep(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -7985,16 +8048,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometrySweep(
 }
 
 // loop_cut
-bool UMcpAutomationBridgeSubsystem::HandleGeometryLoopCut(
+bool McpHandlers::Geometry::HandleGeometryLoopCut(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleLoopCut(this, RequestId, Payload, Socket);
+    return HandleLoopCut(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -8002,16 +8066,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryLoopCut(
 }
 
 // duplicate_along_spline
-bool UMcpAutomationBridgeSubsystem::HandleGeometryDuplicateAlongSpline(
+bool McpHandlers::Geometry::HandleGeometryDuplicateAlongSpline(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleDuplicateAlongSpline(this, RequestId, Payload, Socket);
+    return HandleDuplicateAlongSpline(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -8019,16 +8084,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryDuplicateAlongSpline(
 }
 
 // unwrap_uv
-bool UMcpAutomationBridgeSubsystem::HandleGeometryUnwrapUV(
+bool McpHandlers::Geometry::HandleGeometryUnwrapUV(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleUnwrapUV(this, RequestId, Payload, Socket);
+    return HandleUnwrapUV(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -8036,16 +8102,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryUnwrapUV(
 }
 
 // pack_uv_islands
-bool UMcpAutomationBridgeSubsystem::HandleGeometryPackUVIslands(
+bool McpHandlers::Geometry::HandleGeometryPackUVIslands(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandlePackUVIslands(this, RequestId, Payload, Socket);
+    return HandlePackUVIslands(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -8053,16 +8120,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryPackUVIslands(
 }
 
 // convert_to_nanite
-bool UMcpAutomationBridgeSubsystem::HandleGeometryConvertToNanite(
+bool McpHandlers::Geometry::HandleGeometryConvertToNanite(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleConvertToNanite(this, RequestId, Payload, Socket);
+    return HandleConvertToNanite(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -8070,16 +8138,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryConvertToNanite(
 }
 
 // extrude_along_spline
-bool UMcpAutomationBridgeSubsystem::HandleGeometryExtrudeAlongSpline(
+bool McpHandlers::Geometry::HandleGeometryExtrudeAlongSpline(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleExtrudeAlongSpline(this, RequestId, Payload, Socket);
+    return HandleExtrudeAlongSpline(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -8087,16 +8156,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryExtrudeAlongSpline(
 }
 
 // edge_split
-bool UMcpAutomationBridgeSubsystem::HandleGeometryEdgeSplit(
+bool McpHandlers::Geometry::HandleGeometryEdgeSplit(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleEdgeSplit(this, RequestId, Payload, Socket);
+    return HandleEdgeSplit(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -8104,16 +8174,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryEdgeSplit(
 }
 
 // quadrangulate
-bool UMcpAutomationBridgeSubsystem::HandleGeometryQuadrangulate(
+bool McpHandlers::Geometry::HandleGeometryQuadrangulate(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleQuadrangulate(this, RequestId, Payload, Socket);
+    return HandleQuadrangulate(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -8121,16 +8192,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryQuadrangulate(
 }
 
 // remesh_voxel
-bool UMcpAutomationBridgeSubsystem::HandleGeometryRemeshVoxel(
+bool McpHandlers::Geometry::HandleGeometryRemeshVoxel(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleRemeshVoxel(this, RequestId, Payload, Socket);
+    return HandleRemeshVoxel(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -8138,16 +8210,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryRemeshVoxel(
 }
 
 // generate_complex_collision
-bool UMcpAutomationBridgeSubsystem::HandleGeometryGenerateComplexCollision(
+bool McpHandlers::Geometry::HandleGeometryGenerateComplexCollision(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleGenerateComplexCollision(this, RequestId, Payload, Socket);
+    return HandleGenerateComplexCollision(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -8155,16 +8228,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryGenerateComplexCollision(
 }
 
 // simplify_collision
-bool UMcpAutomationBridgeSubsystem::HandleGeometrySimplifyCollision(
+bool McpHandlers::Geometry::HandleGeometrySimplifyCollision(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleSimplifyCollision(this, RequestId, Payload, Socket);
+    return HandleSimplifyCollision(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -8172,16 +8246,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometrySimplifyCollision(
 }
 
 // generate_lods
-bool UMcpAutomationBridgeSubsystem::HandleGeometryGenerateLODs(
+bool McpHandlers::Geometry::HandleGeometryGenerateLODs(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleGenerateLODsGeometry(this, RequestId, Payload, Socket);
+    return HandleGenerateLODsGeometry(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -8189,16 +8264,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometryGenerateLODs(
 }
 
 // set_lod_settings
-bool UMcpAutomationBridgeSubsystem::HandleGeometrySetLODSettings(
+bool McpHandlers::Geometry::HandleGeometrySetLODSettings(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleSetLODSettings(this, RequestId, Payload, Socket);
+    return HandleSetLODSettings(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;
@@ -8206,16 +8282,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGeometrySetLODSettings(
 }
 
 // set_lod_screen_sizes
-bool UMcpAutomationBridgeSubsystem::HandleGeometrySetLODScreenSizes(
+bool McpHandlers::Geometry::HandleGeometrySetLODScreenSizes(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if MCP_HAS_FULL_GEOMETRY_SCRIPT
-    return HandleSetLODScreenSizes(this, RequestId, Payload, Socket);
+    return HandleSetLODScreenSizes(&S, RequestId, Payload, Socket);
 #else
     // UE 5.0 doesn't have full GeometryScript support
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("GeometryScript operations require UE 5.1 or later"),
         TEXT("NOT_SUPPORTED"));
     return true;

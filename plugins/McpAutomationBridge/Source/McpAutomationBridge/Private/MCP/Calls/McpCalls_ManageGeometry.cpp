@@ -5,12 +5,13 @@
 // its schema fragment in a S_<Suffix>() function; the published facade schema
 // folds those fragments and GetDecl() derives the validation decl from the same
 // fragment via McpDeriveDecl(), so schema and decl are one source and cannot
-// drift. Run() delegates to the subsystem member handlers — HandleGeometry*
-// (GeometryHandlers.cpp) — until the module split de-members those bodies.
+// drift. Run() delegates to the namespaced free handlers
+// (McpHandlers::Geometry::HandleGeometry*, McpAutomationBridge_GeometryHandlers.cpp).
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_GeometryHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -839,127 +840,127 @@ class FMcpCall_ManageGeometry_##ClassSuffix final : public FMcpCall             
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
 	{                                                                                     \
-		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+		return HandlerFn(S, RequestId, Payload, Socket);                                  \
 	}                                                                                     \
 };
 
 // Primitives
-MCP_GE_CALL(CreateBox, "create_box", HandleGeometryCreateBox, EMcpCallFlags::Mutating)
-MCP_GE_CALL(CreateSphere, "create_sphere", HandleGeometryCreateSphere, EMcpCallFlags::Mutating)
-MCP_GE_CALL(CreateCylinder, "create_cylinder", HandleGeometryCreateCylinder, EMcpCallFlags::Mutating)
-MCP_GE_CALL(CreateCone, "create_cone", HandleGeometryCreateCone, EMcpCallFlags::Mutating)
-MCP_GE_CALL(CreateCapsule, "create_capsule", HandleGeometryCreateCapsule, EMcpCallFlags::Mutating)
-MCP_GE_CALL(CreateTorus, "create_torus", HandleGeometryCreateTorus, EMcpCallFlags::Mutating)
-MCP_GE_CALL(CreatePlane, "create_plane", HandleGeometryCreatePlane, EMcpCallFlags::Mutating)
-MCP_GE_CALL(CreateDisc, "create_disc", HandleGeometryCreateDisc, EMcpCallFlags::Mutating)
-MCP_GE_CALL(CreateStairs, "create_stairs", HandleGeometryCreateStairs, EMcpCallFlags::Mutating)
-MCP_GE_CALL(CreateSpiralStairs, "create_spiral_stairs", HandleGeometryCreateSpiralStairs, EMcpCallFlags::Mutating)
-MCP_GE_CALL(CreateRing, "create_ring", HandleGeometryCreateRing, EMcpCallFlags::Mutating)
-MCP_GE_CALL(CreateArch, "create_arch", HandleGeometryCreateArch, EMcpCallFlags::Mutating)
-MCP_GE_CALL(CreatePipe, "create_pipe", HandleGeometryCreatePipe, EMcpCallFlags::Mutating)
-MCP_GE_CALL(CreateRamp, "create_ramp", HandleGeometryCreateRamp, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Revolve, "revolve", HandleGeometryRevolve, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreateBox, "create_box", McpHandlers::Geometry::HandleGeometryCreateBox, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreateSphere, "create_sphere", McpHandlers::Geometry::HandleGeometryCreateSphere, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreateCylinder, "create_cylinder", McpHandlers::Geometry::HandleGeometryCreateCylinder, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreateCone, "create_cone", McpHandlers::Geometry::HandleGeometryCreateCone, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreateCapsule, "create_capsule", McpHandlers::Geometry::HandleGeometryCreateCapsule, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreateTorus, "create_torus", McpHandlers::Geometry::HandleGeometryCreateTorus, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreatePlane, "create_plane", McpHandlers::Geometry::HandleGeometryCreatePlane, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreateDisc, "create_disc", McpHandlers::Geometry::HandleGeometryCreateDisc, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreateStairs, "create_stairs", McpHandlers::Geometry::HandleGeometryCreateStairs, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreateSpiralStairs, "create_spiral_stairs", McpHandlers::Geometry::HandleGeometryCreateSpiralStairs, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreateRing, "create_ring", McpHandlers::Geometry::HandleGeometryCreateRing, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreateArch, "create_arch", McpHandlers::Geometry::HandleGeometryCreateArch, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreatePipe, "create_pipe", McpHandlers::Geometry::HandleGeometryCreatePipe, EMcpCallFlags::Mutating)
+MCP_GE_CALL(CreateRamp, "create_ramp", McpHandlers::Geometry::HandleGeometryCreateRamp, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Revolve, "revolve", McpHandlers::Geometry::HandleGeometryRevolve, EMcpCallFlags::Mutating)
 
 // Booleans
-MCP_GE_CALL(BooleanUnion, "boolean_union", HandleGeometryBooleanUnion, EMcpCallFlags::Mutating)
-MCP_GE_CALL(BooleanSubtract, "boolean_subtract", HandleGeometryBooleanSubtract, EMcpCallFlags::Mutating)
-MCP_GE_CALL(BooleanIntersection, "boolean_intersection", HandleGeometryBooleanIntersection, EMcpCallFlags::Mutating)
-MCP_GE_CALL(BooleanTrim, "boolean_trim", HandleGeometryBooleanTrim, EMcpCallFlags::Mutating)
-MCP_GE_CALL(SelfUnion, "self_union", HandleGeometrySelfUnion, EMcpCallFlags::Mutating)
+MCP_GE_CALL(BooleanUnion, "boolean_union", McpHandlers::Geometry::HandleGeometryBooleanUnion, EMcpCallFlags::Mutating)
+MCP_GE_CALL(BooleanSubtract, "boolean_subtract", McpHandlers::Geometry::HandleGeometryBooleanSubtract, EMcpCallFlags::Mutating)
+MCP_GE_CALL(BooleanIntersection, "boolean_intersection", McpHandlers::Geometry::HandleGeometryBooleanIntersection, EMcpCallFlags::Mutating)
+MCP_GE_CALL(BooleanTrim, "boolean_trim", McpHandlers::Geometry::HandleGeometryBooleanTrim, EMcpCallFlags::Mutating)
+MCP_GE_CALL(SelfUnion, "self_union", McpHandlers::Geometry::HandleGeometrySelfUnion, EMcpCallFlags::Mutating)
 
 // Mesh Utils
-MCP_GE_CALL(GetMeshInfo, "get_mesh_info", HandleGeometryGetMeshInfo, EMcpCallFlags::None)
-MCP_GE_CALL(RecalculateNormals, "recalculate_normals", HandleGeometryRecalculateNormals, EMcpCallFlags::Mutating)
-MCP_GE_CALL(FlipNormals, "flip_normals", HandleGeometryFlipNormals, EMcpCallFlags::Mutating)
-MCP_GE_CALL(SimplifyMesh, "simplify_mesh", HandleGeometrySimplifyMesh, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Subdivide, "subdivide", HandleGeometrySubdivide, EMcpCallFlags::Mutating)
-MCP_GE_CALL(AutoUV, "auto_uv", HandleGeometryAutoUV, EMcpCallFlags::Mutating)
-MCP_GE_CALL(ConvertToStaticMesh, "convert_to_static_mesh", HandleGeometryConvertToStaticMesh, EMcpCallFlags::Mutating)
+MCP_GE_CALL(GetMeshInfo, "get_mesh_info", McpHandlers::Geometry::HandleGeometryGetMeshInfo, EMcpCallFlags::None)
+MCP_GE_CALL(RecalculateNormals, "recalculate_normals", McpHandlers::Geometry::HandleGeometryRecalculateNormals, EMcpCallFlags::Mutating)
+MCP_GE_CALL(FlipNormals, "flip_normals", McpHandlers::Geometry::HandleGeometryFlipNormals, EMcpCallFlags::Mutating)
+MCP_GE_CALL(SimplifyMesh, "simplify_mesh", McpHandlers::Geometry::HandleGeometrySimplifyMesh, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Subdivide, "subdivide", McpHandlers::Geometry::HandleGeometrySubdivide, EMcpCallFlags::Mutating)
+MCP_GE_CALL(AutoUV, "auto_uv", McpHandlers::Geometry::HandleGeometryAutoUV, EMcpCallFlags::Mutating)
+MCP_GE_CALL(ConvertToStaticMesh, "convert_to_static_mesh", McpHandlers::Geometry::HandleGeometryConvertToStaticMesh, EMcpCallFlags::Mutating)
 
 // Modeling Operations
-MCP_GE_CALL(Extrude, "extrude", HandleGeometryExtrude, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Inset, "inset", HandleGeometryInset, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Outset, "outset", HandleGeometryOutset, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Bevel, "bevel", HandleGeometryBevel, EMcpCallFlags::Mutating)
-MCP_GE_CALL(OffsetFaces, "offset_faces", HandleGeometryOffsetFaces, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Shell, "shell", HandleGeometryShell, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Chamfer, "chamfer", HandleGeometryChamfer, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Extrude, "extrude", McpHandlers::Geometry::HandleGeometryExtrude, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Inset, "inset", McpHandlers::Geometry::HandleGeometryInset, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Outset, "outset", McpHandlers::Geometry::HandleGeometryOutset, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Bevel, "bevel", McpHandlers::Geometry::HandleGeometryBevel, EMcpCallFlags::Mutating)
+MCP_GE_CALL(OffsetFaces, "offset_faces", McpHandlers::Geometry::HandleGeometryOffsetFaces, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Shell, "shell", McpHandlers::Geometry::HandleGeometryShell, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Chamfer, "chamfer", McpHandlers::Geometry::HandleGeometryChamfer, EMcpCallFlags::Mutating)
 
 // Deformers
-MCP_GE_CALL(Bend, "bend", HandleGeometryBend, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Twist, "twist", HandleGeometryTwist, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Taper, "taper", HandleGeometryTaper, EMcpCallFlags::Mutating)
-MCP_GE_CALL(NoiseDeform, "noise_deform", HandleGeometryNoiseDeform, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Smooth, "smooth", HandleGeometrySmooth, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Relax, "relax", HandleGeometryRelax, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Stretch, "stretch", HandleGeometryStretch, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Spherify, "spherify", HandleGeometrySpherify, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Cylindrify, "cylindrify", HandleGeometryCylindrify, EMcpCallFlags::Mutating)
-MCP_GE_CALL(LatticeDeform, "lattice_deform", HandleGeometryLatticeDeform, EMcpCallFlags::Mutating)
-MCP_GE_CALL(DisplaceByTexture, "displace_by_texture", HandleGeometryDisplaceByTexture, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Bend, "bend", McpHandlers::Geometry::HandleGeometryBend, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Twist, "twist", McpHandlers::Geometry::HandleGeometryTwist, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Taper, "taper", McpHandlers::Geometry::HandleGeometryTaper, EMcpCallFlags::Mutating)
+MCP_GE_CALL(NoiseDeform, "noise_deform", McpHandlers::Geometry::HandleGeometryNoiseDeform, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Smooth, "smooth", McpHandlers::Geometry::HandleGeometrySmooth, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Relax, "relax", McpHandlers::Geometry::HandleGeometryRelax, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Stretch, "stretch", McpHandlers::Geometry::HandleGeometryStretch, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Spherify, "spherify", McpHandlers::Geometry::HandleGeometrySpherify, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Cylindrify, "cylindrify", McpHandlers::Geometry::HandleGeometryCylindrify, EMcpCallFlags::Mutating)
+MCP_GE_CALL(LatticeDeform, "lattice_deform", McpHandlers::Geometry::HandleGeometryLatticeDeform, EMcpCallFlags::Mutating)
+MCP_GE_CALL(DisplaceByTexture, "displace_by_texture", McpHandlers::Geometry::HandleGeometryDisplaceByTexture, EMcpCallFlags::Mutating)
 
 // Mesh Repair
-MCP_GE_CALL(WeldVertices, "weld_vertices", HandleGeometryWeldVertices, EMcpCallFlags::Mutating)
-MCP_GE_CALL(FillHoles, "fill_holes", HandleGeometryFillHoles, EMcpCallFlags::Mutating)
-MCP_GE_CALL(RemoveDegenerates, "remove_degenerates", HandleGeometryRemoveDegenerates, EMcpCallFlags::Mutating)
-MCP_GE_CALL(RemeshUniform, "remesh_uniform", HandleGeometryRemeshUniform, EMcpCallFlags::Mutating)
-MCP_GE_CALL(MergeVertices, "merge_vertices", HandleGeometryMergeVertices, EMcpCallFlags::Mutating)
+MCP_GE_CALL(WeldVertices, "weld_vertices", McpHandlers::Geometry::HandleGeometryWeldVertices, EMcpCallFlags::Mutating)
+MCP_GE_CALL(FillHoles, "fill_holes", McpHandlers::Geometry::HandleGeometryFillHoles, EMcpCallFlags::Mutating)
+MCP_GE_CALL(RemoveDegenerates, "remove_degenerates", McpHandlers::Geometry::HandleGeometryRemoveDegenerates, EMcpCallFlags::Mutating)
+MCP_GE_CALL(RemeshUniform, "remesh_uniform", McpHandlers::Geometry::HandleGeometryRemeshUniform, EMcpCallFlags::Mutating)
+MCP_GE_CALL(MergeVertices, "merge_vertices", McpHandlers::Geometry::HandleGeometryMergeVertices, EMcpCallFlags::Mutating)
 
 // Collision Generation
-MCP_GE_CALL(GenerateCollision, "generate_collision", HandleGeometryGenerateCollision, EMcpCallFlags::Mutating)
+MCP_GE_CALL(GenerateCollision, "generate_collision", McpHandlers::Geometry::HandleGeometryGenerateCollision, EMcpCallFlags::Mutating)
 
 // Transform Operations
-MCP_GE_CALL(Mirror, "mirror", HandleGeometryMirror, EMcpCallFlags::Mutating)
-MCP_GE_CALL(ArrayLinear, "array_linear", HandleGeometryArrayLinear, EMcpCallFlags::Mutating)
-MCP_GE_CALL(ArrayRadial, "array_radial", HandleGeometryArrayRadial, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Mirror, "mirror", McpHandlers::Geometry::HandleGeometryMirror, EMcpCallFlags::Mutating)
+MCP_GE_CALL(ArrayLinear, "array_linear", McpHandlers::Geometry::HandleGeometryArrayLinear, EMcpCallFlags::Mutating)
+MCP_GE_CALL(ArrayRadial, "array_radial", McpHandlers::Geometry::HandleGeometryArrayRadial, EMcpCallFlags::Mutating)
 
 // Mesh Topology Operations
-MCP_GE_CALL(Triangulate, "triangulate", HandleGeometryTriangulate, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Poke, "poke", HandleGeometryPoke, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Triangulate, "triangulate", McpHandlers::Geometry::HandleGeometryTriangulate, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Poke, "poke", McpHandlers::Geometry::HandleGeometryPoke, EMcpCallFlags::Mutating)
 
 // UV Operations
-MCP_GE_CALL(ProjectUV, "project_uv", HandleGeometryProjectUV, EMcpCallFlags::Mutating)
-MCP_GE_CALL(TransformUVs, "transform_uvs", HandleGeometryTransformUVs, EMcpCallFlags::Mutating)
+MCP_GE_CALL(ProjectUV, "project_uv", McpHandlers::Geometry::HandleGeometryProjectUV, EMcpCallFlags::Mutating)
+MCP_GE_CALL(TransformUVs, "transform_uvs", McpHandlers::Geometry::HandleGeometryTransformUVs, EMcpCallFlags::Mutating)
 
 // Tangent Operations
-MCP_GE_CALL(RecomputeTangents, "recompute_tangents", HandleGeometryRecomputeTangents, EMcpCallFlags::Mutating)
+MCP_GE_CALL(RecomputeTangents, "recompute_tangents", McpHandlers::Geometry::HandleGeometryRecomputeTangents, EMcpCallFlags::Mutating)
 
 // Advanced Operations (Bridge, Loft, Sweep)
-MCP_GE_CALL(Bridge, "bridge", HandleGeometryBridge, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Loft, "loft", HandleGeometryLoft, EMcpCallFlags::Mutating)
-MCP_GE_CALL(Sweep, "sweep", HandleGeometrySweep, EMcpCallFlags::Mutating)
-MCP_GE_CALL(LoopCut, "loop_cut", HandleGeometryLoopCut, EMcpCallFlags::Mutating)
-MCP_GE_CALL(DuplicateAlongSpline, "duplicate_along_spline", HandleGeometryDuplicateAlongSpline, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Bridge, "bridge", McpHandlers::Geometry::HandleGeometryBridge, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Loft, "loft", McpHandlers::Geometry::HandleGeometryLoft, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Sweep, "sweep", McpHandlers::Geometry::HandleGeometrySweep, EMcpCallFlags::Mutating)
+MCP_GE_CALL(LoopCut, "loop_cut", McpHandlers::Geometry::HandleGeometryLoopCut, EMcpCallFlags::Mutating)
+MCP_GE_CALL(DuplicateAlongSpline, "duplicate_along_spline", McpHandlers::Geometry::HandleGeometryDuplicateAlongSpline, EMcpCallFlags::Mutating)
 
 // Additional UV Operations
-MCP_GE_CALL(UnwrapUV, "unwrap_uv", HandleGeometryUnwrapUV, EMcpCallFlags::Mutating)
-MCP_GE_CALL(PackUVIslands, "pack_uv_islands", HandleGeometryPackUVIslands, EMcpCallFlags::Mutating)
+MCP_GE_CALL(UnwrapUV, "unwrap_uv", McpHandlers::Geometry::HandleGeometryUnwrapUV, EMcpCallFlags::Mutating)
+MCP_GE_CALL(PackUVIslands, "pack_uv_islands", McpHandlers::Geometry::HandleGeometryPackUVIslands, EMcpCallFlags::Mutating)
 
 // Nanite Conversion
-MCP_GE_CALL(ConvertToNanite, "convert_to_nanite", HandleGeometryConvertToNanite, EMcpCallFlags::Mutating)
+MCP_GE_CALL(ConvertToNanite, "convert_to_nanite", McpHandlers::Geometry::HandleGeometryConvertToNanite, EMcpCallFlags::Mutating)
 
 // Spline-based Operations
-MCP_GE_CALL(ExtrudeAlongSpline, "extrude_along_spline", HandleGeometryExtrudeAlongSpline, EMcpCallFlags::Mutating)
+MCP_GE_CALL(ExtrudeAlongSpline, "extrude_along_spline", McpHandlers::Geometry::HandleGeometryExtrudeAlongSpline, EMcpCallFlags::Mutating)
 
 // Edge Operations
-MCP_GE_CALL(EdgeSplit, "edge_split", HandleGeometryEdgeSplit, EMcpCallFlags::Mutating)
+MCP_GE_CALL(EdgeSplit, "edge_split", McpHandlers::Geometry::HandleGeometryEdgeSplit, EMcpCallFlags::Mutating)
 
 // Topology Operations
-MCP_GE_CALL(Quadrangulate, "quadrangulate", HandleGeometryQuadrangulate, EMcpCallFlags::Mutating)
+MCP_GE_CALL(Quadrangulate, "quadrangulate", McpHandlers::Geometry::HandleGeometryQuadrangulate, EMcpCallFlags::Mutating)
 
 // Remesh Operations
-MCP_GE_CALL(RemeshVoxel, "remesh_voxel", HandleGeometryRemeshVoxel, EMcpCallFlags::Mutating)
+MCP_GE_CALL(RemeshVoxel, "remesh_voxel", McpHandlers::Geometry::HandleGeometryRemeshVoxel, EMcpCallFlags::Mutating)
 
 // Complex Collision
-MCP_GE_CALL(GenerateComplexCollision, "generate_complex_collision", HandleGeometryGenerateComplexCollision, EMcpCallFlags::Mutating)
+MCP_GE_CALL(GenerateComplexCollision, "generate_complex_collision", McpHandlers::Geometry::HandleGeometryGenerateComplexCollision, EMcpCallFlags::Mutating)
 
 // Collision Simplification
-MCP_GE_CALL(SimplifyCollision, "simplify_collision", HandleGeometrySimplifyCollision, EMcpCallFlags::Mutating)
+MCP_GE_CALL(SimplifyCollision, "simplify_collision", McpHandlers::Geometry::HandleGeometrySimplifyCollision, EMcpCallFlags::Mutating)
 
 // LOD Operations (Geometry-specific)
-MCP_GE_CALL(GenerateLODs, "generate_lods", HandleGeometryGenerateLODs, EMcpCallFlags::Mutating)
-MCP_GE_CALL(SetLODSettings, "set_lod_settings", HandleGeometrySetLODSettings, EMcpCallFlags::Mutating)
-MCP_GE_CALL(SetLODScreenSizes, "set_lod_screen_sizes", HandleGeometrySetLODScreenSizes, EMcpCallFlags::Mutating)
+MCP_GE_CALL(GenerateLODs, "generate_lods", McpHandlers::Geometry::HandleGeometryGenerateLODs, EMcpCallFlags::Mutating)
+MCP_GE_CALL(SetLODSettings, "set_lod_settings", McpHandlers::Geometry::HandleGeometrySetLODSettings, EMcpCallFlags::Mutating)
+MCP_GE_CALL(SetLODScreenSizes, "set_lod_screen_sizes", McpHandlers::Geometry::HandleGeometrySetLODScreenSizes, EMcpCallFlags::Mutating)
 
 #undef MCP_GE_CALL
 
