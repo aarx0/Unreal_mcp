@@ -2961,13 +2961,11 @@ private:
   // Ticker handle for managing the subsystems tick function
   FTSTicker::FDelegateHandle TickHandle;
 
-  // Sequence helpers
+public:
+  // Sequence helper — public: the de-membered McpHandlers::Sequence free
+  // functions resolve the target sequence through it.
   FString ResolveSequencePath(const TSharedPtr<FJsonObject> &Payload);
 
-  // manage_sequence subhandlers — public so the manage_sequence FMcpCall
-  // classes (Private/MCP/Calls/) can delegate, until the module split
-  // de-members the implementations off the subsystem.
-public:
   bool HandleSequenceCreate(const FString &RequestId,
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle Socket);
@@ -3044,14 +3042,11 @@ public:
                                   const TSharedPtr<FJsonObject> &Payload,
                                   FMcpResponseHandle Socket);
 
-private:
-  // Control handlers
+public:
+  // World-selecting forward to McpHandlerUtils::FindActorByName — public: the
+  // de-membered handler free functions resolve actors through it.
   AActor *FindActorByName(const FString &Target, bool bExactMatchOnly = false);
 
-  // Control Actor Subhandlers — public so the control_actor FMcpCall classes
-  // (Private/MCP/Calls/) can delegate, until the module split de-members the
-  // implementations off the subsystem.
-public:
   bool HandleControlActorSpawn(const FString &RequestId,
                                const TSharedPtr<FJsonObject> &Payload,
                                FMcpResponseHandle Socket);

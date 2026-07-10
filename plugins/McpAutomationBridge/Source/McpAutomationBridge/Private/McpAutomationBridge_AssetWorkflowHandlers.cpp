@@ -57,6 +57,7 @@
 #include "McpHandlerUtils.h"
 #include "McpPropertyReflection.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_AssetWorkflowHandlers.h"
 #include "Misc/EngineVersionComparison.h"
 #include "Misc/ScopeExit.h"
 #include "UObject/MetaData.h"
@@ -263,10 +264,11 @@ static bool HandleSaveAssetStatic(UMcpAutomationBridgeSubsystem* Self,
 
 // The classed manage_asset `save` action delegates here; the editor-gated
 // implementation remains the file-static HandleSaveAssetStatic above.
-bool UMcpAutomationBridgeSubsystem::HandleSaveAsset(
+bool McpHandlers::Asset::HandleSaveAsset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
-  return HandleSaveAssetStatic(this, RequestId, Payload, RequestingSocket);
+  return HandleSaveAssetStatic(&S, RequestId, Payload, RequestingSocket);
 }
 
 
@@ -274,7 +276,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSaveAsset(
 // 1. FIXUP REDIRECTORS
 // ============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleFixupRedirectors(
+bool McpHandlers::Asset::HandleFixupRedirectors(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -287,7 +290,7 @@ bool UMcpAutomationBridgeSubsystem::HandleFixupRedirectors(
   // Implementation of redirector fixup functionality
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("fixup_redirectors payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -307,7 +310,7 @@ bool UMcpAutomationBridgeSubsystem::HandleFixupRedirectors(
 
   // Validate path is provided
   if (DirectoryPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("directoryPath or path is required for fixup_redirectors"),
                         TEXT("MISSING_ARGUMENT"));
     return true;
@@ -316,7 +319,7 @@ bool UMcpAutomationBridgeSubsystem::HandleFixupRedirectors(
   // SECURITY: Sanitize path to prevent traversal attacks
   FString SanitizedPath = SanitizeProjectRelativePath(DirectoryPath);
   if (SanitizedPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         FString::Printf(TEXT("Invalid path (traversal/security violation): %s"), *DirectoryPath),
         TEXT("SECURITY_VIOLATION"));
     return true;
@@ -332,7 +335,7 @@ bool UMcpAutomationBridgeSubsystem::HandleFixupRedirectors(
   // UEditorAssetLibrary::DoesDirectoryExist() uses AssetRegistry cache which may
   // contain stale entries. We need to check if the directory ACTUALLY exists on disk.
   if (!DoesAssetDirectoryExistOnDisk(NormalizedPath)) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         FString::Printf(TEXT("Directory not found: %s"), *NormalizedPath),
                         TEXT("PATH_NOT_FOUND"));
     return true;
@@ -363,7 +366,7 @@ bool UMcpAutomationBridgeSubsystem::HandleFixupRedirectors(
     Result->SetBoolField(TEXT("success"), true);
     Result->SetNumberField(TEXT("redirectorsFound"), 0);
     Result->SetNumberField(TEXT("redirectorsFixed"), 0);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("No redirectors found"), Result, FString());
     return true;
   }
@@ -419,13 +422,13 @@ bool UMcpAutomationBridgeSubsystem::HandleFixupRedirectors(
   Result->SetNumberField(TEXT("redirectorsFound"), RedirectorAssets.Num());
   Result->SetNumberField(TEXT("redirectorsFixed"), DeletedCount);
 
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, true,
       FString::Printf(TEXT("Fixed %d redirectors"), DeletedCount), Result,
       FString());
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("fixup_redirectors requires editor build"),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -436,7 +439,8 @@ bool UMcpAutomationBridgeSubsystem::HandleFixupRedirectors(
 // 2. SOURCE CONTROL CHECKOUT
 // ============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleSourceControlCheckout(
+bool McpHandlers::Asset::HandleSourceControlCheckout(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -447,7 +451,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlCheckout(
   }
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("source_control_checkout payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -472,7 +476,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlCheckout(
   }
 
   if (AssetPaths.Num() == 0) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("assetPath (string) or assetPaths (array) required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -483,7 +487,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlCheckout(
     Result->SetBoolField(TEXT("success"), false);
     Result->SetStringField(TEXT("error"),
                            TEXT("Source control is not enabled"));
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Source control disabled"), Result,
                            TEXT("SOURCE_CONTROL_DISABLED"));
     return true;
@@ -504,7 +508,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlCheckout(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("success"), false);
     Result->SetStringField(TEXT("error"), TEXT("No valid assets found"));
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("No valid assets"), Result,
                            TEXT("NO_VALID_ASSETS"));
     return true;
@@ -522,14 +526,14 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlCheckout(
   Result->SetNumberField(TEXT("checkedOut"), PackageNames.Num());
   Result->SetArrayField(TEXT("assets"), CheckedOutPaths);
 
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess,
                          bSuccess ? TEXT("Assets checked out successfully")
                                   : TEXT("Checkout failed"),
                          Result,
                          bSuccess ? FString() : TEXT("CHECKOUT_FAILED"));
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("source_control_checkout requires editor build"),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -540,7 +544,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlCheckout(
 // 3. SOURCE CONTROL SUBMIT
 // ============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleSourceControlSubmit(
+bool McpHandlers::Asset::HandleSourceControlSubmit(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -551,7 +556,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlSubmit(
   }
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("source_control_submit payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -576,7 +581,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlSubmit(
   }
 
   if (AssetPaths.Num() == 0) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("assetPath (string) or assetPaths (array) required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -593,7 +598,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlSubmit(
     Result->SetBoolField(TEXT("success"), false);
     Result->SetStringField(TEXT("error"),
                            TEXT("Source control is not enabled"));
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Source control disabled"), Result,
                            TEXT("SOURCE_CONTROL_DISABLED"));
     return true;
@@ -615,7 +620,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlSubmit(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("success"), false);
     Result->SetStringField(TEXT("error"), TEXT("No valid assets found"));
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("No valid assets"), Result,
                            TEXT("NO_VALID_ASSETS"));
     return true;
@@ -646,13 +651,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlSubmit(
                             bSuccess ? PackageNames.Num() : 0);
   ResultObj->SetStringField(TEXT("description"), Description);
 
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, bSuccess,
       bSuccess ? TEXT("Assets submitted successfully") : TEXT("Submit failed"),
       ResultObj, bSuccess ? FString() : TEXT("SUBMIT_FAILED"));
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("source_control_submit requires editor build"),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -665,7 +670,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSourceControlSubmit(
 // 4. BULK RENAME ASSETS
 // ============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleBulkRenameAssets(
+bool McpHandlers::Asset::HandleBulkRenameAssets(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -676,7 +682,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkRenameAssets(
   }
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("bulk_rename payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -715,7 +721,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkRenameAssets(
 
       NormalizedPath = SanitizeProjectRelativePath(NormalizedPath);
       if (NormalizedPath.IsEmpty()) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Invalid path: %s"), *FolderPath),
                             TEXT("SECURITY_VIOLATION"));
         return true;
@@ -746,11 +752,11 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkRenameAssets(
         Result->SetBoolField(TEXT("success"), true);
         Result->SetNumberField(TEXT("renamed"), 0);
         Result->SetStringField(TEXT("message"), TEXT("No assets found in folder"));
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("No assets found"), Result, FString());
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("No assets found"), Result, FString());
         return true;
       }
     } else {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Either assetPaths array or path is required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -810,7 +816,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkRenameAssets(
     Result->SetNumberField(TEXT("renamed"), 0);
     Result->SetStringField(TEXT("message"),
                            TEXT("No assets required renaming"));
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("No renames needed"), Result, FString());
     return true;
   }
@@ -841,14 +847,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkRenameAssets(
   Result->SetNumberField(TEXT("renamed"), RenameData.Num());
   Result->SetArrayField(TEXT("assets"), RenamedAssets);
 
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, bSuccess,
       bSuccess ? FString::Printf(TEXT("Renamed %d assets"), RenameData.Num())
                : TEXT("Bulk rename failed"),
       Result, bSuccess ? FString() : TEXT("BULK_RENAME_FAILED"));
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("bulk_rename requires editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -859,7 +865,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkRenameAssets(
 // 5. BULK DELETE ASSETS
 // ============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleBulkDeleteAssets(
+bool McpHandlers::Asset::HandleBulkDeleteAssets(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -870,7 +877,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkDeleteAssets(
   }
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("bulk_delete payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -909,7 +916,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkDeleteAssets(
 
       NormalizedPath = SanitizeProjectRelativePath(NormalizedPath);
       if (NormalizedPath.IsEmpty()) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Invalid path: %s"), *FolderPath),
                             TEXT("SECURITY_VIOLATION"));
         return true;
@@ -948,11 +955,11 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkDeleteAssets(
         Result->SetBoolField(TEXT("success"), true);
         Result->SetNumberField(TEXT("deleted"), 0);
         Result->SetStringField(TEXT("message"), TEXT("No assets found matching criteria"));
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("No assets found"), Result, FString());
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("No assets found"), Result, FString());
         return true;
       }
     } else {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Either assetPaths array or path is required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -976,7 +983,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkDeleteAssets(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("success"), false);
     Result->SetStringField(TEXT("error"), TEXT("No valid assets found"));
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("No valid assets"), Result,
                            TEXT("NO_VALID_ASSETS"));
     return true;
@@ -1031,14 +1038,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkDeleteAssets(
   Result->SetArrayField(TEXT("deleted"), DeletedArray);
   Result->SetNumberField(TEXT("requested"), ObjectsToDelete.Num());
 
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, DeletedCount > 0,
       FString::Printf(TEXT("Deleted %d of %d assets"), DeletedCount,
                       ObjectsToDelete.Num()),
       Result, DeletedCount > 0 ? FString() : TEXT("BULK_DELETE_FAILED"));
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("bulk_delete requires editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1049,7 +1056,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkDeleteAssets(
 // 6. GENERATE THUMBNAIL
 // ============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
+bool McpHandlers::Asset::HandleGenerateThumbnail(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -1059,7 +1067,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
   }
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("create_thumbnail payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -1068,7 +1076,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
   FString AssetPath;
   if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
       AssetPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("assetPath required"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("assetPath required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -1076,7 +1084,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
   // SECURITY: Validate asset path
   FString SafeAssetPath = SanitizeProjectRelativePath(AssetPath);
   if (SafeAssetPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         FString::Printf(TEXT("Invalid path (traversal/security violation): %s"), *AssetPath),
         TEXT("SECURITY_VIOLATION"));
     return true;
@@ -1099,11 +1107,11 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
   // caused the queued lambda to sit behind the current dispatch cycle, so responses
   // never reached the MCP server before the 30-second timeout (issues #138, #139).
   // Execute synchronously instead.
-  SendProgressUpdate(RequestId, 0.0f,
+  S.SendProgressUpdate(RequestId, 0.0f,
       FString::Printf(TEXT("Starting thumbnail generation for: %s"), *SafeAssetPath), true);
 
   if (!UEditorAssetLibrary::DoesAssetExist(SafeAssetPath)) {
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Asset not found"), nullptr,
                            TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -1111,7 +1119,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
 
   UObject *Asset = UEditorAssetLibrary::LoadAsset(SafeAssetPath);
   if (!Asset) {
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Failed to load asset"), nullptr,
                            TEXT("LOAD_FAILED"));
     return true;
@@ -1129,14 +1137,14 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
     if (!OutputPath.IsEmpty()) {
       Result->SetStringField(TEXT("outputPath"), OutputPath);
     }
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Asset verified; thumbnail rendering skipped under NullRHI"),
                            Result, FString());
     return true;
   }
 
   // Send progress update before GPU operation
-  SendProgressUpdate(RequestId, 50.0f,
+  S.SendProgressUpdate(RequestId, 50.0f,
       TEXT("Rendering thumbnail (GPU operation)..."), true);
 
   FObjectThumbnail ObjectThumbnail;
@@ -1168,7 +1176,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
       // SECURITY: Sanitize and validate the output path to prevent path traversal
       FString SafeOutputPath = SanitizeProjectFilePath(OutputPath);
       if (SafeOutputPath.IsEmpty()) {
-        SendAutomationResponse(RequestingSocket, RequestId, false,
+        S.SendAutomationResponse(RequestingSocket, RequestId, false,
                                FString::Printf(TEXT("Invalid or unsafe output path: %s"), *OutputPath),
                                nullptr, TEXT("SECURITY_VIOLATION"));
         return true;
@@ -1185,7 +1193,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
       }
 
       if (!AbsolutePath.StartsWith(NormalizedProjectDir, ESearchCase::IgnoreCase)) {
-        SendAutomationResponse(RequestingSocket, RequestId, false,
+        S.SendAutomationResponse(RequestingSocket, RequestId, false,
                                FString::Printf(TEXT("Output path escapes project directory: %s"), *OutputPath),
                                nullptr, TEXT("SECURITY_VIOLATION"));
         return true;
@@ -1217,7 +1225,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
     Result->SetStringField(TEXT("outputPath"), OutputPath);
   }
 
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, bSuccess,
       bSuccess ? TEXT("Thumbnail generated successfully")
                : TEXT("Thumbnail generation failed"),
@@ -1225,7 +1233,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
 
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("create_thumbnail requires editor build"),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1254,7 +1262,8 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateThumbnail(
  * @param Socket WebSocket connection.
  * @return True if handled.
  */
-bool UMcpAutomationBridgeSubsystem::HandleImportAsset(
+bool McpHandlers::Asset::HandleImportAsset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -1264,7 +1273,7 @@ bool UMcpAutomationBridgeSubsystem::HandleImportAsset(
   Payload->TryGetStringField(TEXT("sourcePath"), SourcePath);
 
   if (DestinationPath.IsEmpty() || SourcePath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sourcePath and destinationPath required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
@@ -1281,7 +1290,7 @@ bool UMcpAutomationBridgeSubsystem::HandleImportAsset(
 
   // Verify source file exists
   if (!FPaths::FileExists(ResolvedSourcePath)) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Source file not found: %s"), *SourcePath),
         nullptr, TEXT("SOURCE_NOT_FOUND"));
@@ -1291,7 +1300,7 @@ bool UMcpAutomationBridgeSubsystem::HandleImportAsset(
   // Sanitize destination path
   FString SafeDestPath = SanitizeProjectRelativePath(DestinationPath);
   if (SafeDestPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid destination path"), nullptr,
                            TEXT("INVALID_PATH"));
     return true;
@@ -1315,8 +1324,8 @@ bool UMcpAutomationBridgeSubsystem::HandleImportAsset(
   // We use SetTimerForNextTick to ensure we're completely outside of any
   // TaskGraph callback chain before invoking the import.
   if (GEditor) {
-    MarkRequestDeferred(RequestId);
-    TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakThis(this);
+    S.MarkRequestDeferred(RequestId);
+    TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakThis(&S);
     GEditor->GetTimerManager()->SetTimerForNextTick(
         [WeakThis, RequestId, ResolvedSourcePath, DestPath, DestName, Socket]() {
           UMcpAutomationBridgeSubsystem *StrongThis = WeakThis.Get();
@@ -1394,14 +1403,14 @@ bool UMcpAutomationBridgeSubsystem::HandleImportAsset(
         });
   } else {
     // Fallback: GEditor not available (shouldn't happen in editor context)
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available for deferred import"),
                            nullptr, TEXT("EDITOR_NOT_AVAILABLE"));
   }
 
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -1414,12 +1423,13 @@ bool UMcpAutomationBridgeSubsystem::HandleImportAsset(
  * @param Socket WebSocket connection.
  * @return True if handled.
  */
-bool UMcpAutomationBridgeSubsystem::HandleSetMetadata(
+bool McpHandlers::Asset::HandleSetMetadata(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("set_metadata payload missing"), nullptr,
                            TEXT("INVALID_PAYLOAD"));
     return true;
@@ -1428,14 +1438,14 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMetadata(
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AssetPath = SanitizeProjectRelativePath(AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid assetPath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
@@ -1444,7 +1454,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMetadata(
   const FString SafeAssetPath = AssetPath;
 
   if (!UEditorAssetLibrary::DoesAssetExist(SafeAssetPath)) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
                            nullptr, TEXT("ASSET_NOT_FOUND"));
     return true;
   }
@@ -1457,7 +1467,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMetadata(
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetStringField(TEXT("assetPath"), SafeAssetPath);
     Resp->SetNumberField(TEXT("updatedKeys"), 0);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("No metadata provided; no-op"), Resp,
                            FString());
     return true;
@@ -1465,7 +1475,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMetadata(
 
   UObject *Asset = UEditorAssetLibrary::LoadAsset(SafeAssetPath);
   if (!Asset) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to load asset"), nullptr,
                            TEXT("LOAD_FAILED"));
     return true;
@@ -1473,7 +1483,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMetadata(
 
   UPackage *Package = Asset->GetOutermost();
   if (!Package) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to resolve package for asset"), nullptr,
                            TEXT("PACKAGE_NOT_FOUND"));
     return true;
@@ -1542,11 +1552,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMetadata(
   // Add verification data
   McpHandlerUtils::AddVerification(Resp, Asset);
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Asset metadata updated"), Resp, FString());
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -1560,7 +1570,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMetadata(
  * @param Socket WebSocket connection.
  * @return True if handled.
  */
-bool UMcpAutomationBridgeSubsystem::HandleDuplicateAsset(
+bool McpHandlers::Asset::HandleDuplicateAsset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -1574,7 +1585,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDuplicateAsset(
     Payload->TryGetStringField(TEXT("newName"), DestinationPath);
 
   if (SourcePath.IsEmpty() || DestinationPath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("sourcePath (or assetPath) and destinationPath (or newName) "
              "required"),
@@ -1595,7 +1606,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDuplicateAsset(
   SourcePath = SanitizeProjectRelativePath(SourcePath);
   DestinationPath = SanitizeProjectRelativePath(DestinationPath);
   if (SourcePath.IsEmpty() || DestinationPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid sourcePath or destinationPath"),
                            nullptr, TEXT("SECURITY_VIOLATION"));
     return true;
@@ -1658,10 +1669,10 @@ bool UMcpAutomationBridgeSubsystem::HandleDuplicateAsset(
     Resp->SetNumberField(TEXT("duplicatedCount"), DuplicatedCount);
 
     if (bSuccess) {
-      SendAutomationResponse(Socket, RequestId, true, TEXT("Folder duplicated"),
+      S.SendAutomationResponse(Socket, RequestId, true, TEXT("Folder duplicated"),
                              Resp, FString());
     } else {
-      SendAutomationResponse(Socket, RequestId, false,
+      S.SendAutomationResponse(Socket, RequestId, false,
                              TEXT("No assets duplicated"), Resp,
                              TEXT("DUPLICATE_FAILED"));
     }
@@ -1670,7 +1681,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDuplicateAsset(
 
   // Fallback: single-asset duplication
   if (!UEditorAssetLibrary::DoesAssetExist(SourcePath)) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Source asset not found: %s"), *SourcePath),
         nullptr, TEXT("ASSET_NOT_FOUND"));
@@ -1678,7 +1689,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDuplicateAsset(
   }
 
   if (UEditorAssetLibrary::DoesAssetExist(DestinationPath)) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Destination asset already exists: %s"),
                         *DestinationPath),
@@ -1695,15 +1706,15 @@ bool UMcpAutomationBridgeSubsystem::HandleDuplicateAsset(
     if (NewAsset) {
       McpHandlerUtils::AddVerification(Resp, NewAsset);
     }
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Asset duplicated"),
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Asset duplicated"),
                            Resp, FString());
   } else {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Duplicate failed"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Duplicate failed"),
                            nullptr, TEXT("DUPLICATE_FAILED"));
   }
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -1716,7 +1727,8 @@ bool UMcpAutomationBridgeSubsystem::HandleDuplicateAsset(
  * @param Socket WebSocket connection.
  * @return True if handled.
  */
-bool UMcpAutomationBridgeSubsystem::HandleRenameAsset(
+bool McpHandlers::Asset::HandleRenameAsset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -1730,7 +1742,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameAsset(
     Payload->TryGetStringField(TEXT("newName"), DestinationPath);
 
   if (SourcePath.IsEmpty() || DestinationPath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("sourcePath (or assetPath) and destinationPath (or newName) "
              "required"),
@@ -1755,7 +1767,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameAsset(
 
   if ((SourcePath.Contains(TEXT("/")) || SourcePath.StartsWith(TEXT("/"))) &&
       SanitizeProjectRelativePath(SourcePath).IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid sourcePath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
@@ -1763,7 +1775,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameAsset(
 
   DestinationPath = SanitizeProjectRelativePath(DestinationPath);
   if (DestinationPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid destinationPath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
@@ -1778,14 +1790,14 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameAsset(
 
   ResolvedSourcePath = SanitizeProjectRelativePath(ResolvedSourcePath);
   if (ResolvedSourcePath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid resolved sourcePath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
   }
 
   if (!UEditorAssetLibrary::DoesAssetExist(ResolvedSourcePath)) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Source asset not found: %s"), *SourcePath),
         nullptr, TEXT("ASSET_NOT_FOUND"));
@@ -1804,10 +1816,10 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameAsset(
       McpHandlerUtils::AddVerification(Resp, RenamedAsset);
     }
     
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Asset renamed"), Resp,
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Asset renamed"), Resp,
                            FString());
   } else {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Failed to rename asset. Check if destination "
                              "'%s' already exists or source is locked."),
@@ -1816,7 +1828,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameAsset(
   }
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -1830,7 +1842,8 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameAsset(
  * @param Socket WebSocket connection.
  * @return True if handled.
  */
-bool UMcpAutomationBridgeSubsystem::HandleDeleteAssets(
+bool McpHandlers::Asset::HandleDeleteAssets(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -1857,7 +1870,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDeleteAssets(
   }
 
   if (PathsToDelete.Num() == 0) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("No paths provided"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("No paths provided"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -1932,7 +1945,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDeleteAssets(
   }
   
   if (bSuccess) {
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Assets deleted"), Resp, FString());
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Assets deleted"), Resp, FString());
   } else {
     // Nothing was deleted - determine the reason
     FString ErrorMessage;
@@ -1953,11 +1966,11 @@ bool UMcpAutomationBridgeSubsystem::HandleDeleteAssets(
       ErrorCode = TEXT("DELETE_FAILED");
     }
     
-    SendAutomationResponse(Socket, RequestId, false, ErrorMessage, Resp, ErrorCode);
+    S.SendAutomationResponse(Socket, RequestId, false, ErrorMessage, Resp, ErrorCode);
   }
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -1970,7 +1983,8 @@ bool UMcpAutomationBridgeSubsystem::HandleDeleteAssets(
  * @param Socket WebSocket connection.
  * @return True if handled.
  */
-bool UMcpAutomationBridgeSubsystem::HandleCreateFolder(
+bool McpHandlers::Asset::HandleCreateFolder(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -1980,7 +1994,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateFolder(
   }
 
   if (Path.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("path (or directoryPath) required"), nullptr,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -1988,7 +2002,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateFolder(
 
   FString SafePath = SanitizeProjectRelativePath(Path);
   if (SafePath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("Invalid path: must be project-relative and not contain '..'"),
         nullptr, TEXT("INVALID_PATH"));
@@ -2006,16 +2020,16 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateFolder(
     const bool bDirExists = DoesAssetDirectoryExistOnDisk(SafePath);
     Resp->SetStringField(TEXT("verifiedPath"), SafePath);
     Resp->SetBoolField(TEXT("existsAfter"), bDirExists);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Folder created"),
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Folder created"),
                            Resp, FString());
   } else {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to create folder"), nullptr,
                            TEXT("CREATE_FAILED"));
   }
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -2028,21 +2042,22 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateFolder(
  * @param Socket WebSocket connection.
  * @return True if handled.
  */
-bool UMcpAutomationBridgeSubsystem::HandleGetDependencies(
+bool McpHandlers::Asset::HandleGetDependencies(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   const FString SafeAssetPath = SanitizeProjectRelativePath(AssetPath);
   if (SafeAssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Invalid asset path"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Invalid asset path"),
                            nullptr, TEXT("INVALID_PATH"));
     return true;
   }
@@ -2066,7 +2081,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetDependencies(
   AssetRegistryModule.Get().GetAssetsByPackageName(FName(*PackagePath),
                                                    PackageAssets);
   if (PackageAssets.Num() == 0) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         FString::Printf(TEXT("Asset not found: %s"), *SafeAssetPath),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -2083,11 +2098,11 @@ bool UMcpAutomationBridgeSubsystem::HandleGetDependencies(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetBoolField(TEXT("success"), true);
   Resp->SetArrayField(TEXT("dependencies"), DepArray);
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Dependencies retrieved"), Resp, FString());
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -2096,21 +2111,22 @@ bool UMcpAutomationBridgeSubsystem::HandleGetDependencies(
  * Returns the assets that reference a given asset (inverse of get_dependencies).
  * Payload: 'assetPath'.
  */
-bool UMcpAutomationBridgeSubsystem::HandleGetReferencers(
+bool McpHandlers::Asset::HandleGetReferencers(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   const FString SafeAssetPath = SanitizeProjectRelativePath(AssetPath);
   if (SafeAssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Invalid asset path"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Invalid asset path"),
                            nullptr, TEXT("INVALID_PATH"));
     return true;
   }
@@ -2126,7 +2142,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetReferencers(
   AssetRegistryModule.Get().GetAssetsByPackageName(FName(*PackagePath),
                                                    PackageAssets);
   if (PackageAssets.Num() == 0) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         FString::Printf(TEXT("Asset not found: %s"), *SafeAssetPath),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -2144,11 +2160,11 @@ bool UMcpAutomationBridgeSubsystem::HandleGetReferencers(
   Resp->SetBoolField(TEXT("success"), true);
   Resp->SetNumberField(TEXT("count"), RefArray.Num());
   Resp->SetArrayField(TEXT("referencers"), RefArray);
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Referencers retrieved"), Resp, FString());
   return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -2308,14 +2324,15 @@ bool ResolveAssetPropertyPath(UObject *Asset, const FString &PropertyPath,
 
 } // namespace
 
-bool UMcpAutomationBridgeSubsystem::HandleGetAssetProperties(
+bool McpHandlers::Asset::HandleGetAssetProperties(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -2323,7 +2340,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetAssetProperties(
   FString ResolvedPath;
   UObject *Asset = McpHandlerUtils::ResolveObjectFromPath(AssetPath, &ResolvedPath);
   if (!Asset) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         FString::Printf(TEXT("Asset not found: %s"), *AssetPath),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -2341,7 +2358,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetAssetProperties(
     FMcpResolvedPropertyPath Resolved;
     FString ResolveError;
     if (!ResolveAssetPropertyPath(Asset, PropertyName, Resolved, ResolveError)) {
-      SendAutomationError(
+      S.SendAutomationError(
           Socket, RequestId,
           FString::Printf(TEXT("Property path '%s': %s"), *PropertyName, *ResolveError),
           TEXT("PROPERTY_NOT_FOUND"));
@@ -2354,7 +2371,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetAssetProperties(
     Resp->SetStringField(TEXT("propertyName"), PropertyName);
     Resp->SetField(TEXT("value"), McpPropertyReflection::ExportPropertyToJsonValue(
                                       Resolved.Container, Resolved.Prop));
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Asset property retrieved"), Resp, FString());
     return true;
   }
@@ -2368,11 +2385,11 @@ bool UMcpAutomationBridgeSubsystem::HandleGetAssetProperties(
   Resp->SetStringField(TEXT("class"), Asset->GetClass()->GetName());
   Resp->SetObjectField(TEXT("properties"),
                        Props.IsValid() ? Props : MakeShared<FJsonObject>());
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Asset properties retrieved"), Resp, FString());
   return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -2382,7 +2399,8 @@ bool UMcpAutomationBridgeSubsystem::HandleGetAssetProperties(
  * PostEditChangeProperty, and saves. Payload: 'assetPath', 'propertyName',
  * 'value'.
  */
-bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
+bool McpHandlers::Asset::HandleSetAssetProperty(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -2390,7 +2408,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   Payload->TryGetStringField(TEXT("propertyName"), PropertyName);
   if (AssetPath.IsEmpty() || PropertyName.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("assetPath and propertyName required"), nullptr,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -2405,14 +2423,14 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
   switch (McpPropertyReflection::ReadDiscriminatedValue(Payload, TypedValue,
                                                         ValueParseDetail)) {
   case McpPropertyReflection::EMcpTypedValueParse::None:
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("set exactly one typed value field: boolValue, intValue, floatValue, "
              "stringValue, colorValue, vectorValue, structValue, or arrayValue"),
         nullptr, TEXT("NO_CHANGES_REQUESTED"));
     return true;
   case McpPropertyReflection::EMcpTypedValueParse::Ambiguous:
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         *FString::Printf(TEXT("set exactly one typed value field, got: %s"),
                          *ValueParseDetail),
@@ -2425,7 +2443,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
   FString ResolvedPath;
   UObject *Asset = McpHandlerUtils::ResolveObjectFromPath(AssetPath, &ResolvedPath);
   if (!Asset) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         FString::Printf(TEXT("Asset not found: %s"), *AssetPath),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -2437,7 +2455,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
   FMcpResolvedPropertyPath Resolved;
   FString ResolveError;
   if (!ResolveAssetPropertyPath(Asset, PropertyName, Resolved, ResolveError)) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Property path '%s' on %s: %s"), *PropertyName,
                         *Asset->GetClass()->GetName(), *ResolveError),
@@ -2464,7 +2482,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
   if (!McpPropertyReflection::ApplyJsonValueToProperty(
           Container, Prop, ValueField, ApplyError, 0,
           Resolved.OwnerObject ? Resolved.OwnerObject : Asset)) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *ApplyError),
         TEXT("SET_PROPERTY_FAILED"));
@@ -2491,7 +2509,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
   if (!bSaved) {
     // The property was applied in memory but not persisted (e.g. a read-only /
     // un-checked-out file under Perforce). Report it rather than claiming success.
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(
             TEXT("Property '%s' was set in memory but the asset could not be saved: %s"),
@@ -2507,11 +2525,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
   Resp->SetBoolField(TEXT("saved"), bSaved);
   Resp->SetField(TEXT("value"),
                  McpPropertyReflection::ExportPropertyToJsonValue(Container, Prop));
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Asset property set"), Resp,
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Asset property set"), Resp,
                          FString());
   return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -2524,28 +2542,29 @@ bool UMcpAutomationBridgeSubsystem::HandleSetAssetProperty(
  * @param Socket WebSocket connection.
  * @return True if handled.
  */
-bool UMcpAutomationBridgeSubsystem::HandleGetAssetGraph(
+bool McpHandlers::Asset::HandleGetAssetGraph(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   const FString SafeAssetPath = SanitizeProjectRelativePath(AssetPath);
   if (SafeAssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Invalid asset path"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Invalid asset path"),
                            nullptr, TEXT("INVALID_PATH"));
     return true;
   }
 
   // Check if asset exists - return error for non-existent assets
   if (!UEditorAssetLibrary::DoesAssetExist(SafeAssetPath)) {
-    SendAutomationError(Socket, RequestId, 
+    S.SendAutomationError(Socket, RequestId, 
                         FString::Printf(TEXT("Asset not found: %s"), *SafeAssetPath),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -2599,11 +2618,11 @@ bool UMcpAutomationBridgeSubsystem::HandleGetAssetGraph(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetBoolField(TEXT("success"), true);
   Resp->SetObjectField(TEXT("graph"), GraphObj);
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Asset graph retrieved"),
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Asset graph retrieved"),
                          Resp, FString());
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -2618,12 +2637,13 @@ bool UMcpAutomationBridgeSubsystem::HandleGetAssetGraph(
  * @param Socket WebSocket connection.
  * @return True if handled.
  */
-bool UMcpAutomationBridgeSubsystem::HandleSetTags(
+bool McpHandlers::Asset::HandleSetTags(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("set_tags payload missing"), nullptr,
                            TEXT("INVALID_PAYLOAD"));
     return true;
@@ -2632,7 +2652,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetTags(
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -2649,7 +2669,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetTags(
 
   const FString SafeAssetPath = SanitizeProjectRelativePath(AssetPath);
   if (SafeAssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid assetPath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
@@ -2662,20 +2682,20 @@ bool UMcpAutomationBridgeSubsystem::HandleSetTags(
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetStringField(TEXT("assetPath"), SafeAssetPath);
     Resp->SetNumberField(TEXT("appliedTags"), 0);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("No tags provided; no-op"), Resp, FString());
     return true;
   }
 
   if (!UEditorAssetLibrary::DoesAssetExist(SafeAssetPath)) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
                            nullptr, TEXT("ASSET_NOT_FOUND"));
     return true;
   }
 
   UObject *Asset = UEditorAssetLibrary::LoadAsset(SafeAssetPath);
   if (!Asset) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to load asset"), nullptr,
                            TEXT("LOAD_FAILED"));
     return true;
@@ -2707,11 +2727,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSetTags(
   Resp->SetBoolField(TEXT("markedDirty"), true);
   Resp->SetStringField(TEXT("assetPath"), SafeAssetPath);
   Resp->SetNumberField(TEXT("appliedTags"), AppliedCount);
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Tags applied as metadata"), Resp, FString());
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -2724,12 +2744,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSetTags(
  * @param Socket WebSocket connection.
  * @return True if handled.
  */
-bool UMcpAutomationBridgeSubsystem::HandleValidateAsset(
+bool McpHandlers::Asset::HandleValidateAsset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("validate payload missing"), nullptr,
                            TEXT("INVALID_PAYLOAD"));
     return true;
@@ -2738,28 +2759,28 @@ bool UMcpAutomationBridgeSubsystem::HandleValidateAsset(
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   const FString SafeAssetPath = SanitizeProjectRelativePath(AssetPath);
   if (SafeAssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid assetPath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
   }
 
   if (!UEditorAssetLibrary::DoesAssetExist(SafeAssetPath)) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
                            nullptr, TEXT("ASSET_NOT_FOUND"));
     return true;
   }
 
   UObject *Asset = UEditorAssetLibrary::LoadAsset(SafeAssetPath);
   if (!Asset) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to load asset"), nullptr,
                            TEXT("LOAD_FAILED"));
     return true;
@@ -2771,11 +2792,11 @@ bool UMcpAutomationBridgeSubsystem::HandleValidateAsset(
   Resp->SetStringField(TEXT("assetPath"), SafeAssetPath);
   Resp->SetBoolField(TEXT("isValid"), bIsValid);
 
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Asset validated"),
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Asset validated"),
                          Resp, FString());
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -2789,7 +2810,8 @@ bool UMcpAutomationBridgeSubsystem::HandleValidateAsset(
  * @param Socket WebSocket connection.
  * @return True if handled.
  */
-bool UMcpAutomationBridgeSubsystem::HandleListAssets(
+bool McpHandlers::Asset::HandleListAssets(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -2842,7 +2864,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListAssets(
           : (!PathStartsWith.IsEmpty() ? PathStartsWith : TEXT("/Game"));
 
   if (!AssetRegistry.PathExists(EffectiveDirectory)) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Directory '%s' not found in the asset registry. "
                              "Pass a mounted content path like /Game/Folder."),
@@ -3012,11 +3034,11 @@ bool UMcpAutomationBridgeSubsystem::HandleListAssets(
   Resp->SetNumberField(TEXT("count"), AssetsArray.Num());
   Resp->SetNumberField(TEXT("offset"), Offset);
 
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Assets listed"), Resp,
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Assets listed"), Resp,
                          FString());
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
@@ -3038,12 +3060,13 @@ bool UMcpAutomationBridgeSubsystem::HandleListAssets(
  * @param Socket WebSocket connection.
  * @return True if handled.
  */
-bool UMcpAutomationBridgeSubsystem::HandleGenerateReport(
+bool McpHandlers::Asset::HandleGenerateReport(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("generate_report payload missing"), nullptr,
                            TEXT("INVALID_PAYLOAD"));
     return true;
@@ -3105,7 +3128,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateReport(
     // SECURITY: Sanitize and validate the output path to prevent path traversal
     FString SafeOutputPath = SanitizeProjectFilePath(OutputPath);
     if (SafeOutputPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid or unsafe output path: %s"), *OutputPath),
                           TEXT("SECURITY_VIOLATION"));
       return true;
@@ -3122,7 +3145,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateReport(
     }
 
     if (!AbsoluteOutput.StartsWith(NormalizedProjectDir, ESearchCase::IgnoreCase)) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Output path escapes project directory: %s"), *OutputPath),
                           TEXT("SECURITY_VIOLATION"));
       return true;
@@ -3150,16 +3173,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateReport(
     Resp->SetBoolField(TEXT("fileWritten"), bFileWritten);
   }
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Asset report generated"), Resp, FString());
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleCreateDataTable(
+bool McpHandlers::Asset::HandleCreateDataTable(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -3177,7 +3201,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateDataTable(
   Payload->TryGetBoolField(TEXT("save"), bSave);
 
   if (Name.IsEmpty() || Path.IsEmpty() || RowStructStr.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("name, path and rowStruct are required"), nullptr,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -3186,7 +3210,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateDataTable(
   Name = SanitizeAssetName(Name);
   Path = SanitizeProjectRelativePath(Path);
   if (Path.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Invalid path"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Invalid path"),
                            nullptr, TEXT("SECURITY_VIOLATION"));
     return true;
   }
@@ -3198,14 +3222,14 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateDataTable(
     RowStruct = UClass::TryFindTypeSlow<UScriptStruct>(RowStructStr);
   }
   if (!RowStruct) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Could not resolve row struct '%s'"), *RowStructStr),
         nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
   if (!RowStruct->IsChildOf(FTableRowBase::StaticStruct())) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(
             TEXT("Row struct '%s' must derive from FTableRowBase"),
@@ -3221,7 +3245,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateDataTable(
 
   UPackage *Package = CreatePackage(*FullPath);
   if (!Package) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to create package"), nullptr,
                            TEXT("CREATE_FAILED"));
     return true;
@@ -3231,7 +3255,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateDataTable(
       NewObject<UDataTable>(Package, UDataTable::StaticClass(), FName(*Name),
                             RF_Public | RF_Standalone);
   if (!DataTable) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to create DataTable object"), nullptr,
                            TEXT("CREATE_FAILED"));
     return true;
@@ -3247,7 +3271,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateDataTable(
     FString SaveErr;
     bSaved = McpSafeOperations::McpDirectPackageSave(DataTable, &SaveErr);
     if (!bSaved) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, false,
           FString::Printf(TEXT("DataTable created but save failed: %s"),
                           *SaveErr),
@@ -3261,11 +3285,11 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateDataTable(
   Resp->SetStringField(TEXT("assetPath"), DataTable->GetPathName());
   Resp->SetStringField(TEXT("rowStruct"), RowStruct->GetPathName());
   Resp->SetBoolField(TEXT("saved"), bSaved);
-  SendAutomationResponse(Socket, RequestId, true, TEXT("DataTable created"), Resp,
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("DataTable created"), Resp,
                          FString());
   return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor build required"),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor build required"),
                       TEXT("NOT_SUPPORTED"));
   return true;
 #endif
@@ -3306,7 +3330,8 @@ UDataTable *McpLoadDataTableArg(const TSharedPtr<FJsonObject> &Payload,
 } // namespace
 #endif
 
-bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
+bool McpHandlers::Asset::HandleDataTableRowOp(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &SubAction,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
@@ -3320,7 +3345,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
   FString Err;
   UDataTable *DT = McpLoadDataTableArg(Payload, Err);
   if (!DT) {
-    SendAutomationResponse(Socket, RequestId, false, Err, nullptr,
+    S.SendAutomationResponse(Socket, RequestId, false, Err, nullptr,
                            TEXT("NOT_FOUND"));
     return true;
   }
@@ -3356,7 +3381,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
     else
       Resp->SetStringField(TEXT("rowsJson"), RowsJson);
 
-    SendAutomationResponse(Socket, RequestId, true, TEXT("DataTable rows"), Resp,
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("DataTable rows"), Resp,
                            FString());
     return true;
   }
@@ -3368,7 +3393,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
         !Payload->TryGetStringField(TEXT("csv"), Source) &&
         !Payload->TryGetStringField(TEXT("json"), Source) &&
         !Payload->TryGetStringField(TEXT("content"), Source)) {
-      SendAutomationResponse(Socket, RequestId, false,
+      S.SendAutomationResponse(Socket, RequestId, false,
                              TEXT("sourceText (CSV or JSON) is required"),
                              nullptr, TEXT("INVALID_ARGUMENT"));
       return true;
@@ -3406,7 +3431,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
     for (const FString &P : Problems)
       ProblemVals.Add(MakeShared<FJsonValueString>(P));
     Resp->SetArrayField(TEXT("problems"), ProblemVals);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("DataTable imported: %d row(s), %d problem(s)"),
                         RowsAfter, Problems.Num()),
@@ -3418,7 +3443,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
   FString RowName;
   Payload->TryGetStringField(TEXT("rowName"), RowName);
   if (RowName.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("rowName is required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("rowName is required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -3444,7 +3469,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
     Resp->SetBoolField(TEXT("alreadyAbsent"), !bExists);
     Resp->SetNumberField(TEXT("rowCount"), DT->GetRowMap().Num());
     Resp->SetBoolField(TEXT("saved"), bSaved);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            bRemoved ? TEXT("Row removed")
                                     : TEXT("Row already absent"),
                            Resp, FString());
@@ -3458,7 +3483,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
   if (bAdd && bExists) {
     TSharedPtr<FJsonObject> E = McpHandlerUtils::CreateResultObject();
     E->SetStringField(TEXT("rowName"), RowName);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Row '%s' already exists; use edit_row to modify"),
                         *RowName),
@@ -3466,7 +3491,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
     return true;
   }
   if (bEdit && !bExists) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Row '%s' not found; use add_row to create"),
                         *RowName),
@@ -3478,7 +3503,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
   if (bAdd) {
     RowMem = FDataTableEditorUtils::AddRow(DT, RowFName);
     if (!RowMem) {
-      SendAutomationResponse(Socket, RequestId, false,
+      S.SendAutomationResponse(Socket, RequestId, false,
                              TEXT("Failed to add row"), nullptr,
                              TEXT("OPERATION_FAILED"));
       return true;
@@ -3487,7 +3512,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
     DT->Modify();
     RowMem = DT->FindRowUnchecked(RowFName);
     if (!RowMem) {
-      SendAutomationResponse(Socket, RequestId, false,
+      S.SendAutomationResponse(Socket, RequestId, false,
                              TEXT("Row exists but its data is missing"),
                              nullptr, TEXT("OPERATION_FAILED"));
       return true;
@@ -3514,7 +3539,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
         } else {
           if (bAdd)
             FDataTableEditorUtils::RemoveRow(DT, RowFName);
-          SendAutomationResponse(
+          S.SendAutomationResponse(
               Socket, RequestId, false,
               TEXT("rowData must be a JSON object (or a JSON-object string)"),
               nullptr, TEXT("INVALID_ARGUMENT"));
@@ -3535,7 +3560,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
       // doesn't leave an orphan empty row behind.
       if (bAdd)
         FDataTableEditorUtils::RemoveRow(DT, RowFName);
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, false,
           TEXT("rowData could not be applied to the row struct"), nullptr,
           TEXT("DESERIALIZE_FAILED"));
@@ -3555,12 +3580,12 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
   Resp->SetStringField(TEXT("rowName"), RowName);
   Resp->SetNumberField(TEXT("rowCount"), DT->GetRowMap().Num());
   Resp->SetBoolField(TEXT("saved"), bSaved);
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          bAdd ? TEXT("Row added") : TEXT("Row updated"), Resp,
                          FString());
   return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor build required"),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor build required"),
                       TEXT("NOT_SUPPORTED"));
   return true;
 #endif
@@ -3570,7 +3595,8 @@ bool UMcpAutomationBridgeSubsystem::HandleDataTableRowOp(
 // 10. MATERIAL PARAMETER & INSTANCE MANAGEMENT
 // ============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleAddMaterialParameter(
+bool McpHandlers::Asset::HandleAddMaterialParameter(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -3582,7 +3608,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialParameter(
   Payload->TryGetStringField(TEXT("type"), Type);
 
   if (AssetPath.IsEmpty() || Name.IsEmpty() || Type.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("assetPath, name, and type required"), nullptr,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -3590,14 +3616,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialParameter(
 
   AssetPath = SanitizeProjectRelativePath(AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid assetPath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
   }
 
   if (!UEditorAssetLibrary::DoesAssetExist(AssetPath)) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
                            nullptr, TEXT("ASSET_NOT_FOUND"));
     return true;
   }
@@ -3607,7 +3633,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialParameter(
   LoadMaterialOrFunctionAW(AssetPath, Material, Function);
 
   if (!Material && !Function) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Asset is not a Material or Material Function"),
                            nullptr, TEXT("INVALID_ASSET_TYPE"));
     return true;
@@ -3677,7 +3703,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialParameter(
           !TexPath.IsEmpty()) {
         TexPath = SanitizeProjectRelativePath(TexPath);
         if (TexPath.IsEmpty()) {
-          SendAutomationResponse(Socket, RequestId, false,
+          S.SendAutomationResponse(Socket, RequestId, false,
                                  TEXT("Invalid texture path"), nullptr,
                                  TEXT("SECURITY_VIOLATION"));
           return true;
@@ -3699,7 +3725,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialParameter(
       }
     }
   } else {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Unsupported parameter type: %s"), *Type), nullptr,
         TEXT("INVALID_TYPE"));
@@ -3719,36 +3745,37 @@ bool UMcpAutomationBridgeSubsystem::HandleAddMaterialParameter(
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetStringField(TEXT("assetPath"), AssetPath);
     Resp->SetStringField(TEXT("parameterName"), Name);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Parameter added"),
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Parameter added"),
                            Resp, FString());
   } else {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to create parameter expression"),
                            nullptr, TEXT("CREATE_FAILED"));
   }
 
   return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleListMaterialInstances(
+bool McpHandlers::Asset::HandleListMaterialInstances(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AssetPath = SanitizeProjectRelativePath(AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid assetPath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
@@ -3805,37 +3832,38 @@ bool UMcpAutomationBridgeSubsystem::HandleListMaterialInstances(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetBoolField(TEXT("success"), true);
   Resp->SetArrayField(TEXT("instances"), Instances);
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Instances listed"),
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Instances listed"),
                          Resp, FString());
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleResetInstanceParameters(
+bool McpHandlers::Asset::HandleResetInstanceParameters(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AssetPath = SanitizeProjectRelativePath(AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid assetPath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
   }
 
   if (!UEditorAssetLibrary::DoesAssetExist(AssetPath)) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
                            nullptr, TEXT("ASSET_NOT_FOUND"));
     return true;
   }
@@ -3844,7 +3872,7 @@ bool UMcpAutomationBridgeSubsystem::HandleResetInstanceParameters(
   UMaterialInstanceConstant *MIC = Cast<UMaterialInstanceConstant>(Asset);
 
   if (!MIC) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Asset is not a Material Instance Constant"),
                            nullptr, TEXT("INVALID_ASSET_TYPE"));
     return true;
@@ -3857,30 +3885,31 @@ bool UMcpAutomationBridgeSubsystem::HandleResetInstanceParameters(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetBoolField(TEXT("success"), true);
   Resp->SetStringField(TEXT("assetPath"), AssetPath);
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Instance parameters reset"), Resp, FString());
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleDoesAssetExist(
+bool McpHandlers::Asset::HandleDoesAssetExist(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AssetPath = SanitizeProjectRelativePath(AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid assetPath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
@@ -3892,39 +3921,40 @@ bool UMcpAutomationBridgeSubsystem::HandleDoesAssetExist(
   Resp->SetBoolField(TEXT("success"), true);
   Resp->SetBoolField(TEXT("exists"), bExists);
   Resp->SetStringField(TEXT("assetPath"), AssetPath);
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          bExists ? TEXT("Asset exists")
                                  : TEXT("Asset does not exist"),
                          Resp, FString());
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleGetMaterialStats(
+bool McpHandlers::Asset::HandleGetMaterialStats(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AssetPath = SanitizeProjectRelativePath(AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid assetPath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
   }
 
   if (!UEditorAssetLibrary::DoesAssetExist(AssetPath)) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
                            nullptr, TEXT("ASSET_NOT_FOUND"));
     return true;
   }
@@ -3933,7 +3963,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetMaterialStats(
   UMaterialInterface *Material = Cast<UMaterialInterface>(Asset);
 
   if (!Material) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Asset is not a Material"), nullptr,
                            TEXT("INVALID_ASSET_TYPE"));
     return true;
@@ -4021,16 +4051,17 @@ bool UMcpAutomationBridgeSubsystem::HandleGetMaterialStats(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetBoolField(TEXT("success"), true);
   Resp->SetObjectField(TEXT("stats"), Stats);
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Material stats retrieved"), Resp, FString());
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
+bool McpHandlers::Asset::HandleGenerateLODs(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -4041,7 +4072,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Payload missing"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
   }
@@ -4080,7 +4111,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
       Payload->TryGetField(TEXT("reductionSettings"));
   if (ReductionValue.IsValid() && ReductionValue->Type != EJson::Null) {
     if (!ReductionValue->TryGetObject(ReductionOverrides)) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("reductionSettings must be a JSON object"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -4093,7 +4124,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
       if (Field.Key == TEXT("percentTriangles") ||
           Field.Key == TEXT("percentVertices")) {
         if (!bIsNumber || Number < 0.0 || Number > 1.0) {
-          SendAutomationError(
+          S.SendAutomationError(
               RequestingSocket, RequestId,
               FString::Printf(
                   TEXT("reductionSettings.%s must be a number in [0, 1]"),
@@ -4111,7 +4142,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
                  Field.Key == TEXT("weldingThreshold") ||
                  Field.Key == TEXT("hardAngleThreshold")) {
         if (!bIsNumber || Number < 0.0) {
-          SendAutomationError(
+          S.SendAutomationError(
               RequestingSocket, RequestId,
               FString::Printf(
                   TEXT("reductionSettings.%s must be a non-negative number"),
@@ -4132,7 +4163,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
       } else if (Field.Key == TEXT("baseLODModel")) {
         if (!bIsNumber || Number < 0.0 ||
             Number != FMath::FloorToDouble(Number)) {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
                               TEXT("reductionSettings.baseLODModel must be a "
                                    "non-negative integer"),
                               TEXT("INVALID_ARGUMENT"));
@@ -4142,7 +4173,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
       } else if (Field.Key == TEXT("recalculateNormals")) {
         bool bRecalculate = false;
         if (!Field.Value.IsValid() || !Field.Value->TryGetBool(bRecalculate)) {
-          SendAutomationError(
+          S.SendAutomationError(
               RequestingSocket, RequestId,
               TEXT("reductionSettings.recalculateNormals must be a boolean"),
               TEXT("INVALID_ARGUMENT"));
@@ -4150,7 +4181,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
         }
         OverrideRecalculateNormals = bRecalculate;
       } else {
-        SendAutomationError(
+        S.SendAutomationError(
             RequestingSocket, RequestId,
             FString::Printf(
                 TEXT("reductionSettings.%s is not supported; supported keys: "
@@ -4172,7 +4203,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
     // Validate landscape path
     FString SafePath = SanitizeProjectRelativePath(LandscapePath);
     if (SafePath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("Invalid or unsafe landscape path: %s"), *LandscapePath),
                           TEXT("SECURITY_VIOLATION"));
       return true;
@@ -4184,7 +4215,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
   if (!SingleAssetPath.IsEmpty()) {
     FString SafePath = SanitizeProjectRelativePath(SingleAssetPath);
     if (SafePath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("Invalid or unsafe asset path: %s"), *SingleAssetPath),
                           TEXT("SECURITY_VIOLATION"));
       return true;
@@ -4205,7 +4236,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
   }
 
   if (Paths.Num() == 0) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("landscapePath or assetPaths required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -4274,7 +4305,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
         ? FString::Printf(TEXT("Verified %d mesh(es); LOD build skipped under NullRHI"), VerifiedCount)
         : TEXT("No static meshes verified for LOD generation under NullRHI");
     const FString ErrorCode = bSuccess ? FString() : TEXT("LOD_GENERATION_FAILED");
-    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
+    S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
     return true;
   }
 
@@ -4287,7 +4318,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
   TArray<FString> NotMeshPaths;
 
   for (const FString &Path : Paths) {
-    SendProgressUpdate(RequestId, -1.0f,
+    S.SendProgressUpdate(RequestId, -1.0f,
         FString::Printf(TEXT("Processing LOD generation for: %s"), *Path), true);
 
     UObject *Obj = LoadObject<UObject>(nullptr, *Path);
@@ -4407,12 +4438,12 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
       ErrorCode = TEXT("LOD_GENERATION_FAILED");
     }
     
-    SendAutomationResponse(RequestingSocket, RequestId, bSuccess,
+    S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess,
                                       Message, Resp, ErrorCode);
 
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("Requires editor"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -4423,12 +4454,13 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateLODs(
 // 8. METADATA
 // ============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleGetMetadata(
+bool McpHandlers::Asset::HandleGetMetadata(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("get_metadata payload missing"), nullptr,
                            TEXT("INVALID_PAYLOAD"));
     return true;
@@ -4438,28 +4470,28 @@ bool UMcpAutomationBridgeSubsystem::HandleGetMetadata(
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
 
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("assetPath required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AssetPath = SanitizeProjectRelativePath(AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid assetPath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
   }
 
   if (!UEditorAssetLibrary::DoesAssetExist(AssetPath)) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Asset not found"),
                            nullptr, TEXT("ASSET_NOT_FOUND"));
     return true;
   }
 
   UObject *Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
   if (!Asset) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to load asset"), nullptr,
                            TEXT("LOAD_FAILED"));
     return true;
@@ -4495,11 +4527,11 @@ bool UMcpAutomationBridgeSubsystem::HandleGetMetadata(
     }
   }
 
-  SendAutomationResponse(Socket, RequestId, true, TEXT("Metadata retrieved"),
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Metadata retrieved"),
                          Resp, FString());
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("get_metadata requires editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -4512,7 +4544,8 @@ bool UMcpAutomationBridgeSubsystem::HandleGetMetadata(
 
 // Dispatcher-compatible mesh workflow handlers with explicit success/error responses.
 
-bool UMcpAutomationBridgeSubsystem::HandleNaniteRebuildMesh(
+bool McpHandlers::Asset::HandleNaniteRebuildMesh(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
@@ -4523,7 +4556,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNaniteRebuildMesh(
 
 #if WITH_EDITOR && ENGINE_MAJOR_VERSION >= 5
   if (!Payload.IsValid()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("nanite_rebuild_mesh payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -4532,7 +4565,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNaniteRebuildMesh(
   FString MeshPath;
   if (!Payload->TryGetStringField(TEXT("meshPath"), MeshPath) ||
       MeshPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("meshPath is required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -4540,7 +4573,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNaniteRebuildMesh(
 
   MeshPath = SanitizeProjectRelativePath(MeshPath);
   if (MeshPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Invalid meshPath"),
                         TEXT("SECURITY_VIOLATION"));
     return true;
@@ -4549,7 +4582,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNaniteRebuildMesh(
   // Load the static mesh
   UStaticMesh *StaticMesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
   if (!StaticMesh) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         FString::Printf(TEXT("Static mesh not found: %s"), *MeshPath),
                         TEXT("MESH_NOT_FOUND"));
     return true;
@@ -4620,19 +4653,20 @@ bool UMcpAutomationBridgeSubsystem::HandleNaniteRebuildMesh(
   Resp->SetNumberField(TEXT("trianglePercent"), TrianglePercent);
   Resp->SetNumberField(TEXT("fallbackPercent"), FallbackPercent);
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          FString::Printf(TEXT("Nanite settings updated for %s"), *StaticMesh->GetName()),
                          Resp, FString());
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("nanite_rebuild_mesh requires UE 5.0+ editor build"),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleFindByTag(
+bool McpHandlers::Asset::HandleFindByTag(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
@@ -4643,7 +4677,7 @@ bool UMcpAutomationBridgeSubsystem::HandleFindByTag(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("find_by_tag payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -4651,7 +4685,7 @@ bool UMcpAutomationBridgeSubsystem::HandleFindByTag(
 
   FString Tag;
   if (!Payload->TryGetStringField(TEXT("tag"), Tag) || Tag.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("tag field is required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -4663,7 +4697,7 @@ bool UMcpAutomationBridgeSubsystem::HandleFindByTag(
   if (Payload->TryGetStringField(TEXT("path"), Path) && !Path.IsEmpty()) {
     const FString SanitizedPath = SanitizeProjectRelativePath(Path);
     if (SanitizedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
           FString::Printf(TEXT("Invalid path (traversal/security violation): %s"), *Path),
           TEXT("SECURITY_VIOLATION"));
       return true;
@@ -4800,12 +4834,12 @@ bool UMcpAutomationBridgeSubsystem::HandleFindByTag(
   Resp->SetNumberField(TEXT("count"), Results.Num());
   Resp->SetArrayField(TEXT("results"), Results);
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          FString::Printf(TEXT("Found %d objects with tag '%s'"), Results.Num(), *Tag),
                          Resp, FString());
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("find_by_tag requires editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -4816,7 +4850,8 @@ bool UMcpAutomationBridgeSubsystem::HandleFindByTag(
 // SOURCE CONTROL STATE
 // ============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleGetSourceControlState(
+bool McpHandlers::Asset::HandleGetSourceControlState(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
@@ -4827,7 +4862,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetSourceControlState(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("get_source_control_state payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -4851,7 +4886,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetSourceControlState(
   }
 
   if (AssetPaths.Num() == 0) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("assetPath (string) or assetPaths (array) required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -4861,7 +4896,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetSourceControlState(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetBoolField(TEXT("sourceControlEnabled"), false);
     Result->SetStringField(TEXT("message"), TEXT("Source control is not enabled"));
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Source control disabled"), Result, FString());
     return true;
   }
@@ -4972,11 +5007,11 @@ bool UMcpAutomationBridgeSubsystem::HandleGetSourceControlState(
   Result->SetArrayField(TEXT("states"), StatesArray);
   Result->SetNumberField(TEXT("queriedCount"), AssetPaths.Num());
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Source control state retrieved"), Result, FString());
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("get_source_control_state requires editor build"),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -4987,7 +5022,8 @@ bool UMcpAutomationBridgeSubsystem::HandleGetSourceControlState(
 // ANALYZE GRAPH
 // ============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleAnalyzeGraph(
+bool McpHandlers::Asset::HandleAnalyzeGraph(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
@@ -4998,7 +5034,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnalyzeGraph(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("analyze_graph payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -5007,14 +5043,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAnalyzeGraph(
   FString AssetPath;
   if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) &&
       !Payload->TryGetStringField(TEXT("materialPath"), AssetPath)) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("assetPath is required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   if (AssetPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("assetPath cannot be empty"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -5022,7 +5058,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnalyzeGraph(
 
   AssetPath = SanitizeProjectRelativePath(AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Invalid assetPath"),
                         TEXT("SECURITY_VIOLATION"));
     return true;
@@ -5031,7 +5067,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnalyzeGraph(
   // Load the asset
   UObject *Asset = LoadObject<UObject>(nullptr, *AssetPath);
   if (!Asset) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         FString::Printf(TEXT("Asset not found: %s"), *AssetPath),
                         TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -5115,7 +5151,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnalyzeGraph(
 #endif
     }
 
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Material graph analyzed"), Result, FString());
     return true;
   }
@@ -5146,7 +5182,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnalyzeGraph(
     Result->SetNumberField(TEXT("graphCount"), AllGraphs.Num());
     Result->SetArrayField(TEXT("graphs"), GraphInfoArray);
 
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Blueprint graph analyzed"), Result, FString());
     return true;
   }
@@ -5155,11 +5191,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAnalyzeGraph(
   Result->SetStringField(TEXT("graphType"), TEXT("None"));
   Result->SetStringField(TEXT("message"), TEXT("Asset does not have a graph structure"));
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("No graph to analyze for this asset type"), Result, FString());
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("analyze_graph requires editor build"),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;

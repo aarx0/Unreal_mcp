@@ -10,6 +10,7 @@
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_ControlHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -275,37 +276,37 @@ class FMcpCall_ControlActor_##ClassSuffix final : public FMcpCall               
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
 	{                                                                                     \
-		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+		return HandlerFn(S, RequestId, Payload, Socket);                                   \
 	}                                                                                     \
 };
 
-MCP_CA_CALL(Spawn, "spawn", HandleControlActorSpawn, EMcpCallFlags::Mutating)
-MCP_CA_CALL(SpawnBlueprint, "spawn_blueprint", HandleControlActorSpawnBlueprint, EMcpCallFlags::Mutating)
-MCP_CA_CALL(Delete, "delete", HandleControlActorDelete, EMcpCallFlags::Mutating)
-MCP_CA_CALL(DeleteByTag, "delete_by_tag", HandleControlActorDeleteByTag, EMcpCallFlags::Mutating)
-MCP_CA_CALL(Duplicate, "duplicate", HandleControlActorDuplicate, EMcpCallFlags::Mutating)
-MCP_CA_CALL(ApplyForce, "apply_force", HandleControlActorApplyForce, EMcpCallFlags::Mutating)
-MCP_CA_CALL(SetTransform, "set_transform", HandleControlActorSetTransform, EMcpCallFlags::Mutating)
-MCP_CA_CALL(GetTransform, "get_transform", HandleControlActorGetTransform, EMcpCallFlags::None)
-MCP_CA_CALL(SetVisibility, "set_visibility", HandleControlActorSetVisibility, EMcpCallFlags::Mutating)
-MCP_CA_CALL(AddComponent, "add_component", HandleControlActorAddComponent, EMcpCallFlags::Mutating)
-MCP_CA_CALL(RemoveComponent, "remove_component", HandleControlActorRemoveComponent, EMcpCallFlags::Mutating)
-MCP_CA_CALL(SetComponentProperty, "set_component_property", HandleControlActorSetComponentProperties, EMcpCallFlags::Mutating)
-MCP_CA_CALL(GetComponentProperty, "get_component_property", HandleControlActorGetComponentProperty, EMcpCallFlags::None)
-MCP_CA_CALL(GetComponents, "get_components", HandleControlActorGetComponents, EMcpCallFlags::None)
-MCP_CA_CALL(GetActorBounds, "get_actor_bounds", HandleControlActorGetBoundingBox, EMcpCallFlags::None)
-MCP_CA_CALL(AddTag, "add_tag", HandleControlActorAddTag, EMcpCallFlags::Mutating)
-MCP_CA_CALL(RemoveTag, "remove_tag", HandleControlActorRemoveTag, EMcpCallFlags::Mutating)
-MCP_CA_CALL(FindByTag, "find_by_tag", HandleControlActorFindByTag, EMcpCallFlags::None)
-MCP_CA_CALL(FindByName, "find_by_name", HandleControlActorFindByName, EMcpCallFlags::None)
-MCP_CA_CALL(FindByClass, "find_by_class", HandleControlActorFindByClass, EMcpCallFlags::None)
-MCP_CA_CALL(List, "list", HandleControlActorList, EMcpCallFlags::None)
-MCP_CA_CALL(SetBlueprintVariables, "set_blueprint_variables", HandleControlActorSetBlueprintVariables, EMcpCallFlags::Mutating)
-MCP_CA_CALL(CreateSnapshot, "create_snapshot", HandleControlActorCreateSnapshot, EMcpCallFlags::Mutating)
-MCP_CA_CALL(Attach, "attach", HandleControlActorAttach, EMcpCallFlags::Mutating)
-MCP_CA_CALL(Detach, "detach", HandleControlActorDetach, EMcpCallFlags::Mutating)
-MCP_CA_CALL(SetActorCollision, "set_actor_collision", HandleControlActorSetCollision, EMcpCallFlags::Mutating)
-MCP_CA_CALL(CallActorFunction, "call_actor_function", HandleControlActorCallFunction, EMcpCallFlags::Mutating)
+MCP_CA_CALL(Spawn, "spawn", McpHandlers::ControlActor::HandleControlActorSpawn, EMcpCallFlags::Mutating)
+MCP_CA_CALL(SpawnBlueprint, "spawn_blueprint", McpHandlers::ControlActor::HandleControlActorSpawnBlueprint, EMcpCallFlags::Mutating)
+MCP_CA_CALL(Delete, "delete", McpHandlers::ControlActor::HandleControlActorDelete, EMcpCallFlags::Mutating)
+MCP_CA_CALL(DeleteByTag, "delete_by_tag", McpHandlers::ControlActor::HandleControlActorDeleteByTag, EMcpCallFlags::Mutating)
+MCP_CA_CALL(Duplicate, "duplicate", McpHandlers::ControlActor::HandleControlActorDuplicate, EMcpCallFlags::Mutating)
+MCP_CA_CALL(ApplyForce, "apply_force", McpHandlers::ControlActor::HandleControlActorApplyForce, EMcpCallFlags::Mutating)
+MCP_CA_CALL(SetTransform, "set_transform", McpHandlers::ControlActor::HandleControlActorSetTransform, EMcpCallFlags::Mutating)
+MCP_CA_CALL(GetTransform, "get_transform", McpHandlers::ControlActor::HandleControlActorGetTransform, EMcpCallFlags::None)
+MCP_CA_CALL(SetVisibility, "set_visibility", McpHandlers::ControlActor::HandleControlActorSetVisibility, EMcpCallFlags::Mutating)
+MCP_CA_CALL(AddComponent, "add_component", McpHandlers::ControlActor::HandleControlActorAddComponent, EMcpCallFlags::Mutating)
+MCP_CA_CALL(RemoveComponent, "remove_component", McpHandlers::ControlActor::HandleControlActorRemoveComponent, EMcpCallFlags::Mutating)
+MCP_CA_CALL(SetComponentProperty, "set_component_property", McpHandlers::ControlActor::HandleControlActorSetComponentProperties, EMcpCallFlags::Mutating)
+MCP_CA_CALL(GetComponentProperty, "get_component_property", McpHandlers::ControlActor::HandleControlActorGetComponentProperty, EMcpCallFlags::None)
+MCP_CA_CALL(GetComponents, "get_components", McpHandlers::ControlActor::HandleControlActorGetComponents, EMcpCallFlags::None)
+MCP_CA_CALL(GetActorBounds, "get_actor_bounds", McpHandlers::ControlActor::HandleControlActorGetBoundingBox, EMcpCallFlags::None)
+MCP_CA_CALL(AddTag, "add_tag", McpHandlers::ControlActor::HandleControlActorAddTag, EMcpCallFlags::Mutating)
+MCP_CA_CALL(RemoveTag, "remove_tag", McpHandlers::ControlActor::HandleControlActorRemoveTag, EMcpCallFlags::Mutating)
+MCP_CA_CALL(FindByTag, "find_by_tag", McpHandlers::ControlActor::HandleControlActorFindByTag, EMcpCallFlags::None)
+MCP_CA_CALL(FindByName, "find_by_name", McpHandlers::ControlActor::HandleControlActorFindByName, EMcpCallFlags::None)
+MCP_CA_CALL(FindByClass, "find_by_class", McpHandlers::ControlActor::HandleControlActorFindByClass, EMcpCallFlags::None)
+MCP_CA_CALL(List, "list", McpHandlers::ControlActor::HandleControlActorList, EMcpCallFlags::None)
+MCP_CA_CALL(SetBlueprintVariables, "set_blueprint_variables", McpHandlers::ControlActor::HandleControlActorSetBlueprintVariables, EMcpCallFlags::Mutating)
+MCP_CA_CALL(CreateSnapshot, "create_snapshot", McpHandlers::ControlActor::HandleControlActorCreateSnapshot, EMcpCallFlags::Mutating)
+MCP_CA_CALL(Attach, "attach", McpHandlers::ControlActor::HandleControlActorAttach, EMcpCallFlags::Mutating)
+MCP_CA_CALL(Detach, "detach", McpHandlers::ControlActor::HandleControlActorDetach, EMcpCallFlags::Mutating)
+MCP_CA_CALL(SetActorCollision, "set_actor_collision", McpHandlers::ControlActor::HandleControlActorSetCollision, EMcpCallFlags::Mutating)
+MCP_CA_CALL(CallActorFunction, "call_actor_function", McpHandlers::ControlActor::HandleControlActorCallFunction, EMcpCallFlags::Mutating)
 
 #undef MCP_CA_CALL
 

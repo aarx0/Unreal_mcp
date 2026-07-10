@@ -60,6 +60,7 @@
 
 // Core Unreal Engine
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_TextureHandlers.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpHandlerUtils.h"
 #include "Dom/JsonObject.h"
@@ -3272,158 +3273,180 @@ static bool SendTextureResult(UMcpAutomationBridgeSubsystem* Self,
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureCreateNoiseTexture(
+bool McpHandlers::Asset::HandleTextureCreateNoiseTexture(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureCreateNoiseTexture(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureCreateNoiseTexture(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureCreateGradientTexture(
+bool McpHandlers::Asset::HandleTextureCreateGradientTexture(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureCreateGradientTexture(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureCreateGradientTexture(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureCreatePatternTexture(
+bool McpHandlers::Asset::HandleTextureCreatePatternTexture(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureCreatePatternTexture(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureCreatePatternTexture(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureCreateNormalFromHeight(
+bool McpHandlers::Asset::HandleTextureCreateNormalFromHeight(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureCreateNormalFromHeight(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureCreateNormalFromHeight(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureSetCompressionSettings(
+bool McpHandlers::Asset::HandleTextureSetCompressionSettings(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureSetCompressionSettings(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureSetCompressionSettings(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureSetTextureGroup(
+bool McpHandlers::Asset::HandleTextureSetTextureGroup(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureSetTextureGroup(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureSetTextureGroup(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureSetLodBias(
+bool McpHandlers::Asset::HandleTextureSetLodBias(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureSetLodBias(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureSetLodBias(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureConfigureVirtualTexture(
+bool McpHandlers::Asset::HandleTextureConfigureVirtualTexture(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureConfigureVirtualTexture(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureConfigureVirtualTexture(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureSetStreamingPriority(
+bool McpHandlers::Asset::HandleTextureSetStreamingPriority(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureSetStreamingPriority(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureSetStreamingPriority(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureGetTextureInfo(
+bool McpHandlers::Asset::HandleTextureGetTextureInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureGetTextureInfo(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureGetTextureInfo(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureResizeTexture(
+bool McpHandlers::Asset::HandleTextureResizeTexture(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureResizeTexture(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureResizeTexture(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureInvert(
+bool McpHandlers::Asset::HandleTextureInvert(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureInvert(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureInvert(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureDesaturate(
+bool McpHandlers::Asset::HandleTextureDesaturate(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureDesaturate(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureDesaturate(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureAdjustLevels(
+bool McpHandlers::Asset::HandleTextureAdjustLevels(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureAdjustLevels(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureAdjustLevels(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureBlur(
+bool McpHandlers::Asset::HandleTextureBlur(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureBlur(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureBlur(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureSharpen(
+bool McpHandlers::Asset::HandleTextureSharpen(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureSharpen(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureSharpen(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureChannelPack(
+bool McpHandlers::Asset::HandleTextureChannelPack(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureChannelPack(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureChannelPack(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureCombineTextures(
+bool McpHandlers::Asset::HandleTextureCombineTextures(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureCombineTextures(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureCombineTextures(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureAdjustCurves(
+bool McpHandlers::Asset::HandleTextureAdjustCurves(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureAdjustCurves(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureAdjustCurves(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureChannelExtract(
+bool McpHandlers::Asset::HandleTextureChannelExtract(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureChannelExtract(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureChannelExtract(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureCreateRenderTarget(
+bool McpHandlers::Asset::HandleTextureCreateRenderTarget(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureCreateRenderTarget(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureCreateRenderTarget(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleTextureCreateAoFromMesh(
+bool McpHandlers::Asset::HandleTextureCreateAoFromMesh(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendTextureResult(this, RequestId, TextureCreateAoFromMesh(Payload), RequestingSocket);
+    return SendTextureResult(&S, RequestId, TextureCreateAoFromMesh(Payload), RequestingSocket);
 }
 
 #undef TEXTURE_ERROR_RESPONSE

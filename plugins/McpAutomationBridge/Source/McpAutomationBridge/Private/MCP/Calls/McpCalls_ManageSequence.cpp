@@ -5,12 +5,14 @@
 // its schema fragment in a S_<Suffix>() function; the published facade schema
 // folds those fragments and GetDecl() derives the validation decl from the same
 // fragment via McpDeriveDecl(), so schema and decl are one source and cannot
-// drift. Run() delegates to the subsystem member handlers until the module split
-// de-members those bodies.
+// drift. Run() delegates to a de-membered McpHandlers::Sequence free function,
+// or to the UMcpAutomationBridgeSubsystem member for handlers still touching the
+// private ResolveSequencePath / FindActorByName helpers.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_SequenceHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -300,12 +302,29 @@ class FMcpCall_ManageSequence_##ClassSuffix final : public FMcpCall             
 	}                                                                                     \
 };
 
-MCP_MS_CALL(Create, "create", HandleSequenceCreate, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+#define MCP_MS_CALL_NS(ClassSuffix, ActionLiteral, HandlerFn, Flags)                      \
+class FMcpCall_ManageSequence_##ClassSuffix final : public FMcpCall                       \
+{                                                                                         \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
+	const FMcpCallDecl& GetDecl() const override                                          \
+	{                                                                                     \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_sequence"),             \
+			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                             \
+		return D;                                                                         \
+	}                                                                                     \
+	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
+	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
+	{                                                                                     \
+		return HandlerFn(S, RequestId, Payload, Socket);                                  \
+	}                                                                                     \
+};
+
+MCP_MS_CALL_NS(Create, "create", McpHandlers::Sequence::HandleSequenceCreate, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MS_CALL(Open, "open", HandleSequenceOpen, EMcpCallFlags::RequiresEditor)
-MCP_MS_CALL(List, "list", HandleSequenceList, EMcpCallFlags::RequiresEditor)
-MCP_MS_CALL(Duplicate, "duplicate", HandleSequenceDuplicate, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(Rename, "rename", HandleSequenceRename, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(Delete, "delete", HandleSequenceDelete, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL_NS(List, "list", McpHandlers::Sequence::HandleSequenceList, EMcpCallFlags::RequiresEditor)
+MCP_MS_CALL_NS(Duplicate, "duplicate", McpHandlers::Sequence::HandleSequenceDuplicate, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL_NS(Rename, "rename", McpHandlers::Sequence::HandleSequenceRename, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL_NS(Delete, "delete", McpHandlers::Sequence::HandleSequenceDelete, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MS_CALL(GetBindings, "get_bindings", HandleSequenceGetBindings, EMcpCallFlags::RequiresEditor)
 MCP_MS_CALL(GetMetadata, "get_metadata", HandleSequenceGetMetadata, EMcpCallFlags::RequiresEditor)
 MCP_MS_CALL(GetProperties, "get_properties", HandleSequenceGetProperties, EMcpCallFlags::RequiresEditor)
@@ -320,7 +339,7 @@ MCP_MS_CALL(AddSection, "add_section", HandleSequenceAddSection, EMcpCallFlags::
 MCP_MS_CALL(AddTrack, "add_track", HandleSequenceAddTrack, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MS_CALL(RemoveTrack, "remove_track", HandleSequenceRemoveTrack, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MS_CALL(ListTracks, "list_tracks", HandleSequenceListTracks, EMcpCallFlags::RequiresEditor)
-MCP_MS_CALL(ListTrackTypes, "list_track_types", HandleSequenceListTrackTypes, EMcpCallFlags::None)
+MCP_MS_CALL_NS(ListTrackTypes, "list_track_types", McpHandlers::Sequence::HandleSequenceListTrackTypes, EMcpCallFlags::None)
 MCP_MS_CALL(Play, "play", HandleSequencePlay, EMcpCallFlags::RequiresEditor)
 MCP_MS_CALL(Pause, "pause", HandleSequencePause, EMcpCallFlags::RequiresEditor)
 MCP_MS_CALL(Stop, "stop", HandleSequenceStop, EMcpCallFlags::RequiresEditor)
@@ -334,6 +353,7 @@ MCP_MS_CALL(SetTrackSolo, "set_track_solo", HandleSequenceSetTrackSolo, EMcpCall
 MCP_MS_CALL(SetTrackLocked, "set_track_locked", HandleSequenceSetTrackLocked, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 #undef MCP_MS_CALL
+#undef MCP_MS_CALL_NS
 
 } // namespace McpCalls::ManageSequence
 

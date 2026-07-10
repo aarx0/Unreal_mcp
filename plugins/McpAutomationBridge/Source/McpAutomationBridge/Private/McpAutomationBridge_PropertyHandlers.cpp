@@ -66,6 +66,7 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_PropertyHandlers.h"
 #include "McpHandlerUtils.h"
 #include "McpPropertyReflection.h"
 
@@ -125,7 +126,8 @@ namespace
     }
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
+bool McpHandlers::Inspect::HandleSetObjectProperty(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -136,7 +138,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
 
   if (!Payload.IsValid())
   {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           TEXT("set_object_property payload missing."),
           TEXT("INVALID_PAYLOAD"));
       return true;
@@ -154,7 +156,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
 
   if (ObjectPath.IsEmpty() && BlueprintPath.IsEmpty())
   {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           TEXT("Either objectPath or blueprintPath is required."),
           TEXT("INVALID_OBJECT"));
       return true;
@@ -170,7 +172,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
   }
   if (PropertyName.IsEmpty())
   {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           TEXT("propertyName or propertyPath is required."),
           TEXT("INVALID_PROPERTY"));
       return true;
@@ -180,12 +182,12 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
   FString PropParseDetail;
   switch (McpPropertyReflection::ReadDiscriminatedValue(Payload, PropTyped, PropParseDetail)) {
   case McpPropertyReflection::EMcpTypedValueParse::None:
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           TEXT("set exactly one typed value field: boolValue, intValue, floatValue, stringValue, colorValue, vectorValue, structValue, or arrayValue."),
           TEXT("INVALID_VALUE"));
       return true;
   case McpPropertyReflection::EMcpTypedValueParse::Ambiguous:
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           *FString::Printf(TEXT("set exactly one typed value field, got: %s"), *PropParseDetail),
           TEXT("AMBIGUOUS_VALUE"));
       return true;
@@ -204,7 +206,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       UBlueprint* Blueprint = LoadBlueprintAsset(BlueprintPath, NormalizedPath, LoadError);
       if (!Blueprint)
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               FString::Printf(TEXT("Blueprint not found: %s (%s)"), *BlueprintPath, *LoadError),
               TEXT("BLUEPRINT_NOT_FOUND"));
           return true;
@@ -213,7 +215,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       UClass* GeneratedClass = Blueprint->GeneratedClass;
       if (!GeneratedClass)
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               TEXT("Blueprint has no GeneratedClass (not compiled?)"),
               TEXT("CDO_NOT_FOUND"));
           return true;
@@ -222,7 +224,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       RootObject = GeneratedClass->GetDefaultObject();
       if (!RootObject)
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               TEXT("Failed to get Class Default Object"),
               TEXT("CDO_NOT_FOUND"));
           return true;
@@ -237,7 +239,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       RootObject = McpHandlerUtils::ResolveObjectFromPath(ObjectPath, &ResolvedPath);
       if (!RootObject)
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               FString::Printf(TEXT("Unable to find object at path %s."), *ObjectPath),
               TEXT("OBJECT_NOT_FOUND"));
           return true;
@@ -259,7 +261,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
          PropertyName.Equals(TEXT("ActorRotation"), ESearchCase::IgnoreCase) ||
          PropertyName.Equals(TEXT("ActorScale"), ESearchCase::IgnoreCase) ||
          PropertyName.Equals(TEXT("ActorScale3D"), ESearchCase::IgnoreCase))) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           TEXT("Cannot modify runtime transform on a Blueprint CDO. Edit defaults on the root component or SCS template instead."),
           TEXT("CDO_TRANSFORM"));
       return true;
@@ -268,7 +270,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
         PropertyName.Equals(TEXT("ActorLocation"), ESearchCase::IgnoreCase)) {
           if (ValueField->Type != EJson::Object && ValueField->Type != EJson::Array)
           {
-              SendAutomationError(RequestingSocket, RequestId,
+              S.SendAutomationError(RequestingSocket, RequestId,
                   TEXT("ActorLocation requires vectorValue {x,y,z} or arrayValue [x,y,z]."),
                   TEXT("VALUE_TYPE_MISMATCH"));
               return true;
@@ -291,7 +293,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
           AddLevelActorPersistenceFields(ResultPayload);
           ResultPayload->SetObjectField(TEXT("value"), McpPropertyReflection::VectorToJson(NewLoc));
           AddObjectVerification(ResultPayload, Actor);
-          SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Actor location updated."), ResultPayload);
+          S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Actor location updated."), ResultPayload);
           return true;
       }
       
@@ -300,7 +302,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       {
           if (ValueField->Type != EJson::Object && ValueField->Type != EJson::Array)
           {
-              SendAutomationError(RequestingSocket, RequestId,
+              S.SendAutomationError(RequestingSocket, RequestId,
                   TEXT("ActorRotation requires vectorValue {pitch,yaw,roll} or arrayValue [pitch,yaw,roll]."),
                   TEXT("VALUE_TYPE_MISMATCH"));
               return true;
@@ -323,7 +325,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
           AddLevelActorPersistenceFields(ResultPayload);
           ResultPayload->SetObjectField(TEXT("value"), McpPropertyReflection::RotatorToJson(NewRot));
           AddObjectVerification(ResultPayload, Actor);
-          SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Actor rotation updated."), ResultPayload);
+          S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Actor rotation updated."), ResultPayload);
           return true;
       }
       
@@ -333,7 +335,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       {
           if (ValueField->Type != EJson::Object && ValueField->Type != EJson::Array)
           {
-              SendAutomationError(RequestingSocket, RequestId,
+              S.SendAutomationError(RequestingSocket, RequestId,
                   TEXT("ActorScale requires vectorValue {x,y,z} or arrayValue [x,y,z]."),
                   TEXT("VALUE_TYPE_MISMATCH"));
               return true;
@@ -356,7 +358,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
           AddLevelActorPersistenceFields(ResultPayload);
           ResultPayload->SetObjectField(TEXT("value"), McpPropertyReflection::VectorToJson(NewScale));
           AddObjectVerification(ResultPayload, Actor);
-          SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Actor scale updated."), ResultPayload);
+          S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Actor scale updated."), ResultPayload);
           return true;
       }
       
@@ -365,7 +367,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       {
           if (ValueField->Type != EJson::Boolean)
           {
-              SendAutomationError(RequestingSocket, RequestId,
+              S.SendAutomationError(RequestingSocket, RequestId,
                   TEXT("bHidden requires boolValue true/false."),
                   TEXT("VALUE_TYPE_MISMATCH"));
               return true;
@@ -380,7 +382,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
           AddLevelActorPersistenceFields(ResultPayload);
           ResultPayload->SetBoolField(TEXT("value"), bHidden);
           AddObjectVerification(ResultPayload, Actor);
-          SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Actor visibility updated."), ResultPayload);
+          S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Actor visibility updated."), ResultPayload);
           return true;
       }
   }
@@ -394,7 +396,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       FString ResolveError;
       Property = ResolveNestedPropertyPath(RootObject, PropertyName, TargetContainer, ResolveError);
       if (!Property || !TargetContainer) {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               FString::Printf(TEXT("Failed to resolve nested property path '%s': %s"), *PropertyName, *ResolveError),
               TEXT("PROPERTY_NOT_FOUND"));
           return true;
@@ -406,7 +408,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       TargetContainer = RootObject;
       Property = RootObject->GetClass()->FindPropertyByName(*PropertyName);
       if (!Property) {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               FString::Printf(TEXT("Property '%s' not found on object '%s'."), *PropertyName, *ObjectPath),
               TEXT("PROPERTY_NOT_FOUND"));
           return true;
@@ -418,7 +420,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
   // the control_actor set-variable path).
   if (!McpPropertyReflection::PropertyMatchesValueKind(Property, PropTyped.Kind))
   {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           FString::Printf(TEXT("%s: you sent %sValue but the property type is '%s'."),
                           *PropertyName, *PropTyped.Kind, *Property->GetCPPType()),
           TEXT("VALUE_TYPE_MISMATCH"));
@@ -433,7 +435,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
   FString ConversionError;
   if (!ApplyJsonValueToProperty(TargetContainer, Property, ValueField, ConversionError))
   {
-      SendAutomationError(RequestingSocket, RequestId, ConversionError, TEXT("PROPERTY_CONVERSION_FAILED"));
+      S.SendAutomationError(RequestingSocket, RequestId, ConversionError, TEXT("PROPERTY_CONVERSION_FAILED"));
       return true;
   }
 
@@ -499,7 +501,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       bSaved = McpSafeAssetSave(Package);
       if (!bSaved)
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               FString::Printf(TEXT("Property '%s' was applied in memory but saving package '%s' failed; the package is left dirty. Check the .uasset is writable and not locked, or pass save:false and persist later via control_editor save_all."),
                   *PropertyName, *Package->GetName()),
               TEXT("SAVE_FAILED"));
@@ -525,12 +527,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       ResultPayload->SetField(TEXT("value"), CurrentValue);
   }
 
-  SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Property value updated."), ResultPayload);
+  S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Property value updated."), ResultPayload);
   return true;
 }
 
 
-bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
+bool McpHandlers::Inspect::HandleGetObjectProperty(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -540,7 +543,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
     return false;
 
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("get_object_property payload missing."),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -557,7 +560,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
 
   if (ObjectPath.IsEmpty() && BlueprintPath.IsEmpty())
   {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           TEXT("Either objectPath or blueprintPath is required."),
           TEXT("INVALID_OBJECT"));
       return true;
@@ -572,7 +575,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
       PropertyName.TrimStartAndEndInline();
   }
   if (PropertyName.IsEmpty()) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         TEXT("get_object_property requires a non-empty propertyName or propertyPath."),
         TEXT("INVALID_PROPERTY"));
@@ -589,7 +592,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
       UBlueprint* Blueprint = LoadBlueprintAsset(BlueprintPath, NormalizedPath, LoadError);
       if (!Blueprint)
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               FString::Printf(TEXT("Blueprint not found: %s (%s)"), *BlueprintPath, *LoadError),
               TEXT("BLUEPRINT_NOT_FOUND"));
           return true;
@@ -598,7 +601,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
       UClass* GeneratedClass = Blueprint->GeneratedClass;
       if (!GeneratedClass)
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               TEXT("Blueprint has no GeneratedClass (not compiled?)"),
               TEXT("CDO_NOT_FOUND"));
           return true;
@@ -607,7 +610,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
       RootObject = GeneratedClass->GetDefaultObject();
       if (!RootObject)
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               TEXT("Failed to get Class Default Object"),
               TEXT("CDO_NOT_FOUND"));
           return true;
@@ -622,7 +625,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
       RootObject = McpHandlerUtils::ResolveObjectFromPath(ObjectPath, &ResolvedPath);
       if (!RootObject)
       {
-          SendAutomationError(
+          S.SendAutomationError(
               RequestingSocket, RequestId,
               FString::Printf(TEXT("Unable to find object at path %s."), *ObjectPath),
               TEXT("OBJECT_NOT_FOUND"));
@@ -642,7 +645,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
                    PropertyName.Equals(TEXT("ActorRotation"), ESearchCase::IgnoreCase) ||
                    PropertyName.Equals(TEXT("ActorScale"), ESearchCase::IgnoreCase) ||
                    PropertyName.Equals(TEXT("ActorScale3D"), ESearchCase::IgnoreCase))) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           TEXT("Cannot read runtime transform from a Blueprint CDO. Query the SCS template or a spawned instance instead."),
           TEXT("CDO_TRANSFORM"));
       return true;
@@ -660,7 +663,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
       ResultPayload->SetField(TEXT("value"),
                               MakeShared<FJsonValueObject>(ValObj));
 
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Actor location retrieved."), ResultPayload,
                              FString());
       return true;
@@ -678,7 +681,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
       ResultPayload->SetField(TEXT("value"),
                               MakeShared<FJsonValueObject>(ValObj));
 
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Actor rotation retrieved."), ResultPayload,
                              FString());
       return true;
@@ -698,7 +701,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
       ResultPayload->SetField(TEXT("value"),
                               MakeShared<FJsonValueObject>(ValObj));
 
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Actor scale retrieved."), ResultPayload,
                              FString());
       return true;
@@ -709,7 +712,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
   McpHandlerUtils::FPropertyResolveResult PropResult = McpHandlerUtils::ResolveProperty(RootObject, PropertyName);
   if (!PropResult.IsValid())
   {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           PropResult.Error,
           TEXT("PROPERTY_NOT_FOUND"));
@@ -719,7 +722,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
   const TSharedPtr<FJsonValue> CurrentValue =
       ExportPropertyToJsonValue(PropResult.Container, PropResult.Property);
   if (!CurrentValue.IsValid()) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(TEXT("Unable to export property %s."), *PropertyName),
         TEXT("PROPERTY_EXPORT_FAILED"));
@@ -737,7 +740,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetObjectProperty(
     McpHandlerUtils::AddVerification(ResultPayload, RootObject);
   }
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Property value retrieved."), ResultPayload,
                          FString());
   return true;
@@ -914,7 +917,8 @@ UActorComponent* FindCdoComponent(
 } // anonymous namespace
 #endif // WITH_EDITOR
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
+bool McpHandlers::Inspect::HandleInspectCdoAction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -922,7 +926,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
 #if WITH_EDITOR
     if (!Payload.IsValid())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("inspect_cdo: payload missing"),
                             TEXT("INVALID_PAYLOAD"));
         return true;
@@ -933,7 +937,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
     BlueprintPath.TrimStartAndEndInline();
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("blueprintPath is required for inspect_cdo"),
                             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -944,7 +948,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
         BlueprintPath, NormalizedPath, LoadError);
     if (!Blueprint)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Blueprint not found: %s (%s)"),
                                             *BlueprintPath, *LoadError),
                             TEXT("BLUEPRINT_NOT_FOUND"));
@@ -954,7 +958,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
     UClass* GeneratedClass = Blueprint->GeneratedClass;
     if (!GeneratedClass)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Blueprint has no GeneratedClass (not compiled?)"),
                             TEXT("CDO_NOT_FOUND"));
         return true;
@@ -963,7 +967,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
     UObject* CDO = GeneratedClass->GetDefaultObject();
     if (!CDO)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Failed to get Class Default Object"),
                             TEXT("CDO_NOT_FOUND"));
         return true;
@@ -1031,7 +1035,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
         UActorComponent* FoundComp = FindCdoComponent(Blueprint, CDO, ComponentNameFilter);
         if (!FoundComp)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                                 FString::Printf(TEXT("Component not found: %s"),
                                                 *ComponentNameFilter),
                                 TEXT("COMPONENT_NOT_FOUND"));
@@ -1060,7 +1064,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
             Resp->SetObjectField(TEXT("properties"), CompJson);
         }
         Resp->SetBoolField(TEXT("success"), true);
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
                                TEXT("CDO component inspected"), Resp, FString());
         return true;
     }
@@ -1157,11 +1161,11 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectCdoAction(
     Resp->SetArrayField(TEXT("components"), ComponentsArray);
     Resp->SetNumberField(TEXT("componentCount"), ComponentsArray.Num());
     Resp->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("CDO inspection completed"), Resp, FString());
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("inspect_cdo requires editor build."),
                         TEXT("NOT_IMPLEMENTED"));
     return true;
@@ -1288,7 +1292,8 @@ namespace McpDiffAssetDetail
 }
 #endif // WITH_EDITOR
 
-bool UMcpAutomationBridgeSubsystem::HandleDiffAssetAction(
+bool McpHandlers::Inspect::HandleDiffAssetAction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -1297,7 +1302,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDiffAssetAction(
     using namespace McpDiffAssetDetail;
     if (!Payload.IsValid())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("diff_asset: payload missing"), TEXT("INVALID_PAYLOAD"));
         return true;
     }
@@ -1312,20 +1317,20 @@ bool UMcpAutomationBridgeSubsystem::HandleDiffAssetAction(
 
     if (OldFilePath.IsEmpty() || NewFilePath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("diff_asset requires 'oldFilePath' and 'newFilePath' (filesystem paths to .uasset files)"),
             TEXT("INVALID_ARGUMENT"));
         return true;
     }
     if (!FPaths::FileExists(OldFilePath))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("oldFilePath not found: %s"), *OldFilePath), TEXT("FILE_NOT_FOUND"));
         return true;
     }
     if (!FPaths::FileExists(NewFilePath))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("newFilePath not found: %s"), *NewFilePath), TEXT("FILE_NOT_FOUND"));
         return true;
     }
@@ -1375,7 +1380,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDiffAssetAction(
             {
                 IFileManager::Get().Delete(*Staged, false, true, true);
             }
-            SendAutomationError(RequestingSocket, RequestId, StageError, TEXT("DIFF_STAGE_FAILED"));
+            S.SendAutomationError(RequestingSocket, RequestId, StageError, TEXT("DIFF_STAGE_FAILED"));
             return true;
         }
     }
@@ -1403,7 +1408,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDiffAssetAction(
             *AssetName, OldObj ? TEXT("ok") : TEXT("null"), NewObj ? TEXT("ok") : TEXT("null"),
             *OldFilePath, *NewFilePath);
         CleanupDiffArtifacts();
-        SendAutomationError(RequestingSocket, RequestId, LoadError, TEXT("DIFF_LOAD_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, LoadError, TEXT("DIFF_LOAD_FAILED"));
         return true;
     }
 
@@ -1743,10 +1748,10 @@ bool UMcpAutomationBridgeSubsystem::HandleDiffAssetAction(
     Resp->SetArrayField(TEXT("gasSignals"), GasSignals);
     Resp->SetBoolField(TEXT("anyChange"), bAnyChange);
     Resp->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Asset diff completed"), Resp, FString());
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Asset diff completed"), Resp, FString());
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("diff_asset requires editor build."), TEXT("NOT_IMPLEMENTED"));
     return true;
 #endif

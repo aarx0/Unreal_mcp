@@ -11,6 +11,8 @@
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_ControlHandlers.h"
+#include "McpAutomationBridge_FocusInputHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -195,43 +197,43 @@ class FMcpCall_ControlEditor_##ClassSuffix final : public FMcpCall              
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
 	{                                                                                     \
-		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+		return HandlerFn(S, RequestId, Payload, Socket);                                   \
 	}                                                                                     \
 };
 
-MCP_CE_CALL(Play, "play", HandleControlEditorPlay, EMcpCallFlags::None)
-MCP_CE_CALL(Stop, "stop", HandleControlEditorStop, EMcpCallFlags::None)
-MCP_CE_CALL(Pause, "pause", HandleControlEditorPause, EMcpCallFlags::None)
-MCP_CE_CALL(Resume, "resume", HandleControlEditorResume, EMcpCallFlags::None)
-MCP_CE_CALL(Eject, "eject", HandleControlEditorEject, EMcpCallFlags::None)
-MCP_CE_CALL(Possess, "possess", HandleControlEditorPossess, EMcpCallFlags::None)
-MCP_CE_CALL(StepFrame, "step_frame", HandleControlEditorStepFrame, EMcpCallFlags::None)
-MCP_CE_CALL(SetGameSpeed, "set_game_speed", HandleControlEditorSetGameSpeed, EMcpCallFlags::None)
-MCP_CE_CALL(SetFixedDeltaTime, "set_fixed_delta_time", HandleControlEditorSetFixedDeltaTime, EMcpCallFlags::None)
-MCP_CE_CALL(SetCamera, "set_camera", HandleControlEditorSetCamera, EMcpCallFlags::None)
-MCP_CE_CALL(SetCameraFov, "set_camera_fov", HandleControlEditorSetCameraFov, EMcpCallFlags::None)
-MCP_CE_CALL(SetViewMode, "set_view_mode", HandleControlEditorSetViewMode, EMcpCallFlags::None)
-MCP_CE_CALL(SetViewportRealtime, "set_viewport_realtime", HandleControlEditorSetViewportRealtime, EMcpCallFlags::None)
-MCP_CE_CALL(SetGameView, "set_game_view", HandleControlEditorSetGameView, EMcpCallFlags::None)
-MCP_CE_CALL(SetImmersiveMode, "set_immersive_mode", HandleControlEditorSetImmersiveMode, EMcpCallFlags::None)
-MCP_CE_CALL(ShowStats, "show_stats", HandleControlEditorShowStats, EMcpCallFlags::None)
-MCP_CE_CALL(HideStats, "hide_stats", HandleControlEditorHideStats, EMcpCallFlags::None)
-MCP_CE_CALL(FocusActor, "focus_actor", HandleControlEditorFocusActor, EMcpCallFlags::None)
-MCP_CE_CALL(Screenshot, "screenshot", HandleControlEditorScreenshot, EMcpCallFlags::None)
-MCP_CE_CALL(OpenAsset, "open_asset", HandleControlEditorOpenAsset, EMcpCallFlags::None)
-MCP_CE_CALL(CloseAsset, "close_asset", HandleControlEditorCloseAsset, EMcpCallFlags::None)
-MCP_CE_CALL(OpenLevel, "open_level", HandleControlEditorOpenLevel, EMcpCallFlags::None)
-MCP_CE_CALL(SetEditorMode, "set_editor_mode", HandleControlEditorSetEditorMode, EMcpCallFlags::None)
-MCP_CE_CALL(SetPreferences, "set_preferences", HandleControlEditorSetPreferences, EMcpCallFlags::None)
-MCP_CE_CALL(CreateBookmark, "create_bookmark", HandleControlEditorCreateBookmark, EMcpCallFlags::None)
-MCP_CE_CALL(JumpToBookmark, "jump_to_bookmark", HandleControlEditorJumpToBookmark, EMcpCallFlags::None)
-MCP_CE_CALL(StartRecording, "start_recording", HandleControlEditorStartRecording, EMcpCallFlags::None)
-MCP_CE_CALL(StopRecording, "stop_recording", HandleControlEditorStopRecording, EMcpCallFlags::None)
-MCP_CE_CALL(SimulateInput, "simulate_input", HandleControlEditorSimulateInput, EMcpCallFlags::None)
-MCP_CE_CALL(SimulateNav, "simulate_nav", HandleControlEditorSimulateNav, EMcpCallFlags::None)
-MCP_CE_CALL(Undo, "undo", HandleControlEditorUndo, EMcpCallFlags::Mutating)
-MCP_CE_CALL(Redo, "redo", HandleControlEditorRedo, EMcpCallFlags::Mutating)
-MCP_CE_CALL(SaveAll, "save_all", HandleControlEditorSaveAll, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_CE_CALL(Play, "play", McpHandlers::ControlEditor::HandleControlEditorPlay, EMcpCallFlags::None)
+MCP_CE_CALL(Stop, "stop", McpHandlers::ControlEditor::HandleControlEditorStop, EMcpCallFlags::None)
+MCP_CE_CALL(Pause, "pause", McpHandlers::ControlEditor::HandleControlEditorPause, EMcpCallFlags::None)
+MCP_CE_CALL(Resume, "resume", McpHandlers::ControlEditor::HandleControlEditorResume, EMcpCallFlags::None)
+MCP_CE_CALL(Eject, "eject", McpHandlers::ControlEditor::HandleControlEditorEject, EMcpCallFlags::None)
+MCP_CE_CALL(Possess, "possess", McpHandlers::ControlEditor::HandleControlEditorPossess, EMcpCallFlags::None)
+MCP_CE_CALL(StepFrame, "step_frame", McpHandlers::ControlEditor::HandleControlEditorStepFrame, EMcpCallFlags::None)
+MCP_CE_CALL(SetGameSpeed, "set_game_speed", McpHandlers::ControlEditor::HandleControlEditorSetGameSpeed, EMcpCallFlags::None)
+MCP_CE_CALL(SetFixedDeltaTime, "set_fixed_delta_time", McpHandlers::ControlEditor::HandleControlEditorSetFixedDeltaTime, EMcpCallFlags::None)
+MCP_CE_CALL(SetCamera, "set_camera", McpHandlers::ControlEditor::HandleControlEditorSetCamera, EMcpCallFlags::None)
+MCP_CE_CALL(SetCameraFov, "set_camera_fov", McpHandlers::ControlEditor::HandleControlEditorSetCameraFov, EMcpCallFlags::None)
+MCP_CE_CALL(SetViewMode, "set_view_mode", McpHandlers::ControlEditor::HandleControlEditorSetViewMode, EMcpCallFlags::None)
+MCP_CE_CALL(SetViewportRealtime, "set_viewport_realtime", McpHandlers::ControlEditor::HandleControlEditorSetViewportRealtime, EMcpCallFlags::None)
+MCP_CE_CALL(SetGameView, "set_game_view", McpHandlers::ControlEditor::HandleControlEditorSetGameView, EMcpCallFlags::None)
+MCP_CE_CALL(SetImmersiveMode, "set_immersive_mode", McpHandlers::ControlEditor::HandleControlEditorSetImmersiveMode, EMcpCallFlags::None)
+MCP_CE_CALL(ShowStats, "show_stats", McpHandlers::ControlEditor::HandleControlEditorShowStats, EMcpCallFlags::None)
+MCP_CE_CALL(HideStats, "hide_stats", McpHandlers::ControlEditor::HandleControlEditorHideStats, EMcpCallFlags::None)
+MCP_CE_CALL(FocusActor, "focus_actor", McpHandlers::ControlEditor::HandleControlEditorFocusActor, EMcpCallFlags::None)
+MCP_CE_CALL(Screenshot, "screenshot", McpHandlers::ControlEditor::HandleControlEditorScreenshot, EMcpCallFlags::None)
+MCP_CE_CALL(OpenAsset, "open_asset", McpHandlers::ControlEditor::HandleControlEditorOpenAsset, EMcpCallFlags::None)
+MCP_CE_CALL(CloseAsset, "close_asset", McpHandlers::ControlEditor::HandleControlEditorCloseAsset, EMcpCallFlags::None)
+MCP_CE_CALL(OpenLevel, "open_level", McpHandlers::ControlEditor::HandleControlEditorOpenLevel, EMcpCallFlags::None)
+MCP_CE_CALL(SetEditorMode, "set_editor_mode", McpHandlers::ControlEditor::HandleControlEditorSetEditorMode, EMcpCallFlags::None)
+MCP_CE_CALL(SetPreferences, "set_preferences", McpHandlers::ControlEditor::HandleControlEditorSetPreferences, EMcpCallFlags::None)
+MCP_CE_CALL(CreateBookmark, "create_bookmark", McpHandlers::ControlEditor::HandleControlEditorCreateBookmark, EMcpCallFlags::None)
+MCP_CE_CALL(JumpToBookmark, "jump_to_bookmark", McpHandlers::ControlEditor::HandleControlEditorJumpToBookmark, EMcpCallFlags::None)
+MCP_CE_CALL(StartRecording, "start_recording", McpHandlers::ControlEditor::HandleControlEditorStartRecording, EMcpCallFlags::None)
+MCP_CE_CALL(StopRecording, "stop_recording", McpHandlers::ControlEditor::HandleControlEditorStopRecording, EMcpCallFlags::None)
+MCP_CE_CALL(SimulateInput, "simulate_input", McpHandlers::ControlEditor::HandleControlEditorSimulateInput, EMcpCallFlags::None)
+MCP_CE_CALL(SimulateNav, "simulate_nav", McpHandlers::ControlEditor::HandleControlEditorSimulateNav, EMcpCallFlags::None)
+MCP_CE_CALL(Undo, "undo", McpHandlers::ControlEditor::HandleControlEditorUndo, EMcpCallFlags::Mutating)
+MCP_CE_CALL(Redo, "redo", McpHandlers::ControlEditor::HandleControlEditorRedo, EMcpCallFlags::Mutating)
+MCP_CE_CALL(SaveAll, "save_all", McpHandlers::ControlEditor::HandleControlEditorSaveAll, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 #undef MCP_CE_CALL
 

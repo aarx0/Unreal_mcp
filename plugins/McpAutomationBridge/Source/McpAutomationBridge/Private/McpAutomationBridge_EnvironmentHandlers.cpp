@@ -51,6 +51,8 @@
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_AssetWorkflowHandlers.h"
+#include "McpAutomationBridge_EnvironmentHandlers.h"
 #include "UObject/UObjectIterator.h" // find_objects: TObjectIterator discovery
 #include "Misc/ConfigCacheIni.h"
 #include "HAL/PlatformMemory.h"
@@ -511,7 +513,7 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentGenerateLODs(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleGenerateLODs(RequestId, TEXT("generate_lods"), Payload,
+    return McpHandlers::Asset::HandleGenerateLODs(*this, RequestId, TEXT("generate_lods"), Payload,
                               RequestingSocket);
 }
 
@@ -1448,7 +1450,8 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
 //   includeCdo (default false) — include class default objects.
 //   limit (default 50, max 200).
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleInspectFindObjects(
+bool McpHandlers::Inspect::HandleInspectFindObjects(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1456,7 +1459,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectFindObjects(
     Payload->TryGetStringField(TEXT("className"), ClassName);
     if (ClassName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("find_objects requires 'className'."),
                             TEXT("MISSING_PARAMETER"));
         return true;
@@ -1475,7 +1478,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectFindObjects(
     }
     if (!TargetClass)
     {
-        SendAutomationError(
+        S.SendAutomationError(
             RequestingSocket, RequestId,
             FString::Printf(TEXT("Could not resolve className '%s' to a loaded UClass. Pass a loaded short name or a fully-qualified path."), *ClassName),
             TEXT("CLASS_NOT_FOUND"));
@@ -1567,33 +1570,36 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectFindObjects(
     Resp->SetNumberField(TEXT("matched"), Matched);
     Resp->SetBoolField(TEXT("truncated"), bTruncated);
     Resp->SetArrayField(TEXT("objects"), Results);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            FString::Printf(TEXT("Found %d object(s)"), Matched),
                            Resp, FString());
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectGetProjectSettings(
+bool McpHandlers::Inspect::HandleInspectGetProjectSettings(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("inspect get_project_settings is not implemented; use system_control get_project_settings instead."),
         TEXT("NOT_IMPLEMENTED"));
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectGetEditorSettings(
+bool McpHandlers::Inspect::HandleInspectGetEditorSettings(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("inspect get_editor_settings is not implemented; editor preferences are not exposed yet."),
         TEXT("NOT_IMPLEMENTED"));
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectGetWorldSettings(
+bool McpHandlers::Inspect::HandleInspectGetWorldSettings(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1604,19 +1610,20 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectGetWorldSettings(
         Resp->SetStringField(TEXT("worldName"), World->GetName());
         Resp->SetStringField(TEXT("levelName"), World->GetCurrentLevel()->GetName());
         Resp->SetBoolField(TEXT("success"), true);
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
                                TEXT("World settings retrieved"), Resp, FString());
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("No world available"),
                             TEXT("WORLD_NOT_FOUND"));
     }
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectGetViewportInfo(
+bool McpHandlers::Inspect::HandleInspectGetViewportInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1647,20 +1654,21 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectGetViewportInfo(
         RotJson->SetNumberField(TEXT("roll"), CamRot.Roll);
         Resp->SetObjectField(TEXT("rotation"), RotJson);
         Resp->SetBoolField(TEXT("success"), true);
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
                                TEXT("Viewport info retrieved"), Resp, FString());
     }
     else
     {
         Resp->SetBoolField(TEXT("success"), true);
         Resp->SetStringField(TEXT("message"), TEXT("Viewport info not available in this context"));
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
                                TEXT("Viewport info retrieved"), Resp, FString());
     }
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectGetSelectedActors(
+bool McpHandlers::Inspect::HandleInspectGetSelectedActors(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1685,12 +1693,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectGetSelectedActors(
     Resp->SetArrayField(TEXT("actors"), ActorsArray);
     Resp->SetNumberField(TEXT("count"), ActorsArray.Num());
     Resp->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Selected actors retrieved"), Resp, FString());
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectGetSceneStats(
+bool McpHandlers::Inspect::HandleInspectGetSceneStats(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1706,12 +1715,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectGetSceneStats(
     }
     Resp->SetNumberField(TEXT("actorCount"), ActorCount);
     Resp->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Scene stats retrieved"), Resp, FString());
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectGetPerformanceStats(
+bool McpHandlers::Inspect::HandleInspectGetPerformanceStats(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1737,12 +1747,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectGetPerformanceStats(
     Resp->SetNumberField(TEXT("actorCount"), ActorCount);
     Resp->SetBoolField(TEXT("isBenchmarking"), FApp::IsBenchmarking());
     Resp->SetBoolField(TEXT("useFixedTimeStep"), FApp::UseFixedTimeStep());
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Performance stats retrieved"), Resp, FString());
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectGetMemoryStats(
+bool McpHandlers::Inspect::HandleInspectGetMemoryStats(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1757,19 +1768,20 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectGetMemoryStats(
     Resp->SetNumberField(TEXT("availableVirtualBytes"), static_cast<double>(MemoryStats.AvailableVirtual));
     Resp->SetNumberField(TEXT("usedVirtualBytes"), static_cast<double>(MemoryStats.UsedVirtual));
     Resp->SetNumberField(TEXT("peakUsedVirtualBytes"), static_cast<double>(MemoryStats.PeakUsedVirtual));
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Memory stats retrieved"), Resp, FString());
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectRuntimeReport(
+bool McpHandlers::Inspect::HandleInspectRuntimeReport(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
     UWorld *World = McpGetRuntimeInspectionWorld();
     if (!World)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("No editor, PIE, or game world available for runtime inspection"),
                             TEXT("WORLD_NOT_FOUND"));
         return true;
@@ -1887,12 +1899,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectRuntimeReport(
         }
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Runtime inspection report generated"), Report, FString());
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectListObjects(
+bool McpHandlers::Inspect::HandleInspectListObjects(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1914,12 +1927,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectListObjects(
     Resp->SetArrayField(TEXT("objects"), ObjectsArray);
     Resp->SetNumberField(TEXT("count"), ObjectsArray.Num());
     Resp->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Objects listed"), Resp, FString());
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectFindByClass(
+bool McpHandlers::Inspect::HandleInspectFindByClass(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1956,12 +1970,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectFindByClass(
     Resp->SetArrayField(TEXT("objects"), ObjectsArray);
     Resp->SetNumberField(TEXT("count"), ObjectsArray.Num());
     Resp->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Objects found by class"), Resp, FString());
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectFindByTag(
+bool McpHandlers::Inspect::HandleInspectFindByTag(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1989,12 +2004,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectFindByTag(
     Resp->SetArrayField(TEXT("objects"), ObjectsArray);
     Resp->SetNumberField(TEXT("count"), ObjectsArray.Num());
     Resp->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Objects found by tag"), Resp, FString());
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectClassInfo(
+bool McpHandlers::Inspect::HandleInspectClassInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2007,7 +2023,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectClassInfo(
     }
     if (ClassName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("className is required for inspect_class"),
                             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -2037,7 +2053,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectClassInfo(
     }
     if (!TargetClass)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Class not found: %s — pass a loaded short name, a Script path, a Blueprint asset path, or its _C class path"), *ClassName),
                             TEXT("CLASS_NOT_FOUND"));
         return true;
@@ -2077,12 +2093,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectClassInfo(
     }
 
     Resp->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Class inspected"), Resp, FString());
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInspectObjectGeneric(
+bool McpHandlers::Inspect::HandleInspectObjectGeneric(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2098,7 +2115,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectObjectGeneric(
     }
     if (ObjectPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("objectPath, actorName, or name required"),
                             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -2110,7 +2127,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectObjectGeneric(
     
     if (!TargetObject)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Object not found: %s"), *ObjectPath),
                             TEXT("OBJECT_NOT_FOUND"));
         return true;
@@ -2222,7 +2239,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectObjectGeneric(
     }
     Resp->SetArrayField(TEXT("tags"), TagsArray);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Object inspection completed"), Resp, FString());
     return true;
 }

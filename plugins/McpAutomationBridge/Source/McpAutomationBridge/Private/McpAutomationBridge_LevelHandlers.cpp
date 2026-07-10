@@ -23,6 +23,7 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_AssetWorkflowHandlers.h"
 #include "McpAutomationBridge_LevelStructureHandlers.h"
 
 #if WITH_EDITOR
@@ -1589,7 +1590,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelSetMetadata(
   }
 
   AssetPayload->SetStringField(TEXT("assetPath"), AssetPath);
-  return HandleSetMetadata(RequestId, AssetPayload, Socket);
+  return McpHandlers::Asset::HandleSetMetadata(*this, RequestId, AssetPayload, Socket);
 }
 
 bool UMcpAutomationBridgeSubsystem::HandleLevelValidate(

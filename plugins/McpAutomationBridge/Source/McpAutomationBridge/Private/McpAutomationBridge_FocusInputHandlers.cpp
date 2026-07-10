@@ -41,6 +41,7 @@
 #include "McpVersionCompatibility.h"
 
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_FocusInputHandlers.h"
 #include "McpHandlerUtils.h"
 
 #include "Dom/JsonObject.h"
@@ -349,7 +350,8 @@ FKey ResolveNavKey(const FString &Direction, const FString &Device,
 // =============================================================================
 // inspect ui_focus — OBSERVE
 // =============================================================================
-bool UMcpAutomationBridgeSubsystem::HandleInspectUiFocus(
+bool McpHandlers::Inspect::HandleInspectUiFocus(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -357,11 +359,11 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectUiFocus(
 	TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
 	BuildFocusSnapshot(Resp);
 	Resp->SetBoolField(TEXT("success"), true);
-	SendAutomationResponse(RequestingSocket, RequestId, true,
+	S.SendAutomationResponse(RequestingSocket, RequestId, true,
 	                       TEXT("UI focus snapshot"), Resp, FString());
 	return true;
 #else
-	SendAutomationError(RequestingSocket, RequestId,
+	S.SendAutomationError(RequestingSocket, RequestId,
 	                    TEXT("ui_focus requires an editor build."),
 	                    TEXT("NOT_IMPLEMENTED"));
 	return true;
@@ -371,14 +373,15 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectUiFocus(
 // =============================================================================
 // control_editor simulate_nav — DRIVE (faithful)
 // =============================================================================
-bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateNav(
+bool McpHandlers::ControlEditor::HandleControlEditorSimulateNav(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if WITH_EDITOR
 	if (!GEditor || !GEditor->PlayWorld)
 	{
-		SendAutomationError(RequestingSocket, RequestId,
+		S.SendAutomationError(RequestingSocket, RequestId,
 		                    TEXT("simulate_nav drives runtime UI focus and requires an "
 		                         "active PIE session (control_editor play first)."),
 		                    TEXT("NOT_IN_PIE"));
@@ -386,7 +389,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateNav(
 	}
 	if (!FSlateApplication::IsInitialized())
 	{
-		SendAutomationError(RequestingSocket, RequestId,
+		S.SendAutomationError(RequestingSocket, RequestId,
 		                    TEXT("Slate application is not initialized."),
 		                    TEXT("SLATE_NOT_AVAILABLE"));
 		return true;
@@ -405,7 +408,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateNav(
 
 	if (Direction.IsEmpty() && KeyOverride.IsEmpty())
 	{
-		SendAutomationError(RequestingSocket, RequestId,
+		S.SendAutomationError(RequestingSocket, RequestId,
 		                    TEXT("simulate_nav requires 'direction' "
 		                         "(Up/Down/Left/Right/Accept/Back/Next/Previous) or 'key'."),
 		                    TEXT("INVALID_ARGUMENT"));
@@ -417,7 +420,7 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateNav(
 	const FKey NavKey = ResolveNavKey(Direction, Device, KeyOverride, bShift, ResolveErr);
 	if (!NavKey.IsValid())
 	{
-		SendAutomationError(RequestingSocket, RequestId,
+		S.SendAutomationError(RequestingSocket, RequestId,
 		                    ResolveErr.IsEmpty() ? TEXT("Could not resolve a navigation key.")
 		                                         : ResolveErr,
 		                    TEXT("INVALID_ARGUMENT"));
@@ -544,14 +547,14 @@ bool UMcpAutomationBridgeSubsystem::HandleControlEditorSimulateNav(
 	BuildFocusSnapshot(Resp); // adds focusedWidget/focusPath/desiredFocusTarget/etc (post-nav)
 	Resp->SetBoolField(TEXT("success"), true);
 
-	SendAutomationResponse(RequestingSocket, RequestId, true,
+	S.SendAutomationResponse(RequestingSocket, RequestId, true,
 	                       FString::Printf(TEXT("simulate_nav %s (%s) -> focusChanged=%s"),
 	                                       *Direction, *NavKey.ToString(),
 	                                       (Before != After) ? TEXT("true") : TEXT("false")),
 	                       Resp, FString());
 	return true;
 #else
-	SendAutomationError(RequestingSocket, RequestId,
+	S.SendAutomationError(RequestingSocket, RequestId,
 	                    TEXT("simulate_nav requires an editor build."),
 	                    TEXT("NOT_IMPLEMENTED"));
 	return true;

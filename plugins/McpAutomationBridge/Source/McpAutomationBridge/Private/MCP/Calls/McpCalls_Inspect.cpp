@@ -15,6 +15,10 @@
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_ControlHandlers.h"
+#include "McpAutomationBridge_FocusInputHandlers.h"
+#include "McpAutomationBridge_EnvironmentHandlers.h"
+#include "McpAutomationBridge_PropertyHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -290,7 +294,7 @@ class FMcpCall_Inspect_##ClassSuffix final : public FMcpCall                    
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
 	{                                                                                     \
-		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+		return HandlerFn(S, RequestId, Payload, Socket);                                   \
 	}                                                                                     \
 };
 
@@ -311,7 +315,7 @@ class FMcpCall_Inspect_##ClassSuffix final : public FMcpCall                    
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
 	{                                                                                     \
 		NormalizeActorAlias(Payload, /*bAlsoObjectPath*/ false);                          \
-		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+		return HandlerFn(S, RequestId, Payload, Socket);                                   \
 	}                                                                                     \
 };
 
@@ -333,57 +337,57 @@ class FMcpCall_Inspect_##ClassSuffix final : public FMcpCall                    
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
 	{                                                                                     \
 		NormalizeActorAlias(Payload, /*bAlsoObjectPath*/ true);                           \
-		return S.HandlerFn(RequestId, TEXT(InternalLiteral), Payload, Socket);            \
+		return HandlerFn(S, RequestId, TEXT(InternalLiteral), Payload, Socket);            \
 	}                                                                                     \
 };
 
 // Global reads (EnvironmentHandlers.cpp)
-MCP_INSPECT_CALL(FindObjects, "find_objects", HandleInspectFindObjects, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetProjectSettings, "get_project_settings", HandleInspectGetProjectSettings, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetEditorSettings, "get_editor_settings", HandleInspectGetEditorSettings, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetWorldSettings, "get_world_settings", HandleInspectGetWorldSettings, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetViewportInfo, "get_viewport_info", HandleInspectGetViewportInfo, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetSelectedActors, "get_selected_actors", HandleInspectGetSelectedActors, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetSceneStats, "get_scene_stats", HandleInspectGetSceneStats, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetPerformanceStats, "get_performance_stats", HandleInspectGetPerformanceStats, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetMemoryStats, "get_memory_stats", HandleInspectGetMemoryStats, EMcpCallFlags::None)
-MCP_INSPECT_CALL(ListObjects, "list_objects", HandleInspectListObjects, EMcpCallFlags::None)
-MCP_INSPECT_CALL(FindByClass, "find_by_class", HandleInspectFindByClass, EMcpCallFlags::None)
-MCP_INSPECT_CALL(FindByTag, "find_by_tag", HandleInspectFindByTag, EMcpCallFlags::None)
-MCP_INSPECT_CALL(InspectClass, "inspect_class", HandleInspectClassInfo, EMcpCallFlags::None)
-MCP_INSPECT_CALL(RuntimeReport, "runtime_report", HandleInspectRuntimeReport, EMcpCallFlags::None)
-MCP_INSPECT_CALL(PieReport, "pie_report", HandleInspectRuntimeReport, EMcpCallFlags::None)
+MCP_INSPECT_CALL(FindObjects, "find_objects", McpHandlers::Inspect::HandleInspectFindObjects, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetProjectSettings, "get_project_settings", McpHandlers::Inspect::HandleInspectGetProjectSettings, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetEditorSettings, "get_editor_settings", McpHandlers::Inspect::HandleInspectGetEditorSettings, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetWorldSettings, "get_world_settings", McpHandlers::Inspect::HandleInspectGetWorldSettings, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetViewportInfo, "get_viewport_info", McpHandlers::Inspect::HandleInspectGetViewportInfo, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetSelectedActors, "get_selected_actors", McpHandlers::Inspect::HandleInspectGetSelectedActors, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetSceneStats, "get_scene_stats", McpHandlers::Inspect::HandleInspectGetSceneStats, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetPerformanceStats, "get_performance_stats", McpHandlers::Inspect::HandleInspectGetPerformanceStats, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetMemoryStats, "get_memory_stats", McpHandlers::Inspect::HandleInspectGetMemoryStats, EMcpCallFlags::None)
+MCP_INSPECT_CALL(ListObjects, "list_objects", McpHandlers::Inspect::HandleInspectListObjects, EMcpCallFlags::None)
+MCP_INSPECT_CALL(FindByClass, "find_by_class", McpHandlers::Inspect::HandleInspectFindByClass, EMcpCallFlags::None)
+MCP_INSPECT_CALL(FindByTag, "find_by_tag", McpHandlers::Inspect::HandleInspectFindByTag, EMcpCallFlags::None)
+MCP_INSPECT_CALL(InspectClass, "inspect_class", McpHandlers::Inspect::HandleInspectClassInfo, EMcpCallFlags::None)
+MCP_INSPECT_CALL(RuntimeReport, "runtime_report", McpHandlers::Inspect::HandleInspectRuntimeReport, EMcpCallFlags::None)
+MCP_INSPECT_CALL(PieReport, "pie_report", McpHandlers::Inspect::HandleInspectRuntimeReport, EMcpCallFlags::None)
 
 // Self-contained delegates (FocusInputHandlers.cpp / PropertyHandlers.cpp)
-MCP_INSPECT_CALL(UiFocus, "ui_focus", HandleInspectUiFocus, EMcpCallFlags::None)
-MCP_INSPECT_CALL(DiffAsset, "diff_asset", HandleDiffAssetAction, EMcpCallFlags::None)
-MCP_INSPECT_CALL(InspectCdo, "inspect_cdo", HandleInspectCdoAction, EMcpCallFlags::None)
+MCP_INSPECT_CALL(UiFocus, "ui_focus", McpHandlers::Inspect::HandleInspectUiFocus, EMcpCallFlags::None)
+MCP_INSPECT_CALL(DiffAsset, "diff_asset", McpHandlers::Inspect::HandleDiffAssetAction, EMcpCallFlags::None)
+MCP_INSPECT_CALL(InspectCdo, "inspect_cdo", McpHandlers::Inspect::HandleInspectCdoAction, EMcpCallFlags::None)
 
 // Object detail (one generic body, identical output for all eight)
-MCP_INSPECT_CALL(InspectObject, "inspect_object", HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetActorDetails, "get_actor_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetBlueprintDetails, "get_blueprint_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetComponentDetails, "get_component_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetLevelDetails, "get_level_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetMaterialDetails, "get_material_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetMeshDetails, "get_mesh_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
-MCP_INSPECT_CALL(GetTextureDetails, "get_texture_details", HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(InspectObject, "inspect_object", McpHandlers::Inspect::HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetActorDetails, "get_actor_details", McpHandlers::Inspect::HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetBlueprintDetails, "get_blueprint_details", McpHandlers::Inspect::HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetComponentDetails, "get_component_details", McpHandlers::Inspect::HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetLevelDetails, "get_level_details", McpHandlers::Inspect::HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetMaterialDetails, "get_material_details", McpHandlers::Inspect::HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetMeshDetails, "get_mesh_details", McpHandlers::Inspect::HandleInspectObjectGeneric, EMcpCallFlags::None)
+MCP_INSPECT_CALL(GetTextureDetails, "get_texture_details", McpHandlers::Inspect::HandleInspectObjectGeneric, EMcpCallFlags::None)
 
 // Actor actions (shared control_actor handlers, ControlHandlers.cpp)
-MCP_INSPECT_ACTOR_CALL(GetComponents, "get_components", HandleControlActorGetComponents, EMcpCallFlags::None)
-MCP_INSPECT_ACTOR_CALL(GetComponentProperty, "get_component_property", HandleControlActorGetComponentProperty, EMcpCallFlags::None)
-MCP_INSPECT_ACTOR_CALL(SetComponentProperty, "set_component_property", HandleControlActorSetComponentProperties, EMcpCallFlags::Mutating)
-MCP_INSPECT_ACTOR_CALL(GetMetadata, "get_metadata", HandleControlActorGetMetadata, EMcpCallFlags::None)
-MCP_INSPECT_ACTOR_CALL(AddTag, "add_tag", HandleControlActorAddTag, EMcpCallFlags::Mutating)
-MCP_INSPECT_ACTOR_CALL(CreateSnapshot, "create_snapshot", HandleControlActorCreateSnapshot, EMcpCallFlags::Mutating)
-MCP_INSPECT_ACTOR_CALL(RestoreSnapshot, "restore_snapshot", HandleControlActorRestoreSnapshot, EMcpCallFlags::Mutating)
-MCP_INSPECT_ACTOR_CALL(Export, "export", HandleControlActorExport, EMcpCallFlags::Mutating)
-MCP_INSPECT_ACTOR_CALL(DeleteObject, "delete_object", HandleControlActorDelete, EMcpCallFlags::Mutating)
-MCP_INSPECT_ACTOR_CALL(GetBoundingBox, "get_bounding_box", HandleControlActorGetBoundingBox, EMcpCallFlags::None)
+MCP_INSPECT_ACTOR_CALL(GetComponents, "get_components", McpHandlers::ControlActor::HandleControlActorGetComponents, EMcpCallFlags::None)
+MCP_INSPECT_ACTOR_CALL(GetComponentProperty, "get_component_property", McpHandlers::ControlActor::HandleControlActorGetComponentProperty, EMcpCallFlags::None)
+MCP_INSPECT_ACTOR_CALL(SetComponentProperty, "set_component_property", McpHandlers::ControlActor::HandleControlActorSetComponentProperties, EMcpCallFlags::Mutating)
+MCP_INSPECT_ACTOR_CALL(GetMetadata, "get_metadata", McpHandlers::ControlActor::HandleControlActorGetMetadata, EMcpCallFlags::None)
+MCP_INSPECT_ACTOR_CALL(AddTag, "add_tag", McpHandlers::ControlActor::HandleControlActorAddTag, EMcpCallFlags::Mutating)
+MCP_INSPECT_ACTOR_CALL(CreateSnapshot, "create_snapshot", McpHandlers::ControlActor::HandleControlActorCreateSnapshot, EMcpCallFlags::Mutating)
+MCP_INSPECT_ACTOR_CALL(RestoreSnapshot, "restore_snapshot", McpHandlers::ControlActor::HandleControlActorRestoreSnapshot, EMcpCallFlags::Mutating)
+MCP_INSPECT_ACTOR_CALL(Export, "export", McpHandlers::ControlActor::HandleControlActorExport, EMcpCallFlags::Mutating)
+MCP_INSPECT_ACTOR_CALL(DeleteObject, "delete_object", McpHandlers::ControlActor::HandleControlActorDelete, EMcpCallFlags::Mutating)
+MCP_INSPECT_ACTOR_CALL(GetBoundingBox, "get_bounding_box", McpHandlers::ControlActor::HandleControlActorGetBoundingBox, EMcpCallFlags::None)
 
 // Property pair (PropertyHandlers.cpp)
-MCP_INSPECT_PROP_CALL(SetProperty, "set_property", HandleSetObjectProperty, "set_object_property", EMcpCallFlags::Mutating)
-MCP_INSPECT_PROP_CALL(GetProperty, "get_property", HandleGetObjectProperty, "get_object_property", EMcpCallFlags::None)
+MCP_INSPECT_PROP_CALL(SetProperty, "set_property", McpHandlers::Inspect::HandleSetObjectProperty, "set_object_property", EMcpCallFlags::Mutating)
+MCP_INSPECT_PROP_CALL(GetProperty, "get_property", McpHandlers::Inspect::HandleGetObjectProperty, "get_object_property", EMcpCallFlags::None)
 
 #undef MCP_INSPECT_CALL
 #undef MCP_INSPECT_ACTOR_CALL

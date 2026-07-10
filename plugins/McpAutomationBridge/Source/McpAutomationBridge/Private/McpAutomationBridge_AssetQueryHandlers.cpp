@@ -49,6 +49,7 @@
 // Core Includes
 // -----------------------------------------------------------------------------
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_AssetQueryHandlers.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpHandlerUtils.h"
@@ -72,7 +73,8 @@
 // Handler Implementation
 // =============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
+bool McpHandlers::Asset::HandleAssetQueryAction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
@@ -87,7 +89,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
     // Validate payload
     if (!Payload.IsValid())
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("Missing payload."), TEXT("INVALID_PAYLOAD"));
         return true;
     }
@@ -105,7 +107,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
 
         if (AssetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("Missing assetPath."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
@@ -114,7 +116,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
         FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
         if (SanitizedAssetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Invalid assetPath: '%s' contains traversal or invalid characters."), *AssetPath),
                 TEXT("INVALID_PATH"));
             return true;
@@ -162,7 +164,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
 
         Result->SetArrayField(TEXT("dependencies"), DepArray);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, 
             TEXT("Dependencies retrieved."), Result);
         return true;
     }
@@ -180,7 +182,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
 
         if (Tag.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("tag required"), TEXT("INVALID_ARGUMENT"));
             return true;
         }
@@ -196,7 +198,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
             Path = SanitizeProjectRelativePath(RawPath);
             if (Path.IsEmpty())
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *RawPath),
                     TEXT("INVALID_PATH"));
                 return true;
@@ -265,7 +267,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
         Result->SetArrayField(TEXT("assets"), AssetsArray);
         Result->SetNumberField(TEXT("count"), AssetsArray.Num());
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, 
             TEXT("Assets found by tag"), Result);
         return true;
     }
@@ -386,7 +388,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
                                 SortedNames.Sort();
                                 SupportedNames = FString::Join(SortedNames, TEXT(", "));
                             }
-                            SendAutomationError(RequestingSocket, RequestId,
+                            S.SendAutomationError(RequestingSocket, RequestId,
                                 FString::Printf(TEXT("Unknown short class name '%s'. Use full path (e.g. /Script/Engine.AnimSequence) or one of: %s."),
                                     *ClassName, *SupportedNames),
                                 TEXT("UNKNOWN_CLASS_NAME"));
@@ -411,7 +413,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
                 FString SanitizedPath = SanitizeProjectRelativePath(RawPath);
                 if (SanitizedPath.IsEmpty())
                 {
-                    SendAutomationError(RequestingSocket, RequestId,
+                    S.SendAutomationError(RequestingSocket, RequestId,
                         FString::Printf(TEXT("Invalid package path '%s': contains traversal sequences"), *RawPath),
                         TEXT("INVALID_PATH"));
                     return true;
@@ -428,7 +430,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
             FString SanitizedPath = SanitizeProjectRelativePath(SinglePath);
             if (SanitizedPath.IsEmpty())
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("Invalid path (traversal/security violation): %s"), *SinglePath),
                     TEXT("SECURITY_VIOLATION"));
                 return true;
@@ -557,7 +559,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
         Result->SetNumberField(TEXT("offset"), Offset);
         Result->SetNumberField(TEXT("limit"), Limit);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, 
             TEXT("Assets found."), Result);
         return true;
     }
@@ -573,7 +575,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
 
         if (AssetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("Missing assetPath."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
@@ -581,7 +583,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
         const FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
         if (SanitizedAssetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Invalid assetPath: '%s' contains traversal or invalid characters."), *AssetPath),
                 TEXT("INVALID_PATH"));
             return true;
@@ -597,7 +599,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
                 !FPackageName::TryConvertLongPackageNameToFilename(
                     PackageName, FilePath, FPackageName::GetMapPackageExtension()))
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("Could not convert assetPath to source-control filename: %s"), *SanitizedAssetPath),
                     TEXT("INVALID_PATH"));
                 return true;
@@ -615,18 +617,18 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
                 Result->SetBoolField(TEXT("isDeleted"), State->IsDeleted());
                 Result->SetBoolField(TEXT("isModified"), State->IsModified());
 
-                SendAutomationResponse(RequestingSocket, RequestId, true, 
+                S.SendAutomationResponse(RequestingSocket, RequestId, true, 
                     TEXT("Source control state retrieved."), Result);
             }
             else
             {
-                SendAutomationError(RequestingSocket, RequestId, 
+                S.SendAutomationError(RequestingSocket, RequestId, 
                     TEXT("Could not get source control state."), TEXT("STATE_FAILED"));
             }
         }
         else
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("Source control not enabled."), TEXT("SC_DISABLED"));
         }
         return true;
@@ -634,7 +636,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
 #endif
 
     // Unknown subaction
-    SendAutomationError(RequestingSocket, RequestId, 
+    S.SendAutomationError(RequestingSocket, RequestId, 
         TEXT("Unknown subAction."), TEXT("INVALID_SUBACTION"));
     return true;
 }
@@ -647,7 +649,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAssetQueryAction(
  * Wrapper for search_assets action when called directly (not via asset_query).
  * Routes to HandleAssetQueryAction with subAction="search_assets".
  */
-bool UMcpAutomationBridgeSubsystem::HandleSearchAssets(
+bool McpHandlers::Asset::HandleSearchAssets(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
@@ -665,5 +668,5 @@ bool UMcpAutomationBridgeSubsystem::HandleSearchAssets(
     }
 
     // Delegate to HandleAssetQueryAction
-    return HandleAssetQueryAction(RequestId, TEXT("asset_query"), RoutedPayload, RequestingSocket);
+    return HandleAssetQueryAction(S, RequestId, TEXT("asset_query"), RoutedPayload, RequestingSocket);
 }

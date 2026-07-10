@@ -43,6 +43,7 @@
 
 // MCP Core
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_MaterialAuthoringHandlers.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeHelpers.h"
@@ -220,14 +221,14 @@ static void FinalizeMaterialHost(UMaterial *Material, UMaterialFunction *Functio
   FString AssetPath;                                                           \
   if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||             \
       AssetPath.IsEmpty()) {                                                   \
-    SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),       \
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),       \
                         TEXT("INVALID_ARGUMENT"));                             \
     return true;                                                               \
   }                                                                            \
   /* SECURITY: Validate path BEFORE loading asset */                           \
   FString ValidatedAssetPath = SanitizeProjectRelativePath(AssetPath);         \
   if (ValidatedAssetPath.IsEmpty()) {                                          \
-    SendAutomationError(Socket, RequestId,                                     \
+    S.SendAutomationError(Socket, RequestId,                                     \
                         FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath), \
                         TEXT("INVALID_PATH"));                                \
     return true;                                                               \
@@ -235,7 +236,7 @@ static void FinalizeMaterialHost(UMaterial *Material, UMaterialFunction *Functio
   AssetPath = ValidatedAssetPath;                                              \
   UMaterial *Material = LoadObject<UMaterial>(nullptr, *AssetPath);            \
   if (!Material) {                                                             \
-    SendAutomationError(Socket, RequestId, TEXT("Could not load Material."),   \
+    S.SendAutomationError(Socket, RequestId, TEXT("Could not load Material."),   \
                         TEXT("ASSET_NOT_FOUND"));                              \
     return true;                                                               \
   }                                                                            \
@@ -250,13 +251,13 @@ static void FinalizeMaterialHost(UMaterial *Material, UMaterialFunction *Functio
   FString AssetPath;                                                           \
   if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||             \
       AssetPath.IsEmpty()) {                                                   \
-    SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),       \
+    S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),       \
                         TEXT("INVALID_ARGUMENT"));                             \
     return true;                                                               \
   }                                                                            \
   FString ValidatedAssetPath = SanitizeProjectRelativePath(AssetPath);         \
   if (ValidatedAssetPath.IsEmpty()) {                                          \
-    SendAutomationError(Socket, RequestId,                                     \
+    S.SendAutomationError(Socket, RequestId,                                     \
                         FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath), \
                         TEXT("INVALID_PATH"));                                 \
     return true;                                                               \
@@ -266,7 +267,7 @@ static void FinalizeMaterialHost(UMaterial *Material, UMaterialFunction *Functio
   UMaterialFunction *Function = nullptr;                                       \
   LoadMaterialOrFunction(AssetPath, Material, Function);                       \
   if (!Material && !Function) {                                                \
-    SendAutomationError(Socket, RequestId,                                     \
+    S.SendAutomationError(Socket, RequestId,                                     \
                         TEXT("Could not load Material or Material Function."),\
                         TEXT("ASSET_NOT_FOUND"));                              \
     return true;                                                               \
@@ -291,13 +292,14 @@ static void FinalizeMaterialHost(UMaterial *Material, UMaterialFunction *Functio
   #define MCP_NODE_ID(Expr) ((Expr)->GetName())
 #endif // WITH_EDITOR (macros hoisted from HandleManageMaterialAuthoringAction)
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterial(
+bool McpHandlers::Asset::HandleMaterialCreateMaterial(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString Name, Path;
     if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'name'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'name'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -311,7 +313,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterial(
     FString NormalizedOriginal = OriginalName.Replace(TEXT("_"), TEXT(""));
     FString NormalizedSanitized = SanitizedName.Replace(TEXT("_"), TEXT(""));
     if (NormalizedSanitized != NormalizedOriginal) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid material name '%s': contains characters that cannot be used in asset names. Valid name would be: '%s'"),
                                           *OriginalName, *SanitizedName),
                           TEXT("INVALID_NAME"));
@@ -328,13 +330,13 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterial(
     FString ValidatedPath;
     FString PathError;
     if (!ValidateAssetCreationPath(Path, Name, ValidatedPath, PathError)) {
-      SendAutomationError(Socket, RequestId, PathError, TEXT("INVALID_PATH"));
+      S.SendAutomationError(Socket, RequestId, PathError, TEXT("INVALID_PATH"));
       return true;
     }
 
     // Additional validation: reject Windows absolute paths (contain colon)
     if (ValidatedPath.Contains(TEXT(":"))) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': absolute Windows paths are not allowed"), *ValidatedPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -343,7 +345,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterial(
     // Additional validation: verify mount point using engine API
     FText MountReason;
     if (!FPackageName::IsValidLongPackageName(ValidatedPath, true, &MountReason)) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid package path '%s': %s"), *ValidatedPath, *MountReason.ToString()),
                           TEXT("INVALID_PATH"));
       return true;
@@ -355,7 +357,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterial(
     
     FString ParentFolderPath = FPackageName::GetLongPackagePath(ValidatedPath);
     if (!AssetRegistry.PathExists(FName(*ParentFolderPath))) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Parent folder does not exist: %s. Create the folder first or use an existing path."), *ParentFolderPath),
                           TEXT("PARENT_FOLDER_NOT_FOUND"));
       return true;
@@ -368,12 +370,12 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterial(
       if (ExistingAsset) {
         UClass* ExistingClass = ExistingAsset->GetClass();
         FString ExistingClassName = ExistingClass ? ExistingClass->GetName() : TEXT("Unknown");
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Asset '%s' already exists as %s. Cannot create Material with the same name."),
                                             *FullAssetPath, *ExistingClassName),
                             TEXT("ASSET_EXISTS"));
       } else {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Asset '%s' already exists."),
                                             *FullAssetPath),
                             TEXT("ASSET_EXISTS"));
@@ -384,7 +386,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterial(
     UMaterialFactoryNew *Factory = NewObject<UMaterialFactoryNew>();
     UPackage *Package = CreatePackage(*ValidatedPath);
     if (!Package) {
-      SendAutomationError(Socket, RequestId, TEXT("Failed to create package."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Failed to create package."),
                           TEXT("PACKAGE_ERROR"));
       return true;
     }
@@ -394,7 +396,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterial(
                                   FName(*Name), RF_Public | RF_Standalone,
                                   nullptr, GWarn));
     if (!NewMaterial) {
-      SendAutomationError(Socket, RequestId, TEXT("Failed to create material."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Failed to create material."),
                           TEXT("CREATE_FAILED"));
       return true;
     }
@@ -423,7 +425,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterial(
         bValidMaterialDomain = true;
       }
       if (!bValidMaterialDomain) {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Invalid materialDomain '%s'. Valid values: Surface, DeferredDecal, LightFunction, Volume, PostProcess, UI"), *MaterialDomain),
                             TEXT("INVALID_ENUM"));
         return true;
@@ -456,7 +458,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterial(
         bValidBlendMode = true;
       }
       if (!bValidBlendMode) {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Invalid blendMode '%s'. Valid values: Opaque, Masked, Translucent, Additive, Modulate, AlphaComposite, AlphaHoldout"), *BlendMode),
                             TEXT("INVALID_ENUM"));
         return true;
@@ -501,7 +503,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterial(
         bValidShadingModel = true;
       }
       if (!bValidShadingModel) {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Invalid shadingModel '%s'. Valid values: Unlit, DefaultLit, Subsurface, SubsurfaceProfile, PreintegratedSkin, ClearCoat, Hair, Cloth, Eye, TwoSidedFoliage, ThinTranslucent"), *ShadingModel),
                             TEXT("INVALID_ENUM"));
         return true;
@@ -527,30 +529,31 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterial(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, NewMaterial);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Material '%s' created."), *Name),
                            Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialSetBlendMode(
+bool McpHandlers::Asset::HandleMaterialSetBlendMode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath, BlendMode;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetStringField(TEXT("blendMode"), BlendMode)) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'blendMode'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'blendMode'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -558,7 +561,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetBlendMode(
     // Validate path security BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -569,12 +572,12 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetBlendMode(
     UMaterialFunction *TmpFunc = nullptr;
     LoadMaterialOrFunction(AssetPath, Material, TmpFunc);
     if (!Material && !TmpFunc) {
-      SendAutomationError(Socket, RequestId, TEXT("Could not load Material."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Could not load Material."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
     }
     if (!Material) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("set_blend_mode is only supported on UMaterial assets, not Material Functions."),
                           TEXT("UNSUPPORTED_ASSET_TYPE"));
       return true;
@@ -605,7 +608,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetBlendMode(
     }
 
     if (!bValidBlendMode) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid blendMode '%s'. Valid values: Opaque, Masked, Translucent, Additive, Modulate, AlphaComposite, AlphaHoldout"),
                                           *BlendMode),
                           TEXT("INVALID_ENUM"));
@@ -623,30 +626,31 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetBlendMode(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, Material);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Blend mode set to %s."), *BlendMode), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialSetShadingModel(
+bool McpHandlers::Asset::HandleMaterialSetShadingModel(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath, ShadingModel;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetStringField(TEXT("shadingModel"), ShadingModel)) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'shadingModel'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'shadingModel'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -654,7 +658,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetShadingModel(
     // Validate path security BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -665,12 +669,12 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetShadingModel(
     UMaterialFunction *TmpFunc2 = nullptr;
     LoadMaterialOrFunction(AssetPath, Material, TmpFunc2);
     if (!Material && !TmpFunc2) {
-      SendAutomationError(Socket, RequestId, TEXT("Could not load Material."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Could not load Material."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
     }
     if (!Material) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("set_shading_model is only supported on UMaterial assets, not Material Functions."),
                           TEXT("UNSUPPORTED_ASSET_TYPE"));
       return true;
@@ -713,7 +717,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetShadingModel(
     }
 
     if (!bValidShadingModel) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid shadingModel '%s'. Valid values: Unlit, DefaultLit, Subsurface, SubsurfaceProfile, PreintegratedSkin, ClearCoat, Hair, Cloth, Eye, TwoSidedFoliage, ThinTranslucent"),
                                           *ShadingModel),
                           TEXT("INVALID_ENUM"));
@@ -731,30 +735,31 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetShadingModel(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, Material);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Shading model set to %s."), *ShadingModel), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialSetMaterialDomain(
+bool McpHandlers::Asset::HandleMaterialSetMaterialDomain(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath, Domain;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetStringField(TEXT("materialDomain"), Domain)) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'materialDomain'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'materialDomain'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -762,7 +767,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetMaterialDomain(
     // Validate path security BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -773,12 +778,12 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetMaterialDomain(
     UMaterialFunction *TmpFunc3 = nullptr;
     LoadMaterialOrFunction(AssetPath, Material, TmpFunc3);
     if (!Material && !TmpFunc3) {
-      SendAutomationError(Socket, RequestId, TEXT("Could not load Material."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Could not load Material."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
     }
     if (!Material) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("set_material_domain is only supported on UMaterial assets, not Material Functions."),
                           TEXT("UNSUPPORTED_ASSET_TYPE"));
       return true;
@@ -806,7 +811,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetMaterialDomain(
     }
 
     if (!bValidDomain) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid materialDomain '%s'. Valid values: Surface, DeferredDecal, LightFunction, Volume, PostProcess, UI"),
                                           *Domain),
                           TEXT("INVALID_ENUM"));
@@ -824,18 +829,19 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetMaterialDomain(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, Material);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Material domain set to %s."), *Domain), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialAddTextureSample(
+bool McpHandlers::Asset::HandleMaterialAddTextureSample(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -850,7 +856,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddTextureSample(
     if (!TexturePath.IsEmpty()) {
       FString ValidatedTexturePath = SanitizeProjectRelativePath(TexturePath);
       if (ValidatedTexturePath.IsEmpty()) {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Invalid texturePath '%s': contains traversal sequences or invalid root"), *TexturePath),
                             TEXT("INVALID_PATH"));
         return true;
@@ -878,7 +884,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddTextureSample(
               HostOuter, UMaterialExpressionTextureSampleParameter2D::StaticClass(),
               NAME_None, RF_Transactional);
       if (!TexSample) {
-        SendAutomationError(Socket, RequestId, TEXT("Failed to create texture sample expression"), TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Failed to create texture sample expression"), TEXT("CREATION_FAILED"));
         return true;
       }
       TexSample->ParameterName = FName(*ParameterName);
@@ -893,7 +899,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddTextureSample(
               HostOuter, UMaterialExpressionTextureSample::StaticClass(),
               NAME_None, RF_Transactional);
       if (!PlainSample) {
-        SendAutomationError(Socket, RequestId, TEXT("Failed to create texture sample expression"), TEXT("CREATION_FAILED"));
+        S.SendAutomationError(Socket, RequestId, TEXT("Failed to create texture sample expression"), TEXT("CREATION_FAILED"));
         return true;
       }
       if (ResolvedTexture) PlainSample->Texture = ResolvedTexture;
@@ -908,16 +914,17 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddTextureSample(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"), MCP_NODE_ID(CreatedExpr));
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Texture sample added."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Texture sample added."), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialAddTextureCoordinate(
+bool McpHandlers::Asset::HandleMaterialAddTextureCoordinate(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -945,17 +952,18 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddTextureCoordinate(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"),
                            MCP_NODE_ID(TexCoord));
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Texture coordinate added."), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialAddScalarParameter(
+bool McpHandlers::Asset::HandleMaterialAddScalarParameter(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -965,7 +973,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddScalarParameter(
     double DefaultValue = 0.0;
     if (!Payload->TryGetStringField(TEXT("parameterName"), ParamName) ||
         ParamName.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -990,19 +998,20 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddScalarParameter(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"),
                            MCP_NODE_ID(ScalarParam));
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Scalar parameter '%s' added."), *ParamName),
         Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialAddVectorParameter(
+bool McpHandlers::Asset::HandleMaterialAddVectorParameter(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -1011,7 +1020,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddVectorParameter(
     FString ParamName, Group;
     if (!Payload->TryGetStringField(TEXT("parameterName"), ParamName) ||
         ParamName.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -1046,19 +1055,20 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddVectorParameter(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"),
                            MCP_NODE_ID(VecParam));
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Vector parameter '%s' added."), *ParamName),
         Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialAddStaticSwitchParameter(
+bool McpHandlers::Asset::HandleMaterialAddStaticSwitchParameter(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -1068,7 +1078,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddStaticSwitchParameter(
     bool DefaultValue = false;
     if (!Payload->TryGetStringField(TEXT("parameterName"), ParamName) ||
         ParamName.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -1093,18 +1103,19 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddStaticSwitchParameter(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"),
                            MCP_NODE_ID(SwitchParam));
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Static switch '%s' added."), *ParamName), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialAddMathNode(
+bool McpHandlers::Asset::HandleMaterialAddMathNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -1112,7 +1123,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddMathNode(
 
     FString Operation;
     if (!Payload->TryGetStringField(TEXT("operation"), Operation)) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'operation'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'operation'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -1159,7 +1170,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddMathNode(
           HostOuter, UMaterialExpressionAppendVector::StaticClass(), NAME_None,
           RF_Transactional);
     } else {
-      SendAutomationError(
+      S.SendAutomationError(
           Socket, RequestId,
           FString::Printf(TEXT("Unknown operation: %s"), *Operation),
           TEXT("UNKNOWN_OPERATION"));
@@ -1175,18 +1186,19 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddMathNode(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"),
                            MCP_NODE_ID(MathNode));
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Math node '%s' added."), *Operation), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialAddSimpleExpression(
+bool McpHandlers::Asset::HandleMaterialAddSimpleExpression(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &SubAction,
     const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -1263,24 +1275,25 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddSimpleExpression(
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("nodeId"),
                              MCP_NODE_ID(NewExpr));
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, true,
           FString::Printf(TEXT("%s node added."), *NodeName), Result);
     } else {
       // NewExpr was null - could be class lookup failure or UE < 5.1 for rotator
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Failed to create %s node."), *NodeName),
                           TEXT("CREATE_FAILED"));
     }
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialAddConditional(
+bool McpHandlers::Asset::HandleMaterialAddConditional(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &SubAction,
     const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -1311,18 +1324,19 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddConditional(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"),
                            MCP_NODE_ID(NewExpr));
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("%s node added."), *NodeName),
                            Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialAddCustomExpression(
+bool McpHandlers::Asset::HandleMaterialAddCustomExpression(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -1330,7 +1344,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddCustomExpression(
 
     FString Code, OutputType, Description;
     if (!Payload->TryGetStringField(TEXT("code"), Code) || Code.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'code'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'code'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -1422,17 +1436,18 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddCustomExpression(
                            MCP_NODE_ID(CustomExpr));
     Result->SetNumberField(TEXT("inputCount"), CustomExpr->Inputs.Num());
     Result->SetNumberField(TEXT("additionalOutputCount"), CustomExpr->AdditionalOutputs.Num());
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Custom HLSL expression added."), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialConnectNodes(
+bool McpHandlers::Asset::HandleMaterialConnectNodes(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -1446,7 +1461,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConnectNodes(
 
     UMaterialExpression *SourceExpr = FIND_EXPR_IN_HOST(SourceNodeId);
     if (!SourceExpr) {
-      SendAutomationError(Socket, RequestId, TEXT("Source node not found."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Source node not found."),
                           TEXT("NODE_NOT_FOUND"));
       return true;
     }
@@ -1529,10 +1544,10 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConnectNodes(
           }
 #endif
           FINALIZE_HOST();
-          SendAutomationResponse(Socket, RequestId, true,
+          S.SendAutomationResponse(Socket, RequestId, true,
                                  TEXT("Connected to main material node."));
         } else {
-          SendAutomationError(
+          S.SendAutomationError(
               Socket, RequestId,
               FString::Printf(TEXT("Unknown input on main node: %s"), *InputName),
               TEXT("INVALID_PIN"));
@@ -1552,7 +1567,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConnectNodes(
         }
 #endif
         if (!TargetOutput) {
-          SendAutomationError(Socket, RequestId,
+          S.SendAutomationError(Socket, RequestId,
                               FString::Printf(TEXT("No FunctionOutput%s found in material function."),
                                               InputName.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" named '%s'"), *InputName)),
                               TEXT("NODE_NOT_FOUND"));
@@ -1575,7 +1590,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConnectNodes(
         }
 #endif
         FINALIZE_HOST();
-        SendAutomationResponse(Socket, RequestId, true,
+        S.SendAutomationResponse(Socket, RequestId, true,
                                TEXT("Connected to function output."));
         return true;
       }
@@ -1584,7 +1599,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConnectNodes(
     // Connect to another expression
     UMaterialExpression *TargetExpr = FIND_EXPR_IN_HOST(TargetNodeId);
     if (!TargetExpr) {
-      SendAutomationError(Socket, RequestId, TEXT("Target node not found."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Target node not found."),
                           TEXT("NODE_NOT_FOUND"));
       return true;
     }
@@ -1604,7 +1619,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConnectNodes(
             InputPtr->OutputIndex = 0;
           }
           FINALIZE_HOST();
-          SendAutomationResponse(Socket, RequestId, true,
+          S.SendAutomationResponse(Socket, RequestId, true,
                                  TEXT("Nodes connected."));
           return true;
         }
@@ -1620,7 +1635,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConnectNodes(
             CustomInput.Input.OutputIndex = FCString::Atoi(*SourcePin);
           }
           FINALIZE_HOST();
-          SendAutomationResponse(Socket, RequestId, true, TEXT("Nodes connected."));
+          S.SendAutomationResponse(Socket, RequestId, true, TEXT("Nodes connected."));
           return true;
         }
       }
@@ -1636,7 +1651,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConnectNodes(
             FuncInput.Input.OutputIndex = FCString::Atoi(*SourcePin);
           }
           FINALIZE_HOST();
-          SendAutomationResponse(Socket, RequestId, true, TEXT("Nodes connected to MF call input."));
+          S.SendAutomationResponse(Socket, RequestId, true, TEXT("Nodes connected to MF call input."));
           return true;
         }
       }
@@ -1657,7 +1672,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConnectNodes(
                   InPtr->Expression = SourceExpr;
                   InPtr->OutputIndex = i;
                   FINALIZE_HOST();
-                  SendAutomationResponse(Socket, RequestId, true, TEXT("Nodes connected via MF call output."));
+                  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Nodes connected via MF call output."));
                   return true;
                 }
               }
@@ -1668,19 +1683,20 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConnectNodes(
       }
     }
 
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Input pin '%s' not found."), *InputName),
         TEXT("PIN_NOT_FOUND"));
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialDisconnectNodes(
+bool McpHandlers::Asset::HandleMaterialDisconnectNodes(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -1734,12 +1750,12 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialDisconnectNodes(
 
           if (bFound) {
             FINALIZE_HOST();
-            SendAutomationResponse(Socket, RequestId, true,
+            S.SendAutomationResponse(Socket, RequestId, true,
                                    TEXT("Disconnected from main material pin."));
             return true;
           }
         }
-        SendAutomationResponse(Socket, RequestId, true,
+        S.SendAutomationResponse(Socket, RequestId, true,
                                TEXT("Disconnect operation completed."));
         return true;
       } else {
@@ -1758,10 +1774,10 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialDisconnectNodes(
 #endif
         if (bCleared) {
           FINALIZE_HOST();
-          SendAutomationResponse(Socket, RequestId, true,
+          S.SendAutomationResponse(Socket, RequestId, true,
                                  TEXT("Disconnected from function output."));
         } else {
-          SendAutomationResponse(Socket, RequestId, true,
+          S.SendAutomationResponse(Socket, RequestId, true,
                                  TEXT("Disconnect operation completed (no matching output)."));
         }
         return true;
@@ -1771,7 +1787,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialDisconnectNodes(
     // Disconnect a specific input pin on a named expression
     UMaterialExpression *TargetExpr = FIND_EXPR_IN_HOST(NodeId);
     if (!TargetExpr) {
-      SendAutomationError(Socket, RequestId, TEXT("Target node not found."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Target node not found."),
                           TEXT("NODE_NOT_FOUND"));
       return true;
     }
@@ -1785,36 +1801,37 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialDisconnectNodes(
           if (InputPtr) {
             InputPtr->Expression = nullptr;
             FINALIZE_HOST();
-            SendAutomationResponse(Socket, RequestId, true,
+            S.SendAutomationResponse(Socket, RequestId, true,
                                    TEXT("Input pin disconnected."));
             return true;
           }
         }
       }
-      SendAutomationError(
+      S.SendAutomationError(
           Socket, RequestId,
           FString::Printf(TEXT("Input pin '%s' not found."), *PinName),
           TEXT("PIN_NOT_FOUND"));
       return true;
     }
 
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Disconnect operation completed."));
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialFunction(
+bool McpHandlers::Asset::HandleMaterialCreateMaterialFunction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString Name, Path, Description;
     if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'name'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'name'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -1827,7 +1844,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialFunction(
     FString NormalizedOriginal = OriginalName.Replace(TEXT("_"), TEXT(""));
     FString NormalizedSanitized = SanitizedName.Replace(TEXT("_"), TEXT(""));
     if (NormalizedSanitized != NormalizedOriginal) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid material function name '%s': contains characters that cannot be used in asset names. Valid name would be: '%s'"),
                                           *OriginalName, *SanitizedName),
                           TEXT("INVALID_NAME"));
@@ -1844,13 +1861,13 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialFunction(
     FString ValidatedPath;
     FString PathError;
     if (!ValidateAssetCreationPath(Path, Name, ValidatedPath, PathError)) {
-      SendAutomationError(Socket, RequestId, PathError, TEXT("INVALID_PATH"));
+      S.SendAutomationError(Socket, RequestId, PathError, TEXT("INVALID_PATH"));
       return true;
     }
 
     // Additional validation: reject Windows absolute paths (contain colon)
     if (ValidatedPath.Contains(TEXT(":"))) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': absolute Windows paths are not allowed"), *ValidatedPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -1859,7 +1876,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialFunction(
     // Additional validation: verify mount point using engine API
     FText MountReason;
     if (!FPackageName::IsValidLongPackageName(ValidatedPath, true, &MountReason)) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid package path '%s': %s"), *ValidatedPath, *MountReason.ToString()),
                           TEXT("INVALID_PATH"));
       return true;
@@ -1874,12 +1891,12 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialFunction(
       if (ExistingAsset) {
         UClass* ExistingClass = ExistingAsset->GetClass();
         FString ExistingClassName = ExistingClass ? ExistingClass->GetName() : TEXT("Unknown");
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Asset '%s' already exists as %s. Cannot create MaterialFunction with the same name."),
                                             *FullAssetPath, *ExistingClassName),
                             TEXT("ASSET_EXISTS"));
       } else {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Asset '%s' already exists. Cannot overwrite with different asset type."),
                                             *FullAssetPath),
                             TEXT("ASSET_EXISTS"));
@@ -1897,7 +1914,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialFunction(
         NewObject<UMaterialFunctionFactoryNew>();
     UPackage *Package = CreatePackage(*ValidatedPath);
     if (!Package) {
-      SendAutomationError(Socket, RequestId, TEXT("Failed to create package."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Failed to create package."),
                           TEXT("PACKAGE_ERROR"));
       return true;
     }
@@ -1907,7 +1924,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialFunction(
                                   FName(*Name), RF_Public | RF_Standalone,
                                   nullptr, GWarn));
     if (!NewFunc) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Failed to create material function."),
                           TEXT("CREATE_FAILED"));
       return true;
@@ -1931,31 +1948,32 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialFunction(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, NewFunc);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Material function '%s' created."), *Name), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialAddFunctionIO(
+bool McpHandlers::Asset::HandleMaterialAddFunctionIO(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &SubAction,
     const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath, InputName, InputType;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetStringField(TEXT("inputName"), InputName) ||
         InputName.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'inputName'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'inputName'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -1968,7 +1986,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddFunctionIO(
     // SECURITY: Validate path BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -1978,7 +1996,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddFunctionIO(
     UMaterialFunction *Func =
         LoadObject<UMaterialFunction>(nullptr, *AssetPath);
     if (!Func) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Could not load Material Function."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -2043,7 +2061,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddFunctionIO(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("nodeId"),
                            MCP_NODE_ID(NewExpr));
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Function %s '%s' added."),
                         SubAction == TEXT("add_function_input") ? TEXT("input")
@@ -2052,26 +2070,27 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddFunctionIO(
         Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialUseMaterialFunction(
+bool McpHandlers::Asset::HandleMaterialUseMaterialFunction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
     FString ValidatedAssetPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedAssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -2082,7 +2101,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialUseMaterialFunction(
     UMaterialFunction *HostFunction = nullptr;
     LoadMaterialOrFunction(AssetPath, Material, HostFunction);
     if (!Material && !HostFunction) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Could not load Material or Material Function host."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -2097,7 +2116,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialUseMaterialFunction(
     FString FunctionPath;
     if (!Payload->TryGetStringField(TEXT("functionPath"), FunctionPath) ||
         FunctionPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'functionPath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'functionPath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -2105,7 +2124,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialUseMaterialFunction(
     // SECURITY: Validate functionPath before loading
     FString ValidatedFunctionPath = SanitizeProjectRelativePath(FunctionPath);
     if (ValidatedFunctionPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid functionPath '%s': contains traversal sequences or invalid root"), *FunctionPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -2115,7 +2134,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialUseMaterialFunction(
     UMaterialFunction *Func =
         LoadObject<UMaterialFunction>(nullptr, *FunctionPath);
     if (!Func) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Could not load Material Function."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -2123,7 +2142,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialUseMaterialFunction(
 
     // Guard against self-reference when host is itself a MF
     if (HostFunction && Func == HostFunction) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("A material function cannot call itself."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -2159,23 +2178,24 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialUseMaterialFunction(
                            MCP_NODE_ID(FuncCall));
     Result->SetStringField(TEXT("hostType"),
                            Material ? TEXT("Material") : TEXT("MaterialFunction"));
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Material function call added."), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialInstance(
+bool McpHandlers::Asset::HandleMaterialCreateMaterialInstance(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString Name, Path, ParentMaterial;
     if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'name'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'name'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -2187,7 +2207,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialInstance(
     FString NormalizedOriginal = OriginalName.Replace(TEXT("_"), TEXT(""));
     FString NormalizedSanitized = SanitizedName.Replace(TEXT("_"), TEXT(""));
     if (NormalizedSanitized != NormalizedOriginal) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid material instance name '%s': contains characters that cannot be used in asset names. Valid name would be: '%s'"),
                                           *OriginalName, *SanitizedName),
                           TEXT("INVALID_NAME"));
@@ -2197,7 +2217,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialInstance(
 
     if (!Payload->TryGetStringField(TEXT("parentMaterial"), ParentMaterial) ||
         ParentMaterial.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'parentMaterial'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'parentMaterial'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -2210,12 +2230,12 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialInstance(
     FString ValidatedPath;
     FString PathError;
     if (!ValidateAssetCreationPath(Path, Name, ValidatedPath, PathError)) {
-      SendAutomationError(Socket, RequestId, PathError, TEXT("INVALID_PATH"));
+      S.SendAutomationError(Socket, RequestId, PathError, TEXT("INVALID_PATH"));
       return true;
     }
 
     if (ValidatedPath.Contains(TEXT(":"))) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': absolute Windows paths are not allowed"), *ValidatedPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -2223,7 +2243,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialInstance(
 
     FText MountReason;
     if (!FPackageName::IsValidLongPackageName(ValidatedPath, true, &MountReason)) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid package path '%s': %s"), *ValidatedPath, *MountReason.ToString()),
                           TEXT("INVALID_PATH"));
       return true;
@@ -2236,12 +2256,12 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialInstance(
       if (ExistingAsset) {
         UClass* ExistingClass = ExistingAsset->GetClass();
         FString ExistingClassName = ExistingClass ? ExistingClass->GetName() : TEXT("Unknown");
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Asset '%s' already exists as %s. Cannot create MaterialInstanceConstant with the same name."),
                                             *FullAssetPath, *ExistingClassName),
                             TEXT("ASSET_EXISTS"));
       } else {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Asset '%s' already exists. Cannot overwrite with different asset type."),
                                             *FullAssetPath),
                             TEXT("ASSET_EXISTS"));
@@ -2251,7 +2271,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialInstance(
     // SECURITY: Validate parentMaterial path before loading
     FString ValidatedParentPath = SanitizeProjectRelativePath(ParentMaterial);
     if (ValidatedParentPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid parentMaterial path '%s': contains traversal sequences or invalid root"), *ParentMaterial),
                           TEXT("INVALID_PATH"));
       return true;
@@ -2260,7 +2280,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialInstance(
 
     UMaterial *Parent = LoadObject<UMaterial>(nullptr, *ParentMaterial);
     if (!Parent) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Could not load parent material."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -2272,7 +2292,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialInstance(
 
     UPackage *Package = CreatePackage(*ValidatedPath);
     if (!Package) {
-      SendAutomationError(Socket, RequestId, TEXT("Failed to create package."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Failed to create package."),
                           TEXT("PACKAGE_ERROR"));
       return true;
     }
@@ -2282,7 +2302,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialInstance(
                                   Package, FName(*Name),
                                   RF_Public | RF_Standalone, nullptr, GWarn));
     if (!NewInstance) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Failed to create material instance."),
                           TEXT("CREATE_FAILED"));
       return true;
@@ -2301,18 +2321,19 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateMaterialInstance(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, NewInstance);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Material instance '%s' created."), *Name), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialSetScalarParameterValue(
+bool McpHandlers::Asset::HandleMaterialSetScalarParameterValue(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -2320,18 +2341,18 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetScalarParameterValue(
     double Value = 0.0;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetStringField(TEXT("parameterName"), ParamName) ||
         ParamName.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetNumberField(TEXT("floatValue"), Value)) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'floatValue'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'floatValue'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -2339,7 +2360,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetScalarParameterValue(
     // SECURITY: Validate path BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -2349,7 +2370,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetScalarParameterValue(
     UMaterialInstanceConstant *Instance =
         LoadObject<UMaterialInstanceConstant>(nullptr, *AssetPath);
     if (!Instance) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Could not load material instance."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -2369,32 +2390,33 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetScalarParameterValue(
     McpHandlerUtils::AddVerification(Result, Instance);
     Result->SetStringField(TEXT("parameterName"), ParamName);
     Result->SetNumberField(TEXT("value"), Value);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Scalar parameter '%s' set to %f."), *ParamName,
                         Value), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialSetVectorParameterValue(
+bool McpHandlers::Asset::HandleMaterialSetVectorParameterValue(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath, ParamName;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetStringField(TEXT("parameterName"), ParamName) ||
         ParamName.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -2402,7 +2424,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetVectorParameterValue(
     // SECURITY: Validate path BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -2412,7 +2434,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetVectorParameterValue(
     UMaterialInstanceConstant *Instance =
         LoadObject<UMaterialInstanceConstant>(nullptr, *AssetPath);
     if (!Instance) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Could not load material instance."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -2420,7 +2442,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetVectorParameterValue(
 
     const TSharedPtr<FJsonObject> *ColorObj = nullptr;
     if (!Payload->TryGetObjectField(TEXT("colorValue"), ColorObj) || !ColorObj) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Missing 'colorValue' (RGBA object, channels 0..1)."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -2445,37 +2467,38 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetVectorParameterValue(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, Instance);
     Result->SetStringField(TEXT("parameterName"), ParamName);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Vector parameter '%s' set."), *ParamName), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialSetTextureParameterValue(
+bool McpHandlers::Asset::HandleMaterialSetTextureParameterValue(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath, ParamName, TexturePath;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetStringField(TEXT("parameterName"), ParamName) ||
         ParamName.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetStringField(TEXT("texturePath"), TexturePath) ||
         TexturePath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'texturePath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'texturePath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -2483,7 +2506,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetTextureParameterValue(
     // SECURITY: Validate path BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -2493,7 +2516,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetTextureParameterValue(
     UMaterialInstanceConstant *Instance =
         LoadObject<UMaterialInstanceConstant>(nullptr, *AssetPath);
     if (!Instance) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Could not load material instance."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -2501,7 +2524,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetTextureParameterValue(
     // SECURITY: Validate texturePath before loading
     FString ValidatedTexturePath = SanitizeProjectRelativePath(TexturePath);
     if (ValidatedTexturePath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid texturePath '%s': contains traversal sequences or invalid root"), *TexturePath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -2510,7 +2533,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetTextureParameterValue(
 
     UTexture *Texture = LoadObject<UTexture>(nullptr, *TexturePath);
     if (!Texture) {
-      SendAutomationError(Socket, RequestId, TEXT("Could not load texture."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Could not load texture."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
     }
@@ -2528,24 +2551,25 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetTextureParameterValue(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, Instance);
     Result->SetStringField(TEXT("parameterName"), ParamName);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Texture parameter '%s' set."), *ParamName), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateSpecialMaterial(
+bool McpHandlers::Asset::HandleMaterialCreateSpecialMaterial(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &SubAction,
     const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString Name, Path;
     if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'name'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'name'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -2560,7 +2584,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateSpecialMaterial(
     FString NormalizedOriginal = OriginalName.Replace(TEXT("_"), TEXT(""));
     FString NormalizedSanitized = SanitizedName.Replace(TEXT("_"), TEXT(""));
     if (NormalizedSanitized != NormalizedOriginal) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid asset name '%s'. Names can only contain alphanumeric characters and underscores."), *OriginalName),
                           TEXT("INVALID_NAME"));
       return true;
@@ -2571,7 +2595,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateSpecialMaterial(
     FString ValidatedPath;
     FString PathError;
     if (!ValidateAssetCreationPath(Path, Name, ValidatedPath, PathError)) {
-      SendAutomationError(Socket, RequestId, PathError, TEXT("INVALID_PATH"));
+      S.SendAutomationError(Socket, RequestId, PathError, TEXT("INVALID_PATH"));
       return true;
     }
     Path = ValidatedPath;
@@ -2579,7 +2603,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateSpecialMaterial(
     // Check for existing asset collision (different class)
     FString FullAssetPath = Path + TEXT(".") + Name;
     if (UEditorAssetLibrary::DoesAssetExist(FullAssetPath)) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Asset already exists at path: %s"), *FullAssetPath),
                           TEXT("ASSET_EXISTS"));
       return true;
@@ -2589,7 +2613,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateSpecialMaterial(
     UMaterialFactoryNew *Factory = NewObject<UMaterialFactoryNew>();
     UPackage *Package = CreatePackage(*Path);
     if (!Package) {
-      SendAutomationError(Socket, RequestId, TEXT("Failed to create package."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Failed to create package."),
                           TEXT("PACKAGE_ERROR"));
       return true;
     }
@@ -2599,7 +2623,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateSpecialMaterial(
                                   FName(*Name), RF_Public | RF_Standalone,
                                   nullptr, GWarn));
     if (!NewMaterial) {
-      SendAutomationError(Socket, RequestId, TEXT("Failed to create material."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Failed to create material."),
                           TEXT("CREATE_FAILED"));
       return true;
     }
@@ -2630,25 +2654,26 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCreateSpecialMaterial(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, NewMaterial);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Material '%s' created."), *Name),
                            Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialAddLandscapeLayer(
+bool McpHandlers::Asset::HandleMaterialAddLandscapeLayer(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
 #if MCP_HAS_LANDSCAPE_LAYER
     FString LayerName;
     if (!Payload->TryGetStringField(TEXT("layerName"), LayerName) || LayerName.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'layerName'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'layerName'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
     
@@ -2667,7 +2692,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddLandscapeLayer(
     // Validate path security - reject traversal and invalid paths
     FString ValidatedPath = SanitizeProjectRelativePath(Path);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid characters"), *Path),
                           TEXT("INVALID_PATH"));
       return true;
@@ -2677,7 +2702,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddLandscapeLayer(
     // Validate the full package path
     FString PackagePath = Path / LayerName;
     if (!FPackageName::IsValidLongPackageName(PackagePath)) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid package path: %s"), *PackagePath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -2687,7 +2712,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddLandscapeLayer(
     FString PackageName = PackagePath;
     UPackage* Package = CreatePackage(*PackageName);
     if (!Package) {
-      SendAutomationError(Socket, RequestId, TEXT("Failed to create package."), TEXT("PACKAGE_ERROR"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Failed to create package."), TEXT("PACKAGE_ERROR"));
       return true;
     }
     
@@ -2695,7 +2720,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddLandscapeLayer(
         Package, FName(*LayerName), RF_Public | RF_Standalone);
     
     if (!LayerInfo) {
-      SendAutomationError(Socket, RequestId, TEXT("Failed to create layer info."), TEXT("CREATION_ERROR"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Failed to create layer info."), TEXT("CREATION_ERROR"));
       return true;
     }
     
@@ -2718,7 +2743,7 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
       // SECURITY: Validate physicalMaterialPath before loading
       FString ValidatedPhysMatPath = SanitizeProjectRelativePath(PhysMaterialPath);
       if (ValidatedPhysMatPath.IsEmpty()) {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             FString::Printf(TEXT("Invalid physicalMaterialPath '%s': contains traversal sequences or invalid root"), *PhysMaterialPath),
                             TEXT("INVALID_PATH"));
         return true;
@@ -2762,22 +2787,23 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
     McpHandlerUtils::AddVerification(Result, LayerInfo);
     Result->SetStringField(TEXT("layerName"), LayerName);
     
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Landscape layer '%s' created."), *LayerName),
                            Result);
     return true;
 #else
-    SendAutomationError(Socket, RequestId, TEXT("Landscape module not available."), TEXT("NOT_SUPPORTED"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Landscape module not available."), TEXT("NOT_SUPPORTED"));
     return true;
 #endif
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialConfigureLayerBlend(
+bool McpHandlers::Asset::HandleMaterialConfigureLayerBlend(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -2789,7 +2815,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConfigureLayerBlend(
     } else if (Payload->TryGetStringField(TEXT("materialPath"), AssetPath) && !AssetPath.IsEmpty()) {
       // Use materialPath
     } else {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath' or 'materialPath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath' or 'materialPath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -2797,7 +2823,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConfigureLayerBlend(
     // SECURITY: Validate path BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -2806,7 +2832,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConfigureLayerBlend(
     
     UMaterial *Material = LoadObject<UMaterial>(nullptr, *AssetPath);
     if (!Material) {
-      SendAutomationError(Socket, RequestId, TEXT("Could not load Material."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Could not load Material."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
     }
@@ -2815,7 +2841,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConfigureLayerBlend(
     const TArray<TSharedPtr<FJsonValue>> *LayersArray;
     if (!Payload->TryGetArrayField(TEXT("layers"), LayersArray) ||
         LayersArray->Num() == 0) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing or empty 'layers' array."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing or empty 'layers' array."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -2879,26 +2905,27 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialConfigureLayerBlend(
     }
     Result->SetArrayField(TEXT("nodeIds"), NodeIdArray);
     
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Layer blend configured with %d layers."),
                                           CreatedNodeIds.Num()),
                            Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialCompileMaterial(
+bool McpHandlers::Asset::HandleMaterialCompileMaterial(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -2906,7 +2933,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCompileMaterial(
     // Validate path security BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -2917,7 +2944,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCompileMaterial(
     UMaterialFunction *Function = nullptr;
     LoadMaterialOrFunction(AssetPath, Material, Function);
     if (!Material && !Function) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Could not load Material or Material Function."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -2985,7 +3012,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCompileMaterial(
       }
       Result->SetArrayField(TEXT("errors"), ErrorArray);
     }
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            Material
                                ? (bCompiled ? TEXT("Material compiled.")
                                             : TEXT("Material has compile errors."))
@@ -2993,20 +3020,21 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialCompileMaterial(
                            Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialInfo(
+bool McpHandlers::Asset::HandleMaterialGetMaterialInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -3014,7 +3042,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialInfo(
     // Validate path security BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -3025,7 +3053,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialInfo(
     UMaterialFunction *Function = nullptr;
     LoadMaterialOrFunction(AssetPath, Material, Function);
     if (!Material && !Function) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Could not load Material or Material Function."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -3313,33 +3341,34 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialInfo(
       Result->SetArrayField(TEXT("connections"), ConnsArray);
     }
 
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            Material ? TEXT("Material info retrieved.")
                                     : TEXT("Material function info retrieved."),
                            Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialFunctionInfo(
+bool McpHandlers::Asset::HandleMaterialGetMaterialFunctionInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) ||
         AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -3348,7 +3377,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialFunctionInfo(
 
     UMaterialFunction *Function = LoadObject<UMaterialFunction>(nullptr, *AssetPath);
     if (!Function) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Could not load Material Function."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -3393,17 +3422,18 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialFunctionInfo(
     Result->SetArrayField(TEXT("inputs"), InputsArray);
     Result->SetArrayField(TEXT("outputs"), OutputsArray);
 
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Material function info retrieved."), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialFindNode(
+bool McpHandlers::Asset::HandleMaterialFindNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -3414,7 +3444,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialFindNode(
     Payload->TryGetStringField(TEXT("name"), SearchName);
 
     if (SearchType.IsEmpty() && SearchName.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Provide at least 'nodeType' or 'name' to search."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -3499,18 +3529,19 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialFindNode(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetNumberField(TEXT("matchCount"), Matches.Num());
     Result->SetArrayField(TEXT("nodes"), Matches);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Found %d matching node(s)."), Matches.Num()),
                            Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialGetNodeConnections(
+bool McpHandlers::Asset::HandleMaterialGetNodeConnections(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -3519,14 +3550,14 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetNodeConnections(
     FString NodeId;
     Payload->TryGetStringField(TEXT("nodeId"), NodeId);
     if (NodeId.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     UMaterialExpression *StartExpr = FIND_EXPR_IN_HOST(NodeId);
     if (!StartExpr) {
-      SendAutomationError(Socket, RequestId, TEXT("Node not found."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Node not found."),
                           TEXT("NODE_NOT_FOUND"));
       return true;
     }
@@ -3690,17 +3721,18 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetNodeConnections(
     Result->SetStringField(TEXT("type"), StartExpr->GetClass()->GetName());
     Result->SetNumberField(TEXT("connectionCount"), ResultConns.Num());
     Result->SetArrayField(TEXT("connections"), ResultConns);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Node connections retrieved."), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialGetNodeProperties(
+bool McpHandlers::Asset::HandleMaterialGetNodeProperties(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -3709,13 +3741,13 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetNodeProperties(
     FString NodeId;
     Payload->TryGetStringField(TEXT("nodeId"), NodeId);
     if (NodeId.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     UMaterialExpression *Expr = FIND_EXPR_IN_HOST(NodeId);
     if (!Expr) {
-      SendAutomationError(Socket, RequestId, TEXT("Node not found."), TEXT("NODE_NOT_FOUND"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Node not found."), TEXT("NODE_NOT_FOUND"));
       return true;
     }
 
@@ -3834,16 +3866,17 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetNodeProperties(
       Result->SetObjectField(TEXT("properties"), PropsObj);
     }
 
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Node properties retrieved."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Node properties retrieved."), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialSetNodeValue(
+bool McpHandlers::Asset::HandleMaterialSetNodeValue(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -3852,14 +3885,14 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetNodeValue(
     FString NodeId;
     Payload->TryGetStringField(TEXT("nodeId"), NodeId);
     if (NodeId.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     UMaterialExpression *Expr = FIND_EXPR_IN_HOST(NodeId);
     if (!Expr) {
-      SendAutomationError(Socket, RequestId, TEXT("Node not found."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Node not found."),
                           TEXT("NODE_NOT_FOUND"));
       return true;
     }
@@ -3877,7 +3910,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetNodeValue(
 
     if (!bHasValue && !bHasR && !bHasG && !bHasB && !bHasA && !bHasConstA &&
         !bHasConstB) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("No value provided. Supply 'floatValue', any of "
                                "'r'/'g'/'b'/'a', or 'constA'/'constB'."),
                           TEXT("INVALID_ARGUMENT"));
@@ -3901,7 +3934,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetNodeValue(
 
     if (UMaterialExpressionConstant *C = Cast<UMaterialExpressionConstant>(Expr)) {
       if (!bHasValue) {
-        SendAutomationError(Socket, RequestId, TEXT("Constant needs 'floatValue'."),
+        S.SendAutomationError(Socket, RequestId, TEXT("Constant needs 'floatValue'."),
                             TEXT("INVALID_ARGUMENT"));
         return true;
       }
@@ -3942,7 +3975,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetNodeValue(
     } else if (UMaterialExpressionScalarParameter *SP =
                    Cast<UMaterialExpressionScalarParameter>(Expr)) {
       if (!bHasValue) {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             TEXT("ScalarParameter needs 'floatValue'."),
                             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -3982,7 +4015,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetNodeValue(
     }
 
     if (!bHandled) {
-      SendAutomationError(
+      S.SendAutomationError(
           Socket, RequestId,
           FString::Printf(
               TEXT("Node type '%s' has no settable literal value (or the "
@@ -4003,41 +4036,42 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetNodeValue(
     Result->SetStringField(TEXT("type"), Expr->GetClass()->GetName());
     Result->SetStringField(TEXT("applied"), Applied);
     Result->SetBoolField(TEXT("saved"), !HostOuter->GetOutermost()->IsDirty());
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, true,
         FString::Printf(TEXT("Set %s on '%s'."), *Applied, *MCP_NODE_ID(Expr)),
         Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialSetStaticSwitchParameterValue(
+bool McpHandlers::Asset::HandleMaterialSetStaticSwitchParameterValue(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath, ParamName;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetStringField(TEXT("parameterName"), ParamName) || ParamName.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
     bool Value = false;
     if (!Payload->TryGetBoolField(TEXT("boolValue"), Value)) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'boolValue'."),
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'boolValue'."),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s'"), *AssetPath), TEXT("INVALID_PATH"));
       return true;
     }
@@ -4045,7 +4079,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetStaticSwitchParameterValue(
 
     UMaterialInstanceConstant *Instance = LoadObject<UMaterialInstanceConstant>(nullptr, *AssetPath);
     if (!Instance) {
-      SendAutomationError(Socket, RequestId, TEXT("Could not load material instance."), TEXT("ASSET_NOT_FOUND"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Could not load material instance."), TEXT("ASSET_NOT_FOUND"));
       return true;
     }
 
@@ -4087,18 +4121,19 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetStaticSwitchParameterValue(
     McpHandlerUtils::AddVerification(Result, Instance);
     Result->SetStringField(TEXT("parameterName"), ParamName);
     Result->SetBoolField(TEXT("value"), Value);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Static switch '%s' set to %s."), *ParamName, Value ? TEXT("true") : TEXT("false")),
                            Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialDeleteNode(
+bool McpHandlers::Asset::HandleMaterialDeleteNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -4118,7 +4153,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialDeleteNode(
       }
     }
     if (NodeIds.Num() == 0) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId' or 'nodeIds'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId' or 'nodeIds'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
@@ -4201,18 +4236,19 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialDeleteNode(
     }
     Result->SetArrayField(TEXT("removed"), RemovedArr);
     Result->SetNumberField(TEXT("removedCount"), Removed.Num());
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Deleted %d node(s)."), Removed.Num()),
                            Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialUpdateCustomExpression(
+bool McpHandlers::Asset::HandleMaterialUpdateCustomExpression(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -4221,19 +4257,19 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialUpdateCustomExpression(
     FString NodeId;
     Payload->TryGetStringField(TEXT("nodeId"), NodeId);
     if (NodeId.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     UMaterialExpression *Expr = FIND_EXPR_IN_HOST(NodeId);
     if (!Expr) {
-      SendAutomationError(Socket, RequestId, TEXT("Node not found."), TEXT("NODE_NOT_FOUND"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Node not found."), TEXT("NODE_NOT_FOUND"));
       return true;
     }
 
     UMaterialExpressionCustom *CustomExpr = Cast<UMaterialExpressionCustom>(Expr);
     if (!CustomExpr) {
-      SendAutomationError(Socket, RequestId, TEXT("Node is not a Custom Expression."), TEXT("INVALID_NODE_TYPE"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Node is not a Custom Expression."), TEXT("INVALID_NODE_TYPE"));
       return true;
     }
 
@@ -4308,16 +4344,17 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialUpdateCustomExpression(
     Result->SetStringField(TEXT("code"), CustomExpr->Code);
     Result->SetNumberField(TEXT("inputCount"), CustomExpr->Inputs.Num());
     Result->SetNumberField(TEXT("additionalOutputCount"), CustomExpr->AdditionalOutputs.Num());
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Custom expression updated."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Custom expression updated."), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialGetNodeChain(
+bool McpHandlers::Asset::HandleMaterialGetNodeChain(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -4329,17 +4366,17 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetNodeChain(
     Payload->TryGetStringField(TEXT("endPin"), EndPin);
 
     if (StartNodeId.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'startNodeId'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'startNodeId'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (EndNodeId.IsEmpty() && EndPin.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'endNodeId' or 'endPin'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'endNodeId' or 'endPin'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     UMaterialExpression *StartExpr = FIND_EXPR_IN_HOST(StartNodeId);
     if (!StartExpr) {
-      SendAutomationError(Socket, RequestId, TEXT("Start node not found."), TEXT("NODE_NOT_FOUND"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Start node not found."), TEXT("NODE_NOT_FOUND"));
       return true;
     }
 
@@ -4460,18 +4497,19 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetNodeChain(
       Result->SetBoolField(TEXT("pathFound"), false);
       Result->SetStringField(TEXT("message"), TEXT("No path found between the specified nodes."));
     }
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            bPathFound ? TEXT("Signal path found.") : TEXT("No path found."),
                            Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialGetConnectedSubgraph(
+bool McpHandlers::Asset::HandleMaterialGetConnectedSubgraph(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -4484,7 +4522,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetConnectedSubgraph(
     Payload->TryGetStringField(TEXT("nodeId"), NodeId);
 
     if (NodeId.IsEmpty() && !bOrphansOnly) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId' (or set orphansOnly=true)."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId' (or set orphansOnly=true)."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
@@ -4576,7 +4614,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetConnectedSubgraph(
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetNumberField(TEXT("orphanCount"), OrphansArr.Num());
       Result->SetArrayField(TEXT("orphans"), OrphansArr);
-      SendAutomationResponse(Socket, RequestId, true,
+      S.SendAutomationResponse(Socket, RequestId, true,
                              FString::Printf(TEXT("Found %d orphaned node(s)."), OrphansArr.Num()),
                              Result);
       return true;
@@ -4585,7 +4623,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetConnectedSubgraph(
     // Flood fill from specified nodeId
     UMaterialExpression *SeedExpr = FIND_EXPR_IN_HOST(NodeId);
     if (!SeedExpr) {
-      SendAutomationError(Socket, RequestId, TEXT("Node not found."), TEXT("NODE_NOT_FOUND"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Node not found."), TEXT("NODE_NOT_FOUND"));
       return true;
     }
 
@@ -4619,35 +4657,36 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetConnectedSubgraph(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetNumberField(TEXT("islandSize"), NodesArr.Num());
     Result->SetArrayField(TEXT("nodes"), NodesArr);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Subgraph contains %d node(s)."), NodesArr.Num()),
                            Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialAddMaterialNode(
+bool McpHandlers::Asset::HandleMaterialAddMaterialNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath, NodeType;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetStringField(TEXT("nodeType"), NodeType) || NodeType.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeType'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeType'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     // SECURITY: Validate asset path using SanitizeProjectRelativePath
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid assetPath '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -4658,7 +4697,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddMaterialNode(
     UMaterialFunction *Function = nullptr;
     LoadMaterialOrFunction(AssetPath, Material, Function);
     if (!Material && !Function) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Could not load Material or Material Function."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -4751,7 +4790,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddMaterialNode(
         ExpressionClass = ResolveClassByName(PrefixedName);
       }
       if (!ExpressionClass || !ExpressionClass->IsChildOf(UMaterialExpression::StaticClass())) {
-        SendAutomationError(
+        S.SendAutomationError(
             Socket, RequestId,
             FString::Printf(
                 TEXT("Unknown node type: %s. Available types: TextureSample, VectorParameter, "
@@ -4772,7 +4811,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddMaterialNode(
     UMaterialExpression *NewExpr = NewObject<UMaterialExpression>(
         HostOuter, ExpressionClass, NAME_None, RF_Transactional);
     if (!NewExpr) {
-      SendAutomationError(Socket, RequestId, TEXT("Failed to create expression."), TEXT("CREATE_FAILED"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Failed to create expression."), TEXT("CREATE_FAILED"));
       return true;
     }
 
@@ -4812,34 +4851,35 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialAddMaterialNode(
     Result->SetStringField(TEXT("nodeType"), NodeType);
     Result->SetBoolField(TEXT("nodeAdded"), true);
 
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Material node '%s' added."), *NodeType), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialRemoveMaterialNode(
+bool McpHandlers::Asset::HandleMaterialRemoveMaterialNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath, NodeId;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetStringField(TEXT("nodeId"), NodeId) || NodeId.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     // Validate path security BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -4850,7 +4890,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialRemoveMaterialNode(
     UMaterialFunction *Function = nullptr;
     LoadMaterialOrFunction(AssetPath, Material, Function);
     if (!Material && !Function) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Could not load Material or Material Function."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -4860,7 +4900,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialRemoveMaterialNode(
         ? FindExpressionByIdOrName(Material, NodeId)
         : FindExpressionByIdOrNameInFunction(Function, NodeId);
     if (!Expr) {
-      SendAutomationError(Socket, RequestId, TEXT("Node not found."), TEXT("NOT_FOUND"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Node not found."), TEXT("NOT_FOUND"));
       return true;
     }
 
@@ -4896,26 +4936,27 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialRemoveMaterialNode(
     Result->SetStringField(TEXT("nodeId"), NodeId);
     Result->SetBoolField(TEXT("removed"), true);
 
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Material node removed."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Material node removed."), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialSetMaterialParameter(
+bool McpHandlers::Asset::HandleMaterialSetMaterialParameter(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath, ParameterName, ParameterType;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetStringField(TEXT("parameterName"), ParameterName) || ParameterName.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
     Payload->TryGetStringField(TEXT("parameterType"), ParameterType);
@@ -4923,42 +4964,43 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetMaterialParameter(
     // SECURITY: Validate assetPath before use (accepts both Materials and Material Functions)
     FString ValidatedAssetPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedAssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid assetPath '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
     }
     AssetPath = ValidatedAssetPath;
 
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("set_material_parameter is ambiguous. Use set_scalar_parameter_value, set_vector_parameter_value, or set_texture_parameter_value with a material instance path."),
                         TEXT("AMBIGUOUS_ACTION"));
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialNodeDetails(
+bool McpHandlers::Asset::HandleMaterialGetMaterialNodeDetails(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath, NodeId;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!Payload->TryGetStringField(TEXT("nodeId"), NodeId) || NodeId.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'nodeId'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     // Validate path security BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -4969,7 +5011,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialNodeDetails(
     UMaterialFunction *Function = nullptr;
     LoadMaterialOrFunction(AssetPath, Material, Function);
     if (!Material && !Function) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           TEXT("Could not load Material or Material Function."),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -4979,7 +5021,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialNodeDetails(
         ? FindExpressionByIdOrName(Material, NodeId)
         : FindExpressionByIdOrNameInFunction(Function, NodeId);
     if (!Expr) {
-      SendAutomationError(Socket, RequestId, TEXT("Node not found."), TEXT("NOT_FOUND"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Node not found."), TEXT("NOT_FOUND"));
       return true;
     }
 
@@ -5001,29 +5043,30 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialGetMaterialNodeDetails(
       Result->SetNumberField(TEXT("sortPriority"), Out->SortPriority);
     }
 
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Node details retrieved."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Node details retrieved."), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialSetTwoSided(
+bool McpHandlers::Asset::HandleMaterialSetTwoSided(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
     FString AssetPath;
     if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     // Validate path security BEFORE loading asset
     FString ValidatedPath = SanitizeProjectRelativePath(AssetPath);
     if (ValidatedPath.IsEmpty()) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Invalid path '%s': contains traversal sequences or invalid root"), *AssetPath),
                           TEXT("INVALID_PATH"));
       return true;
@@ -5032,7 +5075,7 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetTwoSided(
 
     UMaterial *Material = LoadObject<UMaterial>(nullptr, *AssetPath);
     if (!Material) {
-      SendAutomationError(Socket, RequestId, TEXT("Could not load Material."), TEXT("ASSET_NOT_FOUND"));
+      S.SendAutomationError(Socket, RequestId, TEXT("Could not load Material."), TEXT("ASSET_NOT_FOUND"));
       return true;
     }
 
@@ -5053,17 +5096,18 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialSetTwoSided(
     Result->SetStringField(TEXT("assetPath"), AssetPath);
     Result->SetBoolField(TEXT("twoSided"), bTwoSided);
 
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Two-sided set to %s."), bTwoSided ? TEXT("true") : TEXT("false")), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMaterialArrangeGraph(
+bool McpHandlers::Asset::HandleMaterialArrangeGraph(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
@@ -5098,10 +5142,10 @@ bool UMcpAutomationBridgeSubsystem::HandleMaterialArrangeGraph(
 #endif
     }
     McpHandlerUtils::AddVerification(Result, HostOuter);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Graph arranged."), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Graph arranged."), Result);
     return true;
 #else
-  SendAutomationError(Socket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
