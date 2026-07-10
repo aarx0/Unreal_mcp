@@ -14,18 +14,24 @@ Legend: ✅ shipped · 🟢 decided, ready to run · 🟡 needs an Aaron decisio
 - **Silent-success convention set (no rollback)** — `set_transform` + `set_component_property`
   reworked; `set_actor_collision`/`set_visibility` already align (`844cd076` + earlier). See ②.
 
-## 🟡 Handler-side sequence (the three you set)
+## ✅ Handler-side sequence (the three you set) — all shipped
 - **① dead code** — done (above).
 - **② silent-success — CONVENTION: fail-in-place, NO rollback.** Aaron rejected transactional
   rollback (`Cancel()`) as unverifiable per-setter — a reported "rolled back" can leave live
   side-effect state (SetMobility/SetSimulatePhysics). House rule: writes that land **stay**; on
   any failure, error with `applied`+`failed` (`PROPERTY_WRITE_FAILED`) and the caller re-reads
   fresh state; `NO_CHANGES_REQUESTED` on an empty request; pre-validate-before-write is fine (it
-  never starts, so nothing to revert); prefer atomic actions so partial can't arise. Done on
-  set_transform + set_component_property; **~24 real-write handlers remain.** Error names + the
-  `silent-success-convention-2026-07-06.md` doc's guard-model section need reconciling to this.
-- **③ delete legacy dispatchers** — manage_blueprint's recursive `HandleBlueprintAction` +
-  niagara/material/sequencer authoring subsystems. Biggest refactor; awaiting appetite.
+  never starts, so nothing to revert); prefer atomic actions so partial can't arise. **SHIPPED
+  2026-07-09:** every bag setter is converted-or-justified — the forcing-function lint
+  (`tests/schema/silent-success-lint.ps1`) is green with 10 justified allowlist entries, the
+  `FMcpWriteReport` + `SendWriteReportResponse` helper landed, and the
+  `silent-success-convention-2026-07-06.md` guard-model section is reconciled.
+- **③ delete legacy dispatchers — SHIPPED 2026-07-09/10.** All monolithic string dispatchers
+  are gone (manage_blueprint's `HandleBlueprintAction`/`HandleBlueprintGraphAction`/
+  `HandleSCSAction`/widget/CommonUi + the niagara/material/audio authoring subsystems), extracted
+  to per-action `FMcpCall` members; the legacy registration-map dispatch path was deleted
+  end-to-end (`df9a2fcc`) and boot validation now certifies one `FMcpCall` class per published
+  action (`3981f117`). `FMcpCallRegistry` is the sole dispatch.
 
 ## 🟡 Consolidation (cross-tool duplicates)
 Plan: [`consolidation-plan-2026-07-06.md`](consolidation-plan-2026-07-06.md).

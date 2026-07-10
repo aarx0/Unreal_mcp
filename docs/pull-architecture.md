@@ -102,7 +102,7 @@ doesn't, the op stays "create" but the caller recovers via re-query (same as any
 | 6 | add_node (MetaSound) | `AudioAuthoringHandlers.cpp:958` | caller-supplied node GUID / check by class+name |
 | 7 | add SmartObject slot | `AIHandlers.cpp:2860` | key slot by caller index/id; upsert |
 | 8 | add Niagara emitter/module/renderer | `NiagaraAuthoringHandlers.cpp:359/372/505/580/1465` | pre-check stack/handle list by name |
-| 9 | add_*_widget family (44 sites) | `WidgetAuthoringHandlers.cpp` (helper `CreateAndRegisterWidget@608`) | call **existing** `CheckWidgetExists@832` before `ConstructWidget` |
+| 9 | add_*_widget family (44 sites) | `WidgetAuthoringHandlers.cpp` (helper `CreateAndRegisterWidget@626`) | `CreateAndRegisterWidget` returns the existing widget (via `WidgetTree->FindWidget`) instead of letting `ConstructWidget` auto-suffix a duplicate |
 | 10 | spawn WP volumes / level-instances | `LevelStructureHandlers.cpp:1076/2172/2634/2717` | find existing by requested name before `MakeUniqueObjectName` |
 
 #1 and #9 are near-free (the helpers already exist, just unwired). #5 is the most important

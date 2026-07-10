@@ -1,8 +1,9 @@
 # Silent-success convention — analysis & design (2026-07-06)
 
-Task ② of the handler-side cleanup ("silent success"). Status: **analysis + design, needs
-Aaron's decisions before rollout.** Autonomous scoping stopped here on purpose (see "Why not
-just blast it").
+Task ② of the handler-side cleanup ("silent success"). Status: **SHIPPED 2026-07-09** —
+convention set (fail-in-place, no rollback), helper + forcing-function lint landed, all bag
+setters converted-or-justified. The analysis below is preserved; the resolved decisions are
+marked inline.
 
 ## The reality (measured, not assumed)
 - **911 of 1124 registered actions are `Mutating`.**
@@ -18,30 +19,36 @@ So Task ② is **not** a pile of current bugs to fix — it's a **preventative c
 (and the long tail of un-audited) mutating handlers can't silently succeed. That's design +
 behavioral change, not a mechanical sweep.
 
-## Proposed convention
-A small shared helper so the pattern is uniform instead of hand-rolled:
+## The convention (as shipped)
+A shared helper (`McpHandlerUtils::FMcpWriteReport`) so the pattern is uniform instead of
+hand-rolled:
 ```cpp
-struct FMcpApplyReport {
-    void Applied(const FString& name);              // a real change landed
-    void Ignored(const FString& name, const FString& why); // param accepted but not used
+struct FMcpWriteReport {
+    void MarkApplied(const FString& field);                       // a real change landed
+    void MarkFailed(const FString& field, const FString& reason); // requested but rejected
     bool AnyApplied() const;
-    void EmitInto(TSharedPtr<FJsonObject>& Result) const;  // appliedProperties[] + ignoredParams[]
+    bool AnyFailed() const;
+    void WriteInto(const TSharedPtr<FJsonObject>& Data) const;    // appliedProperties[] + failed[]
 };
 ```
-Plus the guard at each mutating handler's tail:
-> if the caller requested changes but `AnyApplied()` is false → `SendAutomationError(...,
-> "no requested changes were applied", "NO_CHANGES_APPLIED")` instead of a hollow success.
+Every bag setter routes each requested field through `MarkApplied`/`MarkFailed`, then finalizes
+with `SendWriteReportResponse` (`McpResponseHelpers.h`), which owns the success rule:
+> nothing requested → `NO_CHANGES_REQUESTED`; any field failed → `success=false`,
+> `PROPERTY_WRITE_FAILED`, data carries `appliedProperties[]` + `failed[]` (no rollback — applied
+> fields stay); every field applied → success. Enforced by
+> `tests/schema/silent-success-lint.ps1`.
 
-## The subtlety that needs your call
-**Scaffolds break the simple guard.** The combat/interaction scaffolds *intentionally* apply
-nothing at runtime (they author BP variables for game code to consume). A blanket
-"error when nothing applied at runtime" would wrongly fail them. Options:
-1. **Two response kinds** — `applied` (real mutation, guarded) vs `scaffolded` (explicit, allowed
-   to apply nothing, must carry the honest message). Cleanest, but every handler must self-classify.
-2. **Guard only on the param-setter subset** — handlers that take property/value params get the
-   error-on-zero; scaffolds/creators are exempt by not adopting it. Less uniform, lower risk.
-3. **Report-only, no error** — everyone emits `appliedProperties`/`ignoredParams`, but zero-applied
-   is a warning in the payload, not an error. Zero behavioral-break risk; weaker fail-fast.
+## The scaffold subtlety — resolved
+**Scaffolds broke the simple guard.** The combat/interaction scaffolds *intentionally* applied
+nothing at runtime (they authored BP variables for game code to consume), so a blanket
+"error when nothing applied at runtime" would wrongly fail them. The options considered:
+1. ~~**Two response kinds**~~ — `applied` (real mutation, guarded) vs `scaffolded` (explicit,
+   allowed to apply nothing). REJECTED: every handler would have to self-classify.
+2. **Guard only on the param-setter subset** — SHIPPED: the lint targets multi-optional-field
+   "bag" setters (≥2 `HasField` guards); atomic setters/creators are exempt via the allowlist,
+   and the scaffolds were removed outright rather than carved out.
+3. ~~**Report-only, no error**~~ — zero-applied as a payload warning, not an error. REJECTED:
+   `NO_CHANGES_REQUESTED` is a hard error, not a soft warning.
 
 ## Why not just blast it autonomously
 - 911 handlers, each with **handler-specific** "did I apply anything" logic — no mechanical rule.
@@ -51,10 +58,11 @@ nothing at runtime (they author BP variables for game code to consume). A blanke
 Task ① (dead code) was safe to auto-run because the compiler/linker *proved* correctness. Nothing
 proves a silent-success rollout correct except judgment — so it waits for yours.
 
-## Decision points for you
-1. Which guard model — (1) two-kinds, (2) setter-subset, or (3) report-only?
-2. error-on-zero as a hard `NO_CHANGES_APPLIED` error, or a soft warning?
-3. Rollout order — highest-risk domains first (property/config setters), or per-tool as touched?
+## Decisions (resolved 2026-07-09)
+1. Guard model — **(2) setter-subset**, enforced by the bag-setter lint + allowlist.
+2. error-on-zero — **hard error**: `NO_CHANGES_REQUESTED` on empty, `PROPERTY_WRITE_FAILED` on
+   partial. No soft-warning path.
+3. Rollout — per-tool, converting each family's bag setters until the lint went green.
 
-Once you pick, the helper + a pilot on one domain is ~30 min, then it's incremental per-handler.
-I did **not** build the helper or touch handlers yet — no design committed to react against.
+The helper (`FMcpWriteReport`) + `SendWriteReportResponse` landed and every bag setter is
+converted-or-justified (the allowlist holds only atomic-setter/creator false positives).

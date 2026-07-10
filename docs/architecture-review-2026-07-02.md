@@ -2,6 +2,8 @@
 
 **Scope:** structure and design of the native MCP bridge plugin (`plugins/McpAutomationBridge/Source/McpAutomationBridge`). Line-level bugs were audited separately (2026-06-21); this report covers layering, coupling, contracts, failure modes, and extensibility. All claims verified against code at the cited `file:line`. Audience: the maintainer, extending this weekly, solo, with no automated test net.
 
+> **Historical (2026-07-02).** The registration-map dispatch this review describes — `InitializeHandlers` / `RegisterHandler`, the consolidated lambdas, and `HandleBlueprintAction`'s false-return fall-through — was replaced by the `FMcpCall` call registry and deleted; every family is now a per-action `FMcpCall` class. See `docs/action-declarations.md` and `docs/handler-mapping.md` for current dispatch.
+
 ---
 
 ## 1. How it works

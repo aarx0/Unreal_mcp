@@ -5,19 +5,18 @@ serves it. **Source of truth is the code, not this doc:**
 
 - `plugins/McpAutomationBridge/Source/McpAutomationBridge/Private/MCP/McpConsolidatedActionRouting.h`
   — the shared action lists, family predicates, and `GetToolRoutingTable()`.
-- `UMcpAutomationBridgeSubsystem::InitializeHandlers()` in
-  `Private/McpAutomationBridgeSubsystem.cpp` — which handler serves each registered
-  name, and what each consolidated lambda re-dispatches to.
+- `MCP/Calls/McpCalls_<Tool>.cpp` (registered via `McpRegister<Tool>Calls()` in
+  `Private/McpAutomationBridgeSubsystem.cpp`) — the `FMcpCall` class per
+  `(tool, action)` that serves each name, and the handler member it calls.
 - `McpStartupValidation::ValidateActionRouting()` (`Private/MCP/McpStartupValidation.cpp`)
   cross-checks the routing table against the published schemas at editor boot and
   logs errors on drift.
 
-Request flow: `tools/call` → handler-registry lookup by tool name → consolidated
-lambda tests the routed families in order on the payload's `subAction`/`action` →
-matching family handler, else the tool's core fallthrough handler. A handler that
-declines (returns `false`) yields `UNKNOWN_ACTION` — there is no secondary dispatch chain.
-The 22 canonical tool names live in `FMcpToolRegistry::GetCanonicalToolNames`
-(`Private/MCP/McpToolRegistry.cpp`).
+Request flow: `tools/call` → `FMcpCallRegistry::FindCall(tool, payload action)` →
+`FMcpCall::Execute` (envelope / `RequiresEditor` checks → the class's `Run`). A miss —
+or a call that declines by returning `false` — yields `UNKNOWN_ACTION`; there is no
+secondary dispatch chain. The 22 canonical tool names live in
+`FMcpToolRegistry::GetCanonicalToolNames` (`Private/MCP/McpToolRegistry.cpp`).
 
 ## Tools (22 canonical)
 
@@ -27,27 +26,28 @@ subdirectory is shown.
 
 | MCP tool | Routed families (in test order) → handler | Core / fallthrough handler |
 | :-- | :-- | :-- |
-| `manage_asset` | — (MaterialAuthoring/Texture stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAsset.cpp (dispatched from the call registry before the handler map; implementations are the existing AssetWorkflow/AssetQuery members for the 43 core actions, the `HandleMaterial*` members @ MaterialAuthoringHandlers.cpp for the 58 material-authoring actions, and the `HandleTexture*` members @ TextureHandlers.cpp for the 21 texture actions) |
-| `manage_blueprint` | — (CommonUi/WidgetAuthoring/BlueprintGraph stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp (dispatched from the call registry before the handler map; the one delegation-wired family — each class delegates to a SURVIVING route dispatcher with the retired lambda's exact args: Core → `HandleBlueprintAction` @ BlueprintHandlers.cpp, BlueprintGraph → `HandleBlueprintGraphAction` @ BlueprintGraphHandlers.cpp, WidgetAuthoring → `HandleManageWidgetAuthoringAction` @ WidgetAuthoringHandlers.cpp, CommonUi → `HandleCommonUiAction` @ CommonUIHandlers.cpp; the dispatchers survive because `HandleBlueprintAction` recurses into `HandleBlueprintGraphAction`/`HandleSCSAction` and is called externally by EditorFunctionHandlers.cpp) |
-| `build_environment` | — (Lighting/Splines stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp (dispatched from the call registry before the handler map; implementations are the `HandleEnvironment*` members @ EnvironmentHandlers.cpp for the 21 core actions, `HandleLighting*` @ LightingHandlers.cpp for the 12 lighting actions, and the `HandleSpline*` wrappers @ SplineHandlers.cpp for the 22 spline actions) |
-| `animation_physics` | — (AnimationAuthoring/Skeleton stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp (dispatched from the call registry before the handler map; implementations are the `HandleAnimPhys*` members @ AnimationHandlers.cpp for the 14 core actions, `HandleAnimAuthoring*` @ AnimationAuthoringHandlers.cpp for the 42 authoring actions, and the `HandleSkeleton*` members @ SkeletonHandlers.cpp for the 29 skeleton actions) |
-| `system_control` | — (Performance stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp (dispatched from the call registry before the handler map; implementations spread across PerformanceHandlers.cpp (`HandlePerf*`), SystemControlHandlers.cpp (`HandleSys*`), UiHandlers.cpp (`HandleUi*`), LogHandlers.cpp (`HandleLog*`), DebugHandlers.cpp, RenderHandlers.cpp — see note) |
-| `manage_networking` | — (Input/GameFramework/Sessions stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageNetworking.cpp (dispatched from the call registry before the handler map; implementations are the `HandleNetworking*` members @ NetworkingHandlers.cpp for the 27 core actions, `HandleInput*` @ InputHandlers.cpp for the 9 input actions, `HandleGameFramework*` @ GameFrameworkHandlers.cpp for the 20 game-framework actions, and the `HandleSessions*` wrappers @ SessionsHandlers.cpp for the 16 session actions) |
-| `manage_level_structure` | — (Volumes stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevelStructure.cpp (dispatched from the call registry before the handler map; implementations are the `HandleLevelStructure*` members @ LevelStructureHandlers.cpp for the 17 core actions and the `HandleVolume*` members @ VolumeHandlers.cpp for the 28 volume actions) |
-| `manage_audio` | — (AudioAuthoring stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAudio.cpp (dispatched from the call registry before the handler map; implementations are the `HandleAudio*` members @ AudioHandlers.cpp for the 23 core actions and the `HandleAudioAuthoring*` members @ AudioAuthoringHandlers.cpp for the 27 authoring actions) |
-| `manage_ai` | — (BehaviorTree/Navigation survive as `ManageAI()` union inputs for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAi.cpp (dispatched from the call registry before the handler map; implementations are the `HandleAi*` members @ AIHandlers.cpp for the 42 core actions, `HandleBehaviorTree*` @ BehaviorTreeHandlers.cpp for the 7 Behavior Tree graph actions, and the `HandleNavigation*` wrappers @ NavigationHandlers.cpp for the 12 navigation actions) |
-| `control_actor` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ControlActor.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleControlActor*` functions in ControlHandlers.cpp) |
-| `control_editor` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ControlEditor.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleControlEditor*` functions in ControlHandlers.cpp + FocusInputHandlers.cpp) |
-| `inspect` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_Inspect.cpp (dispatched from the call registry before the handler map; implementations are the `HandleInspect*` members @ EnvironmentHandlers.cpp, the shared `HandleControlActor*` members @ ControlHandlers.cpp for the twelve actor actions, `HandleSetObjectProperty`/`HandleGetObjectProperty`/`HandleInspectCdoAction`/`HandleDiffAssetAction` @ PropertyHandlers.cpp, and `HandleInspectUiFocus` @ FocusInputHandlers.cpp) |
-| `manage_level` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevel.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleLevel*` functions in LevelHandlers.cpp, plus `HandleLightingCreateLight` @ LightingHandlers.cpp for `create_light`) |
-| `manage_sequence` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp (dispatched from the call registry before the handler map; implementations remain the `HandleSequence*` functions in SequenceHandlers.cpp) |
-| `manage_geometry` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageGeometry.cpp (dispatched from the call registry before the handler map; implementations are the `HandleGeometry*` members @ GeometryHandlers.cpp, thin wrappers over that TU's static free functions) |
-| `manage_effect` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageEffect.cpp (dispatched from the call registry before the handler map; implementations are the `HandleEffect*` members + `CreateNiagaraEffect` @ EffectHandlers.cpp, `HandleManageNiagaraAuthoringAction` @ NiagaraAuthoringHandlers.cpp for the 36 authoring actions, and `HandleNiagaraGraphAction` @ NiagaraGraphHandlers.cpp for the three graph actions) |
-| `manage_gas` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageGas.cpp (dispatched from the call registry before the handler map; implementations are the `HandleGas*` members @ GASHandlers.cpp) |
-| `manage_character` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCharacter.cpp (dispatched from the call registry before the handler map; implementations are the `HandleCharacter*` members @ CharacterHandlers.cpp) |
-| `manage_combat` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCombat.cpp (dispatched from the call registry before the handler map; implementations are the `HandleCombat*` members @ CombatHandlers.cpp) |
-| `manage_inventory` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInventory.cpp (dispatched from the call registry before the handler map; implementations are the `HandleInventory*` members @ InventoryHandlers.cpp) |
-| `manage_interaction` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInteraction.cpp (dispatched from the call registry before the handler map; implementations are the `HandleInteraction*` members @ InteractionHandlers.cpp) |
+| `manage_asset` | — (MaterialAuthoring/Texture stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAsset.cpp (dispatched from the call registry; implementations are the existing AssetWorkflow/AssetQuery members for the 43 core actions, the `HandleMaterial*` members @ MaterialAuthoringHandlers.cpp for the 58 material-authoring actions, and the `HandleTexture*` members @ TextureHandlers.cpp for the 21 texture actions) |
+| `manage_blueprint` | — (CommonUi/WidgetAuthoring/BlueprintGraph stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp (dispatched from the call registry; each class calls a per-action member directly — Core → `HandleBlueprint*` @ BlueprintHandlers.cpp, BlueprintGraph → `HandleBlueprintGraph*` @ BlueprintGraphHandlers.cpp, WidgetAuthoring → `HandleWidgetAuthoring*` @ WidgetAuthoringHandlers.cpp, CommonUi → `HandleCommonUi*` @ CommonUIHandlers.cpp. The five route dispatchers (`HandleBlueprintAction`/`HandleBlueprintGraphAction`/`HandleSCSAction`/`HandleManageWidgetAuthoringAction`/`HandleCommonUiAction`) were extracted and deleted; `HandleBlueprintModifyScs` is additionally called directly by EditorFunctionHandlers.cpp) |
+| `build_environment` | — (Lighting/Splines stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp (dispatched from the call registry; implementations are the `HandleEnvironment*` members @ EnvironmentHandlers.cpp for the 21 core actions, `HandleLighting*` @ LightingHandlers.cpp for the 12 lighting actions, and the `HandleSpline*` wrappers @ SplineHandlers.cpp for the 22 spline actions) |
+| `animation_physics` | — (AnimationAuthoring/Skeleton stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp (dispatched from the call registry; implementations are the `HandleAnimPhys*` members @ AnimationHandlers.cpp for the 14 core actions, `HandleAnimAuthoring*` @ AnimationAuthoringHandlers.cpp for the 42 authoring actions, and the `HandleSkeleton*` members @ SkeletonHandlers.cpp for the 29 skeleton actions) |
+| `system_control` | — (Performance stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp (dispatched from the call registry; implementations spread across PerformanceHandlers.cpp (`HandlePerf*`), SystemControlHandlers.cpp (`HandleSys*`), UiHandlers.cpp (`HandleUi*`), LogHandlers.cpp (`HandleLog*`), DebugHandlers.cpp, RenderHandlers.cpp — see note) |
+| `manage_networking` | — (GameFramework/Sessions stay listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageNetworking.cpp (dispatched from the call registry; implementations are the `HandleNetworking*` members @ NetworkingHandlers.cpp for the 27 core actions, `HandleGameFramework*` @ GameFrameworkHandlers.cpp for the 20 game-framework actions, and the `HandleSessions*` wrappers @ SessionsHandlers.cpp for the 16 session actions) |
+| `manage_input` | — (single-handler: `Input()` is both the core list and the schema union) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInput.cpp (dispatched from the call registry; implementations are the `HandleInput*` members @ InputHandlers.cpp for the 9 Enhanced Input actions, split out of manage_networking) |
+| `manage_level_structure` | — (Volumes stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevelStructure.cpp (dispatched from the call registry; implementations are the `HandleLevelStructure*` members @ LevelStructureHandlers.cpp for the 17 core actions and the `HandleVolume*` members @ VolumeHandlers.cpp for the 28 volume actions) |
+| `manage_audio` | — (AudioAuthoring stays listed in `GetToolRoutingTable()` for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAudio.cpp (dispatched from the call registry; implementations are the `HandleAudio*` members @ AudioHandlers.cpp for the 23 core actions and the `HandleAudioAuthoring*` members @ AudioAuthoringHandlers.cpp for the 27 authoring actions) |
+| `manage_ai` | — (BehaviorTree/Navigation survive as `ManageAI()` union inputs for schema-union validation only) | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAi.cpp (dispatched from the call registry; implementations are the `HandleAi*` members @ AIHandlers.cpp for the 42 core actions, `HandleBehaviorTree*` @ BehaviorTreeHandlers.cpp for the 7 Behavior Tree graph actions, and the `HandleNavigation*` wrappers @ NavigationHandlers.cpp for the 12 navigation actions) |
+| `control_actor` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ControlActor.cpp (dispatched from the call registry; implementations remain the `HandleControlActor*` functions in ControlHandlers.cpp) |
+| `control_editor` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ControlEditor.cpp (dispatched from the call registry; implementations remain the `HandleControlEditor*` functions in ControlHandlers.cpp + FocusInputHandlers.cpp) |
+| `inspect` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_Inspect.cpp (dispatched from the call registry; implementations are the `HandleInspect*` members @ EnvironmentHandlers.cpp, the shared `HandleControlActor*` members @ ControlHandlers.cpp for the twelve actor actions, `HandleSetObjectProperty`/`HandleGetObjectProperty`/`HandleInspectCdoAction`/`HandleDiffAssetAction` @ PropertyHandlers.cpp, and `HandleInspectUiFocus` @ FocusInputHandlers.cpp) |
+| `manage_level` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageLevel.cpp (dispatched from the call registry; implementations remain the `HandleLevel*` functions in LevelHandlers.cpp, plus `HandleLightingCreateLight` @ LightingHandlers.cpp for `create_light`) |
+| `manage_sequence` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageSequence.cpp (dispatched from the call registry; implementations remain the `HandleSequence*` functions in SequenceHandlers.cpp) |
+| `manage_geometry` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageGeometry.cpp (dispatched from the call registry; implementations are the `HandleGeometry*` members @ GeometryHandlers.cpp, thin wrappers over that TU's static free functions) |
+| `manage_effect` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageEffect.cpp (dispatched from the call registry; implementations are the `HandleEffect*` members + `CreateNiagaraEffect` @ EffectHandlers.cpp, the `HandleNiagara*` members @ NiagaraAuthoringHandlers.cpp for the 36 authoring actions, and `HandleNiagaraGraphAction` @ NiagaraGraphHandlers.cpp for the three graph actions) |
+| `manage_gas` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageGas.cpp (dispatched from the call registry; implementations are the `HandleGas*` members @ GASHandlers.cpp) |
+| `manage_character` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCharacter.cpp (dispatched from the call registry; implementations are the `HandleCharacter*` members @ CharacterHandlers.cpp) |
+| `manage_combat` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageCombat.cpp (dispatched from the call registry; implementations are the `HandleCombat*` members @ CombatHandlers.cpp) |
+| `manage_inventory` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInventory.cpp (dispatched from the call registry; implementations are the `HandleInventory*` members @ InventoryHandlers.cpp) |
+| `manage_interaction` | — | CLASSED: `FMcpCall` instances @ MCP/Calls/McpCalls_ManageInteraction.cpp (dispatched from the call registry; implementations are the `HandleInteraction*` members @ InteractionHandlers.cpp) |
 
 `system_control` note — the family is classed; the registration lambda that used
 to re-dispatch per action is gone. Per-class delegation: the 21 Performance
@@ -74,11 +74,11 @@ Routed family lists:
 
 | List (McpConsolidatedActionRouting.h) | Owner |
 | :-- | :-- |
-| `MaterialAuthoring` | `HandleManageMaterialAuthoringAction` @ MaterialAuthoringHandlers.cpp |
-| `Texture` | `HandleManageTextureAction` @ TextureHandlers.cpp |
-| `BlueprintGraph` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp delegate to the surviving `HandleBlueprintGraphAction` @ BlueprintGraphHandlers.cpp (list retained for schema-union validation) |
-| `WidgetAuthoring` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp delegate to the surviving `HandleManageWidgetAuthoringAction` @ WidgetAuthoringHandlers.cpp (list retained for schema-union validation) |
-| `CommonUi` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp delegate to the surviving `HandleCommonUiAction` @ CommonUIHandlers.cpp (list retained for schema-union validation) |
+| `MaterialAuthoring` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAsset.cpp call `HandleMaterial*` @ MaterialAuthoringHandlers.cpp (list retained for schema-union validation) |
+| `Texture` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAsset.cpp call `HandleTexture*` @ TextureHandlers.cpp (list retained for schema-union validation) |
+| `BlueprintGraph` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp call `HandleBlueprintGraph*` @ BlueprintGraphHandlers.cpp (list retained for schema-union validation) |
+| `WidgetAuthoring` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp call `HandleWidgetAuthoring*` @ WidgetAuthoringHandlers.cpp (list retained for schema-union validation) |
+| `CommonUi` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp call `HandleCommonUi*` @ CommonUIHandlers.cpp (list retained for schema-union validation) |
 | `Lighting` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp delegate to `HandleLighting*` @ LightingHandlers.cpp (list retained for schema-union validation) |
 | `Splines` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp delegate to `HandleSpline*` wrappers @ SplineHandlers.cpp (list retained for schema-union validation) |
 | `AnimationAuthoring` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp delegate to `HandleAnimAuthoring*` @ AnimationAuthoringHandlers.cpp (list retained for schema-union validation) |
@@ -97,7 +97,7 @@ Core (fallthrough) lists:
 | List | Owner |
 | :-- | :-- |
 | `ManageAssetCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageAsset.cpp (implementations are the existing AssetWorkflow/AssetQuery members) |
-| `ManageBlueprintCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp delegate to the surviving `HandleBlueprintAction` @ BlueprintHandlers.cpp |
+| `ManageBlueprintCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_ManageBlueprint.cpp call `HandleBlueprint*` @ BlueprintHandlers.cpp |
 | `BuildEnvironmentCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_BuildEnvironment.cpp (implementations are the `HandleEnvironment*` members @ EnvironmentHandlers.cpp) |
 | `AnimationPhysicsCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_AnimationPhysics.cpp (implementations are the `HandleAnimPhys*` members @ AnimationHandlers.cpp) |
 | `SystemControlCore` | CLASSED — `FMcpCall` instances @ MCP/Calls/McpCalls_SystemControl.cpp (per-class delegation split in the note above) |
@@ -129,12 +129,13 @@ enums only — they own no actions.
 3. Grep that file for the sub-action string to land on the implementing branch:
    `grep -n '"set_blend_mode"' plugins/McpAutomationBridge/Source/McpAutomationBridge/Private/McpAutomationBridge_MaterialAuthoringHandlers.cpp`
 4. Not in the routing header at all? Then it is not reachable from a canonical
-   tool. `InitializeHandlers` registers only the 22 canonical tool names — the
-   legacy Node-server-era per-action registrations (`manage_ui`, `manage_misc`,
+   tool. Only the 22 canonical tool names are published — the legacy
+   Node-server-era per-action registrations (`manage_ui`, `manage_misc`,
    `asset_query`, ~100 others) were deleted 2026-07-02 as unreachable. Their
-   handler functions survive where a consolidated lambda or an FMcpCall class
-   calls them directly (e.g. `HandleAssetAction`); `HandleMiscAction` had no
-   caller and was deleted with `McpAutomationBridge_MiscHandlers.cpp`, and
+   handler functions survive where an `FMcpCall` class calls them directly
+   (e.g. `HandleConsoleCommandAction`, shared by several classes);
+   `HandleMiscAction` had no caller and was deleted with
+   `McpAutomationBridge_MiscHandlers.cpp`, and
    `HandleUiAction` died at the system_control classing (its five advertised
    bodies extracted to `HandleUi*` members, its hidden bodies deleted).
 
