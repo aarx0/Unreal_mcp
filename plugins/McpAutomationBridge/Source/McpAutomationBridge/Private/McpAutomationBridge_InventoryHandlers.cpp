@@ -44,6 +44,7 @@
 
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
+#include "McpResponseHelpers.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
@@ -263,21 +264,45 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetItemProperties(
   TArray<FString> StoredInPropertyBag;
   TArray<FString> FailedProperties;
 
-  if (Payload->TryGetObjectField(TEXT("properties"), PropertiesObj) && PropertiesObj && (*PropertiesObj).IsValid()) {
+  const bool bHasProperties =
+      Payload->TryGetObjectField(TEXT("properties"), PropertiesObj) && PropertiesObj && (*PropertiesObj).IsValid();
+  if (bHasProperties) {
     ApplyItemPropertiesToAsset(ItemAsset, *PropertiesObj, ModifiedProperties,
                                StoredInPropertyBag, FailedProperties);
   }
 
-  ItemAsset->MarkPackageDirty();
+  // The requested-field set is the properties bag keys; ApplyItemPropertiesToAsset
+  // already recorded each key's outcome — map those into the write report.
+  McpHandlerUtils::FMcpWriteReport Report;
+  if (bHasProperties) {
+    for (const auto& Pair : (*PropertiesObj)->Values) {
+      const FString& Key = Pair.Key;
+      if (ModifiedProperties.Contains(Key) || StoredInPropertyBag.Contains(Key)) {
+        Report.MarkApplied(Key);
+      } else {
+        FString Reason = TEXT("failed to apply");
+        const FString Prefix = Key + TEXT(": ");
+        for (const FString& Err : FailedProperties) {
+          if (Err.StartsWith(Prefix)) {
+            Reason = Err.RightChop(Prefix.Len());
+            break;
+          }
+        }
+        Report.MarkFailed(Key, Reason);
+      }
+    }
+  }
 
-  if (GetPayloadBool(Payload, TEXT("save"), false)) {
-    McpSafeAssetSave(ItemAsset);
+  if (Report.AnyApplied()) {
+    ItemAsset->MarkPackageDirty();
+    if (GetPayloadBool(Payload, TEXT("save"), false)) {
+      McpSafeAssetSave(ItemAsset);
+    }
   }
 
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   Result->SetBoolField(TEXT("modified"), ModifiedProperties.Num() + StoredInPropertyBag.Num() > 0);
   Result->SetNumberField(TEXT("propertiesModified"), ModifiedProperties.Num() + StoredInPropertyBag.Num());
-  McpHandlerUtils::AddVerification(Result, ItemAsset);
 
   TArray<TSharedPtr<FJsonValue>> ModifiedArr;
   for (const FString& Name : ModifiedProperties) {
@@ -301,9 +326,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetItemProperties(
     Result->SetArrayField(TEXT("failedProperties"), FailedArr);
   }
 
-  SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Item properties updated"), Result);
-  return true;
+  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                 TEXT("Item properties updated"), ItemAsset);
 }
 
 bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateItemCategory(
@@ -510,7 +534,6 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureSlots(
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetPayloadString(Payload, TEXT("blueprintPath"));
-  int32 SlotCount = static_cast<int32>(GetPayloadNumber(Payload, TEXT("slotCount"), 20));
 
   if (BlueprintPath.IsEmpty()) {
     SendAutomationError(Socket, RequestId,
@@ -530,64 +553,76 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureSlots(
     return true;
   }
 
-  bool bConfigured = false;
+  McpHandlerUtils::FMcpWriteReport Report;
+  const bool bHasSlotCount = Payload->HasField(TEXT("slotCount"));
+  int32 SlotCount = 0;
 
-  // Try to find and set MaxSlots property on the Blueprint's generated class CDO
-  if (Blueprint->GeneratedClass) {
-    UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
-    if (CDO) {
-      FProperty* MaxSlotsProp = CDO->GetClass()->FindPropertyByName(TEXT("MaxSlots"));
-      if (MaxSlotsProp) {
-        TSharedPtr<FJsonValue> SlotValue = MakeShared<FJsonValueNumber>(static_cast<double>(SlotCount));
-        FString ApplyError;
-        if (ApplyJsonValueToProperty(CDO, MaxSlotsProp, SlotValue, ApplyError)) {
-          bConfigured = true;
-        }
-      }
-    }
-  }
+  if (bHasSlotCount) {
+    SlotCount = static_cast<int32>(GetPayloadNumber(Payload, TEXT("slotCount"), 20));
+    bool bApplied = false;
+    FString FailReason;
 
-  // If MaxSlots property doesn't exist, add it as a Blueprint variable
-  if (!bConfigured) {
-    FEdGraphPinType IntType;
-    IntType.PinCategory = UEdGraphSchema_K2::PC_Int;
-
-    // Check if variable already exists
-    bool bExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == TEXT("MaxSlots")) {
-        bExists = true;
-        break;
-      }
-    }
-
-    if (!bExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("MaxSlots"), IntType);
-    }
-    // Compile so the new MaxSlots property lands on the CDO, then write the requested value —
-    // otherwise the variable stays at its type-default 0 instead of slotCount (silent no-op).
-    McpSafeCompileBlueprint(Blueprint);
+    // Try to set an existing MaxSlots property on the generated class CDO.
     if (Blueprint->GeneratedClass) {
-      if (UObject* FreshCDO = Blueprint->GeneratedClass->GetDefaultObject()) {
-        if (FProperty* MaxSlotsProp = FreshCDO->GetClass()->FindPropertyByName(TEXT("MaxSlots"))) {
+      if (UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject()) {
+        if (FProperty* MaxSlotsProp = CDO->GetClass()->FindPropertyByName(TEXT("MaxSlots"))) {
           TSharedPtr<FJsonValue> SlotValue = MakeShared<FJsonValueNumber>(static_cast<double>(SlotCount));
-          FString ApplyError;
-          ApplyJsonValueToProperty(FreshCDO, MaxSlotsProp, SlotValue, ApplyError);
+          if (ApplyJsonValueToProperty(CDO, MaxSlotsProp, SlotValue, FailReason)) {
+            bApplied = true;
+          }
         }
       }
     }
-    bConfigured = true;
+
+    // If MaxSlots doesn't exist yet, add it as a variable, compile so the property lands
+    // on the CDO, then write the requested value.
+    if (!bApplied) {
+      FEdGraphPinType IntType;
+      IntType.PinCategory = UEdGraphSchema_K2::PC_Int;
+
+      bool bExists = false;
+      for (FBPVariableDescription& Var : Blueprint->NewVariables) {
+        if (Var.VarName == TEXT("MaxSlots")) {
+          bExists = true;
+          break;
+        }
+      }
+      if (!bExists) {
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("MaxSlots"), IntType);
+      }
+      McpSafeCompileBlueprint(Blueprint);
+      if (Blueprint->GeneratedClass) {
+        if (UObject* FreshCDO = Blueprint->GeneratedClass->GetDefaultObject()) {
+          if (FProperty* MaxSlotsProp = FreshCDO->GetClass()->FindPropertyByName(TEXT("MaxSlots"))) {
+            TSharedPtr<FJsonValue> SlotValue = MakeShared<FJsonValueNumber>(static_cast<double>(SlotCount));
+            if (ApplyJsonValueToProperty(FreshCDO, MaxSlotsProp, SlotValue, FailReason)) {
+              bApplied = true;
+            }
+          } else {
+            FailReason = TEXT("MaxSlots property unavailable after compile");
+          }
+        }
+      }
+    }
+
+    if (bApplied) {
+      Report.MarkApplied(TEXT("slotCount"));
+    } else {
+      Report.MarkFailed(TEXT("slotCount"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+    }
   }
 
-  McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, GetPayloadBool(Payload, TEXT("save"), true));
+  if (Report.AnyApplied()) {
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, GetPayloadBool(Payload, TEXT("save"), true));
+  }
 
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-  Result->SetNumberField(TEXT("slotCount"), SlotCount);
-  Result->SetBoolField(TEXT("configured"), bConfigured);
   Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-  SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Inventory slots configured"), Result);
-  return true;
+  if (bHasSlotCount) {
+    Result->SetNumberField(TEXT("slotCount"), SlotCount);
+  }
+  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                 TEXT("Inventory slots configured"), Blueprint);
 }
 
 bool UMcpAutomationBridgeSubsystem::HandleInventoryAddFunctions(
@@ -700,8 +735,6 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetReplication(
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetPayloadString(Payload, TEXT("blueprintPath"));
-  bool bReplicated = GetPayloadBool(Payload, TEXT("replicated"), false);
-  FString ReplicationCondition = GetPayloadString(Payload, TEXT("replicationCondition"), TEXT("None"));
 
   if (BlueprintPath.IsEmpty()) {
     SendAutomationError(Socket, RequestId,
@@ -721,62 +754,102 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetReplication(
     return true;
   }
 
+  McpHandlerUtils::FMcpWriteReport Report;
+  const bool bHasReplicated = Payload->HasField(TEXT("replicated"));
+  const bool bHasCondition = Payload->HasField(TEXT("replicationCondition"));
+
+  bool bReplicated = false;
+  const FString ReplicationCondition = GetPayloadString(Payload, TEXT("replicationCondition"), TEXT("None"));
+
+  // Resolve the requested replication condition; an unrecognized value must fail loudly
+  // rather than silently collapse to COND_None.
+  ELifetimeCondition Condition = COND_None;
+  bool bConditionValid = true;
+  if (ReplicationCondition.Equals(TEXT("None"), ESearchCase::IgnoreCase)) {
+    Condition = COND_None;
+  } else if (ReplicationCondition.Equals(TEXT("OwnerOnly"), ESearchCase::IgnoreCase)) {
+    Condition = COND_OwnerOnly;
+  } else if (ReplicationCondition.Equals(TEXT("SkipOwner"), ESearchCase::IgnoreCase)) {
+    Condition = COND_SkipOwner;
+  } else if (ReplicationCondition.Equals(TEXT("SimulatedOnly"), ESearchCase::IgnoreCase)) {
+    Condition = COND_SimulatedOnly;
+  } else if (ReplicationCondition.Equals(TEXT("AutonomousOnly"), ESearchCase::IgnoreCase)) {
+    Condition = COND_AutonomousOnly;
+  } else if (ReplicationCondition.Equals(TEXT("SimulatedOrPhysics"), ESearchCase::IgnoreCase)) {
+    Condition = COND_SimulatedOrPhysics;
+  } else if (ReplicationCondition.Equals(TEXT("InitialOrOwner"), ESearchCase::IgnoreCase)) {
+    Condition = COND_InitialOrOwner;
+  } else if (ReplicationCondition.Equals(TEXT("Custom"), ESearchCase::IgnoreCase)) {
+    Condition = COND_Custom;
+  } else {
+    bConditionValid = false;
+  }
+
   TArray<FString> ReplicatedVariables;
 
-  // Find inventory-related variables and set their replication flags
-  TArray<FName> InventoryVarNames = {
+  const TArray<FName> InventoryVarNames = {
     TEXT("InventorySlots"),
     TEXT("MaxSlots"),
     TEXT("CurrentWeight"),
     TEXT("MaxWeight")
   };
 
-  for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-    bool bIsInventoryVar = false;
-    for (const FName& VarName : InventoryVarNames) {
-      if (Var.VarName == VarName) {
-        bIsInventoryVar = true;
-        break;
-      }
-    }
+  if (bHasReplicated) {
+    bReplicated = GetPayloadBool(Payload, TEXT("replicated"), false);
 
-    if (bIsInventoryVar) {
+    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
+      if (!InventoryVarNames.Contains(Var.VarName)) {
+        continue;
+      }
       if (bReplicated) {
         Var.PropertyFlags |= CPF_Net;
-        Var.RepNotifyFunc = NAME_None; // Can be set to a custom function name
-
-        // Set replication condition
-        if (ReplicationCondition.Equals(TEXT("OwnerOnly"), ESearchCase::IgnoreCase)) {
-          Var.ReplicationCondition = COND_OwnerOnly;
-        } else if (ReplicationCondition.Equals(TEXT("SkipOwner"), ESearchCase::IgnoreCase)) {
-          Var.ReplicationCondition = COND_SkipOwner;
-        } else if (ReplicationCondition.Equals(TEXT("SimulatedOnly"), ESearchCase::IgnoreCase)) {
-          Var.ReplicationCondition = COND_SimulatedOnly;
-        } else if (ReplicationCondition.Equals(TEXT("AutonomousOnly"), ESearchCase::IgnoreCase)) {
-          Var.ReplicationCondition = COND_AutonomousOnly;
-        } else if (ReplicationCondition.Equals(TEXT("SimulatedOrPhysics"), ESearchCase::IgnoreCase)) {
-          Var.ReplicationCondition = COND_SimulatedOrPhysics;
-        } else if (ReplicationCondition.Equals(TEXT("InitialOrOwner"), ESearchCase::IgnoreCase)) {
-          Var.ReplicationCondition = COND_InitialOrOwner;
-        } else if (ReplicationCondition.Equals(TEXT("Custom"), ESearchCase::IgnoreCase)) {
-          Var.ReplicationCondition = COND_Custom;
-        } else {
-          Var.ReplicationCondition = COND_None;
-        }
+        Var.RepNotifyFunc = NAME_None;
+        Var.ReplicationCondition = bConditionValid ? Condition : COND_None;
       } else {
         Var.PropertyFlags &= ~CPF_Net;
         Var.ReplicationCondition = COND_None;
       }
       ReplicatedVariables.Add(Var.VarName.ToString());
     }
+
+    if (ReplicatedVariables.Num() > 0) {
+      Report.MarkApplied(TEXT("replicated"));
+    } else {
+      Report.MarkFailed(TEXT("replicated"),
+          TEXT("no inventory variables (InventorySlots/MaxSlots/CurrentWeight/MaxWeight) found on blueprint"));
+    }
+
+    if (bHasCondition) {
+      if (!bReplicated) {
+        Report.MarkFailed(TEXT("replicationCondition"),
+            TEXT("replicationCondition is ignored when replicated is false"));
+      } else if (!bConditionValid) {
+        Report.MarkFailed(TEXT("replicationCondition"),
+            FString::Printf(TEXT("unknown replication condition '%s'"), *ReplicationCondition));
+      } else if (ReplicatedVariables.Num() == 0) {
+        Report.MarkFailed(TEXT("replicationCondition"),
+            TEXT("no inventory variables found to apply the condition to"));
+      } else {
+        Report.MarkApplied(TEXT("replicationCondition"));
+      }
+    }
+  } else if (bHasCondition) {
+    Report.MarkFailed(TEXT("replicationCondition"),
+        TEXT("requires 'replicated' to be specified"));
   }
 
-  McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
+  if (Report.AnyApplied()) {
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
+  }
 
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-  Result->SetBoolField(TEXT("replicated"), bReplicated);
-  Result->SetStringField(TEXT("replicationCondition"), ReplicationCondition);
   Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+  if (bHasReplicated) {
+    Result->SetBoolField(TEXT("replicated"), bReplicated);
+  }
+  if (bHasCondition) {
+    Result->SetStringField(TEXT("replicationCondition"), ReplicationCondition);
+  }
 
   TArray<TSharedPtr<FJsonValue>> VarsArr;
   for (const FString& VarName : ReplicatedVariables) {
@@ -784,9 +857,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetReplication(
   }
   Result->SetArrayField(TEXT("modifiedVariables"), VarsArr);
 
-  SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Inventory replication configured"), Result);
-  return true;
+  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                 TEXT("Inventory replication configured"), Blueprint);
 }
 
 // ===========================================================================
@@ -864,9 +936,6 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupInteraction(
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString PickupPath = GetPayloadString(Payload, TEXT("pickupPath"));
-  FString InteractionType =
-      GetPayloadString(Payload, TEXT("interactionType"), TEXT("Overlap"));
-  FString Prompt = GetPayloadString(Payload, TEXT("prompt"), TEXT("Press E to pick up"));
 
   if (PickupPath.IsEmpty()) {
     SendAutomationError(Socket, RequestId,
@@ -886,76 +955,128 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupInteraction(
     return true;
   }
 
-  bool bConfigured = false;
+  McpHandlerUtils::FMcpWriteReport Report;
+  const bool bHasInteractionType = Payload->HasField(TEXT("interactionType"));
+  const bool bHasPrompt = Payload->HasField(TEXT("prompt"));
+  const FString InteractionType = GetPayloadString(Payload, TEXT("interactionType"), TEXT("Overlap"));
+  const FString Prompt = GetPayloadString(Payload, TEXT("prompt"), TEXT("Press E to pick up"));
 
-  // Add interaction type and prompt as Blueprint variables
-  FEdGraphPinType StringType;
-  StringType.PinCategory = UEdGraphSchema_K2::PC_String;
+  if (bHasInteractionType || bHasPrompt) {
+    FEdGraphPinType StringType;
+    StringType.PinCategory = UEdGraphSchema_K2::PC_String;
 
-  FEdGraphPinType NameType;
-  NameType.PinCategory = UEdGraphSchema_K2::PC_Name;
+    FEdGraphPinType NameType;
+    NameType.PinCategory = UEdGraphSchema_K2::PC_Name;
 
-  // Add InteractionType variable
-  bool bInteractionTypeExists = false;
-  for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-    if (Var.VarName == TEXT("InteractionType")) {
-      bInteractionTypeExists = true;
-      break;
+    bool bInteractionTypeExists = false;
+    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
+      if (Var.VarName == TEXT("InteractionType")) {
+        bInteractionTypeExists = true;
+        break;
+      }
     }
-  }
-  if (!bInteractionTypeExists) {
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("InteractionType"), NameType);
-  }
-
-  // Add InteractionPrompt variable
-  bool bPromptExists = false;
-  for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-    if (Var.VarName == TEXT("InteractionPrompt")) {
-      bPromptExists = true;
-      break;
+    if (!bInteractionTypeExists) {
+      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("InteractionType"), NameType);
     }
-  }
-  if (!bPromptExists) {
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("InteractionPrompt"), StringType);
-  }
 
-  // Configure the interaction sphere component if it exists
-  USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
-  if (SCS) {
-    for (USCS_Node* Node : SCS->GetAllNodes()) {
-      if (Node && Node->ComponentClass && Node->ComponentClass->IsChildOf(USphereComponent::StaticClass())) {
-        USphereComponent* SphereComp = Cast<USphereComponent>(Node->ComponentTemplate);
-        if (SphereComp) {
-          if (InteractionType.Equals(TEXT("Overlap"), ESearchCase::IgnoreCase)) {
-            SphereComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-            SphereComp->SetGenerateOverlapEvents(true);
-          } else {
-            SphereComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    bool bPromptExists = false;
+    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
+      if (Var.VarName == TEXT("InteractionPrompt")) {
+        bPromptExists = true;
+        break;
+      }
+    }
+    if (!bPromptExists) {
+      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("InteractionPrompt"), StringType);
+    }
+
+    // Configure the interaction sphere component before compiling so the change bakes in.
+    if (bHasInteractionType) {
+      if (USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript) {
+        for (USCS_Node* Node : SCS->GetAllNodes()) {
+          if (Node && Node->ComponentClass && Node->ComponentClass->IsChildOf(USphereComponent::StaticClass())) {
+            if (USphereComponent* SphereComp = Cast<USphereComponent>(Node->ComponentTemplate)) {
+              if (InteractionType.Equals(TEXT("Overlap"), ESearchCase::IgnoreCase)) {
+                SphereComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+                SphereComp->SetGenerateOverlapEvents(true);
+              } else {
+                SphereComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+              }
+            }
           }
-          bConfigured = true;
         }
+      }
+    }
+
+    // Compile so the just-added variables exist on the CDO before writing their defaults.
+    McpSafeCompileBlueprint(Blueprint);
+    UObject* CDO = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : nullptr;
+
+    if (bHasInteractionType) {
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("InteractionType"))) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueString>(InteractionType);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = TEXT("InteractionType property unavailable after compile");
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(TEXT("interactionType"));
+      } else {
+        Report.MarkFailed(TEXT("interactionType"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
+    }
+
+    if (bHasPrompt) {
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("InteractionPrompt"))) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueString>(Prompt);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = TEXT("InteractionPrompt property unavailable after compile");
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(TEXT("prompt"));
+      } else {
+        Report.MarkFailed(TEXT("prompt"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
       }
     }
   }
 
-  McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
+  if (Report.AnyApplied()) {
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
+  }
 
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   Result->SetStringField(TEXT("pickupPath"), PickupPath);
-  Result->SetStringField(TEXT("interactionType"), InteractionType);
-  Result->SetStringField(TEXT("prompt"), Prompt);
-  Result->SetBoolField(TEXT("configured"), bConfigured);
-  SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Pickup interaction configured"), Result);
-  return true;
+  if (bHasInteractionType) {
+    Result->SetStringField(TEXT("interactionType"), InteractionType);
+  }
+  if (bHasPrompt) {
+    Result->SetStringField(TEXT("prompt"), Prompt);
+  }
+  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                 TEXT("Pickup interaction configured"), Blueprint);
 }
 
 bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupRespawn(
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString PickupPath = GetPayloadString(Payload, TEXT("pickupPath"));
-  bool Respawnable = GetPayloadBool(Payload, TEXT("respawnable"), false);
-  double RespawnTime = GetPayloadNumber(Payload, TEXT("respawnTime"), 30.0);
 
   if (PickupPath.IsEmpty()) {
     SendAutomationError(Socket, RequestId,
@@ -975,81 +1096,112 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupRespawn(
     return true;
   }
 
-  // Add respawn-related Blueprint variables
-  FEdGraphPinType BoolType;
-  BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+  McpHandlerUtils::FMcpWriteReport Report;
+  const bool bHasRespawnable = Payload->HasField(TEXT("respawnable"));
+  const bool bHasRespawnTime = Payload->HasField(TEXT("respawnTime"));
+  const bool Respawnable = GetPayloadBool(Payload, TEXT("respawnable"), false);
+  const double RespawnTime = GetPayloadNumber(Payload, TEXT("respawnTime"), 30.0);
 
-  FEdGraphPinType FloatType;
-  FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
-  FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+  if (bHasRespawnable || bHasRespawnTime) {
+    FEdGraphPinType BoolType;
+    BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
 
-  // Add bRespawnable variable
-  bool bRespawnableExists = false;
-  for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-    if (Var.VarName == TEXT("bRespawnable")) {
-      bRespawnableExists = true;
-      break;
-    }
-  }
-  if (!bRespawnableExists) {
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("bRespawnable"), BoolType);
-  }
+    FEdGraphPinType FloatType;
+    FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
+    FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
 
-  // Add RespawnTime variable
-  bool bRespawnTimeExists = false;
-  for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-    if (Var.VarName == TEXT("RespawnTime")) {
-      bRespawnTimeExists = true;
-      break;
-    }
-  }
-  if (!bRespawnTimeExists) {
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("RespawnTime"), FloatType);
-  }
-
-  // Compile first so the just-added variables exist on the generated class/CDO before we
-  // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
-  McpSafeCompileBlueprint(Blueprint);
-
-  // Set default values on the CDO if available
-  if (Blueprint->GeneratedClass) {
-    UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
-    if (CDO) {
-      FProperty* RespawnableProp = CDO->GetClass()->FindPropertyByName(TEXT("bRespawnable"));
-      if (RespawnableProp) {
-        TSharedPtr<FJsonValue> BoolValue = MakeShared<FJsonValueBoolean>(Respawnable);
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, RespawnableProp, BoolValue, ApplyError);
-      }
-
-      FProperty* RespawnTimeProp = CDO->GetClass()->FindPropertyByName(TEXT("RespawnTime"));
-      if (RespawnTimeProp) {
-        TSharedPtr<FJsonValue> FloatValue = MakeShared<FJsonValueNumber>(RespawnTime);
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, RespawnTimeProp, FloatValue, ApplyError);
+    bool bRespawnableExists = false;
+    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
+      if (Var.VarName == TEXT("bRespawnable")) {
+        bRespawnableExists = true;
+        break;
       }
     }
+    if (!bRespawnableExists) {
+      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("bRespawnable"), BoolType);
+    }
+
+    bool bRespawnTimeExists = false;
+    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
+      if (Var.VarName == TEXT("RespawnTime")) {
+        bRespawnTimeExists = true;
+        break;
+      }
+    }
+    if (!bRespawnTimeExists) {
+      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("RespawnTime"), FloatType);
+    }
+
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+    UObject* CDO = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : nullptr;
+
+    if (bHasRespawnable) {
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("bRespawnable"))) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueBoolean>(Respawnable);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = TEXT("bRespawnable property unavailable after compile");
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(TEXT("respawnable"));
+      } else {
+        Report.MarkFailed(TEXT("respawnable"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
+    }
+
+    if (bHasRespawnTime) {
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("RespawnTime"))) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueNumber>(RespawnTime);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = TEXT("RespawnTime property unavailable after compile");
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(TEXT("respawnTime"));
+      } else {
+        Report.MarkFailed(TEXT("respawnTime"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
+    }
   }
 
-  McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
+  if (Report.AnyApplied()) {
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
+  }
 
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   Result->SetStringField(TEXT("pickupPath"), PickupPath);
-  Result->SetBoolField(TEXT("respawnable"), Respawnable);
-  Result->SetNumberField(TEXT("respawnTime"), RespawnTime);
-  Result->SetBoolField(TEXT("configured"), true);
-  SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Pickup respawn configured"), Result);
-  return true;
+  if (bHasRespawnable) {
+    Result->SetBoolField(TEXT("respawnable"), Respawnable);
+  }
+  if (bHasRespawnTime) {
+    Result->SetNumberField(TEXT("respawnTime"), RespawnTime);
+  }
+  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                 TEXT("Pickup respawn configured"), Blueprint);
 }
 
 bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupEffects(
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString PickupPath = GetPayloadString(Payload, TEXT("pickupPath"));
-  bool bBobbing = GetPayloadBool(Payload, TEXT("bobbing"), true);
-  bool bRotation = GetPayloadBool(Payload, TEXT("rotation"), true);
-  bool bGlowEffect = GetPayloadBool(Payload, TEXT("glowEffect"), false);
 
   if (PickupPath.IsEmpty()) {
     SendAutomationError(Socket, RequestId,
@@ -1069,84 +1221,112 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupEffects(
     return true;
   }
 
-  // Add effect-related Blueprint variables
-  FEdGraphPinType BoolType;
-  BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+  McpHandlerUtils::FMcpWriteReport Report;
+  const bool bHasBobbing = Payload->HasField(TEXT("bobbing"));
+  const bool bHasRotation = Payload->HasField(TEXT("rotation"));
+  const bool bHasGlow = Payload->HasField(TEXT("glowEffect"));
+  const bool bBobbing = GetPayloadBool(Payload, TEXT("bobbing"), true);
+  const bool bRotation = GetPayloadBool(Payload, TEXT("rotation"), true);
+  const bool bGlowEffect = GetPayloadBool(Payload, TEXT("glowEffect"), false);
 
-  FEdGraphPinType FloatType;
-  FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
-  FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+  if (bHasBobbing || bHasRotation || bHasGlow) {
+    FEdGraphPinType BoolType;
+    BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
 
-  // Add effect control variables
-  TArray<TPair<FName, bool>> EffectVars = {
-    TPair<FName, bool>(TEXT("bEnableBobbing"), bBobbing),
-    TPair<FName, bool>(TEXT("bEnableRotation"), bRotation),
-    TPair<FName, bool>(TEXT("bEnableGlowEffect"), bGlowEffect)
-  };
+    FEdGraphPinType FloatType;
+    FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
+    FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
 
-  for (const auto& VarPair : EffectVars) {
-    bool bExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == VarPair.Key) {
-        bExists = true;
-        break;
-      }
-    }
-    if (!bExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarPair.Key, BoolType);
-    }
-  }
-
-  // Add bobbing/rotation parameters
-  TArray<FName> FloatVars = {
-    TEXT("BobbingSpeed"),
-    TEXT("BobbingHeight"),
-    TEXT("RotationSpeed")
-  };
-
-  for (const FName& VarName : FloatVars) {
-    bool bExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == VarName) {
-        bExists = true;
-        break;
-      }
-    }
-    if (!bExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarName, FloatType);
-    }
-  }
-
-  // Compile first so the just-added variables exist on the generated class/CDO before we
-  // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
-  McpSafeCompileBlueprint(Blueprint);
-
-  // Set default values on the CDO if available
-  if (Blueprint->GeneratedClass) {
-    UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
-    if (CDO) {
-      for (const auto& VarPair : EffectVars) {
-        FProperty* Prop = CDO->GetClass()->FindPropertyByName(VarPair.Key);
-        if (Prop) {
-          TSharedPtr<FJsonValue> BoolValue = MakeShared<FJsonValueBoolean>(VarPair.Value);
-          FString ApplyError;
-          ApplyJsonValueToProperty(CDO, Prop, BoolValue, ApplyError);
+    TArray<FName> BoolVars = {
+      TEXT("bEnableBobbing"),
+      TEXT("bEnableRotation"),
+      TEXT("bEnableGlowEffect")
+    };
+    for (const FName& VarName : BoolVars) {
+      bool bExists = false;
+      for (FBPVariableDescription& Var : Blueprint->NewVariables) {
+        if (Var.VarName == VarName) {
+          bExists = true;
+          break;
         }
       }
+      if (!bExists) {
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarName, BoolType);
+      }
+    }
+
+    TArray<FName> FloatVars = {
+      TEXT("BobbingSpeed"),
+      TEXT("BobbingHeight"),
+      TEXT("RotationSpeed")
+    };
+    for (const FName& VarName : FloatVars) {
+      bool bExists = false;
+      for (FBPVariableDescription& Var : Blueprint->NewVariables) {
+        if (Var.VarName == VarName) {
+          bExists = true;
+          break;
+        }
+      }
+      if (!bExists) {
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarName, FloatType);
+      }
+    }
+
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+    UObject* CDO = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : nullptr;
+
+    struct FBoolWrite { bool bRequested; const TCHAR* PayloadKey; const TCHAR* VarName; bool Value; };
+    const FBoolWrite Writes[] = {
+      { bHasBobbing,  TEXT("bobbing"),    TEXT("bEnableBobbing"),    bBobbing },
+      { bHasRotation, TEXT("rotation"),   TEXT("bEnableRotation"),   bRotation },
+      { bHasGlow,     TEXT("glowEffect"), TEXT("bEnableGlowEffect"), bGlowEffect }
+    };
+    for (const FBoolWrite& W : Writes) {
+      if (!W.bRequested) {
+        continue;
+      }
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(W.VarName)) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueBoolean>(W.Value);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = FString::Printf(TEXT("%s property unavailable after compile"), W.VarName);
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(W.PayloadKey);
+      } else {
+        Report.MarkFailed(W.PayloadKey, FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
     }
   }
 
-  McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
+  if (Report.AnyApplied()) {
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
+  }
 
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   Result->SetStringField(TEXT("pickupPath"), PickupPath);
-  Result->SetBoolField(TEXT("bobbing"), bBobbing);
-  Result->SetBoolField(TEXT("rotation"), bRotation);
-  Result->SetBoolField(TEXT("glowEffect"), bGlowEffect);
-  Result->SetBoolField(TEXT("configured"), true);
-  SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Pickup effects configured"), Result);
-  return true;
+  if (bHasBobbing) {
+    Result->SetBoolField(TEXT("bobbing"), bBobbing);
+  }
+  if (bHasRotation) {
+    Result->SetBoolField(TEXT("rotation"), bRotation);
+  }
+  if (bHasGlow) {
+    Result->SetBoolField(TEXT("glowEffect"), bGlowEffect);
+  }
+  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                 TEXT("Pickup effects configured"), Blueprint);
 }
 
 // ===========================================================================
@@ -1278,91 +1458,112 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureEquipmentEffects(
     return true;
   }
 
-  // Add equipment effect configuration variables
-  FEdGraphPinType BoolType;
-  BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-
-  FEdGraphPinType FloatType;
-  FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
-  FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-
-  FEdGraphPinType SoftObjectArrayType;
-  SoftObjectArrayType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
-  SoftObjectArrayType.ContainerType = EPinContainerType::Array;
-
-  FEdGraphPinType NameArrayType;
-  NameArrayType.PinCategory = UEdGraphSchema_K2::PC_Name;
-  NameArrayType.ContainerType = EPinContainerType::Array;
-
-  // Stat modifier variables
-  TArray<TPair<FName, FEdGraphPinType>> EffectVars = {
-    TPair<FName, FEdGraphPinType>(TEXT("bApplyStatModifiers"), BoolType),
-    TPair<FName, FEdGraphPinType>(TEXT("StatModifierMultiplier"), FloatType),
-    TPair<FName, FEdGraphPinType>(TEXT("bGrantAbilitiesOnEquip"), BoolType),
-    TPair<FName, FEdGraphPinType>(TEXT("GrantedAbilities"), SoftObjectArrayType),
-    TPair<FName, FEdGraphPinType>(TEXT("bApplyPassiveEffects"), BoolType),
-    TPair<FName, FEdGraphPinType>(TEXT("PassiveEffectClasses"), SoftObjectArrayType),
-    TPair<FName, FEdGraphPinType>(TEXT("EffectTags"), NameArrayType)
-  };
+  McpHandlerUtils::FMcpWriteReport Report;
+  const bool bHasStatModifiers = Payload->HasField(TEXT("statModifiers"));
+  const bool bHasAbilityGrants = Payload->HasField(TEXT("abilityGrants"));
+  const bool bHasPassiveEffects = Payload->HasField(TEXT("passiveEffects"));
+  const bool bStatModifiers = GetPayloadBool(Payload, TEXT("statModifiers"), true);
+  const bool bAbilityGrants = GetPayloadBool(Payload, TEXT("abilityGrants"), true);
+  const bool bPassiveEffects = GetPayloadBool(Payload, TEXT("passiveEffects"), true);
 
   TArray<TSharedPtr<FJsonValue>> AddedVars;
 
-  for (const auto& VarPair : EffectVars) {
-    bool bExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == VarPair.Key) {
-        bExists = true;
-        break;
+  if (bHasStatModifiers || bHasAbilityGrants || bHasPassiveEffects) {
+    // Add equipment effect configuration variables
+    FEdGraphPinType BoolType;
+    BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+
+    FEdGraphPinType FloatType;
+    FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
+    FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+
+    FEdGraphPinType SoftObjectArrayType;
+    SoftObjectArrayType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
+    SoftObjectArrayType.ContainerType = EPinContainerType::Array;
+
+    FEdGraphPinType NameArrayType;
+    NameArrayType.PinCategory = UEdGraphSchema_K2::PC_Name;
+    NameArrayType.ContainerType = EPinContainerType::Array;
+
+    TArray<TPair<FName, FEdGraphPinType>> EffectVars = {
+      TPair<FName, FEdGraphPinType>(TEXT("bApplyStatModifiers"), BoolType),
+      TPair<FName, FEdGraphPinType>(TEXT("StatModifierMultiplier"), FloatType),
+      TPair<FName, FEdGraphPinType>(TEXT("bGrantAbilitiesOnEquip"), BoolType),
+      TPair<FName, FEdGraphPinType>(TEXT("GrantedAbilities"), SoftObjectArrayType),
+      TPair<FName, FEdGraphPinType>(TEXT("bApplyPassiveEffects"), BoolType),
+      TPair<FName, FEdGraphPinType>(TEXT("PassiveEffectClasses"), SoftObjectArrayType),
+      TPair<FName, FEdGraphPinType>(TEXT("EffectTags"), NameArrayType)
+    };
+
+    for (const auto& VarPair : EffectVars) {
+      bool bExists = false;
+      for (FBPVariableDescription& Var : Blueprint->NewVariables) {
+        if (Var.VarName == VarPair.Key) {
+          bExists = true;
+          break;
+        }
+      }
+      if (!bExists) {
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarPair.Key, VarPair.Value);
+        AddedVars.Add(MakeShared<FJsonValueString>(VarPair.Key.ToString()));
       }
     }
-    if (!bExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarPair.Key, VarPair.Value);
-      AddedVars.Add(MakeShared<FJsonValueString>(VarPair.Key.ToString()));
+
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+    UObject* CDO = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : nullptr;
+
+    struct FBoolWrite { bool bRequested; const TCHAR* PayloadKey; const TCHAR* VarName; bool Value; };
+    const FBoolWrite Writes[] = {
+      { bHasStatModifiers, TEXT("statModifiers"),  TEXT("bApplyStatModifiers"),    bStatModifiers },
+      { bHasAbilityGrants, TEXT("abilityGrants"),  TEXT("bGrantAbilitiesOnEquip"), bAbilityGrants },
+      { bHasPassiveEffects,TEXT("passiveEffects"), TEXT("bApplyPassiveEffects"),   bPassiveEffects }
+    };
+    for (const FBoolWrite& W : Writes) {
+      if (!W.bRequested) {
+        continue;
+      }
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(W.VarName)) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueBoolean>(W.Value);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = FString::Printf(TEXT("%s property unavailable after compile"), W.VarName);
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(W.PayloadKey);
+      } else {
+        Report.MarkFailed(W.PayloadKey, FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
     }
   }
 
-  // Compile first so the just-added variables exist on the generated class/CDO before we
-  // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
-  McpSafeCompileBlueprint(Blueprint);
-
-  // Set default values on CDO if available
-  if (Blueprint->GeneratedClass) {
-    UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
-    if (CDO) {
-      FProperty* StatModProp = CDO->GetClass()->FindPropertyByName(TEXT("bApplyStatModifiers"));
-      if (StatModProp) {
-        TSharedPtr<FJsonValue> BoolVal = MakeShared<FJsonValueBoolean>(GetPayloadBool(Payload, TEXT("statModifiers"), true));
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, StatModProp, BoolVal, ApplyError);
-      }
-
-      FProperty* AbilityProp = CDO->GetClass()->FindPropertyByName(TEXT("bGrantAbilitiesOnEquip"));
-      if (AbilityProp) {
-        TSharedPtr<FJsonValue> BoolVal = MakeShared<FJsonValueBoolean>(GetPayloadBool(Payload, TEXT("abilityGrants"), true));
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, AbilityProp, BoolVal, ApplyError);
-      }
-
-      FProperty* PassiveProp = CDO->GetClass()->FindPropertyByName(TEXT("bApplyPassiveEffects"));
-      if (PassiveProp) {
-        TSharedPtr<FJsonValue> BoolVal = MakeShared<FJsonValueBoolean>(GetPayloadBool(Payload, TEXT("passiveEffects"), true));
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, PassiveProp, BoolVal, ApplyError);
-      }
-    }
+  if (Report.AnyApplied()) {
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
   }
-
-  McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-  Result->SetBoolField(TEXT("statModifiersConfigured"), GetPayloadBool(Payload, TEXT("statModifiers"), true));
-  Result->SetBoolField(TEXT("abilityGrantsConfigured"), GetPayloadBool(Payload, TEXT("abilityGrants"), true));
-  Result->SetBoolField(TEXT("passiveEffectsConfigured"), GetPayloadBool(Payload, TEXT("passiveEffects"), true));
-  Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
   Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-  SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Equipment effects configured"), Result);
-  return true;
+  if (bHasStatModifiers) {
+    Result->SetBoolField(TEXT("statModifiers"), bStatModifiers);
+  }
+  if (bHasAbilityGrants) {
+    Result->SetBoolField(TEXT("abilityGrants"), bAbilityGrants);
+  }
+  if (bHasPassiveEffects) {
+    Result->SetBoolField(TEXT("passiveEffects"), bPassiveEffects);
+  }
+  Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
+  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                 TEXT("Equipment effects configured"), Blueprint);
 }
 
 bool UMcpAutomationBridgeSubsystem::HandleInventoryAddEquipmentFunctions(
@@ -1493,89 +1694,122 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureEquipmentVisuals(
     return true;
   }
 
-  bool bAttachToSocket = GetPayloadBool(Payload, TEXT("attachToSocket"), true);
-  FString DefaultSocket = GetPayloadString(Payload, TEXT("defaultSocket"), TEXT("hand_r"));
-
-  // Add equipment visual configuration variables
-  FEdGraphPinType BoolType;
-  BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-
-  FEdGraphPinType NameType;
-  NameType.PinCategory = UEdGraphSchema_K2::PC_Name;
-
-  FEdGraphPinType NameArrayType;
-  NameArrayType.PinCategory = UEdGraphSchema_K2::PC_Name;
-  NameArrayType.ContainerType = EPinContainerType::Array;
-
-  FEdGraphPinType SoftObjectType;
-  SoftObjectType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
-
-  FEdGraphPinType TransformType;
-  TransformType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-  TransformType.PinSubCategoryObject = TBaseStructure<FTransform>::Get();
-
-  // Visual configuration variables
-  TArray<TPair<FName, FEdGraphPinType>> VisualVars = {
-    TPair<FName, FEdGraphPinType>(TEXT("bAttachToSocket"), BoolType),
-    TPair<FName, FEdGraphPinType>(TEXT("DefaultAttachSocket"), NameType),
-    TPair<FName, FEdGraphPinType>(TEXT("EquipmentSockets"), NameArrayType),
-    TPair<FName, FEdGraphPinType>(TEXT("EquipmentMesh"), SoftObjectType),
-    TPair<FName, FEdGraphPinType>(TEXT("AttachmentOffset"), TransformType),
-    TPair<FName, FEdGraphPinType>(TEXT("bUseCustomAttachRules"), BoolType),
-    TPair<FName, FEdGraphPinType>(TEXT("bHideEquippedMesh"), BoolType)
-  };
+  McpHandlerUtils::FMcpWriteReport Report;
+  const bool bHasAttachToSocket = Payload->HasField(TEXT("attachToSocket"));
+  const bool bHasDefaultSocket = Payload->HasField(TEXT("defaultSocket"));
+  const bool bAttachToSocket = GetPayloadBool(Payload, TEXT("attachToSocket"), true);
+  const FString DefaultSocket = GetPayloadString(Payload, TEXT("defaultSocket"), TEXT("hand_r"));
 
   TArray<TSharedPtr<FJsonValue>> AddedVars;
 
-  for (const auto& VarPair : VisualVars) {
-    bool bExists = false;
-    for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == VarPair.Key) {
-        bExists = true;
-        break;
+  if (bHasAttachToSocket || bHasDefaultSocket) {
+    // Add equipment visual configuration variables
+    FEdGraphPinType BoolType;
+    BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+
+    FEdGraphPinType NameType;
+    NameType.PinCategory = UEdGraphSchema_K2::PC_Name;
+
+    FEdGraphPinType NameArrayType;
+    NameArrayType.PinCategory = UEdGraphSchema_K2::PC_Name;
+    NameArrayType.ContainerType = EPinContainerType::Array;
+
+    FEdGraphPinType SoftObjectType;
+    SoftObjectType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
+
+    FEdGraphPinType TransformType;
+    TransformType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+    TransformType.PinSubCategoryObject = TBaseStructure<FTransform>::Get();
+
+    TArray<TPair<FName, FEdGraphPinType>> VisualVars = {
+      TPair<FName, FEdGraphPinType>(TEXT("bAttachToSocket"), BoolType),
+      TPair<FName, FEdGraphPinType>(TEXT("DefaultAttachSocket"), NameType),
+      TPair<FName, FEdGraphPinType>(TEXT("EquipmentSockets"), NameArrayType),
+      TPair<FName, FEdGraphPinType>(TEXT("EquipmentMesh"), SoftObjectType),
+      TPair<FName, FEdGraphPinType>(TEXT("AttachmentOffset"), TransformType),
+      TPair<FName, FEdGraphPinType>(TEXT("bUseCustomAttachRules"), BoolType),
+      TPair<FName, FEdGraphPinType>(TEXT("bHideEquippedMesh"), BoolType)
+    };
+
+    for (const auto& VarPair : VisualVars) {
+      bool bExists = false;
+      for (FBPVariableDescription& Var : Blueprint->NewVariables) {
+        if (Var.VarName == VarPair.Key) {
+          bExists = true;
+          break;
+        }
+      }
+      if (!bExists) {
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarPair.Key, VarPair.Value);
+        AddedVars.Add(MakeShared<FJsonValueString>(VarPair.Key.ToString()));
       }
     }
-    if (!bExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarPair.Key, VarPair.Value);
-      AddedVars.Add(MakeShared<FJsonValueString>(VarPair.Key.ToString()));
+
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+    UObject* CDO = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : nullptr;
+
+    if (bHasAttachToSocket) {
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("bAttachToSocket"))) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueBoolean>(bAttachToSocket);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = TEXT("bAttachToSocket property unavailable after compile");
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(TEXT("attachToSocket"));
+      } else {
+        Report.MarkFailed(TEXT("attachToSocket"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
+    }
+
+    if (bHasDefaultSocket) {
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("DefaultAttachSocket"))) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueString>(DefaultSocket);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = TEXT("DefaultAttachSocket property unavailable after compile");
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(TEXT("defaultSocket"));
+      } else {
+        Report.MarkFailed(TEXT("defaultSocket"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
     }
   }
 
-  // Compile first so the just-added variables exist on the generated class/CDO before we
-  // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
-  McpSafeCompileBlueprint(Blueprint);
-
-  // Set default values on CDO if available
-  if (Blueprint->GeneratedClass) {
-    UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
-    if (CDO) {
-      FProperty* AttachProp = CDO->GetClass()->FindPropertyByName(TEXT("bAttachToSocket"));
-      if (AttachProp) {
-        TSharedPtr<FJsonValue> BoolVal = MakeShared<FJsonValueBoolean>(bAttachToSocket);
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, AttachProp, BoolVal, ApplyError);
-      }
-
-      FProperty* SocketProp = CDO->GetClass()->FindPropertyByName(TEXT("DefaultAttachSocket"));
-      if (SocketProp) {
-        TSharedPtr<FJsonValue> NameVal = MakeShared<FJsonValueString>(DefaultSocket);
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, SocketProp, NameVal, ApplyError);
-      }
-    }
+  if (Report.AnyApplied()) {
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
   }
-
-  McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-  Result->SetBoolField(TEXT("attachToSocket"), bAttachToSocket);
-  Result->SetStringField(TEXT("defaultSocket"), DefaultSocket);
-  Result->SetBoolField(TEXT("visualsConfigured"), true);
-  Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
   Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-  SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Equipment visuals configured"), Result);
-  return true;
+  if (bHasAttachToSocket) {
+    Result->SetBoolField(TEXT("attachToSocket"), bAttachToSocket);
+  }
+  if (bHasDefaultSocket) {
+    Result->SetStringField(TEXT("defaultSocket"), DefaultSocket);
+  }
+  Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
+  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                 TEXT("Equipment visuals configured"), Blueprint);
 }
 
 // ===========================================================================
@@ -1738,116 +1972,167 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureLootDrop(
     return true;
   }
 
-  int32 DropCount = static_cast<int32>(GetPayloadNumber(Payload, TEXT("dropCount"), 1));
-  double DropRadius = GetPayloadNumber(Payload, TEXT("dropRadius"), 100.0);
-  bool bDropOnDeath = GetPayloadBool(Payload, TEXT("dropOnDeath"), true);
-
-  // Add loot drop configuration variables
-  FEdGraphPinType IntType;
-  IntType.PinCategory = UEdGraphSchema_K2::PC_Int;
-
-  FEdGraphPinType FloatType;
-  FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
-  FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-
-  FEdGraphPinType BoolType;
-  BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-
-  FEdGraphPinType SoftObjectType;
-  SoftObjectType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
-
-  FEdGraphPinType VectorType;
-  VectorType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-  VectorType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
-
-  // Loot drop variables
-  TArray<TPair<FName, FEdGraphPinType>> LootVars = {
-    TPair<FName, FEdGraphPinType>(TEXT("LootTable"), SoftObjectType),
-    TPair<FName, FEdGraphPinType>(TEXT("LootDropCount"), IntType),
-    TPair<FName, FEdGraphPinType>(TEXT("LootDropRadius"), FloatType),
-    TPair<FName, FEdGraphPinType>(TEXT("bDropLootOnDeath"), BoolType),
-    TPair<FName, FEdGraphPinType>(TEXT("bRandomizeDropLocation"), BoolType),
-    TPair<FName, FEdGraphPinType>(TEXT("DropOffset"), VectorType),
-    TPair<FName, FEdGraphPinType>(TEXT("bApplyDropImpulse"), BoolType),
-    TPair<FName, FEdGraphPinType>(TEXT("DropImpulseStrength"), FloatType)
-  };
+  McpHandlerUtils::FMcpWriteReport Report;
+  const bool bHasDropCount = Payload->HasField(TEXT("dropCount"));
+  const bool bHasDropRadius = Payload->HasField(TEXT("dropRadius"));
+  const bool bHasDropOnDeath = Payload->HasField(TEXT("dropOnDeath"));
+  const int32 DropCount = static_cast<int32>(GetPayloadNumber(Payload, TEXT("dropCount"), 1));
+  const double DropRadius = GetPayloadNumber(Payload, TEXT("dropRadius"), 100.0);
+  const bool bDropOnDeath = GetPayloadBool(Payload, TEXT("dropOnDeath"), true);
 
   TArray<TSharedPtr<FJsonValue>> AddedVars;
 
-  for (const auto& VarPair : LootVars) {
-    bool bExists = false;
+  if (bHasDropCount || bHasDropRadius || bHasDropOnDeath) {
+    // Add loot drop configuration variables
+    FEdGraphPinType IntType;
+    IntType.PinCategory = UEdGraphSchema_K2::PC_Int;
+
+    FEdGraphPinType FloatType;
+    FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
+    FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+
+    FEdGraphPinType BoolType;
+    BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+
+    FEdGraphPinType SoftObjectType;
+    SoftObjectType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
+
+    FEdGraphPinType VectorType;
+    VectorType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+    VectorType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
+
+    TArray<TPair<FName, FEdGraphPinType>> LootVars = {
+      TPair<FName, FEdGraphPinType>(TEXT("LootTable"), SoftObjectType),
+      TPair<FName, FEdGraphPinType>(TEXT("LootDropCount"), IntType),
+      TPair<FName, FEdGraphPinType>(TEXT("LootDropRadius"), FloatType),
+      TPair<FName, FEdGraphPinType>(TEXT("bDropLootOnDeath"), BoolType),
+      TPair<FName, FEdGraphPinType>(TEXT("bRandomizeDropLocation"), BoolType),
+      TPair<FName, FEdGraphPinType>(TEXT("DropOffset"), VectorType),
+      TPair<FName, FEdGraphPinType>(TEXT("bApplyDropImpulse"), BoolType),
+      TPair<FName, FEdGraphPinType>(TEXT("DropImpulseStrength"), FloatType)
+    };
+
+    for (const auto& VarPair : LootVars) {
+      bool bExists = false;
+      for (FBPVariableDescription& Var : Blueprint->NewVariables) {
+        if (Var.VarName == VarPair.Key) {
+          bExists = true;
+          break;
+        }
+      }
+      if (!bExists) {
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarPair.Key, VarPair.Value);
+        AddedVars.Add(MakeShared<FJsonValueString>(VarPair.Key.ToString()));
+      }
+    }
+
+    // Add event dispatcher for loot drops
+    FEdGraphPinType DelegateType;
+    DelegateType.PinCategory = UEdGraphSchema_K2::PC_MCDelegate;
+
+    bool bEventExists = false;
     for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == VarPair.Key) {
-        bExists = true;
+      if (Var.VarName == TEXT("OnLootDropped")) {
+        bEventExists = true;
         break;
       }
     }
-    if (!bExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarPair.Key, VarPair.Value);
-      AddedVars.Add(MakeShared<FJsonValueString>(VarPair.Key.ToString()));
+    if (!bEventExists) {
+      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("OnLootDropped"), DelegateType);
+      AddedVars.Add(MakeShared<FJsonValueString>(TEXT("OnLootDropped")));
+    }
+
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+    UObject* CDO = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : nullptr;
+
+    if (bHasDropCount) {
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("LootDropCount"))) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueNumber>(static_cast<double>(DropCount));
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = TEXT("LootDropCount property unavailable after compile");
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(TEXT("dropCount"));
+      } else {
+        Report.MarkFailed(TEXT("dropCount"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
+    }
+
+    if (bHasDropRadius) {
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("LootDropRadius"))) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueNumber>(DropRadius);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = TEXT("LootDropRadius property unavailable after compile");
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(TEXT("dropRadius"));
+      } else {
+        Report.MarkFailed(TEXT("dropRadius"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
+    }
+
+    if (bHasDropOnDeath) {
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("bDropLootOnDeath"))) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueBoolean>(bDropOnDeath);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = TEXT("bDropLootOnDeath property unavailable after compile");
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(TEXT("dropOnDeath"));
+      } else {
+        Report.MarkFailed(TEXT("dropOnDeath"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
     }
   }
 
-  // Add event dispatcher for loot drops
-  FEdGraphPinType DelegateType;
-  DelegateType.PinCategory = UEdGraphSchema_K2::PC_MCDelegate;
-
-  bool bEventExists = false;
-  for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-    if (Var.VarName == TEXT("OnLootDropped")) {
-      bEventExists = true;
-      break;
-    }
+  if (Report.AnyApplied()) {
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
   }
-  if (!bEventExists) {
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("OnLootDropped"), DelegateType);
-    AddedVars.Add(MakeShared<FJsonValueString>(TEXT("OnLootDropped")));
-  }
-
-  // Compile first so the just-added variables exist on the generated class/CDO before we
-  // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
-  McpSafeCompileBlueprint(Blueprint);
-
-  // Set default values on CDO if available
-  if (Blueprint->GeneratedClass) {
-    UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
-    if (CDO) {
-      FProperty* DropCountProp = CDO->GetClass()->FindPropertyByName(TEXT("LootDropCount"));
-      if (DropCountProp) {
-        TSharedPtr<FJsonValue> IntVal = MakeShared<FJsonValueNumber>(static_cast<double>(DropCount));
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, DropCountProp, IntVal, ApplyError);
-      }
-
-      FProperty* DropRadiusProp = CDO->GetClass()->FindPropertyByName(TEXT("LootDropRadius"));
-      if (DropRadiusProp) {
-        TSharedPtr<FJsonValue> FloatVal = MakeShared<FJsonValueNumber>(DropRadius);
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, DropRadiusProp, FloatVal, ApplyError);
-      }
-
-      FProperty* DropOnDeathProp = CDO->GetClass()->FindPropertyByName(TEXT("bDropLootOnDeath"));
-      if (DropOnDeathProp) {
-        TSharedPtr<FJsonValue> BoolVal = MakeShared<FJsonValueBoolean>(bDropOnDeath);
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, DropOnDeathProp, BoolVal, ApplyError);
-      }
-    }
-  }
-
-  McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   Result->SetStringField(TEXT("actorPath"), ActorPath);
   Result->SetStringField(TEXT("lootTablePath"), LootTablePath);
-  Result->SetNumberField(TEXT("dropCount"), DropCount);
-  Result->SetNumberField(TEXT("dropRadius"), DropRadius);
-  Result->SetBoolField(TEXT("dropOnDeath"), bDropOnDeath);
-  Result->SetBoolField(TEXT("configured"), true);
+  if (bHasDropCount) {
+    Result->SetNumberField(TEXT("dropCount"), DropCount);
+  }
+  if (bHasDropRadius) {
+    Result->SetNumberField(TEXT("dropRadius"), DropRadius);
+  }
+  if (bHasDropOnDeath) {
+    Result->SetBoolField(TEXT("dropOnDeath"), bDropOnDeath);
+  }
   Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
-  SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Loot drop configured"), Result);
-  return true;
+  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                 TEXT("Loot drop configured"), Blueprint);
 }
 
 bool UMcpAutomationBridgeSubsystem::HandleInventorySetLootQualityTiers(
@@ -2026,25 +2311,39 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureRecipeRequirements(
     return true;
   }
 
+  McpHandlerUtils::FMcpWriteReport Report;
+  const bool bHasRequiredLevel = Payload->HasField(TEXT("requiredLevel"));
+  const bool bHasRequiredStation = Payload->HasField(TEXT("requiredStation"));
   const int32 RequiredLevel = static_cast<int32>(GetPayloadNumber(Payload, TEXT("requiredLevel"), 0));
   const FString RequiredStation = GetPayloadString(Payload, TEXT("requiredStation"), TEXT("None"));
-  GenericRecipe->Properties.Add(TEXT("RequiredLevel"), FString::FromInt(RequiredLevel));
-  GenericRecipe->Properties.Add(TEXT("RequiredStation"), RequiredStation);
-  GenericRecipe->MarkPackageDirty();
 
-  if (GetPayloadBool(Payload, TEXT("save"), false)) {
-    McpSafeAssetSave(GenericRecipe);
+  if (bHasRequiredLevel) {
+    GenericRecipe->Properties.Add(TEXT("RequiredLevel"), FString::FromInt(RequiredLevel));
+    Report.MarkApplied(TEXT("requiredLevel"));
+  }
+  if (bHasRequiredStation) {
+    GenericRecipe->Properties.Add(TEXT("RequiredStation"), RequiredStation);
+    Report.MarkApplied(TEXT("requiredStation"));
+  }
+
+  if (Report.AnyApplied()) {
+    GenericRecipe->MarkPackageDirty();
+    if (GetPayloadBool(Payload, TEXT("save"), false)) {
+      McpSafeAssetSave(GenericRecipe);
+    }
   }
 
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   Result->SetStringField(TEXT("recipePath"), RecipePath);
-  Result->SetNumberField(TEXT("requiredLevel"), RequiredLevel);
-  Result->SetStringField(TEXT("requiredStation"), RequiredStation);
-  Result->SetBoolField(TEXT("configured"), true);
-  Result->SetNumberField(TEXT("propertiesModified"), 2);
-  SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Recipe requirements configured"), Result);
-  return true;
+  if (bHasRequiredLevel) {
+    Result->SetNumberField(TEXT("requiredLevel"), RequiredLevel);
+  }
+  if (bHasRequiredStation) {
+    Result->SetStringField(TEXT("requiredStation"), RequiredStation);
+  }
+  Result->SetNumberField(TEXT("propertiesModified"), Report.Applied.Num());
+  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                 TEXT("Recipe requirements configured"), GenericRecipe);
 }
 
 bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateCraftingStation(
@@ -2251,83 +2550,124 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureItemStacking(
     return true;
   }
 
-  bool bStackable = GetPayloadBool(Payload, TEXT("stackable"), true);
-  int32 MaxStackSize = static_cast<int32>(GetPayloadNumber(Payload, TEXT("maxStackSize"), 99));
-  bool bUniqueItems = GetPayloadBool(Payload, TEXT("uniqueItems"), false);
+  McpHandlerUtils::FMcpWriteReport Report;
+  const bool bHasStackable = Payload->HasField(TEXT("stackable"));
+  const bool bHasMaxStackSize = Payload->HasField(TEXT("maxStackSize"));
+  const bool bHasUniqueItems = Payload->HasField(TEXT("uniqueItems"));
+  const bool bStackable = GetPayloadBool(Payload, TEXT("stackable"), true);
+  const int32 MaxStackSize = static_cast<int32>(GetPayloadNumber(Payload, TEXT("maxStackSize"), 99));
+  const bool bUniqueItems = GetPayloadBool(Payload, TEXT("uniqueItems"), false);
 
+  UMcpGenericDataAsset* GenericItem = Cast<UMcpGenericDataAsset>(ItemAsset);
   TArray<FString> ModifiedProps;
 
-  // Try to set stacking properties via reflection
-  FProperty* StackableProp = ItemAsset->GetClass()->FindPropertyByName(TEXT("bStackable"));
-  if (!StackableProp) {
-    StackableProp = ItemAsset->GetClass()->FindPropertyByName(TEXT("Stackable"));
-  }
-  if (StackableProp) {
-    TSharedPtr<FJsonValue> BoolVal = MakeShared<FJsonValueBoolean>(bStackable);
-    FString ApplyError;
-    if (ApplyJsonValueToProperty(ItemAsset, StackableProp, BoolVal, ApplyError)) {
-      ModifiedProps.Add(TEXT("Stackable"));
+  // Each requested field goes to a matching native property first, then to the generic
+  // string bag, and fails loudly if neither is available.
+  if (bHasStackable) {
+    FProperty* Prop = ItemAsset->GetClass()->FindPropertyByName(TEXT("bStackable"));
+    if (!Prop) {
+      Prop = ItemAsset->GetClass()->FindPropertyByName(TEXT("Stackable"));
     }
-  }
-
-  FProperty* MaxStackProp = ItemAsset->GetClass()->FindPropertyByName(TEXT("MaxStackSize"));
-  if (!MaxStackProp) {
-    MaxStackProp = ItemAsset->GetClass()->FindPropertyByName(TEXT("StackLimit"));
-  }
-  if (MaxStackProp) {
-    TSharedPtr<FJsonValue> IntVal = MakeShared<FJsonValueNumber>(static_cast<double>(MaxStackSize));
-    FString ApplyError;
-    if (ApplyJsonValueToProperty(ItemAsset, MaxStackProp, IntVal, ApplyError)) {
-      ModifiedProps.Add(TEXT("MaxStackSize"));
-    }
-  }
-
-  FProperty* UniqueProp = ItemAsset->GetClass()->FindPropertyByName(TEXT("bUniqueItem"));
-  if (UniqueProp) {
-    TSharedPtr<FJsonValue> BoolVal = MakeShared<FJsonValueBoolean>(bUniqueItems);
-    FString ApplyError;
-    if (ApplyJsonValueToProperty(ItemAsset, UniqueProp, BoolVal, ApplyError)) {
-      ModifiedProps.Add(TEXT("UniqueItem"));
-    }
-  }
-
-  if (ModifiedProps.Num() == 0) {
-    if (UMcpGenericDataAsset* GenericItem = Cast<UMcpGenericDataAsset>(ItemAsset)) {
+    FString FailReason;
+    bool bApplied = false;
+    if (Prop) {
+      TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueBoolean>(bStackable);
+      if (ApplyJsonValueToProperty(ItemAsset, Prop, Val, FailReason)) {
+        bApplied = true;
+        ModifiedProps.Add(TEXT("Stackable"));
+      }
+    } else if (GenericItem) {
       GenericItem->Properties.Add(TEXT("bStackable"), bStackable ? TEXT("true") : TEXT("false"));
-      GenericItem->Properties.Add(TEXT("MaxStackSize"), FString::FromInt(MaxStackSize));
-      GenericItem->Properties.Add(TEXT("bUniqueItem"), bUniqueItems ? TEXT("true") : TEXT("false"));
+      bApplied = true;
       ModifiedProps.Add(TEXT("Properties.bStackable"));
-      ModifiedProps.Add(TEXT("Properties.MaxStackSize"));
-      ModifiedProps.Add(TEXT("Properties.bUniqueItem"));
+    } else {
+      FailReason = TEXT("no bStackable/Stackable property and asset is not a generic data asset");
+    }
+    if (bApplied) {
+      Report.MarkApplied(TEXT("stackable"));
+    } else {
+      Report.MarkFailed(TEXT("stackable"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
     }
   }
 
-  ItemAsset->MarkPackageDirty();
+  if (bHasMaxStackSize) {
+    FProperty* Prop = ItemAsset->GetClass()->FindPropertyByName(TEXT("MaxStackSize"));
+    if (!Prop) {
+      Prop = ItemAsset->GetClass()->FindPropertyByName(TEXT("StackLimit"));
+    }
+    FString FailReason;
+    bool bApplied = false;
+    if (Prop) {
+      TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueNumber>(static_cast<double>(MaxStackSize));
+      if (ApplyJsonValueToProperty(ItemAsset, Prop, Val, FailReason)) {
+        bApplied = true;
+        ModifiedProps.Add(TEXT("MaxStackSize"));
+      }
+    } else if (GenericItem) {
+      GenericItem->Properties.Add(TEXT("MaxStackSize"), FString::FromInt(MaxStackSize));
+      bApplied = true;
+      ModifiedProps.Add(TEXT("Properties.MaxStackSize"));
+    } else {
+      FailReason = TEXT("no MaxStackSize/StackLimit property and asset is not a generic data asset");
+    }
+    if (bApplied) {
+      Report.MarkApplied(TEXT("maxStackSize"));
+    } else {
+      Report.MarkFailed(TEXT("maxStackSize"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+    }
+  }
 
-  if (GetPayloadBool(Payload, TEXT("save"), false)) {
-    McpSafeAssetSave(ItemAsset);
+  if (bHasUniqueItems) {
+    FProperty* Prop = ItemAsset->GetClass()->FindPropertyByName(TEXT("bUniqueItem"));
+    FString FailReason;
+    bool bApplied = false;
+    if (Prop) {
+      TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueBoolean>(bUniqueItems);
+      if (ApplyJsonValueToProperty(ItemAsset, Prop, Val, FailReason)) {
+        bApplied = true;
+        ModifiedProps.Add(TEXT("UniqueItem"));
+      }
+    } else if (GenericItem) {
+      GenericItem->Properties.Add(TEXT("bUniqueItem"), bUniqueItems ? TEXT("true") : TEXT("false"));
+      bApplied = true;
+      ModifiedProps.Add(TEXT("Properties.bUniqueItem"));
+    } else {
+      FailReason = TEXT("no bUniqueItem property and asset is not a generic data asset");
+    }
+    if (bApplied) {
+      Report.MarkApplied(TEXT("uniqueItems"));
+    } else {
+      Report.MarkFailed(TEXT("uniqueItems"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+    }
+  }
+
+  if (Report.AnyApplied()) {
+    ItemAsset->MarkPackageDirty();
+    if (GetPayloadBool(Payload, TEXT("save"), false)) {
+      McpSafeAssetSave(ItemAsset);
+    }
   }
 
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   Result->SetStringField(TEXT("itemPath"), ItemPath);
-  Result->SetBoolField(TEXT("stackable"), bStackable);
-  Result->SetNumberField(TEXT("maxStackSize"), MaxStackSize);
-  Result->SetBoolField(TEXT("uniqueItems"), bUniqueItems);
+  if (bHasStackable) {
+    Result->SetBoolField(TEXT("stackable"), bStackable);
+  }
+  if (bHasMaxStackSize) {
+    Result->SetNumberField(TEXT("maxStackSize"), MaxStackSize);
+  }
+  if (bHasUniqueItems) {
+    Result->SetBoolField(TEXT("uniqueItems"), bUniqueItems);
+  }
 
   TArray<TSharedPtr<FJsonValue>> ModArr;
   for (const FString& Prop : ModifiedProps) {
     ModArr.Add(MakeShared<FJsonValueString>(Prop));
   }
   Result->SetArrayField(TEXT("modifiedProperties"), ModArr);
-  Result->SetBoolField(TEXT("configured"), ModifiedProps.Num() > 0);
 
-  if (ModifiedProps.Num() == 0) {
-    Result->SetStringField(TEXT("note"), TEXT("No stacking properties found. Ensure your item class has bStackable, MaxStackSize, or StackLimit properties."));
-  }
-
-  SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Item stacking configured"), Result);
-  return true;
+  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                 TEXT("Item stacking configured"), ItemAsset);
 }
 
 bool UMcpAutomationBridgeSubsystem::HandleInventorySetItemIcon(
@@ -2588,115 +2928,186 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureWeight(
     return true;
   }
 
-  double MaxWeight = GetPayloadNumber(Payload, TEXT("maxWeight"), 100.0);
-  bool bEnableWeight = GetPayloadBool(Payload, TEXT("enableWeight"), true);
+  McpHandlerUtils::FMcpWriteReport Report;
   // 'encumberance' (sic) spellings accepted for back-compat with older clients.
-  bool bEncumbranceSystem = GetPayloadBool(Payload, TEXT("encumbranceSystem"),
+  const bool bHasMaxWeight = Payload->HasField(TEXT("maxWeight"));
+  const bool bHasEnableWeight = Payload->HasField(TEXT("enableWeight"));
+  const bool bHasEncumbranceSystem =
+      Payload->HasField(TEXT("encumbranceSystem")) || Payload->HasField(TEXT("encumberanceSystem"));
+  const bool bHasEncumbranceThreshold =
+      Payload->HasField(TEXT("encumbranceThreshold")) || Payload->HasField(TEXT("encumberanceThreshold"));
+
+  const double MaxWeight = GetPayloadNumber(Payload, TEXT("maxWeight"), 100.0);
+  const bool bEnableWeight = GetPayloadBool(Payload, TEXT("enableWeight"), true);
+  const bool bEncumbranceSystem = GetPayloadBool(Payload, TEXT("encumbranceSystem"),
       GetPayloadBool(Payload, TEXT("encumberanceSystem"), false));
-  double EncumbranceThreshold = GetPayloadNumber(Payload, TEXT("encumbranceThreshold"),
+  const double EncumbranceThreshold = GetPayloadNumber(Payload, TEXT("encumbranceThreshold"),
       GetPayloadNumber(Payload, TEXT("encumberanceThreshold"), 0.75));
-
-  FEdGraphPinType FloatType;
-  FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
-  FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-
-  FEdGraphPinType BoolType;
-  BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-
-  // Weight configuration variables
-  TArray<TPair<FName, FEdGraphPinType>> WeightVars = {
-    TPair<FName, FEdGraphPinType>(TEXT("MaxCarryWeight"), FloatType),
-    TPair<FName, FEdGraphPinType>(TEXT("CurrentCarryWeight"), FloatType),
-    TPair<FName, FEdGraphPinType>(TEXT("bWeightEnabled"), BoolType),
-    TPair<FName, FEdGraphPinType>(TEXT("bUseEncumbrance"), BoolType),
-    TPair<FName, FEdGraphPinType>(TEXT("EncumbranceThreshold"), FloatType),
-    TPair<FName, FEdGraphPinType>(TEXT("WeightMultiplier"), FloatType)
-  };
 
   TArray<TSharedPtr<FJsonValue>> AddedVars;
 
-  for (const auto& VarPair : WeightVars) {
-    bool bExists = false;
+  if (bHasMaxWeight || bHasEnableWeight || bHasEncumbranceSystem || bHasEncumbranceThreshold) {
+    FEdGraphPinType FloatType;
+    FloatType.PinCategory = UEdGraphSchema_K2::PC_Real;
+    FloatType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+
+    FEdGraphPinType BoolType;
+    BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+
+    TArray<TPair<FName, FEdGraphPinType>> WeightVars = {
+      TPair<FName, FEdGraphPinType>(TEXT("MaxCarryWeight"), FloatType),
+      TPair<FName, FEdGraphPinType>(TEXT("CurrentCarryWeight"), FloatType),
+      TPair<FName, FEdGraphPinType>(TEXT("bWeightEnabled"), BoolType),
+      TPair<FName, FEdGraphPinType>(TEXT("bUseEncumbrance"), BoolType),
+      TPair<FName, FEdGraphPinType>(TEXT("EncumbranceThreshold"), FloatType),
+      TPair<FName, FEdGraphPinType>(TEXT("WeightMultiplier"), FloatType)
+    };
+
+    for (const auto& VarPair : WeightVars) {
+      bool bExists = false;
+      for (FBPVariableDescription& Var : Blueprint->NewVariables) {
+        if (Var.VarName == VarPair.Key) {
+          bExists = true;
+          break;
+        }
+      }
+      if (!bExists) {
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarPair.Key, VarPair.Value);
+        AddedVars.Add(MakeShared<FJsonValueString>(VarPair.Key.ToString()));
+      }
+    }
+
+    // Add weight-related event
+    FEdGraphPinType DelegateType;
+    DelegateType.PinCategory = UEdGraphSchema_K2::PC_MCDelegate;
+
+    bool bEventExists = false;
     for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-      if (Var.VarName == VarPair.Key) {
-        bExists = true;
+      if (Var.VarName == TEXT("OnEncumbranceChanged")) {
+        bEventExists = true;
         break;
       }
     }
-    if (!bExists) {
-      FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarPair.Key, VarPair.Value);
-      AddedVars.Add(MakeShared<FJsonValueString>(VarPair.Key.ToString()));
+    if (!bEventExists) {
+      FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("OnEncumbranceChanged"), DelegateType);
+      AddedVars.Add(MakeShared<FJsonValueString>(TEXT("OnEncumbranceChanged")));
+    }
+
+    // Compile first so the just-added variables exist on the generated class/CDO before we
+    // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
+    McpSafeCompileBlueprint(Blueprint);
+    UObject* CDO = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : nullptr;
+
+    if (bHasMaxWeight) {
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("MaxCarryWeight"))) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueNumber>(MaxWeight);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = TEXT("MaxCarryWeight property unavailable after compile");
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(TEXT("maxWeight"));
+      } else {
+        Report.MarkFailed(TEXT("maxWeight"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
+    }
+
+    if (bHasEnableWeight) {
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("bWeightEnabled"))) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueBoolean>(bEnableWeight);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = TEXT("bWeightEnabled property unavailable after compile");
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(TEXT("enableWeight"));
+      } else {
+        Report.MarkFailed(TEXT("enableWeight"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
+    }
+
+    if (bHasEncumbranceSystem) {
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("bUseEncumbrance"))) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueBoolean>(bEncumbranceSystem);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = TEXT("bUseEncumbrance property unavailable after compile");
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(TEXT("encumbranceSystem"));
+      } else {
+        Report.MarkFailed(TEXT("encumbranceSystem"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
+    }
+
+    if (bHasEncumbranceThreshold) {
+      FString FailReason;
+      bool bApplied = false;
+      if (CDO) {
+        if (FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("EncumbranceThreshold"))) {
+          TSharedPtr<FJsonValue> Val = MakeShared<FJsonValueNumber>(EncumbranceThreshold);
+          if (ApplyJsonValueToProperty(CDO, Prop, Val, FailReason)) {
+            bApplied = true;
+          }
+        } else {
+          FailReason = TEXT("EncumbranceThreshold property unavailable after compile");
+        }
+      } else {
+        FailReason = TEXT("generated class unavailable");
+      }
+      if (bApplied) {
+        Report.MarkApplied(TEXT("encumbranceThreshold"));
+      } else {
+        Report.MarkFailed(TEXT("encumbranceThreshold"), FailReason.IsEmpty() ? TEXT("failed to apply") : FailReason);
+      }
     }
   }
 
-  // Add weight-related event
-  FEdGraphPinType DelegateType;
-  DelegateType.PinCategory = UEdGraphSchema_K2::PC_MCDelegate;
-
-  bool bEventExists = false;
-  for (FBPVariableDescription& Var : Blueprint->NewVariables) {
-    if (Var.VarName == TEXT("OnEncumbranceChanged")) {
-      bEventExists = true;
-      break;
-    }
+  if (Report.AnyApplied()) {
+    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
   }
-  if (!bEventExists) {
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("OnEncumbranceChanged"), DelegateType);
-    AddedVars.Add(MakeShared<FJsonValueString>(TEXT("OnEncumbranceChanged")));
-  }
-
-  // Compile first so the just-added variables exist on the generated class/CDO before we
-  // write their defaults — otherwise FindPropertyByName misses them and the writes no-op.
-  McpSafeCompileBlueprint(Blueprint);
-
-  // Set default values on CDO if available
-  if (Blueprint->GeneratedClass) {
-    UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
-    if (CDO) {
-      FProperty* MaxWeightProp = CDO->GetClass()->FindPropertyByName(TEXT("MaxCarryWeight"));
-      if (MaxWeightProp) {
-        TSharedPtr<FJsonValue> FloatVal = MakeShared<FJsonValueNumber>(MaxWeight);
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, MaxWeightProp, FloatVal, ApplyError);
-      }
-
-      FProperty* EnableProp = CDO->GetClass()->FindPropertyByName(TEXT("bWeightEnabled"));
-      if (EnableProp) {
-        TSharedPtr<FJsonValue> BoolVal = MakeShared<FJsonValueBoolean>(bEnableWeight);
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, EnableProp, BoolVal, ApplyError);
-      }
-
-      FProperty* EncumProp = CDO->GetClass()->FindPropertyByName(TEXT("bUseEncumbrance"));
-      if (EncumProp) {
-        TSharedPtr<FJsonValue> BoolVal = MakeShared<FJsonValueBoolean>(bEncumbranceSystem);
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, EncumProp, BoolVal, ApplyError);
-      }
-
-      FProperty* ThreshProp = CDO->GetClass()->FindPropertyByName(TEXT("EncumbranceThreshold"));
-      if (ThreshProp) {
-        TSharedPtr<FJsonValue> FloatVal = MakeShared<FJsonValueNumber>(EncumbranceThreshold);
-        FString ApplyError;
-        ApplyJsonValueToProperty(CDO, ThreshProp, FloatVal, ApplyError);
-      }
-    }
-  }
-
-  McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, GetPayloadBool(Payload, TEXT("save"), true));
 
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-  Result->SetNumberField(TEXT("maxWeight"), MaxWeight);
-  Result->SetBoolField(TEXT("enableWeight"), bEnableWeight);
-  Result->SetBoolField(TEXT("encumbranceSystem"), bEncumbranceSystem);
-  Result->SetNumberField(TEXT("encumbranceThreshold"), EncumbranceThreshold);
+  if (bHasMaxWeight) {
+    Result->SetNumberField(TEXT("maxWeight"), MaxWeight);
+  }
+  if (bHasEnableWeight) {
+    Result->SetBoolField(TEXT("enableWeight"), bEnableWeight);
+  }
+  if (bHasEncumbranceSystem) {
+    Result->SetBoolField(TEXT("encumbranceSystem"), bEncumbranceSystem);
+  }
+  if (bHasEncumbranceThreshold) {
+    Result->SetNumberField(TEXT("encumbranceThreshold"), EncumbranceThreshold);
+  }
   Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
-  Result->SetBoolField(TEXT("configured"), true);
-
-  SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Inventory weight configured"), Result);
-  return true;
+  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                 TEXT("Inventory weight configured"), Blueprint);
 }
 
 
