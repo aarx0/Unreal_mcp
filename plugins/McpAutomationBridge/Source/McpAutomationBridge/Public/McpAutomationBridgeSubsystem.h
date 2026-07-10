@@ -737,9 +737,10 @@ private:
   // manage_blueprint is classed — see MCP/Calls/McpCalls_ManageBlueprint.cpp.
   // Core + Graph subActions are per-action members (below), called directly by
   // their classed actions, as are the CommonUi actions and the widget Lifecycle/
-  // Containers/Leaves actions; the remaining widget families still delegate to
-  // HandleManageWidgetAuthoringAction. The HandleBlueprintModifyScs member is also
-  // called externally by EditorFunctionHandlers.cpp (BLUEPRINT_ADD_COMPONENT).
+  // Containers/Leaves/Slot/Binding/Animation actions; the remaining widget families
+  // (Style/Tree/Recipes/Misc) still delegate to HandleManageWidgetAuthoringAction.
+  // The HandleBlueprintModifyScs member is also called externally by
+  // EditorFunctionHandlers.cpp (BLUEPRINT_ADD_COMPONENT).
   // manage_sequence is classed — see MCP/Calls/McpCalls_ManageSequence.cpp.
   bool CreateNiagaraEffect(const FString &RequestId,
                            const TSharedPtr<FJsonObject> &Payload,
@@ -2547,23 +2548,73 @@ public:
       const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
   bool HandleWidgetAuthoringAddTreeView(const FString &RequestId,
       const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  // Per-action manage_widget_authoring members (Slot / Binding / Animation),
+  // hoisted from the family scanners; called directly by their classed actions.
+  bool HandleWidgetAuthoringSetAnchor(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetAlignment(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetPosition(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetSize(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetPadding(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetZOrder(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetRenderTransform(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetVisibility(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetStyle(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetClipping(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetFont(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetMargin(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringBindText(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringBindVisibility(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringBindColor(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringBindEnabled(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringBindOnClicked(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringBindOnHovered(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringBindOnValueChanged(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringBindEventToDelegate(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringCreatePropertyBinding(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetWidgetBinding(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringBindLocalizedText(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringCreateWidgetAnimation(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddAnimationTrack(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddAnimationKeyframe(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetAnimationLoop(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetAnimationSpeed(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringGetAnimationInfo(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringDeleteAnimation(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 private:
   // Phase 19 family sub-handlers — each owns one cluster of subactions and
   // returns false if SubAction isn't one of its own (so the dispatcher falls
   // through to the next family). Split out of the former monolithic dispatcher
   // purely for navigability; branch bodies are unchanged.
-  bool HandleWidgetAuthoring_Slot(
-      const FString &SubAction, const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool HandleWidgetAuthoring_Binding(
-      const FString &SubAction, const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool HandleWidgetAuthoring_Animation(
-      const FString &SubAction, const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
   bool HandleWidgetAuthoring_Style(
       const FString &SubAction, const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,

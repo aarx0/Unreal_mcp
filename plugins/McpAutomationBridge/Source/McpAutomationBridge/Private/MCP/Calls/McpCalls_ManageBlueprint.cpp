@@ -8,18 +8,18 @@
 // via McpDeriveDecl(), so schema and decl are one source and cannot drift.
 //
 // Dispatch is mixed: Core, Graph, CommonUi, and the widget Lifecycle/Containers/
-// Leaves actions call a per-action member directly (MCP_BP_CORE_CALL /
-// MCP_BP_GRAPH_CALL / MCP_BP_CUI_CALL / MCP_BP_WIDGET_CALL); the remaining widget
-// families still delegate to the surviving 4-arg HandleManageWidgetAuthoringAction
-// dispatcher (MCP_BP_ACTION_CALL), passing EXACTLY the args the retired
-// registration lambda passed (byte-behaviour-identical for canonical inputs). The
-// hoisted HandleBlueprintModifyScs member is also called externally by
-// EditorFunctionHandlers.cpp:
+// Leaves/Slot/Binding/Animation actions call a per-action member directly
+// (MCP_BP_CORE_CALL / MCP_BP_GRAPH_CALL / MCP_BP_CUI_CALL / MCP_BP_WIDGET_CALL);
+// the remaining widget families (Style/Tree/Recipes/Misc) still delegate to the
+// surviving 4-arg HandleManageWidgetAuthoringAction dispatcher (MCP_BP_ACTION_CALL),
+// passing EXACTLY the args the retired registration lambda passed
+// (byte-behaviour-identical for canonical inputs). The hoisted HandleBlueprintModifyScs
+// member is also called externally by EditorFunctionHandlers.cpp:
 //   Core       -> HandleBlueprint<Action> member (RequestId, Payload, ...)
 //   Graph      -> HandleBlueprintGraph<Action> member (RequestId, Payload, ...)
 //   CommonUi   -> HandleCommonUi<Action> member (RequestId, Payload, ...)
-//   Widget     -> HandleWidgetAuthoring<Action> member (Lifecycle/Containers/Leaves),
-//                 else HandleManageWidgetAuthoringAction(RequestId, "manage_widget_authoring", ...)
+//   Widget     -> HandleWidgetAuthoring<Action> member (Lifecycle/Containers/Leaves/
+//                 Slot/Binding/Animation), else HandleManageWidgetAuthoringAction(RequestId, "manage_widget_authoring", ...)
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
@@ -1678,9 +1678,9 @@ class FMcpCall_ManageBlueprint_##ClassSuffix final : public FMcpCall            
 };
 
 // Widget direct-call: one classed action per hoisted HandleWidgetAuthoring* member
-// (WidgetAuthoringHandlers.cpp, Lifecycle/Containers/Leaves families). Run() calls
-// the member directly. Structurally identical to MCP_BP_CORE_CALL; the un-hoisted
-// Widget families still delegate via MCP_BP_ACTION_CALL.
+// (WidgetAuthoringHandlers.cpp, Lifecycle/Containers/Leaves/Slot/Binding/Animation
+// families). Run() calls the member directly. Structurally identical to
+// MCP_BP_CORE_CALL; the un-hoisted Widget families still delegate via MCP_BP_ACTION_CALL.
 #define MCP_BP_WIDGET_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags) \
 class FMcpCall_ManageBlueprint_##ClassSuffix final : public FMcpCall                     \
 {                                                                                        \
@@ -1763,10 +1763,10 @@ MCP_BP_GRAPH_CALL(ArrangeGraph, "arrange_graph", HandleBlueprintGraphArrangeGrap
 MCP_BP_GRAPH_CALL(ListAnimbpGraphs, "list_animbp_graphs", HandleBlueprintGraphListAnimbpGraphs, EMcpCallFlags::RequiresEditor)
 MCP_BP_GRAPH_CALL(GetTransitionRuleGraph, "get_transition_rule_graph", HandleBlueprintGraphGetTransitionRuleGraph, EMcpCallFlags::RequiresEditor)
 
-// WidgetAuthoring. Lifecycle/Containers/Leaves actions call a per-action
-// HandleWidgetAuthoring* member directly (MCP_BP_WIDGET_CALL); the remaining
-// families still delegate to HandleManageWidgetAuthoringAction (MCP_BP_ACTION_CALL,
-// Action arg "manage_widget_authoring").
+// WidgetAuthoring. Lifecycle/Containers/Leaves/Slot/Binding/Animation actions call
+// a per-action HandleWidgetAuthoring* member directly (MCP_BP_WIDGET_CALL); the
+// remaining families (Style/Tree/Recipes/Misc) still delegate to
+// HandleManageWidgetAuthoringAction (MCP_BP_ACTION_CALL, Action arg "manage_widget_authoring").
 MCP_BP_WIDGET_CALL(CreateWidgetBlueprint, "create_widget_blueprint", HandleWidgetAuthoringCreateWidgetBlueprint, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(SetWidgetParentClass, "set_widget_parent_class", HandleWidgetAuthoringSetWidgetParentClass, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(AddCanvasPanel, "add_canvas_panel", HandleWidgetAuthoringAddCanvasPanel, EMcpCallFlags::Mutating)
@@ -1792,29 +1792,29 @@ MCP_BP_WIDGET_CALL(AddComboBox, "add_combo_box", HandleWidgetAuthoringAddComboBo
 MCP_BP_WIDGET_CALL(AddSpinBox, "add_spin_box", HandleWidgetAuthoringAddSpinBox, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(AddListView, "add_list_view", HandleWidgetAuthoringAddListView, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(AddTreeView, "add_tree_view", HandleWidgetAuthoringAddTreeView, EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetAnchor, "set_anchor", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetAlignment, "set_alignment", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetPosition, "set_position", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetSize, "set_size", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetPadding, "set_padding", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetZOrder, "set_z_order", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetRenderTransform, "set_render_transform", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetVisibility, "set_visibility", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetStyle, "set_style", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetClipping, "set_clipping", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreatePropertyBinding, "create_property_binding", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(BindText, "bind_text", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(BindVisibility, "bind_visibility", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(BindColor, "bind_color", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(BindEnabled, "bind_enabled", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(BindOnClicked, "bind_on_clicked", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(BindOnHovered, "bind_on_hovered", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(BindOnValueChanged, "bind_on_value_changed", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(BindEventToDelegate, "bind_event_to_delegate", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateWidgetAnimation, "create_widget_animation", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddAnimationTrack, "add_animation_track", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(AddAnimationKeyframe, "add_animation_keyframe", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetAnimationLoop, "set_animation_loop", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetAnchor, "set_anchor", HandleWidgetAuthoringSetAnchor, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetAlignment, "set_alignment", HandleWidgetAuthoringSetAlignment, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetPosition, "set_position", HandleWidgetAuthoringSetPosition, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetSize, "set_size", HandleWidgetAuthoringSetSize, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetPadding, "set_padding", HandleWidgetAuthoringSetPadding, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetZOrder, "set_z_order", HandleWidgetAuthoringSetZOrder, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetRenderTransform, "set_render_transform", HandleWidgetAuthoringSetRenderTransform, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetVisibility, "set_visibility", HandleWidgetAuthoringSetVisibility, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetStyle, "set_style", HandleWidgetAuthoringSetStyle, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetClipping, "set_clipping", HandleWidgetAuthoringSetClipping, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(CreatePropertyBinding, "create_property_binding", HandleWidgetAuthoringCreatePropertyBinding, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(BindText, "bind_text", HandleWidgetAuthoringBindText, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(BindVisibility, "bind_visibility", HandleWidgetAuthoringBindVisibility, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(BindColor, "bind_color", HandleWidgetAuthoringBindColor, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(BindEnabled, "bind_enabled", HandleWidgetAuthoringBindEnabled, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(BindOnClicked, "bind_on_clicked", HandleWidgetAuthoringBindOnClicked, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(BindOnHovered, "bind_on_hovered", HandleWidgetAuthoringBindOnHovered, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(BindOnValueChanged, "bind_on_value_changed", HandleWidgetAuthoringBindOnValueChanged, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(BindEventToDelegate, "bind_event_to_delegate", HandleWidgetAuthoringBindEventToDelegate, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(CreateWidgetAnimation, "create_widget_animation", HandleWidgetAuthoringCreateWidgetAnimation, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(AddAnimationTrack, "add_animation_track", HandleWidgetAuthoringAddAnimationTrack, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(AddAnimationKeyframe, "add_animation_keyframe", HandleWidgetAuthoringAddAnimationKeyframe, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetAnimationLoop, "set_animation_loop", HandleWidgetAuthoringSetAnimationLoop, EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(CreateMainMenu, "create_main_menu", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(CreatePauseMenu, "create_pause_menu", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(CreateSettingsMenu, "create_settings_menu", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
@@ -1845,16 +1845,16 @@ MCP_BP_ACTION_CALL(AddWidgetComponent, "add_widget_component", HandleManageWidge
 MCP_BP_WIDGET_CALL(AddSafeZone, "add_safe_zone", HandleWidgetAuthoringAddSafeZone, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(AddSpacer, "add_spacer", HandleWidgetAuthoringAddSpacer, EMcpCallFlags::Mutating)
 MCP_BP_WIDGET_CALL(AddWidgetSwitcher, "add_widget_switcher", HandleWidgetAuthoringAddWidgetSwitcher, EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetFont, "set_font", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetMargin, "set_margin", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetFont, "set_font", HandleWidgetAuthoringSetFont, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetMargin, "set_margin", HandleWidgetAuthoringSetMargin, EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(CreateWidgetStyle, "create_widget_style", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(ApplyStyleToWidget, "apply_style_to_widget", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetWidgetBinding, "set_widget_binding", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(BindLocalizedText, "bind_localized_text", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(SetWidgetBinding, "set_widget_binding", HandleWidgetAuthoringSetWidgetBinding, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(BindLocalizedText, "bind_localized_text", HandleWidgetAuthoringBindLocalizedText, EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(SetLocalizationKey, "set_localization_key", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(GetAnimationInfo, "get_animation_info", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::None)
-MCP_BP_ACTION_CALL(SetAnimationSpeed, "set_animation_speed", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(DeleteAnimation, "delete_animation", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(GetAnimationInfo, "get_animation_info", HandleWidgetAuthoringGetAnimationInfo, EMcpCallFlags::None)
+MCP_BP_WIDGET_CALL(SetAnimationSpeed, "set_animation_speed", HandleWidgetAuthoringSetAnimationSpeed, EMcpCallFlags::Mutating)
+MCP_BP_WIDGET_CALL(DeleteAnimation, "delete_animation", HandleWidgetAuthoringDeleteAnimation, EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(CreateCreditsScreen, "create_credits_screen", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(CreateShopUi, "create_shop_ui", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(AddQuestTracker, "add_quest_tracker", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)

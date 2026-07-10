@@ -61,6 +61,7 @@
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeHelpers.h"
+#include "MCP/McpConsolidatedActionRouting.h"          // GetPayloadSubAction
 
 // JSON & Serialization
 #include "Dom/JsonObject.h"
@@ -1031,6 +1032,13 @@ namespace
 // -----------------------------------------------------------------------------
 #define MCP_WIDGETAUTH_PREAMBLE() \
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
+
+// Combined-branch members (set_style/set_clipping; bind_text/bind_visibility/
+// bind_color/bind_enabled; bind_on_clicked/bind_on_hovered) re-derive the payload
+// sub-action the retired scanner read at its top; the shared branch bodies switch
+// on it.
+#define MCP_WIDGETAUTH_SUBACTION() \
+    const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(Payload);
 
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetBlueprint(
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
@@ -2548,19 +2556,22 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddTreeView(
 }
 
 // -----------------------------------------------------------------------------
-// Widget-authoring family sub-handlers still routed through
-// HandleManageWidgetAuthoringAction (Slot / Binding / Animation / Style / Tree /
-// Recipes / Misc). Each scans its own cluster of sub-actions and returns false
-// when the sub-action isn't one of its own, so the dispatcher tries the next
-// family.
+// Per-action manage_widget_authoring members: Slot, Binding, Animation. Hoisted
+// verbatim from the retired HandleWidgetAuthoring_Slot / _Binding / _Animation
+// family scanners; each is called directly by its classed action
+// (MCP/Calls/McpCalls_ManageBlueprint.cpp). Combined scanner branches that served
+// several sub-actions (set_style/set_clipping; bind_text/bind_visibility/
+// bind_color/bind_enabled; bind_on_clicked/bind_on_hovered) become one member per
+// sub-action, each holding the whole branch body and re-deriving the payload
+// sub-action via MCP_WIDGETAUTH_SUBACTION so it still steers the body. The Style /
+// Tree / Recipes / Misc families still route through HandleManageWidgetAuthoringAction.
 // -----------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
-    const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnchor(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
 {
-    TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
-    if (SubAction.Equals(TEXT("set_anchor"), ESearchCase::IgnoreCase))
-    {
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetSlotName(Payload);
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
@@ -2710,10 +2721,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Anchor set"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_alignment"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAlignment(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetSlotName(Payload);
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
@@ -2778,10 +2792,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Alignment set"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_position"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPosition(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetSlotName(Payload);
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
@@ -2851,10 +2868,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Position set"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_size"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetSize(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetSlotName(Payload);
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
@@ -2930,10 +2950,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Size set"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_padding"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPadding(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetSlotName(Payload);
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
@@ -3010,10 +3033,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Padding set"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_z_order"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetZOrder(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetSlotName(Payload);
         int32 ZOrder = static_cast<int32>(GetJsonNumberField(Payload, TEXT("zOrder"), 0));
@@ -3051,10 +3077,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Z-order set"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_render_transform"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetRenderTransform(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetSlotName(Payload);
 
@@ -3115,10 +3144,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Render transform set"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_visibility"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetVisibility(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetSlotName(Payload);
         FString VisibilityStr = GetJsonStringField(Payload, TEXT("visibility"), TEXT("Visible"));
@@ -3153,11 +3185,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Visibility set"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_style"), ESearchCase::IgnoreCase) ||
-        SubAction.Equals(TEXT("set_clipping"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetStyle(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
+    MCP_WIDGETAUTH_SUBACTION()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetSlotName(Payload);
 
@@ -3381,10 +3416,244 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, Msg, ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_font"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetClipping(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
+    MCP_WIDGETAUTH_SUBACTION()
+        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
+        FString SlotName = GetSlotName(Payload);
+
+        if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            return true;
+        }
+
+        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
+        if (!WidgetBP || !WidgetBP->WidgetTree)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            return true;
+        }
+
+        UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
+        if (!Widget)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
+            return true;
+        }
+
+        if (SubAction.Equals(TEXT("set_clipping"), ESearchCase::IgnoreCase))
+        {
+            FString ClippingStr = GetJsonStringField(Payload, TEXT("clipping"), TEXT("Inherit"));
+            EWidgetClipping Clipping = EWidgetClipping::Inherit;
+            if (ClippingStr.Equals(TEXT("ClipToBounds"), ESearchCase::IgnoreCase))
+            {
+                Clipping = EWidgetClipping::ClipToBounds;
+            }
+            else if (ClippingStr.Equals(TEXT("ClipToBoundsWithoutIntersecting"), ESearchCase::IgnoreCase))
+            {
+                Clipping = EWidgetClipping::ClipToBoundsWithoutIntersecting;
+            }
+            else if (ClippingStr.Equals(TEXT("ClipToBoundsAlways"), ESearchCase::IgnoreCase))
+            {
+                Clipping = EWidgetClipping::ClipToBoundsAlways;
+            }
+            else if (ClippingStr.Equals(TEXT("OnDemand"), ESearchCase::IgnoreCase))
+            {
+                Clipping = EWidgetClipping::OnDemand;
+            }
+            Widget->SetClipping(Clipping);
+            WidgetBP->MarkPackageDirty();
+            const bool bSaveSucceeded = McpSafeAssetSave(WidgetBP);
+
+            ResultJson->SetStringField(TEXT("mode"), TEXT("write"));
+            ResultJson->SetStringField(TEXT("propertyName"), TEXT("Clipping"));
+            ResultJson->SetStringField(TEXT("value"), ClippingStr);
+            ResultJson->SetStringField(TEXT("widgetName"), SlotName);
+            ResultJson->SetStringField(TEXT("widgetClass"), Widget->GetClass()->GetName());
+            ResultJson->SetBoolField(TEXT("saveSucceeded"), bSaveSucceeded);
+            if (!bSaveSucceeded)
+            {
+                ResultJson->SetStringField(TEXT("warning"), TEXT("Clipping changed in editor memory, but package save did not complete in the current headless session."));
+            }
+        }
+        else if (SubAction.Equals(TEXT("set_style"), ESearchCase::IgnoreCase))
+        {
+            // Generic property setter via UE reflection — works on any widget class, any property
+            FString PropertyName = GetJsonStringField(Payload, TEXT("propertyName"));
+            FString Value;
+            bool bUseJsonConverter = false;
+            TSharedPtr<FJsonValue> RawJsonValue;
+
+            McpPropertyReflection::FMcpTypedValue StyleTyped;
+            FString StyleParseDetail;
+            const McpPropertyReflection::EMcpTypedValueParse StyleParse =
+                McpPropertyReflection::ReadDiscriminatedValue(Payload, StyleTyped, StyleParseDetail);
+            if (StyleParse == McpPropertyReflection::EMcpTypedValueParse::Ambiguous)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    *FString::Printf(TEXT("set exactly one typed value field, got: %s"), *StyleParseDetail),
+                    TEXT("AMBIGUOUS_VALUE"));
+                return true;
+            }
+            bool bHasValueField = (StyleParse == McpPropertyReflection::EMcpTypedValueParse::Ok);
+            // Extract value from the typed field — handle string, number, bool, object, and array types
+            if (bHasValueField)
+            {
+                const TSharedPtr<FJsonValue> ValField = StyleTyped.Json;
+                if (ValField.IsValid())
+                {
+                    if (ValField->Type == EJson::String)
+                    {
+                        Value = ValField->AsString();
+                    }
+                    else if (ValField->Type == EJson::Number)
+                    {
+                        Value = FString::SanitizeFloat(ValField->AsNumber());
+                    }
+                    else if (ValField->Type == EJson::Boolean)
+                    {
+                        Value = ValField->AsBool() ? TEXT("True") : TEXT("False");
+                    }
+                    else if (ValField->Type == EJson::Object || ValField->Type == EJson::Array)
+                    {
+                        // Defer to FJsonObjectConverter for struct-backed properties
+                        bUseJsonConverter = true;
+                        RawJsonValue = ValField;
+                    }
+                    else if (ValField->Type == EJson::Null)
+                    {
+                        SendAutomationError(RequestingSocket, RequestId,
+                            TEXT("Null JSON value is not supported for property mutation"), TEXT("UNSUPPORTED_VALUE_TYPE"));
+                        return true;
+                    }
+                }
+            }
+
+            if (PropertyName.IsEmpty())
+            {
+                // Legacy path: if no propertyName given, try "style" param against "Style" property
+                // Reset state from any prior "value" field extraction to avoid stale data
+                bUseJsonConverter = false;
+                RawJsonValue.Reset();
+                Value.Empty();
+
+                PropertyName = TEXT("Style");
+                bHasValueField = Payload->HasField(TEXT("style"));
+                if (bHasValueField)
+                {
+                    const TSharedPtr<FJsonValue> StyleField = Payload->TryGetField(TEXT("style"));
+                    if (StyleField.IsValid() && (StyleField->Type == EJson::Object || StyleField->Type == EJson::Array))
+                    {
+                        bUseJsonConverter = true;
+                        RawJsonValue = StyleField;
+                    }
+                    else
+                    {
+                        Value = GetJsonStringField(Payload, TEXT("style"));
+                    }
+                }
+            }
+
+            if (PropertyName.IsEmpty())
+            {
+                SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: propertyName"), TEXT("MISSING_PARAMETER"));
+                return true;
+            }
+
+            FProperty* Prop = Widget->GetClass()->FindPropertyByName(FName(*PropertyName));
+            if (!Prop)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("Property '%s' not found on widget '%s' (class %s)"), *PropertyName, *SlotName, *Widget->GetClass()->GetName()),
+                    TEXT("PROPERTY_NOT_FOUND"));
+                return true;
+            }
+
+            void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Widget);
+
+            if (!bHasValueField)
+            {
+                // READ mode — value field not present, export and return current value
+                FString ExportedValue;
+                MCP_PROPERTY_EXPORT_TEXT(Prop, ExportedValue, ValuePtr, ValuePtr, Widget, PPF_None);
+
+                ResultJson->SetStringField(TEXT("mode"), TEXT("read"));
+                ResultJson->SetStringField(TEXT("propertyName"), PropertyName);
+                ResultJson->SetStringField(TEXT("value"), ExportedValue);
+                ResultJson->SetStringField(TEXT("widgetName"), SlotName);
+                ResultJson->SetStringField(TEXT("widgetClass"), Widget->GetClass()->GetName());
+            }
+            else
+            {
+                // WRITE mode — set the property value
+                Widget->Modify();
+
+                bool bWriteSuccess = false;
+                if (bUseJsonConverter && RawJsonValue.IsValid())
+                {
+                    // Use FJsonObjectConverter for struct-backed properties (Object/Array JSON)
+                    bWriteSuccess = FJsonObjectConverter::JsonValueToUProperty(RawJsonValue, Prop, ValuePtr, 0, 0);
+                }
+                else
+                {
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+                    const TCHAR* ImportResult = Prop->ImportText_Direct(*Value, ValuePtr, Widget, PPF_None);
+#else
+                    const TCHAR* ImportResult = Prop->ImportText(*Value, ValuePtr, PPF_None, Widget);
+#endif
+                    bWriteSuccess = (ImportResult != nullptr);
+                }
+                if (!bWriteSuccess)
+                {
+                    SendAutomationError(RequestingSocket, RequestId,
+                        FString::Printf(TEXT("Failed to set '%s' to '%s' on widget '%s'"), *PropertyName, *Value, *SlotName),
+                        TEXT("SET_PROPERTY_FAILED"));
+                    return true;
+                }
+
+                FPropertyChangedEvent ChangeEvent(Prop);
+                Widget->PostEditChangeProperty(ChangeEvent);
+
+                // Export the value back to verify what was actually set
+                FString ExportedValue;
+                MCP_PROPERTY_EXPORT_TEXT(Prop, ExportedValue, ValuePtr, ValuePtr, Widget, PPF_None);
+
+                ResultJson->SetStringField(TEXT("mode"), TEXT("write"));
+                ResultJson->SetStringField(TEXT("propertyName"), PropertyName);
+                ResultJson->SetStringField(TEXT("value"), Value);
+                ResultJson->SetStringField(TEXT("exportedValue"), ExportedValue);
+                ResultJson->SetStringField(TEXT("widgetName"), SlotName);
+                ResultJson->SetStringField(TEXT("widgetClass"), Widget->GetClass()->GetName());
+
+                // Property change — mark dirty and save, do NOT recompile (that wipes instance values)
+                WidgetBP->MarkPackageDirty();
+                McpSafeAssetSave(WidgetBP);
+            }
+        }
+
+        ResultJson->SetBoolField(TEXT("success"), true);
+        FString ModeStr;
+        bool bIsRead = ResultJson->TryGetStringField(TEXT("mode"), ModeStr) && ModeStr == TEXT("read");
+        FString Msg = bIsRead
+            ? FString::Printf(TEXT("%s property read"), *SubAction)
+            : FString::Printf(TEXT("%s applied"), *SubAction);
+        ResultJson->SetStringField(TEXT("message"), Msg);
+
+        SendAutomationResponse(RequestingSocket, RequestId, true, Msg, ResultJson);
+        return true;
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetFont(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"));
         FString FontPath = GetJsonStringField(Payload, TEXT("font"));
@@ -3453,10 +3722,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set font"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_margin"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetMargin(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"));
         float Left = GetJsonNumberField(Payload, TEXT("left"), 0.0f);
@@ -3526,20 +3798,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set margin"), ResultJson);
         return true;
-    }
-
-    return false;
 }
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
-    const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindText(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
 {
-    TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
-    if (SubAction.Equals(TEXT("bind_text"), ESearchCase::IgnoreCase) ||
-        SubAction.Equals(TEXT("bind_visibility"), ESearchCase::IgnoreCase) ||
-        SubAction.Equals(TEXT("bind_color"), ESearchCase::IgnoreCase) ||
-        SubAction.Equals(TEXT("bind_enabled"), ESearchCase::IgnoreCase))
-    {
+    MCP_WIDGETAUTH_SUBACTION()
         SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("'%s' is not implemented: it does not create a UMG property binding. "
                 "For a live-updating value, author an event handler with bind_event_to_delegate "
@@ -3549,11 +3814,62 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
                 *SubAction),
             TEXT("NOT_IMPLEMENTED"));
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("bind_on_clicked"), ESearchCase::IgnoreCase) ||
-        SubAction.Equals(TEXT("bind_on_hovered"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindVisibility(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_SUBACTION()
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("'%s' is not implemented: it does not create a UMG property binding. "
+                "For a live-updating value, author an event handler with bind_event_to_delegate "
+                "(external delegate, e.g. an AttributeComponent) or bind_on_value_changed (child-widget "
+                "delegate) that calls the widget's setter. For a true property binding, create the getter "
+                "function in the Widget Blueprint and assign it via the designer's Bind dropdown."),
+                *SubAction),
+            TEXT("NOT_IMPLEMENTED"));
+        return true;
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindColor(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_SUBACTION()
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("'%s' is not implemented: it does not create a UMG property binding. "
+                "For a live-updating value, author an event handler with bind_event_to_delegate "
+                "(external delegate, e.g. an AttributeComponent) or bind_on_value_changed (child-widget "
+                "delegate) that calls the widget's setter. For a true property binding, create the getter "
+                "function in the Widget Blueprint and assign it via the designer's Bind dropdown."),
+                *SubAction),
+            TEXT("NOT_IMPLEMENTED"));
+        return true;
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEnabled(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_SUBACTION()
+        SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("'%s' is not implemented: it does not create a UMG property binding. "
+                "For a live-updating value, author an event handler with bind_event_to_delegate "
+                "(external delegate, e.g. an AttributeComponent) or bind_on_value_changed (child-widget "
+                "delegate) that calls the widget's setter. For a true property binding, create the getter "
+                "function in the Widget Blueprint and assign it via the designer's Bind dropdown."),
+                *SubAction),
+            TEXT("NOT_IMPLEMENTED"));
+        return true;
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnClicked(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
+    MCP_WIDGETAUTH_SUBACTION()
         // Real widget-delegate event binding (handles bind_on_clicked AND bind_on_hovered).
         //
         // Creates a UK2Node_ComponentBoundEvent in the widget BP's event graph for the
@@ -3760,10 +4076,227 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget delegate bound"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("bind_on_value_changed"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnHovered(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
+    MCP_WIDGETAUTH_SUBACTION()
+        // Real widget-delegate event binding (handles bind_on_clicked AND bind_on_hovered).
+        //
+        // Creates a UK2Node_ComponentBoundEvent in the widget BP's event graph for the
+        // named widget's multicast delegate (default "OnClicked" / "OnHovered"). This is the
+        // same node the UMG Designer's "+ OnClicked" button produces, so it works for ANY
+        // widget exposing a BlueprintAssignable delegate — plain UButton, UCommonButtonBase,
+        // custom user-widget buttons, etc. (The old bind_on_hovered stub cast to UButton and
+        // only returned instructions; it never wired anything and could not see Common UI
+        // buttons — it now shares this real path.)
+        //
+        // If "targetFunction" (alias "functionName") is supplied, a self CallFunction node
+        // for that function is created and the event's exec output is linked to it — e.g.
+        // binding a Back button's OnClicked straight to DeactivateWidget with one call.
+        //
+        // Params:
+        //   widgetPath     (required) - the widget Blueprint asset
+        //   slotName       (required) - the child widget whose delegate to bind
+        //   delegateName   (optional) - multicast delegate; default OnClicked / OnHovered
+        //   targetFunction (optional, alias functionName) - self UFUNCTION to call
+        const bool bHoveredVariant = SubAction.Equals(TEXT("bind_on_hovered"), ESearchCase::IgnoreCase);
+        FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
+        FString SlotName = GetSlotName(Payload);
+        FString DelegateName = GetJsonStringField(Payload, TEXT("delegateName"),
+            bHoveredVariant ? TEXT("OnHovered") : TEXT("OnClicked"));
+        FString TargetFunction = GetJsonStringField(Payload, TEXT("targetFunction"));
+        if (TargetFunction.IsEmpty())
+        {
+            TargetFunction = GetJsonStringField(Payload, TEXT("functionName"));
+        }
+
+        if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            return true;
+        }
+
+        UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
+        if (!WidgetBP || !WidgetBP->WidgetTree)
+        {
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            return true;
+        }
+
+        UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
+        if (!Widget)
+        {
+            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
+            return true;
+        }
+
+        // Group all graph mutations (event node + wiring + compile) as one undo
+        // unit. Non-const so error paths can Cancel() and roll back partial
+        // mutations instead of committing them to the undo stack.
+        FScopedTransaction Transaction(FText::FromString(
+            bHoveredVariant ? TEXT("Bind On Hovered") : TEXT("Bind On Clicked")));
+        const UEdGraphSchema_K2* K2 = GetDefault<UEdGraphSchema_K2>();
+
+        // The widget must be a variable for a bound event to reference it.
+        bool bMadeVariable = false;
+        if (!Widget->bIsVariable)
+        {
+            Widget->Modify();
+            Widget->bIsVariable = true;
+            bMadeVariable = true;
+            FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+        }
+
+        // The multicast delegate (e.g. OnClicked) lives on the widget's own class.
+        FMulticastDelegateProperty* DelegateProp =
+            FindFProperty<FMulticastDelegateProperty>(Widget->GetClass(), FName(*DelegateName));
+        if (!DelegateProp)
+        {
+            Transaction.Cancel();
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Delegate '%s' not found on widget '%s' (class %s)"),
+                    *DelegateName, *SlotName, *Widget->GetClass()->GetName()),
+                TEXT("DELEGATE_NOT_FOUND"));
+            return true;
+        }
+
+        // The widget variable is an FObjectProperty on the BP's generated class.
+        // Recompile once if it isn't visible yet (e.g. we just set bIsVariable).
+        auto FindWidgetVarProp = [&]() -> FObjectProperty*
+        {
+            UClass* SearchClass = WidgetBP->SkeletonGeneratedClass
+                ? (UClass*)WidgetBP->SkeletonGeneratedClass
+                : (UClass*)WidgetBP->GeneratedClass;
+            return SearchClass ? FindFProperty<FObjectProperty>(SearchClass, FName(*SlotName)) : nullptr;
+        };
+        FObjectProperty* WidgetVarProp = FindWidgetVarProp();
+        if (!WidgetVarProp)
+        {
+            FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::SkipGarbageCollection);
+            WidgetVarProp = FindWidgetVarProp();
+        }
+        if (!WidgetVarProp)
+        {
+            Transaction.Cancel();
+            SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Could not resolve widget variable property for '%s'"), *SlotName),
+                TEXT("WIDGET_VAR_NOT_FOUND"));
+            return true;
+        }
+
+        if (WidgetBP->UbergraphPages.Num() == 0)
+        {
+            Transaction.Cancel();
+            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no event graph"), TEXT("NO_EVENT_GRAPH"));
+            return true;
+        }
+        UEdGraph* EventGraph = WidgetBP->UbergraphPages[0];
+        EventGraph->Modify();
+
+        // Reuse an existing bound event for this (widget, delegate) if present.
+        UK2Node_ComponentBoundEvent* EventNode = nullptr;
+        {
+            TArray<UK2Node_ComponentBoundEvent*> ExistingBoundEvents;
+            FBlueprintEditorUtils::GetAllNodesOfClass<UK2Node_ComponentBoundEvent>(WidgetBP, ExistingBoundEvents);
+            for (UK2Node_ComponentBoundEvent* BE : ExistingBoundEvents)
+            {
+                if (BE && BE->ComponentPropertyName == WidgetVarProp->GetFName()
+                    && BE->DelegatePropertyName == DelegateProp->GetFName())
+                {
+                    EventNode = BE;
+                    break;
+                }
+            }
+        }
+        const bool bEventExisted = (EventNode != nullptr);
+        // Self-layout anchor for this chain. A brand-new event is stacked below any
+        // event roots already in the graph (count * row gap) so generated chains
+        // don't smoosh at (0,0); a reused event keeps its place and new nodes anchor
+        // to it. Within-chain offsets below are added to (BaseX, BaseY).
+        int32 BaseX = 0;
+        int32 BaseY = 0;
+        if (!EventNode)
+        {
+            int32 ExistingEventChains = 0;
+            for (const UEdGraphNode* ExistingNode : EventGraph->Nodes)
+            {
+                if (ExistingNode && ExistingNode->IsA<UK2Node_Event>()) { ++ExistingEventChains; }
+            }
+            BaseY = ExistingEventChains * McpWidgetChainRowGapY;
+
+            FGraphNodeCreator<UK2Node_ComponentBoundEvent> EventCreator(*EventGraph);
+            EventNode = EventCreator.CreateNode(false);
+            EventNode->InitializeComponentBoundEventParams(WidgetVarProp, DelegateProp);
+            EventNode->NodePosX = BaseX;
+            EventNode->NodePosY = BaseY;
+            EventCreator.Finalize();
+        }
+        else
+        {
+            BaseX = EventNode->NodePosX;
+            BaseY = EventNode->NodePosY;
+        }
+
+        // Optionally create + wire a self function call (e.g. DeactivateWidget).
+        bool bWiredTargetFunction = false;
+        if (!TargetFunction.IsEmpty())
+        {
+            UClass* SelfClass = WidgetBP->GeneratedClass ? (UClass*)WidgetBP->GeneratedClass : (UClass*)WidgetBP->ParentClass;
+            UFunction* Func = SelfClass ? SelfClass->FindFunctionByName(FName(*TargetFunction)) : nullptr;
+            if (!Func)
+            {
+                SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("targetFunction '%s' not found on %s"), *TargetFunction,
+                        SelfClass ? *SelfClass->GetName() : TEXT("<null>")),
+                    TEXT("FUNCTION_NOT_FOUND"));
+                return true;
+            }
+
+            FGraphNodeCreator<UK2Node_CallFunction> CallCreator(*EventGraph);
+            UK2Node_CallFunction* CallNode = CallCreator.CreateNode(false);
+            CallNode->SetFromFunction(Func);
+            CallNode->NodePosX = BaseX + 400;
+            CallNode->NodePosY = BaseY;
+            CallCreator.Finalize();
+
+            UEdGraphPin* EventThen = EventNode->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+            UEdGraphPin* CallExec = CallNode->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+            // Schema-checked connect (validates pin compatibility) instead of raw MakeLinkTo.
+            bWiredTargetFunction = EventThen && CallExec && K2->TryCreateConnection(EventThen, CallExec);
+        }
+
+        // Compile so the binding is generated, then persist.
+        FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::SkipGarbageCollection);
+        WidgetBP->MarkPackageDirty();
+        const bool bSaved = McpSafeAssetSave(WidgetBP);
+
+        ResultJson->SetBoolField(TEXT("success"), true);
+        ResultJson->SetStringField(TEXT("widgetName"), SlotName);
+        ResultJson->SetStringField(TEXT("widgetClass"), Widget->GetClass()->GetName());
+        ResultJson->SetStringField(TEXT("delegate"), DelegateName);
+        ResultJson->SetStringField(TEXT("eventNode"), EventNode->GetName());
+        ResultJson->SetBoolField(TEXT("eventAlreadyExisted"), bEventExisted);
+        ResultJson->SetBoolField(TEXT("madeWidgetVariable"), bMadeVariable);
+        if (!TargetFunction.IsEmpty())
+        {
+            ResultJson->SetStringField(TEXT("targetFunction"), TargetFunction);
+            ResultJson->SetBoolField(TEXT("wiredTargetFunction"), bWiredTargetFunction);
+        }
+        ResultJson->SetBoolField(TEXT("saveSucceeded"), bSaved);
+
+        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget delegate bound"), ResultJson);
+        return true;
+}
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnValueChanged(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         // Real value-changed binding (was a stub that only returned an instruction
         // string and wired nothing). Mirrors the real bind_on_clicked: creates a
         // UK2Node_ComponentBoundEvent for the widget's value-changed multicast
@@ -4001,8 +4534,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("OnValueChanged bound"), ResultJson);
         return true;
-    }
+}
 
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEventToDelegate(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
     // bind_event_to_delegate — subscribe a widget event graph to a multicast
     // delegate on an EXTERNAL object reached via an event output pin (the "push"
     // HUD pattern: InitializeHud(Attributes) binds Attributes.OnHealthPercentUpdate
@@ -4012,8 +4550,6 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
     // signature-matched UK2Node_CustomEvent. The source event must already exist
     // (run add_event first); the new chain is appended to the END of its exec run so
     // repeated binds (health, then magic) stack instead of fighting over the Then pin.
-    if (SubAction.Equals(TEXT("bind_event_to_delegate"), ESearchCase::IgnoreCase))
-    {
         const FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         const FString EventName = GetJsonStringField(Payload, TEXT("eventName"));
         const FString OwnerPinName = GetJsonStringField(Payload, TEXT("ownerPin"));
@@ -4266,10 +4802,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
         SendAutomationResponse(RequestingSocket, RequestId, true,
             FString::Printf(TEXT("Bound %s.%s -> %s"), *OwnerClass->GetName(), *DelegateName, *HandlerEventName), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("create_property_binding"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreatePropertyBinding(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
         // Never created an FDelegateEditorBinding — only returned an advisory "instruction".
         // Same unbuilt feature as bind_text et al. Fail honestly and point at the working path.
         SendAutomationError(RequestingSocket, RequestId,
@@ -4280,10 +4818,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
                  "designer's Bind dropdown."),
             TEXT("NOT_IMPLEMENTED"));
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_widget_binding"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetWidgetBinding(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         if (WidgetPath.IsEmpty())
         {
@@ -4344,10 +4884,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
                  "create the getter in the Widget Blueprint and assign it via the designer's Bind dropdown."),
             TEXT("NOT_IMPLEMENTED"));
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("bind_localized_text"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindLocalizedText(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"));
         FString StringTableId = GetJsonStringField(Payload, TEXT("stringTableId"));
@@ -4399,17 +4942,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Binding(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Bound localized text"), ResultJson);
         return true;
-    }
-
-    return false;
 }
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
-    const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetAnimation(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
 {
-    TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
-    if (SubAction.Equals(TEXT("create_widget_animation"), ESearchCase::IgnoreCase))
-    {
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString AnimationName = GetJsonStringField(Payload, TEXT("animationName"), TEXT("NewAnimation"));
         double Duration = GetJsonNumberField(Payload, TEXT("duration"), 1.0);
@@ -4483,10 +5022,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
         
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget animation created"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_animation_track"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAnimationTrack(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString AnimationName = GetJsonStringField(Payload, TEXT("animationName"));
         FString SlotName = GetSlotName(Payload);
@@ -4573,10 +5115,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
         
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Animation track added"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_animation_keyframe"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAnimationKeyframe(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString AnimationName = GetJsonStringField(Payload, TEXT("animationName"));
         double Time = GetJsonNumberField(Payload, TEXT("time"), 0.0);
@@ -4622,10 +5166,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
                  "to resolve the track's MovieSceneFloatChannel and insert the key."),
             TEXT("NOT_IMPLEMENTED"));
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_animation_loop"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnimationLoop(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString AnimationName = GetJsonStringField(Payload, TEXT("animationName"));
         bool bLoop = GetJsonBoolField(Payload, TEXT("loop"), true);
@@ -4671,10 +5217,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
                  "or use PlayAnimation's looping mode)."),
             TEXT("NOT_IMPLEMENTED"));
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_animation_speed"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnimationSpeed(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString AnimationName = GetJsonStringField(Payload, TEXT("animationName"));
         float PlaybackSpeed = GetJsonNumberField(Payload, TEXT("speed"), 1.0f);
@@ -4717,10 +5265,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
                  "asset. Pass PlaybackSpeed to PlayAnimation() at runtime."),
             TEXT("NOT_IMPLEMENTED"));
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("get_animation_info"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetAnimationInfo(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString AnimationName = GetJsonStringField(Payload, TEXT("animationName"));
 
@@ -4827,10 +5378,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Retrieved animation info"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("delete_animation"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringDeleteAnimation(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString AnimationName = GetJsonStringField(Payload, TEXT("animationName"));
 
@@ -4873,9 +5427,6 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Animation(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Deleted animation"), ResultJson);
         return true;
-    }
-
-    return false;
 }
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Style(
     const FString& SubAction, const FString& RequestId, const FString& Action,
@@ -7557,12 +8108,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
 
     // Family sub-handlers. Each returns true once it has handled (and responded
     // to) SubAction, false if SubAction isn't one of its own, so the next family
-    // is tried. The Lifecycle / Containers / Leaves families were hoisted to
-    // per-action members dispatched directly by their classed actions
-    // (MCP/Calls/McpCalls_ManageBlueprint.cpp) and no longer route through here.
-    if (HandleWidgetAuthoring_Slot(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
-    if (HandleWidgetAuthoring_Binding(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
-    if (HandleWidgetAuthoring_Animation(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
+    // is tried. The Lifecycle / Containers / Leaves and Slot / Binding / Animation
+    // families were hoisted to per-action members dispatched directly by their
+    // classed actions (MCP/Calls/McpCalls_ManageBlueprint.cpp) and no longer route
+    // through here.
     if (HandleWidgetAuthoring_Style(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
     if (HandleWidgetAuthoring_Tree(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
     if (HandleWidgetAuthoring_Recipes(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
