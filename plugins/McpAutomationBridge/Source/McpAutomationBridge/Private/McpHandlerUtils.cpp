@@ -94,6 +94,31 @@ FString JsonValueToString(const TSharedPtr<FJsonValue>& Value)
 // =============================================================================
 
 #if WITH_EDITOR
+UWorld* GetActorLookupWorld(bool* bOutIsPieWorld)
+{
+    UWorld* World = nullptr;
+    bool bIsPieWorld = false;
+
+    if (GEditor)
+    {
+        if (const FWorldContext* PieContext = GEditor->GetPIEWorldContext())
+        {
+            World = PieContext->World();
+            bIsPieWorld = (World != nullptr);
+        }
+        if (!World)
+        {
+            World = GEditor->GetEditorWorldContext().World();
+        }
+    }
+
+    if (bOutIsPieWorld)
+    {
+        *bOutIsPieWorld = bIsPieWorld;
+    }
+    return World;
+}
+
 AActor* FindActorByName(UWorld* World, const FString& Name, EMcpActorNameMatch Match)
 {
     if (!World || Name.IsEmpty())

@@ -390,7 +390,7 @@ static bool HandleAddSplinePoint(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -458,7 +458,7 @@ static bool HandleRemoveSplinePoint(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -523,7 +523,7 @@ static bool HandleSetSplinePointPosition(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -588,7 +588,7 @@ static bool HandleSetSplinePointTangents(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -661,7 +661,7 @@ static bool HandleSetSplinePointRotation(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -725,7 +725,7 @@ static bool HandleSetSplinePointScale(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -789,7 +789,7 @@ static bool HandleSetSplineType(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -1018,7 +1018,7 @@ static bool HandleSetSplineMeshAsset(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -1102,7 +1102,7 @@ static bool HandleConfigureSplineMeshAxis(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -1191,7 +1191,7 @@ static bool HandleSetSplineMeshMaterial(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -1282,7 +1282,7 @@ static bool HandleScatterMeshesAlongSpline(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,
@@ -1572,7 +1572,7 @@ static bool HandleGetSplinesInfo(
 {
     FString ActorName = GetJsonStringFieldSpline(Payload, TEXT("actorName"));
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         Self->SendAutomationResponse(Socket, RequestId, false,

@@ -1037,7 +1037,7 @@ bool McpHandlers::Networking::HandleNetworkingSetOwner(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         S.SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
@@ -1161,7 +1161,7 @@ bool McpHandlers::Networking::HandleNetworkingCheckHasAuthority(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         S.SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
@@ -1209,7 +1209,7 @@ bool McpHandlers::Networking::HandleNetworkingCheckIsLocallyControlled(
         return true;
     }
 
-    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld();
     if (!World)
     {
         S.SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));
@@ -2188,7 +2188,7 @@ bool McpHandlers::Networking::HandleNetworkingGetInfo(
     }
     else if (!ActorName.IsEmpty())
     {
-        UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+        UWorld* World = McpHandlerUtils::GetActorLookupWorld();
         if (!World)
         {
             S.SendAutomationError(Socket, RequestId, TEXT("No world available"), TEXT("NO_WORLD"));

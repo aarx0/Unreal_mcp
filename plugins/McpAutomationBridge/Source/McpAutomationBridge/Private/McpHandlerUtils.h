@@ -232,6 +232,18 @@ namespace McpHandlerUtils
 
 #if WITH_EDITOR
     /**
+     * The world that name/class/tag actor lookups should target: the PIE world
+     * when a play session is active, otherwise the editor world. Resolved via
+     * GEditor->GetPIEWorldContext() (instance 0, deterministic) rather than
+     * GEditor->PlayWorld, which UEditorEngine::Tick reassigns per PIE context
+     * (last-context-wins, can be null mid-teardown) and so is nondeterministic
+     * under multi-instance PIE.
+     * @param bOutIsPieWorld Optional; set true when the returned world is PIE.
+     * @return The lookup world, or nullptr when no editor exists.
+     */
+    MCPAUTOMATIONBRIDGE_API class UWorld* GetActorLookupWorld(bool* bOutIsPieWorld = nullptr);
+
+    /**
      * Find an actor by name in the given world.
      * @param World The world to search; nullptr yields nullptr
      * @param Name Actor object name, editor label, or full path to match

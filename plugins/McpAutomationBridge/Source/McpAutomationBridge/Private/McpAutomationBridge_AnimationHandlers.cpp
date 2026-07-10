@@ -2905,51 +2905,7 @@ bool McpHandlers::AnimationPhysics::HandlePlayAnimMontage(
   double PlayRate = 1.0;
   Payload->TryGetNumberField(TEXT("playRate"), PlayRate);
 
-  if (!GEditor || !GEditor->GetEditorWorldContext().World()) {
-    S.SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("Editor world not available"),
-                        TEXT("EDITOR_NOT_AVAILABLE"));
-    return true;
-  }
-
-  UEditorActorSubsystem *ActorSS =
-      GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
-  if (!ActorSS) {
-    S.SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("EditorActorSubsystem not available"),
-                        TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
-    return true;
-  }
-
-  TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
-  AActor *TargetActor = nullptr;
-
-  if (GEditor && GEditor->GetEditorWorldContext().World()) {
-    UWorld *World = GEditor->GetEditorWorldContext().World();
-    for (TActorIterator<AActor> It(World); It; ++It) {
-      AActor *Actor = *It;
-      if (Actor) {
-        if (Actor->GetActorLabel().Equals(ActorName, ESearchCase::IgnoreCase) ||
-            Actor->GetName().Equals(ActorName, ESearchCase::IgnoreCase)) {
-          TargetActor = Actor;
-          break;
-        }
-      }
-    }
-  }
-
-  // Fallback to ActorSS search if iterator didn't find it (rare but redundant
-  // safety)
-  if (!TargetActor) {
-    for (AActor *Actor : AllActors) {
-      if (Actor &&
-          (Actor->GetActorLabel().Equals(ActorName, ESearchCase::IgnoreCase) ||
-           Actor->GetName().Equals(ActorName, ESearchCase::IgnoreCase))) {
-        TargetActor = Actor;
-        break;
-      }
-    }
-  }
+  AActor *TargetActor = S.FindActorByName(ActorName);
 
   if (!TargetActor) {
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();

@@ -1975,9 +1975,10 @@ bool McpHandlers::Inspect::HandleInspectListObjects(
     TArray<TSharedPtr<FJsonValue>> ObjectsArray;
     int32 Matched = 0;
     bool bTruncated = false;
-    if (GEditor && GEditor->GetEditorWorldContext().World())
+    bool bIsPieWorld = false;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld(&bIsPieWorld);
+    if (World)
     {
-        UWorld* World = GEditor->GetEditorWorldContext().World();
         for (TActorIterator<AActor> It(World); It; ++It)
         {
             AActor* Actor = *It;
@@ -2007,6 +2008,13 @@ bool McpHandlers::Inspect::HandleInspectListObjects(
     Resp->SetNumberField(TEXT("count"), ObjectsArray.Num());
     Resp->SetNumberField(TEXT("matched"), Matched);
     Resp->SetBoolField(TEXT("truncated"), bTruncated);
+    Resp->SetBoolField(TEXT("isPieWorld"), bIsPieWorld);
+    if (World)
+    {
+        Resp->SetStringField(TEXT("worldName"), World->GetName());
+        Resp->SetStringField(TEXT("worldPackage"), World->GetOutermost()->GetName());
+        Resp->SetBoolField(TEXT("hasBegunPlay"), World->HasBegunPlay());
+    }
     Resp->SetBoolField(TEXT("success"), true);
     S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Objects listed"), Resp, FString());
@@ -2040,10 +2048,11 @@ bool McpHandlers::Inspect::HandleInspectFindByClass(
     TArray<TSharedPtr<FJsonValue>> ObjectsArray;
     int32 Matched = 0;
     bool bTruncated = false;
+    bool bIsPieWorld = false;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld(&bIsPieWorld);
 
-    if (GEditor && GEditor->GetEditorWorldContext().World() && !ClassName.IsEmpty())
+    if (World && !ClassName.IsEmpty())
     {
-        UWorld* World = GEditor->GetEditorWorldContext().World();
         for (TActorIterator<AActor> It(World); It; ++It)
         {
             AActor* Actor = *It;
@@ -2068,6 +2077,13 @@ bool McpHandlers::Inspect::HandleInspectFindByClass(
     Resp->SetNumberField(TEXT("count"), ObjectsArray.Num());
     Resp->SetNumberField(TEXT("matched"), Matched);
     Resp->SetBoolField(TEXT("truncated"), bTruncated);
+    Resp->SetBoolField(TEXT("isPieWorld"), bIsPieWorld);
+    if (World)
+    {
+        Resp->SetStringField(TEXT("worldName"), World->GetName());
+        Resp->SetStringField(TEXT("worldPackage"), World->GetOutermost()->GetName());
+        Resp->SetBoolField(TEXT("hasBegunPlay"), World->HasBegunPlay());
+    }
     Resp->SetBoolField(TEXT("success"), true);
     S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Objects found by class"), Resp, FString());
@@ -2083,10 +2099,11 @@ bool McpHandlers::Inspect::HandleInspectFindByTag(
     FString Tag;
     Payload->TryGetStringField(TEXT("tag"), Tag);
     TArray<TSharedPtr<FJsonValue>> ObjectsArray;
+    bool bIsPieWorld = false;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld(&bIsPieWorld);
 
-    if (GEditor && GEditor->GetEditorWorldContext().World() && !Tag.IsEmpty())
+    if (World && !Tag.IsEmpty())
     {
-        UWorld* World = GEditor->GetEditorWorldContext().World();
         for (TActorIterator<AActor> It(World); It; ++It)
         {
             AActor* Actor = *It;
@@ -2102,6 +2119,13 @@ bool McpHandlers::Inspect::HandleInspectFindByTag(
     }
     Resp->SetArrayField(TEXT("objects"), ObjectsArray);
     Resp->SetNumberField(TEXT("count"), ObjectsArray.Num());
+    Resp->SetBoolField(TEXT("isPieWorld"), bIsPieWorld);
+    if (World)
+    {
+        Resp->SetStringField(TEXT("worldName"), World->GetName());
+        Resp->SetStringField(TEXT("worldPackage"), World->GetOutermost()->GetName());
+        Resp->SetBoolField(TEXT("hasBegunPlay"), World->HasBegunPlay());
+    }
     Resp->SetBoolField(TEXT("success"), true);
     S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Objects found by tag"), Resp, FString());

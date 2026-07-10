@@ -1671,11 +1671,17 @@ bool McpHandlers::ControlActor::HandleControlActorFindByTag(
   UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
          TEXT("HandleControlActorFindByTag: Searching for tag '%s' (FName: %s)"),
          *TagValue, *TagName.ToString());
-  UEditorActorSubsystem *ActorSS =
-      GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
-  TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
-  
-  
+  bool bIsPieWorld = false;
+  UWorld *World = McpHandlerUtils::GetActorLookupWorld(&bIsPieWorld);
+  TArray<AActor *> AllActors;
+  if (World) {
+    for (TActorIterator<AActor> It(World); It; ++It) {
+      if (AActor *Actor = *It) {
+        AllActors.Add(Actor);
+      }
+    }
+  }
+
   // Log total actors being searched
   UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
          TEXT("HandleControlActorFindByTag: Searching %d actors in level"), AllActors.Num());
@@ -1718,6 +1724,12 @@ bool McpHandlers::ControlActor::HandleControlActorFindByTag(
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   Data->SetArrayField(TEXT("actors"), Matches);
   Data->SetNumberField(TEXT("count"), Matches.Num());
+  Data->SetBoolField(TEXT("isPieWorld"), bIsPieWorld);
+  if (World) {
+    Data->SetStringField(TEXT("worldName"), World->GetName());
+    Data->SetStringField(TEXT("worldPackage"), World->GetOutermost()->GetName());
+    Data->SetBoolField(TEXT("hasBegunPlay"), World->HasBegunPlay());
+  }
   S.SendAutomationResponse(Socket, RequestId, true, TEXT("Actors found"), Data);
   return true;
 #else
@@ -1790,9 +1802,16 @@ bool McpHandlers::ControlActor::HandleControlActorFindByName(
     return true;
   }
 
-  UEditorActorSubsystem *ActorSS =
-      GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
-  const TArray<AActor *> AllActors = ActorSS->GetAllLevelActors();
+  bool bIsPieWorld = false;
+  UWorld *World = McpHandlerUtils::GetActorLookupWorld(&bIsPieWorld);
+  TArray<AActor *> AllActors;
+  if (World) {
+    for (TActorIterator<AActor> It(World); It; ++It) {
+      if (AActor *Actor = *It) {
+        AllActors.Add(Actor);
+      }
+    }
+  }
   TArray<TSharedPtr<FJsonValue>> Matches;
   for (AActor *Actor : AllActors) {
     if (!Actor)
@@ -1819,6 +1838,12 @@ bool McpHandlers::ControlActor::HandleControlActorFindByName(
   Data->SetNumberField(TEXT("count"), Matches.Num());
   Data->SetArrayField(TEXT("actors"), Matches);
   Data->SetStringField(TEXT("query"), Query);
+  Data->SetBoolField(TEXT("isPieWorld"), bIsPieWorld);
+  if (World) {
+    Data->SetStringField(TEXT("worldName"), World->GetName());
+    Data->SetStringField(TEXT("worldPackage"), World->GetOutermost()->GetName());
+    Data->SetBoolField(TEXT("hasBegunPlay"), World->HasBegunPlay());
+  }
   S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Actor query executed"), Data);
   return true;
@@ -2355,21 +2380,8 @@ bool McpHandlers::ControlActor::HandleControlActorFindByClass(
   int32 Matched = 0;
   bool bTruncated = false;
 
-  // Prefer the PIE world when active, matching HandleControlActorList and
-  // FindActorByName — otherwise by-class enumeration misses every PIE actor
-  // while the by-name path finds them. Resolve via GetPIEWorldContext()
-  // (instance 0), NOT GEditor->PlayWorld: PlayWorld is per-frame scratch that
-  // UEditorEngine::Tick reassigns per PIE context (last-context-wins, can be
-  // null mid-teardown) — nondeterministic under multi-instance PIE.
-  UWorld* World = nullptr;
   bool bIsPieWorld = false;
-  if (const FWorldContext* PieContext = GEditor->GetPIEWorldContext()) {
-    World = PieContext->World();
-    bIsPieWorld = (World != nullptr);
-  }
-  if (!World) {
-    World = GEditor->GetEditorWorldContext().World();
-  }
+  UWorld* World = McpHandlerUtils::GetActorLookupWorld(&bIsPieWorld);
   if (World) {
     UClass* ClassToFind = nullptr;
 
