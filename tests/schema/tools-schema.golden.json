@@ -5791,10 +5791,6 @@
           },
           "type": "object"
         },
-        "sourceNodeGuid": {
-          "description": "connect_pins: source node GUID (alias of sourceNodeId).",
-          "type": "string"
-        },
         "sourceNodeId": {
           "description": "ID of the source node.",
           "type": "string"
@@ -5860,10 +5856,6 @@
         },
         "targetFunction": {
           "description": "bind_on_clicked/bind_on_hovered: self UFUNCTION to call (alias functionName).",
-          "type": "string"
-        },
-        "targetNodeGuid": {
-          "description": "connect_pins: target node GUID (alias of targetNodeId).",
           "type": "string"
         },
         "targetNodeId": {
