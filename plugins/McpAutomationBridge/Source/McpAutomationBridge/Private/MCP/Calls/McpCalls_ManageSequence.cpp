@@ -285,24 +285,7 @@ static void S_SetTrackLocked(FMcpSchemaBuilder& B)
 // RequiresEditor in) because list_track_types is pure reflection — no editor,
 // no mutation.
 
-#define MCP_MS_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                         \
-class FMcpCall_ManageSequence_##ClassSuffix final : public FMcpCall                       \
-{                                                                                         \
-	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
-	const FMcpCallDecl& GetDecl() const override                                          \
-	{                                                                                     \
-		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_sequence"),             \
-			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                             \
-		return D;                                                                         \
-	}                                                                                     \
-	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
-	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
-	{                                                                                     \
-		return S.HandlerFn(RequestId, Payload, Socket);                                   \
-	}                                                                                     \
-};
-
-#define MCP_MS_CALL_NS(ClassSuffix, ActionLiteral, HandlerFn, Flags)                      \
+#define MCP_MS_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                      \
 class FMcpCall_ManageSequence_##ClassSuffix final : public FMcpCall                       \
 {                                                                                         \
 	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
@@ -319,41 +302,40 @@ class FMcpCall_ManageSequence_##ClassSuffix final : public FMcpCall             
 	}                                                                                     \
 };
 
-MCP_MS_CALL_NS(Create, "create", McpHandlers::Sequence::HandleSequenceCreate, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(Open, "open", HandleSequenceOpen, EMcpCallFlags::RequiresEditor)
-MCP_MS_CALL_NS(List, "list", McpHandlers::Sequence::HandleSequenceList, EMcpCallFlags::RequiresEditor)
-MCP_MS_CALL_NS(Duplicate, "duplicate", McpHandlers::Sequence::HandleSequenceDuplicate, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL_NS(Rename, "rename", McpHandlers::Sequence::HandleSequenceRename, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL_NS(Delete, "delete", McpHandlers::Sequence::HandleSequenceDelete, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(GetBindings, "get_bindings", HandleSequenceGetBindings, EMcpCallFlags::RequiresEditor)
-MCP_MS_CALL(GetMetadata, "get_metadata", HandleSequenceGetMetadata, EMcpCallFlags::RequiresEditor)
-MCP_MS_CALL(GetProperties, "get_properties", HandleSequenceGetProperties, EMcpCallFlags::RequiresEditor)
-MCP_MS_CALL(SetProperties, "set_properties", HandleSequenceSetProperties, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(AddCamera, "add_camera", HandleSequenceAddCamera, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(AddActor, "add_actor", HandleSequenceAddActor, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(AddActors, "add_actors", HandleSequenceAddActors, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(RemoveActors, "remove_actors", HandleSequenceRemoveActors, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(AddSpawnableFromClass, "add_spawnable_from_class", HandleSequenceAddSpawnable, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(AddKeyframe, "add_keyframe", HandleSequenceAddKeyframe, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(AddSection, "add_section", HandleSequenceAddSection, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(AddTrack, "add_track", HandleSequenceAddTrack, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(RemoveTrack, "remove_track", HandleSequenceRemoveTrack, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(ListTracks, "list_tracks", HandleSequenceListTracks, EMcpCallFlags::RequiresEditor)
-MCP_MS_CALL_NS(ListTrackTypes, "list_track_types", McpHandlers::Sequence::HandleSequenceListTrackTypes, EMcpCallFlags::None)
-MCP_MS_CALL(Play, "play", HandleSequencePlay, EMcpCallFlags::RequiresEditor)
-MCP_MS_CALL(Pause, "pause", HandleSequencePause, EMcpCallFlags::RequiresEditor)
-MCP_MS_CALL(Stop, "stop", HandleSequenceStop, EMcpCallFlags::RequiresEditor)
-MCP_MS_CALL(SetPlaybackSpeed, "set_playback_speed", HandleSequenceSetPlaybackSpeed, EMcpCallFlags::RequiresEditor)
-MCP_MS_CALL(SetDisplayRate, "set_display_rate", HandleSequenceSetDisplayRate, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(SetTickResolution, "set_tick_resolution", HandleSequenceSetTickResolution, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(SetViewRange, "set_view_range", HandleSequenceSetViewRange, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(SetWorkRange, "set_work_range", HandleSequenceSetWorkRange, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(SetTrackMuted, "set_track_muted", HandleSequenceSetTrackMuted, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(SetTrackSolo, "set_track_solo", HandleSequenceSetTrackSolo, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MS_CALL(SetTrackLocked, "set_track_locked", HandleSequenceSetTrackLocked, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(Create, "create", McpHandlers::Sequence::HandleSequenceCreate, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(Open, "open", McpHandlers::Sequence::HandleSequenceOpen, EMcpCallFlags::RequiresEditor)
+MCP_MS_CALL(List, "list", McpHandlers::Sequence::HandleSequenceList, EMcpCallFlags::RequiresEditor)
+MCP_MS_CALL(Duplicate, "duplicate", McpHandlers::Sequence::HandleSequenceDuplicate, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(Rename, "rename", McpHandlers::Sequence::HandleSequenceRename, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(Delete, "delete", McpHandlers::Sequence::HandleSequenceDelete, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(GetBindings, "get_bindings", McpHandlers::Sequence::HandleSequenceGetBindings, EMcpCallFlags::RequiresEditor)
+MCP_MS_CALL(GetMetadata, "get_metadata", McpHandlers::Sequence::HandleSequenceGetMetadata, EMcpCallFlags::RequiresEditor)
+MCP_MS_CALL(GetProperties, "get_properties", McpHandlers::Sequence::HandleSequenceGetProperties, EMcpCallFlags::RequiresEditor)
+MCP_MS_CALL(SetProperties, "set_properties", McpHandlers::Sequence::HandleSequenceSetProperties, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(AddCamera, "add_camera", McpHandlers::Sequence::HandleSequenceAddCamera, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(AddActor, "add_actor", McpHandlers::Sequence::HandleSequenceAddActor, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(AddActors, "add_actors", McpHandlers::Sequence::HandleSequenceAddActors, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(RemoveActors, "remove_actors", McpHandlers::Sequence::HandleSequenceRemoveActors, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(AddSpawnableFromClass, "add_spawnable_from_class", McpHandlers::Sequence::HandleSequenceAddSpawnable, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(AddKeyframe, "add_keyframe", McpHandlers::Sequence::HandleSequenceAddKeyframe, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(AddSection, "add_section", McpHandlers::Sequence::HandleSequenceAddSection, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(AddTrack, "add_track", McpHandlers::Sequence::HandleSequenceAddTrack, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(RemoveTrack, "remove_track", McpHandlers::Sequence::HandleSequenceRemoveTrack, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(ListTracks, "list_tracks", McpHandlers::Sequence::HandleSequenceListTracks, EMcpCallFlags::RequiresEditor)
+MCP_MS_CALL(ListTrackTypes, "list_track_types", McpHandlers::Sequence::HandleSequenceListTrackTypes, EMcpCallFlags::None)
+MCP_MS_CALL(Play, "play", McpHandlers::Sequence::HandleSequencePlay, EMcpCallFlags::RequiresEditor)
+MCP_MS_CALL(Pause, "pause", McpHandlers::Sequence::HandleSequencePause, EMcpCallFlags::RequiresEditor)
+MCP_MS_CALL(Stop, "stop", McpHandlers::Sequence::HandleSequenceStop, EMcpCallFlags::RequiresEditor)
+MCP_MS_CALL(SetPlaybackSpeed, "set_playback_speed", McpHandlers::Sequence::HandleSequenceSetPlaybackSpeed, EMcpCallFlags::RequiresEditor)
+MCP_MS_CALL(SetDisplayRate, "set_display_rate", McpHandlers::Sequence::HandleSequenceSetDisplayRate, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(SetTickResolution, "set_tick_resolution", McpHandlers::Sequence::HandleSequenceSetTickResolution, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(SetViewRange, "set_view_range", McpHandlers::Sequence::HandleSequenceSetViewRange, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(SetWorkRange, "set_work_range", McpHandlers::Sequence::HandleSequenceSetWorkRange, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(SetTrackMuted, "set_track_muted", McpHandlers::Sequence::HandleSequenceSetTrackMuted, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(SetTrackSolo, "set_track_solo", McpHandlers::Sequence::HandleSequenceSetTrackSolo, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MS_CALL(SetTrackLocked, "set_track_locked", McpHandlers::Sequence::HandleSequenceSetTrackLocked, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 #undef MCP_MS_CALL
-#undef MCP_MS_CALL_NS
 
 } // namespace McpCalls::ManageSequence
 

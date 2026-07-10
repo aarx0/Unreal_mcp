@@ -263,15 +263,15 @@ if (NewObj) {
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceSetDisplayRate(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceSetDisplayRate(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("sequence_set_display_rate requires a sequence path"), nullptr,
         TEXT("INVALID_SEQUENCE"));
@@ -280,7 +280,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetDisplayRate(
 
   UObject *SeqObj = UEditorAssetLibrary::LoadAsset(SeqPath);
   if (!SeqObj) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
   }
@@ -329,24 +329,24 @@ if (bRateFound) {
         Resp->SetStringField(TEXT("displayRate"),
                              NewRate.ToPrettyText().ToString());
         McpHandlerUtils::AddVerification(Resp, LevelSeq);
-        SendAutomationResponse(Socket, RequestId, true,
+        S.SendAutomationResponse(Socket, RequestId, true,
                                TEXT("Display rate set"), Resp, FString());
         return true;
       }
 
-      SendAutomationResponse(Socket, RequestId, false,
+      S.SendAutomationResponse(Socket, RequestId, false,
                              TEXT("Invalid frameRate format"), nullptr,
                              TEXT("INVALID_ARGUMENT"));
       return true;
     }
   }
 
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("Invalid sequence type"), nullptr,
                          TEXT("INVALID_SEQUENCE"));
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       Socket, RequestId, false,
       TEXT("sequence_set_display_rate requires editor build"), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -354,14 +354,14 @@ if (bRateFound) {
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceSetProperties(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceSetProperties(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("sequence_set_properties requires a sequence path"), nullptr,
         TEXT("INVALID_SEQUENCE"));
@@ -369,7 +369,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetProperties(
   }
 
 #if WITH_EDITOR
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(this);
+  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(&S);
   FString RequestIdArg = RequestId;
 
   // Capture simple types. For JsonObject, we need to capture the data, not the
@@ -381,7 +381,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetProperties(
   // the Async task, but I need to capture LocalPayload. LocalPayload is a
   // SharedPtr, so it's safe to capture.
 
-  UMcpAutomationBridgeSubsystem *Subsystem = this;
+  UMcpAutomationBridgeSubsystem *Subsystem = &S;
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   UObject *SeqObj = UEditorAssetLibrary::LoadAsset(SeqPath);
   if (!SeqObj) {
@@ -482,30 +482,30 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetProperties(
       Resp, TEXT("NOT_IMPLEMENTED"));
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_set_properties requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceOpen(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceOpen(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sequence_open requires a sequence path"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
   }
 
 #if WITH_EDITOR
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(this);
+  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(&S);
   FString RequestIdArg = RequestId;
-  UMcpAutomationBridgeSubsystem *Subsystem = this;
+  UMcpAutomationBridgeSubsystem *Subsystem = &S;
   UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
          TEXT("HandleSequenceOpen: Opening sequence %s for RequestID=%s"),
          *SeqPath, *RequestIdArg);
@@ -558,21 +558,21 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceOpen(
                                     TEXT("Sequence opened"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_open requires editor build."), nullptr,
                          TEXT("NOT_AVAILABLE"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceAddCamera(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceAddCamera(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sequence_add_camera requires a sequence path"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
@@ -582,7 +582,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddCamera(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   UObject *SeqObj = UEditorAssetLibrary::LoadAsset(SeqPath);
   if (!SeqObj) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
   }
@@ -596,14 +596,14 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddCamera(
     if (Spawned) {
       ULevelSequence *LevelSeq = Cast<ULevelSequence>(SeqObj);
       if (!LevelSeq) {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             TEXT("Sequence object is not a LevelSequence"),
                             TEXT("INVALID_SEQUENCE"));
         return true;
       }
       UMovieScene *MovieScene = LevelSeq->GetMovieScene();
       if (!MovieScene) {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
                             TEXT("Sequence has no MovieScene"),
                             TEXT("INVALID_SEQUENCE"));
         return true;
@@ -622,7 +622,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddCamera(
       const FMovieSceneBindingReferences *BindingRefs =
           LevelSeq->GetBindingReferences();
       if (!BindingRefs || !BindingRefs->HasBinding(BindingGuid)) {
-        SendAutomationError(
+        S.SendAutomationError(
             Socket, RequestId,
             TEXT("Camera spawned but failed to bind to the sequence"),
             TEXT("ADD_CAMERA_BIND_FAILED"));
@@ -633,46 +633,46 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddCamera(
       Resp->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());
       Resp->SetBoolField(TEXT("success"), true);
       Resp->SetStringField(TEXT("actorLabel"), Spawned->GetActorLabel());
-      SendAutomationResponse(Socket, RequestId, true,
+      S.SendAutomationResponse(Socket, RequestId, true,
                              TEXT("Camera actor spawned and bound to sequence"),
                              Resp, FString());
       return true;
     }
   }
-  SendAutomationResponse(Socket, RequestId, false, TEXT("Failed to add camera"),
+  S.SendAutomationResponse(Socket, RequestId, false, TEXT("Failed to add camera"),
                          nullptr, TEXT("ADD_CAMERA_FAILED"));
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("UEditorActorSubsystem not available"), nullptr,
                          TEXT("NOT_AVAILABLE"));
   return true;
 #endif
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_add_camera requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequencePlay(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequencePlay(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("No sequence selected or path provided"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
   }
 
 #if WITH_EDITOR
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(this);
+  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(&S);
   FString RequestIdArg = RequestId;
-  UMcpAutomationBridgeSubsystem *Subsystem = this;
+  UMcpAutomationBridgeSubsystem *Subsystem = &S;
   ULevelSequence *LevelSeq =
       Cast<ULevelSequence>(UEditorAssetLibrary::LoadAsset(SeqPath));
   if (LevelSeq) {
@@ -688,28 +688,28 @@ bool UMcpAutomationBridgeSubsystem::HandleSequencePlay(
                                     nullptr, TEXT("EXECUTION_ERROR"));
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_play requires editor build."), nullptr,
                          TEXT("NOT_AVAILABLE"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceAddActor(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceAddActor(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString ActorName;
   LocalPayload->TryGetStringField(TEXT("actorName"), ActorName);
   if (ActorName.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("actorName required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("actorName required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sequence_add_actor requires a sequence path"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
@@ -726,31 +726,31 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddActor(
   NamesArray.Add(MakeShared<FJsonValueString>(ActorName));
   ForwardPayload->SetArrayField(TEXT("actorNames"), NamesArray);
 
-  return HandleSequenceAddActors(RequestId, ForwardPayload, Socket);
+  return McpHandlers::Sequence::HandleSequenceAddActors(S, RequestId, ForwardPayload, Socket);
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_add_actor requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceAddActors(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceAddActors(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   const TArray<TSharedPtr<FJsonValue>> *Arr = nullptr;
   LocalPayload->TryGetArrayField(TEXT("actorNames"), Arr);
   if (!Arr || Arr->Num() == 0) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("actorNames required"), nullptr,
                            TEXT("INVALID_ARGUMENT"));
     return true;
   }
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sequence_add_actors requires a sequence path"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
@@ -764,9 +764,9 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddActors(
       Names.Add(V->AsString());
   }
 
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(this);
+  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(&S);
   FString RequestIdArg = RequestId;
-  UMcpAutomationBridgeSubsystem *Subsystem = this;
+  UMcpAutomationBridgeSubsystem *Subsystem = &S;
   UObject *SeqObj = UEditorAssetLibrary::LoadAsset(SeqPath);
   if (!SeqObj) {
     Subsystem->SendAutomationResponse(Socket, RequestIdArg, false,
@@ -851,28 +851,28 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddActors(
 #endif
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_add_actors requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceAddSpawnable(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceAddSpawnable(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString ClassName;
   LocalPayload->TryGetStringField(TEXT("className"), ClassName);
   if (ClassName.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("className required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("className required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("sequence_add_spawnable_from_class requires a sequence path"),
         nullptr, TEXT("INVALID_SEQUENCE"));
@@ -882,7 +882,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddSpawnable(
 #if WITH_EDITOR
   UObject *SeqObj = UEditorAssetLibrary::LoadAsset(SeqPath);
   if (!SeqObj) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
   }
@@ -899,7 +899,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddSpawnable(
   if (!ResolvedClass)
     ResolvedClass = ResolveClassByName(ClassName);
   if (!ResolvedClass) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Class not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Class not found"),
                            nullptr, TEXT("CLASS_NOT_FOUND"));
     return true;
   }
@@ -917,24 +917,24 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddSpawnable(
           SpawnableResp->SetStringField(TEXT("className"), ClassName);
           SpawnableResp->SetStringField(TEXT("bindingGuid"),
                                         BindingGuid.ToString());
-          SendAutomationResponse(Socket, RequestId, true,
+          S.SendAutomationResponse(Socket, RequestId, true,
                                  TEXT("Spawnable added to sequence"),
                                  SpawnableResp, FString());
           return true;
         }
       }
     }
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to create spawnable binding"), nullptr,
                            TEXT("SPAWNABLE_CREATION_FAILED"));
     return true;
   }
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("Sequence object is not a LevelSequence"),
                          nullptr, TEXT("INVALID_SEQUENCE_TYPE"));
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       Socket, RequestId, false,
       TEXT("sequence_add_spawnable_from_class requires editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -942,22 +942,22 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddSpawnable(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceRemoveActors(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceRemoveActors(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   const TArray<TSharedPtr<FJsonValue>> *Arr = nullptr;
   LocalPayload->TryGetArrayField(TEXT("actorNames"), Arr);
   if (!Arr || Arr->Num() == 0) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("actorNames required"), nullptr,
                            TEXT("INVALID_ARGUMENT"));
     return true;
   }
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("sequence_remove_actors requires a sequence path"), nullptr,
         TEXT("INVALID_SEQUENCE"));
@@ -967,12 +967,12 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceRemoveActors(
 #if WITH_EDITOR
   UObject *SeqObj = UEditorAssetLibrary::LoadAsset(SeqPath);
   if (!SeqObj) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
   }
   if (!GEditor) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), nullptr,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -1036,37 +1036,37 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceRemoveActors(
     TSharedPtr<FJsonObject> Out = McpHandlerUtils::CreateResultObject();
     Out->SetArrayField(TEXT("removedActors"), Removed);
     Out->SetNumberField(TEXT("bindingsProcessed"), RemovedCount);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Actors processed for removal"), Out,
                            FString());
     return true;
   }
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("EditorActorSubsystem not available"), nullptr,
                          TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("UEditorActorSubsystem not available"), nullptr,
                          TEXT("NOT_AVAILABLE"));
   return true;
 #endif
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_remove_actors requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceGetBindings(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceGetBindings(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("sequence_get_bindings requires a sequence path"), nullptr,
         TEXT("INVALID_SEQUENCE"));
@@ -1076,7 +1076,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceGetBindings(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   UObject *SeqObj = UEditorAssetLibrary::LoadAsset(SeqPath);
   if (!SeqObj) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
   }
@@ -1102,31 +1102,31 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceGetBindings(
         BindingsArray.Add(MakeShared<FJsonValueObject>(Bobj));
       }
       Resp->SetArrayField(TEXT("bindings"), BindingsArray);
-      SendAutomationResponse(Socket, RequestId, true, TEXT("bindings listed"),
+      S.SendAutomationResponse(Socket, RequestId, true, TEXT("bindings listed"),
                              Resp, FString());
       return true;
     }
   }
   Resp->SetArrayField(TEXT("bindings"), TArray<TSharedPtr<FJsonValue>>());
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("bindings listed (empty)"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_get_bindings requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceGetProperties(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceGetProperties(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("sequence_get_properties requires a sequence path"), nullptr,
         TEXT("INVALID_SEQUENCE"));
@@ -1136,7 +1136,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceGetProperties(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   UObject *SeqObj = UEditorAssetLibrary::LoadAsset(SeqPath);
   if (!SeqObj) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
   }
@@ -1155,7 +1155,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceGetProperties(
       Resp->SetNumberField(TEXT("playbackStart"), Start);
       Resp->SetNumberField(TEXT("playbackEnd"), End);
       Resp->SetNumberField(TEXT("duration"), End - Start);
-      SendAutomationResponse(Socket, RequestId, true,
+      S.SendAutomationResponse(Socket, RequestId, true,
                              TEXT("properties retrieved"), Resp, FString());
       return true;
     }
@@ -1164,33 +1164,33 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceGetProperties(
   Resp->SetNumberField(TEXT("playbackStart"), 0.0);
   Resp->SetNumberField(TEXT("playbackEnd"), 0.0);
   Resp->SetNumberField(TEXT("duration"), 0.0);
-  SendAutomationResponse(Socket, RequestId, true, TEXT("properties retrieved"),
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("properties retrieved"),
                          Resp, FString());
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_get_properties requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceSetPlaybackSpeed(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceSetPlaybackSpeed(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   double Speed = 1.0;
   LocalPayload->TryGetNumberField(TEXT("speed"), Speed);
   if (Speed <= 0.0) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid speed (must be > 0)"), nullptr,
                            TEXT("INVALID_ARGUMENT"));
     return true;
   }
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("sequence_set_playback_speed requires a sequence path"), nullptr,
         TEXT("INVALID_SEQUENCE"));
@@ -1198,11 +1198,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetPlaybackSpeed(
   }
 
 #if WITH_EDITOR
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(this);
+  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(&S);
   FString RequestIdArg = RequestId; // Capture
 
   // Execute on Game Thread
-  UMcpAutomationBridgeSubsystem *Subsystem = this;
+  UMcpAutomationBridgeSubsystem *Subsystem = &S;
   UObject *SeqObj = UEditorAssetLibrary::LoadAsset(SeqPath);
   if (!SeqObj) {
     Subsystem->SendAutomationResponse(Socket, RequestIdArg, false,
@@ -1244,7 +1244,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetPlaybackSpeed(
       TEXT("EDITOR_NOT_OPEN"));
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       Socket, RequestId, false,
       TEXT("sequence_set_playback_speed requires editor build."), nullptr,
       TEXT("NOT_AVAILABLE"));
@@ -1252,22 +1252,22 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetPlaybackSpeed(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequencePause(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequencePause(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sequence_pause requires a sequence path"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
   }
 #if WITH_EDITOR
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(this);
+  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(&S);
   FString RequestIdArg = RequestId;
-  UMcpAutomationBridgeSubsystem *Subsystem = this;
+  UMcpAutomationBridgeSubsystem *Subsystem = &S;
 
   ULevelSequence *LevelSeq =
       Cast<ULevelSequence>(UEditorAssetLibrary::LoadAsset(SeqPath));
@@ -1287,29 +1287,29 @@ bool UMcpAutomationBridgeSubsystem::HandleSequencePause(
       TEXT("EXECUTION_ERROR"));
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_pause requires editor build."), nullptr,
                          TEXT("NOT_AVAILABLE"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceStop(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceStop(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sequence_stop requires a sequence path"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
   }
 #if WITH_EDITOR
-  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(this);
+  TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakSubsystem(&S);
   FString RequestIdArg = RequestId;
-  UMcpAutomationBridgeSubsystem *Subsystem = this;
+  UMcpAutomationBridgeSubsystem *Subsystem = &S;
 
   ULevelSequence *LevelSeq =
       Cast<ULevelSequence>(UEditorAssetLibrary::LoadAsset(SeqPath));
@@ -1341,7 +1341,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceStop(
       TEXT("EXECUTION_ERROR"));
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_stop requires editor build."), nullptr,
                          TEXT("NOT_AVAILABLE"));
   return true;
@@ -1552,14 +1552,14 @@ bool McpHandlers::Sequence::HandleSequenceDelete(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceGetMetadata(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceGetMetadata(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("sequence_get_metadata requires a sequence path"), nullptr,
         TEXT("INVALID_SEQUENCE"));
@@ -1568,7 +1568,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceGetMetadata(
 #if WITH_EDITOR
   UObject *SeqObj = UEditorAssetLibrary::LoadAsset(SeqPath);
   if (!SeqObj) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
   }
@@ -1576,25 +1576,25 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceGetMetadata(
   Resp->SetStringField(TEXT("path"), SeqPath);
   Resp->SetStringField(TEXT("name"), SeqObj->GetName());
   Resp->SetStringField(TEXT("class"), SeqObj->GetClass()->GetName());
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Sequence metadata retrieved"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_get_metadata requires editor build."),
                          nullptr, TEXT("NOT_AVAILABLE"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceAddKeyframe(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
-  FString SeqPath = ResolveSequencePath(LocalPayload);
+  FString SeqPath = S.ResolveSequencePath(LocalPayload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("sequence_add_keyframe requires a sequence path"), nullptr,
         TEXT("INVALID_SEQUENCE"));
@@ -1609,7 +1609,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
   LocalPayload->TryGetStringField(TEXT("property"), PropertyName);
 
   if (BindingIdStr.IsEmpty() && ActorName.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("Either bindingId or actorName must be provided. bindingId is the "
              "GUID from add_actor/get_bindings. actorName is the label of an "
@@ -1622,7 +1622,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
 
   double Frame = 0.0;
   if (!LocalPayload->TryGetNumberField(TEXT("frame"), Frame)) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("frame number is required. Example: "
                                 "{\"frame\": 30} for keyframe at frame 30"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
@@ -1632,7 +1632,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
 #if WITH_EDITOR
   UObject *SeqObj = UEditorAssetLibrary::LoadAsset(SeqPath);
   if (!SeqObj) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
   }
@@ -1664,7 +1664,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
 
       if (!BindingGuid.IsValid()) {
         FString Target = !BindingIdStr.IsEmpty() ? BindingIdStr : ActorName;
-        SendAutomationResponse(
+        S.SendAutomationResponse(
             Socket, RequestId, false,
             FString::Printf(TEXT("Binding not found for '%s'. Ensure actor is "
                                  "bound to sequence."),
@@ -1675,7 +1675,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
 
       FMovieSceneBinding *Binding = MovieScene->FindBinding(BindingGuid);
       if (!Binding) {
-        SendAutomationResponse(Socket, RequestId, false,
+        S.SendAutomationResponse(Socket, RequestId, false,
                                TEXT("Binding object not found in sequence"),
                                nullptr, TEXT("BINDING_NOT_FOUND"));
         return true;
@@ -1780,7 +1780,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
 
             if (bModified) {
               MovieScene->Modify();
-              SendAutomationResponse(Socket, RequestId, true,
+              S.SendAutomationResponse(Socket, RequestId, true,
                                      TEXT("Keyframe added"), nullptr,
                                      FString());
               return true;
@@ -1820,7 +1820,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
                 Channel->GetData().UpdateOrAddKey(
                     TickFrame, FMovieSceneFloatValue((float)Val->AsNumber()));
                 MovieScene->Modify();
-                SendAutomationResponse(Socket, RequestId, true,
+                S.SendAutomationResponse(Socket, RequestId, true,
                                        TEXT("Float Keyframe added"), nullptr);
                 return true;
               }
@@ -1854,7 +1854,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
               if (Channel) {
                 Channel->GetData().UpdateOrAddKey(TickFrame, Val->AsBool());
                 MovieScene->Modify();
-                SendAutomationResponse(Socket, RequestId, true,
+                S.SendAutomationResponse(Socket, RequestId, true,
                                        TEXT("Bool Keyframe added"), nullptr);
                 return true;
               }
@@ -1863,32 +1863,32 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddKeyframe(
         }
       }
 
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, false,
           TEXT("Unsupported property or failed to create track"), nullptr,
           TEXT("UNSUPPORTED_PROPERTY"));
       return true;
     }
   }
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("Sequence object is not a LevelSequence"),
                          nullptr, TEXT("INVALID_SEQUENCE_TYPE"));
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_add_keyframe requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceAddSection(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceAddSection(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
 #if WITH_EDITOR
-  FString SeqPath = ResolveSequencePath(Payload);
+  FString SeqPath = S.ResolveSequencePath(Payload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("sequence_add_section requires a sequence path"), nullptr,
         TEXT("INVALID_SEQUENCE"));
@@ -1905,7 +1905,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddSection(
 
   ULevelSequence *Sequence = LoadObject<ULevelSequence>(nullptr, *SeqPath);
   if (!Sequence || !Sequence->GetMovieScene()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("SEQUENCE_NOT_FOUND"));
     return true;
   }
@@ -1957,7 +1957,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddSection(
   }
 
   if (!Track) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Track not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Track not found"),
                            nullptr, TEXT("TRACK_NOT_FOUND"));
     return true;
   }
@@ -1976,32 +1976,32 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddSection(
     Resp->SetStringField(TEXT("trackName"), Track->GetName());
     Resp->SetNumberField(TEXT("startFrame"), StartFrame);
     Resp->SetNumberField(TEXT("endFrame"), EndFrame);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Section added to track"), Resp);
   } else {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to create section"), nullptr,
                            TEXT("SECTION_CREATION_FAILED"));
   }
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_add_section requires editor build"),
                          nullptr, TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTickResolution(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceSetTickResolution(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   FString ResolutionStr;
   Payload->TryGetStringField(TEXT("resolution"), ResolutionStr);
 
-  FString SeqPath = ResolveSequencePath(Payload);
+  FString SeqPath = S.ResolveSequencePath(Payload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("path required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("path required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -2045,10 +2045,10 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTickResolution(
 
     Sequence->GetMovieScene()->SetTickResolutionDirectly(TickResolution);
     Sequence->GetMovieScene()->Modify();
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Tick resolution set"),
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Tick resolution set"),
                            nullptr);
   } else {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("NOT_FOUND"));
   }
   return true;
@@ -2057,18 +2057,18 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTickResolution(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceSetViewRange(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceSetViewRange(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   double Start = 0;
   double End = 10;
   Payload->TryGetNumberField(TEXT("start"), Start);
   Payload->TryGetNumberField(TEXT("end"), End);
-  FString SeqPath = ResolveSequencePath(Payload);
+  FString SeqPath = S.ResolveSequencePath(Payload);
 
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("path required"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("path required"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -2077,10 +2077,10 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetViewRange(
   if (Sequence && Sequence->GetMovieScene()) {
     Sequence->GetMovieScene()->SetViewRange(Start, End);
     Sequence->GetMovieScene()->Modify();
-    SendAutomationResponse(Socket, RequestId, true, TEXT("View range set"),
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("View range set"),
                            nullptr);
   } else {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("NOT_FOUND"));
   }
   return true;
@@ -2089,13 +2089,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetViewRange(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackMuted(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceSetTrackMuted(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
 #if WITH_EDITOR
-  FString SeqPath = ResolveSequencePath(Payload);
+  FString SeqPath = S.ResolveSequencePath(Payload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sequence path required"), nullptr,
                            TEXT("INVALID_SEQUENCE"));
     return true;
@@ -2108,7 +2108,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackMuted(
 
   ULevelSequence *Sequence = LoadObject<ULevelSequence>(nullptr, *SeqPath);
   if (!Sequence || !Sequence->GetMovieScene()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("SEQUENCE_NOT_FOUND"));
     return true;
   }
@@ -2139,7 +2139,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackMuted(
   }
 
   if (!Track) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Track not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Track not found"),
                            nullptr, TEXT("TRACK_NOT_FOUND"));
     return true;
   }
@@ -2151,27 +2151,27 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackMuted(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetStringField(TEXT("trackName"), Track->GetName());
   Resp->SetBoolField(TEXT("muted"), bMuted);
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          bMuted ? TEXT("Track muted") : TEXT("Track unmuted"),
                          Resp);
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_set_track_muted requires editor build"),
                          nullptr, TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackSolo(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceSetTrackSolo(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   // Note: UE doesn't have a direct "solo" property on tracks, but we can
   // simulate it by muting all other tracks
-  FString SeqPath = ResolveSequencePath(Payload);
+  FString SeqPath = S.ResolveSequencePath(Payload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sequence path required"), nullptr,
                            TEXT("INVALID_SEQUENCE"));
     return true;
@@ -2184,7 +2184,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackSolo(
 
   ULevelSequence *Sequence = LoadObject<ULevelSequence>(nullptr, *SeqPath);
   if (!Sequence || !Sequence->GetMovieScene()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("SEQUENCE_NOT_FOUND"));
     return true;
   }
@@ -2216,7 +2216,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackSolo(
   }
 
   if (!SoloTrack) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Track not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Track not found"),
                            nullptr, TEXT("TRACK_NOT_FOUND"));
     return true;
   }
@@ -2247,25 +2247,25 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackSolo(
   Resp->SetBoolField(TEXT("solo"), bSolo);
   Resp->SetNumberField(TEXT("affectedTrackCount"), AffectedTrackCount);
   Resp->SetNumberField(TEXT("disabledOtherTrackCount"), DisabledOtherTrackCount);
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       Socket, RequestId, true,
       bSolo ? TEXT("Track solo enabled by disabling evaluation on other tracks") : TEXT("Solo disabled; all tracks evaluation-enabled"), Resp);
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_set_track_solo requires editor build"),
                          nullptr, TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackLocked(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceSetTrackLocked(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
 #if WITH_EDITOR
-  FString SeqPath = ResolveSequencePath(Payload);
+  FString SeqPath = S.ResolveSequencePath(Payload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sequence path required"), nullptr,
                            TEXT("INVALID_SEQUENCE"));
     return true;
@@ -2278,7 +2278,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackLocked(
 
   ULevelSequence *Sequence = LoadObject<ULevelSequence>(nullptr, *SeqPath);
   if (!Sequence || !Sequence->GetMovieScene()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("SEQUENCE_NOT_FOUND"));
     return true;
   }
@@ -2309,7 +2309,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackLocked(
   }
 
   if (!Track) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Track not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Track not found"),
                            nullptr, TEXT("TRACK_NOT_FOUND"));
     return true;
   }
@@ -2325,12 +2325,12 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackLocked(
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetStringField(TEXT("trackName"), Track->GetName());
   Resp->SetBoolField(TEXT("locked"), bLocked);
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       Socket, RequestId, true,
       bLocked ? TEXT("Track locked") : TEXT("Track unlocked"), Resp);
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       Socket, RequestId, false,
       TEXT("sequence_set_track_locked requires editor build"), nullptr,
       TEXT("EDITOR_ONLY"));
@@ -2338,13 +2338,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetTrackLocked(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceRemoveTrack(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
+bool McpHandlers::Sequence::HandleSequenceRemoveTrack(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
 #if WITH_EDITOR
-  FString SeqPath = ResolveSequencePath(Payload);
+  FString SeqPath = S.ResolveSequencePath(Payload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sequence path required"), nullptr,
                            TEXT("INVALID_SEQUENCE"));
     return true;
@@ -2355,7 +2355,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceRemoveTrack(
 
   ULevelSequence *Sequence = LoadObject<ULevelSequence>(nullptr, *SeqPath);
   if (!Sequence || !Sequence->GetMovieScene()) {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Sequence not found"),
                            nullptr, TEXT("SEQUENCE_NOT_FOUND"));
     return true;
   }
@@ -2395,15 +2395,15 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceRemoveTrack(
     MovieScene->Modify();
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetStringField(TEXT("trackName"), RemovedTrackName);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Track removed"),
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Track removed"),
                            Resp);
   } else {
-    SendAutomationResponse(Socket, RequestId, false, TEXT("Track not found"),
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("Track not found"),
                            nullptr, TEXT("TRACK_NOT_FOUND"));
   }
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("sequence_remove_track requires editor build"),
                          nullptr, TEXT("EDITOR_ONLY"));
   return true;
@@ -2445,12 +2445,12 @@ bool McpHandlers::Sequence::HandleSequenceListTrackTypes(
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceAddTrack(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
-  FString SeqPath = ResolveSequencePath(Payload);
+bool McpHandlers::Sequence::HandleSequenceAddTrack(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
+  FString SeqPath = S.ResolveSequencePath(Payload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("add_track requires a sequence path"), nullptr,
                            TEXT("INVALID_SEQUENCE"));
     return true;
@@ -2458,7 +2458,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddTrack(
 
   ULevelSequence *Sequence = LoadObject<ULevelSequence>(nullptr, *SeqPath);
   if (!Sequence) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Level sequence not found"), nullptr,
                            TEXT("SEQUENCE_NOT_FOUND"));
     return true;
@@ -2466,7 +2466,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddTrack(
 
   UMovieScene *MovieScene = Sequence->GetMovieScene();
   if (!MovieScene) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("MovieScene not available"), nullptr,
                            TEXT("MOVIESCENE_UNAVAILABLE"));
     return true;
@@ -2475,7 +2475,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddTrack(
   FString TrackType;
   Payload->TryGetStringField(TEXT("trackType"), TrackType);
   if (TrackType.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("trackType required (e.g., Transform, Animation, Audio, Event)"),
         nullptr, TEXT("INVALID_ARGUMENT"));
@@ -2510,7 +2510,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddTrack(
       }
     }
     if (!BindingGuid.IsValid()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, false,
           FString::Printf(TEXT("Binding not found for actor: %s"), *ActorName),
           nullptr, TEXT("BINDING_NOT_FOUND"));
@@ -2547,7 +2547,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddTrack(
       NewTrack = MovieScene->AddTrack(TrackClass);
 #else
       // UE 5.0: AddTrack always requires a binding GUID
-      SendAutomationError(
+      S.SendAutomationError(
           Socket, RequestId,
           TEXT("Adding tracks without binding is not supported in UE 5.0. Please provide an actor or object binding."),
           TEXT("NOT_SUPPORTED"));
@@ -2556,7 +2556,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddTrack(
     }
   } else if (TrackClass) {
     // Found a class but it's not a track
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Class '%s' is not a UMovieSceneTrack"),
                         *TrackClass->GetName()),
@@ -2577,10 +2577,10 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddTrack(
       Resp->SetStringField(TEXT("actorName"), ActorName);
       Resp->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());
     }
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Track added successfully"), Resp, FString());
   } else {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Failed to add track of type: %s"), *TrackType),
         nullptr, TEXT("TRACK_CREATION_FAILED"));
@@ -2588,12 +2588,12 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceAddTrack(
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceListTracks(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
-  FString SeqPath = ResolveSequencePath(Payload);
+bool McpHandlers::Sequence::HandleSequenceListTracks(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
+  FString SeqPath = S.ResolveSequencePath(Payload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("list_tracks requires a sequence path"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
@@ -2602,7 +2602,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceListTracks(
 #if WITH_EDITOR
   ULevelSequence *Sequence = LoadObject<ULevelSequence>(nullptr, *SeqPath);
   if (!Sequence) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Level sequence not found"), nullptr,
                            TEXT("SEQUENCE_NOT_FOUND"));
     return true;
@@ -2610,7 +2610,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceListTracks(
 
   UMovieScene *MovieScene = Sequence->GetMovieScene();
   if (!MovieScene) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("MovieScene not available"), nullptr,
                            TEXT("MOVIESCENE_UNAVAILABLE"));
     return true;
@@ -2668,25 +2668,25 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceListTracks(
   Resp->SetArrayField(TEXT("tracks"), TracksArray);
   Resp->SetNumberField(TEXT("trackCount"), TracksArray.Num());
   Resp->SetStringField(TEXT("sequencePath"), SeqPath);
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       Socket, RequestId, true,
       FString::Printf(TEXT("Found %d tracks"), TracksArray.Num()), Resp,
       FString());
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("list_tracks requires editor build"), nullptr,
                          TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSequenceSetWorkRange(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
-  FString SeqPath = ResolveSequencePath(Payload);
+bool McpHandlers::Sequence::HandleSequenceSetWorkRange(
+    UMcpAutomationBridgeSubsystem &S, const FString &RequestId,
+    const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket) {
+  FString SeqPath = S.ResolveSequencePath(Payload);
   if (SeqPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("set_work_range requires a sequence path"),
                            nullptr, TEXT("INVALID_SEQUENCE"));
     return true;
@@ -2695,7 +2695,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetWorkRange(
 #if WITH_EDITOR
   ULevelSequence *Sequence = LoadObject<ULevelSequence>(nullptr, *SeqPath);
   if (!Sequence) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Level sequence not found"), nullptr,
                            TEXT("SEQUENCE_NOT_FOUND"));
     return true;
@@ -2703,7 +2703,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetWorkRange(
 
   UMovieScene *MovieScene = Sequence->GetMovieScene();
   if (!MovieScene) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("MovieScene not available"), nullptr,
                            TEXT("MOVIESCENE_UNAVAILABLE"));
     return true;
@@ -2728,11 +2728,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceSetWorkRange(
   Resp->SetNumberField(TEXT("startFrame"), StartFrame.Value);
   Resp->SetNumberField(TEXT("endFrame"), EndFrame.Value);
   Resp->SetStringField(TEXT("sequencePath"), SeqPath);
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Work range set successfully"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("set_work_range requires editor build"), nullptr,
                          TEXT("EDITOR_ONLY"));
   return true;
