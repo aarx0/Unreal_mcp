@@ -704,9 +704,9 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkRenameAssets(
       }
     }
   } else {
-    // Check for folderPath - if provided, list all assets in that folder
+    // Check for path - if provided, list all assets in that folder
     FString FolderPath;
-    if (Payload->TryGetStringField(TEXT("folderPath"), FolderPath) && !FolderPath.IsEmpty()) {
+    if (Payload->TryGetStringField(TEXT("path"), FolderPath) && !FolderPath.IsEmpty()) {
       // Normalize path
       FString NormalizedPath = FolderPath;
       if (NormalizedPath.StartsWith(TEXT("/Content"), ESearchCase::IgnoreCase)) {
@@ -716,7 +716,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkRenameAssets(
       NormalizedPath = SanitizeProjectRelativePath(NormalizedPath);
       if (NormalizedPath.IsEmpty()) {
         SendAutomationError(RequestingSocket, RequestId,
-                            FString::Printf(TEXT("Invalid folderPath: %s"), *FolderPath),
+                            FString::Printf(TEXT("Invalid path: %s"), *FolderPath),
                             TEXT("SECURITY_VIOLATION"));
         return true;
       }
@@ -751,7 +751,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkRenameAssets(
       }
     } else {
       SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("Either assetPaths array or folderPath is required"),
+                          TEXT("Either assetPaths array or path is required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -894,11 +894,10 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkDeleteAssets(
       }
     }
   } else {
-    // Check for folderPath - if provided, list all assets in that folder
+    // Check for path - if provided, list all assets in that folder
     FString FolderPath;
     FString Pattern;
-    Payload->TryGetStringField(TEXT("folderPath"), FolderPath);
-    Payload->TryGetStringField(TEXT("path"), FolderPath);  // alias
+    Payload->TryGetStringField(TEXT("path"), FolderPath);
     Payload->TryGetStringField(TEXT("pattern"), Pattern);
     
     if (!FolderPath.IsEmpty()) {
@@ -911,7 +910,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkDeleteAssets(
       NormalizedPath = SanitizeProjectRelativePath(NormalizedPath);
       if (NormalizedPath.IsEmpty()) {
         SendAutomationError(RequestingSocket, RequestId,
-                            FString::Printf(TEXT("Invalid folderPath: %s"), *FolderPath),
+                            FString::Printf(TEXT("Invalid path: %s"), *FolderPath),
                             TEXT("SECURITY_VIOLATION"));
         return true;
       }
@@ -954,7 +953,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBulkDeleteAssets(
       }
     } else {
       SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("Either assetPaths array or folderPath is required"),
+                          TEXT("Either assetPaths array or path is required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -2809,8 +2808,6 @@ bool UMcpAutomationBridgeSubsystem::HandleListAssets(
   } else {
     Payload->TryGetStringField(TEXT("path"), PathFilter);
     if (PathFilter.IsEmpty())
-      Payload->TryGetStringField(TEXT("directory"), PathFilter);
-    if (PathFilter.IsEmpty())
       Payload->TryGetStringField(TEXT("directoryPath"), PathFilter);
   }
 
@@ -3053,7 +3050,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGenerateReport(
   }
 
   FString Directory;
-  Payload->TryGetStringField(TEXT("directory"), Directory);
+  Payload->TryGetStringField(TEXT("path"), Directory);
   if (Directory.IsEmpty()) {
     Directory = TEXT("/Game");
   }

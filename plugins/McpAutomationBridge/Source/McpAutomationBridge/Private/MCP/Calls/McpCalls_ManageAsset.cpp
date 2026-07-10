@@ -41,7 +41,6 @@ static void S_List(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("filter"), TEXT("get_material_info: what to include — 'parameters'|'expressions'|'connections'|'all' (default all)."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
-	 .String(TEXT("directory"), TEXT("list: directory to list (default /Game)."))
 	 .String(TEXT("directoryPath"), TEXT("Path to a directory."))
 	 .Bool(TEXT("recursive"), TEXT("list: recurse into subfolders (default true)."))
 	 .Bool(TEXT("recursivePaths"), TEXT(""))
@@ -228,7 +227,7 @@ static void S_FindByTag(FMcpSchemaBuilder& B)
 
 static void S_GenerateReport(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("directory"), TEXT("list: directory to list (default /Game)."))
+	B.String(TEXT("path"), TEXT("Path to a directory."))
 	 .String(TEXT("reportType"), TEXT("generate_report: report kind, e.g. 'Summary' (default)."))
 	 .String(TEXT("outputPath"), TEXT("create_thumbnail/generate_report: file path (relative to project dir) to write output to. channel_extract: destination texture path."));
 }
@@ -383,8 +382,8 @@ static void S_BulkRename(FMcpSchemaBuilder& B)
 	 .String(TEXT("replaceText"), TEXT(""))
 	 .Bool(TEXT("checkoutFiles"), TEXT(""))
 	 .Array(TEXT("assetPaths"), TEXT(""))
-	 .String(TEXT("folderPath"), TEXT("Path to a directory."))
-	 .Required({TEXT("assetPaths"), TEXT("folderPath")});
+	 .String(TEXT("path"), TEXT("Path to a directory."))
+	 .Required({TEXT("assetPaths"), TEXT("path")});
 }
 
 static void S_BulkDelete(FMcpSchemaBuilder& B)
@@ -392,10 +391,9 @@ static void S_BulkDelete(FMcpSchemaBuilder& B)
 	B.Bool(TEXT("showConfirmation"), TEXT(""))
 	 .Bool(TEXT("fixupRedirectors"), TEXT(""))
 	 .Array(TEXT("assetPaths"), TEXT(""))
-	 .String(TEXT("folderPath"), TEXT("Path to a directory."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
-	 .String(TEXT("pattern"), TEXT("bulk_delete: substring filter applied to matching asset names when deleting by folderPath."))
-	 .Required({TEXT("assetPaths"), TEXT("folderPath"), TEXT("path")});
+	 .String(TEXT("pattern"), TEXT("bulk_delete: substring filter applied to matching asset names when deleting by path."))
+	 .Required({TEXT("assetPaths"), TEXT("path")});
 }
 
 static void S_SourceControlCheckout(FMcpSchemaBuilder& B)
