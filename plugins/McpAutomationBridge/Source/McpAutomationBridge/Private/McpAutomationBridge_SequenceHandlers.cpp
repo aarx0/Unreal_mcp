@@ -122,9 +122,12 @@
 
 FString UMcpAutomationBridgeSubsystem::ResolveSequencePath(
     const TSharedPtr<FJsonObject> &Payload) {
+  // assetPath is canonical; path is the back-compat alias.
   FString Path;
-  if (Payload.IsValid() && Payload->TryGetStringField(TEXT("path"), Path) &&
-      !Path.IsEmpty()) {
+  if (Payload.IsValid() &&
+      ((Payload->TryGetStringField(TEXT("assetPath"), Path) &&
+        !Path.IsEmpty()) ||
+       (Payload->TryGetStringField(TEXT("path"), Path) && !Path.IsEmpty()))) {
 #if WITH_EDITOR
     // Check existence first to avoid error log spam
     if (UEditorAssetLibrary::DoesAssetExist(Path)) {
@@ -1403,7 +1406,9 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceDuplicate(
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString SourcePath;
-  LocalPayload->TryGetStringField(TEXT("path"), SourcePath);
+  if (!LocalPayload->TryGetStringField(TEXT("assetPath"), SourcePath) ||
+      SourcePath.IsEmpty())
+    LocalPayload->TryGetStringField(TEXT("path"), SourcePath);
   FString DestinationPath;
   LocalPayload->TryGetStringField(TEXT("destinationPath"), DestinationPath);
   if (SourcePath.IsEmpty() || DestinationPath.IsEmpty()) {
@@ -1460,7 +1465,9 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceRename(
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString Path;
-  LocalPayload->TryGetStringField(TEXT("path"), Path);
+  if (!LocalPayload->TryGetStringField(TEXT("assetPath"), Path) ||
+      Path.IsEmpty())
+    LocalPayload->TryGetStringField(TEXT("path"), Path);
   FString NewName;
   LocalPayload->TryGetStringField(TEXT("newName"), NewName);
   if (Path.IsEmpty() || NewName.IsEmpty()) {
@@ -1504,7 +1511,9 @@ bool UMcpAutomationBridgeSubsystem::HandleSequenceDelete(
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
   FString Path;
-  LocalPayload->TryGetStringField(TEXT("path"), Path);
+  if (!LocalPayload->TryGetStringField(TEXT("assetPath"), Path) ||
+      Path.IsEmpty())
+    LocalPayload->TryGetStringField(TEXT("path"), Path);
   if (Path.IsEmpty()) {
     SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sequence_delete requires path"), nullptr,
