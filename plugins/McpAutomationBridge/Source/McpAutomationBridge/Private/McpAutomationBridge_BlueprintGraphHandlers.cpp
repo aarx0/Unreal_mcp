@@ -53,6 +53,7 @@
 #include "McpAutomationBridgeHelpers.h"
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_BlueprintGraphHandlers.h"
 #include "McpGraphLayoutUtils.h"
 #include "Misc/ScopeExit.h"
 
@@ -562,7 +563,7 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph)
 // UBlueprint* Blueprint and UEdGraph* TargetGraph to the member body.
 #define MCP_BPGRAPH_PREAMBLE_HEAD() \
   if (!Payload.IsValid()) { \
-    SendAutomationError(RequestingSocket, RequestId, \
+    S.SendAutomationError(RequestingSocket, RequestId, \
                         TEXT("Missing payload for blueprint graph action."), \
                         TEXT("INVALID_PAYLOAD")); \
     return true; \
@@ -573,7 +574,7 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph)
     if (Payload->TryGetStringField(TEXT("assetPath"), AssetPathParam) && !AssetPathParam.IsEmpty()) { \
       FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPathParam); \
       if (SanitizedAssetPath.IsEmpty()) { \
-        SendAutomationError(RequestingSocket, RequestId, \
+        S.SendAutomationError(RequestingSocket, RequestId, \
                             TEXT("Invalid assetPath: contains traversal sequences or invalid characters."), \
                             TEXT("INVALID_PATH")); \
         return true; \
@@ -582,7 +583,7 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph)
     if (Payload->TryGetStringField(TEXT("blueprintPath"), BlueprintPathParam) && !BlueprintPathParam.IsEmpty()) { \
       FString SanitizedBlueprintPath = SanitizeProjectRelativePath(BlueprintPathParam); \
       if (SanitizedBlueprintPath.IsEmpty()) { \
-        SendAutomationError(RequestingSocket, RequestId, \
+        S.SendAutomationError(RequestingSocket, RequestId, \
                             TEXT("Invalid blueprintPath: contains traversal sequences or invalid characters."), \
                             TEXT("INVALID_PATH")); \
         return true; \
@@ -603,14 +604,14 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph)
   } \
   FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath); \
   if (SanitizedAssetPath.IsEmpty()) { \
-    SendAutomationError(RequestingSocket, RequestId, \
+    S.SendAutomationError(RequestingSocket, RequestId, \
                         TEXT("Invalid asset path: contains traversal sequences or invalid characters."), \
                         TEXT("INVALID_PATH")); \
     return true; \
   } \
   AssetPath = SanitizedAssetPath; \
   if (AssetPath.IsEmpty()) { \
-    SendAutomationError( \
+    S.SendAutomationError( \
         RequestingSocket, RequestId, \
         TEXT("Missing 'assetPath' or 'blueprintPath' in payload."), \
         TEXT("INVALID_ARGUMENT")); \
@@ -620,7 +621,7 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph)
   FString LoadError; \
   UBlueprint *Blueprint = LoadBlueprintAsset(AssetPath, NormalizedPath, LoadError); \
   if (!Blueprint) { \
-    SendAutomationError( \
+    S.SendAutomationError( \
         RequestingSocket, RequestId, \
         LoadError.IsEmpty() \
             ? FString::Printf(TEXT("Could not load blueprint at path: %s"), \
@@ -664,7 +665,7 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph)
     } \
   } \
   if (!TargetGraph) { \
-    SendAutomationError( \
+    S.SendAutomationError( \
         RequestingSocket, RequestId, \
         FString::Printf(TEXT("Could not find graph '%s' in blueprint."), \
                         *GraphName), \
@@ -737,7 +738,8 @@ static UEdGraphPin *FindPinByName(UEdGraphNode *Node, const FString &PinName) {
 }
 #endif // WITH_EDITOR
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
+bool McpHandlers::Blueprint::HandleBlueprintGraphCreateNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -773,10 +775,10 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
       Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
       Result->SetStringField(TEXT("nodeName"), NewNode->GetName());
       McpHandlerUtils::AddVerification(Result, Blueprint);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Node created."), Result);
     } else {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           TEXT("Failed to create node (unsupported type or internal error)."),
           TEXT("CREATE_FAILED"));
@@ -889,7 +891,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
 
     // Return early with error if function not found (before NodeCreator)
     if (!Func) {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(
               TEXT("Could not find function '%s::%s' for node type '%s'"),
@@ -1049,7 +1051,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
     }
 
     if (!FoundProp && !bFoundAsBPDeclaredVar) {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(
               TEXT("Variable '%s' not found in Blueprint or any parent class "
@@ -1125,7 +1127,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
       CallFuncNode->SetFromFunction(Func);
       FinalizeAndReport(NodeCreator, CallFuncNode);
     } else {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(
               TEXT("No UFunction named '%s' found. Pass the function's C++ "
@@ -1145,7 +1147,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
     Payload->TryGetStringField(TEXT("eventName"), EventName);
     Payload->TryGetStringField(TEXT("memberClass"), MemberClass);
     if (EventName.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("eventName required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -1179,7 +1181,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
       EventNode->bOverrideFunction = true;
       FinalizeAndReport(NodeCreator, EventNode);
     } else {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(TEXT("Event '%s' not found"), *EventName),
           TEXT("EVENT_NOT_FOUND"));
@@ -1383,7 +1385,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
     // Ensure the blueprint has a GeneratedClass (must be compiled)
     if (!Blueprint->GeneratedClass)
     {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           TEXT("Blueprint has no GeneratedClass. Compile it first."), TEXT("INVALID_STATE"));
       return true;
     }
@@ -1405,7 +1407,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
       if (!ParamObj->TryGetStringField(TEXT("name"), ParamName) ||
           !ParamObj->TryGetStringField(TEXT("type"), ParamType))
       {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Missing 'name' or 'type' in parameter definition."), TEXT("INVALID_PARAMETER"));
         return true;
       }
@@ -1482,7 +1484,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
         NodePos, TargetGraph, EventName, TempFunc, false);
 
     if (!EventNode) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           TEXT("Failed to create custom event from function."), TEXT("INTERNAL_ERROR"));
       return true;
     }
@@ -1502,7 +1504,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
     Result->SetStringField(TEXT("nodeId"), EventNode->NodeGuid.ToString());
     Result->SetStringField(TEXT("nodeName"), EventNode->GetName());
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
         TEXT("Custom event with parameters created using engine API."), Result);
     return true;
   }
@@ -1522,7 +1524,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
       TargetClassName = NodeType.Mid(6);
     UClass *TargetClass = ResolveUClass(TargetClassName);
     if (!TargetClass) {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(TEXT("Class '%s' not found"), *TargetClassName),
           TEXT("CLASS_NOT_FOUND"));
@@ -1540,7 +1542,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
     FString InputAxisName;
     Payload->TryGetStringField(TEXT("inputAxisName"), InputAxisName);
     if (InputAxisName.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("inputAxisName required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -1572,7 +1574,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
         !SpawnClassName.IsEmpty()) {
       SpawnClass = ResolveUClass(SpawnClassName);
       if (!SpawnClass) {
-        SendAutomationError(
+        S.SendAutomationError(
             RequestingSocket, RequestId,
             FString::Printf(TEXT("Class '%s' not found"), *SpawnClassName),
             TEXT("CLASS_NOT_FOUND"));
@@ -1602,7 +1604,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
     Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
     Result->SetStringField(TEXT("nodeName"), NewNode->GetName());
     Result->SetStringField(TEXT("nodeClass"), NodeClass->GetName());
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Node created."), Result);
     return true;
   }
@@ -1625,15 +1627,15 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
       Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
       Result->SetStringField(TEXT("nodeName"), NewNode->GetName());
       Result->SetStringField(TEXT("nodeClass"), NodeClass->GetName());
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Node created."), Result);
     } else {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Failed to instantiate node."),
                           TEXT("CREATE_FAILED"));
     }
   } else {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(TEXT("Node type '%s' not found. Use list_node_types "
                              "to see available types."),
@@ -1642,14 +1644,15 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateNode(
   }
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphConnectPins(
+bool McpHandlers::Blueprint::HandleBlueprintGraphConnectPins(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1669,7 +1672,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphConnectPins(
   UEdGraphNode *ToNode = FindNodeByIdOrName(TargetGraph, ToNodeId);
 
   if (!FromNode || !ToNode) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Could not find source or target node."),
                         TEXT("NODE_NOT_FOUND"));
     return true;
@@ -1713,7 +1716,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphConnectPins(
     }
     UE_LOG(LogTemp, Warning, TEXT("connect_pins: FromNode '%s' pins: %s"), *FromNode->GetName(), *FromPinsList);
     UE_LOG(LogTemp, Warning, TEXT("connect_pins: ToNode '%s' pins: %s"), *ToNode->GetName(), *ToPinsList);
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Could not find source or target pin."),
                         TEXT("PIN_NOT_FOUND"));
     return true;
@@ -1724,23 +1727,24 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphConnectPins(
     
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Pins connected."), Result);
   } else {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to connect pins (schema rejection)."),
                         TEXT("CONNECTION_FAILED"));
   }
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphBreakPinLinks(
+bool McpHandlers::Blueprint::HandleBlueprintGraphBreakPinLinks(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1757,14 +1761,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphBreakPinLinks(
   UEdGraphNode *TargetNode = FindNodeByIdOrName(TargetGraph, NodeId);
 
   if (!TargetNode) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
                         TEXT("NODE_NOT_FOUND"));
     return true;
   }
 
   UEdGraphPin *Pin = FindPinByName(TargetNode, PinName);
   if (!Pin) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Pin not found."),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Pin not found."),
                         TEXT("PIN_NOT_FOUND"));
     return true;
   }
@@ -1775,18 +1779,19 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphBreakPinLinks(
   
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   McpHandlerUtils::AddVerification(Result, Blueprint);
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Pin links broken."), Result);
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphDeleteNode(
+bool McpHandlers::Blueprint::HandleBlueprintGraphDeleteNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1809,22 +1814,23 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphDeleteNode(
     
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Node deleted."), Result);
   } else {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
                         TEXT("NODE_NOT_FOUND"));
   }
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateRerouteNode(
+bool McpHandlers::Blueprint::HandleBlueprintGraphCreateRerouteNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1853,18 +1859,19 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphCreateRerouteNode(
   Result->SetStringField(TEXT("nodeId"), RerouteNode->NodeGuid.ToString());
   Result->SetStringField(TEXT("nodeName"), RerouteNode->GetName());
   McpHandlerUtils::AddVerification(Result, Blueprint);
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Reroute node created."), Result);
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphSetNodeProperty(
+bool McpHandlers::Blueprint::HandleBlueprintGraphSetNodeProperty(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1932,7 +1939,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphSetNodeProperty(
                               ESearchCase::IgnoreCase)) {
         NewState = ENodeEnabledState::DevelopmentOnly;
       } else {
-        SendAutomationError(
+        S.SendAutomationError(
             RequestingSocket, RequestId,
             FString::Printf(
                 TEXT("Invalid EnabledState '%s' (expected "
@@ -1965,29 +1972,30 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphSetNodeProperty(
       Result->SetStringField(TEXT("nodeId"), TargetNode->NodeGuid.ToString());
       Result->SetStringField(TEXT("nodeName"), TargetNode->GetName());
       McpHandlerUtils::AddVerification(Result, Blueprint);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Node property updated."), Result);
     } else {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(TEXT("Unsupported node property '%s'"),
                           *PropertyName),
           TEXT("PROPERTY_NOT_SUPPORTED"));
     }
   } else {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
                         TEXT("NODE_NOT_FOUND"));
   }
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphGetNodeDetails(
+bool McpHandlers::Blueprint::HandleBlueprintGraphGetNodeDetails(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2062,22 +2070,23 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphGetNodeDetails(
     Result->SetArrayField(TEXT("pins"), Pins);
     McpHandlerUtils::AddVerification(Result, Blueprint);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Node details retrieved."), Result);
   } else {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
                         TEXT("NODE_NOT_FOUND"));
   }
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphGetGraphDetails(
+bool McpHandlers::Blueprint::HandleBlueprintGraphGetGraphDetails(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2088,18 +2097,19 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphGetGraphDetails(
       BuildGraphDetailsJson(TargetGraph, bIncludePinLinks);
   McpHandlerUtils::AddVerification(Result, Blueprint);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Graph details retrieved."), Result);
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphArrangeGraph(
+bool McpHandlers::Blueprint::HandleBlueprintGraphArrangeGraph(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2130,18 +2140,19 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphArrangeGraph(
   }
   Result->SetArrayField(TEXT("nodes"), NodePositions);
   McpHandlerUtils::AddVerification(Result, Blueprint);
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Graph arranged."), Result);
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphGetPinDetails(
+bool McpHandlers::Blueprint::HandleBlueprintGraphGetPinDetails(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2154,7 +2165,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphGetPinDetails(
   UEdGraphNode *TargetNode = FindNodeByIdOrName(TargetGraph, NodeId);
 
   if (!TargetNode) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
                         TEXT("NODE_NOT_FOUND"));
     return true;
   }
@@ -2163,7 +2174,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphGetPinDetails(
   if (!PinName.IsEmpty()) {
     UEdGraphPin *Pin = FindPinByName(TargetNode, PinName);
     if (!Pin) {
-      SendAutomationError(RequestingSocket, RequestId, TEXT("Pin not found."),
+      S.SendAutomationError(RequestingSocket, RequestId, TEXT("Pin not found."),
                           TEXT("PIN_NOT_FOUND"));
       return true;
     }
@@ -2232,18 +2243,19 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphGetPinDetails(
   Result->SetArrayField(TEXT("pins"), PinsJson);
   McpHandlerUtils::AddVerification(Result, Blueprint);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Pin details retrieved."), Result);
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphListNodeTypes(
+bool McpHandlers::Blueprint::HandleBlueprintGraphListNodeTypes(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2265,18 +2277,19 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphListNodeTypes(
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   Result->SetArrayField(TEXT("nodeTypes"), NodeTypes);
   Result->SetNumberField(TEXT("count"), NodeTypes.Num());
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Node types listed."), Result);
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphSetPinDefaultValue(
+bool McpHandlers::Blueprint::HandleBlueprintGraphSetPinDefaultValue(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2289,20 +2302,20 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphSetPinDefaultValue(
 
   UEdGraphNode *TargetNode = FindNodeByIdOrName(TargetGraph, NodeId);
   if (!TargetNode) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
                         TEXT("NODE_NOT_FOUND"));
     return true;
   }
 
   UEdGraphPin *Pin = FindPinByName(TargetNode, PinName);
   if (!Pin) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Pin not found."),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Pin not found."),
                         TEXT("PIN_NOT_FOUND"));
     return true;
   }
 
   if (Pin->Direction != EGPD_Input) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Can only set default values on input pins."),
                         TEXT("INVALID_PIN_DIRECTION"));
     return true;
@@ -2310,7 +2323,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphSetPinDefaultValue(
 
   const UEdGraphSchema *Schema = TargetGraph->GetSchema();
   if (!Schema) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Graph has no schema; cannot set pin default."),
                         TEXT("NO_SCHEMA"));
     return true;
@@ -2339,7 +2352,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphSetPinDefaultValue(
       Resolved = StaticLoadObject(UObject::StaticClass(), nullptr, *Value);
       if (!Resolved)
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               FString::Printf(TEXT("Could not resolve object/class '%s' for pin '%s'."), *Value, *PinName),
               TEXT("OBJECT_NOT_FOUND"));
           return true;
@@ -2378,7 +2391,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphSetPinDefaultValue(
   }
   if (!bStored)
   {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           FString::Printf(
               TEXT("Schema rejected default value '%s' for pin '%s' (incompatible type or invalid format)."),
               *Value, *PinName),
@@ -2402,18 +2415,19 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphSetPinDefaultValue(
     Result->SetStringField(TEXT("storedValue"), StoredValue);
   }
   McpHandlerUtils::AddVerification(Result, Blueprint);
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Pin default value set."), Result);
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphListAnimbpGraphs(
+bool McpHandlers::Blueprint::HandleBlueprintGraphListAnimbpGraphs(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2471,20 +2485,21 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphListAnimbpGraphs(
   Result->SetArrayField(TEXT("graphs"), GraphsJson);
   Result->SetNumberField(TEXT("count"), GraphsJson.Num());
   McpHandlerUtils::AddVerification(Result, Blueprint);
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, true,
       TEXT("Graphs listed. Pass any graphName to get_graph_details."),
       Result);
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphGetTransitionRuleGraph(
+bool McpHandlers::Blueprint::HandleBlueprintGraphGetTransitionRuleGraph(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2496,7 +2511,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphGetTransitionRuleGraph(
   const FString StateMachineName =
       GetJsonStringField(Payload, TEXT("stateMachine"));
   if (TransitionName.IsEmpty() && (FromState.IsEmpty() || ToState.IsEmpty())) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         TEXT("Provide fromState + toState (optionally stateMachine to "
              "disambiguate) or transitionName."),
@@ -2555,7 +2570,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphGetTransitionRuleGraph(
   }
 
   if (Matches.Num() == 0) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("No transition matched. Transitions present: %s"),
@@ -2569,7 +2584,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphGetTransitionRuleGraph(
   const int32 TransitionIndex =
       GetJsonIntField(Payload, TEXT("transitionIndex"), 0);
   if (TransitionIndex < 0 || TransitionIndex >= Matches.Num()) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(TEXT("transitionIndex %d out of range: %d parallel "
                              "transition(s) matched."),
@@ -2628,11 +2643,11 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGraphGetTransitionRuleGraph(
                            Found->CustomTransitionGraph->GetName());
   }
   McpHandlerUtils::AddVerification(Result, Blueprint);
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Transition rule graph retrieved."), Result);
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Blueprint graph actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;

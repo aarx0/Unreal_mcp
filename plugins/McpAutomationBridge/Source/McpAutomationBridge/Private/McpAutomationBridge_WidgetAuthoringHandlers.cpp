@@ -59,6 +59,7 @@
 
 // MCP Core
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_WidgetAuthoringHandlers.h"
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "MCP/McpConsolidatedActionRouting.h"          // GetPayloadSubAction
@@ -1014,7 +1015,8 @@ namespace
 #define MCP_WIDGETAUTH_SUBACTION() \
     const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(Payload);
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetBlueprint(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreateWidgetBlueprint(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1022,7 +1024,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetBlueprint(
         FString Name = GetJsonStringField(Payload, TEXT("name"));
         if (Name.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: name"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
@@ -1043,7 +1045,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetBlueprint(
         FString SanitizedFolder = SanitizeProjectRelativePath(Folder);
         if (SanitizedFolder.IsEmpty() && !Folder.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("Invalid folder path: path traversal or invalid characters detected"), 
                 TEXT("SECURITY_VIOLATION"));
             return true;
@@ -1065,7 +1067,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetBlueprint(
         FString NewBPObjectPath = FullPath + TEXT(".") + Name;
         if (FindObject<UWidgetBlueprint>(nullptr, *NewBPObjectPath) != nullptr)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("Widget blueprint '%s' already exists"), *Name), 
                 TEXT("ALREADY_EXISTS"));
             return true;
@@ -1076,7 +1078,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetBlueprint(
         {
             if (FindObject<UWidgetBlueprint>(ExistingPackage, *Name) != nullptr)
             {
-                SendAutomationError(RequestingSocket, RequestId, 
+                S.SendAutomationError(RequestingSocket, RequestId, 
                     FString::Printf(TEXT("Widget blueprint '%s' already exists"), *Name), 
                     TEXT("ALREADY_EXISTS"));
                 return true;
@@ -1087,7 +1089,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetBlueprint(
         UPackage* Package = CreatePackage(*FullPath);
         if (!Package)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
             return true;
         }
 
@@ -1138,7 +1140,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetBlueprint(
             {
                 // A non-default parentClass was explicitly requested but could not be resolved to a
                 // UUserWidget subclass. Fail loudly rather than silently creating a plain UserWidget.
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("Could not resolve parentClass '%s' to a UUserWidget subclass. Pass a loaded class name, or a fully-qualified path such as /Script/CommonUI.CommonActivatableWidget or /Game/UI/MyWidget.MyWidget_C."), *ParentClass),
                     TEXT("INVALID_PARENT_CLASS"));
                 return true;
@@ -1157,7 +1159,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetBlueprint(
 
         if (!WidgetBlueprint)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create widget blueprint"), TEXT("CREATION_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create widget blueprint"), TEXT("CREATION_ERROR"));
             return true;
         }
 
@@ -1177,12 +1179,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetBlueprint(
         ResultJson->SetStringField(TEXT("widgetPath"), ObjectPath);
 
         McpHandlerUtils::AddVerification(ResultJson, WidgetBlueprint);
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, 
             FString::Printf(TEXT("Created widget blueprint: %s"), *Name), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringShowWidget(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringShowWidget(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1207,7 +1210,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringShowWidget(
             ResultJson->SetStringField(TEXT("message"), TEXT("Notification shown"));
             ResultJson->SetStringField(TEXT("widgetId"), WidgetId);
             
-            SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Notification shown"), ResultJson);
+            S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Notification shown"), ResultJson);
             return true;
         }
         
@@ -1215,7 +1218,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringShowWidget(
         FString EffectivePath = WidgetPath.IsEmpty() ? GetJsonStringField(Payload, TEXT("name")) : WidgetPath;
         if (EffectivePath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("Missing required parameter: widgetPath or name"), TEXT("MISSING_PARAMETER"));
             return true;
         }
@@ -1224,7 +1227,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringShowWidget(
         FString SanitizedPath = SanitizeProjectRelativePath(EffectivePath);
         if (SanitizedPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("Invalid widgetPath: path traversal or invalid characters detected"), 
                 TEXT("SECURITY_VIOLATION"));
             return true;
@@ -1235,7 +1238,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringShowWidget(
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(EffectivePath);
         if (!WidgetBP)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("Widget blueprint not found: %s"), *EffectivePath), 
                 TEXT("NOT_FOUND"));
             return true;
@@ -1253,12 +1256,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringShowWidget(
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Widget opened: %s"), *EffectivePath));
         ResultJson->SetStringField(TEXT("widgetPath"), EffectivePath);
         
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, 
             FString::Printf(TEXT("Widget opened: %s"), *EffectivePath), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetWidgetParentClass(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetWidgetParentClass(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1268,7 +1272,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetWidgetParentClass(
 
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
         
@@ -1276,7 +1280,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetWidgetParentClass(
         FString SanitizedWidgetPath = SanitizeProjectRelativePath(WidgetPath);
         if (SanitizedWidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("Invalid widgetPath: path traversal or invalid characters detected"), 
                 TEXT("SECURITY_VIOLATION"));
             return true;
@@ -1285,14 +1289,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetWidgetParentClass(
         
         if (ParentClass.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: parentClass"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: parentClass"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -1306,7 +1310,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetWidgetParentClass(
 #endif
         if (!NewParentClass || !NewParentClass->IsChildOf(UUserWidget::StaticClass()))
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Parent class not found or invalid"), TEXT("INVALID_CLASS"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Parent class not found or invalid"), TEXT("INVALID_CLASS"));
             return true;
         }
 
@@ -1317,12 +1321,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetWidgetParentClass(
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Set parent class to: %s"), *ParentClass));
 
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
             FString::Printf(TEXT("Set parent class to: %s"), *ParentClass), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringPreviewWidget(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringPreviewWidget(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1330,14 +1335,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringPreviewWidget(
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -1349,11 +1354,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringPreviewWidget(
         ResultJson->SetStringField(TEXT("message"), TEXT("Widget blueprint marked for recompilation. Open in Widget Blueprint Editor to see preview."));
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget preview updated"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget preview updated"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringRemoveWidget(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringRemoveWidget(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1363,21 +1369,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringRemoveWidget(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* TargetWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!TargetWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -1399,11 +1405,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringRemoveWidget(
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
         ResultJson->SetStringField(TEXT("removedWidget"), SlotName);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Removed widget"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Removed widget"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringRenameWidget(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringRenameWidget(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1417,21 +1424,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringRenameWidget(
 
         if (WidgetPath.IsEmpty() || OldName.IsEmpty() || NewName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, oldName, newName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, oldName, newName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* TargetWidget = WidgetBP->WidgetTree->FindWidget(FName(*OldName));
         if (!TargetWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *OldName), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *OldName), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -1459,7 +1466,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringRenameWidget(
             TargetWidget->IsA(ExistingProperty->PropertyClass);
         if (NameValidator->IsValid(NewFName) != EValidatorResult::Ok && !bBindWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("'%s' is not a valid/unique name in this Blueprint."), *NewName),
                 TEXT("INVALID_NAME"));
             return true;
@@ -1534,11 +1541,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringRenameWidget(
         ResultJson->SetStringField(TEXT("newName"), NewName);
         ResultJson->SetBoolField(TEXT("desiredFocusUpdated"), bDesiredFocusUpdated);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Renamed widget"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Renamed widget"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringReplaceWidgetClass(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringReplaceWidgetClass(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1555,28 +1563,28 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringReplaceWidgetClass(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty() || NewWidgetClass.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName, newWidgetClass"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName, newWidgetClass"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* TargetWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!TargetWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
         UClass* NewClass = ResolveClassByName(NewWidgetClass);
         if (!NewClass || !NewClass->IsChildOf(UWidget::StaticClass()))
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("'%s' did not resolve to a UWidget subclass"), *NewWidgetClass), TEXT("INVALID_CLASS"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("'%s' did not resolve to a UWidget subclass"), *NewWidgetClass), TEXT("INVALID_CLASS"));
             return true;
         }
 
@@ -1612,7 +1620,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringReplaceWidgetClass(
         UWidget* NewWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!NewWidget || !NewWidget->IsA(NewClass))
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Replace did not yield a '%s' named '%s'"), *NewWidgetClass, *SlotName), TEXT("REPLACE_FAILED"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Replace did not yield a '%s' named '%s'"), *NewWidgetClass, *SlotName), TEXT("REPLACE_FAILED"));
             return true;
         }
 
@@ -1627,10 +1635,10 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringReplaceWidgetClass(
         FKismetEditorUtilities::CompileBlueprint(WidgetBP);
         const bool bCompiledClean = (WidgetBP->Status == EBlueprintStatus::BS_UpToDate ||
                                      WidgetBP->Status == EBlueprintStatus::BS_UpToDateWithWarnings);
-        ClearCapturedErrors();
+        S.ClearCapturedErrors();
         if (!bCompiledClean)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Widget replaced but the blueprint did not compile clean (status %d)"), (int32)WidgetBP->Status),
                 TEXT("REPLACE_COMPILE_FAILED"));
             return true;
@@ -1643,67 +1651,72 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringReplaceWidgetClass(
         ResultJson->SetStringField(TEXT("toClass"), NewWidget->GetClass()->GetName());
         ResultJson->SetBoolField(TEXT("saved"), bSaved);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Replaced widget class"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Replaced widget class"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCanvasPanel(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddCanvasPanel(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UCanvasPanel::StaticClass(), TEXT("CanvasPanel"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added canvas panel"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddHorizontalBox(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddHorizontalBox(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UHorizontalBox::StaticClass(), TEXT("HorizontalBox"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added horizontal box"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddVerticalBox(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddVerticalBox(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UVerticalBox::StaticClass(), TEXT("VerticalBox"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added vertical box"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddOverlay(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddOverlay(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UOverlay::StaticClass(), TEXT("Overlay"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added overlay"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddGridPanel(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddGridPanel(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1711,7 +1724,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddGridPanel(
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
@@ -1719,21 +1732,22 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddGridPanel(
         // their cell slots, not a fixed dimension — so dropping them is behavior-preserving.)
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UGridPanel::StaticClass(), TEXT("GridPanel"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added grid panel"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddUniformGrid(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddUniformGrid(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UUniformGridPanel::StaticClass(), TEXT("UniformGridPanel"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         UUniformGridPanel* UniformGrid = Cast<UUniformGridPanel>(NewWidget);
@@ -1763,18 +1777,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddUniformGrid(
             UniformGrid->SetMinDesiredSlotHeight(static_cast<float>(GetJsonNumberField(Payload, TEXT("minDesiredSlotHeight"), 0.0)));
         }
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added uniform grid panel"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWrapBox(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddWrapBox(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UWrapBox::StaticClass(), TEXT("WrapBox"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         UWrapBox* WrapBox = Cast<UWrapBox>(NewWidget);
@@ -1801,18 +1816,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWrapBox(
         }
 #endif
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added wrap box"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddScrollBox(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddScrollBox(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UScrollBox::StaticClass(), TEXT("ScrollBox"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         UScrollBox* ScrollBox = Cast<UScrollBox>(NewWidget);
@@ -1852,18 +1868,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddScrollBox(
             ScrollBox->SetAlwaysShowScrollbar(GetJsonBoolField(Payload, TEXT("alwaysShowScrollbar")));
         }
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added scroll box"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSizeBox(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddSizeBox(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             USizeBox::StaticClass(), TEXT("SizeBox"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         USizeBox* SizeBox = Cast<USizeBox>(NewWidget);
@@ -1894,18 +1911,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSizeBox(
             SizeBox->SetMaxDesiredHeight(static_cast<float>(GetJsonNumberField(Payload, TEXT("maxDesiredHeight"), 0.0)));
         }
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added size box"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddScaleBox(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddScaleBox(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UScaleBox::StaticClass(), TEXT("ScaleBox"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         UScaleBox* ScaleBox = Cast<UScaleBox>(NewWidget);
@@ -1966,18 +1984,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddScaleBox(
             }
         }
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added scale box"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddBorder(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddBorder(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UBorder::StaticClass(), TEXT("Border"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         UBorder* BorderWidget = Cast<UBorder>(NewWidget);
@@ -2010,11 +2029,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddBorder(
             BorderWidget->SetPadding(Padding);
         }
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added border"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSafeZone(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddSafeZone(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2025,14 +2045,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSafeZone(
 
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -2059,7 +2079,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSafeZone(
         FString ValidationError;
         if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
         {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
             return true;
         }
 
@@ -2067,11 +2087,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSafeZone(
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
         ResultJson->SetStringField(TEXT("slotName"), SlotName);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added safe zone"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added safe zone"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSpacer(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddSpacer(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2084,14 +2105,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSpacer(
 
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -2119,7 +2140,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSpacer(
         FString ValidationError;
         if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
         {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
             return true;
         }
 
@@ -2129,11 +2150,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSpacer(
         ResultJson->SetNumberField(TEXT("sizeX"), SizeX);
         ResultJson->SetNumberField(TEXT("sizeY"), SizeY);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added spacer"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added spacer"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidgetSwitcher(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddWidgetSwitcher(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2145,14 +2167,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidgetSwitcher(
 
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -2180,7 +2202,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidgetSwitcher(
         FString ValidationError;
         if (!ValidateWidgetCreation(WidgetBP, SlotName, ValidationError))
         {
-            SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, ValidationError, TEXT("ENGINE_ERROR"));
             return true;
         }
 
@@ -2189,18 +2211,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidgetSwitcher(
         ResultJson->SetStringField(TEXT("slotName"), SlotName);
         ResultJson->SetNumberField(TEXT("activeIndex"), ActiveIndex);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added widget switcher"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added widget switcher"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddTextBlock(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddTextBlock(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UTextBlock::StaticClass(), TEXT("TextBlock"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         UTextBlock* TextBlock = Cast<UTextBlock>(NewWidget);
@@ -2233,18 +2256,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddTextBlock(
             TextBlock->SetAutoWrapText(GetJsonBoolField(Payload, TEXT("autoWrap")));
         }
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added text block"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddImage(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddImage(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UImage::StaticClass(), TEXT("Image"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         UImage* ImageWidget = Cast<UImage>(NewWidget);
@@ -2268,18 +2292,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddImage(
             ImageWidget->SetColorAndOpacity(Color);
         }
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added image"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddButton(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddButton(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UButton::StaticClass(), TEXT("Button"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         UButton* ButtonWidget = Cast<UButton>(NewWidget);
@@ -2298,18 +2323,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddButton(
             ButtonWidget->SetColorAndOpacity(Color);
         }
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added button"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddProgressBar(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddProgressBar(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UProgressBar::StaticClass(), TEXT("ProgressBar"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         UProgressBar* ProgressBarWidget = Cast<UProgressBar>(NewWidget);
@@ -2334,18 +2360,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddProgressBar(
             ProgressBarWidget->SetIsMarquee(GetJsonBoolField(Payload, TEXT("isMarquee")));
         }
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added progress bar"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSlider(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddSlider(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             USlider::StaticClass(), TEXT("Slider"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         USlider* SliderWidget = Cast<USlider>(NewWidget);
@@ -2372,43 +2399,46 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSlider(
             SliderWidget->SetStepSize(static_cast<float>(GetJsonNumberField(Payload, TEXT("stepSize"), 0.01)));
         }
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added slider"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddRichTextBlock(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddRichTextBlock(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             URichTextBlock::StaticClass(), TEXT("RichTextBlock"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         Cast<URichTextBlock>(NewWidget)->SetText(FText::FromString(GetJsonStringField(Payload, TEXT("text"), TEXT("Rich Text"))));
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added rich text block"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCheckBox(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddCheckBox(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UCheckBox::StaticClass(), TEXT("CheckBox"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         Cast<UCheckBox>(NewWidget)->SetIsChecked(GetJsonBoolField(Payload, TEXT("isChecked"), false));
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added check box"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddTextInput(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddTextInput(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2420,7 +2450,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddTextInput(
 
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             InputClass, TEXT("TextInput"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
 
@@ -2428,18 +2458,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddTextInput(
         if (bMultiLine) { Cast<UMultiLineEditableTextBox>(NewWidget)->SetHintText(HintText); }
         else            { Cast<UEditableTextBox>(NewWidget)->SetHintText(HintText); }
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added text input"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddComboBox(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddComboBox(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UComboBoxString::StaticClass(), TEXT("ComboBox"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         UComboBoxString* ComboBox = Cast<UComboBoxString>(NewWidget);
@@ -2461,18 +2492,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddComboBox(
             ComboBox->SetSelectedOption(SelectedOption);
         }
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added combo box"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSpinBox(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddSpinBox(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             USpinBox::StaticClass(), TEXT("SpinBox"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
         USpinBox* SpinBox = Cast<USpinBox>(NewWidget);
@@ -2497,35 +2529,37 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSpinBox(
             SpinBox->SetDelta(static_cast<float>(GetJsonNumberField(Payload, TEXT("delta"), 1.0)));
         }
 
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added spin box"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddListView(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddListView(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UListView::StaticClass(), TEXT("ListView"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added list view"), ResultJson);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddTreeView(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddTreeView(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
-        UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
+        UWidget* NewWidget = ConstructWidgetForAdd(&S, RequestingSocket, RequestId, Payload,
             UTreeView::StaticClass(), TEXT("TreeView"), WidgetBP, SlotName);
         if (!NewWidget) { return true; }
-        return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
+        return AddFinalizeRespondWidget(&S, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added tree view"), ResultJson);
 }
 
@@ -2540,7 +2574,8 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddTreeView(
 // sub-action via MCP_WIDGETAUTH_SUBACTION so it still steers the body.
 // -----------------------------------------------------------------------------
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnchor(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetAnchor(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2549,28 +2584,28 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnchor(
         FString SlotName = GetSlotName(Payload);
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
         UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot);
         if (!CanvasSlot)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("set_anchor requires a Canvas Panel slot"), TEXT("INVALID_SLOT"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("set_anchor requires a Canvas Panel slot"), TEXT("INVALID_SLOT"));
             return true;
         }
 
@@ -2666,7 +2701,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnchor(
             }
             else
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("Unknown anchor preset '%s'. Valid presets: TopLeft, TopCenter, TopRight, CenterLeft, Center, CenterRight, BottomLeft, BottomCenter, BottomRight, StretchHorizontal, StretchVertical, StretchAll"), *Preset),
                     TEXT("INVALID_ARGUMENT"));
                 return true;
@@ -2676,7 +2711,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnchor(
 
         if (!bHaveAnchor)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing anchors: provide preset, anchorMin/anchorMax:{x,y}, or anchorMinX/anchorMinY/anchorMaxX/anchorMaxY"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing anchors: provide preset, anchorMin/anchorMax:{x,y}, or anchorMinX/anchorMinY/anchorMaxX/anchorMaxY"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
@@ -2692,11 +2727,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnchor(
         ResultJson->SetBoolField(TEXT("saveSucceeded"), bAnchorSaved);
         ResultJson->SetStringField(TEXT("message"), TEXT("Anchor set"));
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Anchor set"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Anchor set"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAlignment(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetAlignment(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2705,28 +2741,28 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAlignment(
         FString SlotName = GetSlotName(Payload);
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
         UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot);
         if (!CanvasSlot)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("set_alignment requires a Canvas Panel slot"), TEXT("INVALID_SLOT"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("set_alignment requires a Canvas Panel slot"), TEXT("INVALID_SLOT"));
             return true;
         }
 
@@ -2750,7 +2786,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAlignment(
         }
         if (!bHaveAlignment)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("No alignment provided: supply alignment:{x,y} or alignmentX/alignmentY"), TEXT("NO_CHANGES_REQUESTED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("No alignment provided: supply alignment:{x,y} or alignmentX/alignmentY"), TEXT("NO_CHANGES_REQUESTED"));
             return true;
         }
 
@@ -2763,11 +2799,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAlignment(
         ResultJson->SetBoolField(TEXT("saveSucceeded"), bAlignSaved);
         ResultJson->SetStringField(TEXT("message"), TEXT("Alignment set"));
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Alignment set"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Alignment set"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPosition(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetPosition(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2776,28 +2813,28 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPosition(
         FString SlotName = GetSlotName(Payload);
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
         UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot);
         if (!CanvasSlot)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("set_position requires a Canvas Panel slot"), TEXT("INVALID_SLOT"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("set_position requires a Canvas Panel slot"), TEXT("INVALID_SLOT"));
             return true;
         }
 
@@ -2827,7 +2864,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPosition(
         }
         if (!bHavePosition)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("No position provided: supply position:{x,y}, posX/posY, or x/y"), TEXT("NO_CHANGES_REQUESTED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("No position provided: supply position:{x,y}, posX/posY, or x/y"), TEXT("NO_CHANGES_REQUESTED"));
             return true;
         }
 
@@ -2840,11 +2877,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPosition(
         ResultJson->SetBoolField(TEXT("saveSucceeded"), bPosSaved);
         ResultJson->SetStringField(TEXT("message"), TEXT("Position set"));
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Position set"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Position set"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetSize(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetSize(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2853,21 +2891,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetSize(
         FString SlotName = GetSlotName(Payload);
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
@@ -2884,7 +2922,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetSize(
             const bool bHaveSize = SizeObj.IsValid() || Payload->HasField(TEXT("x")) || Payload->HasField(TEXT("y"));
             if (!bHaveSize)
             {
-                SendAutomationError(RequestingSocket, RequestId, TEXT("No size provided: supply size:{x,y} or x/y"), TEXT("NO_CHANGES_REQUESTED"));
+                S.SendAutomationError(RequestingSocket, RequestId, TEXT("No size provided: supply size:{x,y} or x/y"), TEXT("NO_CHANGES_REQUESTED"));
                 return true;
             }
             FVector2D Size = CanvasSlot->GetSize();
@@ -2910,7 +2948,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetSize(
             // Seed from the slot's current size so an unspecified rule/weight is kept.
             if (!Payload->HasField(TEXT("fill")) && !Payload->HasField(TEXT("fillWeight")))
             {
-                SendAutomationError(RequestingSocket, RequestId, TEXT("No size provided: supply fill:<bool> and/or fillWeight:<number>"), TEXT("NO_CHANGES_REQUESTED"));
+                S.SendAutomationError(RequestingSocket, RequestId, TEXT("No size provided: supply fill:<bool> and/or fillWeight:<number>"), TEXT("NO_CHANGES_REQUESTED"));
                 return true;
             }
             FSlateChildSize NewSize = HSlot ? HSlot->GetSize() : VSlot->GetSize();
@@ -2937,7 +2975,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetSize(
         }
         else
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("set_size requires a Canvas Panel, Horizontal Box, or Vertical Box slot"), TEXT("INVALID_SLOT"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("set_size requires a Canvas Panel, Horizontal Box, or Vertical Box slot"), TEXT("INVALID_SLOT"));
             return true;
         }
 
@@ -2948,11 +2986,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetSize(
         ResultJson->SetBoolField(TEXT("saveSucceeded"), bSizeSaved);
         ResultJson->SetStringField(TEXT("message"), TEXT("Size set"));
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Size set"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Size set"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPadding(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetPadding(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -2961,21 +3000,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPadding(
         FString SlotName = GetSlotName(Payload);
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
@@ -2993,7 +3032,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPadding(
         else if (OverlaySlotWidget) { Padding = OverlaySlotWidget->GetPadding(); PaddedSlot = TEXT("overlay"); }
         else
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Slot type does not support padding (need HBox/VBox/Overlay child)"), TEXT("INVALID_SLOT"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Slot type does not support padding (need HBox/VBox/Overlay child)"), TEXT("INVALID_SLOT"));
             return true;
         }
 
@@ -3023,7 +3062,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPadding(
         }
         if (!bHavePadding)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("No padding provided: supply padding:{left,top,right,bottom}, pad:<all>, or padLeft/padTop/padRight/padBottom"), TEXT("NO_CHANGES_REQUESTED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("No padding provided: supply padding:{left,top,right,bottom}, pad:<all>, or padLeft/padTop/padRight/padBottom"), TEXT("NO_CHANGES_REQUESTED"));
             return true;
         }
 
@@ -3038,11 +3077,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetPadding(
         ResultJson->SetBoolField(TEXT("saveSucceeded"), bPadSaved);
         ResultJson->SetStringField(TEXT("message"), TEXT("Padding set"));
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Padding set"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Padding set"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetZOrder(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetZOrder(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -3053,21 +3093,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetZOrder(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
@@ -3082,11 +3122,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetZOrder(
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Z-order set to %d"), ZOrder));
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Z-order set"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Z-order set"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetRenderTransform(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetRenderTransform(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -3096,21 +3137,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetRenderTransform(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
@@ -3151,7 +3192,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetRenderTransform(
 
         if (!bHaveTransform)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("No render transform provided: supply translation, scale, shear, or angle"), TEXT("NO_CHANGES_REQUESTED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("No render transform provided: supply translation, scale, shear, or angle"), TEXT("NO_CHANGES_REQUESTED"));
             return true;
         }
 
@@ -3162,11 +3203,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetRenderTransform(
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), TEXT("Render transform set"));
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Render transform set"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Render transform set"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetVisibility(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetVisibility(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -3177,21 +3219,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetVisibility(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
@@ -3203,11 +3245,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetVisibility(
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("message"), FString::Printf(TEXT("Visibility set to %s"), *VisibilityStr));
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Visibility set"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Visibility set"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetStyle(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetStyle(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -3218,21 +3261,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetStyle(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
@@ -3285,7 +3328,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetStyle(
                 McpPropertyReflection::ReadDiscriminatedValue(Payload, StyleTyped, StyleParseDetail);
             if (StyleParse == McpPropertyReflection::EMcpTypedValueParse::Ambiguous)
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     *FString::Printf(TEXT("set exactly one typed value field, got: %s"), *StyleParseDetail),
                     TEXT("AMBIGUOUS_VALUE"));
                 return true;
@@ -3317,7 +3360,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetStyle(
                     }
                     else if (ValField->Type == EJson::Null)
                     {
-                        SendAutomationError(RequestingSocket, RequestId,
+                        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Null JSON value is not supported for property mutation"), TEXT("UNSUPPORTED_VALUE_TYPE"));
                         return true;
                     }
@@ -3351,14 +3394,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetStyle(
 
             if (PropertyName.IsEmpty())
             {
-                SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: propertyName"), TEXT("MISSING_PARAMETER"));
+                S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: propertyName"), TEXT("MISSING_PARAMETER"));
                 return true;
             }
 
             FProperty* Prop = Widget->GetClass()->FindPropertyByName(FName(*PropertyName));
             if (!Prop)
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("Property '%s' not found on widget '%s' (class %s)"), *PropertyName, *SlotName, *Widget->GetClass()->GetName()),
                     TEXT("PROPERTY_NOT_FOUND"));
                 return true;
@@ -3400,7 +3443,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetStyle(
                 }
                 if (!bWriteSuccess)
                 {
-                    SendAutomationError(RequestingSocket, RequestId,
+                    S.SendAutomationError(RequestingSocket, RequestId,
                         FString::Printf(TEXT("Failed to set '%s' to '%s' on widget '%s'"), *PropertyName, *Value, *SlotName),
                         TEXT("SET_PROPERTY_FAILED"));
                     return true;
@@ -3434,11 +3477,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetStyle(
             : FString::Printf(TEXT("%s applied"), *SubAction);
         ResultJson->SetStringField(TEXT("message"), Msg);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, Msg, ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, Msg, ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetClipping(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetClipping(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -3449,21 +3493,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetClipping(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget not found"), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
@@ -3516,7 +3560,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetClipping(
                 McpPropertyReflection::ReadDiscriminatedValue(Payload, StyleTyped, StyleParseDetail);
             if (StyleParse == McpPropertyReflection::EMcpTypedValueParse::Ambiguous)
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     *FString::Printf(TEXT("set exactly one typed value field, got: %s"), *StyleParseDetail),
                     TEXT("AMBIGUOUS_VALUE"));
                 return true;
@@ -3548,7 +3592,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetClipping(
                     }
                     else if (ValField->Type == EJson::Null)
                     {
-                        SendAutomationError(RequestingSocket, RequestId,
+                        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Null JSON value is not supported for property mutation"), TEXT("UNSUPPORTED_VALUE_TYPE"));
                         return true;
                     }
@@ -3582,14 +3626,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetClipping(
 
             if (PropertyName.IsEmpty())
             {
-                SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: propertyName"), TEXT("MISSING_PARAMETER"));
+                S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: propertyName"), TEXT("MISSING_PARAMETER"));
                 return true;
             }
 
             FProperty* Prop = Widget->GetClass()->FindPropertyByName(FName(*PropertyName));
             if (!Prop)
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("Property '%s' not found on widget '%s' (class %s)"), *PropertyName, *SlotName, *Widget->GetClass()->GetName()),
                     TEXT("PROPERTY_NOT_FOUND"));
                 return true;
@@ -3631,7 +3675,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetClipping(
                 }
                 if (!bWriteSuccess)
                 {
-                    SendAutomationError(RequestingSocket, RequestId,
+                    S.SendAutomationError(RequestingSocket, RequestId,
                         FString::Printf(TEXT("Failed to set '%s' to '%s' on widget '%s'"), *PropertyName, *Value, *SlotName),
                         TEXT("SET_PROPERTY_FAILED"));
                     return true;
@@ -3665,11 +3709,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetClipping(
             : FString::Printf(TEXT("%s applied"), *SubAction);
         ResultJson->SetStringField(TEXT("message"), Msg);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, Msg, ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, Msg, ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetFont(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetFont(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -3681,21 +3726,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetFont(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* TargetWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!TargetWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -3740,11 +3785,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetFont(
         ResultJson->SetStringField(TEXT("slotName"), SlotName);
         ResultJson->SetNumberField(TEXT("fontSize"), FontSize);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set font"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set font"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetMargin(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetMargin(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -3754,21 +3800,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetMargin(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* TargetWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!TargetWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -3787,7 +3833,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetMargin(
         else if (BorderWidget) { Margin = BorderWidget->GetPadding(); }
         else
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget has no margin target (need HBox/VBox/Overlay child or a Border widget)"), TEXT("INVALID_SLOT"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget has no margin target (need HBox/VBox/Overlay child or a Border widget)"), TEXT("INVALID_SLOT"));
             return true;
         }
 
@@ -3798,7 +3844,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetMargin(
         if (Payload->HasField(TEXT("bottom"))) { Margin.Bottom = GetJsonNumberField(Payload, TEXT("bottom"), Margin.Bottom); bHaveMargin = true; }
         if (!bHaveMargin)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("No margin provided: supply left/top/right/bottom"), TEXT("NO_CHANGES_REQUESTED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("No margin provided: supply left/top/right/bottom"), TEXT("NO_CHANGES_REQUESTED"));
             return true;
         }
 
@@ -3817,16 +3863,17 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetMargin(
         ResultJson->SetNumberField(TEXT("right"), Margin.Right);
         ResultJson->SetNumberField(TEXT("bottom"), Margin.Bottom);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set margin"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set margin"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindText(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringBindText(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_SUBACTION()
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("'%s' is not implemented: it does not create a UMG property binding. "
                 "For a live-updating value, author an event handler with bind_event_to_delegate "
                 "(external delegate, e.g. an AttributeComponent) or bind_on_value_changed (child-widget "
@@ -3837,12 +3884,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindText(
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindVisibility(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringBindVisibility(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_SUBACTION()
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("'%s' is not implemented: it does not create a UMG property binding. "
                 "For a live-updating value, author an event handler with bind_event_to_delegate "
                 "(external delegate, e.g. an AttributeComponent) or bind_on_value_changed (child-widget "
@@ -3853,12 +3901,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindVisibility(
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindColor(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringBindColor(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_SUBACTION()
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("'%s' is not implemented: it does not create a UMG property binding. "
                 "For a live-updating value, author an event handler with bind_event_to_delegate "
                 "(external delegate, e.g. an AttributeComponent) or bind_on_value_changed (child-widget "
@@ -3869,12 +3918,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindColor(
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEnabled(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringBindEnabled(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
     MCP_WIDGETAUTH_SUBACTION()
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("'%s' is not implemented: it does not create a UMG property binding. "
                 "For a live-updating value, author an event handler with bind_event_to_delegate "
                 "(external delegate, e.g. an AttributeComponent) or bind_on_value_changed (child-widget "
@@ -3885,7 +3935,8 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEnabled(
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnClicked(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringBindOnClicked(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -3923,21 +3974,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnClicked(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
@@ -3964,7 +4015,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnClicked(
         if (!DelegateProp)
         {
             Transaction.Cancel();
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Delegate '%s' not found on widget '%s' (class %s)"),
                     *DelegateName, *SlotName, *Widget->GetClass()->GetName()),
                 TEXT("DELEGATE_NOT_FOUND"));
@@ -3989,7 +4040,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnClicked(
         if (!WidgetVarProp)
         {
             Transaction.Cancel();
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Could not resolve widget variable property for '%s'"), *SlotName),
                 TEXT("WIDGET_VAR_NOT_FOUND"));
             return true;
@@ -3998,7 +4049,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnClicked(
         if (WidgetBP->UbergraphPages.Num() == 0)
         {
             Transaction.Cancel();
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no event graph"), TEXT("NO_EVENT_GRAPH"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no event graph"), TEXT("NO_EVENT_GRAPH"));
             return true;
         }
         UEdGraph* EventGraph = WidgetBP->UbergraphPages[0];
@@ -4056,7 +4107,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnClicked(
             UFunction* Func = SelfClass ? SelfClass->FindFunctionByName(FName(*TargetFunction)) : nullptr;
             if (!Func)
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("targetFunction '%s' not found on %s"), *TargetFunction,
                         SelfClass ? *SelfClass->GetName() : TEXT("<null>")),
                     TEXT("FUNCTION_NOT_FOUND"));
@@ -4095,11 +4146,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnClicked(
         }
         ResultJson->SetBoolField(TEXT("saveSucceeded"), bSaved);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget delegate bound"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget delegate bound"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnHovered(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringBindOnHovered(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -4137,21 +4189,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnHovered(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
@@ -4178,7 +4230,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnHovered(
         if (!DelegateProp)
         {
             Transaction.Cancel();
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Delegate '%s' not found on widget '%s' (class %s)"),
                     *DelegateName, *SlotName, *Widget->GetClass()->GetName()),
                 TEXT("DELEGATE_NOT_FOUND"));
@@ -4203,7 +4255,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnHovered(
         if (!WidgetVarProp)
         {
             Transaction.Cancel();
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Could not resolve widget variable property for '%s'"), *SlotName),
                 TEXT("WIDGET_VAR_NOT_FOUND"));
             return true;
@@ -4212,7 +4264,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnHovered(
         if (WidgetBP->UbergraphPages.Num() == 0)
         {
             Transaction.Cancel();
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no event graph"), TEXT("NO_EVENT_GRAPH"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no event graph"), TEXT("NO_EVENT_GRAPH"));
             return true;
         }
         UEdGraph* EventGraph = WidgetBP->UbergraphPages[0];
@@ -4270,7 +4322,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnHovered(
             UFunction* Func = SelfClass ? SelfClass->FindFunctionByName(FName(*TargetFunction)) : nullptr;
             if (!Func)
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("targetFunction '%s' not found on %s"), *TargetFunction,
                         SelfClass ? *SelfClass->GetName() : TEXT("<null>")),
                     TEXT("FUNCTION_NOT_FOUND"));
@@ -4309,11 +4361,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnHovered(
         }
         ResultJson->SetBoolField(TEXT("saveSucceeded"), bSaved);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget delegate bound"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget delegate bound"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnValueChanged(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringBindOnValueChanged(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -4339,21 +4392,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnValueChanged(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath and slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* Widget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!Widget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
 
@@ -4363,7 +4416,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnValueChanged(
             TextWidget = WidgetBP->WidgetTree->FindWidget(FName(*TargetText));
             if (!TextWidget)
             {
-                SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("targetText '%s' not found"), *TargetText), TEXT("WIDGET_NOT_FOUND"));
+                S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("targetText '%s' not found"), *TargetText), TEXT("WIDGET_NOT_FOUND"));
                 return true;
             }
         }
@@ -4386,7 +4439,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnValueChanged(
         if (!DelegateProp)
         {
             Transaction.Cancel();
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Delegate '%s' not found on widget '%s' (class %s)"),
                     *DelegateName, *SlotName, *Widget->GetClass()->GetName()),
                 TEXT("DELEGATE_NOT_FOUND"));
@@ -4412,7 +4465,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnValueChanged(
         if (!SliderVarProp)
         {
             Transaction.Cancel();
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Could not resolve widget variable property for '%s'"), *SlotName),
                 TEXT("WIDGET_VAR_NOT_FOUND"));
             return true;
@@ -4420,7 +4473,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnValueChanged(
         if (TextWidget && !TextVarProp)
         {
             Transaction.Cancel();
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Could not resolve widget variable property for targetText '%s'"), *TargetText),
                 TEXT("WIDGET_VAR_NOT_FOUND"));
             return true;
@@ -4429,7 +4482,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnValueChanged(
         if (WidgetBP->UbergraphPages.Num() == 0)
         {
             Transaction.Cancel();
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no event graph"), TEXT("NO_EVENT_GRAPH"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no event graph"), TEXT("NO_EVENT_GRAPH"));
             return true;
         }
         UEdGraph* EventGraph = WidgetBP->UbergraphPages[0];
@@ -4553,11 +4606,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindOnValueChanged(
         }
         ResultJson->SetBoolField(TEXT("saveSucceeded"), bSaved);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("OnValueChanged bound"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("OnValueChanged bound"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEventToDelegate(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringBindEventToDelegate(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -4577,7 +4631,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEventToDelegate(
         const FString DelegateName = GetJsonStringField(Payload, TEXT("delegateName"));
         if (WidgetPath.IsEmpty() || EventName.IsEmpty() || OwnerPinName.IsEmpty() || DelegateName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("Missing required parameters: widgetPath, eventName, ownerPin, delegateName"),
                 TEXT("MISSING_PARAMETER"));
             return true;
@@ -4590,7 +4644,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEventToDelegate(
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget blueprint not found: %s"), *WidgetPath), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget blueprint not found: %s"), *WidgetPath), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -4607,7 +4661,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEventToDelegate(
         }
         if (!SourceEvent)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Event '%s' not found in the widget graph — run add_event for it first"), *EventName),
                 TEXT("EVENT_NOT_FOUND"));
             return true;
@@ -4617,7 +4671,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEventToDelegate(
         UEdGraphPin* OwnerPin = SourceEvent->FindPin(FName(*OwnerPinName), EGPD_Output);
         if (!OwnerPin)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Output pin '%s' not found on event '%s'"), *OwnerPinName, *EventName),
                 TEXT("OWNER_PIN_NOT_FOUND"));
             return true;
@@ -4625,7 +4679,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEventToDelegate(
         UClass* OwnerClass = Cast<UClass>(OwnerPin->PinType.PinSubCategoryObject.Get());
         if (!OwnerClass)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Pin '%s' is not an object pin; cannot resolve the delegate owner class"), *OwnerPinName),
                 TEXT("OWNER_CLASS_NOT_FOUND"));
             return true;
@@ -4633,7 +4687,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEventToDelegate(
         FMulticastDelegateProperty* DelegateProp = FindFProperty<FMulticastDelegateProperty>(OwnerClass, FName(*DelegateName));
         if (!DelegateProp)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Multicast delegate '%s' not found on class '%s'"), *DelegateName, *OwnerClass->GetName()),
                 TEXT("DELEGATE_NOT_FOUND"));
             return true;
@@ -4650,7 +4704,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEventToDelegate(
                     ResultJson->SetBoolField(TEXT("success"), true);
                     ResultJson->SetBoolField(TEXT("alreadyExists"), true);
                     ResultJson->SetStringField(TEXT("handlerEvent"), HandlerEventName);
-                    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Delegate binding already present"), ResultJson);
+                    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Delegate binding already present"), ResultJson);
                     return true;
                 }
             }
@@ -4812,7 +4866,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEventToDelegate(
         // rather than a false success — same fail-fast discipline as bind_animation_notify.
         if (!bExecWired || !bSelfWired || !bDelegateWired)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Delegate binding incomplete (execWired=%d selfWired=%d delegateWired=%d) — the schema rejected a core connection"),
                     bExecWired, bSelfWired, bDelegateWired),
                 TEXT("CONNECTION_FAILED"));
@@ -4820,18 +4874,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindEventToDelegate(
         }
 
         ResultJson->SetBoolField(TEXT("success"), true);
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
             FString::Printf(TEXT("Bound %s.%s -> %s"), *OwnerClass->GetName(), *DelegateName, *HandlerEventName), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreatePropertyBinding(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreatePropertyBinding(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
         // Never created an FDelegateEditorBinding — only returned an advisory "instruction".
         // Same unbuilt feature as bind_text et al. Fail honestly and point at the working path.
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("create_property_binding is not implemented: it does not create a UMG property binding "
                  "(FDelegateEditorBinding + generated getter). For a live-updating value, author an event "
                  "handler with bind_event_to_delegate / bind_on_value_changed that calls the widget's setter; "
@@ -4841,28 +4896,29 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreatePropertyBinding(
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetWidgetBinding(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetWidgetBinding(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         FString TargetWidget = GetJsonStringField(Payload, TEXT("targetWidget"));
         if (TargetWidget.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: targetWidget"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: targetWidget"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         FString PropertyName = GetJsonStringField(Payload, TEXT("property"));
         if (PropertyName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: property"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: property"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
@@ -4875,7 +4931,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetWidgetBinding(
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -4890,7 +4946,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetWidgetBinding(
 
         if (!Target)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("Target widget not found: %s"), *TargetWidget), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
@@ -4899,7 +4955,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetWidgetBinding(
         // this action wired nothing (it reported "targetVerified"/"saved" while doing neither). The
         // input was validated above; fail honestly rather than imply a binding was made.
         (void)Target; (void)FunctionName;
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("set_widget_binding is not implemented: it only checked that the property was bindable and "
                  "wired no binding. Use bind_event_to_delegate / bind_on_value_changed for live updates, or "
                  "create the getter in the Widget Blueprint and assign it via the designer's Bind dropdown."),
@@ -4907,7 +4963,8 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetWidgetBinding(
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindLocalizedText(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringBindLocalizedText(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -4919,21 +4976,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindLocalizedText(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty() || StringTableId.IsEmpty() || StringKey.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* TargetWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!TargetWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -4961,11 +5018,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringBindLocalizedText(
             ResultJson->SetStringField(TEXT("note"), TEXT("String table entry not found or widget is not a text widget"));
         }
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Bound localized text"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Bound localized text"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetAnimation(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreateWidgetAnimation(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -4976,14 +5034,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetAnimation(
         
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
         
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
         
@@ -4992,7 +5050,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetAnimation(
         {
             if (ExistingAnim && ExistingAnim->GetName().Equals(AnimationName, ESearchCase::IgnoreCase))
             {
-                SendAutomationError(RequestingSocket, RequestId, 
+                S.SendAutomationError(RequestingSocket, RequestId, 
                     FString::Printf(TEXT("Animation '%s' already exists"), *AnimationName), 
                     TEXT("ALREADY_EXISTS"));
                 return true;
@@ -5003,7 +5061,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetAnimation(
         UWidgetAnimation* NewAnim = NewObject<UWidgetAnimation>(WidgetBP, FName(*AnimationName), RF_Transactional);
         if (!NewAnim)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create animation"), TEXT("CREATE_FAILED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create animation"), TEXT("CREATE_FAILED"));
             return true;
         }
         
@@ -5012,7 +5070,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetAnimation(
         NewAnim->MovieScene = NewObject<UMovieScene>(NewAnim, FName(*AnimationName), RF_Transactional);
         if (!NewAnim->MovieScene)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create animation MovieScene"), TEXT("CREATE_FAILED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create animation MovieScene"), TEXT("CREATE_FAILED"));
             return true;
         }
         
@@ -5041,11 +5099,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetAnimation(
         ResultJson->SetNumberField(TEXT("duration"), SafeDuration);
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetBP->GetPathName());
         
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget animation created"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget animation created"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAnimationTrack(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddAnimationTrack(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -5057,14 +5116,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAnimationTrack(
         
         if (WidgetPath.IsEmpty() || AnimationName.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, animationName, slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, animationName, slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
         
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
         
@@ -5081,7 +5140,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAnimationTrack(
         
         if (!Animation)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Animation '%s' not found"), *AnimationName), TEXT("ANIMATION_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Animation '%s' not found"), *AnimationName), TEXT("ANIMATION_NOT_FOUND"));
             return true;
         }
         
@@ -5099,7 +5158,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAnimationTrack(
         
         if (!TargetWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found in tree"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found in tree"), *SlotName), TEXT("WIDGET_NOT_FOUND"));
             return true;
         }
         
@@ -5108,7 +5167,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAnimationTrack(
         UMovieScene* MovieScene = Animation->GetMovieScene();
         if (!MovieScene)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Animation has no MovieScene"), TEXT("ANIMATION_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Animation has no MovieScene"), TEXT("ANIMATION_ERROR"));
             return true;
         }
         
@@ -5134,11 +5193,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAnimationTrack(
         
         McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
         
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Animation track added"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Animation track added"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAnimationKeyframe(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddAnimationKeyframe(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -5149,14 +5209,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAnimationKeyframe(
         
         if (WidgetPath.IsEmpty() || AnimationName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, animationName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, animationName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
         
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
         
@@ -5173,7 +5233,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAnimationKeyframe(
         
         if (!Animation)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Animation '%s' not found"), *AnimationName), TEXT("ANIMATION_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Animation '%s' not found"), *AnimationName), TEXT("ANIMATION_NOT_FOUND"));
             return true;
         }
 
@@ -5181,7 +5241,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAnimationKeyframe(
         // keyframe means resolving the bound track's MovieSceneFloatChannel and inserting a key;
         // that is unbuilt. Fail honestly instead of reporting a keyframe that does not exist.
         (void)Time; (void)Value;
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("add_animation_keyframe is not implemented: it writes no MovieScene channel key. "
                  "Author keyframes in the Widget Blueprint Editor's Animation tab, or extend this action "
                  "to resolve the track's MovieSceneFloatChannel and insert the key."),
@@ -5189,7 +5249,8 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAnimationKeyframe(
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnimationLoop(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetAnimationLoop(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -5200,14 +5261,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnimationLoop(
         
         if (WidgetPath.IsEmpty() || AnimationName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, animationName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, animationName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
         
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
         
@@ -5224,7 +5285,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnimationLoop(
         
         if (!Animation)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Animation '%s' not found"), *AnimationName), TEXT("ANIMATION_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Animation '%s' not found"), *AnimationName), TEXT("ANIMATION_NOT_FOUND"));
             return true;
         }
 
@@ -5232,7 +5293,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnimationLoop(
         // to PlayAnimation(NumLoopsToPlay, ...). This action persisted nothing; it only echoed the
         // values. Report that honestly so callers wire looping at the PlayAnimation call site.
         (void)bLoop; (void)LoopCount;
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("set_animation_loop is not implemented: loop count is not stored on the animation asset. "
                  "Pass NumLoopsToPlay to PlayAnimation() at runtime (loop=0 plays once; specify the count "
                  "or use PlayAnimation's looping mode)."),
@@ -5240,7 +5301,8 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnimationLoop(
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnimationSpeed(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetAnimationSpeed(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -5250,14 +5312,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnimationSpeed(
 
         if (WidgetPath.IsEmpty() || AnimationName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, animationName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, animationName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -5273,7 +5335,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnimationSpeed(
 
         if (!TargetAnim || !TargetAnim->MovieScene)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Animation '%s' not found"), *AnimationName), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Animation '%s' not found"), *AnimationName), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -5281,14 +5343,15 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetAnimationSpeed(
         // PlaybackSpeed. Playback speed is a runtime argument to PlayAnimation(..., PlaybackSpeed), not
         // an asset property. Report that honestly instead of "Set animation speed".
         (void)PlaybackSpeed;
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("set_animation_speed is not implemented: playback speed is not stored on the animation "
                  "asset. Pass PlaybackSpeed to PlayAnimation() at runtime."),
             TEXT("NOT_IMPLEMENTED"));
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetAnimationInfo(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringGetAnimationInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -5298,14 +5361,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetAnimationInfo(
 
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -5355,7 +5418,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetAnimationInfo(
 
             if (!TargetAnim)
             {
-                SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Animation '%s' not found"), *AnimationName), TEXT("NOT_FOUND"));
+                S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Animation '%s' not found"), *AnimationName), TEXT("NOT_FOUND"));
                 return true;
             }
 
@@ -5397,11 +5460,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetAnimationInfo(
             }
         }
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Retrieved animation info"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Retrieved animation info"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringDeleteAnimation(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringDeleteAnimation(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -5411,14 +5475,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringDeleteAnimation(
 
         if (WidgetPath.IsEmpty() || AnimationName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, animationName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, animationName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -5434,7 +5498,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringDeleteAnimation(
 
         if (FoundIndex == INDEX_NONE)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Animation '%s' not found"), *AnimationName), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Animation '%s' not found"), *AnimationName), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -5446,7 +5510,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringDeleteAnimation(
         ResultJson->SetStringField(TEXT("deletedAnimation"), AnimationName);
         ResultJson->SetNumberField(TEXT("remainingAnimations"), WidgetBP->Animations.Num());
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Deleted animation"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Deleted animation"), ResultJson);
         return true;
 }
 
@@ -5457,7 +5521,8 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringDeleteAnimation(
 // (MCP/Calls/McpCalls_ManageBlueprint.cpp).
 // -----------------------------------------------------------------------------
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetStyle(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreateWidgetStyle(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -5465,7 +5530,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetStyle(
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
@@ -5484,7 +5549,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetStyle(
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -5624,11 +5689,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetStyle(
         ResultJson->SetArrayField(TEXT("createdVariables"), VariablesArray);
         ResultJson->SetNumberField(TEXT("variableCount"), CreatedVariables.Num());
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget style variables created"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget style variables created"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringApplyStyleToWidget(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringApplyStyleToWidget(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -5638,21 +5704,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringApplyStyleToWidget(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty() || StyleName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName, styleName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName, styleName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* TargetWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!TargetWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -5660,7 +5726,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringApplyStyleToWidget(
         // nothing. Fail honestly. (Widget was validated above.) For Common UI styles use
         // set_common_button_style / set_common_text_style, which set the real TSubclassOf<...> style.
         (void)TargetWidget;
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("apply_style_to_widget is not implemented: it did not apply any style. For Common UI "
                  "widgets use set_common_button_style / set_common_text_style; for plain UMG widgets set the "
                  "style/brush property directly via set_property on the widget's slot object."),
@@ -5668,7 +5734,8 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringApplyStyleToWidget(
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidgetComponent(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddWidgetComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -5676,14 +5743,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidgetComponent(
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         FString ComponentType = GetJsonStringField(Payload, TEXT("componentType"));
         if (ComponentType.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: componentType"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: componentType"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
@@ -5696,7 +5763,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidgetComponent(
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -5839,7 +5906,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidgetComponent(
 
         if (!WidgetClass || !WidgetClass->IsChildOf(UWidget::StaticClass()))
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("Unknown widget type: %s"), *ComponentType), TEXT("UNKNOWN_TYPE"));
             return true;
         }
@@ -5848,7 +5915,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidgetComponent(
         UWidget* NewWidget = WidgetBP->WidgetTree->ConstructWidget<UWidget>(WidgetClass, *ComponentName);
         if (!NewWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct widget"), TEXT("CREATION_FAILED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct widget"), TEXT("CREATION_FAILED"));
             return true;
         }
         RegisterWidgetGuid(WidgetBP, NewWidget);
@@ -5896,11 +5963,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidgetComponent(
         ResultJson->SetStringField(TEXT("componentType"), WidgetClass->GetName());
         ResultJson->SetStringField(TEXT("parentName"), Parent->GetName());
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget component added"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget component added"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringReparentWidget(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringReparentWidget(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -5911,28 +5979,28 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringReparentWidget(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty() || NewParent.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName, newParent"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName, newParent"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* TargetWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!TargetWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
             return true;
         }
 
         UPanelWidget* NewParentWidget = Cast<UPanelWidget>(WidgetBP->WidgetTree->FindWidget(FName(*NewParent)));
         if (!NewParentWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("New parent '%s' not found or not a panel"), *NewParent), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("New parent '%s' not found or not a panel"), *NewParent), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -5950,11 +6018,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringReparentWidget(
         ResultJson->SetStringField(TEXT("widget"), SlotName);
         ResultJson->SetStringField(TEXT("newParent"), NewParent);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Reparented widget"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Reparented widget"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringWrapRoot(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringWrapRoot(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -5972,26 +6041,26 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringWrapRoot(
 
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* OldRoot = WidgetBP->WidgetTree->RootWidget;
         if (!OldRoot)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no root widget - add a panel normally instead."), TEXT("NO_ROOT"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint has no root widget - add a panel normally instead."), TEXT("NO_ROOT"));
             return true;
         }
         if (WidgetBP->WidgetTree->FindWidget(FName(*NewName)))
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("A widget named '%s' already exists."), *NewName), TEXT("ALREADY_EXISTS"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("A widget named '%s' already exists."), *NewName), TEXT("ALREADY_EXISTS"));
             return true;
         }
 
@@ -6002,14 +6071,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringWrapRoot(
         else if (PanelType.Equals(TEXT("CanvasPanel"), ESearchCase::IgnoreCase)) { PanelClass = UCanvasPanel::StaticClass(); }
         else
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Unsupported panelType '%s'. Use Overlay, VerticalBox, HorizontalBox or CanvasPanel."), *PanelType), TEXT("INVALID_ARGUMENT"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Unsupported panelType '%s'. Use Overlay, VerticalBox, HorizontalBox or CanvasPanel."), *PanelType), TEXT("INVALID_ARGUMENT"));
             return true;
         }
 
         UPanelWidget* NewRoot = Cast<UPanelWidget>(WidgetBP->WidgetTree->ConstructWidget<UWidget>(PanelClass, FName(*NewName)));
         if (!NewRoot)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct the panel widget."), TEXT("CREATION_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct the panel widget."), TEXT("CREATION_ERROR"));
             return true;
         }
         NewRoot->SetDisplayLabel(NewName);
@@ -6040,11 +6109,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringWrapRoot(
         ResultJson->SetStringField(TEXT("newRoot"), NewName);
         ResultJson->SetStringField(TEXT("wrapped"), OldRoot->GetName());
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Wrapped root widget"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Wrapped root widget"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidget(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddWidget(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -6059,19 +6129,19 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidget(
 
         if (WidgetPath.IsEmpty() || WidgetClassName.IsEmpty() || Name.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, widgetClass, name"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, widgetClass, name"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
         if (WidgetBP->WidgetTree->FindWidget(FName(*Name)))
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("A widget named '%s' already exists."), *Name), TEXT("ALREADY_EXISTS"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("A widget named '%s' already exists."), *Name), TEXT("ALREADY_EXISTS"));
             return true;
         }
 
@@ -6104,14 +6174,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidget(
         }
         if (!FoundClass || !FoundClass->IsChildOf(UWidget::StaticClass()))
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Could not resolve widgetClass '%s' to a UWidget subclass. Pass a loaded class name, or a fully-qualified path such as /Script/CommonUI.CommonBoundActionBar or /Game/UI/MyWidget.MyWidget_C."), *WidgetClassName),
                 TEXT("INVALID_CLASS"));
             return true;
         }
         if (FoundClass->HasAnyClassFlags(CLASS_Abstract))
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("widgetClass '%s' is abstract - use a concrete subclass."), *WidgetClassName),
                 TEXT("INVALID_CLASS"));
             return true;
@@ -6120,7 +6190,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidget(
         UWidget* NewWidget = WidgetBP->WidgetTree->ConstructWidget<UWidget>(FoundClass, FName(*Name));
         if (!NewWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct the widget."), TEXT("CREATION_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct the widget."), TEXT("CREATION_ERROR"));
             return true;
         }
         NewWidget->SetDisplayLabel(Name);
@@ -6129,7 +6199,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidget(
         FString AddErr;
         if (!SafeAddWidgetToTree(WidgetBP, NewWidget, ParentSlot, &AddErr))
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 AddErr.IsEmpty() ? TEXT("Failed to add the widget to the tree.") : AddErr,
                 TEXT("ADD_FAILED"));
             return true;
@@ -6142,11 +6212,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidget(
         ResultJson->SetStringField(TEXT("name"), Name);
         ResultJson->SetStringField(TEXT("widgetClass"), FoundClass->GetPathName());
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added widget"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added widget"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetWidgetSlotInfo(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringGetWidgetSlotInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -6156,21 +6227,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetWidgetSlotInfo(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* TargetWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!TargetWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -6270,11 +6341,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetWidgetSlotInfo(
             ResultJson->SetStringField(TEXT("parentClass"), Parent->GetClass()->GetName());
         }
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Retrieved widget slot info"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Retrieved widget slot info"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateMainMenu(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreateMainMenu(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -6284,14 +6356,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateMainMenu(
         
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
         
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
         
@@ -6355,11 +6427,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateMainMenu(
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetBP->GetPathName());
         ResultJson->SetStringField(TEXT("title"), Title);
         
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Main menu created"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Main menu created"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreatePauseMenu(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreatePauseMenu(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -6368,14 +6441,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreatePauseMenu(
         
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
         
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
         
@@ -6434,11 +6507,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreatePauseMenu(
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetBP->GetPathName());
         
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Pause menu created"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Pause menu created"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateHudWidget(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreateHudWidget(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -6447,14 +6521,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateHudWidget(
         
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
         
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
         
@@ -6479,11 +6553,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateHudWidget(
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetBP->GetPathName());
         ResultJson->SetStringField(TEXT("note"), TEXT("HUD canvas created. Use add_health_bar, add_crosshair, add_ammo_counter to add HUD elements."));
         
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("HUD widget created"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("HUD widget created"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddHealthBar(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddHealthBar(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -6497,14 +6572,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddHealthBar(
         
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
         
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
         
@@ -6522,7 +6597,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddHealthBar(
         
         if (!Parent)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("No valid parent panel found"), TEXT("PARENT_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("No valid parent panel found"), TEXT("PARENT_NOT_FOUND"));
             return true;
         }
         
@@ -6560,11 +6635,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddHealthBar(
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetName"), TEXT("HealthBarContainer"));
         
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Health bar added"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Health bar added"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCrosshair(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddCrosshair(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -6575,14 +6651,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCrosshair(
         
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
         
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
         
@@ -6600,7 +6676,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCrosshair(
         
         if (!Parent)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("No valid parent panel found"), TEXT("PARENT_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("No valid parent panel found"), TEXT("PARENT_NOT_FOUND"));
             return true;
         }
         
@@ -6637,11 +6713,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCrosshair(
         ResultJson->SetStringField(TEXT("widgetName"), TEXT("Crosshair"));
         ResultJson->SetStringField(TEXT("note"), TEXT("Simple crosshair added. Replace with Image widget and crosshair texture for custom appearance."));
         
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Crosshair added"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Crosshair added"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAmmoCounter(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddAmmoCounter(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -6651,14 +6728,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAmmoCounter(
         
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
         
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
         
@@ -6675,7 +6752,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAmmoCounter(
         
         if (!Parent)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("No valid parent panel found"), TEXT("PARENT_NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("No valid parent panel found"), TEXT("PARENT_NOT_FOUND"));
             return true;
         }
         
@@ -6712,11 +6789,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddAmmoCounter(
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetName"), TEXT("AmmoCounter"));
         
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Ammo counter added"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Ammo counter added"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateSettingsMenu(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreateSettingsMenu(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -6727,7 +6805,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateSettingsMenu(
         FString RawFolder = Folder;
         Folder = SanitizeProjectRelativePath(Folder);
         if (Folder.IsEmpty() && !RawFolder.IsEmpty()) {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
             return true;
         }
         if (Folder.IsEmpty()) { Folder = TEXT("/Game/UI/Menus"); }
@@ -6742,7 +6820,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateSettingsMenu(
         FString NewBPObjectPath = FullPath + TEXT(".") + Name;
         if (FindObject<UWidgetBlueprint>(nullptr, *NewBPObjectPath) != nullptr)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("Widget blueprint '%s' already exists"), *Name), 
                 TEXT("ALREADY_EXISTS"));
             return true;
@@ -6751,7 +6829,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateSettingsMenu(
         UPackage* Package = CreatePackage(*FullPath);
         if (!Package)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
             return true;
         }
 
@@ -6761,7 +6839,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateSettingsMenu(
 
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create settings menu widget"), TEXT("CREATION_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create settings menu widget"), TEXT("CREATION_ERROR"));
             return true;
         }
 
@@ -6821,11 +6899,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateSettingsMenu(
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetBP->GetPathName());
         ResultJson->SetStringField(TEXT("message"), TEXT("Created settings menu template"));
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created settings menu template"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created settings menu template"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateLoadingScreen(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreateLoadingScreen(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -6836,7 +6915,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateLoadingScreen(
         FString RawFolder = Folder;
         Folder = SanitizeProjectRelativePath(Folder);
         if (Folder.IsEmpty() && !RawFolder.IsEmpty()) {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
             return true;
         }
         if (Folder.IsEmpty()) { Folder = TEXT("/Game/UI"); }
@@ -6851,7 +6930,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateLoadingScreen(
         FString NewBPObjectPath = FullPath + TEXT(".") + Name;
         if (FindObject<UWidgetBlueprint>(nullptr, *NewBPObjectPath) != nullptr)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("Widget blueprint '%s' already exists"), *Name), 
                 TEXT("ALREADY_EXISTS"));
             return true;
@@ -6860,7 +6939,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateLoadingScreen(
         UPackage* Package = CreatePackage(*FullPath);
         if (!Package)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
             return true;
         }
 
@@ -6870,7 +6949,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateLoadingScreen(
 
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create loading screen widget"), TEXT("CREATION_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create loading screen widget"), TEXT("CREATION_ERROR"));
             return true;
         }
 
@@ -6920,11 +6999,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateLoadingScreen(
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetBP->GetPathName());
         ResultJson->SetStringField(TEXT("message"), TEXT("Created loading screen template"));
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created loading screen template"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created loading screen template"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddMinimap(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddMinimap(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -6935,14 +7015,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddMinimap(
 
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -6969,7 +7049,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddMinimap(
             DiscardUnaddedWidget(WidgetBP, MapImage);
             DiscardUnaddedWidget(WidgetBP, MinimapBorder);
             DiscardUnaddedWidget(WidgetBP, MinimapContainer);
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("Cannot add minimap: the widget blueprint has no panel root to parent it under. ")
                 TEXT("Give the blueprint a panel root first (e.g. add_canvas_panel)."),
                 TEXT("ADD_FAILED"));
@@ -6995,11 +7075,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddMinimap(
         ResultJson->SetStringField(TEXT("slotName"), SlotName);
         ResultJson->SetNumberField(TEXT("iconSize"), Size);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added minimap widget"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added minimap widget"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCompass(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddCompass(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -7009,14 +7090,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCompass(
 
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -7041,7 +7122,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCompass(
             DiscardUnaddedWidget(WidgetBP, DirectionIndicator);
             DiscardUnaddedWidget(WidgetBP, CompassImage);
             DiscardUnaddedWidget(WidgetBP, CompassContainer);
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("Cannot add compass: the widget blueprint has no panel root to parent it under. ")
                 TEXT("Give the blueprint a panel root first (e.g. add_canvas_panel)."),
                 TEXT("ADD_FAILED"));
@@ -7063,11 +7144,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCompass(
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
         ResultJson->SetStringField(TEXT("slotName"), SlotName);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added compass widget"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added compass widget"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddInteractionPrompt(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddInteractionPrompt(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -7078,14 +7160,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddInteractionPrompt(
 
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -7111,7 +7193,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddInteractionPrompt(
             DiscardUnaddedWidget(WidgetBP, PromptText);
             DiscardUnaddedWidget(WidgetBP, KeyIcon);
             DiscardUnaddedWidget(WidgetBP, PromptContainer);
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("Cannot add interaction prompt: the widget blueprint has no panel root to parent it under. ")
                 TEXT("Give the blueprint a panel root first (e.g. add_canvas_panel)."),
                 TEXT("ADD_FAILED"));
@@ -7132,11 +7214,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddInteractionPrompt(
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
         ResultJson->SetStringField(TEXT("slotName"), SlotName);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added interaction prompt"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added interaction prompt"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddObjectiveTracker(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddObjectiveTracker(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -7146,14 +7229,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddObjectiveTracker(
 
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -7191,7 +7274,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddObjectiveTracker(
             DiscardUnaddedWidget(WidgetBP, ObjectiveList);
             DiscardUnaddedWidget(WidgetBP, ObjectiveTitle);
             DiscardUnaddedWidget(WidgetBP, ObjectiveContainer);
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("Cannot add objective tracker: the widget blueprint has no panel root to parent it under. ")
                 TEXT("Give the blueprint a panel root first (e.g. add_canvas_panel)."),
                 TEXT("ADD_FAILED"));
@@ -7213,11 +7296,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddObjectiveTracker(
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
         ResultJson->SetStringField(TEXT("slotName"), SlotName);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added objective tracker"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added objective tracker"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddDamageIndicator(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddDamageIndicator(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -7227,14 +7311,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddDamageIndicator(
 
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -7274,7 +7358,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddDamageIndicator(
             DiscardUnaddedWidget(WidgetBP, DirectionalCanvas);
             DiscardUnaddedWidget(WidgetBP, VignetteImage);
             DiscardUnaddedWidget(WidgetBP, DamageOverlay);
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("Cannot add damage indicator: the widget blueprint has no panel root to parent it under. ")
                 TEXT("Give the blueprint a panel root first (e.g. add_canvas_panel)."),
                 TEXT("ADD_FAILED"));
@@ -7294,11 +7378,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddDamageIndicator(
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
         ResultJson->SetStringField(TEXT("slotName"), SlotName);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added damage indicator"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added damage indicator"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateInventoryUi(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreateInventoryUi(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -7309,7 +7394,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateInventoryUi(
         FString RawFolder = Folder;
         Folder = SanitizeProjectRelativePath(Folder);
         if (Folder.IsEmpty() && !RawFolder.IsEmpty()) {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
             return true;
         }
         if (Folder.IsEmpty()) { Folder = TEXT("/Game/UI"); }
@@ -7326,7 +7411,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateInventoryUi(
         FString NewBPObjectPath = FullPath + TEXT(".") + Name;
         if (FindObject<UWidgetBlueprint>(nullptr, *NewBPObjectPath) != nullptr)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("Widget blueprint '%s' already exists"), *Name), 
                 TEXT("ALREADY_EXISTS"));
             return true;
@@ -7335,7 +7420,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateInventoryUi(
         UPackage* Package = CreatePackage(*FullPath);
         if (!Package)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
             return true;
         }
 
@@ -7345,7 +7430,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateInventoryUi(
 
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create inventory widget"), TEXT("CREATION_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create inventory widget"), TEXT("CREATION_ERROR"));
             return true;
         }
 
@@ -7400,11 +7485,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateInventoryUi(
         ResultJson->SetNumberField(TEXT("rows"), GridRows);
         ResultJson->SetNumberField(TEXT("totalSlots"), GridColumns * GridRows);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created inventory UI"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created inventory UI"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateDialogWidget(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreateDialogWidget(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -7415,7 +7501,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateDialogWidget(
         FString RawFolder = Folder;
         Folder = SanitizeProjectRelativePath(Folder);
         if (Folder.IsEmpty() && !RawFolder.IsEmpty()) {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
             return true;
         }
         if (Folder.IsEmpty()) { Folder = TEXT("/Game/UI"); }
@@ -7430,7 +7516,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateDialogWidget(
         FString NewBPObjectPath = FullPath + TEXT(".") + Name;
         if (FindObject<UWidgetBlueprint>(nullptr, *NewBPObjectPath) != nullptr)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("Widget blueprint '%s' already exists"), *Name), 
                 TEXT("ALREADY_EXISTS"));
             return true;
@@ -7439,7 +7525,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateDialogWidget(
         UPackage* Package = CreatePackage(*FullPath);
         if (!Package)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
             return true;
         }
 
@@ -7449,7 +7535,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateDialogWidget(
 
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create dialog widget"), TEXT("CREATION_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create dialog widget"), TEXT("CREATION_ERROR"));
             return true;
         }
 
@@ -7510,11 +7596,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateDialogWidget(
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetBP->GetPathName());
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created dialog widget"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created dialog widget"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateRadialMenu(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreateRadialMenu(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -7525,7 +7612,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateRadialMenu(
         FString RawFolder = Folder;
         Folder = SanitizeProjectRelativePath(Folder);
         if (Folder.IsEmpty() && !RawFolder.IsEmpty()) {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
             return true;
         }
         if (Folder.IsEmpty()) { Folder = TEXT("/Game/UI"); }
@@ -7541,7 +7628,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateRadialMenu(
         FString NewBPObjectPath = FullPath + TEXT(".") + Name;
         if (FindObject<UWidgetBlueprint>(nullptr, *NewBPObjectPath) != nullptr)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("Widget blueprint '%s' already exists"), *Name), 
                 TEXT("ALREADY_EXISTS"));
             return true;
@@ -7550,7 +7637,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateRadialMenu(
         UPackage* Package = CreatePackage(*FullPath);
         if (!Package)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
             return true;
         }
 
@@ -7560,7 +7647,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateRadialMenu(
 
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create radial menu"), TEXT("CREATION_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create radial menu"), TEXT("CREATION_ERROR"));
             return true;
         }
 
@@ -7630,11 +7717,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateRadialMenu(
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetBP->GetPathName());
         ResultJson->SetNumberField(TEXT("segments"), SegmentCount);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created radial menu"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created radial menu"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateCreditsScreen(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreateCreditsScreen(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -7645,7 +7733,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateCreditsScreen(
         FString RawFolder = Folder;
         Folder = SanitizeProjectRelativePath(Folder);
         if (Folder.IsEmpty() && !RawFolder.IsEmpty()) {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
             return true;
         }
         if (Folder.IsEmpty()) { Folder = TEXT("/Game/UI"); }
@@ -7659,7 +7747,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateCreditsScreen(
         UPackage* Package = CreatePackage(*FullPath);
         if (!Package)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
             return true;
         }
 
@@ -7669,7 +7757,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateCreditsScreen(
 
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create credits widget"), TEXT("CREATION_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create credits widget"), TEXT("CREATION_ERROR"));
             return true;
         }
 
@@ -7725,11 +7813,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateCreditsScreen(
         ResultJson->SetBoolField(TEXT("success"), true);
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetBP->GetPathName());
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created credits screen"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created credits screen"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateShopUi(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringCreateShopUi(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -7740,7 +7829,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateShopUi(
         FString RawFolder = Folder;
         Folder = SanitizeProjectRelativePath(Folder);
         if (Folder.IsEmpty() && !RawFolder.IsEmpty()) {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid folder path: path traversal or invalid characters detected"), TEXT("INVALID_PATH"));
             return true;
         }
         if (Folder.IsEmpty()) { Folder = TEXT("/Game/UI"); }
@@ -7755,7 +7844,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateShopUi(
         UPackage* Package = CreatePackage(*FullPath);
         if (!Package)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
             return true;
         }
 
@@ -7765,7 +7854,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateShopUi(
 
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create shop widget"), TEXT("CREATION_ERROR"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create shop widget"), TEXT("CREATION_ERROR"));
             return true;
         }
 
@@ -7860,11 +7949,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateShopUi(
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetBP->GetPathName());
         ResultJson->SetNumberField(TEXT("columns"), ItemColumns);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created shop UI"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Created shop UI"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddQuestTracker(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringAddQuestTracker(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -7874,14 +7964,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddQuestTracker(
 
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -7951,11 +8041,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddQuestTracker(
         ResultJson->SetStringField(TEXT("widgetPath"), WidgetPath);
         ResultJson->SetStringField(TEXT("slotName"), SlotName);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added quest tracker"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added quest tracker"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetWidgetInfo(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringGetWidgetInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -7963,14 +8054,14 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetWidgetInfo(
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         if (WidgetPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameter: widgetPath"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -8035,7 +8126,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetWidgetInfo(
             {
                 TArray<FString> Names;
                 WidgetBP->WidgetTree->ForEachWidget([&Names](UWidget* W) { Names.Add(W->GetName()); });
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("Widget '%s' not found. Widgets present: %s"),
                         *WidgetName, *FString::Join(Names, TEXT(", "))),
                     TEXT("NOT_FOUND"));
@@ -8115,11 +8206,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringGetWidgetInfo(
         ResultJson->SetObjectField(TEXT("widgetInfo"), WidgetInfo);
 
         McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Retrieved widget info"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Retrieved widget info"), ResultJson);
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetLocalizationKey(
+bool McpHandlers::Blueprint::HandleWidgetAuthoringSetLocalizationKey(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -8131,21 +8223,21 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetLocalizationKey(
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty() || Key.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName, key"), TEXT("MISSING_PARAMETER"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing required parameters: widgetPath, slotName, key"), TEXT("MISSING_PARAMETER"));
             return true;
         }
 
         UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
         if (!WidgetBP || !WidgetBP->WidgetTree)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
             return true;
         }
 
         UWidget* TargetWidget = WidgetBP->WidgetTree->FindWidget(FName(*SlotName));
         if (!TargetWidget)
         {
-            SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Widget '%s' not found"), *SlotName), TEXT("NOT_FOUND"));
             return true;
         }
 
@@ -8166,7 +8258,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetLocalizationKey(
         ResultJson->SetStringField(TEXT("namespace"), Namespace);
         ResultJson->SetStringField(TEXT("key"), Key);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set localization key"), ResultJson);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set localization key"), ResultJson);
         return true;
 }
 #pragma warning(pop)

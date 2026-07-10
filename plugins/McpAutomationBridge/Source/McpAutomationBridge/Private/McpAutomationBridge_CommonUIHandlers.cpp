@@ -25,6 +25,7 @@
 #include "McpVersionCompatibility.h"
 
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_CommonUIHandlers.h"
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeHelpers.h"               // GetJsonStringField
 #include "McpAutomationBridge_WidgetAuthoringHelpers.h" // LoadWidgetBlueprint, Register/Unregister, SafeAddWidgetToTree
@@ -120,13 +121,14 @@ namespace
 	const FString SubAction = McpConsolidatedActions::GetPayloadSubAction(Payload);
 #endif
 
-bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonButton(
+bool McpHandlers::Blueprint::HandleCommonUiAddCommonButton(
+	UMcpAutomationBridgeSubsystem& S,
 	const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
 	FMcpResponseHandle RequestingSocket)
 {
 #if !MCP_HAS_COMMON_UI
 	(void)Payload;
-	SendAutomationError(RequestingSocket, RequestId,
+	S.SendAutomationError(RequestingSocket, RequestId,
 		TEXT("Common UI support was not compiled into this build (the CommonUI plugin/module was not found at build time)."),
 		TEXT("COMMON_UI_DISABLED"));
 	return true;
@@ -135,7 +137,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonButton(
 		const FString ButtonClassPath = GetJsonStringField(Payload, TEXT("buttonClass"));
 		if (WidgetPath.IsEmpty() || ButtonClassPath.IsEmpty())
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				TEXT("add_common_button requires 'widgetPath' and 'buttonClass' (a concrete UCommonButtonBase subclass, e.g. /Game/UI/WBP_MenuButton.WBP_MenuButton_C)."),
 				TEXT("MISSING_PARAMETER"));
 			return true;
@@ -149,21 +151,21 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonButton(
 		UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
 		if (!WidgetBP || !WidgetBP->WidgetTree)
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
 			return true;
 		}
 
 		UClass* ButtonClass = ResolveClassFromString(ButtonClassPath);
 		if (!ButtonClass || !ButtonClass->IsChildOf(UCommonButtonBase::StaticClass()))
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				FString::Printf(TEXT("Could not resolve buttonClass '%s' to a UCommonButtonBase subclass."), *ButtonClassPath),
 				TEXT("INVALID_CLASS"));
 			return true;
 		}
 		if (ButtonClass->HasAnyClassFlags(CLASS_Abstract))
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				FString::Printf(TEXT("buttonClass '%s' is abstract; pass a concrete Blueprint subclass (UCommonButtonBase itself cannot be instantiated)."), *ButtonClassPath),
 				TEXT("ABSTRACT_CLASS"));
 			return true;
@@ -174,7 +176,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonButton(
 		UCommonButtonBase* Button = Cast<UCommonButtonBase>(WidgetBP->WidgetTree->ConstructWidget<UWidget>(ButtonClass, FName(*SlotName)));
 		if (!Button)
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct Common UI button"), TEXT("CREATION_ERROR"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct Common UI button"), TEXT("CREATION_ERROR"));
 			return true;
 		}
 		RegisterWidgetGuid(WidgetBP, Button);
@@ -198,7 +200,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonButton(
 		FString AddErr;
 		if (!SafeAddWidgetToTree(WidgetBP, Button, ParentSlot, &AddErr))
 		{
-			SendAutomationError(RequestingSocket, RequestId, AddErr, TEXT("TREE_ERROR"));
+			S.SendAutomationError(RequestingSocket, RequestId, AddErr, TEXT("TREE_ERROR"));
 			return true;
 		}
 		McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
@@ -212,18 +214,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonButton(
 			ResultJson->SetStringField(TEXT("warning"), StyleWarning);
 		}
 		McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
-		SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added Common UI button"), ResultJson);
+		S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added Common UI button"), ResultJson);
 		return true;
 #endif // MCP_HAS_COMMON_UI
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonText(
+bool McpHandlers::Blueprint::HandleCommonUiAddCommonText(
+	UMcpAutomationBridgeSubsystem& S,
 	const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
 	FMcpResponseHandle RequestingSocket)
 {
 #if !MCP_HAS_COMMON_UI
 	(void)Payload;
-	SendAutomationError(RequestingSocket, RequestId,
+	S.SendAutomationError(RequestingSocket, RequestId,
 		TEXT("Common UI support was not compiled into this build (the CommonUI plugin/module was not found at build time)."),
 		TEXT("COMMON_UI_DISABLED"));
 	return true;
@@ -231,7 +234,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonText(
 		const FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
 		if (WidgetPath.IsEmpty())
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("add_common_text requires 'widgetPath'"), TEXT("MISSING_PARAMETER"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("add_common_text requires 'widgetPath'"), TEXT("MISSING_PARAMETER"));
 			return true;
 		}
 
@@ -243,14 +246,14 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonText(
 		UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
 		if (!WidgetBP || !WidgetBP->WidgetTree)
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
 			return true;
 		}
 
 		UCommonTextBlock* TextWidget = WidgetBP->WidgetTree->ConstructWidget<UCommonTextBlock>(UCommonTextBlock::StaticClass(), FName(*SlotName));
 		if (!TextWidget)
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct Common UI text block"), TEXT("CREATION_ERROR"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct Common UI text block"), TEXT("CREATION_ERROR"));
 			return true;
 		}
 		RegisterWidgetGuid(WidgetBP, TextWidget);
@@ -279,7 +282,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonText(
 		FString AddErr;
 		if (!SafeAddWidgetToTree(WidgetBP, TextWidget, ParentSlot, &AddErr))
 		{
-			SendAutomationError(RequestingSocket, RequestId, AddErr, TEXT("TREE_ERROR"));
+			S.SendAutomationError(RequestingSocket, RequestId, AddErr, TEXT("TREE_ERROR"));
 			return true;
 		}
 		McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
@@ -292,18 +295,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonText(
 			ResultJson->SetStringField(TEXT("warning"), StyleWarning);
 		}
 		McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
-		SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added Common UI text"), ResultJson);
+		S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added Common UI text"), ResultJson);
 		return true;
 #endif // MCP_HAS_COMMON_UI
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonBorder(
+bool McpHandlers::Blueprint::HandleCommonUiAddCommonBorder(
+	UMcpAutomationBridgeSubsystem& S,
 	const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
 	FMcpResponseHandle RequestingSocket)
 {
 #if !MCP_HAS_COMMON_UI
 	(void)Payload;
-	SendAutomationError(RequestingSocket, RequestId,
+	S.SendAutomationError(RequestingSocket, RequestId,
 		TEXT("Common UI support was not compiled into this build (the CommonUI plugin/module was not found at build time)."),
 		TEXT("COMMON_UI_DISABLED"));
 	return true;
@@ -311,7 +315,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonBorder(
 		const FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
 		if (WidgetPath.IsEmpty())
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("add_common_border requires 'widgetPath'"), TEXT("MISSING_PARAMETER"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("add_common_border requires 'widgetPath'"), TEXT("MISSING_PARAMETER"));
 			return true;
 		}
 
@@ -323,14 +327,14 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonBorder(
 		UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
 		if (!WidgetBP || !WidgetBP->WidgetTree)
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
 			return true;
 		}
 
 		UCommonBorder* BorderWidget = WidgetBP->WidgetTree->ConstructWidget<UCommonBorder>(UCommonBorder::StaticClass(), FName(*SlotName));
 		if (!BorderWidget)
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct Common UI border"), TEXT("CREATION_ERROR"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to construct Common UI border"), TEXT("CREATION_ERROR"));
 			return true;
 		}
 		RegisterWidgetGuid(WidgetBP, BorderWidget);
@@ -353,7 +357,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonBorder(
 		FString AddErr;
 		if (!SafeAddWidgetToTree(WidgetBP, BorderWidget, ParentSlot, &AddErr))
 		{
-			SendAutomationError(RequestingSocket, RequestId, AddErr, TEXT("TREE_ERROR"));
+			S.SendAutomationError(RequestingSocket, RequestId, AddErr, TEXT("TREE_ERROR"));
 			return true;
 		}
 		McpFinalizeBlueprint(WidgetBP, /*bStructural=*/true, /*bSave=*/true);
@@ -366,18 +370,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiAddCommonBorder(
 			ResultJson->SetStringField(TEXT("warning"), StyleWarning);
 		}
 		McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
-		SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added Common UI border"), ResultJson);
+		S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added Common UI border"), ResultJson);
 		return true;
 #endif // MCP_HAS_COMMON_UI
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonButtonStyle(
+bool McpHandlers::Blueprint::HandleCommonUiSetCommonButtonStyle(
+	UMcpAutomationBridgeSubsystem& S,
 	const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
 	FMcpResponseHandle RequestingSocket)
 {
 #if !MCP_HAS_COMMON_UI
 	(void)Payload;
-	SendAutomationError(RequestingSocket, RequestId,
+	S.SendAutomationError(RequestingSocket, RequestId,
 		TEXT("Common UI support was not compiled into this build (the CommonUI plugin/module was not found at build time)."),
 		TEXT("COMMON_UI_DISABLED"));
 	return true;
@@ -390,7 +395,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonButtonStyle(
 		const FString StyleClassPath = GetJsonStringField(Payload, TEXT("styleClass"));
 		if (WidgetPath.IsEmpty() || WidgetName.IsEmpty() || StyleClassPath.IsEmpty())
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				TEXT("This action requires 'widgetPath', 'widgetName', and 'styleClass'."),
 				TEXT("MISSING_PARAMETER"));
 			return true;
@@ -399,14 +404,14 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonButtonStyle(
 		UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
 		if (!WidgetBP || !WidgetBP->WidgetTree)
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
 			return true;
 		}
 
 		UWidget* Target = WidgetBP->WidgetTree->FindWidget(FName(*WidgetName));
 		if (!Target)
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				FString::Printf(TEXT("Widget '%s' not found in %s"), *WidgetName, *WidgetPath), TEXT("WIDGET_NOT_FOUND"));
 			return true;
 		}
@@ -418,13 +423,13 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonButtonStyle(
 			UCommonButtonBase* Button = Cast<UCommonButtonBase>(Target);
 			if (!Button)
 			{
-				SendAutomationError(RequestingSocket, RequestId,
+				S.SendAutomationError(RequestingSocket, RequestId,
 					FString::Printf(TEXT("Widget '%s' is not a UCommonButtonBase"), *WidgetName), TEXT("WRONG_TYPE"));
 				return true;
 			}
 			if (!StyleClass || !StyleClass->IsChildOf(UCommonButtonStyle::StaticClass()))
 			{
-				SendAutomationError(RequestingSocket, RequestId,
+				S.SendAutomationError(RequestingSocket, RequestId,
 					FString::Printf(TEXT("styleClass '%s' is not a UCommonButtonStyle subclass"), *StyleClassPath), TEXT("INVALID_CLASS"));
 				return true;
 			}
@@ -435,13 +440,13 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonButtonStyle(
 			UCommonTextBlock* TextWidget = Cast<UCommonTextBlock>(Target);
 			if (!TextWidget)
 			{
-				SendAutomationError(RequestingSocket, RequestId,
+				S.SendAutomationError(RequestingSocket, RequestId,
 					FString::Printf(TEXT("Widget '%s' is not a UCommonTextBlock"), *WidgetName), TEXT("WRONG_TYPE"));
 				return true;
 			}
 			if (!StyleClass || !StyleClass->IsChildOf(UCommonTextStyle::StaticClass()))
 			{
-				SendAutomationError(RequestingSocket, RequestId,
+				S.SendAutomationError(RequestingSocket, RequestId,
 					FString::Printf(TEXT("styleClass '%s' is not a UCommonTextStyle subclass"), *StyleClassPath), TEXT("INVALID_CLASS"));
 				return true;
 			}
@@ -455,18 +460,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonButtonStyle(
 		ResultJson->SetStringField(TEXT("widgetName"), WidgetName);
 		ResultJson->SetStringField(TEXT("styleClass"), StyleClass->GetPathName());
 		McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
-		SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set Common UI style"), ResultJson);
+		S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set Common UI style"), ResultJson);
 		return true;
 #endif // MCP_HAS_COMMON_UI
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonTextStyle(
+bool McpHandlers::Blueprint::HandleCommonUiSetCommonTextStyle(
+	UMcpAutomationBridgeSubsystem& S,
 	const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
 	FMcpResponseHandle RequestingSocket)
 {
 #if !MCP_HAS_COMMON_UI
 	(void)Payload;
-	SendAutomationError(RequestingSocket, RequestId,
+	S.SendAutomationError(RequestingSocket, RequestId,
 		TEXT("Common UI support was not compiled into this build (the CommonUI plugin/module was not found at build time)."),
 		TEXT("COMMON_UI_DISABLED"));
 	return true;
@@ -479,7 +485,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonTextStyle(
 		const FString StyleClassPath = GetJsonStringField(Payload, TEXT("styleClass"));
 		if (WidgetPath.IsEmpty() || WidgetName.IsEmpty() || StyleClassPath.IsEmpty())
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				TEXT("This action requires 'widgetPath', 'widgetName', and 'styleClass'."),
 				TEXT("MISSING_PARAMETER"));
 			return true;
@@ -488,14 +494,14 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonTextStyle(
 		UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
 		if (!WidgetBP || !WidgetBP->WidgetTree)
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
 			return true;
 		}
 
 		UWidget* Target = WidgetBP->WidgetTree->FindWidget(FName(*WidgetName));
 		if (!Target)
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				FString::Printf(TEXT("Widget '%s' not found in %s"), *WidgetName, *WidgetPath), TEXT("WIDGET_NOT_FOUND"));
 			return true;
 		}
@@ -507,13 +513,13 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonTextStyle(
 			UCommonButtonBase* Button = Cast<UCommonButtonBase>(Target);
 			if (!Button)
 			{
-				SendAutomationError(RequestingSocket, RequestId,
+				S.SendAutomationError(RequestingSocket, RequestId,
 					FString::Printf(TEXT("Widget '%s' is not a UCommonButtonBase"), *WidgetName), TEXT("WRONG_TYPE"));
 				return true;
 			}
 			if (!StyleClass || !StyleClass->IsChildOf(UCommonButtonStyle::StaticClass()))
 			{
-				SendAutomationError(RequestingSocket, RequestId,
+				S.SendAutomationError(RequestingSocket, RequestId,
 					FString::Printf(TEXT("styleClass '%s' is not a UCommonButtonStyle subclass"), *StyleClassPath), TEXT("INVALID_CLASS"));
 				return true;
 			}
@@ -524,13 +530,13 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonTextStyle(
 			UCommonTextBlock* TextWidget = Cast<UCommonTextBlock>(Target);
 			if (!TextWidget)
 			{
-				SendAutomationError(RequestingSocket, RequestId,
+				S.SendAutomationError(RequestingSocket, RequestId,
 					FString::Printf(TEXT("Widget '%s' is not a UCommonTextBlock"), *WidgetName), TEXT("WRONG_TYPE"));
 				return true;
 			}
 			if (!StyleClass || !StyleClass->IsChildOf(UCommonTextStyle::StaticClass()))
 			{
-				SendAutomationError(RequestingSocket, RequestId,
+				S.SendAutomationError(RequestingSocket, RequestId,
 					FString::Printf(TEXT("styleClass '%s' is not a UCommonTextStyle subclass"), *StyleClassPath), TEXT("INVALID_CLASS"));
 				return true;
 			}
@@ -544,18 +550,19 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonTextStyle(
 		ResultJson->SetStringField(TEXT("widgetName"), WidgetName);
 		ResultJson->SetStringField(TEXT("styleClass"), StyleClass->GetPathName());
 		McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
-		SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set Common UI style"), ResultJson);
+		S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Set Common UI style"), ResultJson);
 		return true;
 #endif // MCP_HAS_COMMON_UI
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonButtonInputAction(
+bool McpHandlers::Blueprint::HandleCommonUiSetCommonButtonInputAction(
+	UMcpAutomationBridgeSubsystem& S,
 	const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
 	FMcpResponseHandle RequestingSocket)
 {
 #if !MCP_HAS_COMMON_UI
 	(void)Payload;
-	SendAutomationError(RequestingSocket, RequestId,
+	S.SendAutomationError(RequestingSocket, RequestId,
 		TEXT("Common UI support was not compiled into this build (the CommonUI plugin/module was not found at build time)."),
 		TEXT("COMMON_UI_DISABLED"));
 	return true;
@@ -566,7 +573,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonButtonInputAction(
 		const FString RowName = GetJsonStringField(Payload, TEXT("rowName"));
 		if (WidgetPath.IsEmpty() || WidgetName.IsEmpty() || DataTablePath.IsEmpty() || RowName.IsEmpty())
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				TEXT("This action requires 'widgetPath', 'widgetName', 'dataTable', and 'rowName'."),
 				TEXT("MISSING_PARAMETER"));
 			return true;
@@ -575,14 +582,14 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonButtonInputAction(
 		UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(WidgetPath);
 		if (!WidgetBP || !WidgetBP->WidgetTree)
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Widget blueprint not found"), TEXT("NOT_FOUND"));
 			return true;
 		}
 
 		UWidget* Target = WidgetBP->WidgetTree->FindWidget(FName(*WidgetName));
 		if (!Target)
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				FString::Printf(TEXT("Widget '%s' not found in %s"), *WidgetName, *WidgetPath), TEXT("WIDGET_NOT_FOUND"));
 			return true;
 		}
@@ -590,7 +597,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonButtonInputAction(
 		UCommonButtonBase* Button = Cast<UCommonButtonBase>(Target);
 		if (!Button)
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				FString::Printf(TEXT("Widget '%s' is not a UCommonButtonBase"), *WidgetName), TEXT("WRONG_TYPE"));
 			return true;
 		}
@@ -598,13 +605,13 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonButtonInputAction(
 		UDataTable* DataTable = LoadObject<UDataTable>(nullptr, *DataTablePath);
 		if (!DataTable)
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				FString::Printf(TEXT("DataTable not found at '%s'"), *DataTablePath), TEXT("NOT_FOUND"));
 			return true;
 		}
 		if (!DataTable->RowStruct || !DataTable->RowStruct->IsChildOf(FCommonInputActionDataBase::StaticStruct()))
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				FString::Printf(TEXT("DataTable '%s' row struct must derive from CommonInputActionDataBase"), *DataTablePath),
 				TEXT("INVALID_ROW_STRUCT"));
 			return true;
@@ -619,7 +626,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonButtonInputAction(
 			UCommonButtonBase::StaticClass(), TEXT("TriggeringInputAction"));
 		if (!TrigProp || TrigProp->Struct != FDataTableRowHandle::StaticStruct())
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				TEXT("Could not resolve UCommonButtonBase.TriggeringInputAction property"), TEXT("INTERNAL_ERROR"));
 			return true;
 		}
@@ -642,19 +649,20 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiSetCommonButtonInputAction(
 		ResultJson->SetStringField(TEXT("rowName"), RowName);
 		ResultJson->SetBoolField(TEXT("rowFound"), bRowFound);
 		McpHandlerUtils::AddVerification(ResultJson, WidgetBP);
-		SendAutomationResponse(RequestingSocket, RequestId, true,
+		S.SendAutomationResponse(RequestingSocket, RequestId, true,
 			TEXT("Set Common UI button input action"), ResultJson);
 		return true;
 #endif // MCP_HAS_COMMON_UI
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleCommonUiCreateCommonButtonStyle(
+bool McpHandlers::Blueprint::HandleCommonUiCreateCommonButtonStyle(
+	UMcpAutomationBridgeSubsystem& S,
 	const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
 	FMcpResponseHandle RequestingSocket)
 {
 #if !MCP_HAS_COMMON_UI
 	(void)Payload;
-	SendAutomationError(RequestingSocket, RequestId,
+	S.SendAutomationError(RequestingSocket, RequestId,
 		TEXT("Common UI support was not compiled into this build (the CommonUI plugin/module was not found at build time)."),
 		TEXT("COMMON_UI_DISABLED"));
 	return true;
@@ -668,12 +676,12 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiCreateCommonButtonStyle(
 		FString Name = GetJsonStringField(Payload, TEXT("name"));
 		if (Name.IsEmpty())
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'name'."), TEXT("MISSING_PARAMETER"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'name'."), TEXT("MISSING_PARAMETER"));
 			return true;
 		}
 		if (Name.Contains(TEXT("/")) || Name.Contains(TEXT(".")))
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				TEXT("'name' must be a bare asset name (no '/' or '.'); use 'path' for the folder."),
 				TEXT("INVALID_NAME"));
 			return true;
@@ -696,7 +704,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiCreateCommonButtonStyle(
 			ExistJson->SetStringField(TEXT("blueprintPath"), PackagePath);
 			ExistJson->SetStringField(TEXT("styleClass"), ClassPath);
 			ExistJson->SetStringField(TEXT("styleType"), bButtonStyle ? TEXT("button") : TEXT("text"));
-			SendAutomationResponse(RequestingSocket, RequestId, true,
+			S.SendAutomationResponse(RequestingSocket, RequestId, true,
 				FString::Printf(TEXT("Style asset already exists: %s"), *PackagePath), ExistJson);
 			return true;
 		}
@@ -704,7 +712,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiCreateCommonButtonStyle(
 		UPackage* Package = CreatePackage(*PackagePath);
 		if (!Package)
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package for style asset."), TEXT("PACKAGE_ERROR"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package for style asset."), TEXT("PACKAGE_ERROR"));
 			return true;
 		}
 
@@ -713,7 +721,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiCreateCommonButtonStyle(
 			BPTYPE_Normal, UBlueprint::StaticClass(), UBlueprintGeneratedClass::StaticClass());
 		if (!StyleBP)
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create style blueprint."), TEXT("CREATION_FAILED"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create style blueprint."), TEXT("CREATION_FAILED"));
 			return true;
 		}
 
@@ -726,20 +734,21 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiCreateCommonButtonStyle(
 		ResultJson->SetStringField(TEXT("styleClass"), ClassPath);
 		ResultJson->SetStringField(TEXT("styleType"), bButtonStyle ? TEXT("button") : TEXT("text"));
 		McpHandlerUtils::AddVerification(ResultJson, StyleBP);
-		SendAutomationResponse(RequestingSocket, RequestId, true,
+		S.SendAutomationResponse(RequestingSocket, RequestId, true,
 			FString::Printf(TEXT("Created %s style: %s"), bButtonStyle ? TEXT("button") : TEXT("text"), *PackagePath),
 			ResultJson);
 		return true;
 #endif // MCP_HAS_COMMON_UI
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleCommonUiCreateCommonTextStyle(
+bool McpHandlers::Blueprint::HandleCommonUiCreateCommonTextStyle(
+	UMcpAutomationBridgeSubsystem& S,
 	const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
 	FMcpResponseHandle RequestingSocket)
 {
 #if !MCP_HAS_COMMON_UI
 	(void)Payload;
-	SendAutomationError(RequestingSocket, RequestId,
+	S.SendAutomationError(RequestingSocket, RequestId,
 		TEXT("Common UI support was not compiled into this build (the CommonUI plugin/module was not found at build time)."),
 		TEXT("COMMON_UI_DISABLED"));
 	return true;
@@ -753,12 +762,12 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiCreateCommonTextStyle(
 		FString Name = GetJsonStringField(Payload, TEXT("name"));
 		if (Name.IsEmpty())
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'name'."), TEXT("MISSING_PARAMETER"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'name'."), TEXT("MISSING_PARAMETER"));
 			return true;
 		}
 		if (Name.Contains(TEXT("/")) || Name.Contains(TEXT(".")))
 		{
-			SendAutomationError(RequestingSocket, RequestId,
+			S.SendAutomationError(RequestingSocket, RequestId,
 				TEXT("'name' must be a bare asset name (no '/' or '.'); use 'path' for the folder."),
 				TEXT("INVALID_NAME"));
 			return true;
@@ -781,7 +790,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiCreateCommonTextStyle(
 			ExistJson->SetStringField(TEXT("blueprintPath"), PackagePath);
 			ExistJson->SetStringField(TEXT("styleClass"), ClassPath);
 			ExistJson->SetStringField(TEXT("styleType"), bButtonStyle ? TEXT("button") : TEXT("text"));
-			SendAutomationResponse(RequestingSocket, RequestId, true,
+			S.SendAutomationResponse(RequestingSocket, RequestId, true,
 				FString::Printf(TEXT("Style asset already exists: %s"), *PackagePath), ExistJson);
 			return true;
 		}
@@ -789,7 +798,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiCreateCommonTextStyle(
 		UPackage* Package = CreatePackage(*PackagePath);
 		if (!Package)
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package for style asset."), TEXT("PACKAGE_ERROR"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package for style asset."), TEXT("PACKAGE_ERROR"));
 			return true;
 		}
 
@@ -798,7 +807,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiCreateCommonTextStyle(
 			BPTYPE_Normal, UBlueprint::StaticClass(), UBlueprintGeneratedClass::StaticClass());
 		if (!StyleBP)
 		{
-			SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create style blueprint."), TEXT("CREATION_FAILED"));
+			S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create style blueprint."), TEXT("CREATION_FAILED"));
 			return true;
 		}
 
@@ -811,7 +820,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCommonUiCreateCommonTextStyle(
 		ResultJson->SetStringField(TEXT("styleClass"), ClassPath);
 		ResultJson->SetStringField(TEXT("styleType"), bButtonStyle ? TEXT("button") : TEXT("text"));
 		McpHandlerUtils::AddVerification(ResultJson, StyleBP);
-		SendAutomationResponse(RequestingSocket, RequestId, true,
+		S.SendAutomationResponse(RequestingSocket, RequestId, true,
 			FString::Printf(TEXT("Created %s style: %s"), bButtonStyle ? TEXT("button") : TEXT("text"), *PackagePath),
 			ResultJson);
 		return true;

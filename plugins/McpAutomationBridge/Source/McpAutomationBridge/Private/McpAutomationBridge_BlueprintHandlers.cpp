@@ -92,6 +92,8 @@
 // -----------------------------------------------------------------------------
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_BlueprintHandlers.h"
+#include "McpAutomationBridge_BlueprintGraphHandlers.h" // HandleBlueprintGraphCreateNode (internal cross-call)
 #include "McpAutomationBridge_BlueprintCreationHandlers.h"
 #include "McpAutomationBridge_SCSHandlers.h"
 #include "Misc/DateTime.h"
@@ -996,14 +998,14 @@ UBlueprint *UMcpAutomationBridgeSubsystem::ResolveBlueprintOrError(
     const FString &BlueprintPath, const FString &RequestId,
     FMcpResponseHandle Socket, const TCHAR *FieldName) {
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         FString::Printf(TEXT("Missing %s."), FieldName),
                         TEXT("INVALID_ARGUMENT"));
     return nullptr;
   }
   UBlueprint *Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
         TEXT("NOT_FOUND"));
@@ -1098,7 +1100,7 @@ UBlueprint *UMcpAutomationBridgeSubsystem::ResolveBlueprintOrError(
 // name/blueprintPath/blueprintCandidates), from the retired HandleSCSAction.
 #define MCP_BPSCS_PREAMBLE() \
   if (!Payload.IsValid()) { \
-    SendAutomationResponse(RequestingSocket, RequestId, false, \
+    S.SendAutomationResponse(RequestingSocket, RequestId, false, \
                            TEXT("SCS operations require valid payload"), \
                            nullptr, TEXT("INVALID_PAYLOAD")); \
     return true; \
@@ -1128,7 +1130,8 @@ UBlueprint *UMcpAutomationBridgeSubsystem::ResolveBlueprintOrError(
   };
 #endif // WITH_EDITOR (manage_blueprint Core/SCS member preambles)
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddScsComponent(
+bool McpHandlers::Blueprint::HandleBlueprintAddScsComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1166,20 +1169,21 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddScsComponent(
     }
     TSharedPtr<FJsonObject> Result = FSCSHandlers::AddSCSComponent(
         BPPath, CompClass, CompName, ParentName, MeshPath, MaterialPath);
-    SendAutomationResponse(RequestingSocket, RequestId,
+    S.SendAutomationResponse(RequestingSocket, RequestId,
                            GetJsonBoolField(Result, TEXT("success")),
                            SafeGetStr(Result, TEXT("message")), Result,
                            SafeGetStr(Result, TEXT("error")));
     return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveScsComponent(
+bool McpHandlers::Blueprint::HandleBlueprintRemoveScsComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1196,20 +1200,21 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveScsComponent(
     }
     TSharedPtr<FJsonObject> Result =
         FSCSHandlers::RemoveSCSComponent(BPPath, CompName);
-    SendAutomationResponse(RequestingSocket, RequestId,
+    S.SendAutomationResponse(RequestingSocket, RequestId,
                            GetJsonBoolField(Result, TEXT("success")),
                            SafeGetStr(Result, TEXT("message")), Result,
                            SafeGetStr(Result, TEXT("error")));
     return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintReparentScsComponent(
+bool McpHandlers::Blueprint::HandleBlueprintReparentScsComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1231,20 +1236,21 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintReparentScsComponent(
     }
     TSharedPtr<FJsonObject> Result =
         FSCSHandlers::ReparentSCSComponent(BPPath, CompName, NewParent);
-    SendAutomationResponse(RequestingSocket, RequestId,
+    S.SendAutomationResponse(RequestingSocket, RequestId,
                            GetJsonBoolField(Result, TEXT("success")),
                            SafeGetStr(Result, TEXT("message")), Result,
                            SafeGetStr(Result, TEXT("error")));
     return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetScsTransform(
+bool McpHandlers::Blueprint::HandleBlueprintSetScsTransform(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1261,20 +1267,21 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetScsTransform(
     }
     TSharedPtr<FJsonObject> Result =
         FSCSHandlers::SetSCSComponentTransform(BPPath, CompName, Payload);
-    SendAutomationResponse(RequestingSocket, RequestId,
+    S.SendAutomationResponse(RequestingSocket, RequestId,
                            GetJsonBoolField(Result, TEXT("success")),
                            SafeGetStr(Result, TEXT("message")), Result,
                            SafeGetStr(Result, TEXT("error")));
     return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetScsProperty(
+bool McpHandlers::Blueprint::HandleBlueprintSetScsProperty(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1299,7 +1306,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetScsProperty(
     switch (McpPropertyReflection::ReadDiscriminatedValue(Payload, TypedValue,
                                                           ValueParseDetail)) {
     case McpPropertyReflection::EMcpTypedValueParse::None:
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("set exactly one typed value field: boolValue, intValue, "
                "floatValue, stringValue, colorValue, vectorValue, structValue, "
@@ -1307,7 +1314,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetScsProperty(
           nullptr, TEXT("NO_CHANGES_REQUESTED"));
       return true;
     case McpPropertyReflection::EMcpTypedValueParse::Ambiguous:
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           *FString::Printf(TEXT("set exactly one typed value field, got: %s"),
                            *ValueParseDetail),
@@ -1318,27 +1325,28 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetScsProperty(
     }
     TSharedPtr<FJsonObject> Result = FSCSHandlers::SetSCSComponentProperty(
         BPPath, CompName, PropName, TypedValue.Json);
-    SendAutomationResponse(RequestingSocket, RequestId,
+    S.SendAutomationResponse(RequestingSocket, RequestId,
                            GetJsonBoolField(Result, TEXT("success")),
                            SafeGetStr(Result, TEXT("message")), Result,
                            SafeGetStr(Result, TEXT("error")));
     return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddConstructionScript(
+bool McpHandlers::Blueprint::HandleBlueprintAddConstructionScript(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   MCP_BPCORE_PREAMBLE();
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_add_construction_script requires a blueprint path."),
           nullptr, TEXT("INVALID_BLUEPRINT_PATH"));
@@ -1361,7 +1369,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddConstructionScript(
              TEXT("HandleBlueprintAction: blueprint_add_construction_script "
                   "failed to load '%s' (%s)"),
              *Path, *LoadErr);
-      SendAutomationResponse(RequestingSocket, RequestId, false, LoadErr,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false, LoadErr,
                              Result, TEXT("BLUEPRINT_NOT_FOUND"));
       return true;
     }
@@ -1400,7 +1408,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddConstructionScript(
              TEXT("HandleBlueprintAction: construction script graph ready '%s' "
                   "graph='%s'"),
              *Path, *ConstructionGraph->GetName());
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Construction script graph ready."), Result,
                              FString());
     } else {
@@ -1411,34 +1419,35 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddConstructionScript(
              TEXT("HandleBlueprintAction: failed to create construction script "
                   "graph for '%s'"),
              *Path);
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Construction script creation failed"),
                              Result, TEXT("GRAPH_ERROR"));
     }
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("blueprint_add_construction_script requires editor build"),
         nullptr, TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_add_construction_script requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintCompile(
+bool McpHandlers::Blueprint::HandleBlueprintCompile(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   MCP_BPCORE_PREAMBLE();
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_compile requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -1459,7 +1468,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintCompile(
     if (!BP) {
       TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
       Err->SetStringField(TEXT("error"), LoadErr);
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Failed to load blueprint for compilation"),
                              Err, TEXT("NOT_FOUND"));
       return true;
@@ -1479,40 +1488,42 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintCompile(
     Out->SetBoolField(TEXT("compiled"), true);
     Out->SetBoolField(TEXT("saved"), bSaved);
     Out->SetStringField(TEXT("blueprintPath"), Path);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Blueprint compiled"), Out, FString());
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("blueprint_compile requires editor build"),
                            nullptr, TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_compile requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintCreateAction(
+bool McpHandlers::Blueprint::HandleBlueprintCreateAction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   TSharedPtr<FJsonObject> LocalPayload =
       Payload.IsValid() ? Payload : McpHandlerUtils::CreateResultObject();
     return FBlueprintCreationHandlers::HandleBlueprintCreate(
-        this, RequestId, LocalPayload, RequestingSocket);
+        &S, RequestId, LocalPayload, RequestingSocket);
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint actions are editor-only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintEnsureExists(
+bool McpHandlers::Blueprint::HandleBlueprintEnsureExists(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1522,7 +1533,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintEnsureExists(
            *RequestId);
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_ensure_exists requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -1564,7 +1575,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintEnsureExists(
       }
       // Use FBlueprintCreationHandlers to create the blueprint
       bool bCreateResult = FBlueprintCreationHandlers::HandleBlueprintCreate(
-          this, RequestId, CreatePayload, RequestingSocket);
+          &S, RequestId, CreatePayload, RequestingSocket);
       // If creation handler returned true, it sent its own response
       if (bCreateResult) {
         return true;
@@ -1578,7 +1589,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintEnsureExists(
     Resp->SetBoolField(TEXT("exists"), bExists);
     Resp->SetBoolField(TEXT("created"), bCreated);
     Resp->SetStringField(TEXT("blueprintPath"), bExists ? CheckPath : Path);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, true,
         bCreated ? TEXT("Blueprint created")
                  : (bExists ? TEXT("Blueprint exists")
@@ -1586,21 +1597,22 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintEnsureExists(
         Resp, FString());
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("blueprint_ensure_exists requires editor build"), nullptr,
         TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_ensure_exists requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintProbeHandle(
+bool McpHandlers::Blueprint::HandleBlueprintProbeHandle(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1610,7 +1622,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintProbeHandle(
            *RequestId);
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_probe_handle requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -1661,34 +1673,35 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintProbeHandle(
     if (!AssetClass.IsEmpty()) {
       Resp->SetStringField(TEXT("assetClass"), AssetClass);
     }
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            bExists ? TEXT("Blueprint handle found")
                                    : TEXT("Blueprint not found"),
                            Resp, FString());
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("blueprint_probe_handle requires editor build"), nullptr,
         TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_probe_handle requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddComponent(
+bool McpHandlers::Blueprint::HandleBlueprintAddComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   MCP_BPSCS_PREAMBLE();
     UBlueprint *Blueprint = ResolveBlueprint();
     if (!Blueprint) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("add_component requires a valid blueprint"),
                              nullptr, TEXT("INVALID_BLUEPRINT"));
       return true;
@@ -1700,7 +1713,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddComponent(
     Payload->TryGetStringField(TEXT("componentName"), ComponentName);
 
     if (ComponentType.IsEmpty() || ComponentName.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("add_component requires componentType and componentName"),
           nullptr, TEXT("INVALID_ARGUMENT"));
@@ -1710,7 +1723,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddComponent(
     // Get the SCS from the blueprint with explicit null check
     USimpleConstructionScript *SCS = Blueprint->SimpleConstructionScript;
     if (!SCS) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("Blueprint does not have a SimpleConstructionScript"), nullptr,
           TEXT("NO_SCS"));
@@ -1731,7 +1744,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddComponent(
     }
 
     if (!ComponentClass) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           FString::Printf(TEXT("Unknown component type: %s"), *ComponentType),
           nullptr, TEXT("INVALID_COMPONENT_TYPE"));
@@ -1758,7 +1771,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddComponent(
                              NewNode->GetVariableName().ToString());
       Result->SetBoolField(TEXT("compiled"), bCompiled);
       Result->SetBoolField(TEXT("saved"), bSaved);
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, true,
           FString::Printf(TEXT("Added component %s to blueprint SCS"),
                           *ComponentName),
@@ -1766,26 +1779,27 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddComponent(
       return true;
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Failed to add component to SCS"), nullptr,
                            TEXT("OPERATION_FAILED"));
     return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("SCS operations require editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGetScs(
+bool McpHandlers::Blueprint::HandleBlueprintGetScs(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   MCP_BPSCS_PREAMBLE();
     UBlueprint *Blueprint = ResolveBlueprint();
     if (!Blueprint) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("get_scs requires a valid blueprint"),
                              nullptr, TEXT("INVALID_BLUEPRINT"));
       return true;
@@ -1859,20 +1873,21 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGetScs(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetArrayField(TEXT("components"), ComponentsArray);
     Result->SetNumberField(TEXT("componentCount"), ComponentsArray.Num());
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            FString::Printf(TEXT("Retrieved %d SCS components"),
                                            ComponentsArray.Num()),
                            Result, FString());
     return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("SCS operations require editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
+bool McpHandlers::Blueprint::HandleBlueprintModifyScs(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1883,7 +1898,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
            *RequestId);
 
     if (!LocalPayload.IsValid()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("blueprint_modify_scs payload missing."),
                           TEXT("INVALID_PAYLOAD"));
       return true;
@@ -1904,7 +1919,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
         if (!LocalPayload->TryGetArrayField(TEXT("blueprintCandidates"),
                                             CandidateArray) ||
             CandidateArray == nullptr || CandidateArray->Num() == 0) {
-          SendAutomationError(
+          S.SendAutomationError(
               RequestingSocket, RequestId,
               TEXT("blueprint_modify_scs requires a non-empty blueprintPath, "
                    "name, or blueprintCandidates."),
@@ -1919,7 +1934,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
             CandidatePaths.Add(Candidate);
         }
         if (CandidatePaths.Num() == 0) {
-          SendAutomationError(
+          S.SendAutomationError(
               RequestingSocket, RequestId,
               TEXT("blueprint_modify_scs blueprintCandidates array provided "
                    "but contains no valid strings."),
@@ -1933,7 +1948,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
     const TArray<TSharedPtr<FJsonValue>> *OperationsArray = nullptr;
     if (!LocalPayload->TryGetArrayField(TEXT("operations"), OperationsArray) ||
         OperationsArray == nullptr) {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           TEXT("blueprint_modify_scs requires an operations array."),
           TEXT("INVALID_OPERATIONS"));
@@ -1944,7 +1959,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
     bool bCompile = false;
     if (LocalPayload->HasField(TEXT("compile")) &&
         !LocalPayload->TryGetBoolField(TEXT("compile"), bCompile)) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("compile must be a boolean."),
                           TEXT("INVALID_COMPILE_FLAG"));
       return true;
@@ -1952,7 +1967,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
     bool bSave = false;
     if (LocalPayload->HasField(TEXT("save")) &&
         !LocalPayload->TryGetBoolField(TEXT("save"), bSave)) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("save must be a boolean."),
                           TEXT("INVALID_SAVE_FLAG"));
       return true;
@@ -2000,7 +2015,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
           TriedValues.Add(MakeShared<FJsonValueString>(C));
         ErrPayload->SetArrayField(TEXT("triedCandidates"), TriedValues);
       }
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              LoadError.IsEmpty() ? TEXT("Blueprint not found")
                                                  : LoadError,
                              ErrPayload, TEXT("BLUEPRINT_NOT_FOUND"));
@@ -2008,7 +2023,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
     }
 
     if (OperationsArray->Num() == 0) {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           TEXT("blueprint_modify_scs operations array is empty."),
           TEXT("NO_CHANGES_REQUESTED"));
@@ -2019,7 +2034,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
     const FString BusyKey = NormalizedBlueprintPath;
     if (!BusyKey.IsEmpty()) {
       if (GBlueprintBusySet.Contains(BusyKey)) {
-        SendAutomationResponse(
+        S.SendAutomationResponse(
             RequestingSocket, RequestId, false,
             FString::Printf(
                 TEXT("Blueprint %s is busy with another modification."),
@@ -2029,17 +2044,17 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
       }
 
       GBlueprintBusySet.Add(BusyKey);
-      this->CurrentBusyBlueprintKey = BusyKey;
-      this->bCurrentBlueprintBusyMarked = true;
-      this->bCurrentBlueprintBusyScheduled = false;
+      S.CurrentBusyBlueprintKey = BusyKey;
+      S.bCurrentBlueprintBusyMarked = true;
+      S.bCurrentBlueprintBusyScheduled = false;
 
       // If we exit before completing the work, clear the busy flag
       ON_SCOPE_EXIT {
-        if (this->bCurrentBlueprintBusyMarked &&
-            !this->bCurrentBlueprintBusyScheduled) {
-          GBlueprintBusySet.Remove(this->CurrentBusyBlueprintKey);
-          this->bCurrentBlueprintBusyMarked = false;
-          this->CurrentBusyBlueprintKey.Empty();
+        if (S.bCurrentBlueprintBusyMarked &&
+            !S.bCurrentBlueprintBusyScheduled) {
+          GBlueprintBusySet.Remove(S.CurrentBusyBlueprintKey);
+          S.bCurrentBlueprintBusyMarked = false;
+          S.CurrentBusyBlueprintKey.Empty();
         }
       };
     }
@@ -2052,7 +2067,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
     for (int32 Index = 0; Index < DeferredOps.Num(); ++Index) {
       const TSharedPtr<FJsonValue> &OperationValue = DeferredOps[Index];
       if (!OperationValue.IsValid() || OperationValue->Type != EJson::Object) {
-        SendAutomationError(
+        S.SendAutomationError(
             RequestingSocket, RequestId,
             FString::Printf(TEXT("Operation at index %d is not an object."),
                             Index),
@@ -2064,7 +2079,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
       FString OperationType;
       if (!OperationObject->TryGetStringField(TEXT("type"), OperationType) ||
           OperationType.TrimStartAndEnd().IsEmpty()) {
-        SendAutomationError(
+        S.SendAutomationError(
             RequestingSocket, RequestId,
             FString::Printf(TEXT("Operation at index %d missing type."), Index),
             TEXT("INVALID_OPERATION_TYPE"));
@@ -2073,7 +2088,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
     }
 
     // Mark busy as scheduled (we will perform the work synchronously here)
-    this->bCurrentBlueprintBusyScheduled = true;
+    S.bCurrentBlueprintBusyScheduled = true;
 
     // Perform the SCS modification immediately (we are on game thread)
     TSharedPtr<FJsonObject> CompletionResult = McpHandlerUtils::CreateResultObject();
@@ -2091,15 +2106,15 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
              *NormalizedBlueprintPath, *LocalLoadError);
       CompletionResult->SetStringField(TEXT("error"), LocalLoadError);
       // Send failure and clear busy
-      SendAutomationResponse(RequestingSocket, RequestId, false, LocalLoadError,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false, LocalLoadError,
                              CompletionResult, TEXT("BLUEPRINT_NOT_FOUND"));
-      if (!this->CurrentBusyBlueprintKey.IsEmpty() &&
-          GBlueprintBusySet.Contains(this->CurrentBusyBlueprintKey)) {
-        GBlueprintBusySet.Remove(this->CurrentBusyBlueprintKey);
+      if (!S.CurrentBusyBlueprintKey.IsEmpty() &&
+          GBlueprintBusySet.Contains(S.CurrentBusyBlueprintKey)) {
+        GBlueprintBusySet.Remove(S.CurrentBusyBlueprintKey);
       }
-      this->bCurrentBlueprintBusyMarked = false;
-      this->bCurrentBlueprintBusyScheduled = false;
-      this->CurrentBusyBlueprintKey.Empty();
+      S.bCurrentBlueprintBusyMarked = false;
+      S.bCurrentBlueprintBusyScheduled = false;
+      S.CurrentBusyBlueprintKey.Empty();
       return true;
     }
 
@@ -2109,16 +2124,16 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
              TEXT("SCS unavailable for blueprint %s"),
              *NormalizedBlueprintPath);
       CompletionResult->SetStringField(TEXT("error"), TEXT("SCS_UNAVAILABLE"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("SCS_UNAVAILABLE"), CompletionResult,
                              TEXT("SCS_UNAVAILABLE"));
-      if (!this->CurrentBusyBlueprintKey.IsEmpty() &&
-          GBlueprintBusySet.Contains(this->CurrentBusyBlueprintKey)) {
-        GBlueprintBusySet.Remove(this->CurrentBusyBlueprintKey);
+      if (!S.CurrentBusyBlueprintKey.IsEmpty() &&
+          GBlueprintBusySet.Contains(S.CurrentBusyBlueprintKey)) {
+        GBlueprintBusySet.Remove(S.CurrentBusyBlueprintKey);
       }
-      this->bCurrentBlueprintBusyMarked = false;
-      this->bCurrentBlueprintBusyScheduled = false;
-      this->CurrentBusyBlueprintKey.Empty();
+      S.bCurrentBlueprintBusyMarked = false;
+      S.bCurrentBlueprintBusyScheduled = false;
+      S.CurrentBusyBlueprintKey.Empty();
       return true;
     }
 
@@ -2584,7 +2599,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
                               FinalSummaries.Num())
             : FString::Printf(TEXT("%d of %d SCS operation(s) failed."),
                               FailedOps, FinalSummaries.Num());
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, bOk, Message, ResultPayload,
         bOk ? FString()
             : (CompletionResult->HasField(TEXT("error"))
@@ -2592,24 +2607,25 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintModifyScs(
                    : TEXT("SCS_OPERATION_FAILED")));
 
     // Release busy flag
-    if (!this->CurrentBusyBlueprintKey.IsEmpty() &&
-        GBlueprintBusySet.Contains(this->CurrentBusyBlueprintKey)) {
-      GBlueprintBusySet.Remove(this->CurrentBusyBlueprintKey);
+    if (!S.CurrentBusyBlueprintKey.IsEmpty() &&
+        GBlueprintBusySet.Contains(S.CurrentBusyBlueprintKey)) {
+      GBlueprintBusySet.Remove(S.CurrentBusyBlueprintKey);
     }
-    this->bCurrentBlueprintBusyMarked = false;
-    this->bCurrentBlueprintBusyScheduled = false;
-    this->CurrentBusyBlueprintKey.Empty();
+    S.bCurrentBlueprintBusyMarked = false;
+    S.bCurrentBlueprintBusyScheduled = false;
+    S.CurrentBusyBlueprintKey.Empty();
 
     return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_modify_scs requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetVariableMetadata(
+bool McpHandlers::Blueprint::HandleBlueprintSetVariableMetadata(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2621,7 +2637,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetVariableMetadata(
 #if WITH_EDITOR
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_set_variable_metadata requires a blueprint path."),
           nullptr, TEXT("INVALID_BLUEPRINT_PATH"));
@@ -2631,7 +2647,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetVariableMetadata(
     FString VarName;
     LocalPayload->TryGetStringField(TEXT("variableName"), VarName);
     if (VarName.IsEmpty()) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("variableName required"), nullptr,
                              TEXT("INVALID_ARGUMENT"));
       return true;
@@ -2644,14 +2660,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetVariableMetadata(
             ? MetaVal->AsObject()
             : nullptr;
     if (!MetaObjPtr.IsValid()) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("metadata object required"), nullptr,
                              TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     if (GBlueprintBusySet.Contains(Path)) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Blueprint is busy"), nullptr,
                              TEXT("BLUEPRINT_BUSY"));
       return true;
@@ -2672,7 +2688,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetVariableMetadata(
       if (!LoadErr.IsEmpty()) {
         Err->SetStringField(TEXT("error"), LoadErr);
       }
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Failed to load blueprint"), Err,
                              TEXT("BLUEPRINT_NOT_FOUND"));
       return true;
@@ -2697,7 +2713,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetVariableMetadata(
     if (!VariableDesc) {
       TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
       Err->SetStringField(TEXT("error"), TEXT("Variable not found"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Variable not found"), Err,
                              TEXT("VARIABLE_NOT_FOUND"));
       return true;
@@ -2757,7 +2773,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetVariableMetadata(
       Resp->SetObjectField(TEXT("blueprint"), Snapshot);
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Variable metadata applied"), Resp, FString());
 
     // Notify waiters
@@ -2770,21 +2786,22 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetVariableMetadata(
     // (WebSocket automation_event push removed — pull-only / HTTP)
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("blueprint_set_variable_metadata requires editor build"), nullptr,
         TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_set_variable_metadata requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddVariable(
+bool McpHandlers::Blueprint::HandleBlueprintAddVariable(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2794,7 +2811,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddVariable(
            *RequestId);
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_add_variable requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -2804,7 +2821,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddVariable(
     FString VarName;
     LocalPayload->TryGetStringField(TEXT("variableName"), VarName);
     if (VarName.TrimStartAndEnd().IsEmpty()) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("variableName required"), nullptr,
                              TEXT("INVALID_ARGUMENT"));
       return true;
@@ -2821,7 +2838,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddVariable(
       case McpPropertyReflection::EMcpTypedValueParse::None:
         break; // defaultValue is optional
       case McpPropertyReflection::EMcpTypedValueParse::Ambiguous:
-        SendAutomationResponse(
+        S.SendAutomationResponse(
             RequestingSocket, RequestId, false,
             *FString::Printf(TEXT("set exactly one typed default value field, got: %s"),
                              *DefParseDetail),
@@ -2894,14 +2911,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddVariable(
     if (Container == EPinContainerType::Map) {
       FString KeyStr, ValStr;
       if (!InnerSpec.Split(TEXT(","), &KeyStr, &ValStr)) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Map variable type needs 'Map<Key,Value>'"), TEXT("INVALID_ARGUMENT"));
         return true;
       }
       FName KeyCat, KeySubCat, ValCat, ValSubCat;
       TWeakObjectPtr<UObject> KeySub, ValSub;
       if (!ResolveTerminal(KeyStr, KeyCat, KeySubCat, KeySub) || !ResolveTerminal(ValStr, ValCat, ValSubCat, ValSub)) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Could not resolve map inner type(s) in '%s'"), *VarType),
             TEXT("CLASS_NOT_FOUND"));
         return true;
@@ -2917,7 +2934,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddVariable(
       FName InnerCat, InnerSubCat;
       TWeakObjectPtr<UObject> InnerSub;
       if (!ResolveTerminal(InnerSpec, InnerCat, InnerSubCat, InnerSub)) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Could not resolve container inner type '%s'"), *InnerSpec),
             TEXT("CLASS_NOT_FOUND"));
         return true;
@@ -2930,7 +2947,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddVariable(
       FName Cat, SubCat;
       TWeakObjectPtr<UObject> Sub;
       if (!ResolveTerminal(VarType, Cat, SubCat, Sub)) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Could not resolve class '%s'"), *VarType),
             TEXT("CLASS_NOT_FOUND"));
         return true;
@@ -2955,7 +2972,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddVariable(
            *RequestId, *RequestedPath, *VarName);
 
     if (GBlueprintBusySet.Contains(RegKey)) {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(TEXT("Blueprint %s is busy"), *RegKey),
           TEXT("BLUEPRINT_BUSY"));
@@ -2978,7 +2995,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddVariable(
              TEXT("HandleBlueprintAction: failed to load "
                   "blueprint_add_variable target %s (%s)"),
              *RegKey, *LocalLoadError);
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           LocalLoadError.IsEmpty()
                               ? TEXT("Failed to load blueprint")
                               : LocalLoadError,
@@ -3023,7 +3040,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddVariable(
       Response->SetBoolField(TEXT("success"), true);
       Response->SetStringField(
           TEXT("note"), TEXT("Variable already exists; no changes applied."));
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Variable already exists"), Response,
                              FString());
       return true;
@@ -3080,7 +3097,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddVariable(
               return Var.VarName == NewVar.VarName;
             });
         McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/false);
-        SendAutomationError(
+        S.SendAutomationError(
             RequestingSocket, RequestId,
             FString::Printf(
                 TEXT("defaultValue could not be applied to variable '%s': %s. "
@@ -3141,7 +3158,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddVariable(
       Err->SetStringField(
           TEXT("error"),
           TEXT("Verification failed: variable not found after add"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Variable add verification failed"), Err,
                              TEXT("VERIFICATION_FAILED"));
       return true;
@@ -3182,24 +3199,25 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddVariable(
     }
     // Add verification data for the blueprint asset
     McpHandlerUtils::AddVerification(Response, Blueprint);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Variable added"), Response, FString());
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("blueprint_add_variable requires editor build"),
                            nullptr, TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_add_variable requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetDefault(
+bool McpHandlers::Blueprint::HandleBlueprintSetDefault(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -3209,7 +3227,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetDefault(
            *RequestId);
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_set_default requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -3219,7 +3237,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetDefault(
     FString PropertyName;
     LocalPayload->TryGetStringField(TEXT("propertyName"), PropertyName);
     if (PropertyName.TrimStartAndEnd().IsEmpty()) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("propertyName required"), nullptr,
                              TEXT("INVALID_ARGUMENT"));
       return true;
@@ -3230,7 +3248,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetDefault(
     switch (McpPropertyReflection::ReadDiscriminatedValue(LocalPayload, TypedValue,
                                                           ValueParseDetail)) {
     case McpPropertyReflection::EMcpTypedValueParse::None:
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("set exactly one typed value field: boolValue, intValue, "
                "floatValue, stringValue, colorValue, vectorValue, structValue, "
@@ -3238,7 +3256,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetDefault(
           nullptr, TEXT("NO_CHANGES_REQUESTED"));
       return true;
     case McpPropertyReflection::EMcpTypedValueParse::Ambiguous:
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           *FString::Printf(TEXT("set exactly one typed value field, got: %s"),
                            *ValueParseDetail),
@@ -3260,7 +3278,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetDefault(
     UBlueprint *Blueprint =
         LoadBlueprintAsset(Path, LocalNormalized, LocalLoadError);
     if (!Blueprint) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              LocalLoadError.IsEmpty()
                                  ? TEXT("Failed to load blueprint")
                                  : LocalLoadError,
@@ -3269,7 +3287,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetDefault(
     }
 
     if (!Blueprint->GeneratedClass) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Blueprint has no generated class"), nullptr,
                              TEXT("INVALID_BLUEPRINT"));
       return true;
@@ -3277,7 +3295,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetDefault(
 
     UObject *CDO = Blueprint->GeneratedClass->GetDefaultObject();
     if (!CDO) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Could not get CDO"), nullptr,
                              TEXT("INVALID_BLUEPRINT"));
       return true;
@@ -3300,7 +3318,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetDefault(
     }
 
     if (!Property || !TargetContainer) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              ResolveError.IsEmpty() ? TEXT("Property not found")
                                                     : ResolveError,
                              nullptr, TEXT("PROPERTY_NOT_FOUND"));
@@ -3313,7 +3331,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetDefault(
     FString ConversionError;
     if (!ApplyJsonValueToProperty(TargetContainer, Property, ValueField,
                                   ConversionError)) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              ConversionError, nullptr,
                              TEXT("CONVERSION_FAILED"));
       return true;
@@ -3335,24 +3353,25 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetDefault(
 
     // Add verification data for the blueprint asset
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Default value set successfully"), Result);
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("blueprint_set_default requires editor build"),
                            nullptr, TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_set_default requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveVariable(
+bool McpHandlers::Blueprint::HandleBlueprintRemoveVariable(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -3362,7 +3381,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveVariable(
            *RequestId);
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_remove_variable requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -3372,7 +3391,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveVariable(
     FString VarName;
     LocalPayload->TryGetStringField(TEXT("variableName"), VarName);
     if (VarName.TrimStartAndEnd().IsEmpty()) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("variableName required"), nullptr,
                              TEXT("INVALID_ARGUMENT"));
       return true;
@@ -3389,7 +3408,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveVariable(
     UBlueprint *Blueprint =
         LoadBlueprintAsset(Path, LocalNormalized, LocalLoadError);
     if (!Blueprint) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              LocalLoadError.IsEmpty()
                                  ? TEXT("Failed to load blueprint")
                                  : LocalLoadError,
@@ -3407,7 +3426,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveVariable(
     }
 
     if (VarIndex == INDEX_NONE) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           FString::Printf(TEXT("Variable '%s' not found in blueprint."),
                           *VarName),
@@ -3428,25 +3447,26 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveVariable(
     Result->SetStringField(TEXT("blueprintPath"), LocalNormalized);
     // Add verification data for the blueprint asset
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Variable removed successfully"), Result);
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("blueprint_remove_variable requires editor build"), nullptr,
         TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_remove_variable requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintRenameVariable(
+bool McpHandlers::Blueprint::HandleBlueprintRenameVariable(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -3456,7 +3476,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRenameVariable(
            *RequestId);
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_rename_variable requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -3469,7 +3489,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRenameVariable(
     LocalPayload->TryGetStringField(TEXT("newName"), NewName);
 
     if (OldName.IsEmpty() || NewName.IsEmpty()) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Missing 'oldName' or 'newName' in payload."),
                              nullptr, TEXT("INVALID_ARGUMENT"));
       return true;
@@ -3486,7 +3506,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRenameVariable(
     UBlueprint *Blueprint =
         LoadBlueprintAsset(Path, LocalNormalized, LocalLoadError);
     if (!Blueprint) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              LocalLoadError.IsEmpty()
                                  ? TEXT("Failed to load blueprint")
                                  : LocalLoadError,
@@ -3504,7 +3524,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRenameVariable(
     }
 
     if (!bFound) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           FString::Printf(TEXT("Variable '%s' not found in blueprint."),
                           *OldName),
@@ -3527,25 +3547,26 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRenameVariable(
     Result->SetStringField(TEXT("blueprintPath"), LocalNormalized);
     // Add verification data for the blueprint asset
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Variable renamed successfully"), Result);
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("blueprint_rename_variable requires editor build"), nullptr,
         TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_rename_variable requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddEvent(
+bool McpHandlers::Blueprint::HandleBlueprintAddEvent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -3555,7 +3576,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddEvent(
            *RequestId);
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_add_event requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -3586,7 +3607,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddEvent(
 
 #if WITH_EDITOR && MCP_HAS_K2NODE_HEADERS && MCP_HAS_EDGRAPH_SCHEMA_K2
     if (GBlueprintBusySet.Contains(Path)) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Blueprint is busy"), nullptr,
                              TEXT("BLUEPRINT_BUSY"));
       return true;
@@ -3608,7 +3629,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddEvent(
       if (!LoadErr.IsEmpty()) {
         Err->SetStringField(TEXT("error"), LoadErr);
       }
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Failed to load blueprint"), Err,
                              TEXT("BLUEPRINT_NOT_FOUND"));
       return true;
@@ -3635,7 +3656,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddEvent(
     }
 
     if (!EventGraph) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Failed to create event graph"), nullptr,
                              TEXT("GRAPH_UNAVAILABLE"));
       return true;
@@ -3764,7 +3785,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddEvent(
       }
 
       if (!EventFunc) {
-        SendAutomationError(
+        S.SendAutomationError(
             RequestingSocket, RequestId,
             FString::Printf(TEXT("Could not find event '%s' (resolved to '%s') "
                                  "in parent class."),
@@ -3865,7 +3886,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddEvent(
     }
     // Add verification data for the blueprint asset
     McpHandlerUtils::AddVerification(Resp, BP);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Event added"), Resp, FString());
 
     TSharedPtr<FJsonObject> Notify = McpHandlerUtils::CreateResultObject();
@@ -3876,28 +3897,29 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddEvent(
     // (WebSocket automation_event push removed — pull-only / HTTP)
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("blueprint_add_event requires editor build with K2 node headers"),
         nullptr, TEXT("NOT_AVAILABLE"));
     return true;
 #endif // WITH_EDITOR && MCP_HAS_K2NODE_HEADERS && MCP_HAS_EDGRAPH_SCHEMA_K2
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_add_event requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveEvent(
+bool McpHandlers::Blueprint::HandleBlueprintRemoveEvent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   MCP_BPCORE_PREAMBLE();
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_remove_event requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -3906,7 +3928,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveEvent(
     FString EventName;
     LocalPayload->TryGetStringField(TEXT("eventName"), EventName);
     if (EventName.IsEmpty()) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("eventName required"), nullptr,
                              TEXT("INVALID_ARGUMENT"));
       return true;
@@ -3958,7 +3980,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveEvent(
         TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
         Resp->SetStringField(TEXT("eventName"), EventName);
         Resp->SetStringField(TEXT("blueprintPath"), Path);
-        SendAutomationResponse(RequestingSocket, RequestId, false,
+        S.SendAutomationResponse(RequestingSocket, RequestId, false,
                                TEXT("Blueprint not found."),
                                Resp, TEXT("BLUEPRINT_NOT_FOUND"));
         return true;
@@ -3971,7 +3993,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveEvent(
       Resp->SetStringField(
           TEXT("note"),
           TEXT("Event not present; treated as removed (idempotent)."));
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Event not present; treated as removed"),
                              Resp, FString());
       // Fire completion event to satisfy waitForEvent clients
@@ -4018,7 +4040,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveEvent(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetStringField(TEXT("eventName"), EventName);
     Resp->SetStringField(TEXT("blueprintPath"), RegistryPath);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Event removed."), Resp, FString());
     // Broadcast completion event so clients waiting for an automation_event can
     // resolve
@@ -4033,14 +4055,15 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveEvent(
            *EventName, *RegistryPath);
     return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_remove_event requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveFunction(
+bool McpHandlers::Blueprint::HandleBlueprintRemoveFunction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -4054,7 +4077,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveFunction(
       LocalPayload->TryGetStringField(TEXT("name"), FuncName);
     }
     if (Path.IsEmpty() || FuncName.TrimStartAndEnd().IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("remove_function requires blueprintPath and functionName."),
           nullptr, TEXT("INVALID_ARGUMENT"));
@@ -4065,7 +4088,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveFunction(
     FString LoadErr;
     UBlueprint *Blueprint = LoadBlueprintAsset(Path, Normalized, LoadErr);
     if (!Blueprint) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Failed to load blueprint"), nullptr,
                              TEXT("BLUEPRINT_NOT_FOUND"));
       return true;
@@ -4090,24 +4113,25 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintRemoveFunction(
       Resp->SetBoolField(TEXT("alreadyAbsent"), true);
     }
     Resp->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("remove_function"), Resp, FString());
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Editor build required"), nullptr,
                            TEXT("NOT_IMPLEMENTED"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_remove_function requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
+bool McpHandlers::Blueprint::HandleBlueprintAddFunction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -4117,7 +4141,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
            *RequestId);
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_add_function requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -4135,7 +4159,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
       }
     }
     if (FuncName.TrimStartAndEnd().IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("functionName, name, or memberName required. Example: "
                "{\"functionName\": \"MyFunction\"}"),
@@ -4161,7 +4185,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
 
 #if WITH_EDITOR
     if (GBlueprintBusySet.Contains(Path)) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Blueprint is busy"), nullptr,
                              TEXT("BLUEPRINT_BUSY"));
       return true;
@@ -4183,7 +4207,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
       if (!LoadErr.IsEmpty()) {
         Err->SetStringField(TEXT("error"), LoadErr);
       }
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Failed to load blueprint"), Err,
                              TEXT("BLUEPRINT_NOT_FOUND"));
       return true;
@@ -4214,7 +4238,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
       Resp->SetStringField(TEXT("blueprintPath"), RegistryKey);
       Resp->SetStringField(TEXT("functionName"), ExistingGraph->GetName());
       Resp->SetStringField(TEXT("note"), TEXT("Function already exists"));
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Function already exists"), Resp, FString());
       return true;
     }
@@ -4232,7 +4256,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
           ParentClass ? ParentClass->FindFunctionByName(FName(*FuncName))
                       : nullptr;
       if (!ParentFn) {
-        SendAutomationResponse(
+        S.SendAutomationResponse(
             RequestingSocket, RequestId, false,
             FString::Printf(
                 TEXT("Parent class has no function named '%s' to override."),
@@ -4241,7 +4265,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
         return true;
       }
       if (!ParentFn->HasAnyFunctionFlags(FUNC_BlueprintEvent)) {
-        SendAutomationResponse(
+        S.SendAutomationResponse(
             RequestingSocket, RequestId, false,
             FString::Printf(TEXT("'%s' is not a BlueprintImplementableEvent / "
                                  "BlueprintNativeEvent and cannot be "
@@ -4255,7 +4279,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
           Blueprint, FName(*FuncName), UEdGraph::StaticClass(),
           UEdGraphSchema_K2::StaticClass());
       if (!OverrideGraph) {
-        SendAutomationResponse(RequestingSocket, RequestId, false,
+        S.SendAutomationResponse(RequestingSocket, RequestId, false,
                                TEXT("Failed to create override graph"), nullptr,
                                TEXT("GRAPH_UNAVAILABLE"));
         return true;
@@ -4288,7 +4312,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
       Resp->SetBoolField(TEXT("override"), true);
       Resp->SetStringField(TEXT("entryNodeId"), EntryNodeId);
       Resp->SetStringField(TEXT("resultNodeId"), ResultNodeId);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Override function graph created"), Resp,
                              FString());
       return true;
@@ -4298,7 +4322,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
         Blueprint, FName(*FuncName), UEdGraph::StaticClass(),
         UEdGraphSchema_K2::StaticClass());
     if (!NewGraph) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Failed to create function graph"), nullptr,
                              TEXT("GRAPH_UNAVAILABLE"));
       return true;
@@ -4388,7 +4412,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
       ResultNode = FBlueprintEditorUtils::FindOrCreateFunctionResultNode(EntryNode);
     }
     if (Outputs.Num() > 0 && !ResultNode) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("Failed to create a function result node for outputs."),
           nullptr, TEXT("GRAPH_ERROR"));
@@ -4472,7 +4496,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
     }
     // Add verification data for the blueprint asset
     McpHandlerUtils::AddVerification(Resp, Blueprint);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Function added"), Resp, FString());
 
     // Broadcast completion event so clients waiting for an automation_event can
@@ -4485,7 +4509,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
     // (WebSocket automation_event push removed — pull-only / HTTP)
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("blueprint_add_function requires editor build with K2 schema"),
         nullptr, TEXT("NOT_AVAILABLE"));
@@ -4493,14 +4517,15 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddFunction(
 #endif
 #endif // WITH_EDITOR (add_function editor-body gate)
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_add_function requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGetDefault(
+bool McpHandlers::Blueprint::HandleBlueprintGetDefault(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -4510,7 +4535,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGetDefault(
     // detour through find_objects/the Default__ asset path).
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_get_default requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -4519,7 +4544,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGetDefault(
     FString PropertyName;
     LocalPayload->TryGetStringField(TEXT("propertyName"), PropertyName);
     if (PropertyName.IsEmpty()) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("propertyName required"), nullptr,
                              TEXT("INVALID_ARGUMENT"));
       return true;
@@ -4532,14 +4557,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGetDefault(
     if (!BP) {
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("error"), LoadErr);
-      SendAutomationResponse(RequestingSocket, RequestId, false, LoadErr,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false, LoadErr,
                              Result, TEXT("BLUEPRINT_NOT_FOUND"));
       return true;
     }
     UClass *GeneratedClass = BP->GeneratedClass;
     UObject *CDO = GeneratedClass ? GeneratedClass->GetDefaultObject() : nullptr;
     if (!CDO) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Blueprint has no generated class / CDO"),
                              nullptr, TEXT("NO_GENERATED_CLASS"));
       return true;
@@ -4580,7 +4605,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGetDefault(
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("propertyName"), PropertyName);
       Result->SetStringField(TEXT("blueprintPath"), Path);
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Property not found on blueprint"), Result,
                              TEXT("PROPERTY_NOT_FOUND"));
       return true;
@@ -4595,23 +4620,24 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGetDefault(
         McpPropertyReflection::GetPropertyTypeName(TargetProperty));
     Result->SetField(TEXT("value"), McpPropertyReflection::ExportPropertyToJsonValue(
                                         CDO, TargetProperty));
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Default value retrieved"), Result, FString());
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_get_default requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintListFunctions(
+bool McpHandlers::Blueprint::HandleBlueprintListFunctions(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -4621,7 +4647,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintListFunctions(
     // e.g. BP_GetDesiredFocusTarget was overridden.
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_list_functions requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -4635,7 +4661,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintListFunctions(
     if (!BP) {
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("error"), LoadErr);
-      SendAutomationResponse(RequestingSocket, RequestId, false, LoadErr,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false, LoadErr,
                              Result, TEXT("BLUEPRINT_NOT_FOUND"));
       return true;
     }
@@ -4719,23 +4745,24 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintListFunctions(
     }
     Result->SetArrayField(TEXT("interfaces"), InterfacesJson);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Functions listed"), Result, FString());
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor build required"), TEXT("NOT_SUPPORTED"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_list_functions requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintGet(
+bool McpHandlers::Blueprint::HandleBlueprintGet(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -4744,7 +4771,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGet(
            TEXT("Entered blueprint_get handler: RequestId=%s"), *RequestId);
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("blueprint_get requires a blueprint path."),
                              nullptr, TEXT("INVALID_BLUEPRINT_PATH"));
       return true;
@@ -4917,31 +4944,32 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintGet(
       }
     }
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("blueprint_get requires editor build"), nullptr,
                            TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 
     if (!bExists) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Blueprint not found"), nullptr,
                              TEXT("NOT_FOUND"));
       return true;
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Blueprint fetched"), Entry, FString());
     return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_get requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
+bool McpHandlers::Blueprint::HandleBlueprintAddNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -4951,7 +4979,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
            *RequestId);
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("blueprint_add_node requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -4961,7 +4989,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
     FString NodeType;
     LocalPayload->TryGetStringField(TEXT("nodeType"), NodeType);
     if (NodeType.IsEmpty()) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("nodeType required"), nullptr,
                              TEXT("INVALID_ARGUMENT"));
       return true;
@@ -5005,7 +5033,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
             !MemberName.IsEmpty()) {
           LocalPayload->SetStringField(TEXT("variableName"), MemberName);
         }
-        return HandleBlueprintGraphCreateNode(RequestId, LocalPayload,
+        return McpHandlers::Blueprint::HandleBlueprintGraphCreateNode(S, RequestId, LocalPayload,
                                               RequestingSocket);
       }
     }
@@ -5026,7 +5054,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
       if (bIsFunctionCall && FunctionName.IsEmpty() && !MemberName.IsEmpty()) {
         LocalPayload->SetStringField(TEXT("subAction"), TEXT("create_node"));
         LocalPayload->SetStringField(TEXT("nodeType"), TEXT("CallFunction"));
-        return HandleBlueprintGraphCreateNode(RequestId, LocalPayload,
+        return McpHandlers::Blueprint::HandleBlueprintGraphCreateNode(S, RequestId, LocalPayload,
                                               RequestingSocket);
       }
     }
@@ -5037,7 +5065,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
 #if WITH_EDITOR && MCP_HAS_K2NODE_HEADERS && MCP_HAS_EDGRAPH_SCHEMA_K2
 
     if (GBlueprintBusySet.Contains(Path)) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Blueprint is busy"), nullptr,
                              TEXT("BLUEPRINT_BUSY"));
       return true;
@@ -5056,7 +5084,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
     if (!BP) {
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("error"), LoadErr);
-      SendAutomationResponse(RequestingSocket, RequestId, false, LoadErr,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false, LoadErr,
                              Result, TEXT("BLUEPRINT_NOT_FOUND"));
       return true;
     }
@@ -5117,7 +5145,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("error"),
                              TEXT("Failed to locate or create target graph"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Graph creation failed"), Result,
                              TEXT("GRAPH_ERROR"));
       return true;
@@ -5146,7 +5174,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
         // breaks the next compile and has been observed to hang PIE when the owning asset is
         // later instantiated.
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-        SendAutomationResponse(
+        S.SendAutomationResponse(
             RequestingSocket, RequestId, false,
             TEXT("CallFunction node requires functionName (or memberName[+memberClass]). "
                  "Refusing to create a function-less 'None' node."),
@@ -5159,7 +5187,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
         // misconfigured node that breaks the next compile while the add reports success.
         TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
         Result->SetStringField(TEXT("error"), FunctionName);
-        SendAutomationResponse(
+        S.SendAutomationResponse(
             RequestingSocket, RequestId, false,
             FString::Printf(
                 TEXT("Function '%s' not found. Tried the blueprint's class "
@@ -5207,7 +5235,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
         Result->SetStringField(
             TEXT("error"),
             FString::Printf(TEXT("Unsupported nodeType: %s"), *NodeType));
-        SendAutomationResponse(
+        S.SendAutomationResponse(
             RequestingSocket, RequestId, false,
             TEXT("Unsupported node type (and class lookup failed)"), Result,
             TEXT("UNSUPPORTED_NODE"));
@@ -5218,7 +5246,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
     if (!NewNode) {
       TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
       Result->SetStringField(TEXT("error"), TEXT("Failed to instantiate node"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Node creation failed"), Result,
                              TEXT("NODE_CREATION_FAILED"));
       return true;
@@ -5345,7 +5373,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
       Result->SetStringField(TEXT("variableName"), VariableName);
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Node added"), Result, FString());
 
     TSharedPtr<FJsonObject> Notify = McpHandlerUtils::CreateResultObject();
@@ -5360,21 +5388,22 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAddNode(
            *RegistryKey, *NewNode->NodeGuid.ToString());
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("blueprint_add_node requires editor build with K2 node headers"),
         nullptr, TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_add_node requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetMetadata(
+bool McpHandlers::Blueprint::HandleBlueprintSetMetadata(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -5384,7 +5413,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetMetadata(
            *RequestId);
     FString Path = ResolveBlueprintRequestedPath();
     if (Path.IsEmpty()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("set_blueprint_metadata requires a blueprint path."), nullptr,
           TEXT("INVALID_BLUEPRINT_PATH"));
@@ -5394,7 +5423,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetMetadata(
     const TSharedPtr<FJsonObject>* MetadataObj = nullptr;
     if (!LocalPayload->TryGetObjectField(TEXT("metadata"), MetadataObj) ||
         !MetadataObj || !(*MetadataObj).IsValid()) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("metadata object required"), nullptr,
                              TEXT("INVALID_ARGUMENT"));
       return true;
@@ -5407,7 +5436,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetMetadata(
     if (!BP) {
       TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
       Err->SetStringField(TEXT("error"), LoadErr);
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Failed to load blueprint"), Err,
                              TEXT("BLUEPRINT_NOT_FOUND"));
       return true;
@@ -5455,18 +5484,18 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintSetMetadata(
     }
     Resp->SetArrayField(TEXT("metadataSet"), MetaArray);
     Resp->SetBoolField(TEXT("saved"), bSaved);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Metadata set"), Resp, FString());
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("set_blueprint_metadata requires editor build"), nullptr,
         TEXT("NOT_AVAILABLE"));
     return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("blueprint_set_blueprint_metadata requires editor build"),
                       TEXT("EDITOR_ONLY"));
   return true;

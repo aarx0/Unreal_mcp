@@ -64,6 +64,7 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_BlueprintHandlers.h"
 
 // =============================================================================
 // Editor-Only Includes
@@ -880,7 +881,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     Ops.Add(MakeShared<FJsonValueObject>(Op));
     SCSPayload->SetArrayField(TEXT("operations"), Ops);
 
-    return HandleBlueprintModifyScs(RequestId, SCSPayload, RequestingSocket);
+    return McpHandlers::Blueprint::HandleBlueprintModifyScs(*this, RequestId, SCSPayload, RequestingSocket);
   }
 
   if (FN == TEXT("CREATE_ASSET")) {
