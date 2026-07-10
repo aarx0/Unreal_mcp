@@ -4602,8 +4602,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
             !MemberName.IsEmpty()) {
           LocalPayload->SetStringField(TEXT("variableName"), MemberName);
         }
-        return HandleBlueprintGraphAction(RequestId, TEXT("manage_blueprint"),
-                                          LocalPayload, RequestingSocket);
+        return HandleBlueprintGraphCreateNode(RequestId, LocalPayload,
+                                              RequestingSocket);
       }
     }
 
@@ -4623,8 +4623,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
       if (bIsFunctionCall && FunctionName.IsEmpty() && !MemberName.IsEmpty()) {
         LocalPayload->SetStringField(TEXT("subAction"), TEXT("create_node"));
         LocalPayload->SetStringField(TEXT("nodeType"), TEXT("CallFunction"));
-        return HandleBlueprintGraphAction(RequestId, TEXT("manage_blueprint"),
-                                          LocalPayload, RequestingSocket);
+        return HandleBlueprintGraphCreateNode(RequestId, LocalPayload,
+                                              RequestingSocket);
       }
     }
 

@@ -142,7 +142,8 @@ inline const TArray<FString>& ManageBlueprintCore()
 	return Actions;
 }
 
-// Routed to HandleBlueprintGraphAction by the manage_blueprint registration lambda.
+// Each action is dispatched to its own HandleBlueprintGraph* member by the
+// classed manage_blueprint call (MCP/Calls/McpCalls_ManageBlueprint.cpp).
 inline const TArray<FString>& BlueprintGraph()
 {
 	static const TArray<FString> Actions = {

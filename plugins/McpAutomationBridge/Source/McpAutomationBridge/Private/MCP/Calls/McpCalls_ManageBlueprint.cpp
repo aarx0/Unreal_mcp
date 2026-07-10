@@ -423,7 +423,7 @@ static void S_AddNode(FMcpSchemaBuilder& B)
 	 .Required({TEXT("nodeType")});
 }
 
-// BlueprintGraph (HandleBlueprintGraphAction, Action arg "manage_blueprint")
+// BlueprintGraph (per-action HandleBlueprintGraph* members, BlueprintGraphHandlers.cpp)
 
 static void S_CreateNode(FMcpSchemaBuilder& B)
 {
@@ -1633,6 +1633,26 @@ class FMcpCall_ManageBlueprint_##ClassSuffix final : public FMcpCall            
 	}                                                                                    \
 };
 
+// BlueprintGraph: one classed action per HandleBlueprintGraph* member
+// (BlueprintGraphHandlers.cpp). Run() calls the member directly — no surviving
+// 4-arg dispatcher, no action-string re-parse.
+#define MCP_BP_GRAPH_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags) \
+class FMcpCall_ManageBlueprint_##ClassSuffix final : public FMcpCall                     \
+{                                                                                        \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }        \
+	const FMcpCallDecl& GetDecl() const override                                          \
+	{                                                                                    \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("manage_blueprint"),              \
+			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                                 \
+		return D;                                                                          \
+	}                                                                                    \
+	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
+	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
+	{                                                                                    \
+		return S.HandlerFn(RequestId, Payload, Socket);                   \
+	}                                                                                    \
+};
+
 // Core (HandleBlueprintAction, Action arg "manage_blueprint")
 MCP_BP_ACTION_CALL(Create, "create", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(Get, "get", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
@@ -1662,21 +1682,21 @@ MCP_BP_ACTION_CALL(SetVariableMetadata, "set_variable_metadata", HandleBlueprint
 MCP_BP_ACTION_CALL(SetMetadata, "set_blueprint_metadata", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_BP_ACTION_CALL(AddNode, "add_node", HandleBlueprintAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
-// BlueprintGraph (HandleBlueprintGraphAction, Action arg "manage_blueprint")
-MCP_BP_ACTION_CALL(CreateNode, "create_node", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(DeleteNode, "delete_node", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(ConnectPins, "connect_pins", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(BreakPinLinks, "break_pin_links", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(SetNodeProperty, "set_node_property", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(CreateRerouteNode, "create_reroute_node", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(GetNodeDetails, "get_node_details", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
-MCP_BP_ACTION_CALL(GetGraphDetails, "get_graph_details", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
-MCP_BP_ACTION_CALL(GetPinDetails, "get_pin_details", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
-MCP_BP_ACTION_CALL(ListNodeTypes, "list_node_types", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
-MCP_BP_ACTION_CALL(SetPinDefaultValue, "set_pin_default_value", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(ArrangeGraph, "arrange_graph", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BP_ACTION_CALL(ListAnimbpGraphs, "list_animbp_graphs", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
-MCP_BP_ACTION_CALL(GetTransitionRuleGraph, "get_transition_rule_graph", HandleBlueprintGraphAction, "manage_blueprint", EMcpCallFlags::RequiresEditor)
+// BlueprintGraph (per-action HandleBlueprintGraph* members, BlueprintGraphHandlers.cpp)
+MCP_BP_GRAPH_CALL(CreateNode, "create_node", HandleBlueprintGraphCreateNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_GRAPH_CALL(DeleteNode, "delete_node", HandleBlueprintGraphDeleteNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_GRAPH_CALL(ConnectPins, "connect_pins", HandleBlueprintGraphConnectPins, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_GRAPH_CALL(BreakPinLinks, "break_pin_links", HandleBlueprintGraphBreakPinLinks, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_GRAPH_CALL(SetNodeProperty, "set_node_property", HandleBlueprintGraphSetNodeProperty, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_GRAPH_CALL(CreateRerouteNode, "create_reroute_node", HandleBlueprintGraphCreateRerouteNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_GRAPH_CALL(GetNodeDetails, "get_node_details", HandleBlueprintGraphGetNodeDetails, EMcpCallFlags::RequiresEditor)
+MCP_BP_GRAPH_CALL(GetGraphDetails, "get_graph_details", HandleBlueprintGraphGetGraphDetails, EMcpCallFlags::RequiresEditor)
+MCP_BP_GRAPH_CALL(GetPinDetails, "get_pin_details", HandleBlueprintGraphGetPinDetails, EMcpCallFlags::RequiresEditor)
+MCP_BP_GRAPH_CALL(ListNodeTypes, "list_node_types", HandleBlueprintGraphListNodeTypes, EMcpCallFlags::RequiresEditor)
+MCP_BP_GRAPH_CALL(SetPinDefaultValue, "set_pin_default_value", HandleBlueprintGraphSetPinDefaultValue, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_GRAPH_CALL(ArrangeGraph, "arrange_graph", HandleBlueprintGraphArrangeGraph, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BP_GRAPH_CALL(ListAnimbpGraphs, "list_animbp_graphs", HandleBlueprintGraphListAnimbpGraphs, EMcpCallFlags::RequiresEditor)
+MCP_BP_GRAPH_CALL(GetTransitionRuleGraph, "get_transition_rule_graph", HandleBlueprintGraphGetTransitionRuleGraph, EMcpCallFlags::RequiresEditor)
 
 // WidgetAuthoring (HandleManageWidgetAuthoringAction, Action arg "manage_widget_authoring")
 MCP_BP_ACTION_CALL(CreateWidgetBlueprint, "create_widget_blueprint", HandleManageWidgetAuthoringAction, "manage_widget_authoring", EMcpCallFlags::Mutating)
@@ -1782,6 +1802,7 @@ MCP_BP_ACTION_CALL(CreateCommonButtonStyle, "create_common_button_style", Handle
 MCP_BP_ACTION_CALL(CreateCommonTextStyle, "create_common_text_style", HandleCommonUiAction, "manage_common_ui", EMcpCallFlags::Mutating)
 
 #undef MCP_BP_ACTION_CALL
+#undef MCP_BP_GRAPH_CALL
 
 } // namespace McpCalls::ManageBlueprint
 

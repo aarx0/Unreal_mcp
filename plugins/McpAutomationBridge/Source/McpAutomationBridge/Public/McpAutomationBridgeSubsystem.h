@@ -1297,13 +1297,38 @@ public:
 
 public:
   // 1. Editor Authoring & Graph Editing
-  // manage_blueprint is classed (MCP/Calls/McpCalls_ManageBlueprint.cpp) — this
-  // route dispatcher is public so the classed BlueprintGraph actions delegate;
-  // it survives because HandleBlueprintAction recurses into it.
-  bool
-  HandleBlueprintGraphAction(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
+  // manage_blueprint is classed (MCP/Calls/McpCalls_ManageBlueprint.cpp); each
+  // graph subAction is one member below, called directly by its classed action.
+  // HandleBlueprintGraphCreateNode is also reused by HandleBlueprintAction's
+  // add_node cast/getter/CallFunction fast-path (BlueprintHandlers.cpp).
+  bool HandleBlueprintGraphCreateNode(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGraphConnectPins(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGraphBreakPinLinks(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGraphDeleteNode(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGraphCreateRerouteNode(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGraphSetNodeProperty(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGraphGetNodeDetails(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGraphGetGraphDetails(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGraphArrangeGraph(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGraphGetPinDetails(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGraphListNodeTypes(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGraphSetPinDefaultValue(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGraphListAnimbpGraphs(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleBlueprintGraphGetTransitionRuleGraph(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 
   // Called directly by the classed manage_effect graph actions (MCP/Calls/);
   // Action carries its manage_niagara_graph gate literal.
