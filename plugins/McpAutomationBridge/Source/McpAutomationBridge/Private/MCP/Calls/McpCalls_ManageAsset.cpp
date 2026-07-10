@@ -74,14 +74,12 @@ static void S_Rename(FMcpSchemaBuilder& B)
 	 .String(TEXT("newName"), TEXT("rename/duplicate/move: new asset name, resolved into the source asset's folder (alternative to destinationPath)."));
 }
 
-static void S_Move(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("sourcePath"), TEXT("Source path for import/duplicate/rename/move (assetPath also accepted)."))
-	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("destinationPath"), TEXT("Destination path for move/copy."))
-	 .String(TEXT("newName"), TEXT("rename/duplicate/move: new asset name, resolved into the source asset's folder (alternative to destinationPath)."))
-	 .Required({TEXT("sourcePath"), TEXT("assetPath"), TEXT("destinationPath"), TEXT("newName")});
-}
+// move shares rename's contract and implementation (Unreal has no distinct
+// move — see the Move row and HandleRenameAsset). No param is always mandatory:
+// the handler accepts sourcePath|assetPath and destinationPath|newName, and
+// fails loud when either pair is absent, so 'required' stays empty (a fixed
+// alternate list would false-reject a legitimate single-alternate call).
+static void S_Move(FMcpSchemaBuilder& B) { S_Rename(B); }
 
 static void S_Delete(FMcpSchemaBuilder& B)
 {
@@ -1288,7 +1286,7 @@ MCP_MA_CALL(List, "list", HandleListAssets, EMcpCallFlags::RequiresEditor)
 MCP_MA_CALL(Import, "import", HandleImportAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_CALL(Duplicate, "duplicate", HandleDuplicateAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_CALL(Rename, "rename", HandleRenameAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(Move, "move", HandleMoveAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MA_CALL(Move, "move", HandleRenameAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_CALL(Delete, "delete", HandleDeleteAssets, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_CALL(CreateFolder, "create_folder", HandleCreateFolder, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_ACTION_CALL(SearchAssets, "search_assets", HandleSearchAssets, EMcpCallFlags::RequiresEditor)

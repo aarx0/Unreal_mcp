@@ -1822,13 +1822,6 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameAsset(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleMoveAsset(
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
-  // Move is essentially rename in Unreal
-  return HandleRenameAsset(RequestId, Payload, Socket);
-}
-
 /**
  * Handles asset deletion requests.
  *

@@ -3542,9 +3542,6 @@ public:
   bool HandleRenameAsset(const FString &RequestId,
                          const TSharedPtr<FJsonObject> &Payload,
                          FMcpResponseHandle Socket);
-  bool HandleMoveAsset(const FString &RequestId,
-                       const TSharedPtr<FJsonObject> &Payload,
-                       FMcpResponseHandle Socket);
   bool HandleDeleteAssets(const FString &RequestId,
                           const TSharedPtr<FJsonObject> &Payload,
                           FMcpResponseHandle Socket);
