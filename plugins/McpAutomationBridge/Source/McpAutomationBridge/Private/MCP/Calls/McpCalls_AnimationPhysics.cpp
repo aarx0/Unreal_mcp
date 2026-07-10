@@ -195,7 +195,7 @@ static void S_SetSequenceLength(FMcpSchemaBuilder& B)
 	 .Integer(TEXT("frameRate"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: sample rate in fps (default 30)."))
 	 .Integer(TEXT("numFrames"), TEXT("create_animation_sequence/set_sequence_length/create_procedural_animation: explicit frame count (overrides length*frameRate)."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
-	 .Required({TEXT("assetPath"), TEXT("length")});
+	 .Required({TEXT("assetPath")});
 }
 
 static void S_AddBoneTrack(FMcpSchemaBuilder& B)
@@ -556,7 +556,7 @@ static void S_AddSlotNode(FMcpSchemaBuilder& B)
 	 .Number(TEXT("positionX"), TEXT(""))
 	 .Number(TEXT("positionY"), TEXT(""))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
-	 .Required({TEXT("blueprintPath")});
+	 .Required({TEXT("blueprintPath"), TEXT("slotName")});
 }
 
 static void S_AddLayeredBlendPerBone(FMcpSchemaBuilder& B)

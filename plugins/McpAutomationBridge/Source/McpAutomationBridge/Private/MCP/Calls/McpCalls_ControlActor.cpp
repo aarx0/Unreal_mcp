@@ -108,7 +108,7 @@ static void S_SetVisibility(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Bool(TEXT("visible"), TEXT("Whether the item/actor is visible."))
-	 .Required({TEXT("actorName")});
+	 .Required({TEXT("actorName"), TEXT("visible")});
 }
 
 static void S_AddComponent(FMcpSchemaBuilder& B)

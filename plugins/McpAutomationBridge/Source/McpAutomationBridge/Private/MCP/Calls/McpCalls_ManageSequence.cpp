@@ -42,8 +42,7 @@ static void S_Create(FMcpSchemaBuilder& B)
 static void S_Open(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
-	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("path")});
+	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_Duplicate(FMcpSchemaBuilder& B)
@@ -51,7 +50,7 @@ static void S_Duplicate(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
 	 .String(TEXT("destinationPath"), TEXT("Destination path for move/copy."))
-	 .Required({TEXT("path"), TEXT("destinationPath")});
+	 .Required({TEXT("destinationPath")});
 }
 
 static void S_Rename(FMcpSchemaBuilder& B)
@@ -59,35 +58,31 @@ static void S_Rename(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
 	 .String(TEXT("newName"), TEXT("New name for renaming."))
-	 .Required({TEXT("path"), TEXT("newName")});
+	 .Required({TEXT("newName")});
 }
 
 static void S_Delete(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
-	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("path")});
+	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_GetBindings(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
-	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("path")});
+	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_GetMetadata(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
-	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("path")});
+	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_GetProperties(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
-	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("path")});
+	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_SetProperties(FMcpSchemaBuilder& B)
@@ -97,15 +92,13 @@ static void S_SetProperties(FMcpSchemaBuilder& B)
 	 .String(TEXT("frameRate"), TEXT("Frame/display rate in fps: an integer string (e.g. \"30\"), an exact NTSC rational \"numerator/denominator\" (e.g. \"24000/1001\"), or a plain JSON number (rounded to a whole-number rate)."))
 	 .Integer(TEXT("lengthInFrames"), TEXT(""))
 	 .Integer(TEXT("playbackStart"), TEXT(""))
-	 .Integer(TEXT("playbackEnd"), TEXT(""))
-	 .Required({TEXT("path")});
+	 .Integer(TEXT("playbackEnd"), TEXT(""));
 }
 
 static void S_AddCamera(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
-	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("path")});
+	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_AddActor(FMcpSchemaBuilder& B)
@@ -121,7 +114,7 @@ static void S_AddActors(FMcpSchemaBuilder& B)
 	B.Array(TEXT("actorNames"), TEXT(""))
 	 .String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("actorNames"), TEXT("path")});
+	 .Required({TEXT("actorNames")});
 }
 
 static void S_RemoveActors(FMcpSchemaBuilder& B)
@@ -129,7 +122,7 @@ static void S_RemoveActors(FMcpSchemaBuilder& B)
 	B.Array(TEXT("actorNames"), TEXT(""))
 	 .String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("actorNames"), TEXT("path")});
+	 .Required({TEXT("actorNames")});
 }
 
 static void S_AddSpawnableFromClass(FMcpSchemaBuilder& B)
@@ -137,7 +130,7 @@ static void S_AddSpawnableFromClass(FMcpSchemaBuilder& B)
 	B.String(TEXT("className"), TEXT(""))
 	 .String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("className"), TEXT("path")});
+	 .Required({TEXT("className")});
 }
 
 static void S_AddKeyframe(FMcpSchemaBuilder& B)
@@ -151,7 +144,7 @@ static void S_AddKeyframe(FMcpSchemaBuilder& B)
 	 // Transform tracks: structValue {location,rotation,scale}. Float property tracks: floatValue.
 	 .Number(TEXT("floatValue"), TEXT("Keyframe value for a float property track."))
 	 .Object(TEXT("structValue"), TEXT("Keyframe value for a transform track: {location:{x,y,z}, rotation:{roll,pitch,yaw}, scale:{x,y,z}}."))
-	 .Required({TEXT("path"), TEXT("frame")});
+	 .Required({TEXT("frame")});
 }
 
 static void S_AddSection(FMcpSchemaBuilder& B)
@@ -161,8 +154,7 @@ static void S_AddSection(FMcpSchemaBuilder& B)
 	 .String(TEXT("trackName"), TEXT(""))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Integer(TEXT("startFrame"), TEXT(""))
-	 .Integer(TEXT("endFrame"), TEXT(""))
-	 .Required({TEXT("path")});
+	 .Integer(TEXT("endFrame"), TEXT(""));
 }
 
 static void S_AddTrack(FMcpSchemaBuilder& B)
@@ -172,51 +164,45 @@ static void S_AddTrack(FMcpSchemaBuilder& B)
 	 .String(TEXT("trackType"), TEXT(""))
 	 .String(TEXT("trackName"), TEXT(""))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .Required({TEXT("path"), TEXT("trackType")});
+	 .Required({TEXT("trackType")});
 }
 
 static void S_RemoveTrack(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .String(TEXT("trackName"), TEXT(""))
-	 .Required({TEXT("path")});
+	 .String(TEXT("trackName"), TEXT(""));
 }
 
 static void S_ListTracks(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
-	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("path")});
+	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_Play(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
-	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("path")});
+	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_Pause(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
-	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("path")});
+	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_Stop(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
-	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("path")});
+	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_SetPlaybackSpeed(FMcpSchemaBuilder& B)
 {
 	B.Number(TEXT("speed"), TEXT(""))
 	 .String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
-	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("path")});
+	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_SetDisplayRate(FMcpSchemaBuilder& B)
@@ -224,15 +210,14 @@ static void S_SetDisplayRate(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
 	 .String(TEXT("frameRate"), TEXT("Frame/display rate in fps: an integer string (e.g. \"30\"), an exact NTSC rational \"numerator/denominator\" (e.g. \"24000/1001\"), or a plain JSON number (rounded to a whole-number rate)."))
-	 .Required({TEXT("path"), TEXT("frameRate")});
+	 .Required({TEXT("frameRate")});
 }
 
 static void S_SetTickResolution(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("resolution"), TEXT(""))
 	 .String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
-	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("path")});
+	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_SetViewRange(FMcpSchemaBuilder& B)
@@ -240,8 +225,7 @@ static void S_SetViewRange(FMcpSchemaBuilder& B)
 	B.Number(TEXT("start"), TEXT(""))
 	 .Number(TEXT("end"), TEXT(""))
 	 .String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
-	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Required({TEXT("path")});
+	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_SetWorkRange(FMcpSchemaBuilder& B)
@@ -249,8 +233,7 @@ static void S_SetWorkRange(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
 	 .Number(TEXT("start"), TEXT(""))
-	 .Number(TEXT("end"), TEXT(""))
-	 .Required({TEXT("path")});
+	 .Number(TEXT("end"), TEXT(""));
 }
 
 static void S_SetTrackMuted(FMcpSchemaBuilder& B)
@@ -258,8 +241,7 @@ static void S_SetTrackMuted(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
 	 .String(TEXT("trackName"), TEXT(""))
-	 .Bool(TEXT("muted"), TEXT(""))
-	 .Required({TEXT("path")});
+	 .Bool(TEXT("muted"), TEXT(""));
 }
 
 static void S_SetTrackSolo(FMcpSchemaBuilder& B)
@@ -267,8 +249,7 @@ static void S_SetTrackSolo(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
 	 .String(TEXT("trackName"), TEXT(""))
-	 .Bool(TEXT("solo"), TEXT(""))
-	 .Required({TEXT("path")});
+	 .Bool(TEXT("solo"), TEXT(""));
 }
 
 static void S_SetTrackLocked(FMcpSchemaBuilder& B)
@@ -276,8 +257,7 @@ static void S_SetTrackLocked(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
 	 .String(TEXT("trackName"), TEXT(""))
-	 .Bool(TEXT("locked"), TEXT(""))
-	 .Required({TEXT("path")});
+	 .Bool(TEXT("locked"), TEXT(""));
 }
 
 // ─── Classes ─────────────────────────────────────────────────────────────────

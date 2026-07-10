@@ -66,8 +66,7 @@ static void S_Duplicate(FMcpSchemaBuilder& B)
 	B.String(TEXT("sourcePath"), TEXT("Source path for import/duplicate/rename/move (assetPath also accepted)."))
 	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("destinationPath"), TEXT("Destination path for move/copy."))
-	 .String(TEXT("newName"), TEXT("rename/duplicate/move: new asset name, resolved into the source asset's folder (alternative to destinationPath)."))
-	 .Required({TEXT("sourcePath"), TEXT("assetPath"), TEXT("destinationPath"), TEXT("newName")});
+	 .String(TEXT("newName"), TEXT("rename/duplicate/move: new asset name, resolved into the source asset's folder (alternative to destinationPath)."));
 }
 
 static void S_Rename(FMcpSchemaBuilder& B)
@@ -90,15 +89,13 @@ static void S_Delete(FMcpSchemaBuilder& B)
 	B.Array(TEXT("paths"), TEXT(""))
 	 .Array(TEXT("assetPaths"), TEXT(""))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
-	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Required({TEXT("paths"), TEXT("assetPaths"), TEXT("path"), TEXT("assetPath")});
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."));
 }
 
 static void S_CreateFolder(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("path"), TEXT("Path to a directory."))
-	 .String(TEXT("directoryPath"), TEXT("Path to a directory."))
-	 .Required({TEXT("path"), TEXT("directoryPath")});
+	 .String(TEXT("directoryPath"), TEXT("Path to a directory."));
 }
 
 static void S_SearchAssets(FMcpSchemaBuilder& B)
@@ -158,15 +155,13 @@ static void S_SetAssetProperty(FMcpSchemaBuilder& B)
 static void S_GetSourceControlState(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Array(TEXT("assetPaths"), TEXT(""))
-	 .Required({TEXT("assetPath"), TEXT("assetPaths")});
+	 .Array(TEXT("assetPaths"), TEXT(""));
 }
 
 static void S_AnalyzeGraph(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("materialPath"), TEXT("Material asset path."))
-	 .Required({TEXT("assetPath"), TEXT("materialPath")});
+	 .String(TEXT("materialPath"), TEXT("Material asset path."));
 }
 
 static void S_GetAssetGraph(FMcpSchemaBuilder& B)
@@ -215,8 +210,7 @@ static void S_FixupRedirectors(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("directoryPath"), TEXT("Path to a directory."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
-	 .Bool(TEXT("checkoutFiles"), TEXT(""))
-	 .Required({TEXT("directoryPath"), TEXT("path")});
+	 .Bool(TEXT("checkoutFiles"), TEXT(""));
 }
 
 static void S_FindByTag(FMcpSchemaBuilder& B)
@@ -244,7 +238,7 @@ static void S_CreateDataTable(FMcpSchemaBuilder& B)
 	 .String(TEXT("rowStruct"), TEXT("create_data_table (required): row struct deriving from FTableRowBase — full path ('/Script/Module.Struct' or '/Game/.../UserStruct') or bare struct name."))
 	 .String(TEXT("rowStructPath"), TEXT("create_data_table: alias for rowStruct."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .Required({TEXT("name"), TEXT("path"), TEXT("rowStruct"), TEXT("rowStructPath")});
+	 .Required({TEXT("name"), TEXT("path")});
 }
 
 static void S_AddDataTableRow(FMcpSchemaBuilder& B)
@@ -313,8 +307,7 @@ static void S_CreateRenderTarget(FMcpSchemaBuilder& B)
 	 .Integer(TEXT("width"), TEXT(""))
 	 .Integer(TEXT("height"), TEXT(""))
 	 .String(TEXT("format"), TEXT("import_data_table: 'csv' or 'json' (inferred from sourceText if omitted)."))
-	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .Required({TEXT("name")});
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."));
 }
 
 static void S_GenerateLods(FMcpSchemaBuilder& B)
@@ -376,7 +369,7 @@ static void S_NaniteRebuildMesh(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("preserveArea"), TEXT("nanite_rebuild_mesh: preserve surface area during Nanite fallback mesh reduction (default true)."))
 	 .Number(TEXT("trianglePercent"), TEXT("nanite_rebuild_mesh: Nanite fallback mesh triangle percent 0-100 (default 100)."))
 	 .Number(TEXT("fallbackPercent"), TEXT("nanite_rebuild_mesh: Nanite fallback relative error percent 0-100 (default 0)."))
-	 .Required({TEXT("assetPath"), TEXT("meshPath")});
+	 .Required({TEXT("meshPath")});
 }
 
 static void S_BulkRename(FMcpSchemaBuilder& B)
@@ -387,8 +380,7 @@ static void S_BulkRename(FMcpSchemaBuilder& B)
 	 .String(TEXT("replaceText"), TEXT(""))
 	 .Bool(TEXT("checkoutFiles"), TEXT(""))
 	 .Array(TEXT("assetPaths"), TEXT(""))
-	 .String(TEXT("path"), TEXT("Path to a directory."))
-	 .Required({TEXT("assetPaths"), TEXT("path")});
+	 .String(TEXT("path"), TEXT("Path to a directory."));
 }
 
 static void S_BulkDelete(FMcpSchemaBuilder& B)
@@ -397,23 +389,20 @@ static void S_BulkDelete(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("fixupRedirectors"), TEXT(""))
 	 .Array(TEXT("assetPaths"), TEXT(""))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
-	 .String(TEXT("pattern"), TEXT("bulk_delete: substring filter applied to matching asset names when deleting by path."))
-	 .Required({TEXT("assetPaths"), TEXT("path")});
+	 .String(TEXT("pattern"), TEXT("bulk_delete: substring filter applied to matching asset names when deleting by path."));
 }
 
 static void S_SourceControlCheckout(FMcpSchemaBuilder& B)
 {
 	B.Array(TEXT("assetPaths"), TEXT(""))
-	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Required({TEXT("assetPaths"), TEXT("assetPath")});
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."));
 }
 
 static void S_SourceControlSubmit(FMcpSchemaBuilder& B)
 {
 	B.Array(TEXT("assetPaths"), TEXT(""))
 	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("description"), TEXT(""))
-	 .Required({TEXT("assetPaths"), TEXT("assetPath")});
+	 .String(TEXT("description"), TEXT(""));
 }
 
 static void S_Save(FMcpSchemaBuilder& B)
@@ -1158,8 +1147,7 @@ static void S_ChannelPack(FMcpSchemaBuilder& B)
 	 .String(TEXT("alphaTexture"), TEXT("channel_pack: source texture for the output alpha channel."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
-	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .Required({TEXT("name")});
+	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."));
 }
 
 static void S_ChannelExtract(FMcpSchemaBuilder& B)

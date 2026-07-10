@@ -238,7 +238,7 @@ static void S_AddNiagaraModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .String(TEXT("scriptType"), TEXT("Niagara script target, e.g. Spawn or Update."))
 	 .String(TEXT("modulePath"), TEXT("Niagara module script asset path."))
-	 .Required({TEXT("assetPath")});
+	 .Required({TEXT("assetPath"), TEXT("modulePath")});
 }
 
 static void S_ConnectNiagaraPins(FMcpSchemaBuilder& B)

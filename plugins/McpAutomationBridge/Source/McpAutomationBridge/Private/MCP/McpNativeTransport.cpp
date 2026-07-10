@@ -1572,6 +1572,66 @@ void FMcpNativeTransport::HandleToolsCall(
 						TEXT("per-action param check BYPASSED: %s.%s: %s — if these are real reads, fix the table"),
 						*ToolName, *ActionValue, *FString::Join(ForeignParams, TEXT(", ")));
 				}
+
+				// Missing-required check — same pass, same bypassParamCheck path as
+				// the foreign-param check above. Presence only (HasField): an
+				// empty-string value passes this gate; the handler owns value
+				// validation. A missing hard-required param is otherwise a silent
+				// no-op, so it REJECTS in the same response shape.
+				TArray<FString> MissingRequired;
+				TArray<FString> RequiredParams;
+				for (const FMcpParamDecl& Param : Decl->Params)
+				{
+					if (!Param.bRequired)
+					{
+						continue;
+					}
+					RequiredParams.Add(Param.Name);
+					if (!Arguments->HasField(Param.Name))
+					{
+						MissingRequired.Add(Param.Name);
+					}
+				}
+				if (MissingRequired.Num() > 0)
+				{
+					bool bBypass = false;
+					Arguments->TryGetBoolField(TEXT("bypassParamCheck"), bBypass);
+					if (!bBypass)
+					{
+						const FString Message = FString::Printf(
+							TEXT("%s.%s is missing required param(s): %s. Required: %s. ")
+							TEXT("Supply the missing param(s). If the handler does NOT actually require them, ")
+							TEXT("the action's declaration is wrong: retry with bypassParamCheck:true to ")
+							TEXT("proceed now, and report the miss (fork TODO.md) so its fragment's Required() gets fixed."),
+							*ToolName, *ActionValue, *FString::Join(MissingRequired, TEXT(", ")),
+							*FString::Join(RequiredParams, TEXT(", ")));
+						UE_LOG(LogMcpNativeTransport, Warning,
+							TEXT("tools/call rejected (missing required): %s.%s: %s"),
+							*ToolName, *ActionValue, *FString::Join(MissingRequired, TEXT(", ")));
+						TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
+						TArray<TSharedPtr<FJsonValue>> MissingJson, RequiredJson;
+						for (const FString& P : MissingRequired) { MissingJson.Add(MakeShared<FJsonValueString>(P)); }
+						for (const FString& P : RequiredParams) { RequiredJson.Add(MakeShared<FJsonValueString>(P)); }
+						Details->SetArrayField(TEXT("missingRequired"), MissingJson);
+						Details->SetArrayField(TEXT("requiredParams"), RequiredJson);
+						TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
+							false, Message, Details, TEXT("MISSING_REQUIRED"));
+						FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
+						SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
+						ClientSocket->Close();
+						if (SocketSub) SocketSub->DestroySocket(ClientSocket);
+						return;
+					}
+					for (const FString& P : MissingRequired)
+					{
+						BypassedParamWarnings.Add(FString::Printf(
+							TEXT("required param '%s' is missing for %s.%s (per-action table; bypassed)"),
+							*P, *ToolName, *ActionValue));
+					}
+					UE_LOG(LogMcpNativeTransport, Warning,
+						TEXT("missing-required check BYPASSED: %s.%s: %s — if these are not truly required, fix the table"),
+						*ToolName, *ActionValue, *FString::Join(MissingRequired, TEXT(", ")));
+				}
 			}
 		}
 	}

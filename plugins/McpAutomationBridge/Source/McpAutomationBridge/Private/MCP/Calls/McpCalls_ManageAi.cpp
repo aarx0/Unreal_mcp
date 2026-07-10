@@ -605,7 +605,8 @@ static void S_AddNode(FMcpSchemaBuilder& B)
 	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
 	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
-	 .String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."));
+	 .String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."))
+	 .Required({TEXT("nodeType")});
 }
 
 static void S_ConnectNodes(FMcpSchemaBuilder& B)
@@ -614,7 +615,8 @@ static void S_ConnectNodes(FMcpSchemaBuilder& B)
 	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."))
-	 .String(TEXT("childNodeId"), TEXT("Child node ID."));
+	 .String(TEXT("childNodeId"), TEXT("Child node ID."))
+	 .Required({TEXT("parentNodeId"), TEXT("childNodeId")});
 }
 
 static void S_RemoveNode(FMcpSchemaBuilder& B)
@@ -622,7 +624,8 @@ static void S_RemoveNode(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .String(TEXT("nodeId"), TEXT("ID of the node."));
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .Required({TEXT("nodeId")});
 }
 
 static void S_BreakConnections(FMcpSchemaBuilder& B)
@@ -630,7 +633,8 @@ static void S_BreakConnections(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .String(TEXT("nodeId"), TEXT("ID of the node."));
+	 .String(TEXT("nodeId"), TEXT("ID of the node."))
+	 .Required({TEXT("nodeId")});
 }
 
 static void S_SetNodeProperties(FMcpSchemaBuilder& B)
@@ -640,7 +644,8 @@ static void S_SetNodeProperties(FMcpSchemaBuilder& B)
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("comment"), TEXT("Node comment."))
-	 .Object(TEXT("properties"), TEXT("Properties to set on a graph node."));
+	 .Object(TEXT("properties"), TEXT("Properties to set on a graph node."))
+	 .Required({TEXT("nodeId")});
 }
 
 static void S_AddSubnode(FMcpSchemaBuilder& B)
