@@ -1,5 +1,4 @@
 #include "ISettingsModule.h"
-#include "ISettingsSection.h"
 #include "McpAutomationBridgeSettings.h"
 
 #include "CoreMinimal.h"
@@ -55,24 +54,6 @@ public:
 #endif
     }
 
-    /**
-     * @brief Persists UMcpAutomationBridgeSettings to DefaultGame.ini when project settings are modified.
-     *
-     * Saves the mutable default UMcpAutomationBridgeSettings to disk and logs the save action if the settings object is available.
-     *
-     * @return `true` if the settings object was found and saved, `false` otherwise.
-     */
-    bool HandleSettingsModified()
-    {
-        if (UMcpAutomationBridgeSettings* Settings = GetMutableDefault<UMcpAutomationBridgeSettings>())
-        {
-            Settings->SaveConfig();
-            UE_LOG(LogMcpAutomationBridge, Log, TEXT("MCP Automation Bridge settings saved to DefaultGame.ini"));
-            return true;
-        }
-        return false;
-    }
-
 private:
     void RegisterStatusBarWidget()
     {
@@ -90,9 +71,6 @@ private:
             FText::GetEmpty(),
             true, false));
     }
-
-    // Hold the registered settings section so we can unbind and unregister it cleanly
-    TSharedPtr<class ISettingsSection> SettingsSection;
 };
 
 // Restore the previous LOCTEXT_NAMESPACE

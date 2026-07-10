@@ -239,24 +239,6 @@ static FString MakeSplineConfigTagPrefix(const FString& Key)
     return FString::Printf(TEXT("MCP.Spline.%s="), *Key);
 }
 
-static void SetSplineConfigValue(AActor* Target, const FString& Key, const FString& Value)
-{
-    if (!Target) return;
-
-    const FString Prefix = MakeSplineConfigTagPrefix(Key);
-    for (int32 Index = Target->Tags.Num() - 1; Index >= 0; --Index)
-    {
-        if (Target->Tags[Index].ToString().StartsWith(Prefix))
-        {
-            Target->Tags.RemoveAt(Index);
-        }
-    }
-
-    Target->Modify();
-    Target->Tags.Add(FName(*(Prefix + Value)));
-    Target->MarkPackageDirty();
-}
-
 static bool TryGetSplineConfigValue(AActor* Target, const FString& Key, FString& OutValue)
 {
     if (!Target) return false;
@@ -273,24 +255,6 @@ static bool TryGetSplineConfigValue(AActor* Target, const FString& Key, FString&
     }
 
     return false;
-}
-
-static AActor* ResolveSplineConfigTarget(UWorld* World, const FString& ActorName)
-{
-    if (!World) return nullptr;
-
-    if (!ActorName.TrimStartAndEnd().IsEmpty())
-    {
-        return FindActorByName(World, ActorName.TrimStartAndEnd());
-    }
-
-    return World->GetWorldSettings();
-}
-
-static FString GetSplineConfigTargetName(AActor* Target)
-{
-    if (!Target) return TEXT("");
-    return Target->GetActorLabel().IsEmpty() ? Target->GetName() : Target->GetActorLabel();
 }
 
 static bool GetConfiguredSplineBool(AActor* Actor, UWorld* World, const FString& Key, bool DefaultValue)
@@ -313,11 +277,6 @@ static double GetConfiguredSplineNumber(AActor* Actor, UWorld* World, const FStr
     }
 
     return DefaultValue;
-}
-
-static FString BoolToSplineConfigString(bool bValue)
-{
-    return bValue ? TEXT("true") : TEXT("false");
 }
 
 // ============================================================================

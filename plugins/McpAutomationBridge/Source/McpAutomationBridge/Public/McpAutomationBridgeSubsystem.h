@@ -170,18 +170,6 @@ public:
                                         FString &OutError);
 #endif
 
-  // Automation Handler Delegate
-  using FAutomationHandler = TFunction<bool(const FString &, const FString &,
-                                            const TSharedPtr<FJsonObject> &,
-                                            FMcpResponseHandle)>;
-
-  /**
-   * Registers a handler for a specific automation action.
-   * This allows for O(1) dispatch of automation requests and runtime
-   * extensibility.
-   */
-  void RegisterHandler(const FString &Action, FAutomationHandler Handler);
-
   // =========================================================================
   // Per-Request Error Capture (Public for handler access)
   // =========================================================================
@@ -231,9 +219,6 @@ public:
       bInHandledEnsureBlock = false;
     }
   };
-  
-  /** Get the current request's error capture */
-  FRequestErrorCapture& GetCurrentErrorCapture();
   
   /** Begin capturing errors for a request */
   void BeginErrorCapture();
@@ -353,10 +338,6 @@ public:
   void MarkRequestDeferred(const FString &RequestId) { DeferredRequestIds.Add(RequestId); }
   TSet<FString> DeferredRequestIds;
 
-  void RecordAutomationTelemetry(const FString &RequestId, bool bSuccess,
-                                 const FString &Message,
-                                 const FString &ErrorCode);
-
   // Active Log Device
   TSharedPtr<FOutputDevice> LogCaptureDevice;
 
@@ -422,9 +403,6 @@ public:
   TSharedPtr<FMcpExternalTestRun> ActiveExternalTestRun;
 
 private:
-  TMap<FString, FAutomationHandler> AutomationHandlers;
-  void InitializeHandlers();
-
   /**
    * Handle lightweight, well-known editor function invocations sent from the
    * server. This action is intended as a native replacement for the
@@ -454,15 +432,6 @@ private:
   // Array manipulation operations
   // Map manipulation operations
   // Set manipulation operations
-  // Asset dependency graph traversal
-  bool
-  HandleGetAssetReferences(const FString &RequestId, const FString &Action,
-                           const TSharedPtr<FJsonObject> &Payload,
-                           FMcpResponseHandle RequestingSocket);
-  bool
-  HandleGetAssetDependencies(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
   // control_actor and control_editor dispatch chains were classed away —
   // see MCP/Calls/.
   // manage_level is classed — see MCP/Calls/McpCalls_ManageLevel.cpp.
@@ -1210,35 +1179,6 @@ private:
   HandleSetLandscapeMaterial(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
-  bool HandleCreateNiagaraSystemNative(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool
-  HandleAddSequencerKeyframe(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
-  bool
-  HandleManageSequencerTrack(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
-  // Niagara system handlers
-  bool
-  HandleCreateNiagaraSystem(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
-  bool
-  HandleCreateNiagaraRibbon(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
-  bool
-  HandleCreateNiagaraEmitter(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
-  bool
-  HandleSpawnNiagaraActor(const FString &RequestId, const FString &Action,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle RequestingSocket);
   // Animation blueprint handlers
   bool HandlePlayAnimMontage(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
@@ -1249,15 +1189,6 @@ private:
   bool HandleActivateRagdoll(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
-  // Sequencer track handlers
-  bool
-  HandleAddAnimationTrack(const FString &RequestId, const FString &Action,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle RequestingSocket);
-  bool
-  HandleAddTransformTrack(const FString &RequestId, const FString &Action,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle RequestingSocket);
   // Foliage handlers
   bool
   HandleAddFoliageInstances(const FString &RequestId, const FString &Action,
@@ -3026,12 +2957,6 @@ private:
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle RequestingSocket);
 
-  // 4. Input, UI, Hotkeys & Dialogs
-  bool
-  HandleUiAutomationAction(const FString &RequestId, const FString &Action,
-                           const TSharedPtr<FJsonObject> &Payload,
-                           FMcpResponseHandle RequestingSocket);
-
 private:
   // Ticker handle for managing the subsystems tick function
   FTSTicker::FDelegateHandle TickHandle;
@@ -3611,9 +3536,6 @@ public:
   bool HandleDataTableRowOp(const FString &RequestId, const FString &SubAction,
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle Socket);
-  bool HandleCreateNiagaraSystemAsset(const FString &RequestId,
-                                      const TSharedPtr<FJsonObject> &Payload,
-                                      FMcpResponseHandle Socket);
   bool HandleDuplicateAsset(const FString &RequestId,
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle Socket);
@@ -3647,9 +3569,6 @@ public:
   bool HandleGetAssetGraph(const FString &RequestId,
                            const TSharedPtr<FJsonObject> &Payload,
                            FMcpResponseHandle Socket);
-  bool HandleCreateThumbnail(const FString &RequestId,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle Socket);
   bool HandleSetTags(const FString &RequestId,
                      const TSharedPtr<FJsonObject> &Payload,
                      FMcpResponseHandle Socket);

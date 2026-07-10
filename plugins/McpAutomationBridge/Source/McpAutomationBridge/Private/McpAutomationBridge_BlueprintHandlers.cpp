@@ -689,28 +689,6 @@ static void FMcpAutomationBridge_AppendPinsJson(
   }
 }
 
-static FString
-FMcpAutomationBridge_DescribePropertyType(const FProperty *Property) {
-  if (!Property) {
-    return FString();
-  }
-
-#if WITH_EDITOR && MCP_HAS_EDGRAPH_SCHEMA_K2
-  // Convert property to pin type for Blueprint-style type string
-  FEdGraphPinType PinType;
-  if (const UEdGraphSchema_K2 *Schema = GetDefault<UEdGraphSchema_K2>()) {
-    if (Schema->ConvertPropertyToPinType(Property, PinType)) {
-      return FMcpAutomationBridge_DescribePinType(PinType);
-    }
-  }
-#endif
-
-  // Fallback to C++ style if conversion fails
-  FString ExtendedType;
-  const FString BaseType = Property->GetCPPType(&ExtendedType);
-  return ExtendedType.IsEmpty() ? BaseType : BaseType + ExtendedType;
-}
-
 static TArray<TSharedPtr<FJsonValue>>
 FMcpAutomationBridge_CollectBlueprintVariables(UBlueprint *Blueprint) {
   // Delegate to centralized McpBlueprintUtils

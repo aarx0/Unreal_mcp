@@ -847,32 +847,6 @@ namespace
     }
     
     /**
-     * Checks if a widget with the given name already exists in the blueprint.
-     * Returns true and outputs an error message if the widget exists.
-     * 
-     * @param WidgetBP The widget blueprint
-     * @param WidgetName The name to check
-     * @param OutError Output error message if widget exists
-     * @return True if widget already exists (error condition)
-     */
-    bool CheckWidgetExists(UWidgetBlueprint* WidgetBP, const FString& WidgetName, FString& OutError)
-    {
-        if (!WidgetBP || !WidgetBP->WidgetTree)
-        {
-            return false;  // No error if blueprint is invalid (will fail elsewhere)
-        }
-        
-        UWidget* ExistingWidget = WidgetBP->WidgetTree->FindWidget(FName(*WidgetName));
-        if (ExistingWidget)
-        {
-            OutError = FString::Printf(TEXT("Widget '%s' already exists in blueprint"), *WidgetName);
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
      * Persist a widget-tree mutation: mark the blueprint structurally modified and (unless the
      * payload sets "save": false) save it to disk.
      *

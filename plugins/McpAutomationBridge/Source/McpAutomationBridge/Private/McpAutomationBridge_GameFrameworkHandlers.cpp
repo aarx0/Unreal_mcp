@@ -428,13 +428,6 @@ namespace GameFrameworkHelpers
         PinType.PinCategory = UEdGraphSchema_K2::PC_String;
         return PinType;
     }
-
-    FEdGraphPinType MakeBytePinType()
-    {
-        FEdGraphPinType PinType;
-        PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
-        return PinType;
-    }
 #endif
 }
 

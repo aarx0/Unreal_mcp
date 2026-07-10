@@ -26,11 +26,6 @@ inline FString GetPayloadSubAction(const TSharedPtr<FJsonObject>& Payload)
 	return SubAction;
 }
 
-inline bool ContainsAction(const TArray<FString>& Actions, const FString& Action)
-{
-	return Actions.Contains(Action);
-}
-
 // Core lists name the actions owned by the tool's fallthrough handler. They must
 // stay disjoint from the routed family lists below: the registration lambdas test
 // families first, so a name in both silently shadows the core implementation.
@@ -644,41 +639,15 @@ inline const TArray<FString>& ManageAICore()
 		TEXT("create_nav_modifier_component"), TEXT("set_nav_area_class"),
 		TEXT("configure_nav_area_cost"), TEXT("configure_nav_link"),
 		TEXT("set_nav_link_type"), TEXT("create_smart_link"),
-		TEXT("configure_smart_link_behavior"), TEXT("get_navigation_info")
-	};
-	return Actions;
-}
-
-inline const TArray<FString>& BehaviorTree()
-{
-	static const TArray<FString> Actions = {
-		TEXT("create"), TEXT("add_node"), TEXT("connect_nodes"),
-		TEXT("remove_node"), TEXT("break_connections"),
-		TEXT("set_node_properties"), TEXT("add_subnode")
-	};
-	return Actions;
-}
-
-inline const TArray<FString>& Navigation()
-{
-	static const TArray<FString> Actions = {
-		TEXT("configure_nav_mesh_settings"),
-		TEXT("set_nav_agent_properties"), TEXT("rebuild_navigation"),
-		TEXT("create_nav_modifier_component"), TEXT("set_nav_area_class"),
-		TEXT("configure_nav_area_cost"), TEXT("create_nav_link_proxy"),
-		TEXT("configure_nav_link"), TEXT("set_nav_link_type"),
-		TEXT("create_smart_link"), TEXT("configure_smart_link_behavior"),
-		TEXT("get_navigation_info")
+		TEXT("configure_smart_link_behavior"), TEXT("get_navigation_info"),
+		TEXT("add_subnode")
 	};
 	return Actions;
 }
 
 inline TArray<FString> ManageAI()
 {
-	TArray<FString> Actions = ManageAICore();
-	AppendUniqueActions(Actions, BehaviorTree());
-	AppendUniqueActions(Actions, Navigation());
-	return Actions;
+	return ManageAICore();
 }
 
 // Single-handler tools: no routed families, so the whole enum is the core list.
@@ -1007,11 +976,9 @@ inline TArray<FString> ManageInteractionUnion() { return ManageInteraction(); }
 // still matches the published enum.
 
 // ─── Routing introspection ───────────────────────────────────────────────────
-// Mirrors what each tool's registration lambda tests, in test order, so startup
-// validation can prove: no action is claimed by two routed families, no routed
-// family shadows the core (fallthrough) list, and shared schema enums match the
-// published schema. When a registration lambda in InitializeHandlers gains or
-// loses a family test, this table must change with it.
+// Names each tool's vocabulary lists so startup validation can prove: no action
+// is claimed by two lists, no list shadows the core list, and shared schema
+// enums match the published schema.
 
 struct FMcpRoutedFamily
 {

@@ -137,6 +137,35 @@ as they land.
 > Reuses the Phase 2 fragments; the gating unknown is whether the client honors top-level
 > `oneOf` — proposes a one-rebuild `control_editor` pilot to decide before any rollout.
 
+### [ ] 2026-07-10 — actor-name resolution has FOUR rival implementations with drifting semantics
+E2 duplicate-path sweep find. The same `actorName` resolves differently depending on which
+family handles the call: free `FindActorByName` (`McpHandlerUtils.cpp:97` — exact-or-StartsWith,
+case-insensitive, no path match), member `UMcpAutomationBridgeSubsystem::FindActorByName`
+(`ControlHandlers.cpp:189` — name/label/pathname + fuzzy Contains + asset-load fallback),
+`NetworkingHelpers::FindActorByName` (`NetworkingHandlers.cpp:274` — exact only; its own comment
+claims parity with the member, which is false), and a file-local in `SplineHandlers.cpp:172`
+that is CASE-SENSITIVE (`==`), diverging from all three others. Related: the 2026-07-07
+PIE-world entry below is the same resolution-semantics family. Fix wants a dedicated batch:
+pick one canonical resolver (world-aware), reroute all callers, delete the twins, probe the
+behavior deltas (case, fuzzy, asset fallback) per calling action.
+
+### [ ] 2026-07-10 — `manage_asset move` is a pass-through to `rename` with divergent required-param decls
+E2 sweep find. `HandleMoveAsset` (`AssetWorkflowHandlers.cpp:1825`) is one line:
+`return HandleRenameAsset(...)`. Both actions publish, but `S_Move` requires
+`{sourcePath, assetPath, destinationPath, newName}` while `S_Rename` requires nothing — identical
+behavior, two validation contracts. Consolidation-pass input (keep one action, or align decls).
+
+### [ ] 2026-07-10 — internal hand-built-payload delegations: wrapper→target decl drift risk (list)
+E2 sweep inventory, for the Execute-pipeline/apply-receipt evolution — NOT unvalidated wire input
+(each wrapper's own decl Gate-B-validates its params; injected fields are handler-authored
+constants). Sites where one published action's handler builds a payload inline and calls another
+published action's member directly, so wrapper and target decls can drift: 5 AI wrappers
+(`AIHandlers.cpp:1043/:1084/:1127/:1179/:1231` → BehaviorTree create/add_node/add_subnode),
+2 cross-family (`LevelHandlers.cpp:1391` → create_level, `:1591` → set_metadata),
+`BlueprintHandlers.cpp:5030/:5051` → create_node, `SequenceHandlers.cpp:725` → add_actors,
+`EditorFunctionHandlers.cpp:883` → modify_scs, `AssetQueryHandlers.cpp:668` → HandleAssetQueryAction
+(internal dispatcher).
+
 ### [ ] 2026-07-07 — several actor-lookup actions miss live PIE-only actors (default to editor world)
 Dogfood find (chasing the `BP_AoE` radius bug live). Observed, not yet root-caused in bridge
 code — reporting what was directly seen: `inspect.find_by_class` for `BP_AoE_C`/`BP_Telegraph_C`

@@ -1,20 +1,14 @@
 // Per-action call registry — the server's single source of truth for
 // "here's what I know how to do" (see docs/action-declarations.md).
 //
-// Every (tool, action) pair registers a declaration: the params the action
-// reads, which are required, and its flags. Everything else derives from it:
-// transport validation rejects params an action doesn't declare and missing
-// required params; the published schema will derive from it (Stage 3); the
-// decl lint (tests/schema/action-decl-lint.ps1) checks handler source against
-// it both directions.
-//
-// Two backing kinds during the strangler-fig migration:
-//   - SHIM: declaration only; dispatch still flows through the legacy family
-//     handler's action branch. The overwhelming majority today.
-//   - CLASS: an FMcpCall subclass owns declaration AND implementation
-//     (co-located, Chromium-ExtensionFunction-style). New actions MUST be
-//     classes; families convert opportunistically, deleting their legacy
-//     branch in the same commit.
+// Every (tool, action) pair is an FMcpCall subclass that owns its declaration
+// AND implementation (co-located, Chromium-ExtensionFunction-style): the
+// params the action reads, which are required, and its flags. Everything else
+// derives from it: transport validation rejects params an action doesn't
+// declare and missing required params; the published schema folds every
+// call's AppendSchema fragment; the decl lint
+// (tests/schema/action-decl-lint.ps1) checks handler source against it both
+// directions. New actions MUST be classes.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -60,10 +54,9 @@ struct FMcpCallDecl
 };
 
 /**
- * Base class for fully-migrated actions (the CLASS backing kind).
- * Subclasses co-locate their declaration and implementation. Execute() is the
- * shared pipeline (envelope checks -> Run; the apply-receipt grows here);
- * Run() mirrors the legacy family handlers so a branch converts mechanically.
+ * Base class for every published action. Subclasses co-locate their
+ * declaration and implementation. Execute() is the shared pipeline (envelope
+ * checks -> Run; the apply-receipt grows here).
  */
 class FMcpCall
 {
@@ -98,16 +91,13 @@ class FMcpCallRegistry
 public:
 	static FMcpCallRegistry& Get();
 
-	/** Register a family's declarations (SHIM backing). Duplicate (tool, action) is a boot error. */
-	void RegisterDecls(TConstArrayView<FMcpCallDecl> Decls);
-
-	/** Register a classed action (CLASS backing); its decl comes from the instance. */
+	/** Register a classed action; its decl comes from the instance. Duplicate (tool, action) is a boot error. */
 	void RegisterCall(TUniquePtr<FMcpCall> Call);
 
 	/** nullptr when the pair is unknown (transport then falls back to UNKNOWN_ACTION handling). */
 	const FMcpCallDecl* FindDecl(const FString& Tool, const FString& Action) const;
 
-	/** nullptr for shimmed actions — dispatch stays with the legacy family handler. */
+	/** nullptr when the pair is unknown. */
 	FMcpCall* FindCall(const FString& Tool, const FString& Action) const;
 
 	/** Every classed call belonging to Tool (case-insensitive), for schema folding. */

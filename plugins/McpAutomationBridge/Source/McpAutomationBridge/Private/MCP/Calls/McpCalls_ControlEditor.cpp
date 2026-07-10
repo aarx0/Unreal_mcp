@@ -231,7 +231,7 @@ MCP_CE_CALL(SimulateInput, "simulate_input", HandleControlEditorSimulateInput, E
 MCP_CE_CALL(SimulateNav, "simulate_nav", HandleControlEditorSimulateNav, EMcpCallFlags::None)
 MCP_CE_CALL(Undo, "undo", HandleControlEditorUndo, EMcpCallFlags::Mutating)
 MCP_CE_CALL(Redo, "redo", HandleControlEditorRedo, EMcpCallFlags::Mutating)
-MCP_CE_CALL(SaveAll, "save_all", HandleControlEditorSaveAll, EMcpCallFlags::Mutating)
+MCP_CE_CALL(SaveAll, "save_all", HandleControlEditorSaveAll, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 #undef MCP_CE_CALL
 

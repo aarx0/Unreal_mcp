@@ -455,9 +455,6 @@ void UMcpAutomationBridgeSubsystem::Initialize(
   // deleted; FMcpBridgeWebSocket remains only as the inert response-handle type used in
   // handler signatures (always nullptr on HTTP).
 
-  // Initialize the handler registry
-  InitializeHandlers();
-
   const auto* Settings = GetDefault<UMcpAutomationBridgeSettings>();
   const bool bBridgeEnabled = Settings && Settings->bEnableNativeMCP;
 
@@ -514,10 +511,9 @@ void UMcpAutomationBridgeSubsystem::Initialize(
              TEXT("Registered %d action declarations"),
              FMcpCallRegistry::Get().NumDecls());
 
-      // Validate action routing AFTER the calls above register: a tool's per-action
-      // oneOf schema (Phase 3) derives its branches from the call registry, so the
-      // published schema is only complete once registration has run. (InitializeHandlers
-      // above, which builds the legacy handler map, runs before this on purpose.)
+      // Validate action routing AFTER the calls above register: the published
+      // schema folds each call's fragment, so it is only complete once
+      // registration has run.
       McpStartupValidation::ValidateActionRouting();
 
       NativeTransport = MakeShared<FMcpNativeTransport>(this);
@@ -651,11 +647,6 @@ UMcpAutomationBridgeSubsystem::GetBridgeState() const {
 // =============================================================================
 // Per-Request Error Capture Implementation
 // =============================================================================
-
-UMcpAutomationBridgeSubsystem::FRequestErrorCapture& UMcpAutomationBridgeSubsystem::GetCurrentErrorCapture()
-{
-    return CurrentErrorCapture;
-}
 
 void UMcpAutomationBridgeSubsystem::BeginErrorCapture()
 {
@@ -967,162 +958,6 @@ void UMcpAutomationBridgeSubsystem::SendProgressUpdate(
   (void)Message;
   (void)bStillWorking;
   (void)Origin;
-}
-
-/**
- * @brief Records telemetry for an automation request with outcome details.
- *
- * Forwards the request identifier, success flag, human-readable message, and
- * error code to the connection manager for telemetry/logging.
- *
- * @param RequestId Unique identifier of the automation request.
- * @param bSuccess `true` if the request completed successfully, `false`
- * otherwise.
- * @param Message Human-readable message describing the outcome or context.
- * @param ErrorCode Short error identifier (empty if none).
- */
-void UMcpAutomationBridgeSubsystem::RecordAutomationTelemetry(
-    const FString &RequestId, const bool bSuccess, const FString &Message,
-    const FString &ErrorCode) {
-  // WebSocket transport removed; telemetry was WS-only.
-  (void)RequestId; (void)bSuccess; (void)Message; (void)ErrorCode;
-}
-
-/**
- * @brief Registers an automation action handler for the given action string.
- *
- * Null handlers and duplicate action keys are programmer errors: both are
- * logged as errors and ensure, so a bad registration is visible at editor boot
- * instead of surfacing as UNKNOWN_ACTION (or the wrong handler) at request
- * time. A duplicate key keeps the first registration.
- *
- * @param Action The action identifier string used to look up the handler.
- * @param Handler Callable invoked when the specified action is requested.
- */
-void UMcpAutomationBridgeSubsystem::RegisterHandler(
-    const FString &Action, FAutomationHandler Handler) {
-  if (!Handler) {
-    UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
-           TEXT("RegisterHandler: null handler for action '%s' ignored."),
-           *Action);
-    ensureMsgf(false, TEXT("Null automation handler for '%s'"), *Action);
-    return;
-  }
-  if (AutomationHandlers.Contains(Action)) {
-    UE_LOG(LogMcpAutomationBridgeSubsystem, Error,
-           TEXT("RegisterHandler: action '%s' registered twice; keeping the "
-                "first handler."),
-           *Action);
-    ensureMsgf(false, TEXT("Duplicate automation handler for '%s'"), *Action);
-    return;
-  }
-  AutomationHandlers.Add(Action, Handler);
-}
-
-/**
- * @brief Registers all automation action handlers used by the MCP Automation
- * Bridge.
- *
- * Populates the subsystem's handler registry with mappings from action name
- * strings (for example: core/property actions, array/map/set container ops,
- * asset dependency queries, console/system and editor tooling actions,
- * blueprint/world/asset management, rendering/materials, input/control,
- * audio/lighting/physics/effects, and performance actions) to the functions
- * that handle those actions so incoming automation requests can be dispatched
- * by action name.
- *
- * This also registers a few common alias actions (e.g., "create_effect",
- * "clear_debug_shapes") so those actions dispatch directly to the intended
- * handler.
- */
-// MCP_REGISTER_HANDLER collapses the trivial forwarding-lambda registration boilerplate
-// (an action name -> a member handler taking the same 4 args). The multi-branch routers
-// (manage_blueprint, manage_asset, ...) that inspect the sub-action before
-// dispatching are registered longhand below.
-#define MCP_REGISTER_HANDLER(ActionName, HandlerFn) \
-  RegisterHandler(TEXT(ActionName), \
-                  [this](const FString &R, const FString &A, \
-                         const TSharedPtr<FJsonObject> &P, \
-                         FMcpResponseHandle S) { \
-                    return HandlerFn(R, A, P, S); \
-                  })
-
-void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
-  // Only the 22 canonical MCP tool names are registered: the transport
-  // dispatches by tool name alone, so any other key is unreachable. The
-  // legacy per-action registrations from the Node-server era were removed
-  // 2026-07-02.
-  // build_environment is fully classed
-  // (MCP/Calls/McpCalls_BuildEnvironment.cpp) — dispatch reaches its
-  // FMcpCall instances via the registry, not this map.
-
-  // inspect is fully classed (MCP/Calls/McpCalls_Inspect.cpp) —
-  // dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // system_control is fully classed (MCP/Calls/McpCalls_SystemControl.cpp) —
-  // dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // control_actor and control_editor are fully classed (MCP/Calls/) —
-  // dispatch reaches their FMcpCall instances via the registry, not this map.
-
-  // manage_level is fully classed (MCP/Calls/McpCalls_ManageLevel.cpp) —
-  // dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // manage_sequence is fully classed (MCP/Calls/McpCalls_ManageSequence.cpp) —
-  // dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // manage_asset is fully classed (MCP/Calls/McpCalls_ManageAsset.cpp) —
-  // dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // manage_blueprint is fully classed (MCP/Calls/McpCalls_ManageBlueprint.cpp),
-  // the twenty-first and final classed family — dispatch reaches its FMcpCall
-  // instances via the registry, not this map. Core and BlueprintGraph actions call
-  // per-action HandleBlueprint*/HandleBlueprintGraph* members directly (the old
-  // string dispatchers HandleBlueprintAction/HandleBlueprintGraphAction/HandleSCSAction
-  // are hoisted and deleted; HandleBlueprintModifyScs is called externally by
-  // EditorFunctionHandlers.cpp). CommonUi actions and every widget action
-  // likewise call per-action members directly (HandleCommonUi*/HandleWidgetAuthoring*).
-
-  // manage_geometry is fully classed (MCP/Calls/McpCalls_ManageGeometry.cpp)
-  // — dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // manage_gas is fully classed (MCP/Calls/McpCalls_ManageGas.cpp)
-  // — dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // manage_character is fully classed (MCP/Calls/McpCalls_ManageCharacter.cpp)
-  // — dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // manage_combat is fully classed (MCP/Calls/McpCalls_ManageCombat.cpp)
-  // — dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // manage_ai is fully classed (MCP/Calls/McpCalls_ManageAi.cpp) —
-  // dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // manage_inventory is fully classed (MCP/Calls/McpCalls_ManageInventory.cpp)
-  // — dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // manage_interaction is fully classed (MCP/Calls/McpCalls_ManageInteraction.cpp)
-  // — dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // manage_networking is fully classed
-  // (MCP/Calls/McpCalls_ManageNetworking.cpp) — dispatch reaches its
-  // FMcpCall instances via the registry, not this map.
-
-  // manage_audio is fully classed (MCP/Calls/McpCalls_ManageAudio.cpp) —
-  // dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // animation_physics is fully classed
-  // (MCP/Calls/McpCalls_AnimationPhysics.cpp) — dispatch reaches its FMcpCall
-  // instances via the registry, not this map.
-
-  // manage_effect is fully classed (MCP/Calls/McpCalls_ManageEffect.cpp) —
-  // dispatch reaches its FMcpCall instances via the registry, not this map.
-
-  // manage_level_structure is fully classed
-  // (MCP/Calls/McpCalls_ManageLevelStructure.cpp) — dispatch reaches its
-  // FMcpCall instances via the registry, not this map.
-
-#undef MCP_REGISTER_HANDLER
 }
 
 // Drain and process any automation requests that were enqueued while the

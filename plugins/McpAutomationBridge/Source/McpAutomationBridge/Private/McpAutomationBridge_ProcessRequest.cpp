@@ -181,10 +181,9 @@ void UMcpAutomationBridgeSubsystem::ProcessAutomationRequest(
       };
 
       // ---------------------------------------------------------
-      // Classed actions (FMcpCall) win over the legacy family handlers —
-      // the strangler-fig path (docs/action-declarations.md). The registry
-      // key is (tool, payload action); lookups are case-insensitive like
-      // every legacy dispatch comparison.
+      // Single dispatch: the call registry (docs/action-declarations.md).
+      // The key is (tool, payload action). A miss — or a call that declines
+      // by returning false — falls through to the UNKNOWN_ACTION error below.
       // ---------------------------------------------------------
       FString PayloadAction;
       if (Payload.IsValid()) {
@@ -194,21 +193,6 @@ void UMcpAutomationBridgeSubsystem::ProcessAutomationRequest(
         const FString CallLabel = Action + TEXT(".") + PayloadAction;
         if (HandleAndLog(*CallLabel, [&]() {
               return Call->Execute(*this, RequestId, Payload, RequestingSocket);
-            })) {
-          FailIfSilentlyConsumed();
-          return;
-        }
-      }
-
-      // ---------------------------------------------------------
-      // Single dispatch: the handler registry (O(1)). Every action is
-      // registered in InitializeHandlers(); a miss — or a registered handler
-      // that declines by returning false — falls through to the UNKNOWN_ACTION
-      // error below. There is no secondary linear scan.
-      // ---------------------------------------------------------
-      if (const FAutomationHandler *Handler = AutomationHandlers.Find(Action)) {
-        if (HandleAndLog(*Action, [&]() {
-              return (*Handler)(RequestId, Action, Payload, RequestingSocket);
             })) {
           FailIfSilentlyConsumed();
           return;

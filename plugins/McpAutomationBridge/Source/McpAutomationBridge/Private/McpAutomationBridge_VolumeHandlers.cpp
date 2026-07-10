@@ -213,18 +213,6 @@ namespace VolumeHelpers
         return AsVolume->Brush != nullptr;
     }
 
-    // Sphere volumes get a bounding-cube brush; actual collision is the USphereComponent.
-    bool CreateSphereBrushForVolume(ABrush* Volume, float Radius)
-    {
-        return CreateBoxBrushForVolume(Volume, FVector(Radius));
-    }
-
-    // Capsule volumes get a bounding-box brush; actual collision is the UCapsuleComponent.
-    bool CreateCapsuleBrushForVolume(ABrush* Volume, float Radius, float HalfHeight)
-    {
-        return CreateBoxBrushForVolume(Volume, FVector(Radius, Radius, HalfHeight));
-    }
-
     // Resize a volume/trigger actor in place: brush volumes get their brush
     // geometry rebuilt, triggers are resized on the collision shape component.
     bool ApplyVolumeExtent(AActor* VolumeActor, const FVector& Extent, FString& OutError)
