@@ -435,11 +435,12 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateProceduralFoliage(
 }
 
 // create_procedural_terrain
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateProceduralTerrain(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentCreateProceduralTerrain(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleCreateProceduralTerrain(RequestId,
+    return HandleCreateProceduralTerrain(S, RequestId,
                                          TEXT("create_procedural_terrain"),
                                          Payload, RequestingSocket);
 }
@@ -509,11 +510,12 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateLandscapeGrassType(
 }
 
 // generate_lods
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentGenerateLODs(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentGenerateLODs(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return McpHandlers::Asset::HandleGenerateLODs(*this, RequestId, TEXT("generate_lods"), Payload,
+    return McpHandlers::Asset::HandleGenerateLODs(S, RequestId, TEXT("generate_lods"), Payload,
                               RequestingSocket);
 }
 
@@ -527,7 +529,8 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentBakeLightmap(
 }
 
 // export_snapshot: Export environment snapshot to JSON file
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentExportSnapshot(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentExportSnapshot(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -627,10 +630,10 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentExportSnapshot(
     }
 
     Resp->SetBoolField(TEXT("success"), bSuccess);
-    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
+    S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("Environment building actions require editor build."), nullptr,
         TEXT("NOT_IMPLEMENTED"));
@@ -639,7 +642,8 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentExportSnapshot(
 }
 
 // import_snapshot: Import environment snapshot from JSON file
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentImportSnapshot(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentImportSnapshot(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -735,10 +739,10 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentImportSnapshot(
     }
 
     Resp->SetBoolField(TEXT("success"), bSuccess);
-    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
+    S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("Environment building actions require editor build."), nullptr,
         TEXT("NOT_IMPLEMENTED"));
@@ -747,7 +751,8 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentImportSnapshot(
 }
 
 // delete: Delete environment actors by name
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentDelete(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentDelete(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -846,10 +851,10 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentDelete(
     }
 
     Resp->SetBoolField(TEXT("success"), bSuccess);
-    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
+    S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("Environment building actions require editor build."), nullptr,
         TEXT("NOT_IMPLEMENTED"));
@@ -858,7 +863,8 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentDelete(
 }
 
 // create_sky_sphere: Create sky sphere actor
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateSkySphere(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentCreateSkySphere(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -951,10 +957,10 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateSkySphere(
     }
 
     Resp->SetBoolField(TEXT("success"), bSuccess);
-    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
+    S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("Environment building actions require editor build."), nullptr,
         TEXT("NOT_IMPLEMENTED"));
@@ -963,7 +969,8 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateSkySphere(
 }
 
 // set_time_of_day: Set time of day on sky sphere
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentSetTimeOfDay(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentSetTimeOfDay(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1010,10 +1017,10 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentSetTimeOfDay(
     }
 
     Resp->SetBoolField(TEXT("success"), bSuccess);
-    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
+    S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("Environment building actions require editor build."), nullptr,
         TEXT("NOT_IMPLEMENTED"));
@@ -1022,7 +1029,8 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentSetTimeOfDay(
 }
 
 // create_fog_volume: Create exponential height fog
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateFogVolume(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentCreateFogVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1095,10 +1103,10 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateFogVolume(
     }
 
     Resp->SetBoolField(TEXT("success"), bSuccess);
-    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
+    S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp, ErrorCode);
     return true;
 #else
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, false,
         TEXT("Environment building actions require editor build."), nullptr,
         TEXT("NOT_IMPLEMENTED"));
@@ -1177,7 +1185,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBakeLightmap(
  *   - vertices: int - Number of vertices generated
  *   - triangles: int - Number of triangles generated
  */
-bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
+bool McpHandlers::BuildEnvironment::HandleCreateProceduralTerrain(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
@@ -1191,7 +1200,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
 #if WITH_EDITOR
     if (!GEditor)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Editor not available"),
                             TEXT("EDITOR_NOT_AVAILABLE"));
         return true;
@@ -1199,7 +1208,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
 
     if (!Payload.IsValid())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("create_procedural_terrain payload missing"),
                             TEXT("INVALID_PAYLOAD"));
         return true;
@@ -1227,7 +1236,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
     // -------------------------------------------------------------------------
     if (ActorName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("actorName parameter is required for create_procedural_terrain"),
                             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -1240,7 +1249,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
         ActorName.Contains(TEXT("<")) || ActorName.Contains(TEXT(">")) ||
         ActorName.Contains(TEXT("|")))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("actorName contains invalid characters (/, \\, :, *, ?, \", <, >, |)"),
                             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -1249,7 +1258,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
     // Reject excessive length
     if (ActorName.Len() > 128)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("actorName exceeds maximum length of 128 characters"),
                             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -1270,7 +1279,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
     UWorld *World = GEditor->GetEditorWorldContext().World();
     if (!World)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("World not available"),
                             TEXT("WORLD_NOT_AVAILABLE"));
         return true;
@@ -1307,7 +1316,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
     AActor *TerrainActor = World->SpawnActor<AActor>(AActor::StaticClass(), Location, Rotation, SpawnParams);
     if (!TerrainActor)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Failed to spawn terrain actor"),
                             TEXT("SPAWN_FAILED"));
         return true;
@@ -1320,7 +1329,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
     if (!ProcMesh)
     {
         TerrainActor->Destroy();
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Failed to create procedural mesh component"),
                             TEXT("COMPONENT_CREATION_FAILED"));
         return true;
@@ -1419,12 +1428,12 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralTerrain(
     // Add verification data
     McpHandlerUtils::AddVerification(Resp, TerrainActor);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Procedural terrain created successfully"), Resp, FString());
     return true;
 
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("create_procedural_terrain requires editor build"), nullptr,
                            TEXT("NOT_IMPLEMENTED"));
     return true;

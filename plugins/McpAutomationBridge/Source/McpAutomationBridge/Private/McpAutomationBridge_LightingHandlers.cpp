@@ -38,6 +38,7 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_LightingHandlers.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/UObjectIterator.h"
 
@@ -94,7 +95,8 @@
 // =========================================================================
 // Discovers all ALight subclasses via reflection and returns available types
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleLightingListLightTypes(
+bool McpHandlers::BuildEnvironment::HandleLightingListLightTypes(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -102,7 +104,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingListLightTypes(
     UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("EditorActorSubsystem not available"),
             TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
         return true;
@@ -137,11 +139,11 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingListLightTypes(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetArrayField(TEXT("types"), Types);
     Resp->SetNumberField(TEXT("count"), Types.Num());
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
         TEXT("Available light types"), Resp);
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
         TEXT("Lighting actions require editor build"), nullptr,
         TEXT("NOT_IMPLEMENTED"));
     return true;
@@ -156,7 +158,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingListLightTypes(
 // - location/rotation: Transform
 // - properties: intensity, color, castShadows, type-specific settings
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLight(
+bool McpHandlers::BuildEnvironment::HandleLightingCreateLight(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -164,7 +167,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLight(
     UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("EditorActorSubsystem not available"),
             TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
         return true;
@@ -202,7 +205,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLight(
             }
             else
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("Invalid lightType: %s. Must be one of: point, directional, spot, rect, sky"), *LightType),
                     TEXT("INVALID_LIGHT_TYPE"));
                 return true;
@@ -234,7 +237,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLight(
             }
             else
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("Invalid type: %s. Must be one of: point, directional, spot, rect, sky"), *LightType),
                     TEXT("INVALID_LIGHT_TYPE"));
                 return true;
@@ -244,7 +247,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLight(
 
     if (LightClassStr.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("lightClass or lightType required"),
             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -290,7 +293,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLight(
 
     if (!LightClass || !LightClass->IsChildOf(ALight::StaticClass()))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Invalid light class: %s"), *LightClassStr),
             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -313,7 +316,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLight(
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("create_light requires 'location' ({x,y,z}) before it will spawn into the level"),
             TEXT("MISSING_PARAMETER"));
         return true;
@@ -340,7 +343,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLight(
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World || !World->IsValidLowLevel())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("No valid world available for spawning light"),
             TEXT("NO_WORLD"));
         return true;
@@ -376,7 +379,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLight(
 
     if (!NewLight)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Failed to spawn light actor"),
             TEXT("SPAWN_FAILED"));
         return true;
@@ -562,11 +565,11 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLight(
     // Add verification data
     McpHandlerUtils::AddVerification(Resp, NewLight);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
         TEXT("Light spawned"), Resp);
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
         TEXT("Lighting actions require editor build"), nullptr,
         TEXT("NOT_IMPLEMENTED"));
     return true;
@@ -578,7 +581,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLight(
 // =========================================================================
 // Spawns a SkyLight actor with optional cubemap support
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleLightingCreateSkyLight(
+bool McpHandlers::BuildEnvironment::HandleLightingCreateSkyLight(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -586,7 +590,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateSkyLight(
     UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("EditorActorSubsystem not available"),
             TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
         return true;
@@ -622,7 +626,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateSkyLight(
         ASkyLight::StaticClass(), Location, Rotation);
     if (!SkyLight)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Failed to spawn SkyLight"),
             TEXT("SPAWN_FAILED"));
         return true;
@@ -694,11 +698,11 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateSkyLight(
     // Add verification data
     McpHandlerUtils::AddVerification(Resp, SkyLight);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
         TEXT("SkyLight spawned"), Resp);
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
         TEXT("Lighting actions require editor build"), nullptr,
         TEXT("NOT_IMPLEMENTED"));
     return true;
@@ -711,7 +715,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateSkyLight(
 // Starts a lighting build with the specified quality
 // Quality options: preview/0, medium/1, high/2, production/3
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleLightingBuildLighting(
+bool McpHandlers::BuildEnvironment::HandleLightingBuildLighting(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -719,7 +724,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingBuildLighting(
     UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("EditorActorSubsystem not available"),
             TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
         return true;
@@ -743,7 +748,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingBuildLighting(
                 Resp->SetStringField(TEXT("reason"), TEXT("bForceNoPrecomputedLighting is true"));
                 Resp->SetStringField(TEXT("suggestion"),
                     TEXT("Set WorldSettings.bForceNoPrecomputedLighting to false to enable lighting builds"));
-                SendAutomationResponse(RequestingSocket, RequestId, true,
+                S.SendAutomationResponse(RequestingSocket, RequestId, true,
                     TEXT("Lighting build skipped - precomputed lighting disabled in WorldSettings"), Resp);
                 return true;
             }
@@ -781,7 +786,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingBuildLighting(
                 Err->SetStringField(TEXT("quality"), Quality);
                 Err->SetStringField(TEXT("validValues"),
                     TEXT("preview/0, medium/1, high/2, production/3"));
-                SendAutomationResponse(RequestingSocket, RequestId, false,
+                S.SendAutomationResponse(RequestingSocket, RequestId, false,
                     TEXT("Unknown lighting quality"), Err,
                     TEXT("UNKNOWN_QUALITY"));
                 return true;
@@ -794,18 +799,18 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingBuildLighting(
         TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
         Resp->SetStringField(TEXT("quality"), QualityCmd);
         Resp->SetBoolField(TEXT("started"), true);
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
             FString::Printf(TEXT("Lighting build started with quality: %s"), *QualityCmd), Resp);
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Editor world not available"),
             TEXT("EDITOR_WORLD_NOT_AVAILABLE"));
     }
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
         TEXT("Lighting actions require editor build"), nullptr,
         TEXT("NOT_IMPLEMENTED"));
     return true;
@@ -818,7 +823,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingBuildLighting(
 // Ensures exactly one SkyLight exists in the level
 // Removes duplicates and optionally spawns one if none exists
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleLightingEnsureSingleSkyLight(
+bool McpHandlers::BuildEnvironment::HandleLightingEnsureSingleSkyLight(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -826,7 +832,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingEnsureSingleSkyLight(
     UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("EditorActorSubsystem not available"),
             TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
         return true;
@@ -913,11 +919,11 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingEnsureSingleSkyLight(
         McpHandlerUtils::AddVerification(Resp, KeptActor);
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
         TEXT("Ensured single SkyLight"), Resp);
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
         TEXT("Lighting actions require editor build"), nullptr,
         TEXT("NOT_IMPLEMENTED"));
     return true;
@@ -929,7 +935,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingEnsureSingleSkyLight(
 // =========================================================================
 // Creates a LightmassImportanceVolume at the specified location and size
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLightmassVolume(
+bool McpHandlers::BuildEnvironment::HandleLightingCreateLightmassVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -937,7 +944,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLightmassVolume(
     UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("EditorActorSubsystem not available"),
             TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
         return true;
@@ -981,18 +988,18 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLightmassVolume(
         // Add verification data
         McpHandlerUtils::AddVerification(Resp, Volume);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
             TEXT("LightmassImportanceVolume created"), Resp);
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Failed to spawn LightmassImportanceVolume"),
             TEXT("SPAWN_FAILED"));
     }
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
         TEXT("Lighting actions require editor build"), nullptr,
         TEXT("NOT_IMPLEMENTED"));
     return true;
@@ -1005,7 +1012,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLightmassVolume(
 // Enables volumetric fog on an ExponentialHeightFog actor
 // Spawns one if none exists
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleLightingSetupVolumetricFog(
+bool McpHandlers::BuildEnvironment::HandleLightingSetupVolumetricFog(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1013,7 +1021,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetupVolumetricFog(
     UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("EditorActorSubsystem not available"),
             TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
         return true;
@@ -1057,18 +1065,18 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetupVolumetricFog(
         // Add verification data
         McpHandlerUtils::AddVerification(Resp, FogActor);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
             TEXT("Volumetric fog enabled"), Resp);
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Failed to find or spawn ExponentialHeightFog"),
             TEXT("EXECUTION_ERROR"));
     }
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
         TEXT("Lighting actions require editor build"), nullptr,
         TEXT("NOT_IMPLEMENTED"));
     return true;
@@ -1081,7 +1089,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetupVolumetricFog(
 // Configures global illumination method via console variables
 // Options: LumenGI, ScreenSpace, None, RayTraced, Lightmass
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleLightingSetupGlobalIllumination(
+bool McpHandlers::BuildEnvironment::HandleLightingSetupGlobalIllumination(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1089,7 +1098,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetupGlobalIllumination(
     UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("EditorActorSubsystem not available"),
             TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
         return true;
@@ -1098,7 +1107,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetupGlobalIllumination(
     FString Method;
     if (!Payload->TryGetStringField(TEXT("method"), Method) || Method.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("method parameter is required. Valid values: LumenGI, ScreenSpace, None, RayTraced, Lightmass"),
             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -1165,7 +1174,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetupGlobalIllumination(
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Invalid GI method: %s. Valid values: LumenGI, ScreenSpace, None, RayTraced, Lightmass"), *Method),
             TEXT("INVALID_GI_METHOD"));
         return true;
@@ -1174,11 +1183,11 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetupGlobalIllumination(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), bValidMethod);
     Resp->SetStringField(TEXT("method"), Method);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
         FString::Printf(TEXT("GI method configured: %s"), *Method), Resp);
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
         TEXT("Lighting actions require editor build"), nullptr,
         TEXT("NOT_IMPLEMENTED"));
     return true;
@@ -1190,7 +1199,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetupGlobalIllumination(
 // =========================================================================
 // Configures shadow settings (Virtual Shadow Maps)
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleLightingConfigureShadows(
+bool McpHandlers::BuildEnvironment::HandleLightingConfigureShadows(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1198,7 +1208,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingConfigureShadows(
     UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("EditorActorSubsystem not available"),
             TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
         return true;
@@ -1219,11 +1229,11 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingConfigureShadows(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetBoolField(TEXT("virtualShadowMaps"), bVirtual);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
         TEXT("Shadows configured"), Resp);
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
         TEXT("Lighting actions require editor build"), nullptr,
         TEXT("NOT_IMPLEMENTED"));
     return true;
@@ -1235,7 +1245,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingConfigureShadows(
 // =========================================================================
 // Configures auto exposure settings via PostProcessVolume
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleLightingSetExposure(
+bool McpHandlers::BuildEnvironment::HandleLightingSetExposure(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1243,7 +1254,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetExposure(
     UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("EditorActorSubsystem not available"),
             TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
         return true;
@@ -1302,18 +1313,18 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetExposure(
         // Add verification data
         McpHandlerUtils::AddVerification(Resp, PPV);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
             TEXT("Exposure settings applied"), Resp);
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Failed to find/spawn PostProcessVolume"),
             TEXT("EXECUTION_ERROR"));
     }
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
         TEXT("Lighting actions require editor build"), nullptr,
         TEXT("NOT_IMPLEMENTED"));
     return true;
@@ -1325,7 +1336,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetExposure(
 // =========================================================================
 // Configures ambient occlusion settings via PostProcessVolume
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleLightingSetAmbientOcclusion(
+bool McpHandlers::BuildEnvironment::HandleLightingSetAmbientOcclusion(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1333,7 +1345,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetAmbientOcclusion(
     UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("EditorActorSubsystem not available"),
             TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
         return true;
@@ -1397,18 +1409,18 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetAmbientOcclusion(
         // Add verification data
         McpHandlerUtils::AddVerification(Resp, PPV);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
             TEXT("Ambient Occlusion settings configured"), Resp);
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Failed to find/spawn PostProcessVolume"),
             TEXT("EXECUTION_ERROR"));
     }
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
         TEXT("Lighting actions require editor build"), nullptr,
         TEXT("NOT_IMPLEMENTED"));
     return true;
@@ -1420,7 +1432,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingSetAmbientOcclusion(
 // =========================================================================
 // Creates a new level with basic lighting (DirectionalLight, SkyLight)
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLightingEnabledLevel(
+bool McpHandlers::BuildEnvironment::HandleLightingCreateLightingEnabledLevel(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -1428,7 +1441,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLightingEnabledLevel(
     UEditorActorSubsystem *ActorSS = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("EditorActorSubsystem not available"),
             TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
         return true;
@@ -1437,7 +1450,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLightingEnabledLevel(
     FString Path;
     if (!Payload->TryGetStringField(TEXT("path"), Path) || Path.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("path required"),
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("path required"),
             TEXT("INVALID_ARGUMENT"));
         return true;
     }
@@ -1446,7 +1459,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLightingEnabledLevel(
     FString SanitizedPath = SanitizeProjectRelativePath(Path);
     if (SanitizedPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Invalid path: contains traversal or invalid characters"),
             TEXT("INVALID_PATH"));
         return true;
@@ -1468,7 +1481,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLightingEnabledLevel(
         Resp->SetBoolField(TEXT("existsAfter"), true);
         Resp->SetStringField(TEXT("levelPath"), Path);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
             FString::Printf(TEXT("Level already exists with lighting path: %s"), *Path), Resp);
         return true;
     }
@@ -1513,24 +1526,24 @@ bool UMcpAutomationBridgeSubsystem::HandleLightingCreateLightingEnabledLevel(
             Resp->SetBoolField(TEXT("existsAfter"), true);
             Resp->SetStringField(TEXT("levelPath"), Path);
 
-            SendAutomationResponse(RequestingSocket, RequestId, true,
+            S.SendAutomationResponse(RequestingSocket, RequestId, true,
                 TEXT("Level created with lighting"), Resp);
         }
         else
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("Failed to save level"), TEXT("SAVE_FAILED"));
         }
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Editor not available"),
             TEXT("EDITOR_NOT_AVAILABLE"));
     }
     return true;
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
         TEXT("Lighting actions require editor build"), nullptr,
         TEXT("NOT_IMPLEMENTED"));
     return true;

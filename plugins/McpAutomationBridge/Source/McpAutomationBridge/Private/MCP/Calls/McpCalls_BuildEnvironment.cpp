@@ -14,6 +14,9 @@
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_EnvironmentHandlers.h"
+#include "McpAutomationBridge_LightingHandlers.h"
+#include "McpAutomationBridge_SplineHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -823,81 +826,102 @@ class FMcpCall_BuildEnvironment_##ClassSuffix final : public FMcpCall           
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
 	{                                                                                    \
+		return HandlerFn(S, RequestId, Payload, Socket);                                 \
+	}                                                                                    \
+};
+
+// The foliage/landscape wrappers + bake_lightmap forward to still-private
+// Foliage/Landscape/EditorFunction members, so they stay subsystem members
+// (F1 rule 4) and dispatch through S.; this variant keeps that member call.
+#define MCP_BE_MEMBER_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                 \
+class FMcpCall_BuildEnvironment_##ClassSuffix final : public FMcpCall                    \
+{                                                                                        \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }       \
+	const FMcpCallDecl& GetDecl() const override                                         \
+	{                                                                                    \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("build_environment"),          \
+			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                            \
+		return D;                                                                        \
+	}                                                                                    \
+	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
+	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
+	{                                                                                    \
 		return S.HandlerFn(RequestId, Payload, Socket);                                  \
 	}                                                                                    \
 };
 
-// Foliage (delegating wrappers @ EnvironmentHandlers.cpp)
-MCP_BE_CALL(AddFoliageInstances, "add_foliage_instances", HandleEnvironmentAddFoliageInstances, EMcpCallFlags::Mutating)
-MCP_BE_CALL(GetFoliageInstances, "get_foliage_instances", HandleEnvironmentGetFoliageInstances, EMcpCallFlags::None)
-MCP_BE_CALL(RemoveFoliage, "remove_foliage", HandleEnvironmentRemoveFoliage, EMcpCallFlags::Mutating)
-MCP_BE_CALL(PaintFoliage, "paint_foliage", HandleEnvironmentPaintFoliage, EMcpCallFlags::Mutating)
-MCP_BE_CALL(CreateProceduralFoliage, "create_procedural_foliage", HandleEnvironmentCreateProceduralFoliage, EMcpCallFlags::Mutating)
-MCP_BE_CALL(CreateProceduralTerrain, "create_procedural_terrain", HandleEnvironmentCreateProceduralTerrain, EMcpCallFlags::Mutating)
-MCP_BE_CALL(AddFoliage, "add_foliage", HandleEnvironmentAddFoliage, EMcpCallFlags::Mutating)
-// Landscape
-MCP_BE_CALL(CreateLandscape, "create_landscape", HandleEnvironmentCreateLandscape, EMcpCallFlags::Mutating)
-MCP_BE_CALL(PaintLandscape, "paint_landscape", HandleEnvironmentPaintLandscape, EMcpCallFlags::Mutating)
-MCP_BE_CALL(Sculpt, "sculpt", HandleEnvironmentSculpt, EMcpCallFlags::Mutating)
-MCP_BE_CALL(ModifyHeightmap, "modify_heightmap", HandleEnvironmentModifyHeightmap, EMcpCallFlags::Mutating)
-MCP_BE_CALL(SetLandscapeMaterial, "set_landscape_material", HandleEnvironmentSetLandscapeMaterial, EMcpCallFlags::Mutating)
-MCP_BE_CALL(CreateLandscapeGrassType, "create_landscape_grass_type", HandleEnvironmentCreateLandscapeGrassType, EMcpCallFlags::Mutating)
-MCP_BE_CALL(GenerateLods, "generate_lods", HandleEnvironmentGenerateLODs, EMcpCallFlags::Mutating)
-MCP_BE_CALL(BakeLightmap, "bake_lightmap", HandleEnvironmentBakeLightmap, EMcpCallFlags::Mutating)
+// Foliage (delegating wrappers @ EnvironmentHandlers.cpp) — still members
+MCP_BE_MEMBER_CALL(AddFoliageInstances, "add_foliage_instances", HandleEnvironmentAddFoliageInstances, EMcpCallFlags::Mutating)
+MCP_BE_MEMBER_CALL(GetFoliageInstances, "get_foliage_instances", HandleEnvironmentGetFoliageInstances, EMcpCallFlags::None)
+MCP_BE_MEMBER_CALL(RemoveFoliage, "remove_foliage", HandleEnvironmentRemoveFoliage, EMcpCallFlags::Mutating)
+MCP_BE_MEMBER_CALL(PaintFoliage, "paint_foliage", HandleEnvironmentPaintFoliage, EMcpCallFlags::Mutating)
+MCP_BE_MEMBER_CALL(CreateProceduralFoliage, "create_procedural_foliage", HandleEnvironmentCreateProceduralFoliage, EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateProceduralTerrain, "create_procedural_terrain", McpHandlers::BuildEnvironment::HandleEnvironmentCreateProceduralTerrain, EMcpCallFlags::Mutating)
+MCP_BE_MEMBER_CALL(AddFoliage, "add_foliage", HandleEnvironmentAddFoliage, EMcpCallFlags::Mutating)
+// Landscape — still members
+MCP_BE_MEMBER_CALL(CreateLandscape, "create_landscape", HandleEnvironmentCreateLandscape, EMcpCallFlags::Mutating)
+MCP_BE_MEMBER_CALL(PaintLandscape, "paint_landscape", HandleEnvironmentPaintLandscape, EMcpCallFlags::Mutating)
+MCP_BE_MEMBER_CALL(Sculpt, "sculpt", HandleEnvironmentSculpt, EMcpCallFlags::Mutating)
+MCP_BE_MEMBER_CALL(ModifyHeightmap, "modify_heightmap", HandleEnvironmentModifyHeightmap, EMcpCallFlags::Mutating)
+MCP_BE_MEMBER_CALL(SetLandscapeMaterial, "set_landscape_material", HandleEnvironmentSetLandscapeMaterial, EMcpCallFlags::Mutating)
+MCP_BE_MEMBER_CALL(CreateLandscapeGrassType, "create_landscape_grass_type", HandleEnvironmentCreateLandscapeGrassType, EMcpCallFlags::Mutating)
+MCP_BE_CALL(GenerateLods, "generate_lods", McpHandlers::BuildEnvironment::HandleEnvironmentGenerateLODs, EMcpCallFlags::Mutating)
+MCP_BE_MEMBER_CALL(BakeLightmap, "bake_lightmap", HandleEnvironmentBakeLightmap, EMcpCallFlags::Mutating)
 
 // Environment inline extractions (EnvironmentHandlers.cpp)
-MCP_BE_CALL(ExportSnapshot, "export_snapshot", HandleEnvironmentExportSnapshot, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(ImportSnapshot, "import_snapshot", HandleEnvironmentImportSnapshot, EMcpCallFlags::RequiresEditor)
-MCP_BE_CALL(Delete, "delete", HandleEnvironmentDelete, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(CreateSkySphere, "create_sky_sphere", HandleEnvironmentCreateSkySphere, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(SetTimeOfDay, "set_time_of_day", HandleEnvironmentSetTimeOfDay, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(CreateFogVolume, "create_fog_volume", HandleEnvironmentCreateFogVolume, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(ExportSnapshot, "export_snapshot", McpHandlers::BuildEnvironment::HandleEnvironmentExportSnapshot, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(ImportSnapshot, "import_snapshot", McpHandlers::BuildEnvironment::HandleEnvironmentImportSnapshot, EMcpCallFlags::RequiresEditor)
+MCP_BE_CALL(Delete, "delete", McpHandlers::BuildEnvironment::HandleEnvironmentDelete, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateSkySphere, "create_sky_sphere", McpHandlers::BuildEnvironment::HandleEnvironmentCreateSkySphere, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(SetTimeOfDay, "set_time_of_day", McpHandlers::BuildEnvironment::HandleEnvironmentSetTimeOfDay, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateFogVolume, "create_fog_volume", McpHandlers::BuildEnvironment::HandleEnvironmentCreateFogVolume, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Lighting (LightingHandlers.cpp)
-MCP_BE_CALL(ListLightTypes, "list_light_types", HandleLightingListLightTypes, EMcpCallFlags::RequiresEditor)
-MCP_BE_CALL(CreateLight, "create_light", HandleLightingCreateLight, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(CreateSkyLight, "create_sky_light", HandleLightingCreateSkyLight, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(BuildLighting, "build_lighting", HandleLightingBuildLighting, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(EnsureSingleSkyLight, "ensure_single_sky_light", HandleLightingEnsureSingleSkyLight, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(CreateLightmassVolume, "create_lightmass_volume", HandleLightingCreateLightmassVolume, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(SetupVolumetricFog, "setup_volumetric_fog", HandleLightingSetupVolumetricFog, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(SetupGlobalIllumination, "setup_global_illumination", HandleLightingSetupGlobalIllumination, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(ConfigureShadows, "configure_shadows", HandleLightingConfigureShadows, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(SetExposure, "set_exposure", HandleLightingSetExposure, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(SetAmbientOcclusion, "set_ambient_occlusion", HandleLightingSetAmbientOcclusion, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(CreateLightingEnabledLevel, "create_lighting_enabled_level", HandleLightingCreateLightingEnabledLevel, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(ListLightTypes, "list_light_types", McpHandlers::BuildEnvironment::HandleLightingListLightTypes, EMcpCallFlags::RequiresEditor)
+MCP_BE_CALL(CreateLight, "create_light", McpHandlers::BuildEnvironment::HandleLightingCreateLight, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateSkyLight, "create_sky_light", McpHandlers::BuildEnvironment::HandleLightingCreateSkyLight, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(BuildLighting, "build_lighting", McpHandlers::BuildEnvironment::HandleLightingBuildLighting, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(EnsureSingleSkyLight, "ensure_single_sky_light", McpHandlers::BuildEnvironment::HandleLightingEnsureSingleSkyLight, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateLightmassVolume, "create_lightmass_volume", McpHandlers::BuildEnvironment::HandleLightingCreateLightmassVolume, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(SetupVolumetricFog, "setup_volumetric_fog", McpHandlers::BuildEnvironment::HandleLightingSetupVolumetricFog, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(SetupGlobalIllumination, "setup_global_illumination", McpHandlers::BuildEnvironment::HandleLightingSetupGlobalIllumination, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(ConfigureShadows, "configure_shadows", McpHandlers::BuildEnvironment::HandleLightingConfigureShadows, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(SetExposure, "set_exposure", McpHandlers::BuildEnvironment::HandleLightingSetExposure, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(SetAmbientOcclusion, "set_ambient_occlusion", McpHandlers::BuildEnvironment::HandleLightingSetAmbientOcclusion, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateLightingEnabledLevel, "create_lighting_enabled_level", McpHandlers::BuildEnvironment::HandleLightingCreateLightingEnabledLevel, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Spline creation & points (SplineHandlers.cpp)
-MCP_BE_CALL(CreateSplineActor, "create_spline_actor", HandleSplineCreateSplineActor, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(AddSplinePoint, "add_spline_point", HandleSplineAddSplinePoint, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(RemoveSplinePoint, "remove_spline_point", HandleSplineRemoveSplinePoint, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(SetSplinePointPosition, "set_spline_point_position", HandleSplineSetSplinePointPosition, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(SetSplinePointTangents, "set_spline_point_tangents", HandleSplineSetSplinePointTangents, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(SetSplinePointRotation, "set_spline_point_rotation", HandleSplineSetSplinePointRotation, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(SetSplinePointScale, "set_spline_point_scale", HandleSplineSetSplinePointScale, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(SetSplineType, "set_spline_type", HandleSplineSetSplineType, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateSplineActor, "create_spline_actor", McpHandlers::BuildEnvironment::HandleSplineCreateSplineActor, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(AddSplinePoint, "add_spline_point", McpHandlers::BuildEnvironment::HandleSplineAddSplinePoint, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(RemoveSplinePoint, "remove_spline_point", McpHandlers::BuildEnvironment::HandleSplineRemoveSplinePoint, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(SetSplinePointPosition, "set_spline_point_position", McpHandlers::BuildEnvironment::HandleSplineSetSplinePointPosition, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(SetSplinePointTangents, "set_spline_point_tangents", McpHandlers::BuildEnvironment::HandleSplineSetSplinePointTangents, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(SetSplinePointRotation, "set_spline_point_rotation", McpHandlers::BuildEnvironment::HandleSplineSetSplinePointRotation, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(SetSplinePointScale, "set_spline_point_scale", McpHandlers::BuildEnvironment::HandleSplineSetSplinePointScale, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(SetSplineType, "set_spline_type", McpHandlers::BuildEnvironment::HandleSplineSetSplineType, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Spline mesh
-MCP_BE_CALL(CreateSplineMeshComponent, "create_spline_mesh_component", HandleSplineCreateSplineMeshComponent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(SetSplineMeshAsset, "set_spline_mesh_asset", HandleSplineSetSplineMeshAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(ConfigureSplineMeshAxis, "configure_spline_mesh_axis", HandleSplineConfigureSplineMeshAxis, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(SetSplineMeshMaterial, "set_spline_mesh_material", HandleSplineSetSplineMeshMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateSplineMeshComponent, "create_spline_mesh_component", McpHandlers::BuildEnvironment::HandleSplineCreateSplineMeshComponent, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(SetSplineMeshAsset, "set_spline_mesh_asset", McpHandlers::BuildEnvironment::HandleSplineSetSplineMeshAsset, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(ConfigureSplineMeshAxis, "configure_spline_mesh_axis", McpHandlers::BuildEnvironment::HandleSplineConfigureSplineMeshAxis, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(SetSplineMeshMaterial, "set_spline_mesh_material", McpHandlers::BuildEnvironment::HandleSplineSetSplineMeshMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Mesh scattering
-MCP_BE_CALL(ScatterMeshesAlongSpline, "scatter_meshes_along_spline", HandleSplineScatterMeshesAlongSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(ScatterMeshesAlongSpline, "scatter_meshes_along_spline", McpHandlers::BuildEnvironment::HandleSplineScatterMeshesAlongSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Quick templates
-MCP_BE_CALL(CreateRoadSpline, "create_road_spline", HandleSplineCreateRoadSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(CreateRiverSpline, "create_river_spline", HandleSplineCreateRiverSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(CreateFenceSpline, "create_fence_spline", HandleSplineCreateFenceSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(CreateWallSpline, "create_wall_spline", HandleSplineCreateWallSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(CreateCableSpline, "create_cable_spline", HandleSplineCreateCableSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_BE_CALL(CreatePipeSpline, "create_pipe_spline", HandleSplineCreatePipeSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateRoadSpline, "create_road_spline", McpHandlers::BuildEnvironment::HandleSplineCreateRoadSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateRiverSpline, "create_river_spline", McpHandlers::BuildEnvironment::HandleSplineCreateRiverSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateFenceSpline, "create_fence_spline", McpHandlers::BuildEnvironment::HandleSplineCreateFenceSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateWallSpline, "create_wall_spline", McpHandlers::BuildEnvironment::HandleSplineCreateWallSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateCableSpline, "create_cable_spline", McpHandlers::BuildEnvironment::HandleSplineCreateCableSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreatePipeSpline, "create_pipe_spline", McpHandlers::BuildEnvironment::HandleSplineCreatePipeSpline, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Utility
-MCP_BE_CALL(GetSplinesInfo, "get_splines_info", HandleSplineGetSplinesInfo, EMcpCallFlags::RequiresEditor)
+MCP_BE_CALL(GetSplinesInfo, "get_splines_info", McpHandlers::BuildEnvironment::HandleSplineGetSplinesInfo, EMcpCallFlags::RequiresEditor)
 
 #undef MCP_BE_CALL
+#undef MCP_BE_MEMBER_CALL
 
 } // namespace McpCalls::BuildEnvironment
 

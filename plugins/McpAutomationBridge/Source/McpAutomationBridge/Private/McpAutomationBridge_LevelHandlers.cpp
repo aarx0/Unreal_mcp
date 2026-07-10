@@ -23,6 +23,7 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_LevelHandlers.h"
 #include "McpAutomationBridge_AssetWorkflowHandlers.h"
 #include "McpAutomationBridge_LevelStructureHandlers.h"
 
@@ -870,7 +871,8 @@ static TArray<ULevel*> GetAllLevelsFromWorld(UWorld* World) {
   return Levels;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelLoad(
+bool McpHandlers::Level::HandleLevelLoad(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   // Map to Open command
@@ -881,7 +883,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelLoad(
 
   // Determine invalid characters for checks
   if (LevelPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("levelPath required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -890,7 +892,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelLoad(
   // SECURITY: Sanitize LevelPath to prevent path traversal attacks
   FString SanitizedLevelPath = SanitizeProjectRelativePath(LevelPath);
   if (SanitizedLevelPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Invalid levelPath: contains path traversal (..) or invalid characters"),
                         TEXT("SECURITY_VIOLATION"));
     return true;
@@ -906,7 +908,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelLoad(
   }
 
   if (!GEditor) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), nullptr,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -980,7 +982,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelLoad(
       ErrorDetails->SetStringField(TEXT("checkedFlat"), FullFlatMapPath);
     }
     ErrorDetails->SetStringField(TEXT("hint"), TEXT("Unreal levels are typically stored as /Game/Path/LevelName/LevelName.umap"));
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Level file not found. Checked:\n  Folder: %s\n  Flat: %s"), 
                       *FullFolderMapPath, *FullFlatMapPath),
@@ -1005,7 +1007,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelLoad(
       ErrorDetails->SetNumberField(TEXT("dirtyContentPackages"), DirtyContentPackagesBeforeLoad);
       ErrorDetails->SetBoolField(TEXT("saveDirtyPackages"), bSaveDirtyPackages);
       ErrorDetails->SetStringField(TEXT("levelPath"), LevelPath);
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, false,
           TEXT("Cannot load a level in unattended/headless mode while packages are dirty. Pass saveDirtyPackages=true to save them before loading."),
           ErrorDetails, TEXT("DIRTY_PACKAGES"));
@@ -1026,7 +1028,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelLoad(
       ErrorDetails->SetNumberField(TEXT("failedPackageSaves"), FailedDirtyPackageSaves);
       ErrorDetails->SetBoolField(TEXT("saveDirtyPackagesSucceeded"), bSavedDirtyPackagesBeforeLoad);
       ErrorDetails->SetStringField(TEXT("levelPath"), LevelPath);
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, false,
           TEXT("Cannot load a level in unattended/headless mode while packages remain dirty after non-interactive save."),
           ErrorDetails, TEXT("DIRTY_PACKAGES"));
@@ -1045,7 +1047,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelLoad(
       // Normalize paths for comparison (handle case differences)
       if (LoadedPath.ToLower() != ExpectedLoadedPath.ToLower()) {
         // The requested level was not actually loaded - engine fell back to default
-        SendAutomationResponse(
+        S.SendAutomationResponse(
             Socket, RequestId, false,
             FString::Printf(TEXT("Level path mismatch: requested %s but loaded %s"), *ExpectedLoadedPath, *LoadedPath),
             nullptr, TEXT("LOAD_MISMATCH"));
@@ -1064,14 +1066,14 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelLoad(
     Resp->SetNumberField(TEXT("dirtyContentPackagesAfterSave"), DirtyContentPackagesAfterSave);
     Resp->SetNumberField(TEXT("failedDirtyPackageSaves"), FailedDirtyPackageSaves);
     VerifyAssetExists(Resp, ExpectedLoadedPath);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Level loaded"), Resp, FString());
     return true;
   } else {
     // Fallback to ExecuteConsoleCommand "Open" if LoadMap failed (e.g.
     // maybe it was a raw asset path or something) But actually if LoadMap
     // fails, Open likely fails too.
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Failed to load map: %s"), *LevelPath),
         nullptr, TEXT("LOAD_FAILED"));
@@ -1079,11 +1081,12 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelLoad(
   }
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelSave(
+bool McpHandlers::Level::HandleLevelSave(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   if (!GEditor) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), nullptr,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -1091,7 +1094,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelSave(
 
   UWorld *World = GEditor->GetEditorWorldContext().World();
   if (!World) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("No world loaded"), nullptr,
                            TEXT("NO_WORLD"));
     return true;
@@ -1113,7 +1116,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelSave(
         TEXT("Level is unsaved/temporary. Use save_as with a valid path first."));
     ErrorDetail->SetStringField(TEXT("hint"), 
         TEXT("Use manage_level with action='save_as' and provide savePath parameter"));
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("Cannot save transient level: Level must be saved with 'save_as' first"),
         ErrorDetail, TEXT("TRANSIENT_LEVEL"));
@@ -1128,7 +1131,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelSave(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     FString LevelPath = World->GetOutermost()->GetName();
     VerifyAssetExists(Resp, LevelPath);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Level saved"), Resp, FString());
   } else {
     // Provide detailed error information
@@ -1160,7 +1163,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelSave(
     }
 
     ErrorDetail->SetStringField(TEXT("reason"), ErrorReason);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Failed to save level: %s"), *ErrorReason),
         ErrorDetail, TEXT("SAVE_FAILED"));
@@ -1168,7 +1171,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelSave(
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelSaveAs(
+bool McpHandlers::Level::HandleLevelSaveAs(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   // Force cleanup to prevent potential deadlocks with HLODs/WorldPartition
@@ -1183,7 +1187,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelSaveAs(
   if (Payload.IsValid())
     Payload->TryGetStringField(TEXT("savePath"), SavePath);
   if (SavePath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("savePath required for save_as"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
@@ -1191,7 +1195,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelSaveAs(
 
   SavePath = SanitizeProjectRelativePath(SavePath);
   if (SavePath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid savePath: contains path traversal (..) or invalid characters"),
                            nullptr, TEXT("SECURITY_VIOLATION"));
     return true;
@@ -1212,7 +1216,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelSaveAs(
         ErrorDetail->SetStringField(TEXT("absolutePath"), AbsoluteFilePath);
         ErrorDetail->SetNumberField(TEXT("pathLength"), AbsoluteFilePath.Len());
         ErrorDetail->SetNumberField(TEXT("maxLength"), SafePathLength);
-        SendAutomationResponse(
+        S.SendAutomationResponse(
             Socket, RequestId, false,
             FString::Printf(TEXT("Path too long (%d chars, max %d): %s"), 
                 AbsoluteFilePath.Len(), SafePathLength, *SavePath),
@@ -1245,7 +1249,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelSaveAs(
 
       TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       Resp->SetStringField(TEXT("levelPath"), SavePath);
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, true,
           FString::Printf(TEXT("Level saved as %s"), *SavePath), Resp,
           FString());
@@ -1254,7 +1258,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelSaveAs(
       TSharedPtr<FJsonObject> ErrorDetail = McpHandlerUtils::CreateResultObject();
       ErrorDetail->SetStringField(TEXT("attemptedPath"), SavePath);
       ErrorDetail->SetStringField(TEXT("reason"), TEXT("Save operation failed - check Output Log for details"));
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, false,
           FString::Printf(TEXT("Failed to save level as: %s"), *SavePath),
           ErrorDetail, TEXT("SAVE_FAILED"));
@@ -1262,13 +1266,14 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelSaveAs(
     return true;
   }
 #endif
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          TEXT("LevelEditorSubsystem not available"), nullptr,
                          TEXT("SUBSYSTEM_MISSING"));
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelCreate(
+bool McpHandlers::Level::HandleLevelCreate(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString LevelName;
@@ -1289,7 +1294,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelCreate(
       LevelName = LevelName.RightChop(LastSlash + 1);
     }
     if (LevelName.Contains(TEXT(".."))) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, false,
           TEXT("Invalid levelName: contains path traversal (..)"),
           nullptr, TEXT("SECURITY_VIOLATION"));
@@ -1313,7 +1318,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelCreate(
   // that could cause engine crashes or security violations
   FString SanitizedLevelPath = SanitizeProjectRelativePath(LevelPath);
   if (!LevelPath.IsEmpty() && SanitizedLevelPath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("Invalid levelPath: contains path traversal (..), double slashes, or invalid characters"),
         nullptr, TEXT("SECURITY_VIOLATION"));
@@ -1349,7 +1354,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelCreate(
   }
 
   if (SavePath.IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("levelName or levelPath required for create_level"), nullptr,
         TEXT("INVALID_ARGUMENT"));
@@ -1370,7 +1375,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelCreate(
         Resp->SetStringField(TEXT("currentLevelPath"), LoadedWorld->GetOutermost()->GetName());
       }
     }
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, bLoaded,
         bLoaded ? FString::Printf(TEXT("Level already exists and was loaded: %s"), *SavePath)
                 : FString::Printf(TEXT("Level already exists but could not be loaded: %s"), *SavePath),
@@ -1390,10 +1395,11 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelCreate(
   CreatePayload->SetBoolField(TEXT("bCreateWorldPartition"), bUseWorldPartition);
   CreatePayload->SetBoolField(TEXT("save"), true);
   CreatePayload->SetBoolField(TEXT("loadAfterCreate"), true);
-  return McpHandlers::LevelStructure::HandleLevelStructureCreateLevel(*this, RequestId, CreatePayload, Socket);
+  return McpHandlers::LevelStructure::HandleLevelStructureCreateLevel(S, RequestId, CreatePayload, Socket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelStreamInternal(
+bool McpHandlers::Level::HandleLevelStreamInternal(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket, bool bForceUnload) {
   FString LevelName;
@@ -1411,7 +1417,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelStreamInternal(
     bVis = false;
   }
   if (LevelName.TrimStartAndEnd().IsEmpty()) {
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         TEXT("levelName or levelPath required"), nullptr,
         TEXT("INVALID_ARGUMENT"));
@@ -1421,7 +1427,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelStreamInternal(
   // CRITICAL FIX: Use UEditorLevelUtils for streaming instead of console command
   // Console command StreamLevel is unreliable and returns EXEC_FAILED in many cases
   if (!GEditor) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), nullptr,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -1429,7 +1435,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelStreamInternal(
 
   UWorld* World = GEditor->GetEditorWorldContext().World();
   if (!World) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("No world loaded"), nullptr,
                            TEXT("NO_WORLD"));
     return true;
@@ -1471,7 +1477,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelStreamInternal(
         TargetStreamingLevel->IsStreamingStatePending() ? TEXT("Pending") :
         TargetStreamingLevel->IsLevelLoaded() ? TEXT("Loaded") : TEXT("Unloaded"));
     
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Streaming level state updated: %s (Loaded=%s, Visible=%s)"),
                                *NormalizedLevelName, 
                                bLoad ? TEXT("true") : TEXT("false"),
@@ -1480,7 +1486,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelStreamInternal(
   } else {
     // Streaming level not found - try console command as fallback
     if (!IsSafeLevelConsoleToken(NormalizedLevelName)) {
-      SendAutomationResponse(Socket, RequestId, false,
+      S.SendAutomationResponse(Socket, RequestId, false,
                              TEXT("Invalid streaming level name"), Result,
                              TEXT("INVALID_ARGUMENT"));
       return true;
@@ -1499,7 +1505,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelStreamInternal(
     
     if (bCmdSuccess) {
       Result->SetStringField(TEXT("method"), TEXT("console_command"));
-      SendAutomationResponse(Socket, RequestId, true,
+      S.SendAutomationResponse(Socket, RequestId, true,
                              TEXT("Streaming command executed"), Result);
     } else {
       // No ULevelStreaming was located in the world and the StreamLevel Exec
@@ -1507,7 +1513,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelStreamInternal(
       // rather than reporting a phantom success.
       Result->SetStringField(TEXT("method"), TEXT("console_command_fallback"));
       Result->SetStringField(TEXT("command"), Cmd);
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, false,
           FString::Printf(
               TEXT("Streaming level not found in world and StreamLevel command failed: %s"),
@@ -1518,19 +1524,22 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelStreamInternal(
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelStream(
+bool McpHandlers::Level::HandleLevelStream(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
-  return HandleLevelStreamInternal(RequestId, Payload, Socket, false);
+  return HandleLevelStreamInternal(S, RequestId, Payload, Socket, false);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelUnload(
+bool McpHandlers::Level::HandleLevelUnload(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
-  return HandleLevelStreamInternal(RequestId, Payload, Socket, true);
+  return HandleLevelStreamInternal(S, RequestId, Payload, Socket, true);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelBuildLighting(
+bool McpHandlers::Level::HandleLevelBuildLighting(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   // FEditorBuildUtils::EditorBuild is async — returns immediately while
@@ -1545,16 +1554,17 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelBuildLighting(
   FlushRenderingCommands();
   if (GEditor && GEditor->GetEditorWorldContext().World()) {
     FEditorBuildUtils::EditorBuild(GEditor->GetEditorWorldContext().World(), FBuildOptions::BuildLighting);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Lighting build started (runs in background)"), Result);
   } else {
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Lighting build requested (no active world)"), Result);
   }
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelSetMetadata(
+bool McpHandlers::Level::HandleLevelSetMetadata(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> AssetPayload = MakeShared<FJsonObject>();
@@ -1577,23 +1587,24 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelSetMetadata(
       ErrorMessage = FString::Printf(TEXT("metadata target must be a /Game level path: %s"), *AssetPath);
       ErrorCode = TEXT("SECURITY_VIOLATION");
     }
-    SendAutomationResponse(Socket, RequestId, false, ErrorMessage,
+    S.SendAutomationResponse(Socket, RequestId, false, ErrorMessage,
                            nullptr, ErrorCode);
     return true;
   }
   if (!IFileManager::Get().FileExists(*MapFilename) &&
       !FPackageName::DoesPackageExist(AssetPath)) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            FString::Printf(TEXT("Level not found: %s"), *AssetPath),
                            nullptr, TEXT("NOT_FOUND"));
     return true;
   }
 
   AssetPayload->SetStringField(TEXT("assetPath"), AssetPath);
-  return McpHandlers::Asset::HandleSetMetadata(*this, RequestId, AssetPayload, Socket);
+  return McpHandlers::Asset::HandleSetMetadata(S, RequestId, AssetPayload, Socket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelValidate(
+bool McpHandlers::Level::HandleLevelValidate(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString LevelPath;
@@ -1602,7 +1613,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelValidate(
     if (LevelPath.IsEmpty()) Payload->TryGetStringField(TEXT("assetPath"), LevelPath);
   }
   if (LevelPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("levelPath required for validate_level"), nullptr,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -1610,7 +1621,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelValidate(
   LevelPath = NormalizeLevelPackagePath(LevelPath);
   LevelPath = SanitizeProjectRelativePath(LevelPath);
   if (LevelPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid levelPath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
@@ -1636,13 +1647,14 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelValidate(
   Result->SetBoolField(TEXT("packageExists"), bPackageExists);
   Result->SetBoolField(TEXT("fileExists"), bFileExists);
 
-  SendAutomationResponse(Socket, RequestId, bExists,
+  S.SendAutomationResponse(Socket, RequestId, bExists,
                          bExists ? TEXT("Level validated") : TEXT("Level not found"),
                          Result, bExists ? FString() : TEXT("NOT_FOUND"));
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelList(
+bool McpHandlers::Level::HandleLevelList(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
@@ -1731,24 +1743,25 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelList(
                          World->GetOutermost()->GetName());
   }
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Levels listed"), Resp, FString());
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelGetCurrent(
+bool McpHandlers::Level::HandleLevelGetCurrent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   UWorld* EditorWorld = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
   if (!EditorWorld) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("No editor world available"), nullptr, TEXT("NO_WORLD"));
     return true;
   }
 
   ULevel* CurrentLevel = EditorWorld->GetCurrentLevel();
   if (!CurrentLevel) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("No current level available"), nullptr, TEXT("NO_LEVEL"));
     return true;
   }
@@ -1791,12 +1804,13 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelGetCurrent(
   Result->SetNumberField(TEXT("actorCount"), CurrentLevel->Actors.Num());
   Result->SetBoolField(TEXT("isPersistentLevel"), CurrentLevel == EditorWorld->PersistentLevel);
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Current level retrieved"), Result);
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelExport(
+bool McpHandlers::Level::HandleLevelExport(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString LevelPath;
@@ -1810,7 +1824,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelExport(
       Payload->TryGetStringField(TEXT("destinationPath"), ExportPath);
 
   if (ExportPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("exportPath required"), nullptr,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -1819,14 +1833,14 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelExport(
   // SECURITY: Sanitize export path as an asset path
   FString SafeExportPath = NormalizeLevelPackagePath(SanitizeProjectRelativePath(ExportPath));
   if (SafeExportPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Invalid or unsafe exportPath"), nullptr,
                            TEXT("SECURITY_VIOLATION"));
     return true;
   }
 
   if (!GEditor) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), nullptr,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -1844,7 +1858,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelExport(
         bFileFound = IFileManager::Get().FileExists(*Filename);
       }
       if (!bFileFound) {
-        SendAutomationResponse(Socket, RequestId, false,
+        S.SendAutomationResponse(Socket, RequestId, false,
                                FString::Printf(TEXT("Source level not found: %s"), *LevelPath),
                                nullptr, TEXT("LEVEL_NOT_FOUND"));
         return true;
@@ -1855,7 +1869,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelExport(
                     Current->GetPathName() == LevelPath)) {
       WorldToExport = Current;
     } else {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, false,
           FString::Printf(
               TEXT("Requested level is not loaded: %s. Load the level before exporting it."),
@@ -1868,7 +1882,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelExport(
     WorldToExport = GEditor->GetEditorWorldContext().World();
 
   if (!WorldToExport) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("No world loaded"), nullptr,
                            TEXT("NO_WORLD"));
     return true;
@@ -1881,7 +1895,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelExport(
                                          ExportErrorMessage,
                                          ExportErrorCode,
                                          TEXT("Export destination"))) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            ExportErrorMessage, nullptr,
                            ExportErrorCode.IsEmpty() ? TEXT("INVALID_ARGUMENT") : ExportErrorCode);
     return true;
@@ -1895,17 +1909,18 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelExport(
   // to prevent Intel GPU driver crashes (MONZA DdiThreadingContext)
   bool bExported = McpSafeLevelSave(WorldToExport->PersistentLevel, SafeExportPath);
   if (bExported) {
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Level exported"), nullptr);
   } else {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Failed to export level after 5 retries (check GPU driver stability)"), nullptr,
                            TEXT("EXPORT_FAILED"));
   }
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelImport(
+bool McpHandlers::Level::HandleLevelImport(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString DestinationPath;
@@ -1919,7 +1934,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelImport(
       Payload->TryGetStringField(TEXT("packagePath"), SourcePath); // Mapping
 
   if (SourcePath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sourcePath/packagePath required"), nullptr,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -1928,7 +1943,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelImport(
   // If SourcePath is a package (starts with /Game), handle as Duplicate/Copy
   if (SourcePath.StartsWith(TEXT("/"))) {
     if (DestinationPath.IsEmpty()) {
-      SendAutomationResponse(Socket, RequestId, false,
+      S.SendAutomationResponse(Socket, RequestId, false,
                              TEXT("destinationPath required for asset copy"),
                              nullptr, TEXT("INVALID_ARGUMENT"));
       return true;
@@ -1937,7 +1952,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelImport(
     SourcePath = NormalizeLevelPackagePath(SanitizeProjectRelativePath(SourcePath));
     DestinationPath = NormalizeLevelPackagePath(SanitizeProjectRelativePath(DestinationPath));
     if (SourcePath.IsEmpty() || DestinationPath.IsEmpty()) {
-      SendAutomationResponse(Socket, RequestId, false,
+      S.SendAutomationResponse(Socket, RequestId, false,
                              TEXT("Invalid sourcePath or destinationPath"),
                              nullptr, TEXT("SECURITY_VIOLATION"));
       return true;
@@ -1957,7 +1972,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelImport(
       Result->SetStringField(TEXT("sourcePath"), SourcePath);
       Result->SetStringField(TEXT("destinationPath"), DestinationPath);
       Result->SetBoolField(TEXT("alreadyExists"), true);
-      SendAutomationResponse(Socket, RequestId, true,
+      S.SendAutomationResponse(Socket, RequestId, true,
                              FString::Printf(TEXT("Destination already exists: %s"), *DestinationPath), Result);
       return true;
     }
@@ -1970,10 +1985,10 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelImport(
                                                  ErrorMessage, ErrorCode);
     if (bCopied) {
       Result->SetBoolField(TEXT("imported"), true);
-      SendAutomationResponse(Socket, RequestId, true,
+      S.SendAutomationResponse(Socket, RequestId, true,
                              TEXT("Level imported (copied)"), Result);
     } else {
-      SendAutomationResponse(Socket, RequestId, false, ErrorMessage,
+      S.SendAutomationResponse(Socket, RequestId, false, ErrorMessage,
                              Result,
                              ErrorCode.IsEmpty() ? TEXT("IMPORT_FAILED") : ErrorCode);
     }
@@ -1982,7 +1997,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelImport(
 
   // If SourcePath is file, try Import
   if (!GEditor) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor not available"), nullptr,
                            TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -2005,7 +2020,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelImport(
     // GEditor->ImportMap(*DestPath, *DestName, *SourcePath);
     // ImportMap is deprecated/removed. For .umap files, manual import or Copy
     // is preferred.
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Direct map file import not supported. Use "
                                 "import_level with a package path to copy."),
                            nullptr, TEXT("NOT_IMPLEMENTED"));
@@ -2014,14 +2029,15 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelImport(
   // Automation of Import is tricky without a factory wrapper.
   // Use AssetTools Import.
 
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       Socket, RequestId, false,
       TEXT("File-based level import not fully automatic yet"), nullptr,
       TEXT("NOT_IMPLEMENTED"));
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelAddSublevel(
+bool McpHandlers::Level::HandleLevelAddSublevel(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString SubLevelPath;
@@ -2031,7 +2047,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAddSublevel(
     Payload->TryGetStringField(TEXT("levelPath"), SubLevelPath);
 
   if (SubLevelPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("sublevelPath required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -2039,7 +2055,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAddSublevel(
 
   SubLevelPath = SanitizeProjectRelativePath(SubLevelPath);
   if (SubLevelPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Invalid sublevelPath"),
                         TEXT("SECURITY_VIOLATION"));
     return true;
@@ -2068,7 +2084,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAddSublevel(
   if (!bFileFound) {
     // Try checking DoesPackageExist as last resort
     if (!FPackageName::DoesPackageExist(SubLevelPath)) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, false,
           FString::Printf(TEXT("Level file not found: %s"), *SubLevelPath),
           nullptr, TEXT("PACKAGE_NOT_FOUND"));
@@ -2081,7 +2097,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAddSublevel(
     Payload->TryGetStringField(TEXT("streamingMethod"), StreamingMethod);
 
   if (!GEditor) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("Editor unavailable"), nullptr,
                            TEXT("NO_EDITOR"));
     return true;
@@ -2089,7 +2105,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAddSublevel(
 
   UWorld *World = GEditor->GetEditorWorldContext().World();
   if (!World) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("No world loaded"), nullptr,
                            TEXT("NO_WORLD"));
     return true;
@@ -2124,7 +2140,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAddSublevel(
           Result->SetStringField(TEXT("sublevelPath"), SubLevelPath);
           Result->SetStringField(TEXT("world"), World->GetName());
           Result->SetBoolField(TEXT("alreadyExists"), true);
-          SendAutomationResponse(Socket, RequestId, true,
+          S.SendAutomationResponse(Socket, RequestId, true,
                                  FString::Printf(TEXT("Sublevel already in world: %s"), *SubLevelPath), Result);
           return true;
         } else {
@@ -2165,20 +2181,20 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAddSublevel(
       Result->SetStringField(TEXT("sublevelPath"), SubLevelPath);
       Result->SetStringField(TEXT("world"), World->GetName());
       Result->SetStringField(TEXT("streamingMethod"), StreamingMethod);
-      SendAutomationResponse(Socket, RequestId, true,
+      S.SendAutomationResponse(Socket, RequestId, true,
                              TEXT("Sublevel added successfully"), Result);
     } else {
       // CRITICAL FIX: Level file doesn't exist - return ERROR not success with warning
       // The streaming level was added to the world but the level file doesn't exist
       // This is an error condition, not a warning
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           Socket, RequestId, false,
           FString::Printf(TEXT("Sublevel file not found: %s"), *SubLevelPath),
           nullptr, TEXT("FILE_NOT_FOUND"));
     }
   } else {
     // Did we fail because it's already there?
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         Socket, RequestId, false,
         FString::Printf(TEXT("Failed to add sublevel %s (Check logs)"),
                         *SubLevelPath),
@@ -2187,7 +2203,8 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelAddSublevel(
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelDelete(
+bool McpHandlers::Level::HandleLevelDelete(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString LevelPath;
@@ -2197,7 +2214,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelDelete(
     Payload->TryGetStringField(TEXT("path"), LevelPath);
 
   if (LevelPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("levelPath required for delete"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
@@ -2206,7 +2223,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelDelete(
   // Issue #8: Sanitize path to prevent traversal attacks
   FString SanitizedPath = SanitizeProjectRelativePath(LevelPath);
   if (SanitizedPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            FString::Printf(TEXT("Invalid path (traversal/security violation): %s"), *LevelPath),
                            nullptr, TEXT("SECURITY_VIOLATION"));
     return true;
@@ -2232,7 +2249,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelDelete(
           *LongPackageName);
       DeleteErrorCode = TEXT("INVALID_LEVEL_PATH");
     }
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            DeleteErrorMessage, nullptr, DeleteErrorCode);
     return true;
   }
@@ -2466,27 +2483,28 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelDelete(
   Result->SetBoolField(TEXT("packageExistsAfter"), bPackageStillExists);
 
   if (bExternalSidecarDeleteFailed) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            ExternalDeleteErrorMessage, Result,
                            ExternalDeleteErrorCode.IsEmpty()
                                ? TEXT("SOURCE_EXTERNAL_DELETE_FAILED")
                                : ExternalDeleteErrorCode);
   } else if (bDeletedWithSidecars) {
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Level file deleted: %s"), *LongPackageName), Result);
   } else if (bCurrentWorldMatchesTarget || bPackageStillLoaded) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            FString::Printf(TEXT("Level is still loaded and cannot be deleted safely: %s"), *LongPackageName),
                            Result, TEXT("LEVEL_LOADED"));
   } else {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            FString::Printf(TEXT("Failed to delete level: %s"), *LongPackageName),
                            Result, TEXT("DELETE_FAILED"));
   }
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelRename(
+bool McpHandlers::Level::HandleLevelRename(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString SourcePath;
@@ -2507,13 +2525,13 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelRename(
   }
 
   if (SourcePath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("levelPath or sourcePath required for rename_level"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
   if (DestinationPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("destinationPath required for rename_level"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
@@ -2522,14 +2540,14 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelRename(
   // Issue #8: Sanitize paths to prevent traversal attacks
   FString SanitizedSource = SanitizeProjectRelativePath(SourcePath);
   if (SanitizedSource.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            FString::Printf(TEXT("Invalid source path (traversal/security violation): %s"), *SourcePath),
                            nullptr, TEXT("SECURITY_VIOLATION"));
     return true;
   }
   FString SanitizedDest = SanitizeProjectRelativePath(DestinationPath);
   if (SanitizedDest.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            FString::Printf(TEXT("Invalid destination path (traversal/security violation): %s"), *DestinationPath),
                            nullptr, TEXT("SECURITY_VIOLATION"));
     return true;
@@ -2538,7 +2556,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelRename(
   DestinationPath = NormalizeLevelPackagePath(SanitizedDest);
 
   if (IsCurrentEditorWorldPackage(SourcePath)) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            FString::Printf(TEXT("Cannot rename the current loaded level: %s"), *SourcePath),
                            nullptr, TEXT("LEVEL_LOADED"));
     return true;
@@ -2554,7 +2572,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelRename(
   FString ErrorCode;
   const bool bCopied = CopyLevelMapPackageFile(SourcePath, DestinationPath, bOverwrite, Result, ErrorMessage, ErrorCode);
   if (!bCopied) {
-    SendAutomationResponse(Socket, RequestId, false, ErrorMessage, Result, ErrorCode);
+    S.SendAutomationResponse(Socket, RequestId, false, ErrorMessage, Result, ErrorCode);
     return true;
   }
 
@@ -2593,7 +2611,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelRename(
                                         bDeletedSourceExternalObjects,
                                         ErrorMessage, ErrorCode)) {
       Result->SetStringField(TEXT("externalDeleteError"), ErrorMessage);
-      SendAutomationResponse(Socket, RequestId, false, ErrorMessage,
+      S.SendAutomationResponse(Socket, RequestId, false, ErrorMessage,
                              Result, ErrorCode);
       return true;
     }
@@ -2618,17 +2636,18 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelRename(
   Result->SetBoolField(TEXT("sourceFileExistsAfter"), bSourceFileExistsAfter);
 
   if (bRenamed) {
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Level renamed to: %s"), *DestinationPath), Result);
   } else {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            FString::Printf(TEXT("Failed to delete source level after copy: %s"), *SourcePath),
                            Result, TEXT("SOURCE_DELETE_FAILED"));
   }
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelDuplicate(
+bool McpHandlers::Level::HandleLevelDuplicate(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString SourcePath;
@@ -2642,13 +2661,13 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelDuplicate(
     Payload->TryGetStringField(TEXT("destinationPath"), DestinationPath);
 
   if (SourcePath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("sourcePath or levelPath required for duplicate_level"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
   }
   if (DestinationPath.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("destinationPath required for duplicate_level"),
                            nullptr, TEXT("INVALID_ARGUMENT"));
     return true;
@@ -2657,14 +2676,14 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelDuplicate(
   // Issue #8: Sanitize paths to prevent traversal attacks
   FString SanitizedSource = SanitizeProjectRelativePath(SourcePath);
   if (SanitizedSource.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            FString::Printf(TEXT("Invalid source path (traversal/security violation): %s"), *SourcePath),
                            nullptr, TEXT("SECURITY_VIOLATION"));
     return true;
   }
   FString SanitizedDest = SanitizeProjectRelativePath(DestinationPath);
   if (SanitizedDest.IsEmpty()) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            FString::Printf(TEXT("Invalid destination path (traversal/security violation): %s"), *DestinationPath),
                            nullptr, TEXT("SECURITY_VIOLATION"));
     return true;
@@ -2683,16 +2702,17 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelDuplicate(
   const bool bDuplicated = CopyLevelMapPackageFile(SourcePath, DestinationPath, bOverwrite, Result, ErrorMessage, ErrorCode);
   if (bDuplicated) {
     Result->SetBoolField(TEXT("duplicated"), true);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            FString::Printf(TEXT("Level duplicated to: %s"), *DestinationPath), Result);
   } else {
-    SendAutomationResponse(Socket, RequestId, false, ErrorMessage, Result,
+    S.SendAutomationResponse(Socket, RequestId, false, ErrorMessage, Result,
                            ErrorCode.IsEmpty() ? TEXT("DUPLICATE_FAILED") : ErrorCode);
   }
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLevelGetSummary(
+bool McpHandlers::Level::HandleLevelGetSummary(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   FString LevelPath;
@@ -2703,7 +2723,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelGetSummary(
 
   UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
   if (!World) {
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
                            TEXT("No editor world available"), nullptr, TEXT("NO_WORLD"));
     return true;
   }
@@ -2712,7 +2732,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelGetSummary(
   if (!LevelPath.IsEmpty()) {
     LevelPath = SanitizeProjectRelativePath(LevelPath);
     if (LevelPath.IsEmpty()) {
-      SendAutomationResponse(Socket, RequestId, false,
+      S.SendAutomationResponse(Socket, RequestId, false,
                              TEXT("Invalid levelPath"), nullptr,
                              TEXT("SECURITY_VIOLATION"));
       return true;
@@ -2768,7 +2788,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelGetSummary(
       }
     }
 
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Level info retrieved"), Result);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Level info retrieved"), Result);
     return true;
   }
 
@@ -2818,13 +2838,13 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelGetSummary(
       }
       Result->SetObjectField(TEXT("tagsAndValues"), TagsObj);
 
-      SendAutomationResponse(Socket, RequestId, true,
+      S.SendAutomationResponse(Socket, RequestId, true,
                              TEXT("Level info retrieved (asset registry, not loaded)"), Result);
       return true;
     }
   }
 
-  SendAutomationResponse(Socket, RequestId, false,
+  S.SendAutomationResponse(Socket, RequestId, false,
                          FString::Printf(TEXT("Level not found: %s"), *LevelPath),
                          nullptr, TEXT("LEVEL_NOT_FOUND"));
   return true;
@@ -2833,9 +2853,10 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelGetSummary(
 #else
 
 #define MCP_LEVEL_HANDLER_STUB(Fn)                                            \
-  bool UMcpAutomationBridgeSubsystem::Fn(const FString &,                     \
-                                         const TSharedPtr<FJsonObject> &,     \
-                                         FMcpResponseHandle) {                \
+  bool McpHandlers::Level::Fn(UMcpAutomationBridgeSubsystem&,                 \
+                              const FString &,                               \
+                              const TSharedPtr<FJsonObject> &,               \
+                              FMcpResponseHandle) {                          \
     return false;                                                             \
   }
 

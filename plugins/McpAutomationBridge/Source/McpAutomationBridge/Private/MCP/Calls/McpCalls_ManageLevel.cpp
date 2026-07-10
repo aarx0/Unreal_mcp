@@ -11,6 +11,7 @@
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_LevelHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -159,28 +160,28 @@ class FMcpCall_ManageLevel_##ClassSuffix final : public FMcpCall                
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
 	{                                                                                     \
-		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+		return HandlerFn(S, RequestId, Payload, Socket);                                  \
 	}                                                                                     \
 };
 
-MCP_ML_CALL(Load, "load", HandleLevelLoad, EMcpCallFlags::Mutating)
-MCP_ML_CALL(Save, "save", HandleLevelSave, EMcpCallFlags::Mutating)
-MCP_ML_CALL(SaveAs, "save_as", HandleLevelSaveAs, EMcpCallFlags::Mutating)
-MCP_ML_CALL(CreateLevel, "create_level", HandleLevelCreate, EMcpCallFlags::Mutating)
-MCP_ML_CALL(Stream, "stream", HandleLevelStream, EMcpCallFlags::Mutating)
-MCP_ML_CALL(Unload, "unload", HandleLevelUnload, EMcpCallFlags::Mutating)
-MCP_ML_CALL(BuildLighting, "build_lighting", HandleLevelBuildLighting, EMcpCallFlags::Mutating)
-MCP_ML_CALL(SetMetadata, "set_metadata", HandleLevelSetMetadata, EMcpCallFlags::Mutating)
-MCP_ML_CALL(ExportLevel, "export_level", HandleLevelExport, EMcpCallFlags::Mutating)
-MCP_ML_CALL(ImportLevel, "import_level", HandleLevelImport, EMcpCallFlags::Mutating)
-MCP_ML_CALL(AddSublevel, "add_sublevel", HandleLevelAddSublevel, EMcpCallFlags::Mutating)
-MCP_ML_CALL(Delete, "delete", HandleLevelDelete, EMcpCallFlags::Mutating)
-MCP_ML_CALL(RenameLevel, "rename_level", HandleLevelRename, EMcpCallFlags::Mutating)
-MCP_ML_CALL(DuplicateLevel, "duplicate_level", HandleLevelDuplicate, EMcpCallFlags::Mutating)
-MCP_ML_CALL(ListLevels, "list_levels", HandleLevelList, EMcpCallFlags::None)
-MCP_ML_CALL(GetSummary, "get_summary", HandleLevelGetSummary, EMcpCallFlags::None)
-MCP_ML_CALL(GetCurrentLevel, "get_current_level", HandleLevelGetCurrent, EMcpCallFlags::None)
-MCP_ML_CALL(ValidateLevel, "validate_level", HandleLevelValidate, EMcpCallFlags::None)
+MCP_ML_CALL(Load, "load", McpHandlers::Level::HandleLevelLoad, EMcpCallFlags::Mutating)
+MCP_ML_CALL(Save, "save", McpHandlers::Level::HandleLevelSave, EMcpCallFlags::Mutating)
+MCP_ML_CALL(SaveAs, "save_as", McpHandlers::Level::HandleLevelSaveAs, EMcpCallFlags::Mutating)
+MCP_ML_CALL(CreateLevel, "create_level", McpHandlers::Level::HandleLevelCreate, EMcpCallFlags::Mutating)
+MCP_ML_CALL(Stream, "stream", McpHandlers::Level::HandleLevelStream, EMcpCallFlags::Mutating)
+MCP_ML_CALL(Unload, "unload", McpHandlers::Level::HandleLevelUnload, EMcpCallFlags::Mutating)
+MCP_ML_CALL(BuildLighting, "build_lighting", McpHandlers::Level::HandleLevelBuildLighting, EMcpCallFlags::Mutating)
+MCP_ML_CALL(SetMetadata, "set_metadata", McpHandlers::Level::HandleLevelSetMetadata, EMcpCallFlags::Mutating)
+MCP_ML_CALL(ExportLevel, "export_level", McpHandlers::Level::HandleLevelExport, EMcpCallFlags::Mutating)
+MCP_ML_CALL(ImportLevel, "import_level", McpHandlers::Level::HandleLevelImport, EMcpCallFlags::Mutating)
+MCP_ML_CALL(AddSublevel, "add_sublevel", McpHandlers::Level::HandleLevelAddSublevel, EMcpCallFlags::Mutating)
+MCP_ML_CALL(Delete, "delete", McpHandlers::Level::HandleLevelDelete, EMcpCallFlags::Mutating)
+MCP_ML_CALL(RenameLevel, "rename_level", McpHandlers::Level::HandleLevelRename, EMcpCallFlags::Mutating)
+MCP_ML_CALL(DuplicateLevel, "duplicate_level", McpHandlers::Level::HandleLevelDuplicate, EMcpCallFlags::Mutating)
+MCP_ML_CALL(ListLevels, "list_levels", McpHandlers::Level::HandleLevelList, EMcpCallFlags::None)
+MCP_ML_CALL(GetSummary, "get_summary", McpHandlers::Level::HandleLevelGetSummary, EMcpCallFlags::None)
+MCP_ML_CALL(GetCurrentLevel, "get_current_level", McpHandlers::Level::HandleLevelGetCurrent, EMcpCallFlags::None)
+MCP_ML_CALL(ValidateLevel, "validate_level", McpHandlers::Level::HandleLevelValidate, EMcpCallFlags::None)
 
 #undef MCP_ML_CALL
 
