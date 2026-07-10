@@ -14,6 +14,12 @@
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_SystemControlHandlers.h"
+#include "McpAutomationBridge_PerformanceHandlers.h"
+#include "McpAutomationBridge_UiHandlers.h"
+#include "McpAutomationBridge_LogHandlers.h"
+#include "McpAutomationBridge_DebugHandlers.h"
+#include "McpAutomationBridge_RenderHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -272,68 +278,89 @@ class FMcpCall_SystemControl_##ClassSuffix final : public FMcpCall              
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                    \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override    \
 	{                                                                                       \
+		return HandlerFn(S, RequestId, Payload, Socket);                                     \
+	}                                                                                       \
+};
+
+// Member-form variant: the handler stays a UMcpAutomationBridgeSubsystem member
+// (delegates to a private member: HandleInsightsAction / HandleConsoleCommandAction /
+// HandleLogSetSubscribed), so Run() dispatches through the instance.
+#define MCP_SC_MEMBER_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                          \
+class FMcpCall_SystemControl_##ClassSuffix final : public FMcpCall                         \
+{                                                                                          \
+	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }         \
+	const FMcpCallDecl& GetDecl() const override                                            \
+	{                                                                                       \
+		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("system_control"),                \
+			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                               \
+		return D;                                                                           \
+	}                                                                                       \
+	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                    \
+	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override    \
+	{                                                                                       \
 		return S.HandlerFn(RequestId, Payload, Socket);                                     \
 	}                                                                                       \
 };
 
 // Build / test pipeline (McpAutomationBridge_SystemControlHandlers.cpp)
-MCP_SC_CALL(GenerateTestStub, "generate_test_stub", HandleSysGenerateTestStub, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(LiveCodingCompile, "live_coding_compile", HandleSysLiveCodingCompile, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(RunUbt, "run_ubt", HandleSysRunUbt, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(GetBuildStatus, "get_build_status", HandleSysGetBuildStatus, EMcpCallFlags::RequiresEditor)
-MCP_SC_CALL(ListTests, "list_tests", HandleSysListTests, EMcpCallFlags::RequiresEditor)
-MCP_SC_CALL(RunTests, "run_tests", HandleSysRunTests, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(GetTestResults, "get_test_results", HandleSysGetTestResults, EMcpCallFlags::RequiresEditor)
-MCP_SC_CALL(ExecutePython, "execute_python", HandleSysExecutePython, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(StartSession, "start_session", HandleSysStartSession, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(GenerateTestStub, "generate_test_stub", McpHandlers::SystemControl::HandleSysGenerateTestStub, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(LiveCodingCompile, "live_coding_compile", McpHandlers::SystemControl::HandleSysLiveCodingCompile, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(RunUbt, "run_ubt", McpHandlers::SystemControl::HandleSysRunUbt, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(GetBuildStatus, "get_build_status", McpHandlers::SystemControl::HandleSysGetBuildStatus, EMcpCallFlags::RequiresEditor)
+MCP_SC_CALL(ListTests, "list_tests", McpHandlers::SystemControl::HandleSysListTests, EMcpCallFlags::RequiresEditor)
+MCP_SC_CALL(RunTests, "run_tests", McpHandlers::SystemControl::HandleSysRunTests, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(GetTestResults, "get_test_results", McpHandlers::SystemControl::HandleSysGetTestResults, EMcpCallFlags::RequiresEditor)
+MCP_SC_CALL(ExecutePython, "execute_python", McpHandlers::SystemControl::HandleSysExecutePython, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_MEMBER_CALL(StartSession, "start_session", HandleSysStartSession, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Console delegations (McpAutomationBridge_SystemControlHandlers.cpp →
 // HandleConsoleCommandAction; handler-enforced availability, all builds)
-MCP_SC_CALL(ExecuteCommand, "execute_command", HandleSysExecuteCommand, EMcpCallFlags::Mutating)
-MCP_SC_CALL(SetCvar, "set_cvar", HandleSysSetCvar, EMcpCallFlags::Mutating)
+MCP_SC_MEMBER_CALL(ExecuteCommand, "execute_command", HandleSysExecuteCommand, EMcpCallFlags::Mutating)
+MCP_SC_MEMBER_CALL(SetCvar, "set_cvar", HandleSysSetCvar, EMcpCallFlags::Mutating)
 
 // Project settings (McpAutomationBridge_UiHandlers.cpp). get/set_project_settings
 // walk GEngine/GConfig with fallbacks — handler-enforced, not RequiresEditor.
-MCP_SC_CALL(GetProjectSettings, "get_project_settings", HandleUiGetProjectSettings, EMcpCallFlags::None)
-MCP_SC_CALL(SetProjectSetting, "set_project_setting", HandleUiSetProjectSetting, EMcpCallFlags::Mutating)
+MCP_SC_CALL(GetProjectSettings, "get_project_settings", McpHandlers::SystemControl::HandleUiGetProjectSettings, EMcpCallFlags::None)
+MCP_SC_CALL(SetProjectSetting, "set_project_setting", McpHandlers::SystemControl::HandleUiSetProjectSetting, EMcpCallFlags::Mutating)
 
 // Log ring (McpAutomationBridge_LogHandlers.cpp). Deliberately NOT
 // RequiresEditor: the ring and its members work in non-editor builds.
-MCP_SC_CALL(GetLog, "get_log", HandleLogQuery, EMcpCallFlags::None)
-MCP_SC_CALL(TailLog, "tail_log", HandleLogQuery, EMcpCallFlags::None)
-MCP_SC_CALL(ClearLog, "clear_log", HandleLogClear, EMcpCallFlags::Mutating)
-MCP_SC_CALL(Subscribe, "subscribe", HandleLogSubscribe, EMcpCallFlags::Mutating)
-MCP_SC_CALL(Unsubscribe, "unsubscribe", HandleLogUnsubscribe, EMcpCallFlags::Mutating)
+MCP_SC_CALL(GetLog, "get_log", McpHandlers::SystemControl::HandleLogQuery, EMcpCallFlags::None)
+MCP_SC_CALL(TailLog, "tail_log", McpHandlers::SystemControl::HandleLogQuery, EMcpCallFlags::None)
+MCP_SC_CALL(ClearLog, "clear_log", McpHandlers::SystemControl::HandleLogClear, EMcpCallFlags::Mutating)
+MCP_SC_MEMBER_CALL(Subscribe, "subscribe", HandleLogSubscribe, EMcpCallFlags::Mutating)
+MCP_SC_MEMBER_CALL(Unsubscribe, "unsubscribe", HandleLogUnsubscribe, EMcpCallFlags::Mutating)
 
 // Gameplay debugger (McpAutomationBridge_DebugHandlers.cpp; not editor-gated)
-MCP_SC_CALL(SpawnCategory, "spawn_category", HandleDebugSpawnCategory, EMcpCallFlags::Mutating)
+MCP_SC_CALL(SpawnCategory, "spawn_category", McpHandlers::SystemControl::HandleDebugSpawnCategory, EMcpCallFlags::Mutating)
 
 // Lumen (McpAutomationBridge_RenderHandlers.cpp)
-MCP_SC_CALL(LumenUpdateScene, "lumen_update_scene", HandleRenderLumenUpdateScene, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(LumenUpdateScene, "lumen_update_scene", McpHandlers::SystemControl::HandleRenderLumenUpdateScene, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Performance (McpAutomationBridge_PerformanceHandlers.cpp)
-MCP_SC_CALL(GenerateMemoryReport, "generate_memory_report", HandlePerfGenerateMemoryReport, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(GetPerfStats, "get_perf_stats", HandlePerfGetStats, EMcpCallFlags::RequiresEditor)
-MCP_SC_CALL(StartProfiling, "start_profiling", HandlePerfStartProfiling, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(StopProfiling, "stop_profiling", HandlePerfStopProfiling, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(ShowFps, "show_fps", HandlePerfShowFps, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(SetScalability, "set_scalability", HandlePerfSetScalability, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(SetResolutionScale, "set_resolution_scale", HandlePerfSetResolutionScale, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(SetVsync, "set_vsync", HandlePerfSetVsync, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(SetFrameRateLimit, "set_frame_rate_limit", HandlePerfSetFrameRateLimit, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(EnableGpuTiming, "enable_gpu_timing", HandlePerfEnableGpuTiming, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(ConfigureNanite, "configure_nanite", HandlePerfConfigureNanite, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(ConfigureLod, "configure_lod", HandlePerfConfigureLod, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(ConfigureTextureStreaming, "configure_texture_streaming", HandlePerfConfigureTextureStreaming, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(ApplyBaselineSettings, "apply_baseline_settings", HandlePerfApplyBaselineSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(OptimizeDrawCalls, "optimize_draw_calls", HandlePerfOptimizeDrawCalls, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(ConfigureOcclusionCulling, "configure_occlusion_culling", HandlePerfConfigureOcclusionCulling, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(OptimizeShaders, "optimize_shaders", HandlePerfOptimizeShaders, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(ConfigureWorldPartition, "configure_world_partition", HandlePerfConfigureWorldPartition, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(MergeActors, "merge_actors", HandlePerfMergeActors, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_CALL(RunBenchmark, "run_benchmark", HandlePerfRunBenchmark, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(GenerateMemoryReport, "generate_memory_report", McpHandlers::SystemControl::HandlePerfGenerateMemoryReport, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(GetPerfStats, "get_perf_stats", McpHandlers::SystemControl::HandlePerfGetStats, EMcpCallFlags::RequiresEditor)
+MCP_SC_CALL(StartProfiling, "start_profiling", McpHandlers::SystemControl::HandlePerfStartProfiling, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(StopProfiling, "stop_profiling", McpHandlers::SystemControl::HandlePerfStopProfiling, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(ShowFps, "show_fps", McpHandlers::SystemControl::HandlePerfShowFps, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(SetScalability, "set_scalability", McpHandlers::SystemControl::HandlePerfSetScalability, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(SetResolutionScale, "set_resolution_scale", McpHandlers::SystemControl::HandlePerfSetResolutionScale, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(SetVsync, "set_vsync", McpHandlers::SystemControl::HandlePerfSetVsync, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(SetFrameRateLimit, "set_frame_rate_limit", McpHandlers::SystemControl::HandlePerfSetFrameRateLimit, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(EnableGpuTiming, "enable_gpu_timing", McpHandlers::SystemControl::HandlePerfEnableGpuTiming, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(ConfigureNanite, "configure_nanite", McpHandlers::SystemControl::HandlePerfConfigureNanite, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(ConfigureLod, "configure_lod", McpHandlers::SystemControl::HandlePerfConfigureLod, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(ConfigureTextureStreaming, "configure_texture_streaming", McpHandlers::SystemControl::HandlePerfConfigureTextureStreaming, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(ApplyBaselineSettings, "apply_baseline_settings", McpHandlers::SystemControl::HandlePerfApplyBaselineSettings, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(OptimizeDrawCalls, "optimize_draw_calls", McpHandlers::SystemControl::HandlePerfOptimizeDrawCalls, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(ConfigureOcclusionCulling, "configure_occlusion_culling", McpHandlers::SystemControl::HandlePerfConfigureOcclusionCulling, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(OptimizeShaders, "optimize_shaders", McpHandlers::SystemControl::HandlePerfOptimizeShaders, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(ConfigureWorldPartition, "configure_world_partition", McpHandlers::SystemControl::HandlePerfConfigureWorldPartition, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(MergeActors, "merge_actors", McpHandlers::SystemControl::HandlePerfMergeActors, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(RunBenchmark, "run_benchmark", McpHandlers::SystemControl::HandlePerfRunBenchmark, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 #undef MCP_SC_CALL
+#undef MCP_SC_MEMBER_CALL
 
 } // namespace McpCalls::SystemControl
 

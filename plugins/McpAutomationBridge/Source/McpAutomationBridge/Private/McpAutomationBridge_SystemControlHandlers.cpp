@@ -5,6 +5,7 @@
 #include "Misc/AutomationTest.h"     // FAutomationTestFramework — real TDD run/poll (run_tests/get_test_results)
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_SystemControlHandlers.h"
 
 #if WITH_EDITOR
 #include "Editor/UnrealEd/Public/Editor.h"
@@ -45,13 +46,13 @@
 // compiles but never shows under run_tests). This emits the known-good shape
 // (matching the bridge self-tests) so the only remaining step is compiling it
 // in (live_coding_compile picks up new files) and running it.
-bool UMcpAutomationBridgeSubsystem::HandleSysGenerateTestStub(
+bool McpHandlers::SystemControl::HandleSysGenerateTestStub(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     FString TestName;
     Payload->TryGetStringField(TEXT("testName"), TestName);
     if (TestName.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           TEXT("generate_test_stub requires 'testName' (e.g. 'Combat.DamageApplies')."),
           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -61,7 +62,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysGenerateTestStub(
     Payload->TryGetStringField(TEXT("testType"), TestType);
     TestType = TestType.ToLower();
     if (TestType != TEXT("simple") && TestType != TEXT("complex") && TestType != TEXT("latent")) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           FString::Printf(TEXT("Unknown testType '%s'. Use simple, complex, or latent."), *TestType),
           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -139,7 +140,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysGenerateTestStub(
       TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("McpAutomationBridge"));
       if (Plugin.IsValid()) { PluginDir = Plugin->GetBaseDir(); }
       if (PluginDir.IsEmpty()) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Could not resolve the McpAutomationBridge plugin dir; pass an explicit outputPath."),
             TEXT("NO_PLUGIN_DIR"));
         return true;
@@ -152,7 +153,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysGenerateTestStub(
     bool bOverwrite = false;
     Payload->TryGetBoolField(TEXT("overwrite"), bOverwrite);
     if (FPaths::FileExists(OutputPath) && !bOverwrite) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           FString::Printf(TEXT("File already exists: %s (pass overwrite:true to replace)."), *OutputPath),
           TEXT("ALREADY_EXISTS"));
       return true;
@@ -162,7 +163,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysGenerateTestStub(
     IFileManager::Get().MakeDirectory(*FPaths::GetPath(OutputPath), /*Tree=*/true);
 
     if (!FFileHelper::SaveStringToFile(Body, *OutputPath)) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
           FString::Printf(TEXT("Failed to write test stub to %s"), *OutputPath),
           TEXT("WRITE_FAILED"));
       return true;
@@ -176,7 +177,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysGenerateTestStub(
     Result->SetStringField(TEXT("testType"), TestType);
     Result->SetStringField(TEXT("nextSteps"),
         FString::Printf(TEXT("live_coding_compile (new files are picked up), then run_tests filter=\"%s\". A brand-new file in a not-yet-rebuilt module may need one full rebuild before Live Coding sees it."), *TestName));
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
         FString::Printf(TEXT("Wrote %s test '%s' to %s"), *TestType, *TestName, *OutputPath),
         Result);
     return true;
@@ -191,21 +192,21 @@ bool UMcpAutomationBridgeSubsystem::HandleSysStartSession(
 // Trigger a Live Coding compile + patch of the running editor so .cpp-body
 // changes to the bridge (or any module) apply without a close/rebuild/relaunch.
 // Header / Build.cs / .uplugin changes still require a full rebuild.
-bool UMcpAutomationBridgeSubsystem::HandleSysLiveCodingCompile(
+bool McpHandlers::SystemControl::HandleSysLiveCodingCompile(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_LIVE_CODING
     ILiveCodingModule *LiveCoding =
         FModuleManager::GetModulePtr<ILiveCodingModule>(LIVE_CODING_MODULE_NAME);
     if (!LiveCoding) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Live Coding module is not loaded"),
                           TEXT("LIVE_CODING_UNAVAILABLE"));
       return true;
     }
     if (!LiveCoding->IsEnabledForSession()) {
       if (!LiveCoding->CanEnableForSession()) {
-        SendAutomationError(
+        S.SendAutomationError(
             RequestingSocket, RequestId,
             FString::Printf(
                 TEXT("Live Coding cannot be enabled for this session: %s"),
@@ -316,13 +317,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSysLiveCodingCompile(
     // reporting a failed build). A failed compile also logs LogLiveCoding
     // errors, which would trip the post-op ENGINE_ERROR guard and replace this
     // response — clear them: the failure is fully reported here, structured.
-    ClearCapturedErrors();
-    SendAutomationResponse(
+    S.ClearCapturedErrors();
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, true,
         FString::Printf(TEXT("Live Coding compile: %s"), *ResultStr), Result);
     return true;
 #else
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         TEXT("Live Coding is not compiled into this build (WITH_LIVE_CODING=0)"),
         TEXT("LIVE_CODING_UNAVAILABLE"));
@@ -330,7 +331,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysLiveCodingCompile(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSysRunUbt(
+bool McpHandlers::SystemControl::HandleSysRunUbt(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     // Extract optional parameters
@@ -356,7 +357,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunUbt(
 
     auto ValidateBuildToken = [&](const FString& Value, const TCHAR* FieldName) -> bool {
       if (!McpIsSafeUbtPositionalToken(Value)) {
-        SendAutomationError(
+        S.SendAutomationError(
             RequestingSocket, RequestId,
             FString::Printf(TEXT("Invalid %s for run_ubt: %s must be a positional token"), FieldName, *Value),
             TEXT("INVALID_ARGUMENT"));
@@ -366,7 +367,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunUbt(
     };
 
     if (Target.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Target is required for run_ubt"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -393,21 +394,21 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunUbt(
     }
 
     if (!McpIsAllowedUbtPlatform(Platform)) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("Platform is not allowed for run_ubt: %s"), *Platform),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     if (!McpIsAllowedUbtConfiguration(Configuration)) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("Configuration is not allowed for run_ubt: %s"), *Configuration),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     if (!McpIsSafeUbtArgumentList(AdditionalArgs)) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("additionalArgs contains unsafe UBT argument characters"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -426,7 +427,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunUbt(
 #endif
 
     if (!FPaths::FileExists(UBTPath)) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("UBT not found at: %s"), *UBTPath),
                           TEXT("UBT_NOT_FOUND"));
       return true;
@@ -515,17 +516,17 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunUbt(
         0, nullptr, nullptr);
 
     if (!ProcessHandle.IsValid()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Failed to launch UBT process"),
                           TEXT("PROCESS_LAUNCH_FAILED"));
       return true;
     }
 
     // Track the job; cap history so process handles don't accumulate.
-    if (UbtBuildJobs.Num() >= 8) {
+    if (S.UbtBuildJobs.Num() >= 8) {
       FString OldestId;
       double OldestStart = TNumericLimits<double>::Max();
-      for (auto& Pair : UbtBuildJobs) {
+      for (auto& Pair : S.UbtBuildJobs) {
         const bool bStillRunning =
             !Pair.Value.bFinished && FPlatformProcess::IsProcRunning(Pair.Value.ProcHandle);
         if (!bStillRunning && Pair.Value.StartTime < OldestStart) {
@@ -534,12 +535,12 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunUbt(
         }
       }
       if (!OldestId.IsEmpty()) {
-        FPlatformProcess::CloseProc(UbtBuildJobs[OldestId].ProcHandle);
-        UbtBuildJobs.Remove(OldestId);
+        FPlatformProcess::CloseProc(S.UbtBuildJobs[OldestId].ProcHandle);
+        S.UbtBuildJobs.Remove(OldestId);
       }
     }
 
-    FMcpUbtBuildJob Job;
+    UMcpAutomationBridgeSubsystem::FMcpUbtBuildJob Job;
     Job.BuildId = BuildId;
     Job.Target = Target;
     Job.Platform = Platform;
@@ -549,8 +550,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunUbt(
     Job.ProcHandle = ProcessHandle;
     Job.ProcessId = ProcessId;
     Job.StartTime = FPlatformTime::Seconds();
-    UbtBuildJobs.Add(BuildId, MoveTemp(Job));
-    LastUbtBuildId = BuildId;
+    S.UbtBuildJobs.Add(BuildId, MoveTemp(Job));
+    S.LastUbtBuildId = BuildId;
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
     Result->SetStringField(TEXT("buildId"), BuildId);
@@ -560,38 +561,38 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunUbt(
     Result->SetStringField(TEXT("platform"), Platform);
     Result->SetStringField(TEXT("configuration"), Configuration);
     Result->SetBoolField(TEXT("noUBA"), bNoUBA);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, true,
         TEXT("UBT started; poll { action:\"get_build_status\" } for progress and results."),
         Result);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSysGetBuildStatus(
+bool McpHandlers::SystemControl::HandleSysGetBuildStatus(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     FString BuildId;
     Payload->TryGetStringField(TEXT("buildId"), BuildId);
     if (BuildId.IsEmpty()) {
-      BuildId = LastUbtBuildId;
+      BuildId = S.LastUbtBuildId;
     }
 
     if (BuildId.IsEmpty()) {
       TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
       Result->SetStringField(TEXT("status"), TEXT("no_builds"));
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("No run_ubt build has been started this session."), Result);
       return true;
     }
-    if (!UbtBuildJobs.Contains(BuildId)) {
-      SendAutomationError(
+    if (!S.UbtBuildJobs.Contains(BuildId)) {
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(TEXT("Unknown buildId '%s' (builds are tracked per editor session)."), *BuildId),
           TEXT("BUILD_NOT_FOUND"));
       return true;
     }
 
-    FMcpUbtBuildJob& BuildJob = UbtBuildJobs[BuildId];
+    UMcpAutomationBridgeSubsystem::FMcpUbtBuildJob& BuildJob = S.UbtBuildJobs[BuildId];
     if (!BuildJob.bFinished && !FPlatformProcess::IsProcRunning(BuildJob.ProcHandle)) {
       BuildJob.bFinished = true;
       BuildJob.EndTime = FPlatformTime::Seconds();
@@ -664,7 +665,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysGetBuildStatus(
       }
       Result->SetArrayField(TEXT("logTail"), TailJson);
     }
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            FString::Printf(TEXT("Build %s: %s"), *BuildId, *Status), Result);
     return true;
 }
@@ -672,7 +673,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysGetBuildStatus(
 // Enumerate registered automation tests (optionally substring-filtered).
 // Read-only: no test is started. Useful to discover exact test names/paths
 // before run_tests, and to confirm seeded project tests are visible.
-bool UMcpAutomationBridgeSubsystem::HandleSysListTests(
+bool McpHandlers::SystemControl::HandleSysListTests(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     FString Filter;
@@ -706,14 +707,14 @@ bool UMcpAutomationBridgeSubsystem::HandleSysListTests(
     Result->SetNumberField(TEXT("matched"), Matched);
     Result->SetStringField(TEXT("filter"), Filter);
     Result->SetArrayField(TEXT("tests"), TestArray);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            FString::Printf(TEXT("%d of %d automation tests match."),
                                            Matched, AllTests.Num()),
                            Result);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
+bool McpHandlers::SystemControl::HandleSysRunTests(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     FString Suite;
@@ -725,24 +726,24 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
       // blocking in-handler runner would deadlock against PIE ticks) and poll
       // with get_test_results. Requires pwsh on PATH and an otherwise idle
       // editor (Slate focus determinism — see tests/ui-nav/README.md).
-      if (ActiveExternalTestRun.IsValid() && !ActiveExternalTestRun->bFinished &&
-          FPlatformProcess::IsProcRunning(ActiveExternalTestRun->ProcHandle)) {
+      if (S.ActiveExternalTestRun.IsValid() && !S.ActiveExternalTestRun->bFinished &&
+          FPlatformProcess::IsProcRunning(S.ActiveExternalTestRun->ProcHandle)) {
         TSharedPtr<FJsonObject> Busy = MakeShared<FJsonObject>();
-        Busy->SetStringField(TEXT("runId"), ActiveExternalTestRun->RunId);
-        SendAutomationResponse(
+        Busy->SetStringField(TEXT("runId"), S.ActiveExternalTestRun->RunId);
+        S.SendAutomationResponse(
             RequestingSocket, RequestId, false,
             FString::Printf(TEXT("A ui-nav run is already in progress (runId=%s). "
                                  "Poll get_test_results until it completes."),
-                            *ActiveExternalTestRun->RunId),
+                            *S.ActiveExternalTestRun->RunId),
             Busy, TEXT("RUN_IN_PROGRESS"));
         return true;
       }
-      if (ActiveAutomationRun.IsValid() && !ActiveAutomationRun->bComplete) {
-        SendAutomationError(
+      if (S.ActiveAutomationRun.IsValid() && !S.ActiveAutomationRun->bComplete) {
+        S.SendAutomationError(
             RequestingSocket, RequestId,
             FString::Printf(TEXT("An automation test run is in progress (runId=%s); "
                                  "ui-nav specs need the editor to themselves."),
-                            *ActiveAutomationRun->RunId),
+                            *S.ActiveAutomationRun->RunId),
             TEXT("RUN_IN_PROGRESS"));
         return true;
       }
@@ -752,7 +753,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
       TSharedPtr<IPlugin> Plugin =
           IPluginManager::Get().FindPlugin(TEXT("McpAutomationBridge"));
       if (!Plugin.IsValid()) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Could not resolve the McpAutomationBridge plugin dir."),
                             TEXT("NO_PLUGIN_DIR"));
         return true;
@@ -763,7 +764,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
       const FString RunnerPath = RepoRoot / TEXT("scripts/ui-nav-test.ps1");
       const FString SpecsDir = RepoRoot / TEXT("tests/ui-nav");
       if (!FPaths::FileExists(RunnerPath)) {
-        SendAutomationError(
+        S.SendAutomationError(
             RequestingSocket, RequestId,
             FString::Printf(TEXT("ui-nav runner not found at: %s"), *RunnerPath),
             TEXT("RUNNER_NOT_FOUND"));
@@ -790,7 +791,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
         }
       }
       if (SpecFiles.Num() == 0) {
-        SendAutomationError(
+        S.SendAutomationError(
             RequestingSocket, RequestId,
             FString::Printf(TEXT("No ui-nav spec matched '%s'. Available: %s"),
                             *SpecParam, *FString::Join(AvailableSpecs, TEXT(", "))),
@@ -822,7 +823,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
       const FString DriverPath = LogDir / (RunId + TEXT("_driver.ps1"));
       if (!FFileHelper::SaveStringToFile(Driver, *DriverPath,
                                          FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Could not write driver script: %s"), *DriverPath),
                             TEXT("FILE_WRITE_FAILED"));
         return true;
@@ -836,13 +837,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
           TEXT("cmd.exe"), *ShellParams,
           true, true, true, &ProcessId, 0, nullptr, nullptr);
       if (!ProcessHandle.IsValid()) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Failed to launch the ui-nav runner process (is pwsh installed?)"),
                             TEXT("PROCESS_LAUNCH_FAILED"));
         return true;
       }
 
-      TSharedPtr<FMcpExternalTestRun> Run = MakeShared<FMcpExternalTestRun>();
+      TSharedPtr<UMcpAutomationBridgeSubsystem::FMcpExternalTestRun> Run = MakeShared<UMcpAutomationBridgeSubsystem::FMcpExternalTestRun>();
       Run->RunId = RunId;
       Run->Suite = TEXT("ui-nav");
       Run->SpecFiles = SpecFiles;
@@ -850,7 +851,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
       Run->ProcHandle = ProcessHandle;
       Run->ProcessId = ProcessId;
       Run->StartTime = FPlatformTime::Seconds();
-      ActiveExternalTestRun = Run;
+      S.ActiveExternalTestRun = Run;
 
       TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
       Result->SetStringField(TEXT("runId"), RunId);
@@ -858,12 +859,12 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
       Result->SetStringField(TEXT("status"), TEXT("running"));
       Result->SetNumberField(TEXT("specsTotal"), SpecFiles.Num());
       TArray<TSharedPtr<FJsonValue>> SpecsJson;
-      for (const FString& S : SpecFiles) {
-        SpecsJson.Add(MakeShared<FJsonValueString>(S));
+      for (const FString& SpecName : SpecFiles) {
+        SpecsJson.Add(MakeShared<FJsonValueString>(SpecName));
       }
       Result->SetArrayField(TEXT("specs"), SpecsJson);
       Result->SetStringField(TEXT("logPath"), RunLogPath);
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, true,
           FString::Printf(TEXT("Started ui-nav suite (%d spec(s)). Poll get_test_results "
                                "with runId=%s. Keep the editor idle while it runs."),
@@ -876,26 +877,26 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
     // the subsystem Tick() drives one ExecuteLatentCommands step per frame via
     // TickAutomationTestRun() so latent/functional tests run over real frames and
     // never block this request handler. Poll results with get_test_results.
-    if (ActiveExternalTestRun.IsValid() && !ActiveExternalTestRun->bFinished &&
-        FPlatformProcess::IsProcRunning(ActiveExternalTestRun->ProcHandle)) {
-      SendAutomationError(
+    if (S.ActiveExternalTestRun.IsValid() && !S.ActiveExternalTestRun->bFinished &&
+        FPlatformProcess::IsProcRunning(S.ActiveExternalTestRun->ProcHandle)) {
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(TEXT("A ui-nav run is in progress (runId=%s); it drives PIE and "
                                "needs the editor to itself."),
-                          *ActiveExternalTestRun->RunId),
+                          *S.ActiveExternalTestRun->RunId),
           TEXT("RUN_IN_PROGRESS"));
       return true;
     }
-    if (ActiveAutomationRun.IsValid() && !ActiveAutomationRun->bComplete) {
+    if (S.ActiveAutomationRun.IsValid() && !S.ActiveAutomationRun->bComplete) {
       TSharedPtr<FJsonObject> Busy = MakeShared<FJsonObject>();
-      Busy->SetStringField(TEXT("runId"), ActiveAutomationRun->RunId);
-      Busy->SetNumberField(TEXT("total"), ActiveAutomationRun->TestCommandNames.Num());
-      Busy->SetNumberField(TEXT("completed"), ActiveAutomationRun->CurrentIndex);
-      SendAutomationResponse(
+      Busy->SetStringField(TEXT("runId"), S.ActiveAutomationRun->RunId);
+      Busy->SetNumberField(TEXT("total"), S.ActiveAutomationRun->TestCommandNames.Num());
+      Busy->SetNumberField(TEXT("completed"), S.ActiveAutomationRun->CurrentIndex);
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           FString::Printf(TEXT("A test run is already in progress (runId=%s). "
                                "Poll get_test_results until it completes."),
-                          *ActiveAutomationRun->RunId),
+                          *S.ActiveAutomationRun->RunId),
           Busy, TEXT("RUN_IN_PROGRESS"));
       return true;
     }
@@ -903,10 +904,10 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
     // Capture per-test results via the framework's end-of-test delegate. The
     // editor's in-process automation worker concludes any active test on its own
     // tick, so this is how we read pass/fail even when we didn't call StopTest.
-    if (!AutomationTestEndHandle.IsValid()) {
-      AutomationTestEndHandle =
+    if (!S.AutomationTestEndHandle.IsValid()) {
+      S.AutomationTestEndHandle =
           FAutomationTestFramework::Get().OnTestEndEvent.AddUObject(
-              this, &UMcpAutomationBridgeSubsystem::OnAutomationTestEnded);
+              &S, &UMcpAutomationBridgeSubsystem::OnAutomationTestEnded);
     }
 
     FString Filter;
@@ -933,7 +934,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
     TArray<FAutomationTestInfo> AllTests;
     Framework.GetValidTestNames(AllTests);
 
-    TSharedPtr<FMcpAutomationRun> Run = MakeShared<FMcpAutomationRun>();
+    TSharedPtr<UMcpAutomationBridgeSubsystem::FMcpAutomationRun> Run = MakeShared<UMcpAutomationBridgeSubsystem::FMcpAutomationRun>();
     Run->RunId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
     Run->StartTime = FPlatformTime::Seconds();
     TArray<TSharedPtr<FJsonValue>> QueuedNames;
@@ -959,7 +960,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
       Result->SetStringField(TEXT("filter"), Filter);
       Result->SetNumberField(TEXT("total"), 0);
       Result->SetNumberField(TEXT("available"), AllTests.Num());
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, true,
           FString::Printf(TEXT("No automation tests match filter '%s' (%d available). "
                                "Use list_tests to discover names."),
@@ -970,7 +971,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
 
     // Don't start while the engine is busy / in PIE; the queue still starts and
     // TickAutomationTestRun waits for a clean frame.
-    ActiveAutomationRun = Run;
+    S.ActiveAutomationRun = Run;
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
     Result->SetStringField(TEXT("runId"), Run->RunId);
@@ -978,7 +979,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
     Result->SetStringField(TEXT("filter"), Filter);
     Result->SetNumberField(TEXT("total"), Run->TestCommandNames.Num());
     Result->SetArrayField(TEXT("tests"), QueuedNames);
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, true,
         FString::Printf(TEXT("Started %d test(s). Poll get_test_results with runId=%s."),
                         Run->TestCommandNames.Num(), *Run->RunId),
@@ -986,7 +987,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysRunTests(
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSysGetTestResults(
+bool McpHandlers::SystemControl::HandleSysGetTestResults(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     FString WantRunId;
@@ -996,10 +997,10 @@ bool UMcpAutomationBridgeSubsystem::HandleSysGetTestResults(
     // ui-nav suite poll: explicit uinav runId, or no runId with no automation
     // run to fall back to. Polls the detached runner process and parses its
     // log (### SPEC / [FAIL] / RESULT lines).
-    if (ActiveExternalTestRun.IsValid() &&
-        (WantRunId == ActiveExternalTestRun->RunId ||
-         (WantRunId.IsEmpty() && !ActiveAutomationRun.IsValid()))) {
-      TSharedPtr<FMcpExternalTestRun> Run = ActiveExternalTestRun;
+    if (S.ActiveExternalTestRun.IsValid() &&
+        (WantRunId == S.ActiveExternalTestRun->RunId ||
+         (WantRunId.IsEmpty() && !S.ActiveAutomationRun.IsValid()))) {
+      TSharedPtr<UMcpAutomationBridgeSubsystem::FMcpExternalTestRun> Run = S.ActiveExternalTestRun;
       if (!Run->bFinished && !FPlatformProcess::IsProcRunning(Run->ProcHandle)) {
         Run->bFinished = true;
         int32 Code = -1;
@@ -1096,28 +1097,28 @@ bool UMcpAutomationBridgeSubsystem::HandleSysGetTestResults(
                                 Run->SpecFiles.Num(), TotalPassed, TotalFailed)
               : FString::Printf(TEXT("ui-nav run in progress: %d/%d spec(s) complete."),
                                 SpecsCompleted, Run->SpecFiles.Num());
-      SendAutomationResponse(RequestingSocket, RequestId, true, Msg, Result);
+      S.SendAutomationResponse(RequestingSocket, RequestId, true, Msg, Result);
       return true;
     }
 
     // Poll the active/last automation run. Returns status running|complete plus
     // per-test results once finished.
-    if (!ActiveAutomationRun.IsValid()) {
-      SendAutomationError(RequestingSocket, RequestId,
+    if (!S.ActiveAutomationRun.IsValid()) {
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("No test run has been started. Call run_tests first."),
                           TEXT("NO_ACTIVE_RUN"));
       return true;
     }
-    if (!WantRunId.IsEmpty() && WantRunId != ActiveAutomationRun->RunId) {
-      SendAutomationError(
+    if (!WantRunId.IsEmpty() && WantRunId != S.ActiveAutomationRun->RunId) {
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(TEXT("runId '%s' not found; current run is '%s'."),
-                          *WantRunId, *ActiveAutomationRun->RunId),
+                          *WantRunId, *S.ActiveAutomationRun->RunId),
           TEXT("RUN_NOT_FOUND"));
       return true;
     }
 
-    TSharedPtr<FMcpAutomationRun> Run = ActiveAutomationRun;
+    TSharedPtr<UMcpAutomationBridgeSubsystem::FMcpAutomationRun> Run = S.ActiveAutomationRun;
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
     Result->SetStringField(TEXT("runId"), Run->RunId);
     Result->SetStringField(TEXT("status"),
@@ -1146,12 +1147,12 @@ bool UMcpAutomationBridgeSubsystem::HandleSysGetTestResults(
                               Run->Passed, Run->Failed, Run->TestCommandNames.Num())
             : FString::Printf(TEXT("Run in progress: %d/%d complete."),
                               Run->CurrentIndex, Run->TestCommandNames.Num());
-    SendAutomationResponse(RequestingSocket, RequestId, true, Msg, Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, Msg, Result);
     return true;
 }
 
 // Execute Python code with stdout/stderr capture via temp file wrapper
-bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
+bool McpHandlers::SystemControl::HandleSysExecutePython(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     FString Code;
@@ -1163,13 +1164,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
     const bool bHasFile = !File.TrimStartAndEnd().IsEmpty();
 
     if (!bHasCode && !bHasFile) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("'code' or 'file' parameter is required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (bHasCode && bHasFile) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Provide either 'code' or 'file', not both"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -1178,7 +1179,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
     // Enforce maximum code size (1 MB)
     static const int32 MaxCodeSize = 1048576;
     if (Code.Len() > MaxCodeSize) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("Python code exceeds maximum size (%d bytes)"), MaxCodeSize),
                           TEXT("CODE_TOO_LARGE"));
       return true;
@@ -1255,7 +1256,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
 
     if (bHasCode) {
       if (!FFileHelper::SaveStringToFile(Code, *CodePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Failed to write temp code file: %s"), *CodePath),
                             TEXT("FILE_WRITE_FAILED"));
         return true;
@@ -1269,7 +1270,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
       // SECURITY: Sanitize file path to prevent directory traversal
       FString SafeFilePath = SanitizeProjectFilePath(File);
       if (SafeFilePath.IsEmpty()) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Invalid or unsafe file path: %s"), *File),
                             TEXT("SECURITY_VIOLATION"));
         return true;
@@ -1286,7 +1287,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
       }
 
       if (!AbsoluteFilePath.StartsWith(NormalizedProjectDir, ESearchCase::IgnoreCase)) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("File path escapes project directory: %s"), *File),
                             TEXT("SECURITY_VIOLATION"));
         return true;
@@ -1299,7 +1300,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
         FPaths::NormalizeFilename(ResolvedPath);
         if (!ResolvedPath.StartsWith(NormalizedProjectDir, ESearchCase::IgnoreCase))
         {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
                               TEXT("Resolved file path escapes project directory (symlink detected)"),
                               TEXT("SECURITY_VIOLATION"));
           return true;
@@ -1327,7 +1328,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
 
     // Write wrapper to disk
     if (!FFileHelper::SaveStringToFile(Wrapper, *ScriptPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("Failed to write temp script: %s"), *ScriptPath),
                           TEXT("FILE_WRITE_FAILED"));
       return true;
@@ -1342,7 +1343,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
       World = GEngine->GetWorldContexts()[0].World();
     }
 
-    SendProgressUpdate(RequestId, 0.0f, TEXT("Executing Python script"), true, CurrentRequestOrigin);
+    S.SendProgressUpdate(RequestId, 0.0f, TEXT("Executing Python script"), true, S.CurrentRequestOrigin);
 
     // Execute via py console command with execution time tracking
     static constexpr double MaxPythonExecutionSeconds = 60.0;
@@ -1353,7 +1354,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
       bExecHandled = GEngine->Exec(World, *PyCommand);
     }
     double ExecElapsed = FPlatformTime::Seconds() - ExecStartTime;
-    SendProgressUpdate(RequestId, 90.0f, TEXT("Collecting Python output"), true, CurrentRequestOrigin);
+    S.SendProgressUpdate(RequestId, 90.0f, TEXT("Collecting Python output"), true, S.CurrentRequestOrigin);
     if (ExecElapsed > MaxPythonExecutionSeconds) {
       UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
              TEXT("Python execution took %.1fs (exceeds %.1fs threshold). "
@@ -1371,7 +1372,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
 
     // Check if Python is available
     if (!bExecHandled && Status.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Python command not recognized. Is the Python Editor Script Plugin enabled?"),
                           TEXT("PYTHON_NOT_AVAILABLE"));
       return true;
@@ -1395,7 +1396,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
           : FString::Printf(TEXT("Python execution failed: %s"), *Trace.Left(1500));
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, bSuccess, PyMessage,
+    S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, PyMessage,
                            Result, bSuccess ? FString() : TEXT("PYTHON_ERROR"));
     return true;
 }
@@ -1405,14 +1406,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSysExecutePython(
 // RequiresEditor on every action above means Execute() rejects before Run()
 // in non-editor builds; these exist only so the module links.
 #define MCP_SYS_HANDLER_STUB(Fn)                                              \
-  bool UMcpAutomationBridgeSubsystem::Fn(const FString &,                     \
+  bool McpHandlers::SystemControl::Fn(UMcpAutomationBridgeSubsystem &, const FString &,                     \
                                          const TSharedPtr<FJsonObject> &,     \
                                          FMcpResponseHandle) {                \
     return false;                                                             \
   }
 
 MCP_SYS_HANDLER_STUB(HandleSysGenerateTestStub)
-MCP_SYS_HANDLER_STUB(HandleSysStartSession)
 MCP_SYS_HANDLER_STUB(HandleSysLiveCodingCompile)
 MCP_SYS_HANDLER_STUB(HandleSysRunUbt)
 MCP_SYS_HANDLER_STUB(HandleSysGetBuildStatus)
@@ -1421,6 +1421,10 @@ MCP_SYS_HANDLER_STUB(HandleSysRunTests)
 MCP_SYS_HANDLER_STUB(HandleSysGetTestResults)
 MCP_SYS_HANDLER_STUB(HandleSysExecutePython)
 #undef MCP_SYS_HANDLER_STUB
+
+// HandleSysStartSession stays a member (delegates to the private HandleInsightsAction).
+bool UMcpAutomationBridgeSubsystem::HandleSysStartSession(
+    const FString &, const TSharedPtr<FJsonObject> &, FMcpResponseHandle) { return false; }
 
 #endif // WITH_EDITOR
 

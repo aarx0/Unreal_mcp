@@ -38,6 +38,7 @@
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_UiHandlers.h"
 
 // =============================================================================
 // Editor-Only Headers
@@ -86,7 +87,7 @@
 // Handler Implementation
 // =============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleUiGetProjectSettings(
+bool McpHandlers::SystemControl::HandleUiGetProjectSettings(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
@@ -150,12 +151,12 @@ bool UMcpAutomationBridgeSubsystem::HandleUiGetProjectSettings(
                        : TEXT("System control action failed");
   }
 
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
                          ErrorCode);
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleUiSetProjectSetting(
+bool McpHandlers::SystemControl::HandleUiSetProjectSetting(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
@@ -209,7 +210,7 @@ bool UMcpAutomationBridgeSubsystem::HandleUiSetProjectSetting(
                        : TEXT("System control action failed");
   }
 
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
                          ErrorCode);
   return true;
 }

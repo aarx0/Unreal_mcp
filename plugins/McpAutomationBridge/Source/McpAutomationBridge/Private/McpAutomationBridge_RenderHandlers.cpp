@@ -21,6 +21,7 @@
 // Core Includes
 // -----------------------------------------------------------------------------
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_RenderHandlers.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpHandlerUtils.h"
@@ -47,7 +48,7 @@
 
 #if WITH_EDITOR
 
-bool UMcpAutomationBridgeSubsystem::HandleRenderLumenUpdateScene(
+bool McpHandlers::SystemControl::HandleRenderLumenUpdateScene(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -66,13 +67,13 @@ bool UMcpAutomationBridgeSubsystem::HandleRenderLumenUpdateScene(
                 Result->SetStringField(TEXT("command"), TEXT("r.Lumen.Scene.Recapture"));
                 Result->SetBoolField(TEXT("executed"), true);
 
-                SendAutomationResponse(RequestingSocket, RequestId, true,
+                S.SendAutomationResponse(RequestingSocket, RequestId, true,
                     TEXT("Lumen scene recapture triggered."), Result);
                 return true;
             }
         }
 
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Could not execute command (no world context)."), TEXT("EXECUTION_FAILED"));
         return true;
 }
@@ -81,7 +82,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRenderLumenUpdateScene(
 
 // RequiresEditor means Execute() rejects before Run() in non-editor builds;
 // this exists only so the module links.
-bool UMcpAutomationBridgeSubsystem::HandleRenderLumenUpdateScene(
+bool McpHandlers::SystemControl::HandleRenderLumenUpdateScene(UMcpAutomationBridgeSubsystem&,
     const FString&, const TSharedPtr<FJsonObject>&, FMcpResponseHandle)
 {
     return false;

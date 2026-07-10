@@ -35,6 +35,7 @@
 // Core Includes
 // -----------------------------------------------------------------------------
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_LogHandlers.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpHandlerUtils.h"
@@ -194,7 +195,7 @@ void UMcpAutomationBridgeSubsystem::CaptureLogLine(
 // =============================================================================
 
 // get_log / tail_log : poll recent captured lines (one shared implementation)
-bool UMcpAutomationBridgeSubsystem::HandleLogQuery(
+bool McpHandlers::SystemControl::HandleLogQuery(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -213,7 +214,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLogQuery(
         const FString CategoryFilter = GetJsonStringField(Payload, TEXT("category"));
         const FString Contains = GetJsonStringField(Payload, TEXT("contains"));
 
-        TArray<FMcpLogEntry> Matched;     // oldest-first
+        TArray<UMcpAutomationBridgeSubsystem::FMcpLogEntry> Matched;     // oldest-first
         uint64 OldestSeq = 0;
         uint64 TotalCaptured = 0;
         uint64 Dropped = 0;
@@ -223,14 +224,14 @@ bool UMcpAutomationBridgeSubsystem::HandleLogQuery(
         int32 RingCap = 0;
 
         {
-            FScopeLock Lock(&LogRingMutex);
-            bCaptureEnabled = bLogCaptureEnabled;
-            TotalCaptured = LogRingNextSeq;
-            RingCount = LogRingCount;
-            RingCap = LogRingCapacity;
-            OldestSeq = (LogRingCount > 0)
-                ? LogRing[LogRingHead].Seq
-                : LogRingNextSeq;
+            FScopeLock Lock(&S.LogRingMutex);
+            bCaptureEnabled = S.bLogCaptureEnabled;
+            TotalCaptured = S.LogRingNextSeq;
+            RingCount = S.LogRingCount;
+            RingCap = S.LogRingCapacity;
+            OldestSeq = (S.LogRingCount > 0)
+                ? S.LogRing[S.LogRingHead].Seq
+                : S.LogRingNextSeq;
 
             // If the caller's cursor predates the oldest line we still hold,
             // that many lines were evicted unseen — report it (no silent gap).
@@ -239,9 +240,9 @@ bool UMcpAutomationBridgeSubsystem::HandleLogQuery(
                 Dropped = OldestSeq - (SinceSeq + 1);
             }
 
-            for (int32 i = 0; i < LogRingCount; ++i)
+            for (int32 i = 0; i < S.LogRingCount; ++i)
             {
-                const FMcpLogEntry& E = LogRing[(LogRingHead + i) % LogRingCapacity];
+                const UMcpAutomationBridgeSubsystem::FMcpLogEntry& E = S.LogRing[(S.LogRingHead + i) % S.LogRingCapacity];
                 if (bHasSince && E.Seq <= SinceSeq)
                 {
                     continue;
@@ -268,7 +269,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLogQuery(
         // past the cursor so repeated polls advance; a plain tail returns the
         // NEWEST `Count`. Either way present oldest-first.
         bool bHasMore = false;
-        TArray<FMcpLogEntry> Window;
+        TArray<UMcpAutomationBridgeSubsystem::FMcpLogEntry> Window;
         if (bHasSince)
         {
             bHasMore = Matched.Num() > Count;
@@ -284,7 +285,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLogQuery(
 
         TArray<TSharedPtr<FJsonValue>> Entries;
         uint64 NextSeq = bHasSince ? SinceSeq : (TotalCaptured > 0 ? TotalCaptured - 1 : 0);
-        for (const FMcpLogEntry& E : Window)
+        for (const UMcpAutomationBridgeSubsystem::FMcpLogEntry& E : Window)
         {
             TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
             Obj->SetNumberField(TEXT("seq"), static_cast<double>(E.Seq));
@@ -315,29 +316,29 @@ bool UMcpAutomationBridgeSubsystem::HandleLogQuery(
             TEXT("Returned %d log line(s)%s."),
             Entries.Num(),
             bHasMore ? TEXT(" (more available — raise count or poll with nextSeq)") : TEXT(""));
-        SendAutomationResponse(RequestingSocket, RequestId, true, Msg, Result, FString());
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, Msg, Result, FString());
         return true;
 }
 
 // clear_log : empty the ring (seq counter preserved so cursors stay unique)
-bool UMcpAutomationBridgeSubsystem::HandleLogClear(
+bool McpHandlers::SystemControl::HandleLogClear(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
         int32 Cleared = 0;
         {
-            FScopeLock Lock(&LogRingMutex);
-            Cleared = LogRingCount;
-            LogRingHead = 0;
-            LogRingCount = 0;
+            FScopeLock Lock(&S.LogRingMutex);
+            Cleared = S.LogRingCount;
+            S.LogRingHead = 0;
+            S.LogRingCount = 0;
         }
         TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
         Result->SetBoolField(TEXT("success"), true);
         Result->SetStringField(TEXT("action"), TEXT("system_control"));
         Result->SetStringField(TEXT("subAction"), TEXT("clear_log"));
         Result->SetNumberField(TEXT("cleared"), Cleared);
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
             FString::Printf(TEXT("Cleared %d log line(s)."), Cleared), Result, FString());
         return true;
 }

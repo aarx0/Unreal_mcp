@@ -28,6 +28,7 @@
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_PerformanceHandlers.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Components/StaticMeshComponent.h"
 #include "Dom/JsonObject.h"
@@ -79,7 +80,7 @@ extern ENGINE_API float GAverageMS;
 
 #if WITH_EDITOR
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfGenerateMemoryReport(
+bool McpHandlers::SystemControl::HandlePerfGenerateMemoryReport(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     bool bDetailed = false;
@@ -92,7 +93,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfGenerateMemoryReport(
     FString Cmd = bDetailed ? TEXT("memreport -full") : TEXT("memreport");
     if (!GEditor)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
         return true;
     }
 
@@ -102,7 +103,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfGenerateMemoryReport(
     // memreport writes to a specific location. For now, just acknowledge
     // execution.
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Memory report generated"), nullptr);
     return true;
 }
@@ -111,7 +112,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfGenerateMemoryReport(
 // (which write a .ue4stats file to disk the agent can't consume), this returns
 // the engine's running perf numbers directly so a caller can see FPS / frame
 // timings / memory without leaving the bridge.
-bool UMcpAutomationBridgeSubsystem::HandlePerfGetStats(
+bool McpHandlers::SystemControl::HandlePerfGetStats(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -144,46 +145,46 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfGetStats(
 
     Result->SetBoolField(TEXT("inPIE"), GEditor && GEditor->PlayWorld != nullptr);
 
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, true,
         FString::Printf(TEXT("%.1f FPS (%.2f ms frame)"), GAverageFPS, GAverageMS),
         Result);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfStartProfiling(
+bool McpHandlers::SystemControl::HandlePerfStartProfiling(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     if (!GEditor)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
         return true;
     }
 
     GEngine->Exec(GEditor->GetEditorWorldContext().World(),
                   TEXT("stat startfile"));
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Profiling started"), nullptr);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfStopProfiling(
+bool McpHandlers::SystemControl::HandlePerfStopProfiling(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     if (!GEditor)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
         return true;
     }
 
     GEngine->Exec(GEditor->GetEditorWorldContext().World(),
                   TEXT("stat stopfile"));
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Profiling stopped"), nullptr);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfShowFps(
+bool McpHandlers::SystemControl::HandlePerfShowFps(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     bool bEnabled = true;
@@ -194,17 +195,17 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfShowFps(
     // GAreyouSure? No, just exec.
     if (!GEditor)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
         return true;
     }
 
     GEngine->Exec(GEditor->GetEditorWorldContext().World(), TEXT("stat fps"));
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("FPS stat toggled"), nullptr);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfSetScalability(
+bool McpHandlers::SystemControl::HandlePerfSetScalability(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     int32 Level = 3; // Epic
@@ -216,12 +217,12 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfSetScalability(
     Scalability::SetQualityLevels(Quals);
     Scalability::SaveState(GEditorIni);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Scalability set"), nullptr);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfSetResolutionScale(
+bool McpHandlers::SystemControl::HandlePerfSetResolutionScale(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     double Scale = 100.0;
@@ -230,17 +231,17 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfSetResolutionScale(
           TEXT("r.ScreenPercentage"));
       if (CVar)
         CVar->Set((float)Scale);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Resolution scale set"), nullptr);
     } else {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Scale required"), nullptr,
                              TEXT("INVALID_ARGUMENT"));
     }
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfSetVsync(
+bool McpHandlers::SystemControl::HandlePerfSetVsync(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     bool bEnabled = true;
@@ -249,28 +250,28 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfSetVsync(
         IConsoleManager::Get().FindConsoleVariable(TEXT("r.VSync"));
     if (CVar)
       CVar->Set(bEnabled ? 1 : 0);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("VSync configured"), nullptr);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfSetFrameRateLimit(
+bool McpHandlers::SystemControl::HandlePerfSetFrameRateLimit(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     double Limit = 0.0;
     if (Payload->TryGetNumberField(TEXT("maxFPS"), Limit)) {
       GEngine->SetMaxFPS((float)Limit);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Max FPS set"), nullptr);
     } else {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("maxFPS required"), nullptr,
                              TEXT("INVALID_ARGUMENT"));
     }
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfConfigureNanite(
+bool McpHandlers::SystemControl::HandlePerfConfigureNanite(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     bool bEnabled = true;
@@ -279,12 +280,12 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfConfigureNanite(
         IConsoleManager::Get().FindConsoleVariable(TEXT("r.Nanite"));
     if (CVar)
       CVar->Set(bEnabled ? 1 : 0);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Nanite configured"), nullptr);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfConfigureLod(
+bool McpHandlers::SystemControl::HandlePerfConfigureLod(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     double LODBias = 0.0;
@@ -303,12 +304,12 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfConfigureLod(
         CVar->Set((int32)ForceLOD);
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("LOD settings configured"), nullptr);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfConfigureTextureStreaming(
+bool McpHandlers::SystemControl::HandlePerfConfigureTextureStreaming(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     bool bEnabled = true;
@@ -345,18 +346,18 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfConfigureTextureStreaming(
     if (CVarStream)
       CVarStream->Set(bEnabled ? 1 : 0);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Texture streaming configured"), nullptr);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfMergeActors(
+bool McpHandlers::SystemControl::HandlePerfMergeActors(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     const TArray<TSharedPtr<FJsonValue>> *NamesArray = nullptr;
     if (!Payload->TryGetArrayField(TEXT("actors"), NamesArray) || !NamesArray ||
         NamesArray->Num() < 2) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("merge_actors requires an 'actors' array "
                                   "with at least 2 entries"),
                              nullptr, TEXT("INVALID_ARGUMENT"));
@@ -364,7 +365,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfMergeActors(
     }
 
     if (!GEditor || !GEditor->GetEditorWorldContext().World()) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("Editor world not available for merge_actors"), nullptr,
           TEXT("EDITOR_NOT_AVAILABLE"));
@@ -418,7 +419,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfMergeActors(
     }
 
     if (ActorsToMerge.Num() < 2) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("merge_actors resolved fewer than 2 valid actors"), nullptr,
           TEXT("INVALID_ARGUMENT"));
@@ -434,7 +435,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfMergeActors(
       RequestedPackageName = FString::Printf(TEXT("/Game/MCPTest/MergedActors/SM_Merged_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
     }
     if (!FPackageName::IsValidLongPackageName(RequestedPackageName)) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("merge_actors requires packageName/outputPath to be a valid long package name"),
                              nullptr, TEXT("INVALID_ARGUMENT"));
       return true;
@@ -450,7 +451,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfMergeActors(
     }
 
     if (!FPackageName::IsValidLongPackageName(MergeBasePackageName)) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("merge_actors normalized packageName/outputPath to an invalid merge base package name"),
                              nullptr, TEXT("INVALID_ARGUMENT"));
       return true;
@@ -471,7 +472,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfMergeActors(
     }
 
     if (ComponentsToMerge.Num() < 2) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("merge_actors requires at least 2 static mesh components"),
                              nullptr, TEXT("INVALID_ARGUMENT"));
       return true;
@@ -508,7 +509,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfMergeActors(
     }
 
     if (!MergedMesh) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Actor merge produced no static mesh asset"),
                              nullptr, TEXT("MERGE_FAILED"));
       return true;
@@ -545,7 +546,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfMergeActors(
       Failure->SetStringField(TEXT("mergeBasePackageName"), MergeBasePackageName);
       Failure->SetStringField(TEXT("actualPackageName"), MergedMesh->GetOutermost()->GetName());
       Failure->SetStringField(TEXT("assetPath"), MergedMesh->GetPathName());
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                               TEXT("Merged static mesh was created but could not be saved"),
                               Failure, TEXT("SAVE_FAILED"));
       return true;
@@ -583,13 +584,13 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfMergeActors(
       McpHandlerUtils::AddVerification(Resp, ActorsToMerge[0]);
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Actors merged to static mesh"), Resp,
                            FString());
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfRunBenchmark(
+bool McpHandlers::SystemControl::HandlePerfRunBenchmark(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     double Duration = 60.0;
@@ -602,18 +603,18 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfRunBenchmark(
     // Start profiling for benchmark
     if (!GEditor)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
         return true;
     }
 
     UWorld* World = GEditor->GetEditorWorldContext().World();
     if (!GEngine || !World)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Editor world not available"), TEXT("NO_WORLD"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor world not available"), TEXT("NO_WORLD"));
         return true;
     }
 
-    const ERequestOrigin ResponseOrigin = CurrentRequestOrigin;
+    const ERequestOrigin ResponseOrigin = S.CurrentRequestOrigin;
     GEngine->Exec(World, TEXT("stat startfile"));
 
     if (BenchmarkType.Equals(TEXT("gpu"), ESearchCase::IgnoreCase) ||
@@ -622,14 +623,14 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfRunBenchmark(
       GEngine->Exec(World, TEXT("profilegpu"));
     }
 
-    SendProgressUpdate(
+    S.SendProgressUpdate(
         RequestId,
         0.0f,
         FString::Printf(TEXT("Benchmark running for %.0fs"), BenchmarkDuration),
         true,
         ResponseOrigin);
 
-    TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakThis(this);
+    TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakThis(&S);
     FTSTicker::GetCoreTicker().AddTicker(
         FTickerDelegate::CreateLambda(
             [WeakThis, RequestingSocket, RequestId, BenchmarkType, BenchmarkDuration, ResponseOrigin](float) {
@@ -677,7 +678,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfRunBenchmark(
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfEnableGpuTiming(
+bool McpHandlers::SystemControl::HandlePerfEnableGpuTiming(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     bool bEnabled = true;
@@ -693,7 +694,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfEnableGpuTiming(
     if (bEnabled) {
       if (!GEditor)
       {
-          SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
+          S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
           return true;
       }
 
@@ -704,7 +705,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfEnableGpuTiming(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("enabled"), bEnabled);
 
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, true,
         FString::Printf(TEXT("GPU timing %s"),
                         bEnabled ? TEXT("enabled") : TEXT("disabled")),
@@ -712,7 +713,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfEnableGpuTiming(
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfApplyBaselineSettings(
+bool McpHandlers::SystemControl::HandlePerfApplyBaselineSettings(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     FString Profile = TEXT("balanced");
@@ -756,13 +757,13 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfApplyBaselineSettings(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetStringField(TEXT("profile"), Profile);
 
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, true,
         FString::Printf(TEXT("Baseline settings applied: %s"), *Profile), Resp);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfOptimizeDrawCalls(
+bool McpHandlers::SystemControl::HandlePerfOptimizeDrawCalls(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     bool bEnabled = true;
@@ -786,12 +787,12 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfOptimizeDrawCalls(
     Resp->SetBoolField(TEXT("optimized"), bEnabled);
     Resp->SetBoolField(TEXT("instancing"), bInstancing);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Draw call optimizations configured"), Resp);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfConfigureOcclusionCulling(
+bool McpHandlers::SystemControl::HandlePerfConfigureOcclusionCulling(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     bool bEnabled = true;
@@ -838,12 +839,12 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfConfigureOcclusionCulling(
       Resp->SetNumberField(TEXT("minScreenRadius"), MinScreenRadiusForOcclusion);
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Occlusion culling configured"), Resp);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfOptimizeShaders(
+bool McpHandlers::SystemControl::HandlePerfOptimizeShaders(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     FString Mode = TEXT("changed");
@@ -865,7 +866,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfOptimizeShaders(
 
     if (!GEditor)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor not available"), TEXT("NO_EDITOR"));
         return true;
     }
 
@@ -876,14 +877,14 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfOptimizeShaders(
     Resp->SetBoolField(TEXT("forceRecompile"), bForceRecompile);
     Resp->SetStringField(TEXT("command"), Cmd);
 
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, true,
         FString::Printf(TEXT("Shader optimization initiated: %s"), *Cmd),
         Resp);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandlePerfConfigureWorldPartition(
+bool McpHandlers::SystemControl::HandlePerfConfigureWorldPartition(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
     bool bEnabled = true;
@@ -930,7 +931,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfConfigureWorldPartition(
       Resp->SetNumberField(TEXT("loadingRange"), LoadingRange);
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("World Partition settings configured"), Resp);
     return true;
 }
@@ -940,7 +941,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePerfConfigureWorldPartition(
 // RequiresEditor on every performance action means Execute() rejects before
 // Run() in non-editor builds; these exist only so the module links.
 #define MCP_PERF_HANDLER_STUB(Fn)                                             \
-  bool UMcpAutomationBridgeSubsystem::Fn(const FString &,                     \
+  bool McpHandlers::SystemControl::Fn(UMcpAutomationBridgeSubsystem &, const FString &,                     \
                                          const TSharedPtr<FJsonObject> &,     \
                                          FMcpResponseHandle) {                \
     return false;                                                             \

@@ -55,7 +55,7 @@
 // Handler Implementation
 // =============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleDebugSpawnCategory(
+bool McpHandlers::SystemControl::HandleDebugSpawnCategory(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -70,7 +70,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDebugSpawnCategory(
         
         if (CategoryName.TrimStartAndEnd().IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("Missing or empty category/categoryName."), TEXT("INVALID_ARGUMENT"));
             return true;
         }
@@ -91,7 +91,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDebugSpawnCategory(
         
         if (bHasInvalidChars)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("Invalid categoryName. Only alphanumeric characters, underscores, and hyphens are allowed."),
                 TEXT("INVALID_CATEGORY_NAME"));
             return true;
@@ -154,7 +154,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDebugSpawnCategory(
 #endif
         if (!World)
         {
-            World = GetWorld();
+            World = S.GetWorld();
         }
 
         if (World)
@@ -201,7 +201,7 @@ bool UMcpAutomationBridgeSubsystem::HandleDebugSpawnCategory(
             Result->SetNumberField(TEXT("categoryIndex"), UpdatedCategoryIndex);
         }
 
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
             FString::Printf(TEXT("Gameplay debugger category %s: %s"),
                 bEnabled ? TEXT("enabled") : TEXT("disabled"), *CategoryName),
             Result);
