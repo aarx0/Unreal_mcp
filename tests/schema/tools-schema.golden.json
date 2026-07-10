@@ -129,7 +129,7 @@
         },
         "assetLodIndex": {
           "description": "bind_cloth_to_skeletal_mesh: cloth asset LOD index.",
-          "type": "number"
+          "type": "integer"
         },
         "assetPath": {
           "description": "Existing asset to modify (e.g. the montage for add_montage_section).",
@@ -179,7 +179,7 @@
         },
         "basePoseFrame": {
           "description": "set_additive_settings: base pose frame index.",
-          "type": "number"
+          "type": "integer"
         },
         "basePoseType": {
           "description": "set_additive_settings: base pose type (default RefPose).",
@@ -323,7 +323,7 @@
         },
         "dimensions": {
           "description": "create_blend_space: 1 or 2 (default 1).",
-          "type": "number"
+          "type": "integer"
         },
         "directory": {
           "description": "Alias of savePath for create_pose_library.",
@@ -338,7 +338,7 @@
         },
         "endFrame": {
           "description": "add_notify_state: end frame.",
-          "type": "number"
+          "type": "integer"
         },
         "engine": {
           "description": "configure_vehicle: engine settings (maxRPM, maxTorque, gears).",
@@ -353,11 +353,11 @@
           "type": "boolean"
         },
         "frame": {
-          "type": "number"
+          "type": "integer"
         },
         "frameRate": {
           "description": "create_animation_sequence/set_sequence_length/create_procedural_animation: sample rate in fps (default 30).",
-          "type": "number"
+          "type": "integer"
         },
         "fromSection": {
           "description": "link_sections: section to link from.",
@@ -373,15 +373,15 @@
         },
         "gridDivisions": {
           "description": "set_axis_settings: axis grid divisions.",
-          "type": "number"
+          "type": "integer"
         },
         "gridX": {
           "description": "create_blend_space: axis-0 grid divisions (default 3).",
-          "type": "number"
+          "type": "integer"
         },
         "gridY": {
           "description": "create_blend_space: axis-1 grid divisions when dimensions=2 (default 3).",
-          "type": "number"
+          "type": "integer"
         },
         "groupName": {
           "description": "add_slot_node: slot group name (default DefaultGroup).",
@@ -408,7 +408,7 @@
         },
         "intValue": {
           "description": "Set an integer node property.",
-          "type": "number"
+          "type": "integer"
         },
         "length": {
           "description": "Length in seconds (create_animation_sequence, set_sequence_length, create_montage).",
@@ -439,7 +439,7 @@
         },
         "lodIndex": {
           "description": "set_vertex_weights/copy_weights/mirror_weights/set_morph_target_deltas: LOD index (default 0).",
-          "type": "number"
+          "type": "integer"
         },
         "machineName": {
           "description": "Alias of stateMachineName.",
@@ -466,7 +466,7 @@
         },
         "meshLodIndex": {
           "description": "bind_cloth_to_skeletal_mesh: skeletal mesh LOD index.",
-          "type": "number"
+          "type": "integer"
         },
         "minValue": {
           "description": "set_axis_settings: axis minimum.",
@@ -521,7 +521,7 @@
         },
         "numFrames": {
           "description": "create_animation_sequence/set_sequence_length/create_procedural_animation: explicit frame count (overrides length*frameRate).",
-          "type": "number"
+          "type": "integer"
         },
         "outputPath": {
           "description": "create_physics_asset: output asset path (default: <mesh>_PhysicsAsset next to the mesh).",
@@ -569,7 +569,7 @@
         },
         "priorityOrder": {
           "description": "set_transition_rules: transition priority order.",
-          "type": "number"
+          "type": "integer"
         },
         "profileName": {
           "description": "set_vertex_weights/copy_weights/mirror_weights: skin weight profile name.",
@@ -691,7 +691,7 @@
         },
         "sectionIndex": {
           "description": "bind_cloth_to_skeletal_mesh: mesh section index to bind.",
-          "type": "number"
+          "type": "integer"
         },
         "sectionName": {
           "type": "string"
@@ -741,7 +741,7 @@
         },
         "startFrame": {
           "description": "add_notify_state: start frame.",
-          "type": "number"
+          "type": "integer"
         },
         "startTime": {
           "description": "Section start time in seconds (alias of 'time').",
@@ -826,7 +826,7 @@
         },
         "trackIndex": {
           "description": "add_notify/add_notify_state/add_montage_notify: notify track index (default 0).",
-          "type": "number"
+          "type": "integer"
         },
         "transitions": {
           "description": "create_state_machine: transitions to add ({sourceState, targetState, crossfadeDuration}).",
@@ -1204,7 +1204,7 @@
         },
         "lodCount": {
           "description": "generate_lods: number of LODs to generate (alias: numLODs).",
-          "type": "number"
+          "type": "integer"
         },
         "material": {
           "description": "Material asset path.",
@@ -1226,10 +1226,10 @@
           "type": "number"
         },
         "maxX": {
-          "type": "number"
+          "type": "integer"
         },
         "maxY": {
-          "type": "number"
+          "type": "integer"
         },
         "meshPath": {
           "description": "Mesh asset path.",
@@ -1254,10 +1254,10 @@
           "type": "number"
         },
         "minX": {
-          "type": "number"
+          "type": "integer"
         },
         "minY": {
-          "type": "number"
+          "type": "integer"
         },
         "name": {
           "description": "Name identifier.",
@@ -1270,7 +1270,7 @@
           "type": "array"
         },
         "numLODs": {
-          "type": "number"
+          "type": "integer"
         },
         "operation": {
           "description": "modify_heightmap: how to apply heightData/strength (default: set). 'add' is accepted as an alias of 'raise'.",
@@ -1362,7 +1362,7 @@
           "type": "integer"
         },
         "quadsPerSection": {
-          "type": "number"
+          "type": "integer"
         },
         "quality": {
           "type": "string"
@@ -1401,16 +1401,16 @@
           "description": "modify_heightmap/paint_landscape: sub-region to affect (minX, minY, maxX, maxY); defaults to top-level minX/minY/maxX/maxY.",
           "properties": {
             "maxX": {
-              "type": "number"
+              "type": "integer"
             },
             "maxY": {
-              "type": "number"
+              "type": "integer"
             },
             "minX": {
-              "type": "number"
+              "type": "integer"
             },
             "minY": {
-              "type": "number"
+              "type": "integer"
             }
           },
           "type": "object"
@@ -1443,13 +1443,13 @@
           "type": "boolean"
         },
         "sectionSize": {
-          "type": "number"
+          "type": "integer"
         },
         "sectionsPerComponent": {
-          "type": "number"
+          "type": "integer"
         },
         "seed": {
-          "type": "number"
+          "type": "integer"
         },
         "size": {
           "description": "create_lightmass_volume: volume size (x, y, z).",
@@ -1506,7 +1506,7 @@
           "type": "number"
         },
         "subdivisions": {
-          "type": "number"
+          "type": "integer"
         },
         "tileSize": {
           "type": "number"
@@ -1667,7 +1667,7 @@
           "type": "string"
         },
         "classPath": {
-          "description": "Asset path (e.g., /Game/Path/Asset).",
+          "description": "Actor class path (alias of className).",
           "type": "string"
         },
         "collision_enabled": {
@@ -1718,7 +1718,7 @@
         },
         "intValue": {
           "description": "Set an integer variable.",
-          "type": "number"
+          "type": "integer"
         },
         "limit": {
           "description": "Maximum number of actors to return.",
@@ -1945,7 +1945,7 @@
         },
         "index": {
           "description": "Bookmark slot index (create_bookmark / jump_to_bookmark).",
-          "type": "number"
+          "type": "integer"
         },
         "inputAction": {
           "type": "string"
@@ -2133,6 +2133,10 @@
           "description": "Set a bool property.",
           "type": "boolean"
         },
+        "class": {
+          "description": "Actor class name (alias of className).",
+          "type": "string"
+        },
         "className": {
           "type": "string"
         },
@@ -2193,7 +2197,7 @@
         },
         "intValue": {
           "description": "Set an integer property.",
-          "type": "number"
+          "type": "integer"
         },
         "limit": {
           "description": "find_objects: max objects returned (default 50, cap 200).",
@@ -2977,7 +2981,7 @@
         },
         "slotIndex": {
           "description": "Index of slot to configure.",
-          "type": "number"
+          "type": "integer"
         },
         "snapRadius": {
           "description": "Snap radius for link endpoints (default: 30).",
@@ -2985,7 +2989,7 @@
         },
         "spawnCount": {
           "description": "Mass spawner entity count.",
-          "type": "number"
+          "type": "integer"
         },
         "startPoint": {
           "description": "Start point of navigation link (relative to actor).",
@@ -3048,11 +3052,11 @@
         },
         "teamId": {
           "description": "Team ID for perception affiliation (0=Neutral, 1=Player, 2=Enemy, etc.).",
-          "type": "number"
+          "type": "integer"
         },
         "testIndex": {
           "description": "Index of test to configure.",
-          "type": "number"
+          "type": "integer"
         },
         "testSettings": {
           "description": "Test scoring and filter settings.",
@@ -3411,7 +3415,7 @@
           "type": "string"
         },
         "coordinateIndex": {
-          "type": "number"
+          "type": "integer"
         },
         "csv": {
           "description": "import_data_table: alias for sourceText (CSV).",
@@ -3423,7 +3427,7 @@
         },
         "depth": {
           "description": "list: recursion depth filter relative to the queried path. get_node_connections: BFS hop limit (default 1; -1 unlimited).",
-          "type": "number"
+          "type": "integer"
         },
         "description": {
           "type": "string"
@@ -3434,10 +3438,6 @@
         },
         "direction": {
           "description": "get_node_connections: inputs|outputs|both (default both).",
-          "type": "string"
-        },
-        "directory": {
-          "description": "list: directory to list (default /Game).",
           "type": "string"
         },
         "directoryPath": {
@@ -3505,10 +3505,6 @@
           "description": "set_node_value: scalar value for a Constant / named-float property / arithmetic ConstA.",
           "type": "number"
         },
-        "folderPath": {
-          "description": "Path to a directory.",
-          "type": "string"
-        },
         "format": {
           "description": "import_data_table: 'csv' or 'json' (inferred from sourceText if omitted).",
           "type": "string"
@@ -3546,7 +3542,7 @@
           "type": "boolean"
         },
         "height": {
-          "type": "number"
+          "type": "integer"
         },
         "inBlack": {
           "description": "adjust_levels: input black point 0-1 (default 0).",
@@ -3605,7 +3601,7 @@
         },
         "intValue": {
           "description": "Set an integer property.",
-          "type": "number"
+          "type": "integer"
         },
         "invertAlpha": {
           "description": "invert: also invert the alpha channel (default false).",
@@ -3639,7 +3635,7 @@
           "type": "array"
         },
         "limit": {
-          "type": "number"
+          "type": "integer"
         },
         "lineWidth": {
           "description": "create_pattern_texture: Grid/Brick line thickness 0-1 (default 0.02).",
@@ -3647,10 +3643,10 @@
         },
         "lodBias": {
           "description": "set_lod_bias: additional texture LOD bias (default 0).",
-          "type": "number"
+          "type": "integer"
         },
         "lodCount": {
-          "type": "number"
+          "type": "integer"
         },
         "luminanceFactors": {
           "description": "add_desaturation: optional luminance weights, channels 0..1 (default 0.3/0.59/0.11).",
@@ -3676,11 +3672,11 @@
           "type": "string"
         },
         "maxDepth": {
-          "type": "number"
+          "type": "integer"
         },
         "maxResults": {
           "description": "find_by_tag: result cap (default 100, max 1000).",
-          "type": "number"
+          "type": "integer"
         },
         "meshPath": {
           "description": "Mesh asset path.",
@@ -3699,7 +3695,7 @@
         },
         "newHeight": {
           "description": "resize_texture: output height in pixels (default 512).",
-          "type": "number"
+          "type": "integer"
         },
         "newName": {
           "description": "rename/duplicate/move: new asset name, resolved into the source asset's folder (alternative to destinationPath).",
@@ -3707,7 +3703,7 @@
         },
         "newWidth": {
           "description": "resize_texture: output width in pixels (default 512).",
-          "type": "number"
+          "type": "integer"
         },
         "nodeId": {
           "description": "ID of the node.",
@@ -3733,11 +3729,11 @@
         },
         "numLODs": {
           "description": "generate_lods: alias for lodCount.",
-          "type": "number"
+          "type": "integer"
         },
         "octaves": {
           "description": "create_noise_texture: FBM octave count (default 4).",
-          "type": "number"
+          "type": "integer"
         },
         "offset": {
           "type": "number"
@@ -3842,7 +3838,7 @@
           "type": "array"
         },
         "pattern": {
-          "description": "bulk_delete: substring filter applied to matching asset names when deleting by folderPath.",
+          "description": "bulk_delete: substring filter applied to matching asset names when deleting by path.",
           "type": "string"
         },
         "patternType": {
@@ -3975,7 +3971,7 @@
         },
         "sampleCount": {
           "description": "create_ao_from_mesh: vertex samples per pixel (default 64).",
-          "type": "number"
+          "type": "integer"
         },
         "samplerType": {
           "description": "add_texture_sample: Color|LinearColor|Normal|Masks|Alpha (default Color).",
@@ -4028,7 +4024,7 @@
         },
         "seed": {
           "description": "create_noise_texture: noise seed (default 0).",
-          "type": "number"
+          "type": "integer"
         },
         "shadingModel": {
           "description": "create_material/set_shading_model: Unlit|DefaultLit|Subsurface|SubsurfaceProfile|PreintegratedSkin|ClearCoat|Hair|Cloth|Eye|TwoSidedFoliage|ThinTranslucent.",
@@ -4122,19 +4118,19 @@
         },
         "tileBorderSize": {
           "description": "configure_virtual_texture: VT tile border size (default 4).",
-          "type": "number"
+          "type": "integer"
         },
         "tileSize": {
           "description": "configure_virtual_texture: VT tile size (default 128).",
-          "type": "number"
+          "type": "integer"
         },
         "tilesX": {
           "description": "create_pattern_texture: horizontal tile count (default 8).",
-          "type": "number"
+          "type": "integer"
         },
         "tilesY": {
           "description": "create_pattern_texture: vertical tile count (default 8).",
-          "type": "number"
+          "type": "integer"
         },
         "trianglePercent": {
           "description": "nanite_rebuild_mesh: Nanite fallback mesh triangle percent 0-100 (default 100).",
@@ -4158,7 +4154,7 @@
         },
         "uvChannel": {
           "description": "create_ao_from_mesh: source UV channel index (default 0).",
-          "type": "number"
+          "type": "integer"
         },
         "vectorValue": {
           "description": "Set an FVector property (x, y, z).",
@@ -4188,7 +4184,7 @@
           "type": "boolean"
         },
         "width": {
-          "type": "number"
+          "type": "integer"
         },
         "x": {
           "type": "number"
@@ -4310,7 +4306,7 @@
         },
         "childIndex": {
           "description": "Input pin index on the source node for connect_cue_nodes.",
-          "type": "number"
+          "type": "integer"
         },
         "classAdjusters": {
           "description": "create_sound_mix: per-class volume/pitch adjusters.",
@@ -4532,7 +4528,7 @@
         },
         "loopCount": {
           "description": "add_cue_node (looping node): fixed loop count when not indefinite.",
-          "type": "number"
+          "type": "integer"
         },
         "looping": {
           "description": "Whether to loop.",
@@ -4951,7 +4947,7 @@
         },
         "activeIndex": {
           "description": "add_widget_switcher: initially active child index.",
-          "type": "number"
+          "type": "integer"
         },
         "alignment": {
           "description": "set_alignment: pivot (alternative to alignmentX/alignmentY).",
@@ -5145,7 +5141,7 @@
         },
         "columns": {
           "description": "create_inventory_ui/create_shop_ui: grid column count.",
-          "type": "number"
+          "type": "integer"
         },
         "compile": {
           "description": "Compile the blueprint(s) after the operation.",
@@ -5258,7 +5254,7 @@
         },
         "fontSize": {
           "description": "Font size (add_text_block, set_font).",
-          "type": "number"
+          "type": "integer"
         },
         "fromState": {
           "description": "get_transition_rule_graph: source state name (paired with toState).",
@@ -5327,7 +5323,7 @@
         },
         "intValue": {
           "description": "Set an integer style property.",
-          "type": "number"
+          "type": "integer"
         },
         "isChecked": {
           "description": "add_check_box: initial checked state.",
@@ -5384,7 +5380,7 @@
         },
         "loopCount": {
           "description": "set_animation_loop: loop count (0 = infinite).",
-          "type": "number"
+          "type": "integer"
         },
         "material_path": {
           "description": "snake_case alias of materialPath.",
@@ -5689,7 +5685,7 @@
         },
         "rows": {
           "description": "create_inventory_ui: grid row count.",
-          "type": "number"
+          "type": "integer"
         },
         "save": {
           "description": "Save the asset(s) after the operation.",
@@ -5731,7 +5727,7 @@
         },
         "segments": {
           "description": "create_radial_menu: number of radial segments.",
-          "type": "number"
+          "type": "integer"
         },
         "selectedOption": {
           "description": "add_combo_box: initially selected option.",
@@ -5900,7 +5896,7 @@
         },
         "transitionIndex": {
           "description": "get_transition_rule_graph: 0-based pick when parallel transitions between the same states match (see matchCount in the response).",
-          "type": "number"
+          "type": "integer"
         },
         "transitionName": {
           "description": "get_transition_rule_graph: transition node title or rule-graph name, as an alternative to fromState/toState.",
@@ -5989,7 +5985,7 @@
         },
         "zOrder": {
           "description": "set_z_order: Canvas slot Z-order.",
-          "type": "number"
+          "type": "integer"
         }
       },
       "required": [
@@ -6100,7 +6096,7 @@
           "type": "number"
         },
         "maxJumpCount": {
-          "type": "number"
+          "type": "integer"
         },
         "meshOffset": {
           "description": "Mesh location offset.",
@@ -6134,7 +6130,7 @@
         },
         "modeId": {
           "description": "Custom movement mode ID.",
-          "type": "number"
+          "type": "integer"
         },
         "modeName": {
           "description": "Name for custom movement mode.",
@@ -6586,7 +6582,7 @@
           "type": "array"
         },
         "burstCount": {
-          "type": "number"
+          "type": "integer"
         },
         "burstTime": {
           "type": "number"
@@ -6691,7 +6687,7 @@
           "type": "string"
         },
         "eventSpawnCount": {
-          "type": "number"
+          "type": "integer"
         },
         "eventType": {
           "type": "string"
@@ -7244,7 +7240,7 @@
         },
         "modifierIndex": {
           "description": "set_modifier_magnitude: index into the effect's Modifiers array (0-based).",
-          "type": "number"
+          "type": "integer"
         },
         "modifierMagnitude": {
           "description": "Magnitude of the modifier.",
@@ -7356,11 +7352,11 @@
         },
         "stackLimit": {
           "description": "set_effect_stacking: alias for stackLimitCount (checked first).",
-          "type": "number"
+          "type": "integer"
         },
         "stackLimitCount": {
           "description": "Maximum stack count.",
-          "type": "number"
+          "type": "integer"
         },
         "stackPeriodResetPolicy": {
           "description": "When to reset stack period.",
@@ -7617,7 +7613,7 @@
         },
         "depthSegments": {
           "description": "Segments along depth.",
-          "type": "number"
+          "type": "integer"
         },
         "depthSubdivisions": {
           "description": "create_plane: subdivision count along depth.",
@@ -7722,7 +7718,7 @@
         },
         "heightSegments": {
           "description": "Segments along height.",
-          "type": "number"
+          "type": "integer"
         },
         "heightSteps": {
           "description": "create_pipe: height step count.",
@@ -7734,7 +7730,7 @@
         },
         "hullCount": {
           "description": "Max convex hulls for generate_collision (convex/convex_decomposition only).",
-          "type": "number"
+          "type": "integer"
         },
         "hullPrecision": {
           "description": "generate_complex_collision: convex decomposition search factor in [0,1] (default 0.5; higher searches harder).",
@@ -7746,7 +7742,7 @@
         },
         "iterations": {
           "description": "Number of iterations for smooth, remesh.",
-          "type": "number"
+          "type": "integer"
         },
         "keepInside": {
           "description": "boolean_trim: keep the portion inside the trim surface.",
@@ -7758,7 +7754,7 @@
         },
         "latticeResolution": {
           "description": "Control lattice resolution for lattice deformation.",
-          "type": "number"
+          "type": "integer"
         },
         "length": {
           "description": "create_capsule/create_ramp: cylinder/ramp length.",
@@ -7781,11 +7777,11 @@
         },
         "lodCount": {
           "description": "Number of LOD levels to generate.",
-          "type": "number"
+          "type": "integer"
         },
         "lodIndex": {
           "description": "Specific LOD index to configure.",
-          "type": "number"
+          "type": "integer"
         },
         "magnitude": {
           "description": "noise_deform: displacement magnitude.",
@@ -7833,15 +7829,15 @@
         },
         "numRings": {
           "description": "Ring count: sphere latitude rings (switches to lat-long topology) or torus major segments.",
-          "type": "number"
+          "type": "integer"
         },
         "numSides": {
           "description": "Radial side count for cylinder and cone (alias of segments).",
-          "type": "number"
+          "type": "integer"
         },
         "numSteps": {
           "description": "Number of steps for stairs.",
-          "type": "number"
+          "type": "integer"
         },
         "numTurns": {
           "description": "Number of full revolutions for create_spiral_stairs (mutually exclusive with curveAngle).",
@@ -7910,7 +7906,7 @@
         },
         "radialSegments": {
           "description": "Radial segments: sphere longitude steps (switches to lat-long topology) or torus minor segments.",
-          "type": "number"
+          "type": "integer"
         },
         "radialSteps": {
           "description": "create_pipe: radial step count.",
@@ -7991,7 +7987,7 @@
         },
         "segments": {
           "description": "Number of segments for bevel, subdivide.",
-          "type": "number"
+          "type": "integer"
         },
         "simplificationFactor": {
           "description": "simplify_collision: simplification strength in [0,1].",
@@ -8059,7 +8055,7 @@
         },
         "targetTriangleCount": {
           "description": "Target triangle count for simplify_mesh and remesh_uniform.",
-          "type": "number"
+          "type": "integer"
         },
         "texturePath": {
           "description": "Texture asset path for displacement.",
@@ -8107,7 +8103,7 @@
         },
         "uvChannel": {
           "description": "UV channel index (0-7).",
-          "type": "number"
+          "type": "integer"
         },
         "uvOffset": {
           "description": "UV offset.",
@@ -8163,7 +8159,7 @@
         },
         "widthSegments": {
           "description": "Segments along width.",
-          "type": "number"
+          "type": "integer"
         },
         "widthSubdivisions": {
           "description": "create_plane: subdivision count along width.",
@@ -8231,7 +8227,7 @@
         },
         "priority": {
           "description": "enable_input_mapping: mapping context priority (default 0).",
-          "type": "number"
+          "type": "integer"
         },
         "replace": {
           "description": "set_input_trigger: clear existing triggers before adding (default false = idempotent dedupe).",
@@ -8514,7 +8510,7 @@
         },
         "dropCount": {
           "description": "Number of drops to roll.",
-          "type": "number"
+          "type": "integer"
         },
         "dropOnDeath": {
           "description": "Drop loot when the actor dies.",
@@ -8546,7 +8542,7 @@
         },
         "entryIndex": {
           "description": "Loot entry index.",
-          "type": "number"
+          "type": "integer"
         },
         "glowEffect": {
           "description": "Enable glow effect.",
@@ -8584,18 +8580,18 @@
         },
         "maxQuantity": {
           "description": "Maximum drop quantity.",
-          "type": "number"
+          "type": "integer"
         },
         "maxStackSize": {
           "description": "Maximum stack size.",
-          "type": "number"
+          "type": "integer"
         },
         "maxWeight": {
           "type": "number"
         },
         "minQuantity": {
           "description": "Minimum drop quantity.",
-          "type": "number"
+          "type": "integer"
         },
         "name": {
           "description": "Name of the asset to create.",
@@ -8607,7 +8603,7 @@
         },
         "outputQuantity": {
           "description": "Quantity produced.",
-          "type": "number"
+          "type": "integer"
         },
         "passiveEffects": {
           "description": "Enable passive effect support when equipped.",
@@ -8631,7 +8627,7 @@
         },
         "quantity": {
           "description": "Ingredient quantity.",
-          "type": "number"
+          "type": "integer"
         },
         "recipePath": {
           "description": "Path to crafting recipe asset.",
@@ -8655,7 +8651,7 @@
         },
         "requiredLevel": {
           "description": "Required player level.",
-          "type": "number"
+          "type": "integer"
         },
         "requiredStation": {
           "description": "Required crafting station type.",
@@ -8668,7 +8664,7 @@
           "description": "Respawn time in seconds.",
           "type": "number"
         },
-        "rotation": {
+        "rotationEffect": {
           "description": "Enable rotation animation.",
           "type": "boolean"
         },
@@ -8677,7 +8673,7 @@
           "type": "boolean"
         },
         "slotCount": {
-          "type": "number"
+          "type": "integer"
         },
         "stackable": {
           "description": "Whether the item can stack.",
@@ -9063,7 +9059,7 @@
         },
         "gridCellSize": {
           "description": "World Partition grid cell size.",
-          "type": "number"
+          "type": "integer"
         },
         "gridName": {
           "description": "configure_grid_size: name of the World Partition runtime grid (default grid if omitted).",
@@ -9539,7 +9535,7 @@
         },
         "localPlayerNum": {
           "description": "mute_player: local player index applying the mute.",
-          "type": "number"
+          "type": "integer"
         },
         "location": {
           "description": "configure_player_start: PlayerStart world location (x, y, z).",
@@ -9551,15 +9547,15 @@
         },
         "maxClientRate": {
           "description": "Max client rate.",
-          "type": "number"
+          "type": "integer"
         },
         "maxInternetClientRate": {
           "description": "Max internet client rate.",
-          "type": "number"
+          "type": "integer"
         },
         "maxPlayers": {
           "description": "configure_local_session_settings / host_lan_server: max player count (default 4).",
-          "type": "number"
+          "type": "integer"
         },
         "minNetUpdateFrequency": {
           "description": "Minimum update frequency when idle (Hz, default 2).",
@@ -9587,7 +9583,7 @@
         },
         "netServerMaxTickRate": {
           "description": "Server max tick rate.",
-          "type": "number"
+          "type": "integer"
         },
         "netUpdateFrequency": {
           "description": "How often actor replicates (Hz, default 100).",
@@ -9636,7 +9632,7 @@
         },
         "playerIndex": {
           "description": "remove_local_player: local player index to remove (cannot be 0).",
-          "type": "number"
+          "type": "integer"
         },
         "playerName": {
           "description": "mute_player: player name to mute/unmute (or use targetPlayerId).",
@@ -9688,7 +9684,7 @@
         },
         "respawnLives": {
           "description": "set_respawn_rules: lives per player (-1 = unlimited).",
-          "type": "number"
+          "type": "integer"
         },
         "respawnLocation": {
           "description": "set_respawn_rules: named respawn location strategy (default PlayerStart).",
@@ -9735,7 +9731,7 @@
         },
         "serverPort": {
           "description": "configure_lan_play / join_lan_server: port number (default 7777).",
-          "type": "number"
+          "type": "integer"
         },
         "smoothingRate": {
           "description": "Smoothing rate for corrections.",
@@ -9779,7 +9775,7 @@
         },
         "teamIndex": {
           "description": "configure_player_start: team index used to build the default PlayerStartTag.",
-          "type": "number"
+          "type": "integer"
         },
         "travelOptions": {
           "description": "host_lan_server / join_lan_server: extra URL options appended to the travel string.",
@@ -9866,6 +9862,10 @@
           },
           "type": "array"
         },
+        "assetPath": {
+          "description": "Level Sequence asset path.",
+          "type": "string"
+        },
         "bindingId": {
           "description": "add_keyframe: sequence binding GUID (alternative to actorName).",
           "type": "string"
@@ -9881,20 +9881,21 @@
           "type": "number"
         },
         "endFrame": {
-          "type": "number"
+          "type": "integer"
         },
         "floatValue": {
           "description": "Keyframe value for a float property track.",
           "type": "number"
         },
         "frame": {
-          "type": "number"
+          "type": "integer"
         },
         "frameRate": {
+          "description": "Frame/display rate in fps: an integer string (e.g. \"30\"), an exact NTSC rational \"numerator/denominator\" (e.g. \"24000/1001\"), or a plain JSON number (rounded to a whole-number rate).",
           "type": "string"
         },
         "lengthInFrames": {
-          "type": "number"
+          "type": "integer"
         },
         "locked": {
           "type": "boolean"
@@ -9911,14 +9912,14 @@
           "type": "string"
         },
         "path": {
-          "description": "Asset path (e.g., /Game/Path/Asset).",
+          "description": "Level Sequence asset path (alias of assetPath).",
           "type": "string"
         },
         "playbackEnd": {
-          "type": "number"
+          "type": "integer"
         },
         "playbackStart": {
-          "type": "number"
+          "type": "integer"
         },
         "property": {
           "description": "Name of the property.",
@@ -9937,7 +9938,7 @@
           "type": "number"
         },
         "startFrame": {
-          "type": "number"
+          "type": "integer"
         },
         "structValue": {
           "description": "Keyframe value for a transform track: {location:{x,y,z}, rotation:{roll,pitch,yaw}, scale:{x,y,z}}.",
@@ -10068,7 +10069,7 @@
         },
         "count": {
           "description": "get_log/tail_log: max lines to return (default 100, max 2000).",
-          "type": "number"
+          "type": "integer"
         },
         "detailed": {
           "description": "generate_memory_report: emit the full/verbose report (memreport -full) instead of the summary.",
@@ -10096,7 +10097,7 @@
         },
         "forceLOD": {
           "description": "configure_lod: r.ForceLOD index (-1 = auto).",
-          "type": "number"
+          "type": "integer"
         },
         "forceRecompile": {
           "description": "optimize_shaders: recompile all shaders regardless of mode.",
@@ -10110,7 +10111,7 @@
           "type": "string"
         },
         "level": {
-          "type": "number"
+          "type": "integer"
         },
         "loadingRange": {
           "description": "configure_world_partition: wp.Runtime.RuntimeStreamingRange.",
@@ -10126,7 +10127,7 @@
         },
         "maxTests": {
           "description": "Max tests to queue for run_tests (1-500, default 50).",
-          "type": "number"
+          "type": "integer"
         },
         "minScreenRadius": {
           "description": "configure_occlusion_culling: r.OcclusionCullMinScreenRadius.",
@@ -10180,7 +10181,7 @@
         },
         "sinceSeq": {
           "description": "get_log/tail_log: return only lines with seq > this (incremental polling; response carries nextSeq + dropped).",
-          "type": "number"
+          "type": "integer"
         },
         "slop": {
           "description": "configure_occlusion_culling: r.OcclusionSlop.",

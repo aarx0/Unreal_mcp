@@ -137,7 +137,11 @@ as they land.
 > Reuses the Phase 2 fragments; the gating unknown is whether the client honors top-level
 > `oneOf` — proposes a one-rebuild `control_editor` pilot to decide before any rollout.
 
-### [ ] 2026-07-10 — actor-name resolution has FOUR rival implementations with drifting semantics
+### [x] 2026-07-10 — actor-name resolution has FOUR rival implementations with drifting semantics
+FIXED same day (`fe085d14`): one canonical McpHandlerUtils::FindActorByName(World, Name,
+Exact|Prefix|Fuzzy); subsystem member is a world-selecting forward; networking/spline locals
+deleted (spline gains case-insensitivity); component-lookup twin also merged. The PIE-world
+bare-name entry below remains open — world CHOICE still lives at call sites.
 E2 duplicate-path sweep find. The same `actorName` resolves differently depending on which
 family handles the call: free `FindActorByName` (`McpHandlerUtils.cpp:97` — exact-or-StartsWith,
 case-insensitive, no path match), member `UMcpAutomationBridgeSubsystem::FindActorByName`
@@ -149,7 +153,11 @@ PIE-world entry below is the same resolution-semantics family. Fix wants a dedic
 pick one canonical resolver (world-aware), reroute all callers, delete the twins, probe the
 behavior deltas (case, fuzzy, asset fallback) per calling action.
 
-### [ ] 2026-07-10 — `manage_asset move` is a pass-through to `rename` with divergent required-param decls
+### [x] 2026-07-10 — `manage_asset move` is a pass-through to `rename` with divergent required-param decls
+FIXED same day (`c1bd983b`): wrapper deleted, move row targets HandleRenameAsset directly, S_Move
+forwards to S_Rename. Found in passing: per-action Required() lists are INERT — the tool fold
+ClearRequired()s them and nothing else enforces them; enforce-at-Gate-B or stop deriving them is
+an open question.
 E2 sweep find. `HandleMoveAsset` (`AssetWorkflowHandlers.cpp:1825`) is one line:
 `return HandleRenameAsset(...)`. Both actions publish, but `S_Move` requires
 `{sourcePath, assetPath, destinationPath, newName}` while `S_Rename` requires nothing — identical
