@@ -10,3 +10,10 @@
 # defeats the forcing function. Every entry needs the one-line reason after the '#'.
 #
 # (populated as the lint surfaces heuristic false positives during the rollout)
+
+HandleSetObjectProperty  # atomic single-property setter: one required propertyName + one discriminated value, all failure paths already loud (INVALID_VALUE/AMBIGUOUS_VALUE/PROPERTY_NOT_FOUND/PROPERTY_CONVERSION_FAILED); the optional reads are target alternatives (objectPath|blueprintPath) + markDirty + value-type discriminants, not a writable bag
+HandleAiConfigureSightConfig  # creator, not a bag setter: implements add_sight_config — unconditionally NewObject<UAISenseConfig_Sight> + ConfigureSense every call; an empty request legitimately adds a default sense (sibling DamageSenseConfig is the same pattern, unflagged)
+HandleAiConfigureHearingConfig  # creator, not a bag setter: implements add_hearing_config — unconditionally NewObject<UAISenseConfig_Hearing> + ConfigureSense every call; empty request legitimately adds a default sense
+HandleAiSetupPerception  # Setup*-that-creates (setup_perception alias of add_perception_component): find-or-creates the perception component and adds default-configured senses; sightRadius/hearingRange etc. are creation defaults, not writes to an existing bag
+HandleGasSetModifierMagnitude  # atomic single-value setter: writes exactly one property (Modifiers[i].ModifierMagnitude) in one of two mutually-exclusive representations (value -> ScalableFloat | setByCallerTag -> SetByCaller); modifierIndex/magnitudeType are selectors; validations are all-or-nothing on that single write and already fail loud
+HandleEffectSetNiagaraParameter  # atomic single-parameter setter: one required parameterName + one type-discriminated value (floatValue|vectorValue|colorValue|boolValue are mutually-exclusive alternatives selected by parameterType, not a writable bag); already fails loud (SET_NIAGARA_PARAM_FAILED/ACTOR_NOT_FOUND/COMPONENT_NOT_FOUND/INVALID_ARGUMENT)

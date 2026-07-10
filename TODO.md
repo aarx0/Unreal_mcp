@@ -8,6 +8,27 @@ as they land.
 > Origin: surfaced during the 2026-06 audio/options-menu work (verifying the asset
 > read/write actions on `manage_asset`).
 
+> **[ ] Found 2026-07-09 (silent-success sweep, code read): `set_object_property` special-cased
+> transform paths silently zero on wrong value type.** In `HandleSetObjectProperty`
+> (PropertyHandlers.cpp:267-340), the ActorLocation/ActorRotation/ActorScale fast paths accept the
+> discriminated value only as Object or Array — any other kind (e.g. `stringValue:"(100,0,0)"`)
+> leaves the vector zero-initialized and the handler happily calls `SetActorLocation(0,0,0)` and
+> reports success ("Actor location updated"). Silent teleport-to-origin. Repro: set_object_property
+> on a level actor with propertyName=ActorLocation + stringValue. Fix belongs in the Phase-B
+> dynamic-strictness pass (same handler also skips the `PropertyMatchesValueKind` cross-check the
+> control_actor path does — reject non-vector kinds with VALUE_TYPE_MISMATCH before the branch).
+
+> **[ ] Found 2026-07-09 (silent-success sweep, code read), two pre-existing warts adjacent to the
+> conversion but out of its scope:**
+> - **`set_modifier_magnitude` default-clobber** — absent `value`/`setByCallerTag` writes
+>   `ScalableFloat(0.0)` into `Modifiers[i].ModifierMagnitude` (GASHandlers.cpp, HandleGasSetModifierMagnitude).
+>   It's an atomic setter (allowlisted from the bag lint); the fix is a fail-loud guard requiring exactly
+>   one of value|setByCallerTag. Repro: set_modifier_magnitude with only blueprintPath+modifierIndex.
+> - **`configure_vehicle` creates the movement component before any field check** — a truly empty request
+>   creates a bare vehicle-movement component, then reports NO_CHANGES_REQUESTED (AnimationHandlers.cpp,
+>   HandleAnimPhysConfigureVehicle). Mutation on a no-changes response. Move creation behind the
+>   any-field-requested check (same shape as the camera-rig fix in ConfigureCameraComponent).
+
 > **[ ] Dogfood finds 2026-07-08 (inspect read actions, direct-HTTP):**
 > - **`inspect get_editor_settings` fake-success stub** — returns `{success:true, message:"Editor
 >   settings retrieved"}` with NO data (EnvironmentHandlers.cpp:1590; the non-editor build is an

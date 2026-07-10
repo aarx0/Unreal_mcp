@@ -1577,13 +1577,9 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectGetProjectSettings(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetStringField(TEXT("action"), TEXT("inspect"));
-    Resp->SetStringField(TEXT("subAction"), TEXT("get_project_settings"));
-    Resp->SetStringField(TEXT("message"), TEXT("Project settings retrieved"));
-    Resp->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
-                           TEXT("Project settings retrieved"), Resp, FString());
+    SendAutomationError(RequestingSocket, RequestId,
+        TEXT("inspect get_project_settings is not implemented; use system_control get_project_settings instead."),
+        TEXT("NOT_IMPLEMENTED"));
     return true;
 }
 
@@ -1591,13 +1587,9 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectGetEditorSettings(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetStringField(TEXT("action"), TEXT("inspect"));
-    Resp->SetStringField(TEXT("subAction"), TEXT("get_editor_settings"));
-    Resp->SetStringField(TEXT("message"), TEXT("Editor settings retrieved"));
-    Resp->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
-                           TEXT("Editor settings retrieved"), Resp, FString());
+    SendAutomationError(RequestingSocket, RequestId,
+        TEXT("inspect get_editor_settings is not implemented; editor preferences are not exposed yet."),
+        TEXT("NOT_IMPLEMENTED"));
     return true;
 }
 
