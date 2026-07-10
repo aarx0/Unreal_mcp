@@ -37,6 +37,7 @@
 // Core Includes
 // -----------------------------------------------------------------------------
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_WorldPartitionHandlers.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpHandlerUtils.h"
@@ -129,7 +130,8 @@
 // Handler Implementation
 // =============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
+bool McpHandlers::BuildEnvironment::HandleWorldPartitionAction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
@@ -145,7 +147,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
     // Validate payload
     if (!Payload.IsValid())
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("Missing payload."), TEXT("INVALID_PAYLOAD"));
         return true;
     }
@@ -186,7 +188,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
                     FString FullPath = FPaths::ConvertRelativePathToFull(Filename);
                     if (!IFileManager::Get().FileExists(*FullPath))
                     {
-                        SendAutomationError(RequestingSocket, RequestId, 
+                        S.SendAutomationError(RequestingSocket, RequestId, 
                             FString::Printf(TEXT("Level file not found: %s"), *FullPath), 
                             TEXT("LEVEL_NOT_FOUND"));
                         return true;
@@ -194,7 +196,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
                     FlushRenderingCommands();
                     if (!McpSafeLoadMap(NormalizedLevelPath))
                     {
-                        SendAutomationError(RequestingSocket, RequestId, 
+                        S.SendAutomationError(RequestingSocket, RequestId, 
                             FString::Printf(TEXT("Failed to load level: %s"), *NormalizedLevelPath), 
                             TEXT("LOAD_FAILED"));
                         return true;
@@ -203,7 +205,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
                 }
                 else
                 {
-                    SendAutomationError(RequestingSocket, RequestId, 
+                    S.SendAutomationError(RequestingSocket, RequestId, 
                         FString::Printf(TEXT("Invalid level path: %s"), *NormalizedLevelPath), 
                         TEXT("INVALID_PATH"));
                     return true;
@@ -221,7 +223,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
                 FString FullPath = FPaths::ConvertRelativePathToFull(Filename);
                 if (!IFileManager::Get().FileExists(*FullPath))
                 {
-                    SendAutomationError(RequestingSocket, RequestId, 
+                    S.SendAutomationError(RequestingSocket, RequestId, 
                         FString::Printf(TEXT("Level file not found: %s"), *FullPath), 
                         TEXT("LEVEL_NOT_FOUND"));
                     return true;
@@ -229,7 +231,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
                 FlushRenderingCommands();
                 if (!McpSafeLoadMap(NormalizedLevelPath))
                 {
-                    SendAutomationError(RequestingSocket, RequestId, 
+                    S.SendAutomationError(RequestingSocket, RequestId, 
                         FString::Printf(TEXT("Failed to load level: %s"), *NormalizedLevelPath), 
                         TEXT("LOAD_FAILED"));
                     return true;
@@ -238,7 +240,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
             }
             else
             {
-                SendAutomationError(RequestingSocket, RequestId, 
+                S.SendAutomationError(RequestingSocket, RequestId, 
                     FString::Printf(TEXT("Invalid level path: %s"), *NormalizedLevelPath), 
                     TEXT("INVALID_PATH"));
                 return true;
@@ -248,7 +250,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
 
     if (!World)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("No active editor world."), TEXT("NO_WORLD"));
         return true;
     }
@@ -256,7 +258,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
     UWorldPartition* WorldPartition = World->GetWorldPartition();
     if (!WorldPartition)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("World is not partitioned."), TEXT("NOT_PARTITIONED"));
         return true;
     }
@@ -307,7 +309,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
             Result->SetStringField(TEXT("method"), TEXT("EditorSubsystem"));
             Result->SetBoolField(TEXT("requested"), true);
 
-            SendAutomationResponse(RequestingSocket, RequestId, true, 
+            S.SendAutomationResponse(RequestingSocket, RequestId, true, 
                 TEXT("Region load requested."), Result);
             return true;
         }
@@ -329,13 +331,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
             Result->SetStringField(TEXT("method"), TEXT("LoaderAdapter"));
             Result->SetBoolField(TEXT("requested"), true);
 
-            SendAutomationResponse(RequestingSocket, RequestId, true, 
+            S.SendAutomationResponse(RequestingSocket, RequestId, true, 
                 TEXT("Region load requested via LoaderAdapter."), Result);
             return true;
         }
 #endif
 
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("WorldPartition region loading not supported in this engine version."), 
             TEXT("NOT_SUPPORTED"));
         return true;
@@ -351,7 +353,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
 
         if (DataLayerName.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("Missing dataLayerName."), TEXT("INVALID_PARAMS"));
             return true;
         }
@@ -360,7 +362,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
             GEditor->GetEditorSubsystem<UDataLayerEditorSubsystem>();
         if (!DataLayerSubsystem)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("DataLayerEditorSubsystem not found."), TEXT("SUBSYSTEM_NOT_FOUND"));
             return true;
         }
@@ -402,7 +404,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
 
         if (bExists)
         {
-            SendAutomationResponse(RequestingSocket, RequestId, true, 
+            S.SendAutomationResponse(RequestingSocket, RequestId, true, 
                 FString::Printf(TEXT("DataLayer '%s' already exists."), *DataLayerName));
             return true;
         }
@@ -424,17 +426,17 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
 
         if (NewLayer)
         {
-            SendAutomationResponse(RequestingSocket, RequestId, true, 
+            S.SendAutomationResponse(RequestingSocket, RequestId, true, 
                 FString::Printf(TEXT("DataLayer '%s' created."), *DataLayerName));
         }
         else
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("Failed to create DataLayer (Subsystem returned null)."), 
                 TEXT("CREATE_FAILED"));
         }
 #else
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("DataLayerEditorSubsystem not available."), TEXT("NOT_SUPPORTED"));
 #endif
         return true;
@@ -472,7 +474,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
 
         if (!Actor)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("Actor not found: %s"), *ActorPath), 
                 TEXT("ACTOR_NOT_FOUND"));
             return true;
@@ -482,7 +484,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
             GEditor->GetEditorSubsystem<UDataLayerEditorSubsystem>();
         if (!DataLayerSubsystem)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("DataLayerEditorSubsystem not found."), TEXT("SUBSYSTEM_NOT_FOUND"));
             return true;
         }
@@ -536,12 +538,12 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
             Result->SetBoolField(TEXT("added"), true);
             McpHandlerUtils::AddVerification(Result, Actor);
 
-            SendAutomationResponse(RequestingSocket, RequestId, true, 
+            S.SendAutomationResponse(RequestingSocket, RequestId, true, 
                 TEXT("Actor added to DataLayer."), Result);
         }
         else
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("DataLayer '%s' not found."), *DataLayerName), 
                 TEXT("DATALAYER_NOT_FOUND"));
         }
@@ -550,7 +552,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
         // DATALAYER_NOT_FOUND sibling above) instead of reporting a "simulated" success with added:false.
         UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
             TEXT("DataLayerEditorSubsystem not available. set_datalayer cannot run."));
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("set_datalayer is unavailable: DataLayerEditorSubsystem is not present in this build/configuration."),
             TEXT("SUBSYSTEM_NOT_FOUND"));
 #endif
@@ -567,7 +569,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
             GEditor->GetEditorSubsystem<UDataLayerEditorSubsystem>();
         if (!DataLayerSubsystem)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("DataLayerEditorSubsystem not found."), TEXT("SUBSYSTEM_NOT_FOUND"));
             return true;
         }
@@ -580,7 +582,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
             WorldPartition ? WorldPartition->GetDataLayerManager() : nullptr;
         if (!DataLayerManager)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("DataLayerManager not found."), TEXT("MANAGER_NOT_FOUND"));
             return true;
         }
@@ -598,7 +600,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
             World ? World->GetSubsystem<UDataLayerSubsystem>() : nullptr;
         if (!DataLayerSubsys)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("DataLayerSubsystem not found."), TEXT("SUBSYSTEM_NOT_FOUND"));
             return true;
         }
@@ -623,10 +625,10 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
             DeletedCount++;
         }
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, 
             FString::Printf(TEXT("Cleaned up %d invalid Data Layer Instances."), DeletedCount));
 #else
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("DataLayerEditorSubsystem not available."), TEXT("NOT_SUPPORTED"));
 #endif
         return true;
@@ -636,7 +638,7 @@ bool UMcpAutomationBridgeSubsystem::HandleWorldPartitionAction(
 
 #else
     // Non-editor build
-    SendAutomationResponse(RequestingSocket, RequestId, false, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, false, 
         TEXT("World Partition support disabled (non-editor build)"), 
         nullptr, TEXT("NOT_IMPLEMENTED"));
     return true;

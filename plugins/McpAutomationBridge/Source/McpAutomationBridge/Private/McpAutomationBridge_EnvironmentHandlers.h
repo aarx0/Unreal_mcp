@@ -48,9 +48,9 @@ bool HandleInspectObjectGeneric(UMcpAutomationBridgeSubsystem& S, const FString&
 } // namespace McpHandlers::Inspect
 
 // build_environment core handlers de-membered off UMcpAutomationBridgeSubsystem
-// (F1 module split). The foliage/landscape wrappers and HandleBakeLightmap remain
-// members (they forward to still-private Foliage/Landscape/EditorFunction members),
-// so only the self-contained core actions are free functions here.
+// (F1 module split). The foliage/landscape wrappers and bake_lightmap forward to
+// the de-membered Foliage/Landscape/EditorFunction free functions (declared in
+// their own paired headers).
 namespace McpHandlers::BuildEnvironment
 {
 bool HandleEnvironmentCreateProceduralTerrain(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
@@ -70,6 +70,34 @@ bool HandleEnvironmentSetTimeOfDay(UMcpAutomationBridgeSubsystem& S, const FStri
 bool HandleEnvironmentCreateFogVolume(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
              const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 bool HandleCreateProceduralTerrain(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const FString& Action, const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleEnvironmentAddFoliageInstances(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleEnvironmentGetFoliageInstances(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleEnvironmentRemoveFoliage(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleEnvironmentPaintFoliage(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleEnvironmentCreateProceduralFoliage(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleEnvironmentAddFoliage(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleEnvironmentCreateLandscape(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleEnvironmentPaintLandscape(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleEnvironmentSculpt(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleEnvironmentModifyHeightmap(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleEnvironmentSetLandscapeMaterial(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleEnvironmentCreateLandscapeGrassType(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleEnvironmentBakeLightmap(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleBakeLightmap(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
              const FString& Action, const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 
 } // namespace McpHandlers::BuildEnvironment

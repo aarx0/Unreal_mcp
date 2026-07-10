@@ -395,134 +395,14 @@ public:
   TSharedPtr<FMcpExternalTestRun> ActiveExternalTestRun;
 
 private:
-  /**
-   * Handle lightweight, well-known editor function invocations sent from the
-   * server. This action is intended as a native replacement for the
-   * execute_editor_python fallback for common scripted templates (spawn,
-   * delete, list actors, set viewport camera, asset existence checks, etc.).
-   * When the plugin implements a native function we will handle it here and
-   * avoid executing arbitrary Python inside the editor.
-   */
-  bool
-  HandleExecuteEditorFunction(const FString &RequestId, const FString &Action,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle RequestingSocket);
-
   // Array manipulation operations
   // Map manipulation operations
   // Set manipulation operations
   // control_actor and control_editor dispatch chains were classed away —
   // see MCP/Calls/.
   // manage_level is classed — see MCP/Calls/McpCalls_ManageLevel.cpp.
-  // system_control is classed — see MCP/Calls/McpCalls_SystemControl.cpp;
-  // its member handlers (HandlePerf*/HandleSys*/HandleUi*/HandleLog*/
-  // HandleDebugSpawnCategory/HandleRenderLumenUpdateScene) live in the
-  // transitional public block below.
-public:
-  // build_environment is classed — see
-  // MCP/Calls/McpCalls_BuildEnvironment.cpp.
-  // Its subhandlers are public so the FMcpCall classes (Private/MCP/Calls/)
-  // can delegate, until the module split de-members the implementations off
-  // the subsystem. Implementations span three TUs: HandleEnvironment* @
-  // EnvironmentHandlers.cpp, HandleLighting* @ LightingHandlers.cpp,
-  // HandleSpline* @ SplineHandlers.cpp.
-  bool HandleEnvironmentAddFoliageInstances(const FString &RequestId,
-                                            const TSharedPtr<FJsonObject> &Payload,
-                                            FMcpResponseHandle RequestingSocket);
-  bool HandleEnvironmentGetFoliageInstances(const FString &RequestId,
-                                            const TSharedPtr<FJsonObject> &Payload,
-                                            FMcpResponseHandle RequestingSocket);
-  bool HandleEnvironmentRemoveFoliage(const FString &RequestId,
-                                      const TSharedPtr<FJsonObject> &Payload,
-                                      FMcpResponseHandle RequestingSocket);
-  bool HandleEnvironmentPaintFoliage(const FString &RequestId,
-                                     const TSharedPtr<FJsonObject> &Payload,
-                                     FMcpResponseHandle RequestingSocket);
-  bool HandleEnvironmentCreateProceduralFoliage(const FString &RequestId,
-                                                const TSharedPtr<FJsonObject> &Payload,
-                                                FMcpResponseHandle RequestingSocket);
-  bool HandleEnvironmentAddFoliage(const FString &RequestId,
-                                   const TSharedPtr<FJsonObject> &Payload,
-                                   FMcpResponseHandle RequestingSocket);
-  bool HandleEnvironmentCreateLandscape(const FString &RequestId,
-                                        const TSharedPtr<FJsonObject> &Payload,
-                                        FMcpResponseHandle RequestingSocket);
-  bool HandleEnvironmentPaintLandscape(const FString &RequestId,
-                                       const TSharedPtr<FJsonObject> &Payload,
-                                       FMcpResponseHandle RequestingSocket);
-  bool HandleEnvironmentSculpt(const FString &RequestId,
-                               const TSharedPtr<FJsonObject> &Payload,
-                               FMcpResponseHandle RequestingSocket);
-  bool HandleEnvironmentModifyHeightmap(const FString &RequestId,
-                                        const TSharedPtr<FJsonObject> &Payload,
-                                        FMcpResponseHandle RequestingSocket);
-  bool HandleEnvironmentSetLandscapeMaterial(const FString &RequestId,
-                                             const TSharedPtr<FJsonObject> &Payload,
-                                             FMcpResponseHandle RequestingSocket);
-  bool HandleEnvironmentCreateLandscapeGrassType(const FString &RequestId,
-                                                 const TSharedPtr<FJsonObject> &Payload,
-                                                 FMcpResponseHandle RequestingSocket);
-  bool HandleEnvironmentBakeLightmap(const FString &RequestId,
-                                     const TSharedPtr<FJsonObject> &Payload,
-                                     FMcpResponseHandle RequestingSocket);
-
-private:
-  bool HandlePaintFoliage(const FString &RequestId, const FString &Action,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle RequestingSocket);
-  bool
-  HandleGetFoliageInstances(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
-  bool HandleRemoveFoliage(const FString &RequestId, const FString &Action,
-                           const TSharedPtr<FJsonObject> &Payload,
-                           FMcpResponseHandle RequestingSocket);
-  bool HandleBakeLightmap(const FString &RequestId, const FString &Action,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle RequestingSocket);
-  bool HandleCreateProceduralFoliage(const FString &RequestId, const FString &Action,
-                                     const TSharedPtr<FJsonObject> &Payload,
-                                     FMcpResponseHandle RequestingSocket);
-  bool HandleAddFoliageType(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
-  // Landscape, foliage, and Niagara handlers
-  bool HandleCreateLandscape(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
-  bool HandleCreateLandscapeGrassType(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  // Aggregate landscape editor that dispatches to specific edit ops
-  bool HandleEditLandscape(const FString &RequestId, const FString &Action,
-                           const TSharedPtr<FJsonObject> &Payload,
-                           FMcpResponseHandle RequestingSocket);
-  // Specific landscape edit operations
-  bool HandleModifyHeightmap(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
-  bool
-  HandlePaintLandscapeLayer(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
-  bool HandleSculptLandscape(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
-  bool
-  HandleSetLandscapeMaterial(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
-  // Foliage handlers
-  bool
-  HandleAddFoliageInstances(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
-  // Additional consolidated tool handlers
-  bool
-  HandleWorldPartitionAction(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
+  // system_control is classed — see MCP/Calls/McpCalls_SystemControl.cpp.
+  // build_environment is classed — see MCP/Calls/McpCalls_BuildEnvironment.cpp.
 
   // Ticker handle for managing the subsystems tick function
   FTSTicker::FDelegateHandle TickHandle;

@@ -42,6 +42,7 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_FoliageHandlers.h"
 #include "McpHandlerUtils.h"
 
 // =============================================================================
@@ -173,7 +174,8 @@ static AInstancedFoliageActor* GetOrCreateFoliageActorForWorldSafe(UWorld* World
 //   - instancesPlaced (int): Number of instances created
 //   - foliageActorPath (string): Path to the foliage actor
 // -----------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandlePaintFoliage(
+bool McpHandlers::BuildEnvironment::HandlePaintFoliage(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -184,7 +186,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintFoliage(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("paint_foliage payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -196,7 +198,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintFoliage(
     Payload->TryGetStringField(TEXT("foliageType"), FoliageTypePath);
   }
   if (FoliageTypePath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("foliageTypePath (or foliageType) required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -205,7 +207,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintFoliage(
   // Security: Validate path format
   FString SafePath = SanitizeProjectRelativePath(FoliageTypePath);
   if (SafePath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         FString::Printf(TEXT("Invalid or unsafe foliage type path: %s"), *FoliageTypePath),
                         TEXT("SECURITY_VIOLATION"));
     return true;
@@ -221,7 +223,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintFoliage(
 
   // Validate after auto-resolve
   if (FoliageTypePath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("foliageTypePath (or foliageType) required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -260,14 +262,14 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintFoliage(
   }
 
   if (Locations.Num() == 0) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("locations array or position required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   if (!GEditor || !GEditor->GetEditorWorldContext().World()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor world not available"),
                         TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -315,7 +317,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintFoliage(
   }
   
   if (!FoliageType) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(TEXT("Foliage type asset not found: %s (also tried as StaticMesh)"),
                         *FoliageTypePath),
@@ -326,7 +328,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintFoliage(
   AInstancedFoliageActor *IFA =
       GetOrCreateFoliageActorForWorldSafe(World, true);
   if (!IFA) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to get foliage actor"),
                         TEXT("FOLIAGE_ACTOR_FAILED"));
     return true;
@@ -364,11 +366,11 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintFoliage(
   Resp->SetStringField(TEXT("foliageActorName"), IFA->GetName());
   Resp->SetBoolField(TEXT("existsAfter"), true);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Foliage painted successfully"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("paint_foliage requires editor build."), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -389,7 +391,8 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintFoliage(
 //   - instancesRemoved (int): Number of instances removed
 //   - foliageActorPath (string): Path to the foliage actor
 // -----------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleRemoveFoliage(
+bool McpHandlers::BuildEnvironment::HandleRemoveFoliage(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -400,7 +403,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRemoveFoliage(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("remove_foliage payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -413,7 +416,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRemoveFoliage(
   if (!FoliageTypePath.IsEmpty()) {
     FString SafePath = SanitizeProjectRelativePath(FoliageTypePath);
     if (SafePath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("Invalid or unsafe foliage type path: %s"), *FoliageTypePath),
                           TEXT("SECURITY_VIOLATION"));
       return true;
@@ -432,7 +435,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRemoveFoliage(
   Payload->TryGetBoolField(TEXT("removeAll"), bRemoveAll);
 
   if (!GEditor || !GEditor->GetEditorWorldContext().World()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor world not available"),
                         TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -442,7 +445,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRemoveFoliage(
   AInstancedFoliageActor *IFA =
       GetOrCreateFoliageActorForWorldSafe(World, false);
   if (!IFA) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("No foliage actor found"),
                         TEXT("FOLIAGE_ACTOR_NOT_FOUND"));
     return true;
@@ -480,11 +483,11 @@ bool UMcpAutomationBridgeSubsystem::HandleRemoveFoliage(
   Resp->SetStringField(TEXT("foliageActorPath"), IFA->GetPathName());
   Resp->SetBoolField(TEXT("existsAfter"), true);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Foliage removed successfully"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("remove_foliage requires editor build."), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -506,7 +509,8 @@ bool UMcpAutomationBridgeSubsystem::HandleRemoveFoliage(
 //   - count (int): Total number of instances
 //   - foliageActorPath (string): Path to the foliage actor
 // -----------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleGetFoliageInstances(
+bool McpHandlers::BuildEnvironment::HandleGetFoliageInstances(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -517,7 +521,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetFoliageInstances(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("get_foliage_instances payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -530,7 +534,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetFoliageInstances(
   if (!FoliageTypePath.IsEmpty()) {
     FString SafePath = SanitizeProjectRelativePath(FoliageTypePath);
     if (SafePath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("Invalid or unsafe foliage type path: %s"), *FoliageTypePath),
                           TEXT("SECURITY_VIOLATION"));
       return true;
@@ -546,7 +550,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetFoliageInstances(
   }
 
   if (!GEditor || !GEditor->GetEditorWorldContext().World()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor world not available"),
                         TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -559,7 +563,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetFoliageInstances(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetArrayField(TEXT("instances"), TArray<TSharedPtr<FJsonValue>>());
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("No foliage actor found"), Resp, FString());
     return true;
   }
@@ -573,7 +577,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetFoliageInstances(
       TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       Resp->SetBoolField(TEXT("success"), true);
       Resp->SetArrayField(TEXT("instances"), TArray<TSharedPtr<FJsonValue>>());
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Foliage type not found, 0 instances"), Resp,
                              FString());
       return true;
@@ -619,11 +623,11 @@ bool UMcpAutomationBridgeSubsystem::HandleGetFoliageInstances(
   Resp->SetStringField(TEXT("foliageActorPath"), IFA->GetPathName());
   Resp->SetBoolField(TEXT("existsAfter"), true);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Foliage instances retrieved"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("get_foliage_instances requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -654,7 +658,8 @@ bool UMcpAutomationBridgeSubsystem::HandleGetFoliageInstances(
 //   - asset_path (string): Path to the created foliage type
 //   - used_mesh (string): Path to the source mesh
 // -----------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAddFoliageType(
+bool McpHandlers::BuildEnvironment::HandleAddFoliageType(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -665,7 +670,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageType(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("add_foliage_type payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -673,7 +678,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageType(
 
   FString Name;
   if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("name required"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("name required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -682,7 +687,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageType(
   if (!Payload->TryGetStringField(TEXT("meshPath"), MeshPath) ||
       MeshPath.IsEmpty() ||
       MeshPath.Equals(TEXT("undefined"), ESearchCase::IgnoreCase)) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("valid meshPath required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -691,7 +696,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageType(
   double Density = 100.0;
   if (Payload->TryGetNumberField(TEXT("density"), Density)) {
     if (Density < 0.0) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("density must be non-negative"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -703,13 +708,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageType(
   Payload->TryGetNumberField(TEXT("maxScale"), MaxScale);
 
   if (MinScale <= 0.0 || MaxScale <= 0.0) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Scales must be positive"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
   if (MinScale > MaxScale) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("minScale (%f) cannot be greater than maxScale (%f)"),
@@ -752,12 +757,12 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageType(
 
   if (!StaticMesh) {
     if (!FPackageName::IsValidLongPackageName(MeshPath)) {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(TEXT("Invalid package path: %s"), *MeshPath),
           TEXT("INVALID_ARGUMENT"));
     } else {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(TEXT("Static mesh not found: %s"), *MeshPath),
           TEXT("ASSET_NOT_FOUND"));
@@ -772,7 +777,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageType(
 
   UPackage *Package = CreatePackage(*FullPackagePath);
   if (!Package) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to create package"),
                         TEXT("PACKAGE_CREATION_FAILED"));
     return true;
@@ -788,7 +793,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageType(
         Package, FName(*AssetName), RF_Public | RF_Standalone);
   }
   if (!FoliageType) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to create foliage type"),
                         TEXT("CREATION_FAILED"));
     return true;
@@ -824,13 +829,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageType(
   // Add verification data
   McpHandlerUtils::AddVerification(Resp, FoliageType);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Foliage type created successfully"), Resp,
                          FString());
 
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("add_foliage_type requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -857,7 +862,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageType(
 //   - foliageActorPath (string): Path to the foliage actor
 //   - foliageTypePath (string): Resolved foliage type path
 // -----------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleAddFoliageInstances(
+bool McpHandlers::BuildEnvironment::HandleAddFoliageInstances(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -868,7 +874,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageInstances(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("add_foliage_instances payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -879,7 +885,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageInstances(
     Payload->TryGetStringField(TEXT("foliageType"), FoliageTypePath);
   }
   if (FoliageTypePath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("foliageType or foliageTypePath required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -888,7 +894,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageInstances(
   // Security: Validate path format
   FString SafePath = SanitizeProjectRelativePath(FoliageTypePath);
   if (SafePath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         FString::Printf(TEXT("Invalid or unsafe foliage type path: %s"), *FoliageTypePath),
                         TEXT("SECURITY_VIOLATION"));
     return true;
@@ -1006,14 +1012,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageInstances(
   }
 
   if (ParsedTransforms.Num() == 0) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("transforms or locations must contain at least one valid location"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   if (!GEditor || !GEditor->GetEditorWorldContext().World()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor world not available"),
                         TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -1048,7 +1054,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageInstances(
   }
   
   if (!FoliageType) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(TEXT("Foliage type asset not found: %s (also tried as StaticMesh)"),
                         *FoliageTypePath),
@@ -1059,7 +1065,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageInstances(
   AInstancedFoliageActor *IFA =
       GetOrCreateFoliageActorForWorldSafe(World, true);
   if (!IFA) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to get foliage actor"),
                         TEXT("FOLIAGE_ACTOR_FAILED"));
     return true;
@@ -1093,11 +1099,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageInstances(
   Resp->SetStringField(TEXT("foliageTypePath"), FoliageTypePath);
   Resp->SetBoolField(TEXT("existsAfter"), true);
   
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Foliage instances added"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("add_foliage_instances requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1130,7 +1136,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAddFoliageInstances(
 //   - foliage_types_count (int): Number of foliage types configured
 //   - resimulated (bool): true if resimulation was triggered
 // -----------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralFoliage(
+bool McpHandlers::BuildEnvironment::HandleCreateProceduralFoliage(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -1142,7 +1149,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralFoliage(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("create_procedural_foliage payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -1195,7 +1202,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralFoliage(
   Payload->TryGetNumberField(TEXT("seed"), Seed);
 
   if (!GEditor) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor not available"),
                         TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -1211,7 +1218,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralFoliage(
   UProceduralFoliageSpawner *Spawner = NewObject<UProceduralFoliageSpawner>(
       Package, FName(*AssetName), RF_Public | RF_Standalone);
   if (!Spawner) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to create spawner asset"),
                         TEXT("CREATION_FAILED"));
     return true;
@@ -1293,7 +1300,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralFoliage(
       SpawnActorInActiveWorld<AActor>(AProceduralFoliageVolume::StaticClass(),
                                       Location, FRotator::ZeroRotator, Name));
   if (!Volume) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to spawn volume"), TEXT("SPAWN_FAILED"));
     return true;
   }
@@ -1319,7 +1326,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralFoliage(
   }
   else
   {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Procedural foliage component not available on spawned volume"),
                         TEXT("COMPONENT_NOT_FOUND"));
     return true;
@@ -1337,11 +1344,11 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateProceduralFoliage(
   McpHandlerUtils::AddVerification(Resp, Volume);
   McpHandlerUtils::AddVerification(Resp, Spawner);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Procedural foliage created"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("create_procedural_foliage requires editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));

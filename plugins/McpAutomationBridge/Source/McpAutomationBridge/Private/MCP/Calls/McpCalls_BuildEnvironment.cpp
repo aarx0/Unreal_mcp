@@ -830,43 +830,23 @@ class FMcpCall_BuildEnvironment_##ClassSuffix final : public FMcpCall           
 	}                                                                                    \
 };
 
-// The foliage/landscape wrappers + bake_lightmap forward to still-private
-// Foliage/Landscape/EditorFunction members, so they stay subsystem members
-// (F1 rule 4) and dispatch through S.; this variant keeps that member call.
-#define MCP_BE_MEMBER_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                 \
-class FMcpCall_BuildEnvironment_##ClassSuffix final : public FMcpCall                    \
-{                                                                                        \
-	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }       \
-	const FMcpCallDecl& GetDecl() const override                                         \
-	{                                                                                    \
-		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("build_environment"),          \
-			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                            \
-		return D;                                                                        \
-	}                                                                                    \
-	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                 \
-	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override \
-	{                                                                                    \
-		return S.HandlerFn(RequestId, Payload, Socket);                                  \
-	}                                                                                    \
-};
-
-// Foliage (delegating wrappers @ EnvironmentHandlers.cpp) — still members
-MCP_BE_MEMBER_CALL(AddFoliageInstances, "add_foliage_instances", HandleEnvironmentAddFoliageInstances, EMcpCallFlags::Mutating)
-MCP_BE_MEMBER_CALL(GetFoliageInstances, "get_foliage_instances", HandleEnvironmentGetFoliageInstances, EMcpCallFlags::None)
-MCP_BE_MEMBER_CALL(RemoveFoliage, "remove_foliage", HandleEnvironmentRemoveFoliage, EMcpCallFlags::Mutating)
-MCP_BE_MEMBER_CALL(PaintFoliage, "paint_foliage", HandleEnvironmentPaintFoliage, EMcpCallFlags::Mutating)
-MCP_BE_MEMBER_CALL(CreateProceduralFoliage, "create_procedural_foliage", HandleEnvironmentCreateProceduralFoliage, EMcpCallFlags::Mutating)
+// Foliage (delegating wrappers @ EnvironmentHandlers.cpp)
+MCP_BE_CALL(AddFoliageInstances, "add_foliage_instances", McpHandlers::BuildEnvironment::HandleEnvironmentAddFoliageInstances, EMcpCallFlags::Mutating)
+MCP_BE_CALL(GetFoliageInstances, "get_foliage_instances", McpHandlers::BuildEnvironment::HandleEnvironmentGetFoliageInstances, EMcpCallFlags::None)
+MCP_BE_CALL(RemoveFoliage, "remove_foliage", McpHandlers::BuildEnvironment::HandleEnvironmentRemoveFoliage, EMcpCallFlags::Mutating)
+MCP_BE_CALL(PaintFoliage, "paint_foliage", McpHandlers::BuildEnvironment::HandleEnvironmentPaintFoliage, EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateProceduralFoliage, "create_procedural_foliage", McpHandlers::BuildEnvironment::HandleEnvironmentCreateProceduralFoliage, EMcpCallFlags::Mutating)
 MCP_BE_CALL(CreateProceduralTerrain, "create_procedural_terrain", McpHandlers::BuildEnvironment::HandleEnvironmentCreateProceduralTerrain, EMcpCallFlags::Mutating)
-MCP_BE_MEMBER_CALL(AddFoliage, "add_foliage", HandleEnvironmentAddFoliage, EMcpCallFlags::Mutating)
-// Landscape — still members
-MCP_BE_MEMBER_CALL(CreateLandscape, "create_landscape", HandleEnvironmentCreateLandscape, EMcpCallFlags::Mutating)
-MCP_BE_MEMBER_CALL(PaintLandscape, "paint_landscape", HandleEnvironmentPaintLandscape, EMcpCallFlags::Mutating)
-MCP_BE_MEMBER_CALL(Sculpt, "sculpt", HandleEnvironmentSculpt, EMcpCallFlags::Mutating)
-MCP_BE_MEMBER_CALL(ModifyHeightmap, "modify_heightmap", HandleEnvironmentModifyHeightmap, EMcpCallFlags::Mutating)
-MCP_BE_MEMBER_CALL(SetLandscapeMaterial, "set_landscape_material", HandleEnvironmentSetLandscapeMaterial, EMcpCallFlags::Mutating)
-MCP_BE_MEMBER_CALL(CreateLandscapeGrassType, "create_landscape_grass_type", HandleEnvironmentCreateLandscapeGrassType, EMcpCallFlags::Mutating)
+MCP_BE_CALL(AddFoliage, "add_foliage", McpHandlers::BuildEnvironment::HandleEnvironmentAddFoliage, EMcpCallFlags::Mutating)
+// Landscape (delegating wrappers @ EnvironmentHandlers.cpp)
+MCP_BE_CALL(CreateLandscape, "create_landscape", McpHandlers::BuildEnvironment::HandleEnvironmentCreateLandscape, EMcpCallFlags::Mutating)
+MCP_BE_CALL(PaintLandscape, "paint_landscape", McpHandlers::BuildEnvironment::HandleEnvironmentPaintLandscape, EMcpCallFlags::Mutating)
+MCP_BE_CALL(Sculpt, "sculpt", McpHandlers::BuildEnvironment::HandleEnvironmentSculpt, EMcpCallFlags::Mutating)
+MCP_BE_CALL(ModifyHeightmap, "modify_heightmap", McpHandlers::BuildEnvironment::HandleEnvironmentModifyHeightmap, EMcpCallFlags::Mutating)
+MCP_BE_CALL(SetLandscapeMaterial, "set_landscape_material", McpHandlers::BuildEnvironment::HandleEnvironmentSetLandscapeMaterial, EMcpCallFlags::Mutating)
+MCP_BE_CALL(CreateLandscapeGrassType, "create_landscape_grass_type", McpHandlers::BuildEnvironment::HandleEnvironmentCreateLandscapeGrassType, EMcpCallFlags::Mutating)
 MCP_BE_CALL(GenerateLods, "generate_lods", McpHandlers::BuildEnvironment::HandleEnvironmentGenerateLODs, EMcpCallFlags::Mutating)
-MCP_BE_MEMBER_CALL(BakeLightmap, "bake_lightmap", HandleEnvironmentBakeLightmap, EMcpCallFlags::Mutating)
+MCP_BE_CALL(BakeLightmap, "bake_lightmap", McpHandlers::BuildEnvironment::HandleEnvironmentBakeLightmap, EMcpCallFlags::Mutating)
 
 // Environment inline extractions (EnvironmentHandlers.cpp)
 MCP_BE_CALL(ExportSnapshot, "export_snapshot", McpHandlers::BuildEnvironment::HandleEnvironmentExportSnapshot, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -921,7 +901,6 @@ MCP_BE_CALL(CreatePipeSpline, "create_pipe_spline", McpHandlers::BuildEnvironmen
 MCP_BE_CALL(GetSplinesInfo, "get_splines_info", McpHandlers::BuildEnvironment::HandleSplineGetSplinesInfo, EMcpCallFlags::RequiresEditor)
 
 #undef MCP_BE_CALL
-#undef MCP_BE_MEMBER_CALL
 
 } // namespace McpCalls::BuildEnvironment
 

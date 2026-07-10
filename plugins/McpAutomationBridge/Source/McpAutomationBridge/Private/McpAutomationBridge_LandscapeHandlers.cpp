@@ -112,6 +112,7 @@
 #include "McpAutomationBridgeGlobals.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_LandscapeHandlers.h"
 #include "McpLandscapeMetadataTags.h"
 #include "ScopedTransaction.h"
 
@@ -185,18 +186,19 @@ DEFINE_LOG_CATEGORY_STATIC(LogMcpLandscapeHandlers, Log, All);
  * @param RequestingSocket  WebSocket connection for response delivery
  * @return true if any sub-handler claimed the action
  */
-bool UMcpAutomationBridgeSubsystem::HandleEditLandscape(
+bool McpHandlers::BuildEnvironment::HandleEditLandscape(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
   // Dispatch to specific edit operations implemented below
-  if (HandleModifyHeightmap(RequestId, Action, Payload, RequestingSocket))
+  if (HandleModifyHeightmap(S, RequestId, Action, Payload, RequestingSocket))
     return true;
-  if (HandlePaintLandscapeLayer(RequestId, Action, Payload, RequestingSocket))
+  if (HandlePaintLandscapeLayer(S, RequestId, Action, Payload, RequestingSocket))
     return true;
-  if (HandleSculptLandscape(RequestId, Action, Payload, RequestingSocket))
+  if (HandleSculptLandscape(S, RequestId, Action, Payload, RequestingSocket))
     return true;
-  if (HandleSetLandscapeMaterial(RequestId, Action, Payload, RequestingSocket))
+  if (HandleSetLandscapeMaterial(S, RequestId, Action, Payload, RequestingSocket))
     return true;
   return false;
 }
@@ -227,7 +229,8 @@ bool UMcpAutomationBridgeSubsystem::HandleEditLandscape(
  * @param RequestingSocket  WebSocket for response delivery
  * @return true if action was handled
  */
-bool UMcpAutomationBridgeSubsystem::HandleCreateLandscape(
+bool McpHandlers::BuildEnvironment::HandleCreateLandscape(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -238,7 +241,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscape(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("create_landscape payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -328,7 +331,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscape(
 
   // ... inside HandleCreateLandscape ...
   if (!GEditor || !GEditor->GetEditorWorldContext().World()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor world not available"),
                         TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -342,7 +345,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscape(
 
   // Strict validation: reject empty/missing name for landscape creation
   if (NameOverride.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("name or landscapeName parameter is required for create_landscape"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -354,7 +357,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscape(
       NameOverride.Contains(TEXT("?")) || NameOverride.Contains(TEXT("\"")) ||
       NameOverride.Contains(TEXT("<")) || NameOverride.Contains(TEXT(">")) ||
       NameOverride.Contains(TEXT("|"))) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("name contains invalid characters (/, \\, :, *, ?, \", <, >, |)"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -362,7 +365,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscape(
 
   // Validate name length
   if (NameOverride.Len() > 128) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("name exceeds maximum length of 128 characters"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -389,7 +392,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscape(
       World->SpawnActor<ALandscape>(ALandscape::StaticClass(), CaptLocation,
                                     FRotator::ZeroRotator, SpawnParams);
   if (!Landscape) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to spawn landscape actor"),
                         TEXT("SPAWN_FAILED"));
     return true;
@@ -582,13 +585,13 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscape(
   Resp->SetNumberField(TEXT("extentX"), CaptComponentsX * CaptQuadsPerComponent * Landscape->GetActorScale3D().X * 0.5);
   Resp->SetNumberField(TEXT("extentY"), CaptComponentsY * CaptQuadsPerComponent * Landscape->GetActorScale3D().Y * 0.5);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Landscape created successfully"),
                          Resp, FString());
 
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("create_landscape requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -624,7 +627,8 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscape(
  * @param RequestingSocket  WebSocket for response delivery
  * @return true if action was handled
  */
-bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
+bool McpHandlers::BuildEnvironment::HandleModifyHeightmap(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -635,7 +639,7 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("modify_heightmap payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -650,7 +654,7 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
   if (!LandscapePath.IsEmpty()) {
     FString SafePath = SanitizeProjectRelativePath(LandscapePath);
     if (SafePath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("Invalid or unsafe landscape path: %s"), *LandscapePath),
                           TEXT("SECURITY_VIOLATION"));
       return true;
@@ -688,7 +692,7 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
   // For flatten, the single value is the target height
   // For set, heightData is required
   if (!bHasHeightData && Operation.Equals(TEXT("set"), ESearchCase::IgnoreCase)) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("heightData array required for 'set' operation"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -764,7 +768,7 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
     FString ErrorMessage = LandscapeName.IsEmpty()
         ? FString::Printf(TEXT("Landscape not found at path: %s"), *LandscapePath)
         : FString::Printf(TEXT("Landscape '%s' not found (path: %s)"), *LandscapeName, *LandscapePath);
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         *ErrorMessage,
                         TEXT("LANDSCAPE_NOT_FOUND"));
     return true;
@@ -772,7 +776,7 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
 
   ULandscapeInfo *LandscapeInfo = Landscape->GetLandscapeInfo();
   if (!LandscapeInfo) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Landscape has no info"),
                         TEXT("INVALID_LANDSCAPE"));
     return true;
@@ -801,7 +805,7 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
         TEXT("Landscape heightmap extent/edit operations are unsafe under NullRHI; landscape identity was validated."));
     McpHandlerUtils::AddVerification(Resp, Landscape);
 
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, true,
         TEXT("Heightmap edit validated; landscape write skipped under NullRHI"),
         Resp, FString());
@@ -815,7 +819,7 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
   // Get full landscape extent first
   int32 FullMinX, FullMinY, FullMaxX, FullMaxY;
   if (!LandscapeInfo->GetLandscapeExtent(FullMinX, FullMinY, FullMaxX, FullMaxY)) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to get landscape extent"),
                         TEXT("INVALID_LANDSCAPE"));
     return true;
@@ -854,7 +858,7 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
         TEXT("Landscape heightmap texture upload is unsafe under NullRHI; landscape and edit region were validated."));
     McpHandlerUtils::AddVerification(Resp, Landscape);
 
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, true,
         TEXT("Heightmap edit validated; texture write skipped under NullRHI"),
         Resp, FString());
@@ -950,13 +954,13 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
   // Add verification data
   McpHandlerUtils::AddVerification(Resp, Landscape);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Heightmap modified successfully"),
                          Resp, FString());
 
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("modify_heightmap requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -987,7 +991,8 @@ bool UMcpAutomationBridgeSubsystem::HandleModifyHeightmap(
  * @param RequestingSocket  WebSocket for response delivery
  * @return true if action was handled
  */
-bool UMcpAutomationBridgeSubsystem::HandleSculptLandscape(
+bool McpHandlers::BuildEnvironment::HandleSculptLandscape(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -998,7 +1003,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSculptLandscape(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("sculpt_landscape payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -1013,7 +1018,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSculptLandscape(
   if (!LandscapePath.IsEmpty()) {
     FString SafePath = SanitizeProjectRelativePath(LandscapePath);
     if (SafePath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("Invalid or unsafe landscape path: %s"), *LandscapePath),
                           TEXT("SECURITY_VIOLATION"));
       return true;
@@ -1037,7 +1042,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSculptLandscape(
     (*LocObj)->TryGetNumberField(TEXT("y"), LocY);
     (*LocObj)->TryGetNumberField(TEXT("z"), LocZ);
   } else {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         TEXT("location or position required. Example: {\"location\": {\"x\": "
              "0, \"y\": 0, \"z\": 100}}"),
@@ -1117,7 +1122,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSculptLandscape(
     FString ErrorMessage = LandscapeName.IsEmpty()
         ? FString::Printf(TEXT("Landscape not found at path: %s"), *LandscapePath)
         : FString::Printf(TEXT("Landscape '%s' not found (path: %s)"), *LandscapeName, *LandscapePath);
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         *ErrorMessage,
                         TEXT("LANDSCAPE_NOT_FOUND"));
     return true;
@@ -1125,7 +1130,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSculptLandscape(
 
   ULandscapeInfo *LandscapeInfo = Landscape->GetLandscapeInfo();
   if (!LandscapeInfo) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Landscape has no info"),
                         TEXT("INVALID_LANDSCAPE"));
     return true;
@@ -1146,7 +1151,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSculptLandscape(
   // Guard against zero scale which would cause division by zero
   if (FMath::IsNearlyZero(ScaleX) || FMath::IsNearlyZero(ScaleZ))
   {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Landscape has zero scale. Cannot perform brush operation."),
                         TEXT("INVALID_SCALE"));
     return true;
@@ -1170,7 +1175,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSculptLandscape(
   }
 
   if (MinX > MaxX || MinY > MaxY) {
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Brush outside landscape bounds"),
                            nullptr, TEXT("OUT_OF_BOUNDS"));
     return true;
@@ -1254,13 +1259,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSculptLandscape(
   Resp->SetNumberField(TEXT("modifiedVertices"),
                        bModified ? HeightData.Num() : 0);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Landscape sculpted"), Resp,
                          FString());
 
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("sculpt_landscape requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1287,7 +1292,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSculptLandscape(
  * @param RequestingSocket  WebSocket for response delivery
  * @return true if action was handled
  */
-bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
+bool McpHandlers::BuildEnvironment::HandlePaintLandscapeLayer(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -1298,7 +1304,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("paint_landscape_layer payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -1313,7 +1319,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
   if (!LandscapePath.IsEmpty()) {
     FString SafePath = SanitizeProjectRelativePath(LandscapePath);
     if (SafePath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           FString::Printf(TEXT("Invalid or unsafe landscape path: %s"), *LandscapePath),
                           TEXT("SECURITY_VIOLATION"));
       return true;
@@ -1324,7 +1330,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
   FString LayerName;
   if (!Payload->TryGetStringField(TEXT("layerName"), LayerName) ||
       LayerName.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("layerName required"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("layerName required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -1403,7 +1409,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
     FString ErrorMessage = LandscapeName.IsEmpty()
         ? FString::Printf(TEXT("Landscape not found at path: %s"), *LandscapePath)
         : FString::Printf(TEXT("Landscape '%s' not found (path: %s)"), *LandscapeName, *LandscapePath);
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         *ErrorMessage,
                         TEXT("LANDSCAPE_NOT_FOUND"));
     return true;
@@ -1411,7 +1417,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
 
   ULandscapeInfo *LandscapeInfo = Landscape->GetLandscapeInfo();
   if (!LandscapeInfo) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Landscape has no info"),
                         TEXT("INVALID_LANDSCAPE"));
     return true;
@@ -1453,7 +1459,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
 
       LayerInfo = NewLayerInfo;
     } else {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(TEXT("Failed to create layer '%s'"),
                           *LayerName),
@@ -1484,7 +1490,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
   // Validate region is valid
   if (PaintMinX > PaintMaxX || PaintMinY > PaintMaxY)
   {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Invalid paint region: min > max after clamping"),
                         TEXT("INVALID_REGION"));
     return true;
@@ -1500,7 +1506,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
   constexpr int32 MaxRegionPixels = 16777216; // 16M pixels = ~16MB for uint8
   if (RegionSizeX * RegionSizeY > MaxRegionPixels)
   {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         FString::Printf(TEXT("Paint region too large: %dx%d (%d pixels). Maximum: %d"),
                                         RegionSizeX, RegionSizeY, RegionSizeX * RegionSizeY, MaxRegionPixels),
                         TEXT("REGION_TOO_LARGE"));
@@ -1530,13 +1536,13 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
   Resp->SetStringField(TEXT("layerName"), LayerName);
   Resp->SetNumberField(TEXT("strength"), Strength);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Layer painted successfully"), Resp,
                          FString());
 
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("paint_landscape_layer requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1559,7 +1565,8 @@ bool UMcpAutomationBridgeSubsystem::HandlePaintLandscapeLayer(
  * @param RequestingSocket  WebSocket for response delivery
  * @return true if action was handled
  */
-bool UMcpAutomationBridgeSubsystem::HandleSetLandscapeMaterial(
+bool McpHandlers::BuildEnvironment::HandleSetLandscapeMaterial(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -1570,7 +1577,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetLandscapeMaterial(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("set_landscape_material payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -1583,7 +1590,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetLandscapeMaterial(
   FString MaterialPath;
   if (!Payload->TryGetStringField(TEXT("materialPath"), MaterialPath) ||
       MaterialPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("materialPath required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -1592,7 +1599,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetLandscapeMaterial(
   // Security: Validate material path
   FString SafeMaterialPath = SanitizeProjectRelativePath(MaterialPath);
   if (SafeMaterialPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         FString::Printf(TEXT("Invalid or unsafe material path: %s"), *MaterialPath),
                         TEXT("SECURITY_VIOLATION"));
     return true;
@@ -1648,7 +1655,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetLandscapeMaterial(
     FString ErrorMessage = LandscapeName.IsEmpty()
         ? FString::Printf(TEXT("Landscape not found at path: %s"), *LandscapePath)
         : FString::Printf(TEXT("Landscape '%s' not found (path: %s)"), *LandscapeName, *LandscapePath);
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         *ErrorMessage,
                         TEXT("LANDSCAPE_NOT_FOUND"));
     return true;
@@ -1664,13 +1671,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSetLandscapeMaterial(
     // Check existence separately only if load failed, to distinguish error
     // type (optional)
     if (!UEditorAssetLibrary::DoesAssetExist(MaterialPath)) {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(TEXT("Material asset not found: %s"),
                           *MaterialPath),
           TEXT("ASSET_NOT_FOUND"));
     } else {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           TEXT("Failed to load material (invalid type?)"),
           TEXT("LOAD_FAILED"));
@@ -1687,13 +1694,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSetLandscapeMaterial(
   Resp->SetStringField(TEXT("landscapeName"), Landscape->GetActorLabel());
   Resp->SetStringField(TEXT("materialPath"), MaterialPath);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Landscape material set"), Resp,
                          FString());
 
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("set_landscape_material requires editor build."),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -1722,7 +1729,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSetLandscapeMaterial(
  * @param RequestingSocket  WebSocket for response delivery
  * @return true if action was handled
  */
-bool UMcpAutomationBridgeSubsystem::HandleCreateLandscapeGrassType(
+bool McpHandlers::BuildEnvironment::HandleCreateLandscapeGrassType(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -1734,7 +1742,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscapeGrassType(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("create_landscape_grass_type payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -1742,7 +1750,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscapeGrassType(
 
   FString Name;
   if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("name required"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("name required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -1752,7 +1760,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscapeGrassType(
       MeshPath.IsEmpty()) {
     Payload->TryGetStringField(TEXT("staticMesh"), MeshPath);
     if (MeshPath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId, TEXT("meshPath or staticMesh required"),
+      S.SendAutomationError(RequestingSocket, RequestId, TEXT("meshPath or staticMesh required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -1761,7 +1769,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscapeGrassType(
   // Security: Validate mesh path
   FString SafeMeshPath = SanitizeProjectRelativePath(MeshPath);
   if (SafeMeshPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         FString::Printf(TEXT("Invalid or unsafe mesh path: %s"), *MeshPath),
                         TEXT("SECURITY_VIOLATION"));
     return true;
@@ -1781,7 +1789,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscapeGrassType(
   UStaticMesh *StaticMesh = Cast<UStaticMesh>(StaticLoadObject(
       UStaticMesh::StaticClass(), nullptr, *MeshPath, nullptr, LOAD_NoWarn));
   if (!StaticMesh) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(TEXT("Static mesh not found: %s"), *MeshPath),
         TEXT("ASSET_NOT_FOUND"));
@@ -1800,7 +1808,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscapeGrassType(
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetStringField(TEXT("asset_path"), ExistingAsset->GetPathName());
     Resp->SetStringField(TEXT("message"), TEXT("Asset already exists"));
-    SendAutomationResponse(
+    S.SendAutomationResponse(
         RequestingSocket, RequestId, true,
         TEXT("Landscape grass type already exists"), Resp, FString());
     return true;
@@ -1810,7 +1818,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscapeGrassType(
   ULandscapeGrassType *GrassType = NewObject<ULandscapeGrassType>(
       Package, FName(*AssetName), RF_Public | RF_Standalone);
   if (!GrassType) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to create grass type asset"),
                         TEXT("CREATION_FAILED"));
     return true;
@@ -1838,13 +1846,13 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateLandscapeGrassType(
   Resp->SetBoolField(TEXT("success"), true);
   Resp->SetStringField(TEXT("asset_path"), GrassType->GetPathName());
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Landscape grass type created"),
                          Resp, FString());
 
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("create_landscape_grass_type requires editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));

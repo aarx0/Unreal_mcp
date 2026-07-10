@@ -65,6 +65,8 @@
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridge_BlueprintHandlers.h"
+#include "McpAutomationBridge_ConsoleCommandHandlers.h"
+#include "McpAutomationBridge_EditorFunctionHandlers.h"
 
 // =============================================================================
 // Editor-Only Includes
@@ -155,7 +157,8 @@
 //
 // The functionName dispatch supports 19+ different editor operations.
 // -----------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
+bool McpHandlers::BuildEnvironment::HandleExecuteEditorFunction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -172,7 +175,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     return false;
 
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("execute_editor_function payload missing."),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -199,22 +202,22 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
       RoutedPayload->SetStringField(TEXT("command"), NestedCommand);
     }
 
-    return HandleConsoleCommandAction(RequestId, TEXT("console_command"),
-                                      RoutedPayload, RequestingSocket);
+    return McpHandlers::SystemControl::HandleConsoleCommandAction(
+        S, RequestId, TEXT("console_command"), RoutedPayload, RequestingSocket);
   }
 
   // Handle batch_console_commands through the central validated handler.
   if (Lower.Equals(TEXT("batch_console_commands")) ||
       Lower.Contains(TEXT("batch_console_commands"))) {
-    return HandleConsoleCommandAction(RequestId, TEXT("batch_console_commands"),
-                                      Payload, RequestingSocket);
+    return McpHandlers::SystemControl::HandleConsoleCommandAction(
+        S, RequestId, TEXT("batch_console_commands"), Payload, RequestingSocket);
   }
 
   // For other execute_editor_function cases require functionName
   FString FunctionName;
   Payload->TryGetStringField(TEXT("functionName"), FunctionName);
   if (FunctionName.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("functionName required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -231,7 +234,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
 
   if (FN == TEXT("GET_ALL_ACTORS") || FN == TEXT("GET_ALL_ACTORS_SIMPLE")) {
     if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Editor not available"), nullptr,
                              TEXT("EDITOR_NOT_AVAILABLE"));
       return true;
@@ -239,7 +242,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     UEditorActorSubsystem *ActorSS =
         GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("EditorActorSubsystem not available"),
                              nullptr, TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
       return true;
@@ -262,7 +265,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetArrayField(TEXT("actors"), Arr);
     Result->SetNumberField(TEXT("count"), Arr.Num());
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Actor list"), Result, FString());
     return true;
   }
@@ -297,7 +300,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     }
 
     if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Editor not available"), nullptr,
                              TEXT("EDITOR_NOT_AVAILABLE"));
       return true;
@@ -305,7 +308,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     UEditorActorSubsystem *ActorSS =
         GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("EditorActorSubsystem not available"),
                              nullptr, TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
       return true;
@@ -317,7 +320,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     if (!Resolved) {
       TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
       Err->SetStringField(TEXT("error"), TEXT("Class not found"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Class not found"), Err,
                              TEXT("CLASS_NOT_FOUND"));
       return true;
@@ -326,7 +329,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     if (!Spawned) {
       TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
       Err->SetStringField(TEXT("error"), TEXT("Spawn failed"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Spawn failed"), Err, TEXT("SPAWN_FAILED"));
       return true;
     }
@@ -335,7 +338,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     Out->SetStringField(TEXT("actorPath"), Spawned->GetPathName());
     Out->SetBoolField(TEXT("success"), true);
     McpHandlerUtils::AddVerification(Out, Spawned);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Actor spawned"), Out, FString());
     return true;
   }
@@ -347,13 +350,13 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     if (Target.IsEmpty())
       Payload->TryGetStringField(TEXT("actorName"), Target);
     if (Target.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("actor_name required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Editor not available"), nullptr,
                              TEXT("EDITOR_NOT_AVAILABLE"));
       return true;
@@ -361,7 +364,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     UEditorActorSubsystem *ActorSS =
         GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("EditorActorSubsystem not available"),
                              nullptr, TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
       return true;
@@ -380,7 +383,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     if (!Found) {
       TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
       Err->SetStringField(TEXT("error"), TEXT("Actor not found"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Actor not found"), Err,
                              TEXT("ACTOR_NOT_FOUND"));
       return true;
@@ -392,11 +395,11 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     Out->SetBoolField(TEXT("success"), bDeleted);
     if (bDeleted) {
       Out->SetStringField(TEXT("deleted"), DeletedActorLabel);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Actor deleted"), Out, FString());
     } else {
       Out->SetStringField(TEXT("error"), TEXT("Delete failed"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Delete failed"), Out, TEXT("DELETE_FAILED"));
     }
     return true;
@@ -408,13 +411,13 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     if (TargetName.IsEmpty())
       Payload->TryGetStringField(TEXT("actorName"), TargetName);
     if (TargetName.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("actorName required"), TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     if (!GEditor || !GEditor->IsPlaySessionInProgress()) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Possess only available during PIE session"),
                              nullptr, TEXT("NOT_IN_PIE"));
       return true;
@@ -422,7 +425,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
 
     UWorld *PlayWorld = GEditor->PlayWorld;
     if (!PlayWorld) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("PIE World not found"), nullptr,
                              TEXT("WORLD_NOT_FOUND"));
       return true;
@@ -441,7 +444,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     }
 
     if (!FoundPawn) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Pawn not found in PIE world"), nullptr,
                              TEXT("PAWN_NOT_FOUND"));
       return true;
@@ -449,7 +452,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
 
     APlayerController *PC = PlayWorld->GetFirstPlayerController();
     if (!PC) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("No PlayerController found in PIE"), nullptr,
                              TEXT("PC_NOT_FOUND"));
       return true;
@@ -461,7 +464,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     Out->SetBoolField(TEXT("success"), true);
     Out->SetStringField(TEXT("possessed"), FoundPawn->GetActorLabel());
     McpHandlerUtils::AddVerification(Out, FoundPawn);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Possessed pawn"), Out, FString());
     return true;
   }
@@ -483,7 +486,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
       }
     }
     if (PathToCheck.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId, TEXT("path required"),
+      S.SendAutomationError(RequestingSocket, RequestId, TEXT("path required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -494,7 +497,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     Out->SetBoolField(TEXT("exists"), bExists);
     Out->SetStringField(TEXT("path"), PathToCheck);
     Out->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            bExists ? TEXT("Asset exists")
                                    : TEXT("Asset not found"),
                            Out, bExists ? FString() : TEXT("NOT_FOUND"));
@@ -522,7 +525,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
       ReadRotatorField(Payload, TEXT("rotation"), Rot, Rot);
     }
     if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Editor not available"), nullptr,
                              TEXT("EDITOR_NOT_AVAILABLE"));
       return true;
@@ -537,10 +540,10 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
       }
       TSharedPtr<FJsonObject> R = McpHandlerUtils::CreateResultObject();
       R->SetBoolField(TEXT("success"), true);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Camera set"), R, FString());
     } else {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("UnrealEditorSubsystem not available"),
                              nullptr, TEXT("SUBSYSTEM_NOT_FOUND"));
     }
@@ -551,7 +554,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     FString Quality;
     Payload->TryGetStringField(TEXT("quality"), Quality);
     if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Editor not available"), nullptr,
                              TEXT("EDITOR_NOT_AVAILABLE"));
       return true;
@@ -565,7 +568,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
       CurrentWorld = GEditor->GetEditorWorldContext().World();
     }
     if (!CurrentWorld) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           TEXT("Editor world not available for build lighting"), nullptr,
           TEXT("EDITOR_WORLD_NOT_AVAILABLE"));
@@ -592,7 +595,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
           Err->SetStringField(TEXT("error"), TEXT("unknown_quality"));
           Err->SetStringField(TEXT("quality"), Quality);
           Err->SetStringField(TEXT("validValues"), TEXT("preview, medium, high, production"));
-          SendAutomationResponse(RequestingSocket, RequestId, false,
+          S.SendAutomationResponse(RequestingSocket, RequestId, false,
                                  TEXT("Unknown lighting quality"), Err,
                                  TEXT("UNKNOWN_QUALITY"));
           return true;
@@ -604,7 +607,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
           R->SetBoolField(TEXT("skipped"), true);
           R->SetStringField(TEXT("reason"),
                             TEXT("bForceNoPrecomputedLighting is true"));
-          SendAutomationResponse(
+          S.SendAutomationResponse(
               RequestingSocket, RequestId, true,
               TEXT("Lighting build skipped (precomputed lighting disabled)"), R,
               FString());
@@ -616,18 +619,18 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
       LES->BuildLightMaps(QualityEnum, /*bWithReflectionCaptures*/ false);
       TSharedPtr<FJsonObject> R = McpHandlerUtils::CreateResultObject();
       R->SetBoolField(TEXT("requested"), true);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Build lighting requested"), R, FString());
 #else
       // UE 5.0 fallback - BuildLightMaps not available
       TSharedPtr<FJsonObject> R = McpHandlerUtils::CreateResultObject();
       R->SetBoolField(TEXT("requested"), false);
       R->SetStringField(TEXT("error"), TEXT("BuildLightMaps not available in UE 5.0"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Build lighting not available in UE 5.0"), R, TEXT("NOT_AVAILABLE"));
 #endif
     } else {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("LevelEditorSubsystem not available"),
                              nullptr, TEXT("SUBSYSTEM_NOT_FOUND"));
     }
@@ -636,7 +639,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
 
   if (FN == TEXT("SAVE_CURRENT_LEVEL")) {
     if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Editor not available"), nullptr,
                              TEXT("EDITOR_NOT_AVAILABLE"));
       return true;
@@ -659,7 +662,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
 
     TSharedPtr<FJsonObject> Out = McpHandlerUtils::CreateResultObject();
     Out->SetBoolField(TEXT("success"), bSaved);
-    SendAutomationResponse(RequestingSocket, RequestId, bSaved,
+    S.SendAutomationResponse(RequestingSocket, RequestId, bSaved,
                            bSaved ? TEXT("Level saved")
                                   : TEXT("Failed to save level"),
                            Out, bSaved ? FString() : TEXT("SAVE_FAILED"));
@@ -671,7 +674,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     FString Path;
     Payload->TryGetStringField(TEXT("path"), Path);
     if (Path.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId, TEXT("path required"),
+      S.SendAutomationError(RequestingSocket, RequestId, TEXT("path required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -695,7 +698,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     Out->SetStringField(TEXT("path"), Path);
     Out->SetStringField(TEXT("class"), ClassName);
     Out->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            bExists ? TEXT("Object resolved")
                                    : TEXT("Object not found"),
                            Out, bExists ? FString() : TEXT("NOT_FOUND"));
@@ -708,12 +711,12 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     FString ActorPath;
     Payload->TryGetStringField(TEXT("actorPath"), ActorPath);
     if (ActorPath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("actorPath required"), TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Editor not available"), nullptr,
                              TEXT("EDITOR_NOT_AVAILABLE"));
       return true;
@@ -721,7 +724,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     UEditorActorSubsystem *ActorSS =
         GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("EditorActorSubsystem not available"),
                              nullptr, TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
       return true;
@@ -740,7 +743,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     if (!Found) {
       TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
       Err->SetStringField(TEXT("error"), TEXT("Actor not found"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Actor not found"), Err,
                              TEXT("ACTOR_NOT_FOUND"));
       return true;
@@ -762,7 +765,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     TSharedPtr<FJsonObject> Out = McpHandlerUtils::CreateResultObject();
     Out->SetArrayField(TEXT("components"), Arr);
     Out->SetNumberField(TEXT("count"), Arr.Num());
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Components listed"), Out, FString());
     return true;
   }
@@ -772,14 +775,14 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     FString BlueprintPath;
     Payload->TryGetStringField(TEXT("blueprintPath"), BlueprintPath);
     if (BlueprintPath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("blueprintPath required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     if (!UEditorAssetLibrary::DoesAssetExist(BlueprintPath)) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Blueprint not found"), nullptr,
                              TEXT("NOT_FOUND"));
       return true;
@@ -788,7 +791,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     TSharedPtr<FJsonObject> Out = McpHandlerUtils::CreateResultObject();
     UObject *Obj = UEditorAssetLibrary::LoadAsset(BlueprintPath);
     if (!Obj) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Blueprint not found"), nullptr,
                              TEXT("NOT_FOUND"));
       return true;
@@ -800,11 +803,11 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
         Out->SetStringField(TEXT("blueprintPath"), BlueprintPath);
         Out->SetStringField(TEXT("classPath"), Gen->GetPathName());
         Out->SetStringField(TEXT("className"), Gen->GetName());
-        SendAutomationResponse(RequestingSocket, RequestId, true,
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
                                TEXT("Blueprint CDO info"), Out, FString());
         return true;
       }
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Blueprint/GeneratedClass not available"),
                              nullptr, TEXT("INVALID_BLUEPRINT"));
       return true;
@@ -813,12 +816,12 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     if (UClass *C = Cast<UClass>(Obj)) {
       Out->SetStringField(TEXT("classPath"), C->GetPathName());
       Out->SetStringField(TEXT("className"), C->GetName());
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Class info"), Out, FString());
       return true;
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Blueprint/GeneratedClass not available"),
                            nullptr, TEXT("INVALID_BLUEPRINT"));
     return true;
@@ -854,7 +857,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     FString TargetBP;
     LocalParams->TryGetStringField(TEXT("blueprintPath"), TargetBP);
     if (TargetBP.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("blueprintPath required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -881,7 +884,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     Ops.Add(MakeShared<FJsonValueObject>(Op));
     SCSPayload->SetArrayField(TEXT("operations"), Ops);
 
-    return McpHandlers::Blueprint::HandleBlueprintModifyScs(*this, RequestId, SCSPayload, RequestingSocket);
+    return McpHandlers::Blueprint::HandleBlueprintModifyScs(S, RequestId, SCSPayload, RequestingSocket);
   }
 
   if (FN == TEXT("CREATE_ASSET")) {
@@ -903,7 +906,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
 
     if (AssetName.IsEmpty() || PackagePath.IsEmpty() ||
         FactoryClass.IsEmpty()) {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           TEXT("asset_name, package_path, and factory_class required"),
           TEXT("INVALID_ARGUMENT"));
@@ -911,7 +914,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     }
 
     if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Editor not available"), nullptr,
                              TEXT("EDITOR_NOT_AVAILABLE"));
       return true;
@@ -947,7 +950,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     }
 
     if (!FactoryUClass) {
-      SendAutomationResponse(
+      S.SendAutomationResponse(
           RequestingSocket, RequestId, false,
           FString::Printf(TEXT("Factory class '%s' not found"), *FactoryClass),
           nullptr, TEXT("FACTORY_NOT_FOUND"));
@@ -957,7 +960,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     UFactory *Factory =
         NewObject<UFactory>(GetTransientPackage(), FactoryUClass);
     if (!Factory) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Failed to instantiate factory"), nullptr,
                              TEXT("FACTORY_CREATION_FAILED"));
       return true;
@@ -968,7 +971,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     // generic/most-abusable creation path, so guarding it protects every factory-based create.
     const FString CreateAssetObjectPath = FString::Printf(TEXT("%s/%s"), *PackagePath, *AssetName);
     if (UEditorAssetLibrary::DoesAssetExist(CreateAssetObjectPath)) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              FString::Printf(TEXT("Asset already exists: %s"), *CreateAssetObjectPath),
                              nullptr, TEXT("ALREADY_EXISTS"));
       return true;
@@ -986,10 +989,10 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
       Out->SetStringField(TEXT("path"), NewAsset->GetPathName());
       Out->SetBoolField(TEXT("success"), true);
 
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Asset created"), Out, FString());
     } else {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Failed to create asset via AssetTools"),
                              nullptr, TEXT("ASSET_CREATION_FAILED"));
     }
@@ -1011,13 +1014,13 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     if (!Payload->TryGetStringField(TEXT("path"), SoundPath))
       Payload->TryGetStringField(TEXT("soundPath"), SoundPath);
     if (SoundPath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("soundPath or path required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
     if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Editor world not available"), nullptr,
                              TEXT("EDITOR_WORLD_NOT_AVAILABLE"));
       return true;
@@ -1028,7 +1031,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
       World = UES->GetEditorWorld();
     }
     if (!World) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Editor world not available"), nullptr,
                              TEXT("EDITOR_WORLD_NOT_AVAILABLE"));
       return true;
@@ -1037,7 +1040,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     if (!UEditorAssetLibrary::DoesAssetExist(SoundPath)) {
       TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
       Err->SetStringField(TEXT("error"), TEXT("Sound asset not found"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Sound not found"), Err, TEXT("NOT_FOUND"));
       return true;
     }
@@ -1047,7 +1050,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     if (!Snd) {
       TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
       Err->SetStringField(TEXT("error"), TEXT("Sound asset not found"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Sound not found"), Err, TEXT("NOT_FOUND"));
       return true;
     }
@@ -1069,7 +1072,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
 
     TSharedPtr<FJsonObject> Out = McpHandlerUtils::CreateResultObject();
     Out->SetBoolField(TEXT("success"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Sound played"), Out, FString());
     return true;
   }
@@ -1080,7 +1083,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     FString WidgetPath;
     Payload->TryGetStringField(TEXT("widget_path"), WidgetPath);
     if (WidgetPath.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("widget_path required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
@@ -1092,7 +1095,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     Payload->TryGetNumberField(TEXT("player_index"), playerIndex);
 
     if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Editor not available for widget creation"),
                              nullptr, TEXT("EDITOR_NOT_AVAILABLE"));
       return true;
@@ -1104,7 +1107,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
       TSharedPtr<FJsonObject> Err = McpHandlerUtils::CreateResultObject();
       Err->SetStringField(TEXT("error"), TEXT("Widget class not found"));
       Err->SetStringField(TEXT("widget_path"), WidgetPath);
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Widget class not found"), Err,
                              TEXT("WIDGET_NOT_FOUND"));
       return true;
@@ -1113,7 +1116,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     // Get the current world and player controller
     UWorld *World = GEditor->GetEditorWorldContext().World();
     if (!World) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("No world available"), nullptr,
                              TEXT("NO_WORLD"));
       return true;
@@ -1130,7 +1133,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
         Err->SetStringField(TEXT("error"),
                             TEXT("Player controller not available"));
         Err->SetNumberField(TEXT("player_index"), playerIndex);
-        SendAutomationResponse(RequestingSocket, RequestId, false,
+        S.SendAutomationResponse(RequestingSocket, RequestId, false,
                                TEXT("Player controller not available"), Err,
                                TEXT("NO_PLAYER_CONTROLLER"));
         return true;
@@ -1141,7 +1144,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     UUserWidget *Widget =
         CreateWidget<UUserWidget>(PlayerController, WidgetClass);
     if (!Widget) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Failed to create widget instance"), nullptr,
                              TEXT("WIDGET_CREATION_FAILED"));
       return true;
@@ -1161,13 +1164,13 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
                         PlayerController ? playerIndex : 0);
 
     if (!bIsInViewport) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Failed to add widget to viewport"), Out,
                              TEXT("ADD_TO_VIEWPORT_FAILED"));
       return true;
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Widget added to viewport"), Out, FString());
     return true;
   }
@@ -1185,7 +1188,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     Payload->TryGetBoolField(TEXT("detailed"), bDetailed);
 
     if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Editor not available"), nullptr,
                              TEXT("EDITOR_NOT_AVAILABLE"));
       return true;
@@ -1203,7 +1206,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
         TEXT("message"),
         TEXT("Memory report generated (check Saved/Profiling/MemReports)"));
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Memory report generated"), Out, FString());
     return true;
   }
@@ -1218,14 +1221,14 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     Payload->TryGetObjectField(TEXT("args"), Args);
 
     if (SubsystemName.IsEmpty() || TargetFuncName.IsEmpty()) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("subsystem and function required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
 
     if (!GEditor) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Editor not available"), nullptr,
                              TEXT("EDITOR_NOT_AVAILABLE"));
       return true;
@@ -1257,7 +1260,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
           TEXT("error"),
           FString::Printf(TEXT("Subsystem '%s' not found or not initialized"),
                           *SubsystemName));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
+      S.SendAutomationResponse(RequestingSocket, RequestId, false,
                              TEXT("Subsystem not found"), Err,
                              TEXT("SUBSYSTEM_NOT_FOUND"));
       return true;
@@ -1299,7 +1302,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     Out->SetStringField(TEXT("subsystem"), SubsystemName);
     Out->SetStringField(TEXT("function"), TargetFuncName);
 
-    SendAutomationResponse(RequestingSocket, RequestId, bResult,
+    S.SendAutomationResponse(RequestingSocket, RequestId, bResult,
                            bResult ? TEXT("Function called")
                                    : TEXT("Function call failed"),
                            Out, bResult ? FString() : TEXT("CALL_FAILED"));
@@ -1337,7 +1340,7 @@ bool UMcpAutomationBridgeSubsystem::HandleExecuteEditorFunction(
     TSharedPtr<FJsonObject> Out = McpHandlerUtils::CreateResultObject();
     Out->SetBoolField(TEXT("success"), true);
     Out->SetBoolField(TEXT("enabled"), bEnabled);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Texture streaming configured"), Out,
                            FString());
     return true;
