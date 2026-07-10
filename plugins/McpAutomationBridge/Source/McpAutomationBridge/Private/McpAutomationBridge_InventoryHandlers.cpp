@@ -43,6 +43,7 @@
 #include "Dom/JsonObject.h"
 
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_InventoryHandlers.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpResponseHelpers.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -153,14 +154,15 @@ static void ApplyItemPropertiesToAsset(UObject* ItemAsset,
 // 17.1 Data Assets (4 actions)
 // ===========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateItemDataAsset(
+bool McpHandlers::Inventory::HandleInventoryCreateItemDataAsset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString Name = GetPayloadString(Payload, TEXT("name"));
   FString Path = GetPayloadString(Payload, TEXT("path"), TEXT("/Game/Items"));
 
   if (Name.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: name"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -171,7 +173,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateItemDataAsset(
   FString SanitizedName = SanitizeAssetName(Name);
   UPackage* Package = CreateValidatedAssetPackage(Path, SanitizedName, PathError);
   if (!Package) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         PathError.IsEmpty() ? TEXT("Failed to create package") : PathError,
                         TEXT("PACKAGE_CREATE_FAILED"));
     return true;
@@ -224,23 +226,24 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateItemDataAsset(
       }
     }
     McpHandlerUtils::AddVerification(Result, ItemAsset);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Item data asset created"), Result);
   } else {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Failed to create item data asset"),
                         TEXT("ASSET_CREATE_FAILED"));
   }
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventorySetItemProperties(
+bool McpHandlers::Inventory::HandleInventorySetItemProperties(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString ItemPath = GetPayloadString(Payload, TEXT("itemPath"));
 
   if (ItemPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: itemPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -251,7 +254,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetItemProperties(
   UDataAsset* ItemAsset = Cast<UDataAsset>(Asset);
 
   if (!ItemAsset) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Item data asset not found: %s"), *ItemPath),
         TEXT("ASSET_NOT_FOUND"));
@@ -326,18 +329,19 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetItemProperties(
     Result->SetArrayField(TEXT("failedProperties"), FailedArr);
   }
 
-  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+  return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                  TEXT("Item properties updated"), ItemAsset);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateItemCategory(
+bool McpHandlers::Inventory::HandleInventoryCreateItemCategory(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString Name = GetPayloadString(Payload, TEXT("name"));
   FString Path = GetPayloadString(Payload, TEXT("path"), TEXT("/Game/Items/Categories"));
 
   if (Name.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: name"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -346,7 +350,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateItemCategory(
   // Create a data asset for category
   UPackage* Package = CreateAssetPackage(Path, Name);
   if (!Package) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Failed to create package"),
                         TEXT("PACKAGE_CREATE_FAILED"));
     return true;
@@ -366,24 +370,25 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateItemCategory(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("categoryPath"), Package->GetName());
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Item category created"), Result);
   } else {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Failed to create category asset"),
                         TEXT("ASSET_CREATE_FAILED"));
   }
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryAssignItemCategory(
+bool McpHandlers::Inventory::HandleInventoryAssignItemCategory(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString ItemPath = GetPayloadString(Payload, TEXT("itemPath"));
   FString CategoryPath = GetPayloadString(Payload, TEXT("categoryPath"));
 
   if (ItemPath.IsEmpty() || CategoryPath.IsEmpty()) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         TEXT("Missing required parameters: itemPath and categoryPath"),
         TEXT("MISSING_PARAMETER"));
@@ -395,7 +400,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAssignItemCategory(
   UObject* CategoryObj = StaticLoadObject(UDataAsset::StaticClass(), nullptr, *CategoryPath);
 
   if (!ItemObj) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Item not found: %s"), *ItemPath),
         TEXT("ASSET_NOT_FOUND"));
@@ -444,7 +449,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAssignItemCategory(
   if (!bCategoryAssigned && !AssignError.IsEmpty()) {
     Result->SetStringField(TEXT("note"), TEXT("Category property not found on item class. Ensure your item class has a Category or ItemCategory property."));
   }
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Category assigned to item"), Result);
   return true;
 }
@@ -453,7 +458,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAssignItemCategory(
 // 17.2 Inventory Component (5 actions)
 // ===========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateComponent(
+bool McpHandlers::Inventory::HandleInventoryCreateComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetPayloadString(Payload, TEXT("blueprintPath"));
@@ -461,7 +467,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateComponent(
       GetPayloadString(Payload, TEXT("componentName"), TEXT("InventoryComponent"));
 
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: blueprintPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -471,7 +477,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateComponent(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BlueprintPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -480,7 +486,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateComponent(
 
   USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
   if (!SCS) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Blueprint has no SimpleConstructionScript"),
                         TEXT("NO_SCS"));
     return true;
@@ -520,23 +526,24 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateComponent(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("componentName"), ComponentName);
     Result->SetBoolField(TEXT("componentAdded"), true);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Inventory component added"), Result);
   } else {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Failed to create inventory component"),
                         TEXT("COMPONENT_CREATE_FAILED"));
   }
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureSlots(
+bool McpHandlers::Inventory::HandleInventoryConfigureSlots(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetPayloadString(Payload, TEXT("blueprintPath"));
 
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: blueprintPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -546,7 +553,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureSlots(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BlueprintPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -621,17 +628,18 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureSlots(
   if (bHasSlotCount) {
     Result->SetNumberField(TEXT("slotCount"), SlotCount);
   }
-  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+  return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                  TEXT("Inventory slots configured"), Blueprint);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryAddFunctions(
+bool McpHandlers::Inventory::HandleInventoryAddFunctions(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetPayloadString(Payload, TEXT("blueprintPath"));
 
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: blueprintPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -641,7 +649,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddFunctions(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BlueprintPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -725,19 +733,20 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddFunctions(
   Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
   Result->SetStringField(TEXT("note"), TEXT("Added helper variables and event-dispatcher delegates only. No UFunctions were created — author AddItem/RemoveItem/etc. with add_function, then implement their logic in the Blueprint graph."));
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Inventory functions added"), Result);
   return true;
 }
 
 
-bool UMcpAutomationBridgeSubsystem::HandleInventorySetReplication(
+bool McpHandlers::Inventory::HandleInventorySetReplication(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetPayloadString(Payload, TEXT("blueprintPath"));
 
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: blueprintPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -747,7 +756,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetReplication(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BlueprintPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -857,7 +866,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetReplication(
   }
   Result->SetArrayField(TEXT("modifiedVariables"), VarsArr);
 
-  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+  return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                  TEXT("Inventory replication configured"), Blueprint);
 }
 
@@ -865,14 +874,15 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetReplication(
 // 17.3 Pickups (4 actions)
 // ===========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryCreatePickupActor(
+bool McpHandlers::Inventory::HandleInventoryCreatePickupActor(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString Name = GetPayloadString(Payload, TEXT("name"));
   FString Path = GetPayloadString(Payload, TEXT("path"), TEXT("/Game/Blueprints/Pickups"));
 
   if (Name.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: name"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -881,7 +891,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreatePickupActor(
   // Create a Blueprint actor for pickup
   UPackage* Package = CreateAssetPackage(Path, Name);
   if (!Package) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Failed to create package"),
                         TEXT("PACKAGE_CREATE_FAILED"));
     return true;
@@ -922,23 +932,24 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreatePickupActor(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("pickupPath"), Package->GetName());
     Result->SetStringField(TEXT("blueprintName"), Name);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Pickup actor created"), Result);
   } else {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Failed to create pickup blueprint"),
                         TEXT("BLUEPRINT_CREATE_FAILED"));
   }
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupInteraction(
+bool McpHandlers::Inventory::HandleInventoryConfigurePickupInteraction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString PickupPath = GetPayloadString(Payload, TEXT("pickupPath"));
 
   if (PickupPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: pickupPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -948,7 +959,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupInteraction(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *PickupPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Pickup blueprint not found: %s"), *PickupPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -1069,17 +1080,18 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupInteraction(
   if (bHasPrompt) {
     Result->SetStringField(TEXT("prompt"), Prompt);
   }
-  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+  return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                  TEXT("Pickup interaction configured"), Blueprint);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupRespawn(
+bool McpHandlers::Inventory::HandleInventoryConfigurePickupRespawn(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString PickupPath = GetPayloadString(Payload, TEXT("pickupPath"));
 
   if (PickupPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: pickupPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -1089,7 +1101,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupRespawn(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *PickupPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Pickup blueprint not found: %s"), *PickupPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -1194,17 +1206,18 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupRespawn(
   if (bHasRespawnTime) {
     Result->SetNumberField(TEXT("respawnTime"), RespawnTime);
   }
-  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+  return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                  TEXT("Pickup respawn configured"), Blueprint);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupEffects(
+bool McpHandlers::Inventory::HandleInventoryConfigurePickupEffects(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString PickupPath = GetPayloadString(Payload, TEXT("pickupPath"));
 
   if (PickupPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: pickupPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -1214,7 +1227,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupEffects(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *PickupPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Pickup blueprint not found: %s"), *PickupPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -1325,7 +1338,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupEffects(
   if (bHasGlow) {
     Result->SetBoolField(TEXT("glowEffect"), bGlowEffect);
   }
-  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+  return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                  TEXT("Pickup effects configured"), Blueprint);
 }
 
@@ -1333,7 +1346,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupEffects(
 // 17.4 Equipment System (5 actions)
 // ===========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateEquipmentComponent(
+bool McpHandlers::Inventory::HandleInventoryCreateEquipmentComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetPayloadString(Payload, TEXT("blueprintPath"));
@@ -1341,7 +1355,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateEquipmentComponent(
       GetPayloadString(Payload, TEXT("componentName"), TEXT("EquipmentComponent"));
 
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: blueprintPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -1350,7 +1364,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateEquipmentComponent(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BlueprintPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -1422,26 +1436,27 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateEquipmentComponent(
       AddedVars.Add(MakeShared<FJsonValueString>(TEXT("SlotNames")));
       Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
 
-      SendAutomationResponse(Socket, RequestId, true,
+      S.SendAutomationResponse(Socket, RequestId, true,
                              TEXT("Equipment component added"), Result);
       return true;
     }
   }
 
-  SendAutomationError(Socket, RequestId,
+  S.SendAutomationError(Socket, RequestId,
                       TEXT("Failed to create equipment component"),
                       TEXT("COMPONENT_CREATE_FAILED"));
   return true;
 }
 
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureEquipmentEffects(
+bool McpHandlers::Inventory::HandleInventoryConfigureEquipmentEffects(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetPayloadString(Payload, TEXT("blueprintPath"));
 
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: blueprintPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -1451,7 +1466,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureEquipmentEffects(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BlueprintPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -1562,17 +1577,18 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureEquipmentEffects(
     Result->SetBoolField(TEXT("passiveEffects"), bPassiveEffects);
   }
   Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
-  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+  return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                  TEXT("Equipment effects configured"), Blueprint);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryAddEquipmentFunctions(
+bool McpHandlers::Inventory::HandleInventoryAddEquipmentFunctions(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetPayloadString(Payload, TEXT("blueprintPath"));
 
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: blueprintPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -1582,7 +1598,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddEquipmentFunctions(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BlueprintPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -1666,18 +1682,19 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddEquipmentFunctions(
   Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
   Result->SetStringField(TEXT("note"), TEXT("Added helper variables and event-dispatcher delegates only. No UFunctions were created — author EquipItem/UnequipItem/etc. with add_function, then implement their logic in the Blueprint graph."));
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Equipment functions added"), Result);
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureEquipmentVisuals(
+bool McpHandlers::Inventory::HandleInventoryConfigureEquipmentVisuals(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetPayloadString(Payload, TEXT("blueprintPath"));
 
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: blueprintPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -1687,7 +1704,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureEquipmentVisuals(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BlueprintPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -1808,7 +1825,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureEquipmentVisuals(
     Result->SetStringField(TEXT("defaultSocket"), DefaultSocket);
   }
   Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
-  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+  return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                  TEXT("Equipment visuals configured"), Blueprint);
 }
 
@@ -1816,14 +1833,15 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureEquipmentVisuals(
 // 17.5 Loot System (4 actions)
 // ===========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateLootTable(
+bool McpHandlers::Inventory::HandleInventoryCreateLootTable(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString Name = GetPayloadString(Payload, TEXT("name"));
   FString Path = GetPayloadString(Payload, TEXT("path"), TEXT("/Game/Data/LootTables"));
 
   if (Name.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: name"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -1832,7 +1850,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateLootTable(
   // Create a data asset for loot table
   UPackage* Package = CreateAssetPackage(Path, Name);
   if (!Package) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Failed to create package"),
                         TEXT("PACKAGE_CREATE_FAILED"));
     return true;
@@ -1852,17 +1870,18 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateLootTable(
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("lootTablePath"), Package->GetName());
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Loot table created"), Result);
   } else {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Failed to create loot table asset"),
                         TEXT("ASSET_CREATE_FAILED"));
   }
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryAddLootEntry(
+bool McpHandlers::Inventory::HandleInventoryAddLootEntry(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString LootTablePath = GetPayloadString(Payload, TEXT("lootTablePath"));
@@ -1872,7 +1891,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddLootEntry(
   int32 MaxQuantity = static_cast<int32>(GetPayloadNumber(Payload, TEXT("maxQuantity"), 1));
 
   if (LootTablePath.IsEmpty() || ItemPath.IsEmpty()) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         TEXT("Missing required parameters: lootTablePath and itemPath"),
         TEXT("MISSING_PARAMETER"));
@@ -1884,7 +1903,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddLootEntry(
   UMcpGenericDataAsset* LootTable = Cast<UMcpGenericDataAsset>(LootTableObj);
 
   if (!LootTable) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Loot table not found: %s"), *LootTablePath),
         TEXT("ASSET_NOT_FOUND"));
@@ -1942,19 +1961,20 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddLootEntry(
   if (!EntriesProp) {
     Result->SetStringField(TEXT("storage"), TEXT("Properties"));
   }
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Loot entry added"), Result);
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureLootDrop(
+bool McpHandlers::Inventory::HandleInventoryConfigureLootDrop(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString ActorPath = GetPayloadString(Payload, TEXT("actorPath"));
   FString LootTablePath = GetPayloadString(Payload, TEXT("lootTablePath"));
 
   if (ActorPath.IsEmpty() || LootTablePath.IsEmpty()) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         TEXT("Missing required parameters: actorPath and lootTablePath"),
         TEXT("MISSING_PARAMETER"));
@@ -1965,7 +1985,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureLootDrop(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *ActorPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Actor blueprint not found: %s"), *ActorPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -2131,17 +2151,18 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureLootDrop(
     Result->SetBoolField(TEXT("dropOnDeath"), bDropOnDeath);
   }
   Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
-  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+  return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                  TEXT("Loot drop configured"), Blueprint);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventorySetLootQualityTiers(
+bool McpHandlers::Inventory::HandleInventorySetLootQualityTiers(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString LootTablePath = GetPayloadString(Payload, TEXT("lootTablePath"));
 
   if (LootTablePath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: lootTablePath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -2152,7 +2173,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetLootQualityTiers(
   UMcpGenericDataAsset* LootTable = Cast<UMcpGenericDataAsset>(LootTableObj);
 
   if (!LootTable) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Loot table not found: %s"), *LootTablePath),
         TEXT("ASSET_NOT_FOUND"));
@@ -2221,7 +2242,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetLootQualityTiers(
     Result->SetStringField(TEXT("note"), TEXT("QualityTiers property not found. Ensure your loot table class has a QualityTiers or Tiers property."));
   }
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Quality tiers configured"), Result);
   return true;
 }
@@ -2230,7 +2251,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetLootQualityTiers(
 // 17.6 Crafting System (4 actions)
 // ===========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateCraftingRecipe(
+bool McpHandlers::Inventory::HandleInventoryCreateCraftingRecipe(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString Name = GetPayloadString(Payload, TEXT("name"));
@@ -2238,7 +2260,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateCraftingRecipe(
   FString Path = GetPayloadString(Payload, TEXT("path"), TEXT("/Game/Data/Recipes"));
 
   if (Name.IsEmpty() || OutputItemPath.IsEmpty()) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         TEXT("Missing required parameters: name and outputItemPath"),
         TEXT("MISSING_PARAMETER"));
@@ -2247,7 +2269,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateCraftingRecipe(
 
   UPackage* Package = CreateAssetPackage(Path, Name);
   if (!Package) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Failed to create package"),
                         TEXT("PACKAGE_CREATE_FAILED"));
     return true;
@@ -2278,23 +2300,24 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateCraftingRecipe(
     Result->SetNumberField(TEXT("outputQuantity"), OutputQuantity);
     Result->SetNumberField(TEXT("craftTime"), CraftTime);
     Result->SetStringField(TEXT("storage"), TEXT("Properties"));
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Crafting recipe created"), Result);
   } else {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Failed to create recipe asset"),
                         TEXT("ASSET_CREATE_FAILED"));
   }
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureRecipeRequirements(
+bool McpHandlers::Inventory::HandleInventoryConfigureRecipeRequirements(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString RecipePath = GetPayloadString(Payload, TEXT("recipePath"));
 
   if (RecipePath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: recipePath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -2304,7 +2327,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureRecipeRequirements(
   UMcpGenericDataAsset* GenericRecipe = Cast<UMcpGenericDataAsset>(RecipeAsset);
 
   if (!GenericRecipe) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Recipe not found or unsupported asset type: %s"), *RecipePath),
         TEXT("ASSET_NOT_FOUND"));
@@ -2342,11 +2365,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureRecipeRequirements(
     Result->SetStringField(TEXT("requiredStation"), RequiredStation);
   }
   Result->SetNumberField(TEXT("propertiesModified"), Report.Applied.Num());
-  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+  return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                  TEXT("Recipe requirements configured"), GenericRecipe);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateCraftingStation(
+bool McpHandlers::Inventory::HandleInventoryCreateCraftingStation(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString Name = GetPayloadString(Payload, TEXT("name"));
@@ -2355,7 +2379,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateCraftingStation(
       GetPayloadString(Payload, TEXT("stationType"), TEXT("Basic"));
 
   if (Name.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: name"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -2363,7 +2387,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateCraftingStation(
 
   UPackage* Package = CreateAssetPackage(Path, Name);
   if (!Package) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Failed to create package"),
                         TEXT("PACKAGE_CREATE_FAILED"));
     return true;
@@ -2398,17 +2422,18 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryCreateCraftingStation(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("stationPath"), Package->GetName());
     Result->SetStringField(TEXT("stationType"), StationType);
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
                            TEXT("Crafting station created"), Result);
   } else {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Failed to create crafting station blueprint"),
                         TEXT("BLUEPRINT_CREATE_FAILED"));
   }
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryAddCraftingComponent(
+bool McpHandlers::Inventory::HandleInventoryAddCraftingComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetPayloadString(Payload, TEXT("blueprintPath"));
@@ -2416,7 +2441,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddCraftingComponent(
       GetPayloadString(Payload, TEXT("componentName"), TEXT("CraftingComponent"));
 
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: blueprintPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -2425,7 +2450,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddCraftingComponent(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BlueprintPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -2512,13 +2537,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddCraftingComponent(
       Result->SetBoolField(TEXT("componentAdded"), true);
       Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
       Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
-      SendAutomationResponse(Socket, RequestId, true,
+      S.SendAutomationResponse(Socket, RequestId, true,
                              TEXT("Crafting component added"), Result);
       return true;
     }
   }
 
-  SendAutomationError(Socket, RequestId,
+  S.SendAutomationError(Socket, RequestId,
                       TEXT("Failed to create crafting component"),
                       TEXT("COMPONENT_CREATE_FAILED"));
   return true;
@@ -2528,13 +2553,14 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddCraftingComponent(
 // 17.7 Additional Actions (6 actions to complete 33 total)
 // ===========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureItemStacking(
+bool McpHandlers::Inventory::HandleInventoryConfigureItemStacking(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString ItemPath = GetPayloadString(Payload, TEXT("itemPath"));
 
   if (ItemPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: itemPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -2543,7 +2569,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureItemStacking(
   // Load the item asset
   UObject* ItemAsset = StaticLoadObject(UDataAsset::StaticClass(), nullptr, *ItemPath);
   if (!ItemAsset) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Item not found: %s"), *ItemPath),
         TEXT("ASSET_NOT_FOUND"));
@@ -2666,18 +2692,19 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureItemStacking(
   }
   Result->SetArrayField(TEXT("modifiedProperties"), ModArr);
 
-  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+  return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                  TEXT("Item stacking configured"), ItemAsset);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventorySetItemIcon(
+bool McpHandlers::Inventory::HandleInventorySetItemIcon(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString ItemPath = GetPayloadString(Payload, TEXT("itemPath"));
   FString IconPath = GetPayloadString(Payload, TEXT("iconPath"));
 
   if (ItemPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: itemPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -2686,7 +2713,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetItemIcon(
   // Load the item asset
   UObject* ItemAsset = StaticLoadObject(UDataAsset::StaticClass(), nullptr, *ItemPath);
   if (!ItemAsset) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Item not found: %s"), *ItemPath),
         TEXT("ASSET_NOT_FOUND"));
@@ -2742,12 +2769,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInventorySetItemIcon(
     Result->SetStringField(TEXT("note"), TEXT("No icon property found. Ensure your item class has an Icon, ItemIcon, or Thumbnail property."));
   }
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Item icon configured"), Result);
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryAddRecipeIngredient(
+bool McpHandlers::Inventory::HandleInventoryAddRecipeIngredient(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString RecipePath = GetPayloadString(Payload, TEXT("recipePath"));
@@ -2755,7 +2783,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddRecipeIngredient(
   int32 Quantity = static_cast<int32>(GetPayloadNumber(Payload, TEXT("quantity"), 1));
 
   if (RecipePath.IsEmpty() || IngredientItemPath.IsEmpty()) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         TEXT("Missing required parameters: recipePath and ingredientItemPath"),
         TEXT("MISSING_PARAMETER"));
@@ -2765,7 +2793,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddRecipeIngredient(
   // Load the recipe asset
   UObject* RecipeAsset = StaticLoadObject(UDataAsset::StaticClass(), nullptr, *RecipePath);
   if (!RecipeAsset) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Recipe not found: %s"), *RecipePath),
         TEXT("ASSET_NOT_FOUND"));
@@ -2829,12 +2857,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryAddRecipeIngredient(
     Result->SetStringField(TEXT("note"), TEXT("Ingredients property not found. Ensure your recipe class has an Ingredients, RequiredItems, or InputItems array."));
   }
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Recipe ingredient added"), Result);
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryRemoveLootEntry(
+bool McpHandlers::Inventory::HandleInventoryRemoveLootEntry(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString LootTablePath = GetPayloadString(Payload, TEXT("lootTablePath"));
@@ -2842,14 +2871,14 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryRemoveLootEntry(
   FString ItemPath = GetPayloadString(Payload, TEXT("itemPath"));
 
   if (LootTablePath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: lootTablePath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
   }
 
   if (EntryIndex < 0 && ItemPath.IsEmpty()) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         TEXT("Either entryIndex or itemPath must be provided"),
         TEXT("MISSING_PARAMETER"));
@@ -2861,7 +2890,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryRemoveLootEntry(
   UMcpGenericDataAsset* LootTable = Cast<UMcpGenericDataAsset>(LootTableObj);
 
   if (!LootTable) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Loot table not found: %s"), *LootTablePath),
         TEXT("ASSET_NOT_FOUND"));
@@ -2901,18 +2930,19 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryRemoveLootEntry(
     Result->SetStringField(TEXT("note"), TEXT("Entry not removed. Check that entryIndex is valid or LootEntries array exists."));
   }
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Loot entry removed"), Result);
   return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureWeight(
+bool McpHandlers::Inventory::HandleInventoryConfigureWeight(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetPayloadString(Payload, TEXT("blueprintPath"));
 
   if (BlueprintPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("Missing required parameter: blueprintPath"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -2921,7 +2951,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureWeight(
   UBlueprint* Blueprint =
       Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BlueprintPath));
   if (!Blueprint) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
         TEXT("BLUEPRINT_NOT_FOUND"));
@@ -3106,7 +3136,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureWeight(
     Result->SetNumberField(TEXT("encumbranceThreshold"), EncumbranceThreshold);
   }
   Result->SetArrayField(TEXT("variablesAdded"), AddedVars);
-  return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+  return SendWriteReportResponse(&S, Socket, RequestId, Report, Result,
                                  TEXT("Inventory weight configured"), Blueprint);
 }
 
@@ -3115,7 +3145,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigureWeight(
 // Utility (1 action)
 // ===========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleInventoryGetInfo(
+bool McpHandlers::Inventory::HandleInventoryGetInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket) {
   FString BlueprintPath = GetPayloadString(Payload, TEXT("blueprintPath"));
@@ -3127,7 +3158,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryGetInfo(
   // Validate that at least one path is provided
   if (BlueprintPath.IsEmpty() && ItemPath.IsEmpty() && LootTablePath.IsEmpty() && 
       RecipePath.IsEmpty() && PickupPath.IsEmpty()) {
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
                         TEXT("At least one path parameter is required (blueprintPath, itemPath, lootTablePath, recipePath, or pickupPath)"),
                         TEXT("MISSING_PARAMETER"));
     return true;
@@ -3164,7 +3195,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryGetInfo(
     UBlueprint* Blueprint = Cast<UBlueprint>(
         StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BlueprintPath));
     if (!Blueprint) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -3192,7 +3223,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryGetInfo(
     // Use UDataAsset base class for loading - UPrimaryDataAsset is abstract in UE5.7
     UObject* ItemAsset = StaticLoadObject(UDataAsset::StaticClass(), nullptr, *ItemPath);
     if (!ItemAsset) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Item not found: %s"), *ItemPath),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -3204,7 +3235,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryGetInfo(
   } else if (!LootTablePath.IsEmpty()) {
     UObject* LootTableAsset = StaticLoadObject(UDataAsset::StaticClass(), nullptr, *LootTablePath);
     if (!LootTableAsset) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Loot table not found: %s"), *LootTablePath),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -3215,7 +3246,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryGetInfo(
   } else if (!RecipePath.IsEmpty()) {
     UObject* RecipeAsset = StaticLoadObject(UDataAsset::StaticClass(), nullptr, *RecipePath);
     if (!RecipeAsset) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Recipe not found: %s"), *RecipePath),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -3227,7 +3258,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryGetInfo(
     UBlueprint* PickupBlueprint = Cast<UBlueprint>(
         StaticLoadObject(UBlueprint::StaticClass(), nullptr, *PickupPath));
     if (!PickupBlueprint) {
-      SendAutomationError(Socket, RequestId,
+      S.SendAutomationError(Socket, RequestId,
                           FString::Printf(TEXT("Pickup blueprint not found: %s"), *PickupPath),
                           TEXT("ASSET_NOT_FOUND"));
       return true;
@@ -3236,7 +3267,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryGetInfo(
     Result->SetStringField(TEXT("pickupPath"), PickupPath);
   }
 
-  SendAutomationResponse(Socket, RequestId, true,
+  S.SendAutomationResponse(Socket, RequestId, true,
                          TEXT("Inventory info retrieved"), Result);
   return true;
 }

@@ -5,13 +5,14 @@
 // each class AUTHORS its schema fragment in a S_<Suffix>() function; the
 // published facade schema folds those fragments and GetDecl() derives the
 // validation decl from the same fragment via McpDeriveDecl(), so schema and
-// decl are one source and cannot drift. Run() delegates to the subsystem member
-// handlers — HandleInput* (InputHandlers.cpp) for the 9 input actions — until
-// the module split de-members those bodies.
+// decl are one source and cannot drift. Run() delegates to the namespaced free
+// handlers (McpHandlers::Input::HandleInput*, McpAutomationBridge_InputHandlers.cpp)
+// for the 9 input actions.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_InputHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -119,20 +120,20 @@ class FMcpCall_ManageInput_##ClassSuffix final : public FMcpCall                
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
 	{                                                                                     \
-		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+		return HandlerFn(S, RequestId, Payload, Socket);                                     \
 	}                                                                                     \
 };
 
 // Input (InputHandlers.cpp)
-MCP_MINPUT_CALL(CreateInputAction, "create_input_action", HandleInputCreateInputAction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MINPUT_CALL(CreateInputMappingContext, "create_input_mapping_context", HandleInputCreateInputMappingContext, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MINPUT_CALL(AddMapping, "add_mapping", HandleInputAddMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MINPUT_CALL(RemoveMapping, "remove_mapping", HandleInputRemoveMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MINPUT_CALL(SetInputTrigger, "set_input_trigger", HandleInputSetInputTrigger, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MINPUT_CALL(SetInputModifier, "set_input_modifier", HandleInputSetInputModifier, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MINPUT_CALL(EnableInputMapping, "enable_input_mapping", HandleInputEnableInputMapping, EMcpCallFlags::RequiresEditor)
-MCP_MINPUT_CALL(DisableInputAction, "disable_input_action", HandleInputDisableInputAction, EMcpCallFlags::RequiresEditor)
-MCP_MINPUT_CALL(GetInputInfo, "get_info", HandleInputGetInputInfo, EMcpCallFlags::RequiresEditor)
+MCP_MINPUT_CALL(CreateInputAction, "create_input_action", McpHandlers::Input::HandleInputCreateInputAction, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MINPUT_CALL(CreateInputMappingContext, "create_input_mapping_context", McpHandlers::Input::HandleInputCreateInputMappingContext, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MINPUT_CALL(AddMapping, "add_mapping", McpHandlers::Input::HandleInputAddMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MINPUT_CALL(RemoveMapping, "remove_mapping", McpHandlers::Input::HandleInputRemoveMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MINPUT_CALL(SetInputTrigger, "set_input_trigger", McpHandlers::Input::HandleInputSetInputTrigger, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MINPUT_CALL(SetInputModifier, "set_input_modifier", McpHandlers::Input::HandleInputSetInputModifier, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_MINPUT_CALL(EnableInputMapping, "enable_input_mapping", McpHandlers::Input::HandleInputEnableInputMapping, EMcpCallFlags::RequiresEditor)
+MCP_MINPUT_CALL(DisableInputAction, "disable_input_action", McpHandlers::Input::HandleInputDisableInputAction, EMcpCallFlags::RequiresEditor)
+MCP_MINPUT_CALL(GetInputInfo, "get_info", McpHandlers::Input::HandleInputGetInputInfo, EMcpCallFlags::RequiresEditor)
 
 #undef MCP_MINPUT_CALL
 

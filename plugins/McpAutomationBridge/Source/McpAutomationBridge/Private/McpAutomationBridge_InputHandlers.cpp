@@ -35,6 +35,7 @@
 // Core Includes
 // -----------------------------------------------------------------------------
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_InputHandlers.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpHandlerUtils.h"
@@ -165,7 +166,8 @@ UInputModifier* CreateInputModifierForType(const FString& ModifierType, UObject*
 // -------------------------------------------------------------------------
 // create_input_action: Create UInputAction asset
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputAction(
+bool McpHandlers::Input::HandleInputCreateInputAction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -179,7 +181,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputAction(
         if (!FModuleManager::Get().ModuleExists(TEXT("EnhancedInput")) ||
             !FModuleManager::Get().LoadModule(TEXT("EnhancedInput")))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("EnhancedInput plugin is not enabled in this project. Enable the Enhanced Input plugin to use Input features."),
                 TEXT("ENHANCEDINPUT_PLUGIN_NOT_ENABLED"));
             return true;
@@ -194,7 +196,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputAction(
 
     if (Name.IsEmpty() || Path.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("Name and path are required."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
@@ -203,7 +205,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputAction(
     FString SanitizedPath = SanitizeProjectRelativePath(Path);
     if (SanitizedPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Invalid path: '%s' contains traversal or invalid characters."), *Path),
             TEXT("INVALID_PATH"));
         return true;
@@ -212,7 +214,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputAction(
     // Validate asset name
     if (Name.Contains(TEXT("/")) || Name.Contains(TEXT("\\")) || Name.Contains(TEXT("..")))
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Invalid asset name '%s': contains path separators or traversal sequences"), *Name),
             TEXT("INVALID_NAME"));
         return true;
@@ -240,7 +242,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputAction(
                 ParsedValueType = EInputActionValueType::Axis3D;
             else
             {
-                SendAutomationError(Socket, RequestId,
+                S.SendAutomationError(Socket, RequestId,
                     FString::Printf(TEXT("Invalid valueType '%s' (expected Boolean|Axis1D|Axis2D|Axis3D)"), *ValueTypeStr),
                     TEXT("INVALID_VALUE"));
                 return true;
@@ -254,7 +256,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputAction(
         UInputAction* ExistingAction = Cast<UInputAction>(UEditorAssetLibrary::LoadAsset(FullPath));
         if (!ExistingAction)
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Asset already exists at %s but is not an InputAction"), *FullPath),
                 TEXT("ASSET_TYPE_MISMATCH"));
             return true;
@@ -273,7 +275,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputAction(
         Result->SetStringField(TEXT("valueType"), McpInputActionValueTypeToString(ExistingAction->ValueType));
         McpHandlerUtils::AddVerification(Result, ExistingAction);
 
-        SendAutomationResponse(Socket, RequestId, true,
+        S.SendAutomationResponse(Socket, RequestId, true,
             TEXT("Input Action already exists."), Result);
         return true;
     }
@@ -302,18 +304,18 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputAction(
         }
         McpHandlerUtils::AddVerification(Result, NewAsset);
 
-        SendAutomationResponse(Socket, RequestId, true,
+        S.SendAutomationResponse(Socket, RequestId, true,
             TEXT("Input Action created."), Result);
     }
     else
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("Failed to create Input Action."), TEXT("CREATION_FAILED"));
     }
     return true;
 #else
     // Non-editor build
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("Input management requires Editor build."), TEXT("NOT_AVAILABLE"));
     return true;
 #endif
@@ -322,7 +324,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputAction(
 // -------------------------------------------------------------------------
 // create_input_mapping_context: Create UInputMappingContext asset
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputMappingContext(
+bool McpHandlers::Input::HandleInputCreateInputMappingContext(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -336,7 +339,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputMappingContext(
         if (!FModuleManager::Get().ModuleExists(TEXT("EnhancedInput")) ||
             !FModuleManager::Get().LoadModule(TEXT("EnhancedInput")))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("EnhancedInput plugin is not enabled in this project. Enable the Enhanced Input plugin to use Input features."),
                 TEXT("ENHANCEDINPUT_PLUGIN_NOT_ENABLED"));
             return true;
@@ -351,7 +354,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputMappingContext(
 
     if (Name.IsEmpty() || Path.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("Name and path are required."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
@@ -360,7 +363,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputMappingContext(
     FString SanitizedPath = SanitizeProjectRelativePath(Path);
     if (SanitizedPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Invalid path: '%s' contains traversal or invalid characters."), *Path),
             TEXT("INVALID_PATH"));
         return true;
@@ -369,7 +372,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputMappingContext(
     // Validate asset name
     if (Name.Contains(TEXT("/")) || Name.Contains(TEXT("\\")) || Name.Contains(TEXT("..")))
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Invalid asset name '%s': contains path separators or traversal sequences"), *Name),
             TEXT("INVALID_NAME"));
         return true;
@@ -381,7 +384,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputMappingContext(
         UInputMappingContext* ExistingContext = Cast<UInputMappingContext>(UEditorAssetLibrary::LoadAsset(FullPath));
         if (!ExistingContext)
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Asset already exists at %s but is not an InputMappingContext"), *FullPath),
                 TEXT("ASSET_TYPE_MISMATCH"));
             return true;
@@ -391,7 +394,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputMappingContext(
         Result->SetStringField(TEXT("assetPath"), ExistingContext->GetPathName());
         McpHandlerUtils::AddVerification(Result, ExistingContext);
 
-        SendAutomationResponse(Socket, RequestId, true,
+        S.SendAutomationResponse(Socket, RequestId, true,
             TEXT("Input Mapping Context already exists."), Result);
         return true;
     }
@@ -411,18 +414,18 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputMappingContext(
         Result->SetStringField(TEXT("assetPath"), NewAsset->GetPathName());
         McpHandlerUtils::AddVerification(Result, NewAsset);
 
-        SendAutomationResponse(Socket, RequestId, true,
+        S.SendAutomationResponse(Socket, RequestId, true,
             TEXT("Input Mapping Context created."), Result);
     }
     else
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("Failed to create Input Mapping Context."), TEXT("CREATION_FAILED"));
     }
     return true;
 #else
     // Non-editor build
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("Input management requires Editor build."), TEXT("NOT_AVAILABLE"));
     return true;
 #endif
@@ -431,7 +434,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInputCreateInputMappingContext(
 // -------------------------------------------------------------------------
 // add_mapping: Add key mapping to context
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleInputAddMapping(
+bool McpHandlers::Input::HandleInputAddMapping(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -445,7 +449,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAddMapping(
         if (!FModuleManager::Get().ModuleExists(TEXT("EnhancedInput")) ||
             !FModuleManager::Get().LoadModule(TEXT("EnhancedInput")))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("EnhancedInput plugin is not enabled in this project. Enable the Enhanced Input plugin to use Input features."),
                 TEXT("ENHANCEDINPUT_PLUGIN_NOT_ENABLED"));
             return true;
@@ -467,7 +471,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAddMapping(
 
     if (SanitizedContextPath.IsEmpty() || SanitizedActionPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("Invalid context or action path: contains traversal or invalid characters."),
             TEXT("INVALID_PATH"));
         return true;
@@ -480,7 +484,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAddMapping(
 
     if (!Context || !InAction || KeyName.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Context or action not found, or key is empty. Context: %s, Action: %s"),
                 *SanitizedContextPath, *SanitizedActionPath),
             TEXT("INVALID_ARGUMENT"));
@@ -490,7 +494,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAddMapping(
     FKey Key = FKey(FName(*KeyName));
     if (!Key.IsValid())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("Invalid key name."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
@@ -510,12 +514,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAddMapping(
     AddAssetVerificationNested(Result, TEXT("contextVerification"), Context);
     AddAssetVerificationNested(Result, TEXT("actionVerification"), InAction);
 
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
         TEXT("Mapping added."), Result);
     return true;
 #else
     // Non-editor build
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("Input management requires Editor build."), TEXT("NOT_AVAILABLE"));
     return true;
 #endif
@@ -524,7 +528,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInputAddMapping(
 // -------------------------------------------------------------------------
 // remove_mapping: Remove key mapping from context
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleInputRemoveMapping(
+bool McpHandlers::Input::HandleInputRemoveMapping(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -538,7 +543,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputRemoveMapping(
         if (!FModuleManager::Get().ModuleExists(TEXT("EnhancedInput")) ||
             !FModuleManager::Get().LoadModule(TEXT("EnhancedInput")))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("EnhancedInput plugin is not enabled in this project. Enable the Enhanced Input plugin to use Input features."),
                 TEXT("ENHANCEDINPUT_PLUGIN_NOT_ENABLED"));
             return true;
@@ -560,7 +565,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputRemoveMapping(
 
     if (SanitizedContextPath.IsEmpty() || SanitizedActionPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("Invalid context or action path: contains traversal or invalid characters."),
             TEXT("INVALID_PATH"));
         return true;
@@ -573,7 +578,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputRemoveMapping(
 
     if (!Context || !InAction)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Context or action not found. Context: %s, Action: %s"),
                 *SanitizedContextPath, *SanitizedActionPath),
             TEXT("NOT_FOUND"));
@@ -584,7 +589,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputRemoveMapping(
     const bool bHasSpecificKey = !KeyName.IsEmpty();
     if (bHasSpecificKey && !RequestedKey.IsValid())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Invalid key name: %s"), *KeyName), TEXT("INVALID_ARGUMENT"));
         return true;
     }
@@ -601,7 +606,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputRemoveMapping(
 
     if (bHasSpecificKey && KeysToRemove.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Mapping not found for action '%s' and key '%s'."),
                 *SanitizedActionPath, *KeyName),
             TEXT("NOT_FOUND"));
@@ -639,11 +644,11 @@ bool UMcpAutomationBridgeSubsystem::HandleInputRemoveMapping(
     const FString SuccessMessage = bHasSpecificKey
         ? FString::Printf(TEXT("Mapping removed for action key: %s"), *KeyName)
         : TEXT("Mappings removed for action.");
-    SendAutomationResponse(Socket, RequestId, true, SuccessMessage, Result);
+    S.SendAutomationResponse(Socket, RequestId, true, SuccessMessage, Result);
     return true;
 #else
     // Non-editor build
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("Input management requires Editor build."), TEXT("NOT_AVAILABLE"));
     return true;
 #endif
@@ -652,7 +657,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInputRemoveMapping(
 // -------------------------------------------------------------------------
 // set_input_trigger: Configure trigger on input action
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleInputSetInputTrigger(
+bool McpHandlers::Input::HandleInputSetInputTrigger(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -666,7 +672,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputTrigger(
         if (!FModuleManager::Get().ModuleExists(TEXT("EnhancedInput")) ||
             !FModuleManager::Get().LoadModule(TEXT("EnhancedInput")))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("EnhancedInput plugin is not enabled in this project. Enable the Enhanced Input plugin to use Input features."),
                 TEXT("ENHANCEDINPUT_PLUGIN_NOT_ENABLED"));
             return true;
@@ -682,7 +688,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputTrigger(
     FString SanitizedActionPath = SanitizeProjectRelativePath(ActionPath);
     if (SanitizedActionPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Invalid action path: '%s' contains traversal or invalid characters."), *ActionPath),
             TEXT("INVALID_PATH"));
         return true;
@@ -693,7 +699,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputTrigger(
 
     if (!InAction)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Action not found: %s"), *SanitizedActionPath),
             TEXT("NOT_FOUND"));
         return true;
@@ -746,7 +752,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputTrigger(
     
     if (!NewTrigger)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Unknown trigger type: %s. Supported: Pressed, Released, Down, Tap, Hold, HoldAndRelease, Pulse, RepeatedTap, DoubleTap"), *TriggerType),
             TEXT("INVALID_TRIGGER_TYPE"));
         return true;
@@ -791,7 +797,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputTrigger(
     Result->SetNumberField(TEXT("triggerCount"), InAction->Triggers.Num());
     McpHandlerUtils::AddVerification(Result, InAction);
 
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
         bAlreadyPresent
             ? FString::Printf(TEXT("Trigger '%s' already present (idempotent); pass replace:true to re-author."), *TriggerType)
             : FString::Printf(TEXT("Trigger '%s' configured on action."), *TriggerType),
@@ -799,7 +805,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputTrigger(
     return true;
 #else
     // Non-editor build
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("Input management requires Editor build."), TEXT("NOT_AVAILABLE"));
     return true;
 #endif
@@ -808,7 +814,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputTrigger(
 // -------------------------------------------------------------------------
 // set_input_modifier: Configure modifier on input action
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleInputSetInputModifier(
+bool McpHandlers::Input::HandleInputSetInputModifier(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -822,7 +829,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputModifier(
         if (!FModuleManager::Get().ModuleExists(TEXT("EnhancedInput")) ||
             !FModuleManager::Get().LoadModule(TEXT("EnhancedInput")))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("EnhancedInput plugin is not enabled in this project. Enable the Enhanced Input plugin to use Input features."),
                 TEXT("ENHANCEDINPUT_PLUGIN_NOT_ENABLED"));
             return true;
@@ -844,7 +851,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputModifier(
     const bool bTargetMapping = !ContextPath.IsEmpty() || !KeyName.IsEmpty();
     if (bTargetMapping && (ContextPath.IsEmpty() || KeyName.IsEmpty()))
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("contextPath and key are both required when setting a modifier on a specific mapping."),
             TEXT("INVALID_ARGUMENT"));
         return true;
@@ -853,7 +860,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputModifier(
     FString SanitizedActionPath = SanitizeProjectRelativePath(ActionPath);
     if (SanitizedActionPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Invalid action path: '%s' contains traversal or invalid characters."), *ActionPath),
             TEXT("INVALID_PATH"));
         return true;
@@ -864,7 +871,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputModifier(
 
     if (!InAction)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Action not found: %s"), *SanitizedActionPath),
             TEXT("NOT_FOUND"));
         return true;
@@ -880,7 +887,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputModifier(
     {
         if (!RequestedKey.IsValid())
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Invalid key name: %s"), *KeyName), TEXT("INVALID_ARGUMENT"));
             return true;
         }
@@ -888,7 +895,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputModifier(
         SanitizedContextPath = SanitizeProjectRelativePath(ContextPath);
         if (SanitizedContextPath.IsEmpty())
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Invalid context path: '%s' contains traversal or invalid characters."), *ContextPath),
                 TEXT("INVALID_PATH"));
             return true;
@@ -897,7 +904,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputModifier(
         Context = Cast<UInputMappingContext>(UEditorAssetLibrary::LoadAsset(SanitizedContextPath));
         if (!Context)
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Context not found: %s"), *SanitizedContextPath),
                 TEXT("NOT_FOUND"));
             return true;
@@ -916,7 +923,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputModifier(
 
         if (!TargetMapping)
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 FString::Printf(TEXT("Mapping not found for action '%s' and key '%s'."),
                     *SanitizedActionPath, *KeyName),
                 TEXT("NOT_FOUND"));
@@ -929,7 +936,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputModifier(
     UInputModifier* NewModifier = CreateInputModifierForType(ModifierType, ModifierOuter);
     if (!NewModifier)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Unknown modifier type: %s. Supported: DeadZone, SmoothDelta, SwizzleInputAxis, Negate, Scalar, ScaleByDeltaTime, ToWorldSpace"), *ModifierType),
             TEXT("INVALID_MODIFIER_TYPE"));
         return true;
@@ -967,12 +974,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputModifier(
         McpHandlerUtils::AddVerification(Result, InAction);
     }
 
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
         FString::Printf(TEXT("Modifier '%s' configured on action."), *ModifierType), Result);
     return true;
 #else
     // Non-editor build
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("Input management requires Editor build."), TEXT("NOT_AVAILABLE"));
     return true;
 #endif
@@ -981,7 +988,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInputSetInputModifier(
 // -------------------------------------------------------------------------
 // enable_input_mapping: Enable mapping context at runtime
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleInputEnableInputMapping(
+bool McpHandlers::Input::HandleInputEnableInputMapping(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -995,7 +1003,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputEnableInputMapping(
         if (!FModuleManager::Get().ModuleExists(TEXT("EnhancedInput")) ||
             !FModuleManager::Get().LoadModule(TEXT("EnhancedInput")))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("EnhancedInput plugin is not enabled in this project. Enable the Enhanced Input plugin to use Input features."),
                 TEXT("ENHANCEDINPUT_PLUGIN_NOT_ENABLED"));
             return true;
@@ -1011,7 +1019,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputEnableInputMapping(
     FString SanitizedContextPath = SanitizeProjectRelativePath(ContextPath);
     if (SanitizedContextPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Invalid context path: '%s' contains traversal or invalid characters."), *ContextPath),
             TEXT("INVALID_PATH"));
         return true;
@@ -1022,7 +1030,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputEnableInputMapping(
 
     if (!Context)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Context not found: %s"), *SanitizedContextPath),
             TEXT("NOT_FOUND"));
         return true;
@@ -1035,12 +1043,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInputEnableInputMapping(
     Result->SetBoolField(TEXT("enabled"), true);
     McpHandlerUtils::AddVerification(Result, Context);
 
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
         TEXT("Input mapping context enabled (requires PIE for runtime effect)."), Result);
     return true;
 #else
     // Non-editor build
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("Input management requires Editor build."), TEXT("NOT_AVAILABLE"));
     return true;
 #endif
@@ -1049,7 +1057,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInputEnableInputMapping(
 // -------------------------------------------------------------------------
 // disable_input_action: Disable input action
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleInputDisableInputAction(
+bool McpHandlers::Input::HandleInputDisableInputAction(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1063,7 +1072,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputDisableInputAction(
         if (!FModuleManager::Get().ModuleExists(TEXT("EnhancedInput")) ||
             !FModuleManager::Get().LoadModule(TEXT("EnhancedInput")))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("EnhancedInput plugin is not enabled in this project. Enable the Enhanced Input plugin to use Input features."),
                 TEXT("ENHANCEDINPUT_PLUGIN_NOT_ENABLED"));
             return true;
@@ -1076,7 +1085,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputDisableInputAction(
     FString SanitizedActionPath = SanitizeProjectRelativePath(ActionPath);
     if (SanitizedActionPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Invalid action path: '%s' contains traversal or invalid characters."), *ActionPath),
             TEXT("INVALID_PATH"));
         return true;
@@ -1087,7 +1096,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputDisableInputAction(
 
     if (!InAction)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Action not found: %s"), *SanitizedActionPath),
             TEXT("NOT_FOUND"));
         return true;
@@ -1098,12 +1107,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInputDisableInputAction(
     Result->SetBoolField(TEXT("disabled"), true);
     McpHandlerUtils::AddVerification(Result, InAction);
 
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
         TEXT("Input action disabled."), Result);
     return true;
 #else
     // Non-editor build
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("Input management requires Editor build."), TEXT("NOT_AVAILABLE"));
     return true;
 #endif
@@ -1112,7 +1121,8 @@ bool UMcpAutomationBridgeSubsystem::HandleInputDisableInputAction(
 // -------------------------------------------------------------------------
 // get_input_info: Get info about input asset
 // -------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleInputGetInputInfo(
+bool McpHandlers::Input::HandleInputGetInputInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
@@ -1126,7 +1136,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputGetInputInfo(
         if (!FModuleManager::Get().ModuleExists(TEXT("EnhancedInput")) ||
             !FModuleManager::Get().LoadModule(TEXT("EnhancedInput")))
         {
-            SendAutomationError(Socket, RequestId,
+            S.SendAutomationError(Socket, RequestId,
                 TEXT("EnhancedInput plugin is not enabled in this project. Enable the Enhanced Input plugin to use Input features."),
                 TEXT("ENHANCEDINPUT_PLUGIN_NOT_ENABLED"));
             return true;
@@ -1144,7 +1154,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputGetInputInfo(
 
     if (AssetPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             TEXT("assetPath (or blueprintPath) is required."), TEXT("INVALID_ARGUMENT"));
         return true;
     }
@@ -1152,7 +1162,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputGetInputInfo(
     FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath);
     if (SanitizedAssetPath.IsEmpty())
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Invalid asset path: '%s' contains traversal or invalid characters."), *AssetPath),
             TEXT("INVALID_PATH"));
         return true;
@@ -1161,7 +1171,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInputGetInputInfo(
     UObject* Asset = UEditorAssetLibrary::LoadAsset(SanitizedAssetPath);
     if (!Asset)
     {
-        SendAutomationError(Socket, RequestId,
+        S.SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Asset not found: %s"), *SanitizedAssetPath),
             TEXT("NOT_FOUND"));
         return true;
@@ -1216,12 +1226,12 @@ bool UMcpAutomationBridgeSubsystem::HandleInputGetInputInfo(
 
     McpHandlerUtils::AddVerification(Result, Asset);
 
-    SendAutomationResponse(Socket, RequestId, true,
+    S.SendAutomationResponse(Socket, RequestId, true,
         TEXT("Input asset info retrieved."), Result);
     return true;
 #else
     // Non-editor build
-    SendAutomationError(Socket, RequestId,
+    S.SendAutomationError(Socket, RequestId,
         TEXT("Input management requires Editor build."), TEXT("NOT_AVAILABLE"));
     return true;
 #endif

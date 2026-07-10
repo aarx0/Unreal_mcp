@@ -5,12 +5,13 @@
 // its schema fragment in a S_<Suffix>() function; the published facade schema
 // folds those fragments and GetDecl() derives the validation decl from the same
 // fragment via McpDeriveDecl(), so schema and decl are one source and cannot
-// drift. Run() delegates to the subsystem member handlers (HandleInventory*,
-// InventoryHandlers.cpp) until the module split de-members those bodies.
+// drift. Run() delegates to the namespaced free handlers (McpHandlers::Inventory::
+// HandleInventory*, McpAutomationBridge_InventoryHandlers.cpp).
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_InventoryHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -338,55 +339,55 @@ class FMcpCall_ManageInventory_##ClassSuffix final : public FMcpCall            
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                   \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override   \
 	{                                                                                      \
-		return S.HandlerFn(RequestId, Payload, Socket);                                    \
+		return HandlerFn(S, RequestId, Payload, Socket);                                   \
 	}                                                                                      \
 };
 
 // Data assets (17.1)
-MCP_IV_CALL(CreateItemDataAsset, "create_item_data_asset", HandleInventoryCreateItemDataAsset, EMcpCallFlags::Mutating)
-MCP_IV_CALL(SetItemProperties, "set_item_properties", HandleInventorySetItemProperties, EMcpCallFlags::Mutating)
-MCP_IV_CALL(CreateItemCategory, "create_item_category", HandleInventoryCreateItemCategory, EMcpCallFlags::Mutating)
-MCP_IV_CALL(AssignItemCategory, "assign_item_category", HandleInventoryAssignItemCategory, EMcpCallFlags::Mutating)
+MCP_IV_CALL(CreateItemDataAsset, "create_item_data_asset", McpHandlers::Inventory::HandleInventoryCreateItemDataAsset, EMcpCallFlags::Mutating)
+MCP_IV_CALL(SetItemProperties, "set_item_properties", McpHandlers::Inventory::HandleInventorySetItemProperties, EMcpCallFlags::Mutating)
+MCP_IV_CALL(CreateItemCategory, "create_item_category", McpHandlers::Inventory::HandleInventoryCreateItemCategory, EMcpCallFlags::Mutating)
+MCP_IV_CALL(AssignItemCategory, "assign_item_category", McpHandlers::Inventory::HandleInventoryAssignItemCategory, EMcpCallFlags::Mutating)
 
 // Inventory component (17.2)
-MCP_IV_CALL(CreateComponent, "create_inventory_component", HandleInventoryCreateComponent, EMcpCallFlags::Mutating)
-MCP_IV_CALL(ConfigureSlots, "configure_inventory_slots", HandleInventoryConfigureSlots, EMcpCallFlags::Mutating)
-MCP_IV_CALL(AddFunctions, "add_inventory_functions", HandleInventoryAddFunctions, EMcpCallFlags::Mutating)
-MCP_IV_CALL(SetReplication, "set_inventory_replication", HandleInventorySetReplication, EMcpCallFlags::Mutating)
+MCP_IV_CALL(CreateComponent, "create_inventory_component", McpHandlers::Inventory::HandleInventoryCreateComponent, EMcpCallFlags::Mutating)
+MCP_IV_CALL(ConfigureSlots, "configure_inventory_slots", McpHandlers::Inventory::HandleInventoryConfigureSlots, EMcpCallFlags::Mutating)
+MCP_IV_CALL(AddFunctions, "add_inventory_functions", McpHandlers::Inventory::HandleInventoryAddFunctions, EMcpCallFlags::Mutating)
+MCP_IV_CALL(SetReplication, "set_inventory_replication", McpHandlers::Inventory::HandleInventorySetReplication, EMcpCallFlags::Mutating)
 
 // Pickups (17.3)
-MCP_IV_CALL(CreatePickupActor, "create_pickup_actor", HandleInventoryCreatePickupActor, EMcpCallFlags::Mutating)
-MCP_IV_CALL(ConfigurePickupInteraction, "configure_pickup_interaction", HandleInventoryConfigurePickupInteraction, EMcpCallFlags::Mutating)
-MCP_IV_CALL(ConfigurePickupRespawn, "configure_pickup_respawn", HandleInventoryConfigurePickupRespawn, EMcpCallFlags::Mutating)
-MCP_IV_CALL(ConfigurePickupEffects, "configure_pickup_effects", HandleInventoryConfigurePickupEffects, EMcpCallFlags::Mutating)
+MCP_IV_CALL(CreatePickupActor, "create_pickup_actor", McpHandlers::Inventory::HandleInventoryCreatePickupActor, EMcpCallFlags::Mutating)
+MCP_IV_CALL(ConfigurePickupInteraction, "configure_pickup_interaction", McpHandlers::Inventory::HandleInventoryConfigurePickupInteraction, EMcpCallFlags::Mutating)
+MCP_IV_CALL(ConfigurePickupRespawn, "configure_pickup_respawn", McpHandlers::Inventory::HandleInventoryConfigurePickupRespawn, EMcpCallFlags::Mutating)
+MCP_IV_CALL(ConfigurePickupEffects, "configure_pickup_effects", McpHandlers::Inventory::HandleInventoryConfigurePickupEffects, EMcpCallFlags::Mutating)
 
 // Equipment system (17.4)
-MCP_IV_CALL(CreateEquipmentComponent, "create_equipment_component", HandleInventoryCreateEquipmentComponent, EMcpCallFlags::Mutating)
-MCP_IV_CALL(ConfigureEquipmentEffects, "configure_equipment_effects", HandleInventoryConfigureEquipmentEffects, EMcpCallFlags::Mutating)
-MCP_IV_CALL(AddEquipmentFunctions, "add_equipment_functions", HandleInventoryAddEquipmentFunctions, EMcpCallFlags::Mutating)
-MCP_IV_CALL(ConfigureEquipmentVisuals, "configure_equipment_visuals", HandleInventoryConfigureEquipmentVisuals, EMcpCallFlags::Mutating)
+MCP_IV_CALL(CreateEquipmentComponent, "create_equipment_component", McpHandlers::Inventory::HandleInventoryCreateEquipmentComponent, EMcpCallFlags::Mutating)
+MCP_IV_CALL(ConfigureEquipmentEffects, "configure_equipment_effects", McpHandlers::Inventory::HandleInventoryConfigureEquipmentEffects, EMcpCallFlags::Mutating)
+MCP_IV_CALL(AddEquipmentFunctions, "add_equipment_functions", McpHandlers::Inventory::HandleInventoryAddEquipmentFunctions, EMcpCallFlags::Mutating)
+MCP_IV_CALL(ConfigureEquipmentVisuals, "configure_equipment_visuals", McpHandlers::Inventory::HandleInventoryConfigureEquipmentVisuals, EMcpCallFlags::Mutating)
 
 // Loot system (17.5)
-MCP_IV_CALL(CreateLootTable, "create_loot_table", HandleInventoryCreateLootTable, EMcpCallFlags::Mutating)
-MCP_IV_CALL(AddLootEntry, "add_loot_entry", HandleInventoryAddLootEntry, EMcpCallFlags::Mutating)
-MCP_IV_CALL(ConfigureLootDrop, "configure_loot_drop", HandleInventoryConfigureLootDrop, EMcpCallFlags::Mutating)
-MCP_IV_CALL(SetLootQualityTiers, "set_loot_quality_tiers", HandleInventorySetLootQualityTiers, EMcpCallFlags::Mutating)
+MCP_IV_CALL(CreateLootTable, "create_loot_table", McpHandlers::Inventory::HandleInventoryCreateLootTable, EMcpCallFlags::Mutating)
+MCP_IV_CALL(AddLootEntry, "add_loot_entry", McpHandlers::Inventory::HandleInventoryAddLootEntry, EMcpCallFlags::Mutating)
+MCP_IV_CALL(ConfigureLootDrop, "configure_loot_drop", McpHandlers::Inventory::HandleInventoryConfigureLootDrop, EMcpCallFlags::Mutating)
+MCP_IV_CALL(SetLootQualityTiers, "set_loot_quality_tiers", McpHandlers::Inventory::HandleInventorySetLootQualityTiers, EMcpCallFlags::Mutating)
 
 // Crafting system (17.6)
-MCP_IV_CALL(CreateCraftingRecipe, "create_crafting_recipe", HandleInventoryCreateCraftingRecipe, EMcpCallFlags::Mutating)
-MCP_IV_CALL(ConfigureRecipeRequirements, "configure_recipe_requirements", HandleInventoryConfigureRecipeRequirements, EMcpCallFlags::Mutating)
-MCP_IV_CALL(CreateCraftingStation, "create_crafting_station", HandleInventoryCreateCraftingStation, EMcpCallFlags::Mutating)
-MCP_IV_CALL(AddCraftingComponent, "add_crafting_component", HandleInventoryAddCraftingComponent, EMcpCallFlags::Mutating)
+MCP_IV_CALL(CreateCraftingRecipe, "create_crafting_recipe", McpHandlers::Inventory::HandleInventoryCreateCraftingRecipe, EMcpCallFlags::Mutating)
+MCP_IV_CALL(ConfigureRecipeRequirements, "configure_recipe_requirements", McpHandlers::Inventory::HandleInventoryConfigureRecipeRequirements, EMcpCallFlags::Mutating)
+MCP_IV_CALL(CreateCraftingStation, "create_crafting_station", McpHandlers::Inventory::HandleInventoryCreateCraftingStation, EMcpCallFlags::Mutating)
+MCP_IV_CALL(AddCraftingComponent, "add_crafting_component", McpHandlers::Inventory::HandleInventoryAddCraftingComponent, EMcpCallFlags::Mutating)
 
 // Additional actions (17.7)
-MCP_IV_CALL(ConfigureItemStacking, "configure_item_stacking", HandleInventoryConfigureItemStacking, EMcpCallFlags::Mutating)
-MCP_IV_CALL(SetItemIcon, "set_item_icon", HandleInventorySetItemIcon, EMcpCallFlags::Mutating)
-MCP_IV_CALL(AddRecipeIngredient, "add_recipe_ingredient", HandleInventoryAddRecipeIngredient, EMcpCallFlags::Mutating)
-MCP_IV_CALL(RemoveLootEntry, "remove_loot_entry", HandleInventoryRemoveLootEntry, EMcpCallFlags::Mutating)
-MCP_IV_CALL(ConfigureWeight, "configure_inventory_weight", HandleInventoryConfigureWeight, EMcpCallFlags::Mutating)
+MCP_IV_CALL(ConfigureItemStacking, "configure_item_stacking", McpHandlers::Inventory::HandleInventoryConfigureItemStacking, EMcpCallFlags::Mutating)
+MCP_IV_CALL(SetItemIcon, "set_item_icon", McpHandlers::Inventory::HandleInventorySetItemIcon, EMcpCallFlags::Mutating)
+MCP_IV_CALL(AddRecipeIngredient, "add_recipe_ingredient", McpHandlers::Inventory::HandleInventoryAddRecipeIngredient, EMcpCallFlags::Mutating)
+MCP_IV_CALL(RemoveLootEntry, "remove_loot_entry", McpHandlers::Inventory::HandleInventoryRemoveLootEntry, EMcpCallFlags::Mutating)
+MCP_IV_CALL(ConfigureWeight, "configure_inventory_weight", McpHandlers::Inventory::HandleInventoryConfigureWeight, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_IV_CALL(GetInfo, "get_info", HandleInventoryGetInfo, EMcpCallFlags::None)
+MCP_IV_CALL(GetInfo, "get_info", McpHandlers::Inventory::HandleInventoryGetInfo, EMcpCallFlags::None)
 
 #undef MCP_IV_CALL
 
