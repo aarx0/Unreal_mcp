@@ -5,14 +5,16 @@
 // S_<Suffix>() function; the published facade schema folds those fragments and
 // GetDecl() derives the validation decl from the same fragment via
 // McpDeriveDecl(), so schema and decl are one source and cannot drift. Run()
-// delegates to the subsystem member handlers — HandleLevelStructure*
-// (LevelStructureHandlers.cpp) for the 17 core actions, HandleVolume*
-// (VolumeHandlers.cpp) for the 28 volume actions — until the module split
-// de-members those bodies.
+// delegates to the namespaced free handlers —
+// McpHandlers::LevelStructure::HandleLevelStructure* (LevelStructureHandlers.cpp)
+// for the 16 core actions and McpHandlers::LevelStructure::HandleVolume*
+// (VolumeHandlers.cpp) for the 28 volume actions.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_LevelStructureHandlers.h"
+#include "McpAutomationBridge_VolumeHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -693,81 +695,81 @@ class FMcpCall_ManageLevelStructure_##ClassSuffix final : public FMcpCall       
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
 	{                                                                                     \
-		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+		return HandlerFn(S, RequestId, Payload, Socket);                                  \
 	}                                                                                     \
 };
 
 // Levels
-MCP_LS_CALL(CreateLevel, "create_level", HandleLevelStructureCreateLevel, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateSublevel, "create_sublevel", HandleLevelStructureCreateSublevel, EMcpCallFlags::Mutating)
-MCP_LS_CALL(ConfigureLevelStreaming, "configure_level_streaming", HandleLevelStructureConfigureLevelStreaming, EMcpCallFlags::Mutating)
-MCP_LS_CALL(SetStreamingDistance, "set_streaming_distance", HandleLevelStructureSetStreamingDistance, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateLevel, "create_level", McpHandlers::LevelStructure::HandleLevelStructureCreateLevel, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateSublevel, "create_sublevel", McpHandlers::LevelStructure::HandleLevelStructureCreateSublevel, EMcpCallFlags::Mutating)
+MCP_LS_CALL(ConfigureLevelStreaming, "configure_level_streaming", McpHandlers::LevelStructure::HandleLevelStructureConfigureLevelStreaming, EMcpCallFlags::Mutating)
+MCP_LS_CALL(SetStreamingDistance, "set_streaming_distance", McpHandlers::LevelStructure::HandleLevelStructureSetStreamingDistance, EMcpCallFlags::Mutating)
 
 // World Partition
-MCP_LS_CALL(EnableWorldPartition, "enable_world_partition", HandleLevelStructureEnableWorldPartition, EMcpCallFlags::Mutating)
-MCP_LS_CALL(ConfigureGridSize, "configure_grid_size", HandleLevelStructureConfigureGridSize, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateDataLayer, "create_data_layer", HandleLevelStructureCreateDataLayer, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AssignActorToDataLayer, "assign_actor_to_data_layer", HandleLevelStructureAssignActorToDataLayer, EMcpCallFlags::Mutating)
-MCP_LS_CALL(ConfigureHlodLayer, "configure_hlod_layer", HandleLevelStructureConfigureHlodLayer, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateMinimapVolume, "create_minimap_volume", HandleLevelStructureCreateMinimapVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(EnableWorldPartition, "enable_world_partition", McpHandlers::LevelStructure::HandleLevelStructureEnableWorldPartition, EMcpCallFlags::Mutating)
+MCP_LS_CALL(ConfigureGridSize, "configure_grid_size", McpHandlers::LevelStructure::HandleLevelStructureConfigureGridSize, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateDataLayer, "create_data_layer", McpHandlers::LevelStructure::HandleLevelStructureCreateDataLayer, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AssignActorToDataLayer, "assign_actor_to_data_layer", McpHandlers::LevelStructure::HandleLevelStructureAssignActorToDataLayer, EMcpCallFlags::Mutating)
+MCP_LS_CALL(ConfigureHlodLayer, "configure_hlod_layer", McpHandlers::LevelStructure::HandleLevelStructureConfigureHlodLayer, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateMinimapVolume, "create_minimap_volume", McpHandlers::LevelStructure::HandleLevelStructureCreateMinimapVolume, EMcpCallFlags::Mutating)
 
 // Level Blueprint
-MCP_LS_CALL(OpenLevelBlueprint, "open_level_blueprint", HandleLevelStructureOpenLevelBlueprint, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AddLevelBlueprintNode, "add_level_blueprint_node", HandleLevelStructureAddLevelBlueprintNode, EMcpCallFlags::Mutating)
-MCP_LS_CALL(ConnectLevelBlueprintNodes, "connect_level_blueprint_nodes", HandleLevelStructureConnectLevelBlueprintNodes, EMcpCallFlags::Mutating)
+MCP_LS_CALL(OpenLevelBlueprint, "open_level_blueprint", McpHandlers::LevelStructure::HandleLevelStructureOpenLevelBlueprint, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddLevelBlueprintNode, "add_level_blueprint_node", McpHandlers::LevelStructure::HandleLevelStructureAddLevelBlueprintNode, EMcpCallFlags::Mutating)
+MCP_LS_CALL(ConnectLevelBlueprintNodes, "connect_level_blueprint_nodes", McpHandlers::LevelStructure::HandleLevelStructureConnectLevelBlueprintNodes, EMcpCallFlags::Mutating)
 
 // Level Instances
-MCP_LS_CALL(CreateLevelInstance, "create_level_instance", HandleLevelStructureCreateLevelInstance, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreatePackedLevelActor, "create_packed_level_actor", HandleLevelStructureCreatePackedLevelActor, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateLevelInstance, "create_level_instance", McpHandlers::LevelStructure::HandleLevelStructureCreateLevelInstance, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreatePackedLevelActor, "create_packed_level_actor", McpHandlers::LevelStructure::HandleLevelStructureCreatePackedLevelActor, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_LS_CALL(GetInfo, "get_info", HandleLevelStructureGetInfo, EMcpCallFlags::None)
+MCP_LS_CALL(GetInfo, "get_info", McpHandlers::LevelStructure::HandleLevelStructureGetInfo, EMcpCallFlags::None)
 
 // Trigger Volumes
-MCP_LS_CALL(CreateTriggerVolume, "create_trigger_volume", HandleVolumeCreateTriggerVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateTriggerBox, "create_trigger_box", HandleVolumeCreateTriggerBox, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateTriggerSphere, "create_trigger_sphere", HandleVolumeCreateTriggerSphere, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateTriggerCapsule, "create_trigger_capsule", HandleVolumeCreateTriggerCapsule, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateTriggerVolume, "create_trigger_volume", McpHandlers::LevelStructure::HandleVolumeCreateTriggerVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateTriggerBox, "create_trigger_box", McpHandlers::LevelStructure::HandleVolumeCreateTriggerBox, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateTriggerSphere, "create_trigger_sphere", McpHandlers::LevelStructure::HandleVolumeCreateTriggerSphere, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateTriggerCapsule, "create_trigger_capsule", McpHandlers::LevelStructure::HandleVolumeCreateTriggerCapsule, EMcpCallFlags::Mutating)
 
 // Gameplay Volumes
-MCP_LS_CALL(CreateBlockingVolume, "create_blocking_volume", HandleVolumeCreateBlockingVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateKillZVolume, "create_kill_z_volume", HandleVolumeCreateKillZVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreatePainCausingVolume, "create_pain_causing_volume", HandleVolumeCreatePainCausingVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreatePhysicsVolume, "create_physics_volume", HandleVolumeCreatePhysicsVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateBlockingVolume, "create_blocking_volume", McpHandlers::LevelStructure::HandleVolumeCreateBlockingVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateKillZVolume, "create_kill_z_volume", McpHandlers::LevelStructure::HandleVolumeCreateKillZVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreatePainCausingVolume, "create_pain_causing_volume", McpHandlers::LevelStructure::HandleVolumeCreatePainCausingVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreatePhysicsVolume, "create_physics_volume", McpHandlers::LevelStructure::HandleVolumeCreatePhysicsVolume, EMcpCallFlags::Mutating)
 
 // Audio Volumes
-MCP_LS_CALL(CreateAudioVolume, "create_audio_volume", HandleVolumeCreateAudioVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateReverbVolume, "create_reverb_volume", HandleVolumeCreateReverbVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateAudioVolume, "create_audio_volume", McpHandlers::LevelStructure::HandleVolumeCreateAudioVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateReverbVolume, "create_reverb_volume", McpHandlers::LevelStructure::HandleVolumeCreateReverbVolume, EMcpCallFlags::Mutating)
 
 // Rendering Volumes
-MCP_LS_CALL(CreatePostProcessVolume, "create_post_process_volume", HandleVolumeCreatePostProcessVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateCullDistanceVolume, "create_cull_distance_volume", HandleVolumeCreateCullDistanceVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreatePrecomputedVisibilityVolume, "create_precomputed_visibility_volume", HandleVolumeCreatePrecomputedVisibilityVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateLightmassImportanceVolume, "create_lightmass_importance_volume", HandleVolumeCreateLightmassImportanceVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreatePostProcessVolume, "create_post_process_volume", McpHandlers::LevelStructure::HandleVolumeCreatePostProcessVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateCullDistanceVolume, "create_cull_distance_volume", McpHandlers::LevelStructure::HandleVolumeCreateCullDistanceVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreatePrecomputedVisibilityVolume, "create_precomputed_visibility_volume", McpHandlers::LevelStructure::HandleVolumeCreatePrecomputedVisibilityVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateLightmassImportanceVolume, "create_lightmass_importance_volume", McpHandlers::LevelStructure::HandleVolumeCreateLightmassImportanceVolume, EMcpCallFlags::Mutating)
 
 // Navigation Volumes
-MCP_LS_CALL(CreateNavMeshBoundsVolume, "create_nav_mesh_bounds_volume", HandleVolumeCreateNavMeshBoundsVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateNavModifierVolume, "create_nav_modifier_volume", HandleVolumeCreateNavModifierVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(CreateCameraBlockingVolume, "create_camera_blocking_volume", HandleVolumeCreateCameraBlockingVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateNavMeshBoundsVolume, "create_nav_mesh_bounds_volume", McpHandlers::LevelStructure::HandleVolumeCreateNavMeshBoundsVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateNavModifierVolume, "create_nav_modifier_volume", McpHandlers::LevelStructure::HandleVolumeCreateNavModifierVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(CreateCameraBlockingVolume, "create_camera_blocking_volume", McpHandlers::LevelStructure::HandleVolumeCreateCameraBlockingVolume, EMcpCallFlags::Mutating)
 
 // Volume Configuration
-MCP_LS_CALL(SetVolumeExtent, "set_volume_extent", HandleVolumeSetVolumeExtent, EMcpCallFlags::Mutating)
-MCP_LS_CALL(SetVolumeProperties, "set_volume_properties", HandleVolumeSetVolumeProperties, EMcpCallFlags::Mutating)
-MCP_LS_CALL(SetVolumeBounds, "set_volume_bounds", HandleVolumeSetVolumeBounds, EMcpCallFlags::Mutating)
+MCP_LS_CALL(SetVolumeExtent, "set_volume_extent", McpHandlers::LevelStructure::HandleVolumeSetVolumeExtent, EMcpCallFlags::Mutating)
+MCP_LS_CALL(SetVolumeProperties, "set_volume_properties", McpHandlers::LevelStructure::HandleVolumeSetVolumeProperties, EMcpCallFlags::Mutating)
+MCP_LS_CALL(SetVolumeBounds, "set_volume_bounds", McpHandlers::LevelStructure::HandleVolumeSetVolumeBounds, EMcpCallFlags::Mutating)
 
 // Volume Removal
-MCP_LS_CALL(RemoveVolume, "remove_volume", HandleVolumeRemoveVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(RemoveVolume, "remove_volume", McpHandlers::LevelStructure::HandleVolumeRemoveVolume, EMcpCallFlags::Mutating)
 
 // Utility
-MCP_LS_CALL(GetVolumesInfo, "get_volumes_info", HandleVolumeGetVolumesInfo, EMcpCallFlags::None)
+MCP_LS_CALL(GetVolumesInfo, "get_volumes_info", McpHandlers::LevelStructure::HandleVolumeGetVolumesInfo, EMcpCallFlags::None)
 
 // Add Volume To Actor handlers
-MCP_LS_CALL(AddTriggerVolume, "add_trigger_volume", HandleVolumeAddTriggerVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AddBlockingVolume, "add_blocking_volume", HandleVolumeAddBlockingVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AddKillZVolume, "add_kill_z_volume", HandleVolumeAddKillZVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AddPhysicsVolume, "add_physics_volume", HandleVolumeAddPhysicsVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AddCullDistanceVolume, "add_cull_distance_volume", HandleVolumeAddCullDistanceVolume, EMcpCallFlags::Mutating)
-MCP_LS_CALL(AddPostProcessVolume, "add_post_process_volume", HandleVolumeAddPostProcessVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddTriggerVolume, "add_trigger_volume", McpHandlers::LevelStructure::HandleVolumeAddTriggerVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddBlockingVolume, "add_blocking_volume", McpHandlers::LevelStructure::HandleVolumeAddBlockingVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddKillZVolume, "add_kill_z_volume", McpHandlers::LevelStructure::HandleVolumeAddKillZVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddPhysicsVolume, "add_physics_volume", McpHandlers::LevelStructure::HandleVolumeAddPhysicsVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddCullDistanceVolume, "add_cull_distance_volume", McpHandlers::LevelStructure::HandleVolumeAddCullDistanceVolume, EMcpCallFlags::Mutating)
+MCP_LS_CALL(AddPostProcessVolume, "add_post_process_volume", McpHandlers::LevelStructure::HandleVolumeAddPostProcessVolume, EMcpCallFlags::Mutating)
 
 #undef MCP_LS_CALL
 

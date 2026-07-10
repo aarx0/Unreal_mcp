@@ -63,6 +63,7 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
+#include "McpAutomationBridge_VolumeHandlers.h"
 #include "McpHandlerUtils.h"
 #include "Misc/EngineVersionComparison.h"
 
@@ -3113,433 +3114,461 @@ static bool HandleSetVolumeBounds(
 // stubs.
 
 // create_trigger_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateTriggerVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreateTriggerVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateTriggerVolume(this, RequestId, Payload, Socket);
+    return HandleCreateTriggerVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_trigger_box
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateTriggerBox(
+bool McpHandlers::LevelStructure::HandleVolumeCreateTriggerBox(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateTriggerBox(this, RequestId, Payload, Socket);
+    return HandleCreateTriggerBox(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_trigger_sphere
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateTriggerSphere(
+bool McpHandlers::LevelStructure::HandleVolumeCreateTriggerSphere(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateTriggerSphere(this, RequestId, Payload, Socket);
+    return HandleCreateTriggerSphere(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_trigger_capsule
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateTriggerCapsule(
+bool McpHandlers::LevelStructure::HandleVolumeCreateTriggerCapsule(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateTriggerCapsule(this, RequestId, Payload, Socket);
+    return HandleCreateTriggerCapsule(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_blocking_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateBlockingVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreateBlockingVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateBlockingVolume(this, RequestId, Payload, Socket);
+    return HandleCreateBlockingVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_kill_z_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateKillZVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreateKillZVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateKillZVolume(this, RequestId, Payload, Socket);
+    return HandleCreateKillZVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_pain_causing_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreatePainCausingVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreatePainCausingVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreatePainCausingVolume(this, RequestId, Payload, Socket);
+    return HandleCreatePainCausingVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_physics_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreatePhysicsVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreatePhysicsVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreatePhysicsVolume(this, RequestId, Payload, Socket);
+    return HandleCreatePhysicsVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_audio_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateAudioVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreateAudioVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateAudioVolume(this, RequestId, Payload, Socket);
+    return HandleCreateAudioVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_reverb_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateReverbVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreateReverbVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateReverbVolume(this, RequestId, Payload, Socket);
+    return HandleCreateReverbVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_post_process_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreatePostProcessVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreatePostProcessVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
 #if MCP_HAS_POSTPROCESS_VOLUME
-    return HandleCreatePostProcessVolume(this, RequestId, Payload, Socket);
+    return HandleCreatePostProcessVolume(&S, RequestId, Payload, Socket);
 #else
     // PostProcessVolume requires UE 5.1+
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("PostProcessVolume requires UE 5.1 or later"), nullptr, TEXT("UNSUPPORTED_VERSION"));
     return true;
 #endif
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_cull_distance_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateCullDistanceVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreateCullDistanceVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateCullDistanceVolume(this, RequestId, Payload, Socket);
+    return HandleCreateCullDistanceVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_precomputed_visibility_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreatePrecomputedVisibilityVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreatePrecomputedVisibilityVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreatePrecomputedVisibilityVolume(this, RequestId, Payload, Socket);
+    return HandleCreatePrecomputedVisibilityVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_lightmass_importance_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateLightmassImportanceVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreateLightmassImportanceVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateLightmassImportanceVolume(this, RequestId, Payload, Socket);
+    return HandleCreateLightmassImportanceVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_nav_mesh_bounds_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateNavMeshBoundsVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreateNavMeshBoundsVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateNavMeshBoundsVolume(this, RequestId, Payload, Socket);
+    return HandleCreateNavMeshBoundsVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_nav_modifier_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateNavModifierVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreateNavModifierVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateNavModifierVolume(this, RequestId, Payload, Socket);
+    return HandleCreateNavModifierVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // create_camera_blocking_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeCreateCameraBlockingVolume(
+bool McpHandlers::LevelStructure::HandleVolumeCreateCameraBlockingVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateCameraBlockingVolume(this, RequestId, Payload, Socket);
+    return HandleCreateCameraBlockingVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // set_volume_extent
-bool UMcpAutomationBridgeSubsystem::HandleVolumeSetVolumeExtent(
+bool McpHandlers::LevelStructure::HandleVolumeSetVolumeExtent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleSetVolumeExtent(this, RequestId, Payload, Socket);
+    return HandleSetVolumeExtent(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // set_volume_properties
-bool UMcpAutomationBridgeSubsystem::HandleVolumeSetVolumeProperties(
+bool McpHandlers::LevelStructure::HandleVolumeSetVolumeProperties(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleSetVolumeProperties(this, RequestId, Payload, Socket);
+    return HandleSetVolumeProperties(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // set_volume_bounds
-bool UMcpAutomationBridgeSubsystem::HandleVolumeSetVolumeBounds(
+bool McpHandlers::LevelStructure::HandleVolumeSetVolumeBounds(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleSetVolumeBounds(this, RequestId, Payload, Socket);
+    return HandleSetVolumeBounds(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // remove_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeRemoveVolume(
+bool McpHandlers::LevelStructure::HandleVolumeRemoveVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleRemoveVolume(this, RequestId, Payload, Socket);
+    return HandleRemoveVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // get_volumes_info
-bool UMcpAutomationBridgeSubsystem::HandleVolumeGetVolumesInfo(
+bool McpHandlers::LevelStructure::HandleVolumeGetVolumesInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleGetVolumesInfo(this, RequestId, Payload, Socket);
+    return HandleGetVolumesInfo(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // add_trigger_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeAddTriggerVolume(
+bool McpHandlers::LevelStructure::HandleVolumeAddTriggerVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleAddTriggerVolume(this, RequestId, Payload, Socket);
+    return HandleAddTriggerVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // add_blocking_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeAddBlockingVolume(
+bool McpHandlers::LevelStructure::HandleVolumeAddBlockingVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleAddBlockingVolume(this, RequestId, Payload, Socket);
+    return HandleAddBlockingVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // add_kill_z_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeAddKillZVolume(
+bool McpHandlers::LevelStructure::HandleVolumeAddKillZVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleAddKillZVolume(this, RequestId, Payload, Socket);
+    return HandleAddKillZVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // add_physics_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeAddPhysicsVolume(
+bool McpHandlers::LevelStructure::HandleVolumeAddPhysicsVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleAddPhysicsVolume(this, RequestId, Payload, Socket);
+    return HandleAddPhysicsVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // add_cull_distance_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeAddCullDistanceVolume(
+bool McpHandlers::LevelStructure::HandleVolumeAddCullDistanceVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleAddCullDistanceVolume(this, RequestId, Payload, Socket);
+    return HandleAddCullDistanceVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
 // add_post_process_volume
-bool UMcpAutomationBridgeSubsystem::HandleVolumeAddPostProcessVolume(
+bool McpHandlers::LevelStructure::HandleVolumeAddPostProcessVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
 #if MCP_HAS_POSTPROCESS_VOLUME
-    return HandleAddPostProcessVolume(this, RequestId, Payload, Socket);
+    return HandleAddPostProcessVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("PostProcessVolume requires UE 5.1 or later"), nullptr, TEXT("UNSUPPORTED_VERSION"));
     return true;
 #endif
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Volume operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif

@@ -43,6 +43,7 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
+#include "McpAutomationBridge_LevelStructureHandlers.h"
 #include "Misc/EngineVersionComparison.h"
 #include "Misc/App.h"
 
@@ -2996,57 +2997,61 @@ static bool HandleGetLevelStructureInfo(
 // handler above, replicating the retired chain's editor-build stub.
 
 // create_level
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureCreateLevel(
+bool McpHandlers::LevelStructure::HandleLevelStructureCreateLevel(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateLevel(this, RequestId, Payload, Socket);
+    return HandleCreateLevel(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // create_sublevel
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureCreateSublevel(
+bool McpHandlers::LevelStructure::HandleLevelStructureCreateSublevel(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateSublevel(this, RequestId, Payload, Socket);
+    return HandleCreateSublevel(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // configure_level_streaming
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureConfigureLevelStreaming(
+bool McpHandlers::LevelStructure::HandleLevelStructureConfigureLevelStreaming(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleConfigureLevelStreaming(this, RequestId, Payload, Socket);
+    return HandleConfigureLevelStreaming(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // set_streaming_distance
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureSetStreamingDistance(
+bool McpHandlers::LevelStructure::HandleLevelStructureSetStreamingDistance(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleSetStreamingDistance(this, RequestId, Payload, Socket);
+    return HandleSetStreamingDistance(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
@@ -3054,169 +3059,181 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelStructureSetStreamingDistance(
 // configure_level_bounds
 
 // enable_world_partition
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureEnableWorldPartition(
+bool McpHandlers::LevelStructure::HandleLevelStructureEnableWorldPartition(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleEnableWorldPartition(this, RequestId, Payload, Socket);
+    return HandleEnableWorldPartition(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // configure_grid_size
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureConfigureGridSize(
+bool McpHandlers::LevelStructure::HandleLevelStructureConfigureGridSize(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleConfigureGridSize(this, RequestId, Payload, Socket);
+    return HandleConfigureGridSize(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // create_data_layer
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureCreateDataLayer(
+bool McpHandlers::LevelStructure::HandleLevelStructureCreateDataLayer(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateDataLayer(this, RequestId, Payload, Socket);
+    return HandleCreateDataLayer(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // assign_actor_to_data_layer
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureAssignActorToDataLayer(
+bool McpHandlers::LevelStructure::HandleLevelStructureAssignActorToDataLayer(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleAssignActorToDataLayer(this, RequestId, Payload, Socket);
+    return HandleAssignActorToDataLayer(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // configure_hlod_layer
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureConfigureHlodLayer(
+bool McpHandlers::LevelStructure::HandleLevelStructureConfigureHlodLayer(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleConfigureHlodLayer(this, RequestId, Payload, Socket);
+    return HandleConfigureHlodLayer(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // create_minimap_volume
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureCreateMinimapVolume(
+bool McpHandlers::LevelStructure::HandleLevelStructureCreateMinimapVolume(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateMinimapVolume(this, RequestId, Payload, Socket);
+    return HandleCreateMinimapVolume(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // open_level_blueprint
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureOpenLevelBlueprint(
+bool McpHandlers::LevelStructure::HandleLevelStructureOpenLevelBlueprint(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleOpenLevelBlueprint(this, RequestId, Payload, Socket);
+    return HandleOpenLevelBlueprint(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // add_level_blueprint_node
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureAddLevelBlueprintNode(
+bool McpHandlers::LevelStructure::HandleLevelStructureAddLevelBlueprintNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleAddLevelBlueprintNode(this, RequestId, Payload, Socket);
+    return HandleAddLevelBlueprintNode(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // connect_level_blueprint_nodes
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureConnectLevelBlueprintNodes(
+bool McpHandlers::LevelStructure::HandleLevelStructureConnectLevelBlueprintNodes(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleConnectLevelBlueprintNodes(this, RequestId, Payload, Socket);
+    return HandleConnectLevelBlueprintNodes(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // create_level_instance
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureCreateLevelInstance(
+bool McpHandlers::LevelStructure::HandleLevelStructureCreateLevelInstance(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateLevelInstance(this, RequestId, Payload, Socket);
+    return HandleCreateLevelInstance(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // create_packed_level_actor
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureCreatePackedLevelActor(
+bool McpHandlers::LevelStructure::HandleLevelStructureCreatePackedLevelActor(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreatePackedLevelActor(this, RequestId, Payload, Socket);
+    return HandleCreatePackedLevelActor(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
 
 // get_info
-bool UMcpAutomationBridgeSubsystem::HandleLevelStructureGetInfo(
+bool McpHandlers::LevelStructure::HandleLevelStructureGetInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleGetLevelStructureInfo(this, RequestId, Payload, Socket);
+    return HandleGetLevelStructureInfo(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
+    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_level_structure requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
 #endif
 }

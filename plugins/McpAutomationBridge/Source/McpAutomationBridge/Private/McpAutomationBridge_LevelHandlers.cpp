@@ -23,6 +23,7 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_LevelStructureHandlers.h"
 
 #if WITH_EDITOR
 #include "Editor.h"
@@ -1388,7 +1389,7 @@ bool UMcpAutomationBridgeSubsystem::HandleLevelCreate(
   CreatePayload->SetBoolField(TEXT("bCreateWorldPartition"), bUseWorldPartition);
   CreatePayload->SetBoolField(TEXT("save"), true);
   CreatePayload->SetBoolField(TEXT("loadAfterCreate"), true);
-  return HandleLevelStructureCreateLevel(RequestId, CreatePayload, Socket);
+  return McpHandlers::LevelStructure::HandleLevelStructureCreateLevel(*this, RequestId, CreatePayload, Socket);
 }
 
 bool UMcpAutomationBridgeSubsystem::HandleLevelStreamInternal(
