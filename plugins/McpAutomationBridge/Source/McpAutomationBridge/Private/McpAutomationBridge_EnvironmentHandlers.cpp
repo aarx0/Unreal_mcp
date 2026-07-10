@@ -1928,6 +1928,10 @@ bool UMcpAutomationBridgeSubsystem::HandleInspectFindByClass(
     Payload->TryGetStringField(TEXT("className"), ClassName);
     if (ClassName.IsEmpty())
     {
+        Payload->TryGetStringField(TEXT("class"), ClassName);
+    }
+    if (ClassName.IsEmpty())
+    {
         Payload->TryGetStringField(TEXT("classPath"), ClassName);
     }
     TArray<TSharedPtr<FJsonValue>> ObjectsArray;

@@ -114,6 +114,7 @@ static void S_ListObjects(FMcpSchemaBuilder&) {}
 static void S_FindByClass(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("className"), TEXT(""))
+	 .String(TEXT("class"), TEXT("Actor class name (alias of className)."))
 	 .String(TEXT("classPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."));
 }
 
