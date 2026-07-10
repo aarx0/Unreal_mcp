@@ -1223,10 +1223,10 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupEffects(
 
   McpHandlerUtils::FMcpWriteReport Report;
   const bool bHasBobbing = Payload->HasField(TEXT("bobbing"));
-  const bool bHasRotation = Payload->HasField(TEXT("rotation"));
+  const bool bHasRotation = Payload->HasField(TEXT("rotationEffect"));
   const bool bHasGlow = Payload->HasField(TEXT("glowEffect"));
   const bool bBobbing = GetPayloadBool(Payload, TEXT("bobbing"), true);
-  const bool bRotation = GetPayloadBool(Payload, TEXT("rotation"), true);
+  const bool bRotation = GetPayloadBool(Payload, TEXT("rotationEffect"), true);
   const bool bGlowEffect = GetPayloadBool(Payload, TEXT("glowEffect"), false);
 
   if (bHasBobbing || bHasRotation || bHasGlow) {
@@ -1281,7 +1281,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupEffects(
     struct FBoolWrite { bool bRequested; const TCHAR* PayloadKey; const TCHAR* VarName; bool Value; };
     const FBoolWrite Writes[] = {
       { bHasBobbing,  TEXT("bobbing"),    TEXT("bEnableBobbing"),    bBobbing },
-      { bHasRotation, TEXT("rotation"),   TEXT("bEnableRotation"),   bRotation },
+      { bHasRotation, TEXT("rotationEffect"), TEXT("bEnableRotation"),   bRotation },
       { bHasGlow,     TEXT("glowEffect"), TEXT("bEnableGlowEffect"), bGlowEffect }
     };
     for (const FBoolWrite& W : Writes) {
@@ -1320,7 +1320,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInventoryConfigurePickupEffects(
     Result->SetBoolField(TEXT("bobbing"), bBobbing);
   }
   if (bHasRotation) {
-    Result->SetBoolField(TEXT("rotation"), bRotation);
+    Result->SetBoolField(TEXT("rotationEffect"), bRotation);
   }
   if (bHasGlow) {
     Result->SetBoolField(TEXT("glowEffect"), bGlowEffect);

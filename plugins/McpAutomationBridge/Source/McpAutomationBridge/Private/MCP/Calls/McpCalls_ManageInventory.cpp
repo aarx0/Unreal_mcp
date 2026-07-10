@@ -142,7 +142,7 @@ static void S_ConfigurePickupEffects(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("pickupPath"), TEXT("Path to pickup actor Blueprint."))
 	 .Bool(TEXT("bobbing"), TEXT("Enable bobbing animation."))
-	 .Bool(TEXT("rotation"), TEXT("Enable rotation animation."))
+	 .Bool(TEXT("rotationEffect"), TEXT("Enable rotation animation."))
 	 .Bool(TEXT("glowEffect"), TEXT("Enable glow effect."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("pickupPath")});
