@@ -45,6 +45,7 @@
 
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeGlobals.h"
+#include "McpResponseHelpers.h"
 
 class UProjectileMovementComponent;
 class USphereComponent;
@@ -498,53 +499,73 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatSetWeaponStats(
     UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
+    McpHandlerUtils::FMcpWriteReport Report;
+    TArray<FString> VarsAdded;
+
+    const bool bHasBaseDamage = Payload->HasField(TEXT("baseDamage"));
+    const bool bHasFireRate = Payload->HasField(TEXT("fireRate"));
+    const bool bHasRange = Payload->HasField(TEXT("range"));
+    const bool bHasSpread = Payload->HasField(TEXT("spread"));
+
     double BaseDamage = GetJsonNumberField(Payload, TEXT("baseDamage"), 25.0);
     double FireRate = GetJsonNumberField(Payload, TEXT("fireRate"), 600.0);
     double Range = GetJsonNumberField(Payload, TEXT("range"), 10000.0);
     double Spread = GetJsonNumberField(Payload, TEXT("spread"), 2.0);
 
-    // Add/update variables
-    AddBlueprintVariableCombat(Blueprint, TEXT("BaseDamage"), MakeFloatPinType());
-    AddBlueprintVariableCombat(Blueprint, TEXT("FireRate"), MakeFloatPinType());
-    AddBlueprintVariableCombat(Blueprint, TEXT("Range"), MakeFloatPinType());
-    AddBlueprintVariableCombat(Blueprint, TEXT("Spread"), MakeFloatPinType());
+    // Add only the requested variables so an absent field never clobbers an existing default.
+    if (bHasBaseDamage) { AddBlueprintVariableCombat(Blueprint, TEXT("BaseDamage"), MakeFloatPinType()); VarsAdded.Add(TEXT("BaseDamage")); }
+    if (bHasFireRate) { AddBlueprintVariableCombat(Blueprint, TEXT("FireRate"), MakeFloatPinType()); VarsAdded.Add(TEXT("FireRate")); }
+    if (bHasRange) { AddBlueprintVariableCombat(Blueprint, TEXT("Range"), MakeFloatPinType()); VarsAdded.Add(TEXT("Range")); }
+    if (bHasSpread) { AddBlueprintVariableCombat(Blueprint, TEXT("Spread"), MakeFloatPinType()); VarsAdded.Add(TEXT("Spread")); }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeCompileBlueprint(Blueprint);
-
-    // Set values via CDO
-    if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(Blueprint->GeneratedClass))
+    if (bHasBaseDamage || bHasFireRate || bHasRange || bHasSpread)
     {
-        if (UObject* CDO = BPGC->GetDefaultObject())
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        McpSafeCompileBlueprint(Blueprint);
+
+        UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+        UObject* CDO = BPGC ? BPGC->GetDefaultObject() : nullptr;
+        if (bHasBaseDamage)
         {
-            if (FDoubleProperty* DamageProp = FindFProperty<FDoubleProperty>(BPGC, TEXT("BaseDamage")))
-            {
-                DamageProp->SetPropertyValue_InContainer(CDO, BaseDamage);
-            }
-            if (FDoubleProperty* RateProp = FindFProperty<FDoubleProperty>(BPGC, TEXT("FireRate")))
-            {
-                RateProp->SetPropertyValue_InContainer(CDO, FireRate);
-            }
-            if (FDoubleProperty* RangeProp = FindFProperty<FDoubleProperty>(BPGC, TEXT("Range")))
-            {
-                RangeProp->SetPropertyValue_InContainer(CDO, Range);
-            }
-            if (FDoubleProperty* SpreadProp = FindFProperty<FDoubleProperty>(BPGC, TEXT("Spread")))
-            {
-                SpreadProp->SetPropertyValue_InContainer(CDO, Spread);
-            }
+            if (FDoubleProperty* DamageProp = CDO ? FindFProperty<FDoubleProperty>(BPGC, TEXT("BaseDamage")) : nullptr)
+            { DamageProp->SetPropertyValue_InContainer(CDO, BaseDamage); Report.MarkApplied(TEXT("baseDamage")); }
+            else Report.MarkFailed(TEXT("baseDamage"), TEXT("BaseDamage property not found after compile"));
+        }
+        if (bHasFireRate)
+        {
+            if (FDoubleProperty* RateProp = CDO ? FindFProperty<FDoubleProperty>(BPGC, TEXT("FireRate")) : nullptr)
+            { RateProp->SetPropertyValue_InContainer(CDO, FireRate); Report.MarkApplied(TEXT("fireRate")); }
+            else Report.MarkFailed(TEXT("fireRate"), TEXT("FireRate property not found after compile"));
+        }
+        if (bHasRange)
+        {
+            if (FDoubleProperty* RangeProp = CDO ? FindFProperty<FDoubleProperty>(BPGC, TEXT("Range")) : nullptr)
+            { RangeProp->SetPropertyValue_InContainer(CDO, Range); Report.MarkApplied(TEXT("range")); }
+            else Report.MarkFailed(TEXT("range"), TEXT("Range property not found after compile"));
+        }
+        if (bHasSpread)
+        {
+            if (FDoubleProperty* SpreadProp = CDO ? FindFProperty<FDoubleProperty>(BPGC, TEXT("Spread")) : nullptr)
+            { SpreadProp->SetPropertyValue_InContainer(CDO, Spread); Report.MarkApplied(TEXT("spread")); }
+            else Report.MarkFailed(TEXT("spread"), TEXT("Spread property not found after compile"));
         }
     }
 
-    McpSafeAssetSave(Blueprint);
+    if (Report.AnyApplied())
+    {
+        McpSafeAssetSave(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
-    Result->SetNumberField(TEXT("baseDamage"), BaseDamage);
-    Result->SetNumberField(TEXT("fireRate"), FireRate);
-    Result->SetNumberField(TEXT("range"), Range);
-    Result->SetNumberField(TEXT("spread"), Spread);
-    SetVariablesAdded(Result, {TEXT("BaseDamage"), TEXT("FireRate"), TEXT("Range"), TEXT("Spread")});
+    if (bHasBaseDamage) Result->SetNumberField(TEXT("baseDamage"), BaseDamage);
+    if (bHasFireRate) Result->SetNumberField(TEXT("fireRate"), FireRate);
+    if (bHasRange) Result->SetNumberField(TEXT("range"), Range);
+    if (bHasSpread) Result->SetNumberField(TEXT("spread"), Spread);
+    if (VarsAdded.Num() > 0)
+    {
+        SetVariablesAdded(Result, VarsAdded);
+    }
 
     TSharedPtr<FJsonObject> IgnoredParams = MakeShared<FJsonObject>();
     if (Payload->HasField(TEXT("criticalMultiplier")))
@@ -560,9 +581,8 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatSetWeaponStats(
         Result->SetObjectField(TEXT("ignoredParams"), IgnoredParams);
     }
 
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Weapon stats configured."), Result);
-    return true;
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Weapon stats configured."), Blueprint);
 #endif // WITH_EDITOR
 }
 
@@ -679,27 +699,70 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureProjectileMovement(
     UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
-    UProjectileMovementComponent* MovementComp = GetOrCreateSCSComponent<UProjectileMovementComponent>(Blueprint, TEXT("ProjectileMovement"));
-    if (MovementComp)
+    McpHandlerUtils::FMcpWriteReport Report;
+
+    const bool bHasSpeed = Payload->HasField(TEXT("projectileSpeed"));
+    const bool bHasGravity = Payload->HasField(TEXT("projectileGravityScale"));
+    const bool bHasLifespan = Payload->HasField(TEXT("projectileLifespan"));
+
+    if (bHasSpeed || bHasGravity)
     {
-        double Speed = GetJsonNumberField(Payload, TEXT("projectileSpeed"), 5000.0);
-        double GravityScale = GetJsonNumberField(Payload, TEXT("projectileGravityScale"), 0.0);
-        double Lifespan = GetJsonNumberField(Payload, TEXT("projectileLifespan"), 5.0);
-        
-        MovementComp->InitialSpeed = static_cast<float>(Speed);
-        MovementComp->MaxSpeed = static_cast<float>(Speed);
-        MovementComp->ProjectileGravityScale = static_cast<float>(GravityScale);
+        UProjectileMovementComponent* MovementComp = GetOrCreateSCSComponent<UProjectileMovementComponent>(Blueprint, TEXT("ProjectileMovement"));
+        if (MovementComp)
+        {
+            if (bHasSpeed)
+            {
+                const float Speed = static_cast<float>(GetJsonNumberField(Payload, TEXT("projectileSpeed"), 5000.0));
+                MovementComp->InitialSpeed = Speed;
+                MovementComp->MaxSpeed = Speed;
+                Report.MarkApplied(TEXT("projectileSpeed"));
+            }
+            if (bHasGravity)
+            {
+                MovementComp->ProjectileGravityScale = static_cast<float>(GetJsonNumberField(Payload, TEXT("projectileGravityScale"), 0.0));
+                Report.MarkApplied(TEXT("projectileGravityScale"));
+            }
+        }
+        else
+        {
+            if (bHasSpeed) Report.MarkFailed(TEXT("projectileSpeed"), TEXT("could not get or create ProjectileMovement component"));
+            if (bHasGravity) Report.MarkFailed(TEXT("projectileGravityScale"), TEXT("could not get or create ProjectileMovement component"));
+        }
     }
 
-    McpSafeCompileBlueprint(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    if (Report.AnyApplied())
+    {
+        McpSafeCompileBlueprint(Blueprint);
+    }
+
+    // projectileLifespan lands on the projectile actor's InitialLifeSpan (the
+    // movement component has no lifespan); set after any compile so it survives.
+    if (bHasLifespan)
+    {
+        AActor* ActorCDO = Blueprint->GeneratedClass
+            ? Cast<AActor>(Blueprint->GeneratedClass->GetDefaultObject())
+            : nullptr;
+        if (ActorCDO)
+        {
+            ActorCDO->InitialLifeSpan = static_cast<float>(GetJsonNumberField(Payload, TEXT("projectileLifespan"), 5.0));
+            Report.MarkApplied(TEXT("projectileLifespan"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("projectileLifespan"), TEXT("blueprint has no actor CDO to hold InitialLifeSpan"));
+        }
+    }
+
+    if (Report.AnyApplied())
+    {
+        McpSafeAssetSave(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
-    
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Projectile movement configured."), Result);
-    return true;
+
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Projectile movement configured."), Blueprint);
 #endif // WITH_EDITOR
 }
 
@@ -718,34 +781,60 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureProjectileCollision(
     UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
-    USphereComponent* CollisionComp = GetOrCreateSCSComponent<USphereComponent>(Blueprint, TEXT("CollisionComponent"));
-    if (CollisionComp)
+    McpHandlerUtils::FMcpWriteReport Report;
+
+    const bool bHasRadius = Payload->HasField(TEXT("collisionRadius"));
+    const bool bHasBounce = Payload->HasField(TEXT("bounceEnabled"));
+    const bool bHasBounceRatio = Payload->HasField(TEXT("bounceVelocityRatio"));
+
+    if (bHasRadius)
     {
-        double CollisionRadius = GetJsonNumberField(Payload, TEXT("collisionRadius"), 5.0);
-        CollisionComp->SetSphereRadius(static_cast<float>(CollisionRadius));
-        
-        bool bBounceEnabled = GetJsonBoolField(Payload, TEXT("bounceEnabled"), false);
-        // Bounce settings would be on the movement component
-        UProjectileMovementComponent* MovementComp = GetOrCreateSCSComponent<UProjectileMovementComponent>(Blueprint, TEXT("ProjectileMovement"));
-        if (MovementComp)
+        USphereComponent* CollisionComp = GetOrCreateSCSComponent<USphereComponent>(Blueprint, TEXT("CollisionComponent"));
+        if (CollisionComp)
         {
-            MovementComp->bShouldBounce = bBounceEnabled;
-            if (bBounceEnabled)
-            {
-                double BounceRatio = GetJsonNumberField(Payload, TEXT("bounceVelocityRatio"), 0.6);
-                MovementComp->Bounciness = static_cast<float>(BounceRatio);
-            }
+            CollisionComp->SetSphereRadius(static_cast<float>(GetJsonNumberField(Payload, TEXT("collisionRadius"), 5.0)));
+            Report.MarkApplied(TEXT("collisionRadius"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("collisionRadius"), TEXT("could not get or create CollisionComponent sphere"));
         }
     }
 
-    McpSafeCompileBlueprint(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    if (bHasBounce || bHasBounceRatio)
+    {
+        UProjectileMovementComponent* MovementComp = GetOrCreateSCSComponent<UProjectileMovementComponent>(Blueprint, TEXT("ProjectileMovement"));
+        if (MovementComp)
+        {
+            if (bHasBounce)
+            {
+                MovementComp->bShouldBounce = GetJsonBoolField(Payload, TEXT("bounceEnabled"), false);
+                Report.MarkApplied(TEXT("bounceEnabled"));
+            }
+            if (bHasBounceRatio)
+            {
+                MovementComp->Bounciness = static_cast<float>(GetJsonNumberField(Payload, TEXT("bounceVelocityRatio"), 0.6));
+                Report.MarkApplied(TEXT("bounceVelocityRatio"));
+            }
+        }
+        else
+        {
+            if (bHasBounce) Report.MarkFailed(TEXT("bounceEnabled"), TEXT("could not get or create ProjectileMovement component"));
+            if (bHasBounceRatio) Report.MarkFailed(TEXT("bounceVelocityRatio"), TEXT("could not get or create ProjectileMovement component"));
+        }
+    }
+
+    if (Report.AnyApplied())
+    {
+        McpSafeCompileBlueprint(Blueprint);
+        McpSafeAssetSave(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
-    
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Projectile collision configured."), Result);
-    return true;
+
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Projectile collision configured."), nullptr);
 #endif // WITH_EDITOR
 }
 
@@ -764,24 +853,45 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureProjectileHoming(
     UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
-    UProjectileMovementComponent* MovementComp = GetOrCreateSCSComponent<UProjectileMovementComponent>(Blueprint, TEXT("ProjectileMovement"));
-    if (MovementComp)
+    McpHandlerUtils::FMcpWriteReport Report;
+
+    const bool bHasHoming = Payload->HasField(TEXT("homingEnabled"));
+    const bool bHasAccel = Payload->HasField(TEXT("homingAcceleration"));
+
+    if (bHasHoming || bHasAccel)
     {
-        bool bHomingEnabled = GetJsonBoolField(Payload, TEXT("homingEnabled"), true);
-        double HomingAcceleration = GetJsonNumberField(Payload, TEXT("homingAcceleration"), 20000.0);
-        
-        MovementComp->bIsHomingProjectile = bHomingEnabled;
-        MovementComp->HomingAccelerationMagnitude = static_cast<float>(HomingAcceleration);
+        UProjectileMovementComponent* MovementComp = GetOrCreateSCSComponent<UProjectileMovementComponent>(Blueprint, TEXT("ProjectileMovement"));
+        if (MovementComp)
+        {
+            if (bHasHoming)
+            {
+                MovementComp->bIsHomingProjectile = GetJsonBoolField(Payload, TEXT("homingEnabled"), true);
+                Report.MarkApplied(TEXT("homingEnabled"));
+            }
+            if (bHasAccel)
+            {
+                MovementComp->HomingAccelerationMagnitude = static_cast<float>(GetJsonNumberField(Payload, TEXT("homingAcceleration"), 20000.0));
+                Report.MarkApplied(TEXT("homingAcceleration"));
+            }
+        }
+        else
+        {
+            if (bHasHoming) Report.MarkFailed(TEXT("homingEnabled"), TEXT("could not get or create ProjectileMovement component"));
+            if (bHasAccel) Report.MarkFailed(TEXT("homingAcceleration"), TEXT("could not get or create ProjectileMovement component"));
+        }
     }
 
-    McpSafeCompileBlueprint(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    if (Report.AnyApplied())
+    {
+        McpSafeCompileBlueprint(Blueprint);
+        McpSafeAssetSave(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
-    
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Projectile homing configured."), Result);
-    return true;
+
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Projectile homing configured."), nullptr);
 #endif // WITH_EDITOR
 }
 
@@ -887,6 +997,15 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatSetupHitboxComponent(
     UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
+    McpHandlerUtils::FMcpWriteReport Report;
+    TArray<FString> VarsAdded;
+
+    const bool bHasType = Payload->HasField(TEXT("hitboxType"));
+    const bool bHasSize = Payload->HasField(TEXT("hitboxSize"));
+    const bool bHasHead = Payload->HasField(TEXT("isDamageZoneHead"));
+    const bool bHasMult = Payload->HasField(TEXT("damageMultiplier"));
+    const bool bHasBone = Payload->HasField(TEXT("hitboxBoneName"));
+
     FString HitboxType = GetJsonStringField(Payload, TEXT("hitboxType"), TEXT("Capsule"));
     FString BoneName = GetJsonStringField(Payload, TEXT("hitboxBoneName"), TEXT(""));
     bool bIsDamageZoneHead = GetJsonBoolField(Payload, TEXT("isDamageZoneHead"), false);
@@ -896,104 +1015,166 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatSetupHitboxComponent(
         : Name;
     TSharedPtr<FJsonObject> AppliedHitboxSize = MakeShared<FJsonObject>();
 
-    // Create appropriate collision component based on type
-    if (HitboxType == TEXT("Capsule"))
+    // Create the collision component (and size it) only when the type or size was
+    // requested. An unknown hitboxType fails loudly instead of silently no-op'ing.
+    if (bHasType || bHasSize)
     {
-        UCapsuleComponent* Hitbox = GetOrCreateSCSComponent<UCapsuleComponent>(Blueprint, ComponentName);
-        if (Hitbox)
+        if (HitboxType == TEXT("Capsule"))
         {
-            auto HitboxSizeObj = Payload->GetObjectField(TEXT("hitboxSize"));
-            if (HitboxSizeObj.IsValid())
+            UCapsuleComponent* Hitbox = GetOrCreateSCSComponent<UCapsuleComponent>(Blueprint, ComponentName);
+            if (!Hitbox)
             {
-                double Radius = GetJsonNumberField(HitboxSizeObj, TEXT("radius"), 34.0);
-                double HalfHeight = GetJsonNumberField(HitboxSizeObj, TEXT("halfHeight"), 88.0);
-                Hitbox->SetCapsuleRadius(static_cast<float>(Radius));
-                Hitbox->SetCapsuleHalfHeight(static_cast<float>(HalfHeight));
-                AppliedHitboxSize->SetNumberField(TEXT("radius"), Radius);
-                AppliedHitboxSize->SetNumberField(TEXT("halfHeight"), HalfHeight);
+                if (bHasType) Report.MarkFailed(TEXT("hitboxType"), TEXT("could not get or create capsule hitbox component"));
+                if (bHasSize) Report.MarkFailed(TEXT("hitboxSize"), TEXT("could not get or create capsule hitbox component"));
             }
-        }
-    }
-    else if (HitboxType == TEXT("Box"))
-    {
-        UBoxComponent* Hitbox = GetOrCreateSCSComponent<UBoxComponent>(Blueprint, ComponentName);
-        if (Hitbox)
-        {
-            auto HitboxSizeObj = Payload->GetObjectField(TEXT("hitboxSize"));
-            if (HitboxSizeObj.IsValid())
+            else
             {
-                auto ExtentObj = HitboxSizeObj->GetObjectField(TEXT("extent"));
-                if (ExtentObj.IsValid())
+                if (bHasType) Report.MarkApplied(TEXT("hitboxType"));
+                if (bHasSize)
                 {
-                    FVector Extent = GetVectorFromJsonCombat(ExtentObj);
-                    Hitbox->SetBoxExtent(Extent);
-                    TSharedPtr<FJsonObject> ExtentResult = MakeShared<FJsonObject>();
-                    ExtentResult->SetNumberField(TEXT("x"), Extent.X);
-                    ExtentResult->SetNumberField(TEXT("y"), Extent.Y);
-                    ExtentResult->SetNumberField(TEXT("z"), Extent.Z);
-                    AppliedHitboxSize->SetObjectField(TEXT("extent"), ExtentResult);
+                    const TSharedPtr<FJsonObject>* SizeObj;
+                    if (Payload->TryGetObjectField(TEXT("hitboxSize"), SizeObj))
+                    {
+                        double Radius = GetJsonNumberField(*SizeObj, TEXT("radius"), 34.0);
+                        double HalfHeight = GetJsonNumberField(*SizeObj, TEXT("halfHeight"), 88.0);
+                        Hitbox->SetCapsuleRadius(static_cast<float>(Radius));
+                        Hitbox->SetCapsuleHalfHeight(static_cast<float>(HalfHeight));
+                        AppliedHitboxSize->SetNumberField(TEXT("radius"), Radius);
+                        AppliedHitboxSize->SetNumberField(TEXT("halfHeight"), HalfHeight);
+                        Report.MarkApplied(TEXT("hitboxSize"));
+                    }
+                    else
+                    {
+                        Report.MarkFailed(TEXT("hitboxSize"), TEXT("must be an object with radius/halfHeight"));
+                    }
                 }
             }
         }
-    }
-    else if (HitboxType == TEXT("Sphere"))
-    {
-        USphereComponent* Hitbox = GetOrCreateSCSComponent<USphereComponent>(Blueprint, ComponentName);
-        if (Hitbox)
+        else if (HitboxType == TEXT("Box"))
         {
-            auto HitboxSizeObj = Payload->GetObjectField(TEXT("hitboxSize"));
-            if (HitboxSizeObj.IsValid())
+            UBoxComponent* Hitbox = GetOrCreateSCSComponent<UBoxComponent>(Blueprint, ComponentName);
+            if (!Hitbox)
             {
-                double Radius = GetJsonNumberField(HitboxSizeObj, TEXT("radius"), 50.0);
-                Hitbox->SetSphereRadius(static_cast<float>(Radius));
-                AppliedHitboxSize->SetNumberField(TEXT("radius"), Radius);
+                if (bHasType) Report.MarkFailed(TEXT("hitboxType"), TEXT("could not get or create box hitbox component"));
+                if (bHasSize) Report.MarkFailed(TEXT("hitboxSize"), TEXT("could not get or create box hitbox component"));
             }
+            else
+            {
+                if (bHasType) Report.MarkApplied(TEXT("hitboxType"));
+                if (bHasSize)
+                {
+                    const TSharedPtr<FJsonObject>* SizeObj;
+                    const TSharedPtr<FJsonObject>* ExtentObj;
+                    if (Payload->TryGetObjectField(TEXT("hitboxSize"), SizeObj) &&
+                        (*SizeObj)->TryGetObjectField(TEXT("extent"), ExtentObj))
+                    {
+                        FVector Extent = GetVectorFromJsonCombat(*ExtentObj);
+                        Hitbox->SetBoxExtent(Extent);
+                        TSharedPtr<FJsonObject> ExtentResult = MakeShared<FJsonObject>();
+                        ExtentResult->SetNumberField(TEXT("x"), Extent.X);
+                        ExtentResult->SetNumberField(TEXT("y"), Extent.Y);
+                        ExtentResult->SetNumberField(TEXT("z"), Extent.Z);
+                        AppliedHitboxSize->SetObjectField(TEXT("extent"), ExtentResult);
+                        Report.MarkApplied(TEXT("hitboxSize"));
+                    }
+                    else
+                    {
+                        Report.MarkFailed(TEXT("hitboxSize"), TEXT("Box hitboxSize must contain an 'extent' object with x/y/z"));
+                    }
+                }
+            }
+        }
+        else if (HitboxType == TEXT("Sphere"))
+        {
+            USphereComponent* Hitbox = GetOrCreateSCSComponent<USphereComponent>(Blueprint, ComponentName);
+            if (!Hitbox)
+            {
+                if (bHasType) Report.MarkFailed(TEXT("hitboxType"), TEXT("could not get or create sphere hitbox component"));
+                if (bHasSize) Report.MarkFailed(TEXT("hitboxSize"), TEXT("could not get or create sphere hitbox component"));
+            }
+            else
+            {
+                if (bHasType) Report.MarkApplied(TEXT("hitboxType"));
+                if (bHasSize)
+                {
+                    const TSharedPtr<FJsonObject>* SizeObj;
+                    if (Payload->TryGetObjectField(TEXT("hitboxSize"), SizeObj))
+                    {
+                        double Radius = GetJsonNumberField(*SizeObj, TEXT("radius"), 50.0);
+                        Hitbox->SetSphereRadius(static_cast<float>(Radius));
+                        AppliedHitboxSize->SetNumberField(TEXT("radius"), Radius);
+                        Report.MarkApplied(TEXT("hitboxSize"));
+                    }
+                    else
+                    {
+                        Report.MarkFailed(TEXT("hitboxSize"), TEXT("must be an object with radius"));
+                    }
+                }
+            }
+        }
+        else
+        {
+            if (bHasType) Report.MarkFailed(TEXT("hitboxType"), FString::Printf(TEXT("unknown hitbox type '%s'; expected Capsule, Box, or Sphere"), *HitboxType));
+            if (bHasSize) Report.MarkFailed(TEXT("hitboxSize"), FString::Printf(TEXT("unknown hitbox type '%s'; cannot create a component to size"), *HitboxType));
         }
     }
 
-    // Add hitbox metadata variables
-    AddBlueprintVariableCombat(Blueprint, TEXT("bIsHeadshotZone"), MakeBoolPinType());
-    AddBlueprintVariableCombat(Blueprint, TEXT("HitboxDamageMultiplier"), MakeFloatPinType());
-    AddBlueprintVariableCombat(Blueprint, TEXT("HitboxBoneName"), MakeNamePinType());
+    // Add only the requested metadata variables so an absent field never clobbers an existing default.
+    if (bHasHead) { AddBlueprintVariableCombat(Blueprint, TEXT("bIsHeadshotZone"), MakeBoolPinType()); VarsAdded.Add(TEXT("bIsHeadshotZone")); }
+    if (bHasMult) { AddBlueprintVariableCombat(Blueprint, TEXT("HitboxDamageMultiplier"), MakeFloatPinType()); VarsAdded.Add(TEXT("HitboxDamageMultiplier")); }
+    if (bHasBone) { AddBlueprintVariableCombat(Blueprint, TEXT("HitboxBoneName"), MakeNamePinType()); VarsAdded.Add(TEXT("HitboxBoneName")); }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeCompileBlueprint(Blueprint);
-
-    // Set values
-    if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(Blueprint->GeneratedClass))
+    const bool bNeedsCompile = Report.AnyApplied() || bHasHead || bHasMult || bHasBone;
+    if (bNeedsCompile)
     {
-        if (UObject* CDO = BPGC->GetDefaultObject())
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        McpSafeCompileBlueprint(Blueprint);
+    }
+
+    if (bHasHead || bHasMult || bHasBone)
+    {
+        UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+        UObject* CDO = BPGC ? BPGC->GetDefaultObject() : nullptr;
+        if (bHasHead)
         {
-            if (FBoolProperty* HeadProp = FindFProperty<FBoolProperty>(BPGC, TEXT("bIsHeadshotZone")))
-            {
-                HeadProp->SetPropertyValue_InContainer(CDO, bIsDamageZoneHead);
-            }
-            if (FDoubleProperty* MultProp = FindFProperty<FDoubleProperty>(BPGC, TEXT("HitboxDamageMultiplier")))
-            {
-                MultProp->SetPropertyValue_InContainer(CDO, DamageMultiplier);
-            }
-            if (FNameProperty* BoneProp = FindFProperty<FNameProperty>(BPGC, TEXT("HitboxBoneName")))
-            {
-                BoneProp->SetPropertyValue_InContainer(CDO, FName(*BoneName));
-            }
+            if (FBoolProperty* HeadProp = CDO ? FindFProperty<FBoolProperty>(BPGC, TEXT("bIsHeadshotZone")) : nullptr)
+            { HeadProp->SetPropertyValue_InContainer(CDO, bIsDamageZoneHead); Report.MarkApplied(TEXT("isDamageZoneHead")); }
+            else Report.MarkFailed(TEXT("isDamageZoneHead"), TEXT("bIsHeadshotZone property not found after compile"));
+        }
+        if (bHasMult)
+        {
+            if (FDoubleProperty* MultProp = CDO ? FindFProperty<FDoubleProperty>(BPGC, TEXT("HitboxDamageMultiplier")) : nullptr)
+            { MultProp->SetPropertyValue_InContainer(CDO, DamageMultiplier); Report.MarkApplied(TEXT("damageMultiplier")); }
+            else Report.MarkFailed(TEXT("damageMultiplier"), TEXT("HitboxDamageMultiplier property not found after compile"));
+        }
+        if (bHasBone)
+        {
+            if (FNameProperty* BoneProp = CDO ? FindFProperty<FNameProperty>(BPGC, TEXT("HitboxBoneName")) : nullptr)
+            { BoneProp->SetPropertyValue_InContainer(CDO, FName(*BoneName)); Report.MarkApplied(TEXT("hitboxBoneName")); }
+            else Report.MarkFailed(TEXT("hitboxBoneName"), TEXT("HitboxBoneName property not found after compile"));
         }
     }
 
-    McpSafeAssetSave(Blueprint);
+    if (Report.AnyApplied())
+    {
+        McpSafeAssetSave(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
     Result->SetStringField(TEXT("hitboxType"), HitboxType);
     Result->SetStringField(TEXT("componentName"), ComponentName);
-    Result->SetStringField(TEXT("hitboxBoneName"), BoneName);
     Result->SetObjectField(TEXT("hitboxSize"), AppliedHitboxSize);
-    Result->SetBoolField(TEXT("isDamageZoneHead"), bIsDamageZoneHead);
-    Result->SetNumberField(TEXT("damageMultiplier"), DamageMultiplier);
-    SetVariablesAdded(Result, {TEXT("bIsHeadshotZone"), TEXT("HitboxDamageMultiplier"), TEXT("HitboxBoneName")});
+    if (bHasBone) Result->SetStringField(TEXT("hitboxBoneName"), BoneName);
+    if (bHasHead) Result->SetBoolField(TEXT("isDamageZoneHead"), bIsDamageZoneHead);
+    if (bHasMult) Result->SetNumberField(TEXT("damageMultiplier"), DamageMultiplier);
+    if (VarsAdded.Num() > 0)
+    {
+        SetVariablesAdded(Result, VarsAdded);
+    }
 
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Hitbox component configured."), Result);
-    return true;
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Hitbox component configured."), Blueprint);
 #endif // WITH_EDITOR
 }
 
@@ -1344,46 +1525,76 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatConfigureHitDetection(
     UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
+    McpHandlerUtils::FMcpWriteReport Report;
+    TArray<FString> VarsAdded;
+
+    const bool bHasType = Payload->HasField(TEXT("hitboxType"));
+    const bool bHasMult = Payload->HasField(TEXT("damageMultiplier"));
+
     FString HitboxType = GetJsonStringField(Payload, TEXT("hitboxType"), TEXT("Capsule"));
     double DamageMultiplier = GetJsonNumberField(Payload, TEXT("damageMultiplier"), 1.0);
 
-    // Create collision component based on type
-    if (HitboxType == TEXT("Capsule"))
+    // Create the collision component only when a type was requested; an unknown
+    // type fails loudly instead of silently defaulting to a sphere.
+    if (bHasType)
     {
-        GetOrCreateSCSComponent<UCapsuleComponent>(Blueprint, TEXT("HitboxCapsule"));
-    }
-    else if (HitboxType == TEXT("Box"))
-    {
-        GetOrCreateSCSComponent<UBoxComponent>(Blueprint, TEXT("HitboxBox"));
-    }
-    else
-    {
-        GetOrCreateSCSComponent<USphereComponent>(Blueprint, TEXT("HitboxSphere"));
-    }
-
-    AddBlueprintVariableCombat(Blueprint, TEXT("HitboxDamageMultiplier"), MakeFloatPinType());
-    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/false);
-
-    if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(Blueprint->GeneratedClass))
-    {
-        if (UObject* CDO = BPGC->GetDefaultObject())
+        if (HitboxType == TEXT("Capsule"))
         {
-            if (FDoubleProperty* MultProp = FindFProperty<FDoubleProperty>(BPGC, TEXT("HitboxDamageMultiplier")))
-            {
-                MultProp->SetPropertyValue_InContainer(CDO, DamageMultiplier);
-            }
+            if (GetOrCreateSCSComponent<UCapsuleComponent>(Blueprint, TEXT("HitboxCapsule"))) Report.MarkApplied(TEXT("hitboxType"));
+            else Report.MarkFailed(TEXT("hitboxType"), TEXT("could not get or create capsule hitbox component"));
+        }
+        else if (HitboxType == TEXT("Box"))
+        {
+            if (GetOrCreateSCSComponent<UBoxComponent>(Blueprint, TEXT("HitboxBox"))) Report.MarkApplied(TEXT("hitboxType"));
+            else Report.MarkFailed(TEXT("hitboxType"), TEXT("could not get or create box hitbox component"));
+        }
+        else if (HitboxType == TEXT("Sphere"))
+        {
+            if (GetOrCreateSCSComponent<USphereComponent>(Blueprint, TEXT("HitboxSphere"))) Report.MarkApplied(TEXT("hitboxType"));
+            else Report.MarkFailed(TEXT("hitboxType"), TEXT("could not get or create sphere hitbox component"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("hitboxType"), FString::Printf(TEXT("unknown hitbox type '%s'; expected Capsule, Box, or Sphere"), *HitboxType));
         }
     }
 
-    McpSafeAssetSave(Blueprint);
+    if (bHasMult)
+    {
+        AddBlueprintVariableCombat(Blueprint, TEXT("HitboxDamageMultiplier"), MakeFloatPinType());
+        VarsAdded.Add(TEXT("HitboxDamageMultiplier"));
+    }
+
+    const bool bNeedsCompile = Report.AnyApplied() || bHasMult;
+    if (bNeedsCompile)
+    {
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/false);
+    }
+
+    if (bHasMult)
+    {
+        UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+        UObject* CDO = BPGC ? BPGC->GetDefaultObject() : nullptr;
+        if (FDoubleProperty* MultProp = CDO ? FindFProperty<FDoubleProperty>(BPGC, TEXT("HitboxDamageMultiplier")) : nullptr)
+        { MultProp->SetPropertyValue_InContainer(CDO, DamageMultiplier); Report.MarkApplied(TEXT("damageMultiplier")); }
+        else Report.MarkFailed(TEXT("damageMultiplier"), TEXT("HitboxDamageMultiplier property not found after compile"));
+    }
+
+    if (Report.AnyApplied())
+    {
+        McpSafeAssetSave(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
-    Result->SetStringField(TEXT("hitboxType"), HitboxType);
-    Result->SetNumberField(TEXT("damageMultiplier"), DamageMultiplier);
-    SetVariablesAdded(Result, {TEXT("HitboxDamageMultiplier")});
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Hit detection configured."), Result);
-    return true;
+    if (bHasType) Result->SetStringField(TEXT("hitboxType"), HitboxType);
+    if (bHasMult) Result->SetNumberField(TEXT("damageMultiplier"), DamageMultiplier);
+    if (VarsAdded.Num() > 0)
+    {
+        SetVariablesAdded(Result, VarsAdded);
+    }
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Hit detection configured."), nullptr);
 #endif // WITH_EDITOR
 }
 
@@ -1675,36 +1886,56 @@ bool UMcpAutomationBridgeSubsystem::HandleCombatModifyArmor(
     UBlueprint* Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
+    McpHandlerUtils::FMcpWriteReport Report;
+    TArray<FString> VarsAdded;
+
+    const bool bHasArmor = Payload->HasField(TEXT("armorValue"));
+    const bool bHasReduction = Payload->HasField(TEXT("damageReduction"));
+
     double ArmorValue = GetJsonNumberField(Payload, TEXT("armorValue"), 50.0);
     double DamageReduction = GetJsonNumberField(Payload, TEXT("damageReduction"), 0.25);
 
-    AddBlueprintVariableCombat(Blueprint, TEXT("ArmorValue"), MakeFloatPinType());
-    AddBlueprintVariableCombat(Blueprint, TEXT("ArmorDamageReduction"), MakeFloatPinType());
+    // Add only the requested variables so an absent field never clobbers an existing default.
+    if (bHasArmor) { AddBlueprintVariableCombat(Blueprint, TEXT("ArmorValue"), MakeFloatPinType()); VarsAdded.Add(TEXT("ArmorValue")); }
+    if (bHasReduction) { AddBlueprintVariableCombat(Blueprint, TEXT("ArmorDamageReduction"), MakeFloatPinType()); VarsAdded.Add(TEXT("ArmorDamageReduction")); }
 
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-    McpSafeCompileBlueprint(Blueprint);
-
-    if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(Blueprint->GeneratedClass))
+    if (bHasArmor || bHasReduction)
     {
-        if (UObject* CDO = BPGC->GetDefaultObject())
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        McpSafeCompileBlueprint(Blueprint);
+
+        UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+        UObject* CDO = BPGC ? BPGC->GetDefaultObject() : nullptr;
+        if (bHasArmor)
         {
-            if (FDoubleProperty* ArmorProp = FindFProperty<FDoubleProperty>(BPGC, TEXT("ArmorValue")))
-                ArmorProp->SetPropertyValue_InContainer(CDO, ArmorValue);
-            if (FDoubleProperty* RedProp = FindFProperty<FDoubleProperty>(BPGC, TEXT("ArmorDamageReduction")))
-                RedProp->SetPropertyValue_InContainer(CDO, DamageReduction);
+            if (FDoubleProperty* ArmorProp = CDO ? FindFProperty<FDoubleProperty>(BPGC, TEXT("ArmorValue")) : nullptr)
+            { ArmorProp->SetPropertyValue_InContainer(CDO, ArmorValue); Report.MarkApplied(TEXT("armorValue")); }
+            else Report.MarkFailed(TEXT("armorValue"), TEXT("ArmorValue property not found after compile"));
+        }
+        if (bHasReduction)
+        {
+            if (FDoubleProperty* RedProp = CDO ? FindFProperty<FDoubleProperty>(BPGC, TEXT("ArmorDamageReduction")) : nullptr)
+            { RedProp->SetPropertyValue_InContainer(CDO, DamageReduction); Report.MarkApplied(TEXT("damageReduction")); }
+            else Report.MarkFailed(TEXT("damageReduction"), TEXT("ArmorDamageReduction property not found after compile"));
         }
     }
 
-    McpSafeAssetSave(Blueprint);
+    if (Report.AnyApplied())
+    {
+        McpSafeAssetSave(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
-    Result->SetNumberField(TEXT("armorValue"), ArmorValue);
-    Result->SetNumberField(TEXT("damageReduction"), DamageReduction);
-    SetVariablesAdded(Result, {TEXT("ArmorValue"), TEXT("ArmorDamageReduction")});
+    if (bHasArmor) Result->SetNumberField(TEXT("armorValue"), ArmorValue);
+    if (bHasReduction) Result->SetNumberField(TEXT("damageReduction"), DamageReduction);
+    if (VarsAdded.Num() > 0)
+    {
+        SetVariablesAdded(Result, VarsAdded);
+    }
     Result->SetBoolField(TEXT("scaffoldOnly"), true);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Armor variables scaffolded; game code must apply the damage reduction."), Result);
-    return true;
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Armor variables scaffolded; game code must apply the damage reduction."), nullptr);
 #endif // WITH_EDITOR
 }
 
