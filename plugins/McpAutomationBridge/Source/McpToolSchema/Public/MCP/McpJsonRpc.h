@@ -29,7 +29,7 @@ struct FMcpJsonRpcRequest
  * Static JSON-RPC 2.0 helpers for MCP Streamable HTTP transport.
  * No state — pure utility functions.
  */
-class FMcpJsonRpc
+class MCPTOOLSCHEMA_API FMcpJsonRpc
 {
 public:
 	// JSON-RPC error codes (standard)

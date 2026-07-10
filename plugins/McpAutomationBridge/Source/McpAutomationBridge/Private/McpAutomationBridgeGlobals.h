@@ -10,15 +10,9 @@
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
 #include "HAL/CriticalSection.h"
+#include "MCP/McpResponseHandle.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogMcpAutomationBridgeSubsystem, Log, All);
-
-// Inert response-routing handle threaded through handler signatures. Always
-// null: the legacy WebSocket transport was deleted and responses route by
-// RequestId via FMcpNativeTransport's pending-request map. The class is never
-// defined, so the handle cannot be dereferenced.
-class FMcpBridgeWebSocket;
-using FMcpResponseHandle = TSharedPtr<FMcpBridgeWebSocket>;
 
 extern TMap<FString, TArray<TPair<FString, FMcpResponseHandle>>>
     GBlueprintCreateInflight;

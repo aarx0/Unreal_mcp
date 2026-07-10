@@ -28,9 +28,12 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-$srcRoot   = Resolve-Path (Join-Path $PSScriptRoot '../../plugins/McpAutomationBridge/Source/McpAutomationBridge/Private')
-$toolsDir  = Join-Path $srcRoot 'MCP/Tools'
-$allowFile = Join-Path $PSScriptRoot 'param-reconciliation-allowlist.txt'
+$srcRoot    = Resolve-Path (Join-Path $PSScriptRoot '../../plugins/McpAutomationBridge/Source/McpAutomationBridge/Private')
+# Tool facades + schema/registry infra moved upstream to the McpToolSchema
+# module (Phase F2 split); scan it too for both decls and handler reads.
+$schemaRoot = Resolve-Path (Join-Path $PSScriptRoot '../../plugins/McpAutomationBridge/Source/McpToolSchema')
+$toolsDir   = Join-Path $schemaRoot 'Private/MCP/Tools'
+$allowFile  = Join-Path $PSScriptRoot 'param-reconciliation-allowlist.txt'
 
 # Schema-builder property declarations: .String(TEXT("name"), ...) etc.
 $declRegex = [regex]'\.\s*(?:String|StringEnum|Number|Bool|Integer|Object|Array|ArrayOfObjects|FreeformObject)\s*\(\s*TEXT\("([^"]+)"\)'
@@ -69,6 +72,8 @@ foreach ($f in $toolFiles) {
 # --- handler reads: any-receiver name set + payload-receiver name -> files ---
 $handlerFiles = @(Get-ChildItem -Path $srcRoot -File | Where-Object { $_.Extension -in '.cpp', '.h' }) +
                 @(Get-ChildItem -Path (Join-Path $srcRoot 'MCP') -Recurse -File |
+                  Where-Object { $_.Extension -in '.cpp', '.h' -and $_.DirectoryName -notmatch '[\\/]Tools$' }) +
+                @(Get-ChildItem -Path $schemaRoot -Recurse -File |
                   Where-Object { $_.Extension -in '.cpp', '.h' -and $_.DirectoryName -notmatch '[\\/]Tools$' })
 if (-not $handlerFiles) { throw "no handler sources found under $srcRoot" }
 $anyReads     = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)

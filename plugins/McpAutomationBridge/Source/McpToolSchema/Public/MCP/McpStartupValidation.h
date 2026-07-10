@@ -17,5 +17,5 @@ namespace McpStartupValidation
  * Violations are UE_LOG(Error) with the exact action names, plus one ensure so
  * they cannot pass silently. Returns the violation count (0 = clean).
  */
-int32 ValidateActionRouting();
+MCPTOOLSCHEMA_API int32 ValidateActionRouting();
 }

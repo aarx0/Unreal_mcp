@@ -13,7 +13,7 @@
 
 #include "CoreMinimal.h"
 #include "Containers/Map.h"
-#include "McpAutomationBridgeGlobals.h"
+#include "MCP/McpResponseHandle.h"
 
 class FMcpSchemaBuilder;
 
@@ -86,9 +86,15 @@ protected:
 	                 FMcpResponseHandle ResponseHandle) = 0;
 };
 
-class FMcpCallRegistry
+class MCPTOOLSCHEMA_API FMcpCallRegistry
 {
 public:
+	// Exported singleton: copies deleted so dllexport does not instantiate
+	// copy ops over the non-copyable TUniquePtr map.
+	FMcpCallRegistry() = default;
+	FMcpCallRegistry(const FMcpCallRegistry&) = delete;
+	FMcpCallRegistry& operator=(const FMcpCallRegistry&) = delete;
+
 	static FMcpCallRegistry& Get();
 
 	/** Register a classed action; its decl comes from the instance. Duplicate (tool, action) is a boot error. */
@@ -117,5 +123,5 @@ private:
  * JSON. The returned reference is owned by grow-only static pools and lives for
  * the process; callers cache it in a function-local static. (schema-from-decls)
  */
-const FMcpCallDecl& McpDeriveDecl(const TCHAR* Tool, const TCHAR* Action,
+MCPTOOLSCHEMA_API const FMcpCallDecl& McpDeriveDecl(const TCHAR* Tool, const TCHAR* Action,
                                   EMcpCallFlags Flags, void (*SchemaFn)(FMcpSchemaBuilder&));

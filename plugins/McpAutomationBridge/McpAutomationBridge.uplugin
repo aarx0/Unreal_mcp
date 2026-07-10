@@ -17,6 +17,12 @@
   "SupportsUEBuildSystem": true,
   "Modules": [
     {
+      "Name": "McpToolSchema",
+      "Type": "Editor",
+      "LoadingPhase": "Default",
+      "PlatformAllowList": ["Win64", "Mac", "Linux"]
+    },
+    {
       "Name": "McpAutomationBridge",
       "Type": "Editor",
       "LoadingPhase": "Default",

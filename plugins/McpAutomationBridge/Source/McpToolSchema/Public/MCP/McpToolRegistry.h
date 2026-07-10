@@ -16,9 +16,14 @@ class FMcpToolDefinition;
  * Thread safety: CacheMutex protects Tools, ToolsByName, CachedToolSchemas,
  * and bCacheValid. Register() and all read operations acquire CacheMutex.
  */
-class FMcpToolRegistry
+class MCPTOOLSCHEMA_API FMcpToolRegistry
 {
 public:
+	// Exported singleton: copies deleted so dllexport does not instantiate
+	// copy ops over the non-copyable FCriticalSection member.
+	FMcpToolRegistry(const FMcpToolRegistry&) = delete;
+	FMcpToolRegistry& operator=(const FMcpToolRegistry&) = delete;
+
 	/** Get the singleton instance (Meyer's singleton). */
 	static FMcpToolRegistry& Get();
 

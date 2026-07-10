@@ -142,7 +142,8 @@ public class McpAutomationBridge : ModuleRules
             "Core","CoreUObject","Engine","Json","JsonUtilities",
             "LevelSequence", "MovieScene", "MovieSceneTracks", "GameplayTags",
             "AIModule",  // Required for UEnvQueryTest_Distance and other EQS classes
-            "Landscape"  // Required for FGrassVariety and other landscape classes
+            "Landscape",  // Required for FGrassVariety and other landscape classes
+            "McpToolSchema"  // Upstream tool schema/registry module (Phase F2 split)
         });
 
         if (Target.bBuildEditor)

@@ -19,7 +19,7 @@
  *       .Required({TEXT("action")})
  *       .Build();
  */
-class FMcpSchemaBuilder
+class MCPTOOLSCHEMA_API FMcpSchemaBuilder
 {
 public:
 	FMcpSchemaBuilder();
