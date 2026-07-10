@@ -1023,17 +1023,20 @@ namespace
 #pragma warning(push)
 #pragma warning(disable: 4883)
 // -----------------------------------------------------------------------------
-// Phase 19 family sub-handlers (filled in pass by pass — see header comment).
-// Empty stubs return false so the dispatcher falls through to the legacy chain
-// for any subaction not yet migrated.
+// Per-action manage_widget_authoring members: Lifecycle, Containers, Leaves.
+// Hoisted verbatim from the retired HandleWidgetAuthoring_Lifecycle / _Containers
+// / _Leaves family scanners; each is called directly by its classed action
+// (MCP/Calls/McpCalls_ManageBlueprint.cpp). The only scanner-top shared local was
+// a fresh ResultJson, replicated per member by the preamble.
 // -----------------------------------------------------------------------------
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Lifecycle(
-    const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
-{
+#define MCP_WIDGETAUTH_PREAMBLE() \
     TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
-    if (SubAction.Equals(TEXT("create_widget_blueprint"), ESearchCase::IgnoreCase))
-    {
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringCreateWidgetBlueprint(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString Name = GetJsonStringField(Payload, TEXT("name"));
         if (Name.IsEmpty())
         {
@@ -1195,10 +1198,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Lifecycle(
         SendAutomationResponse(RequestingSocket, RequestId, true, 
             FString::Printf(TEXT("Created widget blueprint: %s"), *Name), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("show_widget"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringShowWidget(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString WidgetId = GetJsonStringField(Payload, TEXT("widgetId"));
         FString Message = GetJsonStringField(Payload, TEXT("message"));
@@ -1268,10 +1274,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Lifecycle(
         SendAutomationResponse(RequestingSocket, RequestId, true, 
             FString::Printf(TEXT("Widget opened: %s"), *EffectivePath), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("set_widget_parent_class"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringSetWidgetParentClass(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString ParentClass = GetJsonStringField(Payload, TEXT("parentClass"));
 
@@ -1329,10 +1338,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Lifecycle(
         SendAutomationResponse(RequestingSocket, RequestId, true,
             FString::Printf(TEXT("Set parent class to: %s"), *ParentClass), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("preview_widget"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringPreviewWidget(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         if (WidgetPath.IsEmpty())
         {
@@ -1357,10 +1369,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Lifecycle(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Widget preview updated"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("remove_widget"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringRemoveWidget(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"));
 
@@ -1404,10 +1419,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Lifecycle(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Removed widget"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("rename_widget"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringRenameWidget(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         // The advertised schema param is oldName; slotName/name accepted as aliases.
         FString OldName = GetJsonStringField(Payload, TEXT("oldName"));
@@ -1536,10 +1554,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Lifecycle(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Renamed widget"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("replace_widget_class"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringReplaceWidgetClass(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         // In-place widget class swap — the programmatic equivalent of the UMG
         // designer's right-click "Replace With". FWidgetBlueprintEditorUtils::
         // ReplaceWidgets reuses the parent slot, copies properties (incl. delegate
@@ -1642,17 +1663,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Lifecycle(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Replaced widget class"), ResultJson);
         return true;
-    }
-
-    return false;
 }
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
-    const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCanvasPanel(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
 {
-    TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
-    if (SubAction.Equals(TEXT("add_canvas_panel"), ESearchCase::IgnoreCase))
-    {
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -1660,10 +1677,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
         if (!NewWidget) { return true; }
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added canvas panel"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_horizontal_box"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddHorizontalBox(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -1671,10 +1691,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
         if (!NewWidget) { return true; }
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added horizontal box"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_vertical_box"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddVerticalBox(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -1682,10 +1705,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
         if (!NewWidget) { return true; }
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added vertical box"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_overlay"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddOverlay(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -1693,10 +1719,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
         if (!NewWidget) { return true; }
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added overlay"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_grid_panel"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddGridPanel(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         if (WidgetPath.IsEmpty())
         {
@@ -1713,10 +1742,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
         if (!NewWidget) { return true; }
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added grid panel"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_uniform_grid"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddUniformGrid(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -1751,10 +1783,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added uniform grid panel"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_wrap_box"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWrapBox(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -1786,10 +1821,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added wrap box"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_scroll_box"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddScrollBox(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -1834,10 +1872,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added scroll box"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_size_box"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSizeBox(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -1873,10 +1914,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added size box"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_scale_box"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddScaleBox(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -1942,10 +1986,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added scale box"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_border"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddBorder(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -1983,10 +2030,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added border"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_safe_zone"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSafeZone(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("SafeZone"));
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
@@ -2037,10 +2087,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added safe zone"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_spacer"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSpacer(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("Spacer"));
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
@@ -2096,10 +2149,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added spacer"), ResultJson);
         return true;
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_widget_switcher"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddWidgetSwitcher(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetJsonStringField(Payload, TEXT("slotName"), TEXT("WidgetSwitcher"));
         FString ParentSlot = GetJsonStringField(Payload, TEXT("parentSlot"));
@@ -2153,17 +2209,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Containers(
 
         SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Added widget switcher"), ResultJson);
         return true;
-    }
-
-    return false;
 }
-bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
-    const FString& SubAction, const FString& RequestId, const FString& Action,
-    const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
+
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddTextBlock(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
 {
-    TSharedPtr<FJsonObject> ResultJson = McpHandlerUtils::CreateResultObject();
-    if (SubAction.Equals(TEXT("add_text_block"), ESearchCase::IgnoreCase))
-    {
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -2201,10 +2253,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added text block"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_image"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddImage(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -2233,10 +2288,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added image"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_button"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddButton(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -2260,10 +2318,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added button"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_progress_bar"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddProgressBar(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -2293,10 +2354,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added progress bar"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_slider"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSlider(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -2328,10 +2392,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added slider"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_rich_text_block"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddRichTextBlock(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -2341,10 +2408,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added rich text block"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_check_box"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddCheckBox(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -2354,10 +2424,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added check box"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_text_input"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddTextInput(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         const bool bMultiLine = GetJsonBoolField(Payload, TEXT("multiLine"), false);
         UClass* const InputClass = bMultiLine
             ? UMultiLineEditableTextBox::StaticClass()
@@ -2375,10 +2448,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added text input"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_combo_box"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddComboBox(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -2405,10 +2481,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added combo box"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_spin_box"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddSpinBox(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -2438,10 +2517,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
 
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added spin box"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_list_view"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddListView(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -2449,10 +2531,13 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
         if (!NewWidget) { return true; }
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added list view"), ResultJson);
-    }
+}
 
-    if (SubAction.Equals(TEXT("add_tree_view"), ESearchCase::IgnoreCase))
-    {
+bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoringAddTreeView(
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+    MCP_WIDGETAUTH_PREAMBLE()
         UWidgetBlueprint* WidgetBP = nullptr;
         FString SlotName;
         UWidget* NewWidget = ConstructWidgetForAdd(this, RequestingSocket, RequestId, Payload,
@@ -2460,10 +2545,15 @@ bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Leaves(
         if (!NewWidget) { return true; }
         return AddFinalizeRespondWidget(this, RequestingSocket, RequestId, Payload, WidgetBP,
             NewWidget, SlotName, TEXT("Added tree view"), ResultJson);
-    }
-
-    return false;
 }
+
+// -----------------------------------------------------------------------------
+// Widget-authoring family sub-handlers still routed through
+// HandleManageWidgetAuthoringAction (Slot / Binding / Animation / Style / Tree /
+// Recipes / Misc). Each scans its own cluster of sub-actions and returns false
+// when the sub-action isn't one of its own, so the dispatcher tries the next
+// family.
+// -----------------------------------------------------------------------------
 bool UMcpAutomationBridgeSubsystem::HandleWidgetAuthoring_Slot(
     const FString& SubAction, const FString& RequestId, const FString& Action,
     const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket)
@@ -7466,12 +7556,10 @@ bool UMcpAutomationBridgeSubsystem::HandleManageWidgetAuthoringAction(
     }
 
     // Family sub-handlers. Each returns true once it has handled (and responded
-    // to) SubAction, false if SubAction isn't one of its own. They're filled in
-    // pass by pass; until a family is migrated its stub returns false and the
-    // legacy inline chain below still handles those subactions.
-    if (HandleWidgetAuthoring_Lifecycle(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
-    if (HandleWidgetAuthoring_Containers(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
-    if (HandleWidgetAuthoring_Leaves(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
+    // to) SubAction, false if SubAction isn't one of its own, so the next family
+    // is tried. The Lifecycle / Containers / Leaves families were hoisted to
+    // per-action members dispatched directly by their classed actions
+    // (MCP/Calls/McpCalls_ManageBlueprint.cpp) and no longer route through here.
     if (HandleWidgetAuthoring_Slot(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
     if (HandleWidgetAuthoring_Binding(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;
     if (HandleWidgetAuthoring_Animation(SubAction, RequestId, Action, Payload, RequestingSocket)) return true;

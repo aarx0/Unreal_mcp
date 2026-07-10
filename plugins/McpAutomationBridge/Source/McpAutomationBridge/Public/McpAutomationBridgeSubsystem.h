@@ -736,10 +736,10 @@ private:
   // below.
   // manage_blueprint is classed — see MCP/Calls/McpCalls_ManageBlueprint.cpp.
   // Core + Graph subActions are per-action members (below), called directly by
-  // their classed actions; Widget/CommonUi delegate to their surviving route
-  // dispatchers (HandleManageWidgetAuthoringAction / HandleCommonUiAction). The
-  // HandleBlueprintModifyScs member is also called externally by
-  // EditorFunctionHandlers.cpp (BLUEPRINT_ADD_COMPONENT).
+  // their classed actions, as are the CommonUi actions and the widget Lifecycle/
+  // Containers/Leaves actions; the remaining widget families still delegate to
+  // HandleManageWidgetAuthoringAction. The HandleBlueprintModifyScs member is also
+  // called externally by EditorFunctionHandlers.cpp (BLUEPRINT_ADD_COMPONENT).
   // manage_sequence is classed — see MCP/Calls/McpCalls_ManageSequence.cpp.
   bool CreateNiagaraEffect(const FString &RequestId,
                            const TSharedPtr<FJsonObject> &Payload,
@@ -2479,23 +2479,79 @@ public:
       const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);
+  // Per-action manage_widget_authoring members (Lifecycle / Containers / Leaves),
+  // hoisted from the family scanners; called directly by their classed actions.
+  bool HandleWidgetAuthoringCreateWidgetBlueprint(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringShowWidget(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringSetWidgetParentClass(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringPreviewWidget(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringRemoveWidget(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringRenameWidget(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringReplaceWidgetClass(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddCanvasPanel(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddHorizontalBox(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddVerticalBox(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddOverlay(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddGridPanel(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddUniformGrid(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddWrapBox(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddScrollBox(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddSizeBox(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddScaleBox(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddBorder(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddSafeZone(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddSpacer(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddWidgetSwitcher(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddTextBlock(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddImage(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddButton(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddProgressBar(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddSlider(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddRichTextBlock(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddCheckBox(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddTextInput(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddComboBox(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddSpinBox(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddListView(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleWidgetAuthoringAddTreeView(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 private:
   // Phase 19 family sub-handlers — each owns one cluster of subactions and
   // returns false if SubAction isn't one of its own (so the dispatcher falls
   // through to the next family). Split out of the former monolithic dispatcher
   // purely for navigability; branch bodies are unchanged.
-  bool HandleWidgetAuthoring_Lifecycle(
-      const FString &SubAction, const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool HandleWidgetAuthoring_Containers(
-      const FString &SubAction, const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
-  bool HandleWidgetAuthoring_Leaves(
-      const FString &SubAction, const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
   bool HandleWidgetAuthoring_Slot(
       const FString &SubAction, const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
@@ -2524,14 +2580,26 @@ private:
       const FString &SubAction, const FString &RequestId, const FString &Action,
       const TSharedPtr<FJsonObject> &Payload,
       FMcpResponseHandle RequestingSocket);
-  // Common UI (CommonUI plugin) authoring handlers
-  // manage_blueprint is classed (MCP/Calls/McpCalls_ManageBlueprint.cpp) — this
-  // route dispatcher is public so the classed CommonUi actions delegate.
+  // Common UI (CommonUI plugin) authoring handlers — per-action members
+  // (CommonUIHandlers.cpp) called directly by their classed manage_blueprint
+  // actions (MCP/Calls/McpCalls_ManageBlueprint.cpp).
 public:
-  bool HandleCommonUiAction(
-      const FString &RequestId, const FString &Action,
-      const TSharedPtr<FJsonObject> &Payload,
-      FMcpResponseHandle RequestingSocket);
+  bool HandleCommonUiAddCommonButton(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleCommonUiAddCommonText(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleCommonUiAddCommonBorder(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleCommonUiSetCommonButtonStyle(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleCommonUiSetCommonTextStyle(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleCommonUiSetCommonButtonInputAction(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleCommonUiCreateCommonButtonStyle(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
+  bool HandleCommonUiCreateCommonTextStyle(const FString &RequestId,
+      const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle RequestingSocket);
 private:
   // manage_networking is classed — see
   // MCP/Calls/McpCalls_ManageNetworking.cpp.

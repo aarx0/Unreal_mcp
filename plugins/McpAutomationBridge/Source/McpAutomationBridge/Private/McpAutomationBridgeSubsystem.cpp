@@ -1080,10 +1080,10 @@ void UMcpAutomationBridgeSubsystem::InitializeHandlers() {
   // per-action HandleBlueprint*/HandleBlueprintGraph* members directly (the old
   // string dispatchers HandleBlueprintAction/HandleBlueprintGraphAction/HandleSCSAction
   // are hoisted and deleted; HandleBlueprintModifyScs is called externally by
-  // EditorFunctionHandlers.cpp). The Widget and CommonUi routes still delegate to
-  // their surviving dispatchers with the exact args the retired lambda passed —
-  // WidgetAuthoring to HandleManageWidgetAuthoringAction("manage_widget_authoring"),
-  // CommonUi to HandleCommonUiAction("manage_common_ui").
+  // EditorFunctionHandlers.cpp). CommonUi actions and the widget Lifecycle/
+  // Containers/Leaves actions likewise call per-action members directly
+  // (HandleCommonUi*/HandleWidgetAuthoring*); the remaining widget families still
+  // delegate to HandleManageWidgetAuthoringAction("manage_widget_authoring").
 
   // manage_geometry is fully classed (MCP/Calls/McpCalls_ManageGeometry.cpp)
   // — dispatch reaches its FMcpCall instances via the registry, not this map.
