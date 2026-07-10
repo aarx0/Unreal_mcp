@@ -197,7 +197,8 @@ static void S_FindByName(FMcpSchemaBuilder& B)
 static void S_FindByClass(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("className"), TEXT("Actor class name."))
-	 .String(TEXT("class"), TEXT("Actor class name (alias of className)."));
+	 .String(TEXT("class"), TEXT("Actor class name (alias of className)."))
+	 .String(TEXT("classPath"), TEXT("Actor class path (alias of className)."));
 }
 
 static void S_List(FMcpSchemaBuilder& B)
