@@ -27,6 +27,7 @@
 // Core Includes
 // -----------------------------------------------------------------------------
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_DebugHandlers.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpHandlerUtils.h"

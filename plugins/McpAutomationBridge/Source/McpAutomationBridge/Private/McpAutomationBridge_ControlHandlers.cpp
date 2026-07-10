@@ -2013,7 +2013,7 @@ bool McpHandlers::ControlActor::HandleControlActorCreateSnapshot(
 
   const FString SnapshotKey =
       FString::Printf(TEXT("%s::%s"), *Found->GetPathName(), *SnapshotName);
-  CachedActorSnapshots.Add(SnapshotKey, Found->GetActorTransform());
+  S.CachedActorSnapshots.Add(SnapshotKey, Found->GetActorTransform());
 
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   Data->SetStringField(TEXT("snapshotName"), SnapshotName);
@@ -2056,13 +2056,13 @@ bool McpHandlers::ControlActor::HandleControlActorRestoreSnapshot(
 
   const FString SnapshotKey =
       FString::Printf(TEXT("%s::%s"), *Found->GetPathName(), *SnapshotName);
-  if (!CachedActorSnapshots.Contains(SnapshotKey)) {
+  if (!S.CachedActorSnapshots.Contains(SnapshotKey)) {
     SendStandardErrorResponse(&S, Socket, RequestId, TEXT("SNAPSHOT_NOT_FOUND"),
                               TEXT("Snapshot not found"), nullptr);
     return true;
   }
 
-  const FTransform &SavedTransform = CachedActorSnapshots[SnapshotKey];
+  const FTransform &SavedTransform = S.CachedActorSnapshots[SnapshotKey];
   Found->Modify();
   Found->SetActorTransform(SavedTransform);
   Found->MarkComponentsRenderStateDirty();

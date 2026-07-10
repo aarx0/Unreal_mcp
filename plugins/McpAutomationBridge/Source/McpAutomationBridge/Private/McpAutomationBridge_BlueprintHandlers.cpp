@@ -998,14 +998,14 @@ UBlueprint *UMcpAutomationBridgeSubsystem::ResolveBlueprintOrError(
     const FString &BlueprintPath, const FString &RequestId,
     FMcpResponseHandle Socket, const TCHAR *FieldName) {
   if (BlueprintPath.IsEmpty()) {
-    S.SendAutomationError(Socket, RequestId,
+    SendAutomationError(Socket, RequestId,
                         FString::Printf(TEXT("Missing %s."), FieldName),
                         TEXT("INVALID_ARGUMENT"));
     return nullptr;
   }
   UBlueprint *Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
   if (!Blueprint) {
-    S.SendAutomationError(
+    SendAutomationError(
         Socket, RequestId,
         FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
         TEXT("NOT_FOUND"));

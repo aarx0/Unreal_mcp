@@ -581,15 +581,17 @@ public:
                             const TSharedPtr<FJsonObject> &Payload,
                             FMcpResponseHandle Socket);
 
+public:
+  // Lightweight snapshot cache for the de-membered control_actor
+  // create_snapshot/restore_snapshot handlers.
+  TMap<FString, FTransform> CachedActorSnapshots;
+
 private:
 
   // subscribe/unsubscribe shared implementation.
   bool HandleLogSetSubscribed(const FString &RequestId,
                               const TSharedPtr<FJsonObject> &Payload,
                               FMcpResponseHandle Socket, bool bSubscribe);
-
-  // Lightweight snapshot cache for automation requests (e.g., create_snapshot)
-  TMap<FString, FTransform> CachedActorSnapshots;
 
   /** Guards against reentrant automation request processing */
   bool bProcessingAutomationRequest = false;
